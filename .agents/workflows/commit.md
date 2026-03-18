@@ -1,3 +1,7 @@
+---
+description: Sequência de passos para commit
+---
+
 # Workflow de Commit — GeminiClaw
 
 Sequência obrigatória que o agente deve seguir para registrar

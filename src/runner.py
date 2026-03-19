@@ -53,6 +53,10 @@ class ContainerRunner:
                 socket_name = f"{agent_id}_{session_id}.sock"
                 host_socket_path = str(Path(IPC_SOCKET_DIR) / socket_name)
 
+                # Prepara caminhos para volume
+                db_path_host = os.environ.get("SQLITE_DB_PATH", "store/geminiclaw.db")
+                db_dir_host = str(Path(db_path_host).parent.absolute())
+                
                 # Parâmetros para a execução do container
                 run_kwargs: dict[str, Any] = {
                     "image": image,
@@ -66,10 +70,16 @@ class ContainerRunner:
                     "environment": {
                         "SESSION_ID": session_id,
                         "AGENT_ID": agent_id,
+                        "GEMINI_API_KEY": os.environ.get("GEMINI_API_KEY", ""),
+                        "SQLITE_DB_PATH": "/data/geminiclaw.db",
                     },
                     "volumes": {
                         host_socket_path: {
                             "bind": "/tmp/geminiclaw-ipc/agent.sock",
+                            "mode": "rw",
+                        },
+                        db_dir_host: {
+                            "bind": "/data",
                             "mode": "rw",
                         }
                     },

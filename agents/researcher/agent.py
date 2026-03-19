@@ -58,3 +58,10 @@ logger.info(
         "tools": ["search"],
     },
 )
+
+if __name__ == "__main__":
+    import asyncio
+    from agents.runner import run_ipc_loop
+    
+    # Inicia o loop de conexão IPC quando o container roda este módulo
+    asyncio.run(run_ipc_loop(root_agent))

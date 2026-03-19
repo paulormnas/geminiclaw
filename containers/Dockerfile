@@ -39,8 +39,8 @@ RUN mkdir -p /tmp/geminiclaw-ipc && chown appuser:appuser /tmp/geminiclaw-ipc
 # Mudar para o usuário não-root
 USER appuser
 
-# Mapear GENAI_API_KEY → GOOGLE_API_KEY (ADK espera GOOGLE_API_KEY)
-ENV GOOGLE_API_KEY=${GENAI_API_KEY}
+# Adicionar virtual environment ao PATH para garantir a resolução correta dos módulos
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Comando padrão
 CMD ["python", "-m", "agents.base.agent"]

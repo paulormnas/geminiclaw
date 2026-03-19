@@ -10,15 +10,15 @@ A ordem das etapas deve ser respeitada — cada uma depende da anterior.
 
 Objetivo: repositório pronto para receber código.
 
-- [ ] Criar repositório Git e estrutura de diretórios (`src/`, `agents/`, `containers/`, `tests/`, `store/`, `logs/`, `.agents/rules/`)
-- [ ] Criar `pyproject.toml` com dependências de produção e grupo `dev`
-- [ ] Executar `uv sync --all-groups` e versionar o `uv.lock`
-- [ ] Criar `.env.example` com todas as variáveis necessárias
-- [ ] Criar `.gitignore` cobrindo `.env`, `*.db`, `logs/`, `.venv/`, `__pycache__/`
-- [ ] Adicionar `AGENTS.md`, `GEMINI.md` e arquivos em `.agents/rules/`
-- [ ] Criar `Dockerfile` base (`python:3.11-slim`) para containers de agente
-- [ ] Criar rede Docker isolada: `docker network create geminiclaw-net`
-- [ ] Commit: `chore: milestone/scaffolding`
+- [x] Criar repositório Git e estrutura de diretórios (`src/`, `agents/`, `containers/`, `tests/`, `store/`, `logs/`, `.agents/rules/`)
+- [x] Criar `pyproject.toml` com dependências de produção e grupo `dev`
+- [x] Executar `uv sync --all-groups` e versionar o `uv.lock`
+- [x] Criar `.env.example` com todas as variáveis necessárias
+- [x] Criar `.gitignore` cobrindo `.env`, `*.db`, `logs/`, `.venv/`, `__pycache__/`
+- [x] Adicionar `AGENTS.md`, `GEMINI.md` e arquivos em `.agents/rules/`
+- [x] Criar `Dockerfile` base (`python:3.11-slim`) para containers de agente
+- [x] Criar rede Docker isolada: `docker network create geminiclaw-net`
+- [x] Commit: `chore: milestone/scaffolding`
 
 ---
 

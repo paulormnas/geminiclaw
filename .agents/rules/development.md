@@ -226,6 +226,7 @@ chore: atualiza dependências no pyproject.toml
 - Criar arquivos `.js`, `.ts` ou `.mjs`
 - Modificar `.env` sem instrução explícita do usuário
 - Alterar `GEMINI.md` ou `AGENTS.md` sem instrução explícita
+- Sempre use `AGENTS.md` ao invés de `GEMINI.md` para manter compatibilidade com outros projetos
 - Usar `print()` no lugar do logger estruturado
 - Usar `except Exception: pass` — todo erro deve ser logado ou propagado
 - Usar `# type: ignore` sem comentário explicando o motivo

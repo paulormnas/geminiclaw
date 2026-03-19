@@ -51,18 +51,18 @@ Objetivo: carregar e validar variáveis de ambiente de forma centralizada.
 
 Objetivo: persistir e recuperar o estado das sessões de agentes.
 
-- [ ] Implementar `init_db(path)` em `src/session.py` com PRAGMAs otimizados (`WAL`, `NORMAL`, cache de 32MB)
-- [ ] Criar schema da tabela `agent_sessions` com campos: `id`, `agent_id`, `status`, `created_at`, `updated_at`, `payload`
-- [ ] Implementar `SessionManager` com métodos:
-  - [ ] `create(agent_id)` → `Session`
-  - [ ] `get(session_id)` → `Session | None`
-  - [ ] `update(session_id, payload)` → `Session`
-  - [ ] `close(session_id)` → `None`
-  - [ ] `list_active()` → `list[Session]`
-- [ ] Adicionar índice em `agent_id` para queries frequentes
-- [ ] Escrever testes unitários com SQLite em memória cobrindo todos os métodos
-- [ ] Escrever teste de concorrência (múltiplas escritas simultâneas)
-- [ ] Commit: `feat(session): implementa SessionManager com SQLite`
+- [x] Implementar `init_db(path)` em `src/session.py` com PRAGMAs otimizados (`WAL`, `NORMAL`, cache de 32MB)
+- [x] Criar schema da tabela `agent_sessions` com campos: `id`, `agent_id`, `status`, `created_at`, `updated_at`, `payload`
+- [x] Implementar `SessionManager` com métodos:
+  - [x] `create(agent_id)` → `Session`
+  - [x] `get(session_id)` → `Session | None`
+  - [x] `update(session_id, payload)` → `Session`
+  - [x] `close(session_id)` → `None`
+  - [x] `list_active()` → `list[Session]`
+- [x] Adicionar índice em `agent_id` para queries frequentes
+- [x] Escrever testes unitários com SQLite em memória cobrindo todos os métodos
+- [x] Escrever teste de concorrência (múltiplas escritas simultâneas)
+- [x] Commit: `feat(session): implementa SessionManager com SQLite`
 
 ---
 

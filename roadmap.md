@@ -26,11 +26,11 @@ Objetivo: repositório pronto para receber código.
 
 Objetivo: sistema de log JSON estruturado disponível para todos os módulos.
 
-- [ ] Implementar `JsonFormatter` em `src/logger.py`
-- [ ] Implementar `get_logger(name)` retornando logger configurado
-- [ ] Garantir que o logger não duplica handlers em chamadas repetidas
-- [ ] Escrever testes unitários cobrindo formatação JSON e campos obrigatórios (`timestamp`, `level`, `event`)
-- [ ] Commit: `feat(logger): implementa logger JSON estruturado`
+- [x] Implementar `JsonFormatter` em `src/logger.py`
+- [x] Implementar `get_logger(name)` retornando logger configurado
+- [x] Garantir que o logger não duplica handlers em chamadas repetidas
+- [x] Escrever testes unitários cobrindo formatação JSON e campos obrigatórios (`timestamp`, `level`, `event`)
+- [x] Commit: `feat(logger): implementa logger JSON estruturado`
 
 ---
 

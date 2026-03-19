@@ -8,7 +8,15 @@ import argparse
 import asyncio
 import signal
 import sys
+import os
+from pathlib import Path
 from typing import NoReturn
+
+# Adiciona a raiz do projeto ao sys.path para permitir imports de 'src'
+# quando o script é executado diretamente (ex: python3 src/cli.py)
+root_path = str(Path(__file__).parent.parent)
+if root_path not in sys.path:
+    sys.path.insert(0, root_path)
 
 from src.logger import get_logger
 from src.config import AGENT_TIMEOUT_SECONDS, DEFAULT_MODEL, SQLITE_DB_PATH

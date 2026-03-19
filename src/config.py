@@ -25,7 +25,7 @@ def get_env(key: str, default: str | None = None, required: bool = False) -> str
     return value  # type: ignore
 
 # Variáveis obrigatórias
-GENAI_API_KEY = get_env("GENAI_API_KEY", required=True)
+GEMINI_API_KEY = get_env("GEMINI_API_KEY", required=True)
 
 # Variáveis opcionais com valores padrão
 DEFAULT_MODEL = get_env("DEFAULT_MODEL", default="gemini-3-flash-preview")

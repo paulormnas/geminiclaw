@@ -25,6 +25,10 @@ COPY pyproject.toml uv.lock ./
 # Instalar dependências (sem o orquestrador, apenas o necessário para agentes)
 RUN uv sync --no-dev --no-install-project
 
+# Copiar código do framework e dos agentes
+COPY src/ /app/src/
+COPY agents/ /app/agents/
+
 # Ajustar permissões para o diretório de dados
 RUN mkdir /data && chown appuser:appuser /data
 VOLUME /data
@@ -34,6 +38,9 @@ RUN mkdir -p /tmp/geminiclaw-ipc && chown appuser:appuser /tmp/geminiclaw-ipc
 
 # Mudar para o usuário não-root
 USER appuser
+
+# Mapear GENAI_API_KEY → GOOGLE_API_KEY (ADK espera GOOGLE_API_KEY)
+ENV GOOGLE_API_KEY=${GENAI_API_KEY}
 
 # Comando padrão
 CMD ["python", "-m", "agents.base.agent"]

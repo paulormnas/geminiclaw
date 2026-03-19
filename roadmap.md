@@ -105,14 +105,14 @@ Objetivo: canal de mensagens confiável entre o orquestrador e os agentes nos co
 
 Objetivo: agente mínimo funcional que pode ser instanciado e executado em um container.
 
-- [ ] Implementar `agents/base/agent.py` com `root_agent` usando Google ADK
-- [ ] Definir `name`, `model`, `description` e `instruction` obrigatórios
-- [ ] Integrar o agente ao `SessionManager` (carrega contexto da sessão ao iniciar)
-- [ ] Integrar o agente ao logger estruturado
-- [ ] Construir imagem Docker do agente base e validar que sobe sem erros
-- [ ] Escrever teste unitário verificando atributos obrigatórios do agente
-- [ ] Escrever smoke test com mock do Gemini validando resposta não-vazia
-- [ ] Commit: `feat(agents): implementa agente base ADK com integração de sessão`
+- [x] Implementar `agents/base/agent.py` com `root_agent` usando Google ADK
+- [x] Definir `name`, `model`, `description` e `instruction` obrigatórios
+- [x] Integrar o agente ao `SessionManager` (carrega contexto da sessão ao iniciar)
+- [x] Integrar o agente ao logger estruturado
+- [x] Construir imagem Docker do agente base e validar que sobe sem erros
+- [x] Escrever teste unitário verificando atributos obrigatórios do agente
+- [x] Escrever smoke test com mock do Gemini validando resposta não-vazia
+- [x] Commit: `feat(agents): implementa agente base ADK com integração de sessão`
 
 ---
 
@@ -120,15 +120,15 @@ Objetivo: agente mínimo funcional que pode ser instanciado e executado em um co
 
 Objetivo: ponto de entrada que recebe uma solicitação do usuário, decide quantos agentes spawnar e coordena a execução.
 
-- [ ] Implementar `src/orchestrator.py` com:
-  - [ ] `handle_request(prompt)` → `OrchestratorResult`
-  - [ ] Lógica de decisão: quantos agentes, qual imagem, qual contexto
-  - [ ] Ciclo: cria sessão → spawna containers → envia mensagens via IPC → aguarda respostas → fecha sessões → retorna resultado
-- [ ] Implementar tratamento de falha parcial: se um agente falhar, os demais continuam
-- [ ] Expor resultado consolidado com respostas de todos os agentes e status de cada um
-- [ ] Escrever testes unitários com mocks do runner e do IPC
-- [ ] Escrever teste de integração do fluxo completo com um único agente
-- [ ] Commit: `feat(runner): implementa orquestrador principal`
+- [x] Implementar `src/orchestrator.py` com:
+  - [x] `handle_request(prompt)` → `OrchestratorResult`
+  - [x] Lógica de decisão: quantos agentes, qual imagem, qual contexto
+  - [x] Ciclo: cria sessão → spawna containers → envia mensagens via IPC → aguarda respostas → fecha sessões → retorna resultado
+- [x] Implementar tratamento de falha parcial: se um agente falhar, os demais continuam
+- [x] Expor resultado consolidado com respostas de todos os agentes e status de cada um
+- [x] Escrever testes unitários com mocks do runner e do IPC
+- [x] Escrever teste de integração do fluxo completo com um único agente
+- [x] Commit: `feat(runner): implementa orquestrador principal`
 
 ---
 

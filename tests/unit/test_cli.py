@@ -254,9 +254,10 @@ class TestSignalHandler:
         mock_create.return_value = (mock_orchestrator, mock_runner)
 
         with patch("src.cli.asyncio.run"):
-            with patch("sys.argv", ["geminiclaw", "teste"]):
-                from src.cli import main
-                main()
+            with patch("src.cli.execute_prompt", new_callable=MagicMock):
+                with patch("sys.argv", ["geminiclaw", "teste"]):
+                    from src.cli import main
+                    main()
 
         # Verifica que signal.signal foi chamado com SIGINT
         mock_signal.assert_any_call(signal.SIGINT, pytest.approx(None, abs=None) if False else mock_signal.call_args_list[0][0][1])
@@ -272,11 +273,12 @@ class TestSignalHandler:
         mock_create.return_value = (mock_orchestrator, mock_runner)
 
         with patch("src.cli.asyncio.run") as mock_run:
-            with patch("sys.argv", ["geminiclaw", "meu prompt"]):
-                from src.cli import main
-                main()
+            with patch("src.cli.execute_prompt", new_callable=MagicMock) as mock_execute:
+                with patch("sys.argv", ["geminiclaw", "meu prompt"]):
+                    from src.cli import main
+                    main()
 
-        mock_run.assert_called_once()
+        mock_run.assert_called_once_with(mock_execute.return_value)
 
     @patch("src.cli._create_orchestrator")
     def test_main_modo_interativo(
@@ -289,11 +291,12 @@ class TestSignalHandler:
         mock_create.return_value = (mock_orchestrator, mock_runner)
 
         with patch("src.cli.asyncio.run") as mock_run:
-            with patch("sys.argv", ["geminiclaw"]):
-                from src.cli import main
-                main()
+            with patch("src.cli.interactive_mode", new_callable=MagicMock) as mock_interactive:
+                with patch("sys.argv", ["geminiclaw"]):
+                    from src.cli import main
+                    main()
 
-        mock_run.assert_called_once()
+        mock_run.assert_called_once_with(mock_interactive.return_value)
 
     @patch("src.cli._create_orchestrator")
     def test_main_falha_inicializacao(

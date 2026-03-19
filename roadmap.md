@@ -38,12 +38,12 @@ Objetivo: sistema de log JSON estruturado disponível para todos os módulos.
 
 Objetivo: carregar e validar variáveis de ambiente de forma centralizada.
 
-- [ ] Implementar `src/config.py` que carrega o `.env` via `python-dotenv`
-- [ ] Definir e documentar todas as variáveis obrigatórias e opcionais
-- [ ] Lançar erro descritivo na inicialização se variável obrigatória estiver ausente
-- [ ] Expor constantes tipadas (`DEFAULT_MODEL`, `AGENT_TIMEOUT_SECONDS`, etc.)
-- [ ] Escrever testes unitários para variáveis ausentes, inválidas e com valores padrão
-- [ ] Commit: `feat(config): implementa carregamento e validação de variáveis de ambiente`
+- [x] Implementar `src/config.py` que carrega o `.env` via `python-dotenv`
+- [x] Definir e documentar todas as variáveis obrigatórias e opcionais
+- [x] Lançar erro descritivo na inicialização se variável obrigatória estiver ausente
+- [x] Expor constantes tipadas (`DEFAULT_MODEL`, `AGENT_TIMEOUT_SECONDS`, etc.)
+- [x] Escrever testes unitários para variáveis ausentes, inválidas e com valores padrão
+- [x] Commit: `feat(config): implementa carregamento e validação de variáveis de ambiente`
 
 ---
 

@@ -2,11 +2,16 @@ import asyncio
 import docker
 import os
 import functools
+from pathlib import Path
 from typing import Any
 from src.logger import get_logger
 from src.config import AGENT_TIMEOUT_SECONDS
 
 logger = get_logger(__name__)
+
+# Diretório base para sockets IPC
+IPC_SOCKET_DIR = "/tmp/geminiclaw-ipc"
+
 
 class ContainerRunner:
     """Gerencia o ciclo de vida de containers Docker para agentes."""
@@ -43,8 +48,13 @@ class ContainerRunner:
                 # Execução em thread separada para não bloquear o loop de eventos
                 loop = asyncio.get_running_loop()
                 
+                # Prepara o caminho do socket IPC para este container
+                # Usa agent_id + session_id para garantir unicidade
+                socket_name = f"{agent_id}_{session_id}.sock"
+                host_socket_path = str(Path(IPC_SOCKET_DIR) / socket_name)
+
                 # Parâmetros para a execução do container
-                run_kwargs = {
+                run_kwargs: dict[str, Any] = {
                     "image": image,
                     "mem_limit": "512m",
                     "nano_cpus": 1_000_000_000,
@@ -55,8 +65,14 @@ class ContainerRunner:
                     "labels": {"project": "geminiclaw", "agent_id": agent_id, "session_id": session_id},
                     "environment": {
                         "SESSION_ID": session_id,
-                        "AGENT_ID": agent_id
-                    }
+                        "AGENT_ID": agent_id,
+                    },
+                    "volumes": {
+                        host_socket_path: {
+                            "bind": "/tmp/geminiclaw-ipc/agent.sock",
+                            "mode": "rw",
+                        }
+                    },
                 }
                 
                 def _run(*args: Any, **kwargs: Any) -> Any:

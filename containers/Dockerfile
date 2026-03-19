@@ -29,6 +29,9 @@ RUN uv sync --no-dev --no-install-project
 RUN mkdir /data && chown appuser:appuser /data
 VOLUME /data
 
+# Criar diretório para socket IPC
+RUN mkdir -p /tmp/geminiclaw-ipc && chown appuser:appuser /tmp/geminiclaw-ipc
+
 # Mudar para o usuário não-root
 USER appuser
 

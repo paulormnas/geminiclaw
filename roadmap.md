@@ -70,17 +70,17 @@ Objetivo: persistir e recuperar o estado das sessões de agentes.
 
 Objetivo: spawnar, monitorar e destruir containers Docker de agentes.
 
-- [ ] Implementar `src/runner.py` com as funções:
-  - [ ] `spawn(agent_id, image, config)` → `ContainerHandle`
-  - [ ] `stop(container_id)` → `None`
-  - [ ] `cleanup_all()` → `None` (destrói todos os containers do projeto)
-- [ ] Aplicar limites de recursos em todo `containers.run()`: `mem_limit="512m"`, `nano_cpus=1_000_000_000`, `network="geminiclaw-net"`, `user="appuser"`, `remove=True`
-- [ ] Implementar `asyncio.Semaphore(3)` para limitar agentes simultâneos
-- [ ] Implementar tratamento de timeout: container que exceder `AGENT_TIMEOUT_SECONDS` é encerrado automaticamente
-- [ ] Escrever testes unitários com mock do `docker-py`
-- [ ] Escrever teste de integração do ciclo de vida completo (spawn → execução → remoção)
-- [ ] Escrever teste de integração para o limite de concorrência
-- [ ] Commit: `feat(runner): implementa container runner com controle de concorrência`
+- [x] Implementar `src/runner.py` com as funções:
+  - [x] `spawn(agent_id, image, config)` → `ContainerHandle`
+  - [x] `stop(container_id)` → `None`
+  - [x] `cleanup_all()` → `None` (destrói todos os containers do projeto)
+- [x] Aplicar limites de recursos em todo `containers.run()`: `mem_limit="512m"`, `nano_cpus=1_000_000_000`, `network="geminiclaw-net"`, `user="appuser"`, `remove=True`
+- [x] Implementar `asyncio.Semaphore(3)` para limitar agentes simultâneos
+- [x] Implementar tratamento de timeout: container que exceder `AGENT_TIMEOUT_SECONDS` é encerrado automaticamente
+- [x] Escrever testes unitários com mock do `docker-py`
+- [x] Escrever teste de integração do ciclo de vida completo (spawn → execução → remoção)
+- [x] Escrever teste de integração para o limite de concorrência
+- [x] Commit: `feat(runner): implementa container runner com controle de concorrência`
 
 ---
 
@@ -88,16 +88,16 @@ Objetivo: spawnar, monitorar e destruir containers Docker de agentes.
 
 Objetivo: canal de mensagens confiável entre o orquestrador e os agentes nos containers.
 
-- [ ] Definir o protocolo de mensagens em JSON: campos `type`, `session_id`, `payload`, `timestamp`
-- [ ] Implementar `src/ipc.py` com:
-  - [ ] `send(container_id, message)` → `None`
-  - [ ] `receive(container_id, timeout)` → `Message`
-  - [ ] Serialização e desserialização de `Message`
-- [ ] Escolher e documentar o mecanismo de transporte (socket Unix ou pipe)
-- [ ] Implementar reconexão automática em caso de falha de transporte
-- [ ] Escrever testes unitários do protocolo de mensagens
-- [ ] Escrever teste de integração de round-trip: host envia → container recebe → container responde → host recebe
-- [ ] Commit: `feat(ipc): implementa canal de comunicação host-container`
+- [x] Definir o protocolo de mensagens em JSON: campos `type`, `session_id`, `payload`, `timestamp`
+- [x] Implementar `src/ipc.py` com:
+  - [x] `send(container_id, message)` → `None`
+  - [x] `receive(container_id, timeout)` → `Message`
+  - [x] Serialização e desserialização de `Message`
+- [x] Escolher e documentar o mecanismo de transporte (socket Unix ou pipe)
+- [x] Implementar reconexão automática em caso de falha de transporte
+- [x] Escrever testes unitários do protocolo de mensagens
+- [x] Escrever teste de integração de round-trip: host envia → container recebe → container responde → host recebe
+- [x] Commit: `feat(ipc): implementa canal de comunicação host-container`
 
 ---
 

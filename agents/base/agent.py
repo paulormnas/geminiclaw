@@ -35,13 +35,13 @@ AGENT_INSTRUCTION = (
 )
 
 
-async def _load_session_context(ctx: Context) -> None:
+async def _load_session_context(callback_context: Any) -> None:
     """Callback executado antes do agente processar a solicitação.
 
     Carrega o payload da sessão do SQLite e injeta no state do agente.
 
     Args:
-        ctx: Contexto do agente ADK.
+        callback_context: Contexto do callback ADK.
     """
     session_id = os.environ.get("SESSION_ID", "")
     agent_id = os.environ.get("AGENT_ID", "")
@@ -61,7 +61,7 @@ async def _load_session_context(ctx: Context) -> None:
         if session:
             # Injeta o payload da sessão no state do agente
             for key, value in session.payload.items():
-                ctx.state[key] = value
+                callback_context.state[key] = value
 
             logger.info(
                 "Contexto da sessão carregado",
@@ -88,13 +88,13 @@ async def _load_session_context(ctx: Context) -> None:
         )
 
 
-async def _persist_session_context(ctx: Context) -> None:
+async def _persist_session_context(callback_context: Any) -> None:
     """Callback executado após o agente processar a solicitação.
 
     Persiste o state do agente de volta na sessão do SQLite.
 
     Args:
-        ctx: Contexto do agente ADK.
+        callback_context: Contexto do callback ADK.
     """
     session_id = os.environ.get("SESSION_ID", "")
     agent_id = os.environ.get("AGENT_ID", "")
@@ -108,8 +108,8 @@ async def _persist_session_context(ctx: Context) -> None:
 
         # Converte o state para dict serializável
         state_data: dict[str, Any] = {}
-        for key in ctx.state:
-            state_data[key] = ctx.state[key]
+        for key in callback_context.state:
+            state_data[key] = callback_context.state[key]
 
         manager.update(session_id, payload=state_data)
 

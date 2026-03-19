@@ -1,6 +1,7 @@
 import pytest
 import asyncio
 from unittest.mock import MagicMock, patch
+import os
 from src.runner import ContainerRunner
 
 @pytest.fixture
@@ -15,32 +16,42 @@ def mock_docker_client():
 @pytest.mark.asyncio
 async def test_runner_spawn_parameters(mock_docker_client):
     """Testa se o runner passa os parâmetros corretos para o docker-py."""
-    runner = ContainerRunner()
-    
-    mock_container = MagicMock()
-    mock_container.id = "fake_id_123"
-    mock_docker_client.containers.run.return_value = mock_container
-    
-    container_id = await runner.spawn("test_agent", "test_image", "session_123")
-    
-    assert container_id == "fake_id_123"
-    mock_docker_client.containers.run.assert_called_once_with(
-        image="test_image",
-        mem_limit="512m",
-        nano_cpus=1_000_000_000,
-        network="geminiclaw-net",
-        user="appuser",
-        remove=True,
-        detach=True,
-        labels={"project": "geminiclaw", "agent_id": "test_agent", "session_id": "session_123"},
-        environment={"SESSION_ID": "session_123", "AGENT_ID": "test_agent"},
-        volumes={
-            "/tmp/geminiclaw-ipc/test_agent_session_123.sock": {
-                "bind": "/tmp/geminiclaw-ipc/agent.sock",
-                "mode": "rw",
-            }
-        },
-    )
+    with patch.dict(os.environ, {"GEMINI_API_KEY": "test_key", "SQLITE_DB_PATH": "/path/to/db"}):
+        runner = ContainerRunner()
+        
+        mock_container = MagicMock()
+        mock_container.id = "fake_id_123"
+        mock_docker_client.containers.run.return_value = mock_container
+        
+        container_id = await runner.spawn("test_agent", "test_image", "session_123")
+        
+        assert container_id == "fake_id_123"
+        
+        # O runner monta o diretório de sockets e o diretório do banco
+        from src.runner import IPC_SOCKET_DIR
+        
+        mock_docker_client.containers.run.assert_called_once_with(
+            image="test_image",
+            mem_limit="512m",
+            nano_cpus=1_000_000_000,
+            network="geminiclaw-net",
+            user="appuser",
+            remove=True,
+            detach=True,
+            labels={"project": "geminiclaw", "agent_id": "test_agent", "session_id": "session_123"},
+            environment={
+                "SESSION_ID": "session_123",
+                "AGENT_ID": "test_agent",
+                "GEMINI_API_KEY": "test_key",
+                "SQLITE_DB_PATH": "/data/geminiclaw.db",
+                "AGENT_SOCKET_NAME": "test_agent_session_123.sock",
+            },
+            volumes={
+                "/path/to": {"bind": "/data", "mode": "rw"},
+                str(IPC_SOCKET_DIR): {"bind": "/tmp/geminiclaw-ipc", "mode": "rw"},
+            },
+            extra_hosts={},
+        )
 
 @pytest.mark.unit
 @pytest.mark.asyncio

@@ -110,23 +110,44 @@ def create_message(
     )
 
 
+from src.platform_utils import should_use_tcp_ipc
+
 class IPCChannel:
-    """Canal de comunicação IPC via Unix Domain Sockets.
+    """Canal de comunicação IPC via Unix Domain Sockets ou TCP.
 
     O host opera como server (bind + listen) e o container como client (connect).
-    Cada container tem seu próprio socket isolado.
+    No Linux, usa Unix Sockets por padrão. No Mac, usa TCP (loopback).
     """
 
-    def __init__(self, socket_dir: str = "/tmp/geminiclaw-ipc") -> None:
+    def __init__(self, socket_dir: str | None = None, use_tcp: bool | None = None) -> None:
         """Inicializa o canal IPC.
 
         Args:
-            socket_dir: Diretório base para os arquivos de socket.
+            socket_dir: Diretório base para os arquivos de socket (Unix mode).
+            use_tcp: Se True, usa TCP em vez de Unix Sockets.
         """
-        self.socket_dir = Path(socket_dir)
-        self.socket_dir.mkdir(parents=True, exist_ok=True)
+        self.use_tcp = use_tcp if use_tcp is not None else should_use_tcp_ipc()
+        
+        if self.use_tcp:
+            logger.info("IPC em modo TCP (compatibilidade)")
+            self.socket_dir = Path("/tmp") # Não usado, mas mantido por compatibilidade
+        else:
+            if socket_dir is None:
+                # Padrão: pasta 'store/ipc' na raiz do projeto
+                root = Path(__file__).parent.parent
+                socket_dir = str((root / "store" / "ipc").absolute())
+                
+            self.socket_dir = Path(socket_dir)
+            self.socket_dir.mkdir(parents=True, exist_ok=True)
+            # Ajusta permissões do diretório para permitir escrita por containers com outros UIDs
+            try:
+                os.chmod(self.socket_dir, 0o777)
+            except OSError as e:
+                logger.warning(f"Não foi possível ajustar permissões de {self.socket_dir}: {e}")
+        
         self._servers: dict[str, asyncio.AbstractServer] = {}
         self._connections: dict[str, tuple[asyncio.StreamReader, asyncio.StreamWriter]] = {}
+        self._ports: dict[str, int] = {} # Mapeia container_id -> port (apenas TCP)
 
     def _socket_path(self, container_id: str) -> str:
         """Retorna o caminho do socket para um container.
@@ -139,23 +160,25 @@ class IPCChannel:
         """
         return str(self.socket_dir / f"{container_id}.sock")
 
+    def get_port(self, container_id: str) -> int | None:
+        """Retorna a porta TCP associada ao container.
+        
+        Returns:
+            Porta ou None se não estiver no modo TCP.
+        """
+        return self._ports.get(container_id)
+
     async def create_socket(self, container_id: str) -> None:
-        """Cria um Unix Domain Socket e aguarda a conexão do container.
+        """Cria um Unix Domain Socket ou servidor TCP e aguarda conexão.
 
         Args:
             container_id: ID do container que se conectará.
 
         Raises:
-            RuntimeError: Se já existir um socket para este container.
+            RuntimeError: Se já existir um socket/servidor para este container.
         """
         if container_id in self._servers:
-            raise RuntimeError(f"Socket já existe para container '{container_id}'.")
-
-        socket_path = self._socket_path(container_id)
-
-        # Remove socket antigo se existir (caso de crash anterior)
-        if os.path.exists(socket_path):
-            os.unlink(socket_path)
+            raise RuntimeError(f"Servidor já existe para container '{container_id}'.")
 
         # Evento para sinalizar quando o client conectar
         connected_event = asyncio.Event()
@@ -166,22 +189,42 @@ class IPCChannel:
             self._connections[container_id] = (reader, writer)
             logger.info(
                 "Container conectado ao IPC",
-                extra={"container_id": container_id, "socket": socket_path},
+                extra={"container_id": container_id, "mode": "TCP" if self.use_tcp else "UNIX"},
             )
             connected_event.set()
 
-        server = await asyncio.start_unix_server(
-            _on_client_connected, path=socket_path
-        )
+        if self.use_tcp:
+            # No modo TCP, escuta em 127.0.0.1 em uma porta aleatória
+            server = await asyncio.start_server(
+                _on_client_connected, host="127.0.0.1", port=0
+            )
+            # Obtém a porta real atribuída
+            port = server.sockets[0].getsockname()[1]
+            self._ports[container_id] = port
+            logger.info(
+                "Servidor IPC TCP criado",
+                extra={"container_id": container_id, "port": port},
+            )
+        else:
+            socket_path = self._socket_path(container_id)
 
-        # Ajusta permissões para que o appuser no container consiga acessar
-        os.chmod(socket_path, 0o777)
+            # Remove socket antigo se existir (caso de crash anterior)
+            if os.path.exists(socket_path):
+                os.unlink(socket_path)
+
+            server = await asyncio.start_unix_server(
+                _on_client_connected, path=socket_path
+            )
+
+            # Ajusta permissões para que o appuser no container consiga acessar
+            os.chmod(socket_path, 0o777)
+            
+            logger.info(
+                "Socket IPC UNIX criado",
+                extra={"container_id": container_id, "socket": socket_path},
+            )
 
         self._servers[container_id] = server
-        logger.info(
-            "Socket IPC criado",
-            extra={"container_id": container_id, "socket": socket_path},
-        )
 
     async def wait_for_connection(self, container_id: str, timeout: float | None = None) -> None:
         """Aguarda a conexão do container ao socket.
@@ -352,11 +395,14 @@ class IPCChannel:
         return conn
 
     async def close(self, container_id: str) -> None:
-        """Fecha o socket e remove o arquivo para um container.
+        """Fecha o socket/servidor e limpa recursos para um container.
 
         Args:
             container_id: ID do container.
         """
+        # Remove porta se existir
+        self._ports.pop(container_id, None)
+
         # Fecha a conexão do client
         conn = self._connections.pop(container_id, None)
         if conn:
@@ -373,14 +419,15 @@ class IPCChannel:
             server.close()
             await server.wait_closed()
 
-        # Remove o arquivo de socket
-        socket_path = self._socket_path(container_id)
-        if os.path.exists(socket_path):
-            os.unlink(socket_path)
+        # Remove o arquivo de socket (apenas no modo UNIX)
+        if not self.use_tcp:
+            socket_path = self._socket_path(container_id)
+            if os.path.exists(socket_path):
+                os.unlink(socket_path)
 
         logger.info(
-            "Socket IPC fechado",
-            extra={"container_id": container_id},
+            "Recursos IPC fechados",
+            extra={"container_id": container_id, "mode": "TCP" if self.use_tcp else "UNIX"},
         )
 
     async def close_all(self) -> None:

@@ -27,7 +27,7 @@ def init_db(db_path: str) -> None:
         db_dir.mkdir(parents=True, exist_ok=True)
 
     with sqlite3.connect(db_path) as conn:
-        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA journal_mode=TRUNCATE")
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA cache_size=-32000")  # ~32MB
         
@@ -52,7 +52,12 @@ class SessionManager:
         init_db(self.db_path)
 
     def _get_connection(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path)
+        # PRAGMAs que devem ser definidos por conexão
+        conn.execute("PRAGMA journal_mode=TRUNCATE")
+        conn.execute("PRAGMA busy_timeout=30000")
+        conn.execute("PRAGMA mmap_size=0")
+        return conn
 
     def create(self, agent_id: str) -> Session:
         """Cria uma nova sessão para o agente.

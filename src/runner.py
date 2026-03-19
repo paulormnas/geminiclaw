@@ -10,7 +10,8 @@ from src.config import AGENT_TIMEOUT_SECONDS
 logger = get_logger(__name__)
 
 # Diretório base para sockets IPC
-IPC_SOCKET_DIR = "/tmp/geminiclaw-ipc"
+_root = Path(__file__).parent.parent
+IPC_SOCKET_DIR = str((_root / "store" / "ipc").absolute())
 
 
 class ContainerRunner:
@@ -30,33 +31,68 @@ class ContainerRunner:
         
         self.semaphore = asyncio.Semaphore(semaphore_limit)
 
-    async def spawn(self, agent_id: str, image: str, session_id: str) -> str:
+    async def spawn(self, agent_id: str, image: str, session_id: str, ipc_port: int | None = None) -> str:
         """Cria e inicia um container para um agente.
 
         Args:
             agent_id: Identificador do agente.
             image: Nome da imagem Docker.
             session_id: ID da sessão associada.
+            ipc_port: Porta TCP para IPC (opcional, se usar TCP em vez de Unix Sockets).
 
         Returns:
             O ID do container criado.
         """
         async with self.semaphore:
-            logger.info("Iniciando container para agente", extra={"agent_id": agent_id, "image": image, "session_id": session_id})
+            logger.info("Iniciando container para agente", extra={"agent_id": agent_id, "image": image, "session_id": session_id, "ipc_mode": "TCP" if ipc_port else "UNIX"})
             
             try:
                 # Execução em thread separada para não bloquear o loop de eventos
                 loop = asyncio.get_running_loop()
                 
-                # Prepara o caminho do socket IPC para este container
-                # Usa agent_id + session_id para garantir unicidade
+                # Prepara o caminho do socket IPC para este container (apenas se não for TCP)
                 socket_name = f"{agent_id}_{session_id}.sock"
-                host_socket_path = str(Path(IPC_SOCKET_DIR) / socket_name)
-
+                
                 # Prepara caminhos para volume
                 db_path_host = os.environ.get("SQLITE_DB_PATH", "store/geminiclaw.db")
                 db_dir_host = str(Path(db_path_host).parent.absolute())
                 
+                # Validação antecipada da GEMINI_API_KEY
+                gemini_key = os.environ.get("GEMINI_API_KEY")
+                if not gemini_key:
+                    logger.error("GEMINI_API_KEY não encontrada no ambiente do host.")
+                    raise RuntimeError("Variável GEMINI_API_KEY obrigatória não está definida no host.")
+
+                # Variáveis de ambiente padrão
+                env = {
+                    "SESSION_ID": session_id,
+                    "AGENT_ID": agent_id,
+                    "GEMINI_API_KEY": gemini_key,
+                    "SQLITE_DB_PATH": "/data/geminiclaw.db",
+                    "AGENT_SOCKET_NAME": socket_name,
+                }
+
+                # Volumes padrão
+                volumes = {
+                    db_dir_host: {
+                        "bind": "/data",
+                        "mode": "rw",
+                    }
+                }
+
+                # Configurações extras para TCP (Mac compatibility)
+                extra_hosts = {}
+                if ipc_port:
+                    env["AGENT_IPC_PORT"] = str(ipc_port)
+                    env["AGENT_IPC_HOST"] = "host.docker.internal"
+                    extra_hosts["host.docker.internal"] = "host-gateway"
+                else:
+                    # Modo UNIX: monta o diretório de sockets
+                    volumes[str(Path(IPC_SOCKET_DIR))] = {
+                        "bind": "/tmp/geminiclaw-ipc",
+                        "mode": "rw",
+                    }
+
                 # Parâmetros para a execução do container
                 run_kwargs: dict[str, Any] = {
                     "image": image,
@@ -64,25 +100,12 @@ class ContainerRunner:
                     "nano_cpus": 1_000_000_000,
                     "network": "geminiclaw-net",
                     "user": "appuser",
-                    "remove": True,
+                    "remove": True, # Re-ativado após debug
                     "detach": True,
                     "labels": {"project": "geminiclaw", "agent_id": agent_id, "session_id": session_id},
-                    "environment": {
-                        "SESSION_ID": session_id,
-                        "AGENT_ID": agent_id,
-                        "GEMINI_API_KEY": os.environ.get("GEMINI_API_KEY", ""),
-                        "SQLITE_DB_PATH": "/data/geminiclaw.db",
-                    },
-                    "volumes": {
-                        host_socket_path: {
-                            "bind": "/tmp/geminiclaw-ipc/agent.sock",
-                            "mode": "rw",
-                        },
-                        db_dir_host: {
-                            "bind": "/data",
-                            "mode": "rw",
-                        }
-                    },
+                    "environment": env,
+                    "volumes": volumes,
+                    "extra_hosts": extra_hosts,
                 }
                 
                 def _run(*args: Any, **kwargs: Any) -> Any:
@@ -92,6 +115,10 @@ class ContainerRunner:
                 
                 logger.info("Container iniciado com sucesso", extra={"container_id": container.id, "agent_id": agent_id})
                 return str(container.id)
+
+            except Exception as e:
+                logger.error("Falha ao spawnar container", extra={"agent_id": agent_id, "error": str(e)})
+                raise
 
             except Exception as e:
                 logger.error("Falha ao spawnar container", extra={"agent_id": agent_id, "error": str(e)})
@@ -110,13 +137,53 @@ class ContainerRunner:
             loop = asyncio.get_running_loop()
             
             def _get_and_stop(cid: str) -> None:
-                c = self.client.containers.get(cid)
-                c.stop()
+                try:
+                    c = self.client.containers.get(cid)
+                    c.stop()
+                except docker.errors.NotFound:
+                    pass
 
             await loop.run_in_executor(None, _get_and_stop, container_id)
             logger.info("Container encerrado", extra={"container_id": container_id})
         except Exception as e:
             logger.warning("Falha ao encerrar container", extra={"container_id": container_id, "error": str(e)})
+
+    async def is_running(self, container_id: str) -> bool:
+        """Verifica se o container ainda está em execução.
+
+        Args:
+            container_id: ID do container.
+
+        Returns:
+            True se estiver rodando, False caso contrário.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+            def _check():
+                c = self.client.containers.get(container_id)
+                return c.status == "running"
+            return await loop.run_in_executor(None, _check)
+        except Exception:
+            return False
+
+    async def get_logs(self, container_id: str, tail: int = 20) -> str:
+        """Obtém os últimos logs do container.
+
+        Args:
+            container_id: ID do container.
+            tail: Número de linhas finais a retornar.
+
+        Returns:
+            String com os logs.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+            def _read_logs():
+                c = self.client.containers.get(container_id)
+                return c.logs(tail=tail).decode("utf-8")
+            return await loop.run_in_executor(None, _read_logs)
+        except Exception as e:
+            return f"Erro ao ler logs: {e}"
 
     def cleanup_all(self) -> None:
         """Remove todos os containers do projeto geminiclaw."""

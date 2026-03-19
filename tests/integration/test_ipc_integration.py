@@ -24,7 +24,7 @@ async def test_roundtrip_loopback_full() -> None:
     ao Unix socket do host. Valida o fluxo completo sem Docker.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
-        channel = IPCChannel(socket_dir=tmpdir)
+        channel = IPCChannel(socket_dir=tmpdir, use_tcp=False)
         container_id = "integration_roundtrip"
 
         # Host cria o socket
@@ -77,7 +77,7 @@ async def test_roundtrip_loopback_full() -> None:
 async def test_multiple_containers_concurrent_roundtrip() -> None:
     """Testa comunicação simultânea com múltiplos containers isolados."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        channel = IPCChannel(socket_dir=tmpdir)
+        channel = IPCChannel(socket_dir=tmpdir, use_tcp=False)
 
         container_ids = ["container_a", "container_b", "container_c"]
         clients: dict[str, tuple[asyncio.StreamReader, asyncio.StreamWriter]] = {}

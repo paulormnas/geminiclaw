@@ -1,6 +1,8 @@
 import pytest
 import asyncio
 import docker
+import os
+from unittest.mock import patch
 from src.runner import ContainerRunner
 
 @pytest.fixture
@@ -19,7 +21,8 @@ async def test_runner_lifecycle_integration(docker_client):
     session_id = "sess_int"
     
     # Spawn
-    container_id = await runner.spawn(agent_id, image, session_id)
+    with patch.dict(os.environ, {"GEMINI_API_KEY": "fake_key", "SQLITE_DB_PATH": "store/geminiclaw.db"}):
+        container_id = await runner.spawn(agent_id, image, session_id)
     assert container_id is not None
     
     # Verifica se o container está rodando
@@ -44,8 +47,9 @@ async def test_runner_cleanup_all_integration(docker_client):
     image = "geminiclaw-base"
     
     # Spawn de 2 containers
-    id1 = await runner.spawn("a1", image, "s1")
-    id2 = await runner.spawn("a2", image, "s2")
+    with patch.dict(os.environ, {"GEMINI_API_KEY": "fake_key", "SQLITE_DB_PATH": "store/geminiclaw.db"}):
+        id1 = await runner.spawn("a1", image, "s1")
+        id2 = await runner.spawn("a2", image, "s2")
     
     # Cleanup
     runner.cleanup_all()

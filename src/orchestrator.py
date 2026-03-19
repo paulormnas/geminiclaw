@@ -225,14 +225,31 @@ class Orchestrator:
             await self.ipc.create_socket(ipc_id)
 
             # 2. Spawna container
+            ipc_port = self.ipc.get_port(ipc_id)
             container_id = await self.runner.spawn(
-                task.agent_id, task.image, session.id
+                task.agent_id, task.image, session.id, ipc_port=ipc_port
             )
 
-            # 3. Aguarda conexão do container ao socket
-            await self.ipc.wait_for_connection(
-                ipc_id, timeout=AGENT_TIMEOUT_SECONDS
-            )
+            # 3. Aguarda conexão do container ao socket monitorando saúde
+            deadline = AGENT_TIMEOUT_SECONDS
+            elapsed = 0.0
+            interval = 0.5
+            while ipc_id not in self.ipc._connections:
+                if elapsed >= deadline:
+                    raise TimeoutError(
+                        f"Container '{task.agent_id}' não conectou dentro de {deadline}s."
+                    )
+                
+                # Verifica se o container ainda está vivo
+                if not await self.runner.is_running(container_id):
+                    logs = await self.runner.get_logs(container_id)
+                    raise RuntimeError(
+                        f"Container '{task.agent_id}' encerrou inesperadamente antes de conectar.\n"
+                        f"Logs:\n{logs}"
+                    )
+                
+                await asyncio.sleep(interval)
+                elapsed += interval
 
             # 4. Envia prompt via IPC
             request_msg = create_message(

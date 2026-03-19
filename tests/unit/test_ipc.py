@@ -172,7 +172,7 @@ class TestIPCChannelLoopback:
     async def test_send_receive_loopback(self) -> None:
         """Envia e recebe uma mensagem via socket Unix local."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            channel = IPCChannel(socket_dir=tmpdir)
+            channel = IPCChannel(socket_dir=tmpdir, use_tcp=False)
             container_id = "test_container"
 
             await channel.create_socket(container_id)
@@ -212,7 +212,7 @@ class TestIPCChannelLoopback:
     async def test_receive_timeout(self) -> None:
         """receive() deve lançar TimeoutError quando o timeout expirar."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            channel = IPCChannel(socket_dir=tmpdir)
+            channel = IPCChannel(socket_dir=tmpdir, use_tcp=False)
             container_id = "timeout_test"
 
             await channel.create_socket(container_id)
@@ -231,12 +231,12 @@ class TestIPCChannelLoopback:
     async def test_create_duplicate_socket_raises(self) -> None:
         """Criar socket duplicado para o mesmo container deve lançar RuntimeError."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            channel = IPCChannel(socket_dir=tmpdir)
+            channel = IPCChannel(socket_dir=tmpdir, use_tcp=False)
             container_id = "dup_test"
 
             await channel.create_socket(container_id)
 
-            with pytest.raises(RuntimeError, match="Socket já existe"):
+            with pytest.raises(RuntimeError, match="Servidor já existe"):
                 await channel.create_socket(container_id)
 
             await channel.close(container_id)
@@ -244,7 +244,7 @@ class TestIPCChannelLoopback:
     async def test_send_without_connection_raises(self) -> None:
         """send() sem conexão ativa deve lançar ConnectionError após tentativas."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            channel = IPCChannel(socket_dir=tmpdir)
+            channel = IPCChannel(socket_dir=tmpdir, use_tcp=False)
             msg = create_message("request", "s1")
 
             with pytest.raises(ConnectionError, match="Falha ao enviar mensagem"):
@@ -253,7 +253,7 @@ class TestIPCChannelLoopback:
     async def test_close_removes_socket_file(self) -> None:
         """close() deve remover o arquivo de socket."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            channel = IPCChannel(socket_dir=tmpdir)
+            channel = IPCChannel(socket_dir=tmpdir, use_tcp=False)
             container_id = "cleanup_test"
 
             await channel.create_socket(container_id)
@@ -266,7 +266,7 @@ class TestIPCChannelLoopback:
     async def test_close_all(self) -> None:
         """close_all() deve fechar todos os sockets ativos."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            channel = IPCChannel(socket_dir=tmpdir)
+            channel = IPCChannel(socket_dir=tmpdir, use_tcp=False)
 
             await channel.create_socket("c1")
             await channel.create_socket("c2")
@@ -279,7 +279,7 @@ class TestIPCChannelLoopback:
     async def test_multiple_containers_isolated(self) -> None:
         """Múltiplos containers devem ter sockets isolados."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            channel = IPCChannel(socket_dir=tmpdir)
+            channel = IPCChannel(socket_dir=tmpdir, use_tcp=False)
 
             await channel.create_socket("c1")
             await channel.create_socket("c2")
@@ -296,7 +296,7 @@ class TestIPCChannelLoopback:
     async def test_length_prefix_framing_integrity(self) -> None:
         """Verifica integridade do length-prefix com múltiplas mensagens consecutivas."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            channel = IPCChannel(socket_dir=tmpdir)
+            channel = IPCChannel(socket_dir=tmpdir, use_tcp=False)
             container_id = "framing_test"
 
             await channel.create_socket(container_id)

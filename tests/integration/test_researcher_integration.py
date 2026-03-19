@@ -37,9 +37,16 @@ def _create_orchestrator() -> tuple[Orchestrator, MagicMock, MagicMock, MagicMoc
     mock_runner = MagicMock()
     mock_runner.spawn = AsyncMock(return_value="container_researcher_123")
     mock_runner.stop = AsyncMock()
-
+    mock_runner.is_running = AsyncMock(return_value=True)
+    mock_runner.get_logs = AsyncMock(return_value="logs")
+    
     mock_ipc = MagicMock()
-    mock_ipc.create_socket = AsyncMock()
+    mock_ipc._connections = {}
+    
+    async def create_socket_side_effect(ipc_id: str) -> None:
+        mock_ipc._connections[ipc_id] = MagicMock()
+    
+    mock_ipc.create_socket = AsyncMock(side_effect=create_socket_side_effect)
     mock_ipc.wait_for_connection = AsyncMock()
     mock_ipc.send = AsyncMock()
     mock_ipc.close = AsyncMock()

@@ -24,8 +24,21 @@ class JsonFormatter(logging.Formatter):
         }
 
         # Adiciona campos extras se presentes
-        if hasattr(record, "extra"):
-            log_data.update(record.extra)
+        # O logging padrão coloca o conteúdo de 'extra={...}' diretamente no record.__dict__
+        # Mas alguns testes passam 'extra={"extra": {...}}', então vamos achatar se necessário.
+        standard_fields = {
+            "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
+            "module", "exc_info", "exc_text", "stack_info", "lineno", "funcName",
+            "created", "msecs", "relativeCreated", "thread", "threadName",
+            "processName", "process", "message", "timestamp", "level", "event"
+        }
+        
+        for key, value in record.__dict__.items():
+            if key not in standard_fields:
+                if key == "extra" and isinstance(value, dict):
+                    log_data.update(value)
+                else:
+                    log_data[key] = value
 
         return json.dumps(log_data)
 

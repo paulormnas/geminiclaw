@@ -23,12 +23,15 @@ async def test_orchestrator_single_agent_flow() -> None:
     db_dir = tempfile.mkdtemp(prefix="gcdb_", dir="/tmp")
 
     try:
-        ipc = IPCChannel(socket_dir=ipc_dir)
+        ipc = IPCChannel(socket_dir=ipc_dir, use_tcp=False)
         db_path = f"{db_dir}/test.db"
         session_manager = SessionManager(db_path=db_path)
 
         mock_runner = MagicMock()
+        mock_runner.spawn = AsyncMock()
         mock_runner.stop = AsyncMock()
+        mock_runner.is_running = AsyncMock(return_value=True)
+        mock_runner.get_logs = AsyncMock(return_value="logs")
 
         orchestrator = Orchestrator(
             runner=mock_runner,
@@ -76,7 +79,7 @@ async def test_orchestrator_single_agent_flow() -> None:
             writer.close()
 
         # Mock do runner.spawn que inicia o "container" fake
-        async def fake_spawn(agent_id: str, image: str, session_id: str) -> str:
+        async def fake_spawn(agent_id: str, image: str, session_id: str, ipc_port: int | None = None) -> str:
             asyncio.create_task(fake_container(session_id))
             return "fake_container_id"
 

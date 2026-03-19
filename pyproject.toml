@@ -11,6 +11,9 @@ dependencies = [
     "python-dotenv>=1.2.2",
 ]
 
+[project.scripts]
+geminiclaw = "src.cli:main"
+
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
@@ -25,5 +28,6 @@ python_files = ["test_*.py"]
 markers = [
     "unit: marks tests as unit tests",
     "integration: marks tests as integration tests",
+    "e2e: marks tests as end-to-end tests (require real API)",
 ]
 

@@ -16,6 +16,11 @@ from src.ipc import IPCChannel, create_message, Message
 
 logger = get_logger(__name__)
 
+# Registro de agentes disponíveis: tipo → imagem Docker
+AGENT_REGISTRY: dict[str, str] = {
+    "base": "geminiclaw-base",
+    "researcher": "geminiclaw-researcher",
+}
 
 @dataclass
 class AgentTask:
@@ -91,6 +96,15 @@ class Orchestrator:
         self.runner = runner
         self.ipc = ipc
         self.session_manager = session_manager
+
+    @staticmethod
+    def get_available_agents() -> dict[str, str]:
+        """Retorna os agentes disponíveis e suas imagens Docker.
+
+        Returns:
+            Dicionário mapeando tipo de agente → imagem Docker.
+        """
+        return dict(AGENT_REGISTRY)
 
     async def handle_request(
         self,

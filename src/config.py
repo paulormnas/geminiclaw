@@ -31,6 +31,7 @@ GENAI_API_KEY = get_env("GENAI_API_KEY", required=True)
 DEFAULT_MODEL = get_env("DEFAULT_MODEL", default="gemini-3-flash-preview")
 AGENT_TIMEOUT_SECONDS = int(get_env("AGENT_TIMEOUT_SECONDS", default="120"))
 SQLITE_DB_PATH = get_env("SQLITE_DB_PATH", default="store/geminiclaw.db")
+SEARCH_CACHE_TTL_SECONDS = int(get_env("SEARCH_CACHE_TTL_SECONDS", default="3600"))
 
 # Garante que o diretório do banco de dados existe
 db_dir = Path(SQLITE_DB_PATH).parent

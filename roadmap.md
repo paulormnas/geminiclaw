@@ -136,15 +136,15 @@ Objetivo: ponto de entrada que recebe uma solicitação do usuário, decide quan
 
 Objetivo: primeiro agente especializado, capaz de buscar e sintetizar informações.
 
-- [ ] Criar `agents/researcher/agent.py` estendendo o agente base
-- [ ] Definir instrução especializada de pesquisa em português
-- [ ] Implementar ferramenta `search(query)` usando Gemini CLI como subprocesso
-- [ ] Implementar cache de resultados de busca com TTL configurável (padrão: 1 hora)
-- [ ] Registrar o researcher no orquestrador como tipo de agente disponível
-- [ ] Escrever testes unitários da ferramenta de busca com mock
-- [ ] Escrever teste de integração do researcher dentro de um container
-- [ ] Escrever smoke test E2E com API real
-- [ ] Commit: `feat(agents): implementa agente researcher com cache de busca`
+- [x] Criar `agents/researcher/agent.py` estendendo o agente base
+- [x] Definir instrução especializada de pesquisa em português
+- [x] Implementar ferramenta `search(query)` usando Gemini CLI como subprocesso
+- [x] Implementar cache de resultados de busca com TTL configurável (padrão: 1 hora)
+- [x] Registrar o researcher no orquestrador como tipo de agente disponível
+- [x] Escrever testes unitários da ferramenta de busca com mock
+- [x] Escrever teste de integração do researcher dentro de um container
+- [x] Escrever smoke test E2E com API real
+- [x] Commit: `feat(agents): implementa agente researcher com cache de busca`
 
 ---
 
@@ -152,13 +152,13 @@ Objetivo: primeiro agente especializado, capaz de buscar e sintetizar informaç�
 
 Objetivo: ponto de entrada para o usuário interagir com o framework.
 
-- [ ] Implementar `src/cli.py` com interface de linha de comando simples
-- [ ] Aceitar prompt do usuário via argumento ou modo interativo (`input()`)
-- [ ] Exibir resultado formatado no terminal
-- [ ] Exibir status de cada agente durante a execução (aguardando, executando, concluído, erro)
-- [ ] Implementar sinal de interrupção (`Ctrl+C`) que encerra containers abertos de forma limpa
-- [ ] Escrever testes unitários do parsing de argumentos
-- [ ] Commit: `feat(cli): implementa interface de linha de comando`
+- [x] Implementar `src/cli.py` com interface de linha de comando simples
+- [x] Aceitar prompt do usuário via argumento ou modo interativo (`input()`)
+- [x] Exibir resultado formatado no terminal
+- [x] Exibir status de cada agente durante a execução (aguardando, executando, concluído, erro)
+- [x] Implementar sinal de interrupção (`Ctrl+C`) que encerra containers abertos de forma limpa
+- [x] Escrever testes unitários do parsing de argumentos
+- [x] Commit: `feat(cli): implementa interface de linha de comando`
 
 ---
 

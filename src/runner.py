@@ -5,7 +5,7 @@ import functools
 from pathlib import Path
 from typing import Any
 from src.logger import get_logger
-from src.config import AGENT_TIMEOUT_SECONDS
+from src.config import AGENT_TIMEOUT_SECONDS, DEFAULT_MODEL
 
 logger = get_logger(__name__)
 
@@ -30,6 +30,17 @@ class ContainerRunner:
             raise RuntimeError("Não foi possível conectar ao daemon do Docker.") from e
         
         self.semaphore = asyncio.Semaphore(semaphore_limit)
+        self._ensure_network()
+
+    def _ensure_network(self) -> None:
+        """Garante que a rede geminiclaw-net existe."""
+        try:
+            self.client.networks.get("geminiclaw-net")
+        except docker.errors.NotFound:
+            logger.info("Criando rede geminiclaw-net")
+            self.client.networks.create("geminiclaw-net", driver="bridge")
+        except Exception as e:
+            logger.warning("Falha ao verificar/criar rede Docker", extra={"error": str(e)})
 
     async def spawn(self, agent_id: str, image: str, session_id: str, ipc_port: int | None = None) -> str:
         """Cria e inicia um container para um agente.
@@ -68,6 +79,8 @@ class ContainerRunner:
                     "SESSION_ID": session_id,
                     "AGENT_ID": agent_id,
                     "GEMINI_API_KEY": gemini_key,
+                    "GOOGLE_API_KEY": gemini_key,
+                    "DEFAULT_MODEL": os.environ.get("DEFAULT_MODEL", DEFAULT_MODEL),
                     "SQLITE_DB_PATH": "/data/geminiclaw.db",
                     "AGENT_SOCKET_NAME": socket_name,
                 }
@@ -110,7 +123,7 @@ class ContainerRunner:
                     "nano_cpus": 1_000_000_000,
                     "network": "geminiclaw-net",
                     "user": "appuser",
-                    "remove": True, # Re-ativado após debug
+                    "remove": True,
                     "detach": True,
                     "labels": {"project": "geminiclaw", "agent_id": agent_id, "session_id": session_id},
                     "environment": env,

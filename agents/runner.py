@@ -104,7 +104,9 @@ async def run_ipc_loop(agent: Any) -> None:
                                 if part.text:
                                     full_text += part.text
                     
-                    resposta = {"resposta": full_text}
+                    resposta = {"text": full_text}
+                    
+                    logger.info("Agente finalizou execução", extra={"full_text_length": len(full_text), "full_text_preview": full_text[:100]})
                     
                     # Se não houve texto mas houve erro no evento, loga
                     if not full_text:

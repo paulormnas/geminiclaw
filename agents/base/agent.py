@@ -11,6 +11,7 @@ from typing import Any
 from google.adk.agents import Agent
 from google.adk.agents.context import Context
 from google.genai import types as genai_types
+from agents.base.tools import write_artifact
 
 from src.logger import get_logger
 from src.session import SessionManager
@@ -140,6 +141,7 @@ root_agent = Agent(
     model=DEFAULT_MODEL,
     description=AGENT_DESCRIPTION,
     instruction=AGENT_INSTRUCTION,
+    tools=[write_artifact],
     before_agent_callback=_load_session_context,
     after_agent_callback=_persist_session_context,
 )

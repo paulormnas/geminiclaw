@@ -5,6 +5,8 @@ gerenciando sessões, IPC e tratamento de falhas parciais.
 """
 
 import asyncio
+import json
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -21,6 +23,8 @@ logger = get_logger(__name__)
 AGENT_REGISTRY: dict[str, str] = {
     "base": "geminiclaw-base",
     "researcher": "geminiclaw-researcher",
+    "planner": "geminiclaw-planner",
+    "validator": "geminiclaw-validator",
 }
 
 @dataclass
@@ -111,6 +115,18 @@ class Orchestrator:
         """
         return dict(AGENT_REGISTRY)
 
+    def _clean_json_text(self, text: str) -> str:
+        """Limpa o texto da resposta para extrair apenas o conteúdo JSON.
+        
+        Remove blocos de código markdown (```json ... ```) e espaços extras.
+        """
+        if not text:
+            return ""
+            
+        # Remove blocos de código markdown
+        text = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", text, flags=re.DOTALL)
+        return text.strip()
+
     async def handle_request(
         self,
         prompt: str,
@@ -127,13 +143,17 @@ class Orchestrator:
             Resultado consolidado com respostas de todos os agentes.
         """
         if agent_tasks is None:
-            agent_tasks = [
-                AgentTask(
-                    agent_id="base_agent",
-                    image="geminiclaw-base",
-                    prompt=prompt,
-                )
-            ]
+            # Etapa 9: Inicia o ciclo de planejamento e raciocínio
+            agent_tasks = await self._run_planning_loop(prompt)
+        
+        if not agent_tasks:
+            return OrchestratorResult(
+                results=[],
+                total=0,
+                succeeded=0,
+                failed=0,
+                artifacts=[],
+            )
 
         prompt_preview = prompt[:100]
         logger.info(
@@ -219,6 +239,9 @@ class Orchestrator:
         Returns:
             Resultado da execução do agente.
         """
+        # Delay anti-429
+        await asyncio.sleep(2)
+        
         session = self.session_manager.create(task.agent_id)
         container_id: str | None = None
         ipc_id = f"{task.agent_id}_{session.id}"
@@ -356,3 +379,88 @@ class Orchestrator:
                     pass
 
         return result
+
+    async def _run_planning_loop(self, prompt: str) -> list[AgentTask]:
+        """Executa o ciclo de planejamento (Planner -> Validator).
+
+        Args:
+            prompt: Solicitação original do usuário.
+
+        Returns:
+            Lista de AgentTask aprovadas.
+        """
+        logger.info("Iniciando ciclo de planejamento", extra={"prompt": prompt})
+        
+        feedback = ""
+        last_plan_str = ""
+        
+        for iteration in range(3):
+            # 1. Executa o Planner
+            planner_prompt = f"Crie um plano para: {prompt}"
+            if feedback:
+                planner_prompt += f"\n\nO plano anterior foi rejeitado: {feedback}. Por favor, revise."
+            
+            planner_task = AgentTask(
+                agent_id="planner", 
+                image=AGENT_REGISTRY["planner"], 
+                prompt=planner_prompt
+            )
+            
+            planner_result = await self._execute_agent(planner_task)
+            if planner_result.status != "success":
+                logger.error("Falha no Agente Planejador", extra={"error": planner_result.error})
+                return []
+            
+            # Tenta extrair JSON da resposta
+            plan_text = self._clean_json_text(planner_result.response.get("text", ""))
+            try:
+                plan_data = json.loads(plan_text)
+                last_plan_str = json.dumps(plan_data, indent=2)
+            except Exception as e:
+                logger.error("Erro ao parsear plano do Planner", extra={"error": str(e), "text": plan_text})
+                feedback = f"Erro de formato no JSON: {str(e)}. Envie APENAS o JSON válido."
+                continue
+            
+            # 2. Executa o Validator
+            validator_prompt = f"Revise este plano:\n{last_plan_str}\n\nPara a solicitação: {prompt}"
+            validator_task = AgentTask(
+                agent_id="validator", 
+                image=AGENT_REGISTRY["validator"], 
+                prompt=validator_prompt
+            )
+            
+            validator_result = await self._execute_agent(validator_task)
+            if validator_result.status != "success":
+                logger.error("Falha no Agente Validador", extra={"error": validator_result.error})
+                return []
+            
+            val_text = self._clean_json_text(validator_result.response.get("text", ""))
+            try:
+                val_data = json.loads(val_text)
+                
+                status = val_data.get("status", "revision_needed")
+                reason = val_data.get("reason", "")
+                
+                if status == "approved":
+                    logger.info("Plano aprovado pelo Validador", extra={"iteration": iteration + 1})
+                    tasks = []
+                    for t in plan_data:
+                        tasks.append(AgentTask(
+                            agent_id=t.get("agent_id", "base"),
+                            image=t.get("image", AGENT_REGISTRY.get(t.get("agent_id", "base"), "geminiclaw-base")),
+                            prompt=t.get("prompt", prompt)
+                        ))
+                    return tasks
+                elif status == "rejected":
+                    logger.warning("Plano rejeitado definitivamente", extra={"reason": reason})
+                    return []
+                else:
+                    feedback = reason or "Plano precisa de revisão."
+                    logger.info("Solicitando revisão do plano", extra={"iteration": iteration + 1, "reason": feedback})
+                    
+            except Exception as e:
+                logger.error("Erro ao parsear resposta do Validador", extra={"error": str(e), "text": val_text})
+                feedback = "Erro ao ler sua validação. Por favor, tente novamente com o formato JSON correto."
+
+        logger.error("Máximo de iterações de planejamento atingido")
+        return []

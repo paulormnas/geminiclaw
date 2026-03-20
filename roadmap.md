@@ -113,14 +113,14 @@ Objetivo: spawnar, monitorar e destruir containers Docker de agentes.
   - [x] `spawn(agent_id, image, config)` → `ContainerHandle`
   - [x] `stop(container_id)` → `None`
   - [x] `cleanup_all()` → `None` (destrói todos os containers do projeto)
-- [ ] Montar `outputs/<session_id>/` como volume no container (`/outputs`) em todo `containers.run()`
+- [x] Montar `outputs/<session_id>/` como volume no container (`/outputs`) em todo `containers.run()`
 - [x] Aplicar limites de recursos em todo `containers.run()`: `mem_limit="512m"`, `nano_cpus=1_000_000_000`, `network="geminiclaw-net"`, `user="appuser"`, `remove=True`
 - [x] Implementar `asyncio.Semaphore(3)` para limitar agentes simultâneos
 - [x] Implementar tratamento de timeout: container que exceder `AGENT_TIMEOUT_SECONDS` é encerrado automaticamente
 - [x] Escrever testes unitários com mock do `docker-py`
-- [ ] Escrever teste de integração do ciclo de vida completo (spawn → execução → remoção)
-- [ ] Escrever teste de integração para o limite de concorrência
-- [ ] Commit: `feat(runner): implementa container runner com controle de concorrência`
+- [x] Escrever teste de integração do ciclo de vida completo (spawn → execução → remoção)
+- [x] Escrever teste de integração para o limite de concorrência
+- [x] Commit: `feat(runner): implementa container runner com controle de concorrência`
 
 ---
 
@@ -147,7 +147,7 @@ Objetivo: agente mínimo funcional que pode ser instanciado e executado em um co
 
 - [x] Implementar `agents/base/agent.py` com `root_agent` usando Google ADK
 - [x] Definir `name`, `model`, `description` e `instruction` obrigatórios
-- [ ] A instrução do agente base deve incluir explicitamente: *"Todos os artefatos que você produzir devem ser salvos em `/outputs/<task_name>/` dentro do container."*
+- [x] A instrução do agente base deve incluir explicitamente: *"Todos os artefatos que você produzir devem ser salvos em `/outputs/<task_name>/` dentro do container."*
 - [x] Integrar o agente ao `SessionManager` (carrega contexto da sessão ao iniciar)
 - [x] Integrar o agente ao logger estruturado
 - [x] Construir imagem Docker do agente base e validar que sobe sem erros
@@ -177,20 +177,21 @@ Objetivo: ponto de entrada que recebe uma solicitação do usuário, decide quan
 
 Objetivo: antes de executar qualquer tarefa, o agente planejador decompõe o problema em passos e submete o plano a um agente validador. Apenas planos aprovados são enviados ao orquestrador para execução.
 
-- [ ] Implementar `agents/planner/agent.py` com instrução especializada em decompor problemas em etapas ordenadas e executáveis
-- [ ] O Planner deve incluir em cada tarefa do plano: nome, responsável e artefatos esperados em `/outputs/<task_name>/`
-- [ ] Implementar `agents/validator/agent.py` com instrução especializada em revisar planos: identificar etapas ambíguas, dependências faltantes, abordagens inviáveis ou tarefas que não especificam onde salvar seus artefatos
+- [x] Implementar `agents/planner/agent.py` com instrução especializada em decompor problemas em etapas ordenadas e executáveis
+- [x] O Planner deve incluir em cada tarefa do plano: nome, responsável e artefatos esperados em `/outputs/<task_name>/`
+- [x] Implementar `agents/validator/agent.py` com instrução especializada em revisar planos: identificar etapas ambíguas, dependências faltantes, abordagens inviáveis ou tarefas que não especificam onde salvar seus artefatos
 - [ ] Definir o protocolo de revisão em `src/ipc.py`:
   - [ ] Planner envia plano ao Validator via IPC
   - [ ] Validator retorna `approved`, `rejected` ou `revision_needed` com justificativa
   - [ ] Se `revision_needed`, o Planner revisa e resubmete (máximo de 3 iterações)
   - [ ] Se `rejected` após 3 tentativas, o orquestrador é notificado e interrompe a tarefa
-- [ ] Integrar o ciclo planner → validator no `src/orchestrator.py` como etapa obrigatória antes do dispatch de agentes executores
+- [x] Integrar o ciclo planner → validator no `src/orchestrator.py` como etapa obrigatória antes do dispatch de agentes executores
 - [ ] Garantir que o plano aprovado é persistido na sessão SQLite antes da execução
-- [ ] Implementar log estruturado de cada iteração do ciclo de revisão
-- [ ] Escrever testes unitários do protocolo de revisão com mocks do planner e do validator
-- [ ] Escrever teste de integração do ciclo completo: planner → validator → aprovação → dispatch
-- [ ] Escrever teste do fluxo de rejeição: 3 iterações sem aprovação → orquestrador notificado
+- [x] Implementar log estruturado de cada iteração do ciclo de revisão
+- [x] Escrever testes unitários do protocolo de revisão com mocks do planner e do validator
+- [/] Escrever teste de integração do ciclo completo: planner → validator → aprovação → dispatch
+- [/] Escrever teste do fluxo de rejeição: 3 iterações sem aprovação → orquestrador notificado
+- [ ] Commit: `feat(agents): implementa ciclo de raciocínio e validação de planos entre agentes`
 - [ ] Commit: `feat(agents): implementa ciclo de raciocínio e validação de planos entre agentes`
 
 ---

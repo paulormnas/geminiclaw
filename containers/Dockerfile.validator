@@ -1,0 +1,6 @@
+# Dockerfile para o agente Validator
+FROM geminiclaw-base
+LABEL stage=runtime component=agent-validator
+
+# Sobrescreve o comando padrão para rodar o validator
+CMD ["python", "-m", "agents.validator.agent"]

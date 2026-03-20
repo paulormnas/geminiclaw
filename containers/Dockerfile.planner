@@ -1,0 +1,6 @@
+# Dockerfile para o agente Planner
+FROM geminiclaw-base
+LABEL stage=runtime component=agent-planner
+
+# Sobrescreve o comando padrão para rodar o planner
+CMD ["python", "-m", "agents.planner.agent"]

@@ -36,4 +36,10 @@ SEARCH_CACHE_TTL_SECONDS = int(get_env("SEARCH_CACHE_TTL_SECONDS", default="3600
 
 # Garante que os diretórios necessários existem
 Path(SQLITE_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-Path(OUTPUT_BASE_DIR).mkdir(parents=True, exist_ok=True)
+
+try:
+    Path(OUTPUT_BASE_DIR).mkdir(parents=True, exist_ok=True)
+except PermissionError:
+    # Em containers, o volume pode já estar montado mas sem permissão de mkdir no root do volume
+    if not Path(OUTPUT_BASE_DIR).exists():
+        raise

@@ -208,5 +208,15 @@ marimo/_lsp/
 __marimo__/
 
 
+#SQLite
+*.db
+*.db-journal
+
+
+#Misc
+task-validation.md
 SETUP.md
 outputs/
+
+#Tests
+test_output*

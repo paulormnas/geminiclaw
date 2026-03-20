@@ -92,7 +92,7 @@ class TestOrchestratorSingleAgent:
         assert result.results[0].session_id == "sess_1"
 
     async def test_handle_request_default_agent(self) -> None:
-        """handle_request sem agent_tasks deve usar agente base padrão."""
+        """handle_request sem agent_tasks deve usar agente base padrão via thinking loop."""
         orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
 
         session = _make_session("base_agent", "sess_default")
@@ -101,12 +101,16 @@ class TestOrchestratorSingleAgent:
         response_msg = _make_response_message("sess_default", {"result": "ok"})
         mock_ipc.receive = AsyncMock(return_value=response_msg)
 
-        result = await orchestrator.handle_request("Teste sem tasks")
+        # Mock do loop de planejamento para retornar uma tarefa simples
+        default_task = AgentTask(agent_id="base_agent", image="geminiclaw-base", prompt="Teste sem tasks")
+        
+        with patch.object(Orchestrator, "_run_planning_loop", AsyncMock(return_value=[default_task])):
+            result = await orchestrator.handle_request("Teste sem tasks")
 
         assert result.total == 1
         assert result.succeeded == 1
         mock_runner.spawn.assert_called_once()
-        # Verifica que usou a imagem padrão
+        # Verifica que usou a imagem padrão definida na tarefa retornada pelo mock
         call_args = mock_runner.spawn.call_args
         assert call_args[0][0] == "base_agent"  # agent_id
         assert call_args[0][1] == "geminiclaw-base"  # image

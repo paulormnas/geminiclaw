@@ -45,13 +45,15 @@ async def test_runner_spawn_parameters(mock_docker_client):
                 "SESSION_ID": "session_123",
                 "AGENT_ID": "test_agent",
                 "GEMINI_API_KEY": "test_key",
+                "GOOGLE_API_KEY": "test_key",
+                "DEFAULT_MODEL": "gemini-3-flash-preview",
                 "SQLITE_DB_PATH": "/data/geminiclaw.db",
                 "AGENT_SOCKET_NAME": "test_agent_session_123.sock",
             },
             volumes={
                 "/path/to": {"bind": "/data", "mode": "rw"},
-                str(Path(IPC_SOCKET_DIR)): {"bind": "/tmp/geminiclaw-ipc", "mode": "rw"},
                 output_path: {"bind": "/outputs", "mode": "rw"},
+                str(Path(IPC_SOCKET_DIR)): {"bind": "/tmp/geminiclaw-ipc", "mode": "rw"},
             },
             extra_hosts={},
         )

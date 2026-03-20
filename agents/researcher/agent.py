@@ -10,6 +10,7 @@ from google.adk.agents import Agent
 from src.logger import get_logger
 from src.config import DEFAULT_MODEL
 from agents.base.agent import _load_session_context, _persist_session_context
+from agents.base.tools import write_artifact
 from agents.researcher.tools import search
 
 logger = get_logger(__name__)
@@ -46,7 +47,7 @@ root_agent = Agent(
     model=DEFAULT_MODEL,
     description=AGENT_DESCRIPTION,
     instruction=AGENT_INSTRUCTION,
-    tools=[search],
+    tools=[search, write_artifact],
     before_agent_callback=_load_session_context,
     after_agent_callback=_persist_session_context,
 )

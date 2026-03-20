@@ -6,6 +6,7 @@ subprocesso assíncrono, com integração ao cache de resultados.
 
 import asyncio
 import asyncio.subprocess
+from pathlib import Path
 
 from src.logger import get_logger
 from src.config import AGENT_TIMEOUT_SECONDS
@@ -87,10 +88,15 @@ async def search(query: str) -> str:
 
         # 4. Salva o artefato de pesquisa (Etapa 1)
         try:
-            output_dir = Path("/outputs")
-            if output_dir.exists():
-                # Usa um nome de arquivo baseado na query (hash ou truncado)
-                research_file = output_dir / "research_results.md"
+            import os
+            agent_id = os.environ.get("AGENT_ID", "researcher")
+            # O Orquestrador cria outputs/<session_id>/<agent_id>/artifacts
+            # No container, /outputs mapeia para outputs/<session_id>/
+            art_dir = Path("/outputs") / agent_id / "artifacts"
+            
+            if art_dir.exists() or Path("/outputs").exists():
+                art_dir.mkdir(parents=True, exist_ok=True)
+                research_file = art_dir / "research_results.md"
                 with open(research_file, "a", encoding="utf-8") as f:
                     f.write(f"\n## Pesquisa: {query}\n\n{result}\n")
         except Exception as e:

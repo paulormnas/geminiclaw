@@ -2,6 +2,7 @@ import pytest
 import asyncio
 from unittest.mock import MagicMock, patch
 import os
+from pathlib import Path
 from src.runner import ContainerRunner
 
 @pytest.fixture
@@ -27,8 +28,9 @@ async def test_runner_spawn_parameters(mock_docker_client):
         
         assert container_id == "fake_id_123"
         
-        # O runner monta o diretório de sockets e o diretório do banco
+        # O runner monta o diretório de sockets, o diretório do banco e o diretório de outputs
         from src.runner import IPC_SOCKET_DIR
+        output_path = str(Path("outputs").absolute() / "session_123")
         
         mock_docker_client.containers.run.assert_called_once_with(
             image="test_image",
@@ -48,7 +50,8 @@ async def test_runner_spawn_parameters(mock_docker_client):
             },
             volumes={
                 "/path/to": {"bind": "/data", "mode": "rw"},
-                str(IPC_SOCKET_DIR): {"bind": "/tmp/geminiclaw-ipc", "mode": "rw"},
+                str(Path(IPC_SOCKET_DIR)): {"bind": "/tmp/geminiclaw-ipc", "mode": "rw"},
+                output_path: {"bind": "/outputs", "mode": "rw"},
             },
             extra_hosts={},
         )

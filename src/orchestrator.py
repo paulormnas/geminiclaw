@@ -13,6 +13,7 @@ from src.config import AGENT_TIMEOUT_SECONDS
 from src.session import SessionManager
 from src.runner import ContainerRunner
 from src.ipc import IPCChannel, create_message, Message
+from src.output_manager import OutputManager
 
 logger = get_logger(__name__)
 
@@ -71,6 +72,7 @@ class OrchestratorResult:
     total: int
     succeeded: int
     failed: int
+    artifacts: list[dict[str, Any]] = field(default_factory=list)
 
 
 class Orchestrator:
@@ -85,6 +87,7 @@ class Orchestrator:
         runner: ContainerRunner,
         ipc: IPCChannel,
         session_manager: SessionManager,
+        output_manager: OutputManager | None = None,
     ) -> None:
         """Inicializa o orquestrador com dependências injetadas.
 
@@ -92,10 +95,12 @@ class Orchestrator:
             runner: Gerenciador de containers Docker.
             ipc: Canal de comunicação IPC.
             session_manager: Gerenciador de sessões SQLite.
+            output_manager: Gerenciador de outputs (opcional).
         """
         self.runner = runner
         self.ipc = ipc
         self.session_manager = session_manager
+        self.output_manager = output_manager or OutputManager()
 
     @staticmethod
     def get_available_agents() -> dict[str, str]:
@@ -176,11 +181,18 @@ class Orchestrator:
         succeeded = sum(1 for r in results if r.status == "success")
         failed = len(results) - succeeded
 
+        # Coleta artefatos de todas as sessões envolvidas
+        all_artifacts = []
+        unique_sessions = {r.session_id for r in results if r.session_id}
+        for sid in unique_sessions:
+            all_artifacts.extend(self.output_manager.list_artifacts(sid))
+
         orchestrator_result = OrchestratorResult(
             results=results,
             total=len(results),
             succeeded=succeeded,
             failed=failed,
+            artifacts=all_artifacts,
         )
 
         logger.info(
@@ -189,6 +201,7 @@ class Orchestrator:
                 "total": orchestrator_result.total,
                 "succeeded": orchestrator_result.succeeded,
                 "failed": orchestrator_result.failed,
+                "artifacts_count": len(all_artifacts),
             },
         )
 
@@ -220,6 +233,10 @@ class Orchestrator:
                     "image": task.image,
                 },
             )
+
+            # 0. Inicializa diretório de output para a sessão e para a tarefa
+            self.output_manager.init_session(session.id)
+            self.output_manager.get_task_dir(session.id, task.agent_id)
 
             # 1. Cria socket IPC
             await self.ipc.create_socket(ipc_id)

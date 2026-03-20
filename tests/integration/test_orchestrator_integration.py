@@ -21,11 +21,15 @@ async def test_orchestrator_single_agent_flow() -> None:
     # Usa /tmp diretamente com nome curto para evitar AF_UNIX path too long
     ipc_dir = tempfile.mkdtemp(prefix="gc_", dir="/tmp")
     db_dir = tempfile.mkdtemp(prefix="gcdb_", dir="/tmp")
+    output_dir = tempfile.mkdtemp(prefix="gcout_", dir="/tmp")
 
     try:
         ipc = IPCChannel(socket_dir=ipc_dir, use_tcp=False)
         db_path = f"{db_dir}/test.db"
         session_manager = SessionManager(db_path=db_path)
+        
+        from src.output_manager import OutputManager
+        output_manager = OutputManager(base_dir=output_dir)
 
         mock_runner = MagicMock()
         mock_runner.spawn = AsyncMock()
@@ -37,6 +41,7 @@ async def test_orchestrator_single_agent_flow() -> None:
             runner=mock_runner,
             ipc=ipc,
             session_manager=session_manager,
+            output_manager=output_manager,
         )
 
         task = AgentTask(
@@ -46,7 +51,7 @@ async def test_orchestrator_single_agent_flow() -> None:
         )
 
         async def fake_container(session_id: str) -> None:
-            """Simula o container: conecta ao socket, recebe request, envia response."""
+            """Simula o container: conecta ao socket, recebe request, envia response e gera artefato."""
             ipc_id = f"ag1_{session_id}"
             socket_path = ipc._socket_path(ipc_id)
 
@@ -58,6 +63,11 @@ async def test_orchestrator_single_agent_flow() -> None:
 
             # Conecta ao socket
             reader, writer = await asyncio.open_unix_connection(socket_path)
+
+            # Simula a escrita de um artefato no "volume" associado à sessão
+            # No teste, escrevemos diretamente no diretório de output controlado pelo OutputManager
+            task_dir = output_manager.get_task_dir(session_id, "ag1")
+            (task_dir / "result.txt").write_text("Resposta final: 42")
 
             # Recebe o request
             header = await reader.readexactly(HEADER_SIZE)
@@ -99,6 +109,11 @@ async def test_orchestrator_single_agent_flow() -> None:
         assert result.results[0].response["source"] == "Douglas Adams"
         assert result.results[0].agent_id == "ag1"
 
+        # Verifica se o artefato foi listado
+        assert len(result.artifacts) == 1
+        assert result.artifacts[0]["name"] == "result.txt"
+        assert result.artifacts[0]["task"] == "ag1"
+
         # Verifica que a sessão foi criada e fechada
         session = session_manager.get(result.results[0].session_id)
         assert session is not None
@@ -109,3 +124,4 @@ async def test_orchestrator_single_agent_flow() -> None:
         import shutil
         shutil.rmtree(ipc_dir, ignore_errors=True)
         shutil.rmtree(db_dir, ignore_errors=True)
+        shutil.rmtree(output_dir, ignore_errors=True)

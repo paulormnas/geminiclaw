@@ -72,10 +72,20 @@ class ContainerRunner:
                     "AGENT_SOCKET_NAME": socket_name,
                 }
 
+                # Prepare output volume
+                output_base = os.environ.get("OUTPUT_BASE_DIR", "outputs")
+                output_session_host = str(Path(output_base).absolute() / session_id)
+                # Garante que a pasta no host existe antes de montar
+                Path(output_session_host).mkdir(parents=True, exist_ok=True)
+
                 # Volumes padrão
                 volumes = {
                     db_dir_host: {
                         "bind": "/data",
+                        "mode": "rw",
+                    },
+                    output_session_host: {
+                        "bind": "/outputs",
                         "mode": "rw",
                     }
                 }

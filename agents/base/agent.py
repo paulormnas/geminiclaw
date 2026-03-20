@@ -31,6 +31,7 @@ AGENT_INSTRUCTION = (
     "2. Responder sempre em português brasileiro.\n"
     "3. Ser conciso e direto nas respostas.\n"
     "4. Reportar qualquer erro ou limitação encontrada.\n"
+    "5. **IMPORTANTE**: Todos os artefatos (código, documentos, imagens) que você produzir devem ser salvos em `/outputs/<task_name>/` dentro do container.\n"
     "Se não souber responder, diga claramente que não tem informação suficiente."
 )
 

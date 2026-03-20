@@ -85,6 +85,17 @@ async def search(query: str) -> str:
         # 3. Armazena no cache
         _search_cache.set(query, result)
 
+        # 4. Salva o artefato de pesquisa (Etapa 1)
+        try:
+            output_dir = Path("/outputs")
+            if output_dir.exists():
+                # Usa um nome de arquivo baseado na query (hash ou truncado)
+                research_file = output_dir / "research_results.md"
+                with open(research_file, "a", encoding="utf-8") as f:
+                    f.write(f"\n## Pesquisa: {query}\n\n{result}\n")
+        except Exception as e:
+            logger.warning("Falha ao salvar artefato de pesquisa", extra={"error": str(e)})
+
         logger.info(
             "Busca concluída com sucesso",
             extra={"query": query[:100], "result_length": len(result)},

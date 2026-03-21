@@ -28,13 +28,17 @@ async def write_artifact(filename: str, content: str) -> str:
             return "Erro: Diretório /outputs não encontrado no container."
 
         task_dir = base_dir / agent_id / "artifacts"
+        
+        # Se for um caminho absoluto como "/outputs/.../arquivo.txt", transforma em relativo para a tarefa
+        safe_name = Path(filename).name
+        
         task_dir.mkdir(parents=True, exist_ok=True)
 
-        file_path = task_dir / filename
+        file_path = task_dir / safe_name
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
 
-        return f"Artefato salvo com sucesso em {filename}"
+        return f"Artefato salvo com sucesso em {file_path}"
 
     except Exception as e:
         logger.error(f"Erro ao salvar artefato: {e}")

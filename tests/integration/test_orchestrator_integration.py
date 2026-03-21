@@ -89,7 +89,7 @@ async def test_orchestrator_single_agent_flow() -> None:
             writer.close()
 
         # Mock do runner.spawn que inicia o "container" fake
-        async def fake_spawn(agent_id: str, image: str, session_id: str, ipc_port: int | None = None) -> str:
+        async def fake_spawn(agent_id: str, image: str, session_id: str, ipc_port: int | None = None, output_session_id: str | None = None) -> str:
             asyncio.create_task(fake_container(session_id))
             return "fake_container_id"
 

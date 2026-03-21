@@ -42,14 +42,15 @@ class ContainerRunner:
         except Exception as e:
             logger.warning("Falha ao verificar/criar rede Docker", extra={"error": str(e)})
 
-    async def spawn(self, agent_id: str, image: str, session_id: str, ipc_port: int | None = None) -> str:
+    async def spawn(self, agent_id: str, image: str, session_id: str, ipc_port: int | None = None, output_session_id: str | None = None) -> str:
         """Cria e inicia um container para um agente.
 
         Args:
             agent_id: Identificador do agente.
             image: Nome da imagem Docker.
-            session_id: ID da sessão associada.
+            session_id: ID da sessão associada (usado para IPC temporário).
             ipc_port: Porta TCP para IPC (opcional, se usar TCP em vez de Unix Sockets).
+            output_session_id: ID alternativo para o diretório de outputs compartilhado.
 
         Returns:
             O ID do container criado.
@@ -87,7 +88,8 @@ class ContainerRunner:
 
                 # Prepare output volume
                 output_base = os.environ.get("OUTPUT_BASE_DIR", "outputs")
-                output_session_host = str(Path(output_base).absolute() / session_id)
+                effective_output_id = output_session_id or session_id
+                output_session_host = str(Path(output_base).absolute() / effective_output_id)
                 # Garante que a pasta no host existe antes de montar
                 Path(output_session_host).mkdir(parents=True, exist_ok=True)
 

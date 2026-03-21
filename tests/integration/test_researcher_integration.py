@@ -109,6 +109,7 @@ class TestResearcherInOrchestrator:
         orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
 
         sessions = [
+            _make_session("orchestrator", "master_sess"),
             _make_session("base_1", "sess_b1"),
             _make_session("researcher_1", "sess_r1"),
         ]

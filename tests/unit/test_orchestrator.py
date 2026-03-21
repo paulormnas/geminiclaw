@@ -95,14 +95,16 @@ class TestOrchestratorSingleAgent:
         """handle_request sem agent_tasks deve usar agente base padrão via thinking loop."""
         orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
 
+        # Mock do loop de planejamento para retornar uma tarefa simples
+        default_task = AgentTask(agent_id="base_agent", image="geminiclaw-base", prompt="Teste sem tasks")
+        
+        # Agora o Orchestrator chama create duas vezes: uma para a master session e outra para o agente
+        master_session = _make_session("orchestrator", "sess_master")
         session = _make_session("base_agent", "sess_default")
-        mock_sm.create.return_value = session
+        mock_sm.create.side_effect = [master_session, session]
 
         response_msg = _make_response_message("sess_default", {"result": "ok"})
         mock_ipc.receive = AsyncMock(return_value=response_msg)
-
-        # Mock do loop de planejamento para retornar uma tarefa simples
-        default_task = AgentTask(agent_id="base_agent", image="geminiclaw-base", prompt="Teste sem tasks")
         
         with patch.object(Orchestrator, "_run_planning_loop", AsyncMock(return_value=[default_task])):
             result = await orchestrator.handle_request("Teste sem tasks")
@@ -126,8 +128,10 @@ class TestOrchestratorMultipleAgents:
         orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
 
         # Cada chamada a create retorna uma session diferente
-        sessions = [_make_session(f"a{i}", f"s{i}") for i in range(3)]
-        mock_sm.create.side_effect = sessions
+        # Agora a primeira chamada é para a master session
+        master_session = _make_session("orchestrator", "sess_master")
+        agent_sessions = [_make_session(f"a{i}", f"s{i}") for i in range(3)]
+        mock_sm.create.side_effect = [master_session] + agent_sessions
 
         responses = [
             _make_response_message(f"s{i}", {"idx": i}) for i in range(3)
@@ -156,8 +160,9 @@ class TestOrchestratorPartialFailure:
         """1 agente falha, os demais retornam sucesso."""
         orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
 
-        sessions = [_make_session(f"a{i}", f"s{i}") for i in range(3)]
-        mock_sm.create.side_effect = sessions
+        master_session = _make_session("orchestrator", "sess_master")
+        agent_sessions = [_make_session(f"a{i}", f"s{i}") for i in range(3)]
+        mock_sm.create.side_effect = [master_session] + agent_sessions
 
         # Segundo agente falha no receive (timeout)
         ok_msg_0 = _make_response_message("s0", {"ok": True})
@@ -197,8 +202,9 @@ class TestOrchestratorPartialFailure:
         """Agente que falha no spawn retorna status error."""
         orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
 
+        master_session = _make_session("orchestrator", "sess_master")
         session = _make_session("a1", "s1")
-        mock_sm.create.return_value = session
+        mock_sm.create.side_effect = [master_session, session]
         mock_runner.spawn = AsyncMock(side_effect=RuntimeError("Docker unavailable"))
 
         task = AgentTask(agent_id="a1", image="img", prompt="test")
@@ -219,8 +225,9 @@ class TestOrchestratorResultCounts:
         """Quando todos os agentes falham."""
         orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
 
-        sessions = [_make_session(f"a{i}", f"s{i}") for i in range(2)]
-        mock_sm.create.side_effect = sessions
+        master_session = _make_session("orchestrator", "sess_master")
+        agent_sessions = [_make_session(f"a{i}", f"s{i}") for i in range(2)]
+        mock_sm.create.side_effect = [master_session] + agent_sessions
         mock_ipc.receive = AsyncMock(side_effect=ConnectionError("IPC down"))
 
         tasks = [
@@ -238,8 +245,9 @@ class TestOrchestratorResultCounts:
         """Agente que excede timeout retorna status 'timeout'."""
         orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
 
+        master_session = _make_session("orchestrator", "sess_master")
         session = _make_session("a1", "s1")
-        mock_sm.create.return_value = session
+        mock_sm.create.side_effect = [master_session, session]
         mock_ipc.receive = AsyncMock(side_effect=TimeoutError("Timeout!"))
 
         task = AgentTask(agent_id="a1", image="img", prompt="test")
@@ -267,7 +275,9 @@ class TestOrchestratorCleanup:
         task = AgentTask(agent_id="a1", image="img", prompt="test")
         await orchestrator.handle_request("cleanup", [task])
 
-        mock_sm.close.assert_called_once_with("sess_cleanup")
+        # close() é chamado duas vezes: uma para o agente e outra para a master session
+        assert mock_sm.close.call_count == 2
+        mock_sm.close.assert_any_call("sess_cleanup")
 
     async def test_ipc_closed_after_execution(self) -> None:
         """Sockets IPC devem ser fechados ao final."""
@@ -311,6 +321,8 @@ class TestOrchestratorCleanup:
         await orchestrator.handle_request("error_cleanup", [task])
 
         # Mesmo com erro, sessão, IPC e container devem ser limpos
-        mock_sm.close.assert_called_once_with("sess_err")
+        # close() é chamado duas vezes: uma para o agente e outra para a master session
+        assert mock_sm.close.call_count == 2
+        mock_sm.close.assert_any_call("sess_err")
         mock_ipc.close.assert_called_once()
         mock_runner.stop.assert_called_once()

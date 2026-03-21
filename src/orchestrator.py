@@ -118,13 +118,21 @@ class Orchestrator:
     def _clean_json_text(self, text: str) -> str:
         """Limpa o texto da resposta para extrair apenas o conteúdo JSON.
         
-        Remove blocos de código markdown (```json ... ```) e espaços extras.
+        Tenta encontrar o primeiro '[' ou '{' e o último ']' ou '}' 
+        para extrair o JSON mesmo com texto ao redor.
         """
         if not text:
             return ""
             
-        # Remove blocos de código markdown
+        # 1. Tenta remover blocos de código markdown
         text = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", text, flags=re.DOTALL)
+        
+        # 2. Busca pelo conteúdo entre o primeiro [ ou { e o último ] ou }
+        # Isso ajuda se o agente incluir texto fora do markdown
+        match = re.search(r"([\[{].*[\]}])", text, re.DOTALL)
+        if match:
+            text = match.group(1)
+            
         return text.strip()
 
     async def handle_request(
@@ -142,9 +150,28 @@ class Orchestrator:
         Returns:
             Resultado consolidado com respostas de todos os agentes.
         """
+        # Cria a sessão mestra para a orquestração
+        master_session = self.session_manager.create("orchestrator")
+        
         if agent_tasks is None:
             # Etapa 9: Inicia o ciclo de planejamento e raciocínio
-            agent_tasks = await self._run_planning_loop(prompt)
+            agent_tasks = await self._run_planning_loop(prompt, master_session.id)
+            
+            # Persiste o plano aprovado na sessão mestra
+            if agent_tasks:
+                plan_payload = {
+                    "prompt": prompt,
+                    "plan": [
+                        {
+                            "agent_id": t.agent_id,
+                            "image": t.image,
+                            "prompt": t.prompt
+                        } for t in agent_tasks
+                    ]
+                }
+                self.session_manager.update(master_session.id, status="executing", payload=plan_payload)
+            else:
+                self.session_manager.update(master_session.id, status="failed", payload={"error": "Planejamento falhou ou foi rejeitado"})
         
         if not agent_tasks:
             return OrchestratorResult(
@@ -162,16 +189,15 @@ class Orchestrator:
                 "prompt_preview": prompt_preview,
                 "agent_count": len(agent_tasks),
                 "agents": [t.agent_id for t in agent_tasks],
+                "plan": [{"agent_id": t.agent_id, "prompt": t.prompt} for t in agent_tasks]
             },
         )
 
-        # Executa todos os agentes em paralelo com tolerância a falhas
-        coroutines = [
-            self._execute_agent(task)
-            for task in agent_tasks
-        ]
-
-        raw_results = await asyncio.gather(*coroutines, return_exceptions=True)
+        # Executa os agentes sequencialmente (Etapa 9 workaround para compartilhamento de estado via arquivos)
+        raw_results = []
+        for task in agent_tasks:
+            result = await self._execute_agent(task, master_session.id)
+            raw_results.append(result)
 
         # Processa resultados, convertendo exceções em AgentResult de erro
         results: list[AgentResult] = []
@@ -201,11 +227,31 @@ class Orchestrator:
         succeeded = sum(1 for r in results if r.status == "success")
         failed = len(results) - succeeded
 
-        # Coleta artefatos de todas as sessões envolvidas
+        # Coleta artefatos de todas as sessões envolvidas (incluindo a mestre)
         all_artifacts = []
         unique_sessions = {r.session_id for r in results if r.session_id}
+        if master_session:
+            unique_sessions.add(master_session.id)
+            
         for sid in unique_sessions:
             all_artifacts.extend(self.output_manager.list_artifacts(sid))
+
+        # Finaliza a sessão mestra
+        final_status = "success" if succeeded == len(results) and len(results) > 0 else "failed"
+        self.session_manager.update(
+            master_session.id, 
+            status=final_status,
+            payload={
+                **master_session.payload,
+                "summary": {
+                    "total": len(results),
+                    "succeeded": succeeded,
+                    "failed": failed,
+                    "artifacts_count": len(all_artifacts)
+                }
+            }
+        )
+        self.session_manager.close(master_session.id)
 
         orchestrator_result = OrchestratorResult(
             results=results,
@@ -227,7 +273,7 @@ class Orchestrator:
 
         return orchestrator_result
 
-    async def _execute_agent(self, task: AgentTask) -> AgentResult:
+    async def _execute_agent(self, task: AgentTask, master_session_id: str | None = None) -> AgentResult:
         """Executa o ciclo de vida completo de um único agente.
 
         Ciclo: cria sessão → cria socket IPC → spawna container →
@@ -235,6 +281,7 @@ class Orchestrator:
 
         Args:
             task: Definição da tarefa do agente.
+            master_session_id: ID da sessão mestra para compartilhamento de estado.
 
         Returns:
             Resultado da execução do agente.
@@ -257,9 +304,11 @@ class Orchestrator:
                 },
             )
 
-            # 0. Inicializa diretório de output para a sessão e para a tarefa
-            self.output_manager.init_session(session.id)
-            self.output_manager.get_task_dir(session.id, task.agent_id)
+            # 0. Inicializa diretório de output
+            # Etapa 9: Usa a sessão mestra se disponível para compartilhamento de arquivos
+            effective_session_id = master_session_id or session.id
+            self.output_manager.init_session(effective_session_id)
+            self.output_manager.get_task_dir(effective_session_id, task.agent_id)
 
             # 1. Cria socket IPC
             await self.ipc.create_socket(ipc_id)
@@ -267,7 +316,7 @@ class Orchestrator:
             # 2. Spawna container
             ipc_port = self.ipc.get_port(ipc_id)
             container_id = await self.runner.spawn(
-                task.agent_id, task.image, session.id, ipc_port=ipc_port
+                task.agent_id, task.image, effective_session_id, ipc_port=ipc_port
             )
 
             # 3. Aguarda conexão do container ao socket monitorando saúde
@@ -380,16 +429,20 @@ class Orchestrator:
 
         return result
 
-    async def _run_planning_loop(self, prompt: str) -> list[AgentTask]:
+    async def _run_planning_loop(self, prompt: str, master_session_id: str) -> list[AgentTask]:
         """Executa o ciclo de planejamento (Planner -> Validator).
 
         Args:
             prompt: Solicitação original do usuário.
+            master_session_id: ID da sessão mestra para logs.
 
         Returns:
             Lista de AgentTask aprovadas.
         """
-        logger.info("Iniciando ciclo de planejamento", extra={"prompt": prompt})
+        logger.info(
+            "Iniciando ciclo de planejamento", 
+            extra={"prompt": prompt, "master_session_id": master_session_id}
+        )
         
         feedback = ""
         last_plan_str = ""
@@ -406,7 +459,7 @@ class Orchestrator:
                 prompt=planner_prompt
             )
             
-            planner_result = await self._execute_agent(planner_task)
+            planner_result = await self._execute_agent(planner_task, master_session_id)
             if planner_result.status != "success":
                 logger.error("Falha no Agente Planejador", extra={"error": planner_result.error})
                 return []
@@ -418,6 +471,9 @@ class Orchestrator:
                 last_plan_str = json.dumps(plan_data, indent=2)
             except Exception as e:
                 logger.error("Erro ao parsear plano do Planner", extra={"error": str(e), "text": plan_text})
+                with open("/tmp/last_plan_text.txt", "w") as f:
+                    f.write(plan_text)
+                print(f"\nDEBUG: RAW PLAN TEXT FROM AGENT:\n{plan_text}\nEND DEBUG\n")
                 feedback = f"Erro de formato no JSON: {str(e)}. Envie APENAS o JSON válido."
                 continue
             
@@ -429,7 +485,7 @@ class Orchestrator:
                 prompt=validator_prompt
             )
             
-            validator_result = await self._execute_agent(validator_task)
+            validator_result = await self._execute_agent(validator_task, master_session_id)
             if validator_result.status != "success":
                 logger.error("Falha no Agente Validador", extra={"error": validator_result.error})
                 return []

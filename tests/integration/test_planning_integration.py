@@ -32,11 +32,24 @@ async def test_full_planning_flow_integration(orchestrator):
     # Executa a orquestração (que deve disparar o planejamento primeiro)
     result = await orchestrator.handle_request(prompt)
     
+    print(f"\nSucceeded: {result.succeeded}")
+    print(f"Total Results: {len(result.results)}")
+    for i, r in enumerate(result.results):
+        print(f"Result {i}: agent={r.agent_id}, status={r.status}")
+        if r.status == "error":
+            print(f"  Error: {r.error}")
+        else:
+            print(f"  Text: {str(r.response)[:100]}...")
+    
+    print(f"Artifacts collected: {len(result.artifacts)}")
+    for a in result.artifacts:
+        print(f"  Artifact: {a['name']} in {a['task']} at {a['path']}")
+
     # Verifica se houve sucesso
     assert result.succeeded >= 1
     assert len(result.results) >= 1
     
-    # Verifica se as tarefas planejadas foram executadas (provavelmente um 'researcher')
+    # Verifica se as tarefas planejadas foram executadas
     agent_ids = [r.agent_id for r in result.results]
     assert "researcher" in agent_ids or "base" in agent_ids
     

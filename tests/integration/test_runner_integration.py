@@ -60,3 +60,27 @@ async def test_runner_cleanup_all_integration(docker_client):
         docker_client.containers.get(id1)
     with pytest.raises(docker.errors.NotFound):
         docker_client.containers.get(id2)
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_session_cleanup_integration(docker_client):
+    """Testa se finalizar a sessão garante a remoção do container limpo."""
+    runner = ContainerRunner()
+    
+    # Spawn
+    with patch.dict(os.environ, {"GEMINI_API_KEY": "fake_key", "SQLITE_DB_PATH": "store/geminiclaw.db"}):
+        container_id = await runner.spawn("cleanup_agent", "geminiclaw-base", "sess_cleanup")
+    
+    # Valida presença do container rodando associado à sessão
+    containers_before = docker_client.containers.list(filters={"label": "session_id=sess_cleanup"})
+    assert len(containers_before) == 1
+    
+    # Força remoção pela lógica do runner (simulando fim da sessão)
+    await runner.stop(container_id)
+    
+    # Aguarda o deamon remover
+    await asyncio.sleep(2)
+    
+    # Valida ausência total de containers com a label da sessão (incluindo parados)
+    containers_after = docker_client.containers.list(filters={"label": "session_id=sess_cleanup"}, all=True)
+    assert len(containers_after) == 0

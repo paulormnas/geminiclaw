@@ -28,7 +28,7 @@ def get_env(key: str, default: str | None = None, required: bool = False) -> str
 GEMINI_API_KEY = get_env("GEMINI_API_KEY", required=True)
 
 # Variáveis opcionais com valores padrão
-DEFAULT_MODEL = get_env("DEFAULT_MODEL", default="gemini-3-flash-preview")
+DEFAULT_MODEL = get_env("DEFAULT_MODEL", default="gemini-3.1-flash-lite-preview")
 AGENT_TIMEOUT_SECONDS = int(get_env("AGENT_TIMEOUT_SECONDS", default="120"))
 SQLITE_DB_PATH = get_env("SQLITE_DB_PATH", default="store/geminiclaw.db")
 OUTPUT_BASE_DIR = get_env("OUTPUT_BASE_DIR", default="outputs")

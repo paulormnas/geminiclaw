@@ -76,8 +76,8 @@ class ContainerRunner:
 
                 # Variáveis de ambiente padrão
                 env = {
-                    "SESSION_ID": session_id,
                     "AGENT_ID": agent_id,
+                    "SESSION_ID": session_id,
                     "GEMINI_API_KEY": gemini_key,
                     "GOOGLE_API_KEY": gemini_key,
                     "DEFAULT_MODEL": os.environ.get("DEFAULT_MODEL", DEFAULT_MODEL),

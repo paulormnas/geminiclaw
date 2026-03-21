@@ -180,19 +180,18 @@ Objetivo: antes de executar qualquer tarefa, o agente planejador decompõe o pro
 - [x] Implementar `agents/planner/agent.py` com instrução especializada em decompor problemas em etapas ordenadas e executáveis
 - [x] O Planner deve incluir em cada tarefa do plano: nome, responsável e artefatos esperados em `/outputs/<task_name>/`
 - [x] Implementar `agents/validator/agent.py` com instrução especializada em revisar planos: identificar etapas ambíguas, dependências faltantes, abordagens inviáveis ou tarefas que não especificam onde salvar seus artefatos
-- [ ] Definir o protocolo de revisão em `src/ipc.py`:
-  - [ ] Planner envia plano ao Validator via IPC
-  - [ ] Validator retorna `approved`, `rejected` ou `revision_needed` com justificativa
-  - [ ] Se `revision_needed`, o Planner revisa e resubmete (máximo de 3 iterações)
-  - [ ] Se `rejected` após 3 tentativas, o orquestrador é notificado e interrompe a tarefa
+- [x] Definir o protocolo de revisão em `src/ipc.py` e `src/orchestrator.py`:
+  - [x] Planner envia plano ao Validator via IPC
+  - [x] Validator retorna `approved`, `rejected` ou `revision_needed` com justificativa
+  - [x] Se `revision_needed`, o Planner revisa e resubmete (máximo de 3 iterações)
+  - [x] Se `rejected` após 3 tentativas, o orquestrador é notificado e interrompe a tarefa
 - [x] Integrar o ciclo planner → validator no `src/orchestrator.py` como etapa obrigatória antes do dispatch de agentes executores
-- [ ] Garantir que o plano aprovado é persistido na sessão SQLite antes da execução
+- [x] Garantir que o plano aprovado é persistido na sessão SQLite (payload da master session) antes da execução
 - [x] Implementar log estruturado de cada iteração do ciclo de revisão
 - [x] Escrever testes unitários do protocolo de revisão com mocks do planner e do validator
-- [/] Escrever teste de integração do ciclo completo: planner → validator → aprovação → dispatch
-- [/] Escrever teste do fluxo de rejeição: 3 iterações sem aprovação → orquestrador notificado
-- [ ] Commit: `feat(agents): implementa ciclo de raciocínio e validação de planos entre agentes`
-- [ ] Commit: `feat(agents): implementa ciclo de raciocínio e validação de planos entre agentes`
+- [x] Escrever teste de integração do ciclo completo: planner → validator → aprovação → dispatch
+- [x] Escrever teste do fluxo de rejeição: 3 iterações sem aprovação → orquestrador notificado
+- [x] Commit: `feat(agents): implementa ciclo de raciocínio e validação de planos entre agentes`
 
 ---
 

@@ -46,7 +46,7 @@ async def test_runner_spawn_parameters(mock_docker_client):
                 "AGENT_ID": "test_agent",
                 "GEMINI_API_KEY": "test_key",
                 "GOOGLE_API_KEY": "test_key",
-                "DEFAULT_MODEL": "gemini-3-flash-preview",
+                "DEFAULT_MODEL": "gemini-3.1-flash-lite-preview",
                 "SQLITE_DB_PATH": "/data/geminiclaw.db",
                 "AGENT_SOCKET_NAME": "test_agent_session_123.sock",
             },

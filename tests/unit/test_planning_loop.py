@@ -35,7 +35,7 @@ async def test_planning_loop_success(mock_deps):
             AgentResult(agent_id="validator", session_id="s2", **validator_response)
         ]
         
-        tasks = await orchestrator._run_planning_loop("De uma volta no quarteirão")
+        tasks = await orchestrator._run_planning_loop("De uma volta no quarteirão", "master_s")
         
         assert len(tasks) == 1
         assert tasks[0].agent_id == "researcher"
@@ -58,7 +58,7 @@ async def test_planning_loop_revision_needed(mock_deps):
             AgentResult(agent_id="validator", session_id="s4", status="success", response={"text": '{"status": "approved"}'})
         ]
         
-        tasks = await orchestrator._run_planning_loop("Prompt")
+        tasks = await orchestrator._run_planning_loop("Prompt", "master_s")
         
         assert len(tasks) == 1
         assert tasks[0].agent_id == "base"
@@ -76,7 +76,7 @@ async def test_planning_loop_max_iterations(mock_deps):
             response={"text": '{"status": "revision_needed"}'} 
         )
         
-        tasks = await orchestrator._run_planning_loop("Prompt")
+        tasks = await orchestrator._run_planning_loop("Prompt", "master_s")
         
         assert tasks == []
         # Para cada iteração: 1 planner + 1 validator = 2 chamadas. 

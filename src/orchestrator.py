@@ -316,7 +316,7 @@ class Orchestrator:
             # 2. Spawna container
             ipc_port = self.ipc.get_port(ipc_id)
             container_id = await self.runner.spawn(
-                task.agent_id, task.image, effective_session_id, ipc_port=ipc_port
+                task.agent_id, task.image, session.id, ipc_port=ipc_port, output_session_id=effective_session_id
             )
 
             # 3. Aguarda conexão do container ao socket monitorando saúde
@@ -460,8 +460,9 @@ class Orchestrator:
             )
             
             planner_result = await self._execute_agent(planner_task, master_session_id)
-            if planner_result.status != "success":
-                logger.error("Falha no Agente Planejador", extra={"error": planner_result.error})
+            if planner_result.status != "success" or "error" in planner_result.response:
+                err = planner_result.error or planner_result.response.get("error", "Erro desconhecido")
+                logger.error("Falha no Agente Planejador", extra={"error": err})
                 return []
             
             # Tenta extrair JSON da resposta
@@ -471,9 +472,6 @@ class Orchestrator:
                 last_plan_str = json.dumps(plan_data, indent=2)
             except Exception as e:
                 logger.error("Erro ao parsear plano do Planner", extra={"error": str(e), "text": plan_text})
-                with open("/tmp/last_plan_text.txt", "w") as f:
-                    f.write(plan_text)
-                print(f"\nDEBUG: RAW PLAN TEXT FROM AGENT:\n{plan_text}\nEND DEBUG\n")
                 feedback = f"Erro de formato no JSON: {str(e)}. Envie APENAS o JSON válido."
                 continue
             
@@ -486,8 +484,9 @@ class Orchestrator:
             )
             
             validator_result = await self._execute_agent(validator_task, master_session_id)
-            if validator_result.status != "success":
-                logger.error("Falha no Agente Validador", extra={"error": validator_result.error})
+            if validator_result.status != "success" or "error" in validator_result.response:
+                err = validator_result.error or validator_result.response.get("error", "Erro desconhecido")
+                logger.error("Falha no Agente Validador", extra={"error": err})
                 return []
             
             val_text = self._clean_json_text(validator_result.response.get("text", ""))

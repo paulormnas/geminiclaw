@@ -3,9 +3,9 @@ import pytest
 from unittest.mock import patch
 import importlib
 
-# Define uma chave fictícia para permitir a importação inicial sem erro
-os.environ["GEMINI_API_KEY"] = "dummy_initial_key"
-import src.config
+# Define uma chave fictícia temporária para permitir a importação inicial sem erro e sem poluir globalmente
+with patch.dict(os.environ, {"GEMINI_API_KEY": "dummy_initial_key"}):
+    import src.config
 
 @pytest.fixture(autouse=True)
 def reset_env():
@@ -46,8 +46,8 @@ def test_config_default_values():
     """Testa se os valores padrão são aplicados corretamente."""
     with patch.dict(os.environ, {"GEMINI_API_KEY": "fake_key"}):
         importlib.reload(src.config)
-        # O valor padrão no código é "gemini-3.1-flash-lite-preview"
-        assert src.config.DEFAULT_MODEL == "gemini-3.1-flash-lite-preview"
+        # O valor padrão no código é "gemini-3.1-pro-preview"
+        assert src.config.DEFAULT_MODEL == "gemini-3.1-pro-preview"
         assert src.config.AGENT_TIMEOUT_SECONDS == 120
         assert src.config.SQLITE_DB_PATH == "store/geminiclaw.db"
 

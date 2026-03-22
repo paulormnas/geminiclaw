@@ -57,5 +57,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Mudar para o usuário não-root
 USER appuser
 
-# Comando padrão
+# Comando padrão - pode ser sobrescrito pelo docker-compose ou docker run
+# Para o framework: python -m src.cli
+# Para agentes: python -m agents.base.agent (default)
 CMD ["python", "-m", "agents.base.agent"]

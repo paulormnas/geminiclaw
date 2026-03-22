@@ -1,0 +1,12 @@
+.env
+.venv/
+__pycache__/
+outputs/
+store/
+logs/
+*.db
+.git/
+.agents/
+.gemini/
+.vscode/
+node_modules/

@@ -1,0 +1,45 @@
+services:
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: geminiclaw-qdrant
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - geminiclaw-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  geminiclaw:
+    build:
+      context: .
+      dockerfile: containers/Dockerfile
+    container_name: geminiclaw-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - HOST_PROJECT_PATH=${PWD}
+    volumes:
+      - ./store:/app/store
+      - ./outputs:/app/outputs
+      - ./logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock   # runner spawna containers filhos
+    networks:
+      - geminiclaw-net
+    depends_on:
+      qdrant:
+        condition: service_healthy
+
+volumes:
+  qdrant_data:
+
+networks:
+  geminiclaw-net:
+    driver: bridge

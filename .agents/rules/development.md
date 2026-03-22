@@ -232,6 +232,7 @@ chore: atualiza dependências no pyproject.toml
 - Usar `# type: ignore` sem comentário explicando o motivo
 - Executar `docker rm -f` em recursos não relacionados ao projeto
 - Commitar com testes falhando
+- acessar o arquivo SETUP.md
 
 ## O agente deve pedir confirmação antes de
 

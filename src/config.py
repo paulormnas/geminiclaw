@@ -34,6 +34,9 @@ SQLITE_DB_PATH = get_env("SQLITE_DB_PATH", default="store/geminiclaw.db")
 OUTPUT_BASE_DIR = get_env("OUTPUT_BASE_DIR", default="outputs")
 SEARCH_CACHE_TTL_SECONDS = int(get_env("SEARCH_CACHE_TTL_SECONDS", default="3600"))
 
+# Qdrant (S2)
+QDRANT_URL = get_env("QDRANT_URL", default="http://localhost:6333")
+
 # Garante que os diretórios necessários existem
 Path(SQLITE_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
 

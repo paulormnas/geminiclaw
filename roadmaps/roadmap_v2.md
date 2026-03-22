@@ -12,6 +12,12 @@ As etapas S1 e S2 são **independentes entre si** — você pode implementar
 apenas uma delas inicialmente e adicionar a outra depois sem nenhuma
 refatoração.
 
+> **Arquitetura de containers:** o projeto usa `docker-compose.yml` como
+> ponto de entrada único para todos os serviços de infraestrutura. O Qdrant
+> (Etapa S2) é o primeiro serviço declarado no Compose. Agentes executores
+> continuam sendo containers efêmeros gerenciados pelo runner Python — eles
+> não entram no Compose porque têm ciclo de vida dinâmico.
+
 ---
 
 ## Estrutura de skills
@@ -30,7 +36,7 @@ src/
     │   ├── __init__.py
     │   ├── skill.py             # DeepSearchSkill
     │   ├── crawler.py           # Crawler de domínios configurados
-    │   ├── indexer.py           # Indexação vetorial com chromadb
+    │   ├── indexer.py           # Indexação vetorial com Qdrant (via Docker)
     │   └── cache.py             # Cache de consultas ao índice
     ├── code/                    # S3 — Execução de código Python
     │   ├── __init__.py
@@ -45,26 +51,141 @@ src/
 
 ---
 
+## Etapa SI — Infraestrutura com docker-compose
+
+> **Pré-requisito de todas as demais etapas deste roadmap.**
+> Deve ser implementada antes da S0.
+
+Objetivo: substituir os comandos `docker run` avulsos por um `docker-compose.yml`
+que declara toda a infraestrutura do GeminiClaw — serviços, redes, volumes e
+dependências — em um único arquivo versionado.
+
+### Arquitetura de serviços
+
+```
+docker-compose.yml
+├── qdrant           — banco vetorial (busca profunda)
+├── geminiclaw       — processo principal (orquestrador + CLI)
+└── agent-*          — containers de agentes (spawned dinamicamente pelo runner)
+
+volumes:
+├── qdrant_data      — persistência do índice vetorial
+├── store            — SQLite (sessions.db, memory.db)
+├── outputs          — artefatos produzidos pelos agentes
+└── logs             — logs do framework
+
+networks:
+└── geminiclaw-net   — rede interna isolada entre todos os serviços
+```
+
+### Arquivo `docker-compose.yml`
+
+```yaml
+services:
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: geminiclaw-qdrant
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - geminiclaw-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  geminiclaw:
+    build:
+      context: .
+      dockerfile: containers/Dockerfile
+    container_name: geminiclaw-app
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./store:/app/store
+      - ./outputs:/app/outputs
+      - ./logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock   # runner spawna containers filhos
+    networks:
+      - geminiclaw-net
+    depends_on:
+      qdrant:
+        condition: service_healthy
+
+volumes:
+  qdrant_data:
+
+networks:
+  geminiclaw-net:
+    driver: bridge
+```
+
+> **Nota sobre o socket Docker:** o volume `/var/run/docker.sock` é necessário
+> para que o `runner.py` consiga spawnar containers de agentes a partir
+> de dentro do container principal. Mantenha a porta do Qdrant vinculada
+> apenas a `127.0.0.1` para não expor o serviço na rede local.
+
+### Comandos principais
+
+```bash
+# Subir toda a infraestrutura
+docker compose up -d
+
+# Verificar status dos serviços
+docker compose ps
+
+# Ver logs em tempo real
+docker compose logs -f
+
+# Reconstruir a imagem após mudanças no código
+docker compose up -d --build geminiclaw
+
+# Encerrar tudo preservando volumes
+docker compose down
+
+# Encerrar e remover volumes (reset completo)
+docker compose down -v
+```
+
+### Tarefas
+
+- [ ] Criar `docker-compose.yml` na raiz do projeto com os serviços `qdrant` e `geminiclaw`
+- [ ] Atualizar `containers/Dockerfile` para servir como imagem do serviço `geminiclaw`
+- [ ] Configurar o `runner.py` para conectar ao socket Docker do host e spawnar containers de agentes na rede `geminiclaw-net`
+- [ ] Garantir que `QDRANT_URL=http://geminiclaw-qdrant:6333` é usado dentro do Docker e `http://localhost:6333` fora (testes locais)
+- [ ] Adicionar `.dockerignore` cobrindo: `.env`, `.venv/`, `__pycache__/`, `outputs/`, `store/`, `logs/`
+- [ ] Atualizar `SETUP.md` substituindo `docker network create` e `docker run` pelos comandos `docker compose`
+- [ ] Escrever teste de integração: `docker compose up` → serviços healthy → framework responde
+- [ ] Commit: `ci: adiciona docker-compose com qdrant e geminiclaw`
+
+---
+
 ## Etapa S0 — Interface base de skills
 
 Objetivo: contrato comum que toda skill deve implementar,
 garantindo que o ADK consiga registrá-las como ferramentas de forma uniforme.
 
-- [ ] Implementar `src/skills/base.py` com a classe abstrata `BaseSkill`:
+- [x] Implementar `src/skills/base.py` com a classe abstrata `BaseSkill`:
   ```python
   class BaseSkill:
       name: str         # Identificador único da skill
       description: str  # Descrição que o agente lê para decidir quando usar
       async def run(self, **kwargs) -> SkillResult: ...
   ```
-- [ ] Definir `SkillResult` com campos: `success`, `output`, `error`, `metadata`
-- [ ] Implementar `src/skills/__init__.py` com `SkillRegistry`:
-  - [ ] `register(skill: BaseSkill)` → registra uma skill
-  - [ ] `get(name: str)` → retorna a skill pelo nome
-  - [ ] `list_available()` → retorna lista de skills com nome e descrição
-  - [ ] `as_adk_tools()` → converte skills registradas para o formato `tools` do ADK
-- [ ] Escrever testes unitários do registry (registro, recuperação, conflito de nomes)
-- [ ] Commit: `feat(skills): implementa interface base e registry de skills`
+- [x] Definir `SkillResult` com campos: `success`, `output`, `error`, `metadata`
+- [x] Implementar `src/skills/__init__.py` com `SkillRegistry`:
+  - [x] `register(skill: BaseSkill)` → registra uma skill
+  - [x] `get(name: str)` → retorna a skill pelo nome
+  - [x] `list_available()` → retorna lista de skills com nome e descrição
+  - [x] `as_adk_tools()` → converte skills registradas para o formato `tools` do ADK
+- [x] Escrever testes unitários do registry (registro, recuperação, conflito de nomes)
+- [x] Commit: `feat(skills): implementa interface base e registry de skills`
 
 ---
 
@@ -90,36 +211,36 @@ uv add httpx beautifulsoup4 lxml
 
 ### Tarefas
 
-- [ ] Implementar `src/skills/search_quick/scraper.py` com `DuckDuckGoScraper`:
-  - [ ] `search(query, max_results=5)` → `list[SearchResult]`
-  - [ ] `SearchResult` com campos: `title`, `url`, `snippet`
-  - [ ] Requisição via `httpx.AsyncClient` com headers de browser para evitar bloqueio
-  - [ ] Parser HTML com `BeautifulSoup` extraindo resultados da página de busca do DDG
-  - [ ] Tratamento de rate limiting: retry com backoff exponencial (máximo 3 tentativas)
-  - [ ] Timeout configurável (`QUICK_SEARCH_TIMEOUT_SECONDS`, padrão: 10)
-- [ ] Implementar `src/skills/search_quick/cache.py` com `SearchCache`:
-  - [ ] Cache em memória com TTL configurável (`QUICK_SEARCH_CACHE_TTL_SECONDS`, padrão: 3600)
-  - [ ] Chave de cache: hash SHA-256 da query normalizada (lowercase, sem espaços extras)
-  - [ ] `get(query)` → resultado cacheado ou `None`
-  - [ ] `set(query, results)` → armazena resultado
-  - [ ] `invalidate(query)` → remove entrada específica
-  - [ ] `clear()` → limpa todo o cache
-- [ ] Implementar `src/skills/search_quick/skill.py` como `QuickSearchSkill(BaseSkill)` com:
-  - [ ] `run(query, max_results=5)` → `SkillResult`
-  - [ ] Consulta o cache antes de fazer scraping
-  - [ ] `description`: *"Use esta skill para buscar informações atuais na internet de forma rápida. Forneça uma query específica. Retorna títulos, URLs e resumos dos primeiros resultados."*
-- [ ] Registrar `QuickSearchSkill` no `SkillRegistry`
-- [ ] Adicionar ao `.env.example`:
+- [x] Implementar `src/skills/search_quick/scraper.py` com `DuckDuckGoScraper`:
+  - [x] `search(query, max_results=5)` → `list[SearchResult]`
+  - [x] `SearchResult` com campos: `title`, `url`, `snippet`
+  - [x] Requisição via `httpx.AsyncClient` com headers de browser para evitar bloqueio
+  - [x] Parser HTML com `BeautifulSoup` extraindo resultados da página de busca do DDG
+  - [x] Tratamento de rate limiting: retry com backoff exponencial (máximo 3 tentativas)
+  - [x] Timeout configurável (`QUICK_SEARCH_TIMEOUT_SECONDS`, padrão: 10)
+- [x] Implementar `src/skills/search_quick/cache.py` com `SearchCache`:
+  - [x] Cache em memória com TTL configurável (`QUICK_SEARCH_CACHE_TTL_SECONDS`, padrão: 3600)
+  - [x] Chave de cache: hash SHA-256 da query normalizada (lowercase, sem espaços extras)
+  - [x] `get(query)` → resultado cacheado ou `None`
+  - [x] `set(query, results)` → armazena resultado
+  - [x] `invalidate(query)` → remove entrada específica
+  - [x] `clear()` → limpa todo o cache
+- [x] Implementar `src/skills/search_quick/skill.py` como `QuickSearchSkill(BaseSkill)` com:
+  - [x] `run(query, max_results=5)` → `SkillResult`
+  - [x] Consulta o cache antes de fazer scraping
+  - [x] `description`: *"Use esta skill para buscar informações atuais na internet de forma rápida. Forneça uma query específica. Retorna títulos, URLs e resumos dos primeiros resultados."*
+- [x] Registrar `QuickSearchSkill` no `SkillRegistry`
+- [x] Adicionar ao `.env.example`:
   ```
   QUICK_SEARCH_TIMEOUT_SECONDS=10
   QUICK_SEARCH_CACHE_TTL_SECONDS=3600
   QUICK_SEARCH_MAX_RESULTS=5
   ```
-- [ ] Escrever testes unitários do scraper com HTML mockado
-- [ ] Escrever testes unitários do cache (hit, miss, TTL expirado)
-- [ ] Escrever testes unitários do retry com backoff
-- [ ] Escrever teste de integração: query real → resultados retornados (requer rede)
-- [ ] Commit: `feat(skills): implementa skill de busca rápida com scraper DuckDuckGo`
+- [x] Escrever testes unitários do scraper com HTML mockado
+- [x] Escrever testes unitários do cache (hit, miss, TTL expirado)
+- [x] Escrever testes unitários do retry com backoff
+- [x] Escrever teste de integração: query real → resultados retornados (requer rede)
+- [x] Commit: `feat(skills): implementa skill de busca rápida com scraper DuckDuckGo`
 
 ---
 
@@ -135,61 +256,133 @@ de resultados genéricos da web em tempo real.
 ### Funcionamento
 
 Um crawler coleta páginas dos domínios configurados, chunka o conteúdo em
-trechos semânticos e indexa num banco vetorial local com `chromadb`. O agente
+trechos semânticos e indexa num banco vetorial local com **Qdrant**. O agente
 envia uma query em linguagem natural, que é convertida em embedding e comparada
-com os vetores do índice. Os trechos mais similares são retornados como contexto.
+com os vetores do índice via busca por similaridade. Os trechos mais relevantes
+são retornados como contexto.
+
+### Por que Qdrant
+
+- Suporta múltiplos tipos de vetores por ponto (texto, imagem, código) na mesma coleção — útil quando o agente indexar conteúdo misto no futuro
+- Suporta **payload filtering**: filtrar por metadados (domínio, data, tipo) combinado com busca vetorial na mesma query
+- Imagem oficial Docker disponível para ARM64 — roda no Pi 5 sem compilação
+- API REST + cliente Python (`qdrant-client`) com documentação oficial extensa
+- Isolamento de serviço via Docker: o índice vetorial é independente do processo do framework e pode ser reiniciado sem perda de dados
 
 ### Dependências Python
 
+```bash
+uv add httpx beautifulsoup4 lxml qdrant-client
 ```
-uv add httpx beautifulsoup4 lxml chromadb
+
+### Setup do Qdrant (via docker-compose)
+
+O Qdrant roda como serviço dedicado definido no `docker-compose.yml` do projeto.
+Os dados são persistidos em volume Docker nomeado — sobrevivem a restarts e
+rebuilds do container.
+
+```yaml
+# docker-compose.yml (trecho do serviço qdrant)
+qdrant:
+  image: qdrant/qdrant:latest
+  container_name: geminiclaw-qdrant
+  restart: unless-stopped
+  ports:
+    - "127.0.0.1:6333:6333"   # REST API — apenas localhost
+    - "127.0.0.1:6334:6334"   # gRPC — apenas localhost
+  volumes:
+    - qdrant_data:/qdrant/storage
+  networks:
+    - geminiclaw-net
+```
+
+O cliente Python conecta via URL, sem nenhuma diferença na interface:
+
+```python
+from qdrant_client import QdrantClient
+
+client = QdrantClient(url="http://geminiclaw-qdrant:6333")  # dentro da rede Docker
+# ou
+client = QdrantClient(url="http://localhost:6333")          # fora do Docker (testes locais)
+```
+
+### Estrutura de um ponto no índice
+
+Cada chunk indexado é armazenado como um ponto Qdrant com:
+
+```python
+# Vetor: embedding do chunk (gerado pelo modelo de embedding configurado)
+# Payload: metadados filtraveis
+{
+    "url": "https://docs.python.org/...",
+    "title": "Python 3.11 — functools",
+    "domain": "docs.python.org",
+    "chunk_index": 3,
+    "content": "texto do chunk...",
+    "crawled_at": "2026-03-22T00:00:00Z",
+    "content_type": "text"   # text | code | table
+}
 ```
 
 ### Tarefas
 
+- [ ] Garantir que o serviço `qdrant` está definido no `docker-compose.yml` e saudável antes de iniciar o indexer (`depends_on: qdrant: condition: service_healthy`)
+- [ ] Configurar healthcheck do serviço Qdrant no `docker-compose.yml`:
+  ```yaml
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+  ```
 - [ ] Implementar `src/skills/search_deep/crawler.py` com `DomainCrawler`:
   - [ ] `crawl(domains: list[str], max_pages_per_domain=50)` → `list[CrawledPage]`
-  - [ ] `CrawledPage` com campos: `url`, `title`, `content`, `crawled_at`
+  - [ ] `CrawledPage` com campos: `url`, `title`, `content`, `crawled_at`, `content_type`
   - [ ] Respeitar `robots.txt` de cada domínio
   - [ ] Rate limiting: máximo de 1 requisição por segundo por domínio
   - [ ] Chunking de conteúdo em trechos de ~500 tokens com sobreposição de ~50 tokens
+  - [ ] Detectar e marcar tipo do chunk: `text`, `code` (blocos `<pre>`, `<code>`), `table`
   - [ ] Salvar estado do crawl em `store/crawl_state.json` para permitir resumo
   - [ ] Modo incremental: re-crawlar apenas páginas com `Last-Modified` mais recente que o último crawl
 - [ ] Implementar `src/skills/search_deep/indexer.py` com `VectorIndexer`:
-  - [ ] `index(pages: list[CrawledPage])` → indexa os chunks no ChromaDB
-  - [ ] `search(query, n_results=5)` → `list[IndexResult]`
-  - [ ] `IndexResult` com campos: `content`, `url`, `title`, `score`
-  - [ ] Banco ChromaDB persistido em `store/vector_index/`
-  - [ ] Coleção separada por domínio para facilitar filtragem
-  - [ ] `reindex(domain)` → remove e re-indexa um domínio específico
-  - [ ] `stats()` → retorna número de chunks indexados por domínio
+  - [ ] `init_collection(domain)` → cria coleção Qdrant para o domínio se não existir
+  - [ ] `index(pages: list[CrawledPage])` → gera embeddings e upsert no Qdrant
+  - [ ] `search(query, n_results=5, filters=None)` → `list[IndexResult]`
+    - [ ] `filters` permite restringir por `domain`, `content_type` ou `crawled_at`
+    - [ ] Usa `qdrant_client.models.Filter` com `FieldCondition` para payload filtering
+  - [ ] `IndexResult` com campos: `content`, `url`, `title`, `domain`, `score`, `content_type`
+  - [ ] `reindex(domain)` → deleta e recria a coleção do domínio
+  - [ ] `stats()` → retorna contagem de pontos por coleção via `client.get_collection()`
 - [ ] Implementar `src/skills/search_deep/cache.py` com `DeepSearchCache`:
   - [ ] Cache em SQLite para queries já realizadas ao índice (evita re-embedding)
   - [ ] TTL configurável (`DEEP_SEARCH_CACHE_TTL_SECONDS`, padrão: 86400)
+  - [ ] Chave de cache: hash SHA-256 da query + filtros serializados
 - [ ] Implementar `src/skills/search_deep/skill.py` como `DeepSearchSkill(BaseSkill)` com:
-  - [ ] `run(query, domains=None, n_results=5)` → `SkillResult`
-  - [ ] Se `domains` fornecido, filtra a busca às coleções correspondentes
-  - [ ] `description`: *"Use esta skill para buscar em profundidade dentro de fontes indexadas e confiáveis. Forneça uma query em linguagem natural. Retorna trechos relevantes com fonte e score de relevância."*
+  - [ ] `run(query, domains=None, content_type=None, n_results=5)` → `SkillResult`
+  - [ ] Constrói `filters` do Qdrant a partir de `domains` e `content_type` quando fornecidos
+  - [ ] `description`: *"Use esta skill para buscar em profundidade dentro de fontes indexadas e confiáveis. Forneça uma query em linguagem natural. Opcionalmente filtre por domínio ou tipo de conteúdo (text, code, table). Retorna trechos relevantes com fonte e score de relevância."*
 - [ ] Criar comando CLI para administração do índice:
   ```bash
-  uv run python -m src.skills.search_deep.indexer crawl   # executa crawl e indexa
-  uv run python -m src.skills.search_deep.indexer stats   # exibe estatísticas
-  uv run python -m src.skills.search_deep.indexer reindex <domain>
+  uv run python -m src.skills.search_deep.indexer crawl             # crawl e indexa todos os domínios
+  uv run python -m src.skills.search_deep.indexer stats             # pontos por coleção
+  uv run python -m src.skills.search_deep.indexer reindex <domain>  # re-indexa domínio específico
   ```
 - [ ] Registrar `DeepSearchSkill` no `SkillRegistry`
 - [ ] Adicionar ao `.env.example`:
   ```
-  DEEP_SEARCH_DOMAINS=                      # Comma-separated: docs.python.org,arxiv.org
+  DEEP_SEARCH_DOMAINS=              # Comma-separated: docs.python.org,arxiv.org
   DEEP_SEARCH_MAX_PAGES_PER_DOMAIN=50
   DEEP_SEARCH_CACHE_TTL_SECONDS=86400
-  VECTOR_INDEX_PATH=./store/vector_index
+  QDRANT_URL=http://localhost:6333   # http://geminiclaw-qdrant:6333 dentro do Docker
+  EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2   # leve, roda no Pi 5
   ```
 - [ ] Escrever testes unitários do crawler com HTML mockado
-- [ ] Escrever testes unitários do chunking (tamanho correto, sobreposição)
-- [ ] Escrever testes unitários do indexer com ChromaDB em memória
+- [ ] Escrever testes unitários do chunking (tamanho correto, sobreposição, detecção de tipo)
+- [ ] Escrever testes unitários do indexer com Qdrant em memória (`QdrantClient(":memory:")` — suportado pelo cliente para testes sem servidor)
+- [ ] Escrever testes unitários do payload filtering (por domínio, por `content_type`)
 - [ ] Escrever testes unitários do cache de queries
 - [ ] Escrever teste de integração: crawl de página real → indexação → busca retorna resultado relevante
-- [ ] Commit: `feat(skills): implementa skill de busca profunda com crawler e índice vetorial`
+- [ ] Commit: `feat(skills): implementa skill de busca profunda com crawler e Qdrant`
 
 ---
 
@@ -402,20 +595,21 @@ um cenário realista de tarefa longa com múltiplos agentes.
 
 ```
 roadmap principal (Etapa 7 — agente base)
-└── S0 (interface base)
-    ├── S1 (busca rápida)       ← independente de S2
-    ├── S2 (busca profunda)     ← independente de S1
-    ├── S3 (execução de código)
-    └── S4 (memória curto prazo)
-        └── S5 (memória longo prazo)
-            └── S6 (integração ao agente base)
-                └── S7 (loop autônomo)
-                    └── S8 (validação integrada)
+└── SI (docker-compose + infraestrutura)
+    └── S0 (interface base de skills)
+        ├── S1 (busca rápida)       ← independente de S2
+        ├── S2 (busca profunda)     ← independente de S1, requer Qdrant via SI
+        ├── S3 (execução de código)
+        └── S4 (memória curto prazo)
+            └── S5 (memória longo prazo)
+                └── S6 (integração ao agente base)
+                    └── S7 (loop autônomo)
+                        └── S8 (validação integrada)
 ```
 
-> S1 e S2 são paralelas e independentes. S6 integra as que estiverem
-> implementadas via flags de habilitação — você não precisa de ambas
-> para avançar.
+> S1 e S2 são paralelas e independentes entre si. S2 depende do Qdrant
+> provisionado pela etapa SI. S6 integra apenas as skills habilitadas
+> via flags — você não precisa de S1 e S2 simultaneamente para avançar.
 
 ---
 
@@ -433,7 +627,8 @@ SKILL_DEEP_SEARCH_ENABLED=false
 DEEP_SEARCH_DOMAINS=              # Comma-separated: docs.python.org,arxiv.org
 DEEP_SEARCH_MAX_PAGES_PER_DOMAIN=50
 DEEP_SEARCH_CACHE_TTL_SECONDS=86400
-VECTOR_INDEX_PATH=./store/vector_index
+QDRANT_URL=http://localhost:6333  # http://geminiclaw-qdrant:6333 dentro do Docker
+EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 
 # Execução de código (S3)
 SKILL_CODE_ENABLED=true

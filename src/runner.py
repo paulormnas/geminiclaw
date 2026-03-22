@@ -86,12 +86,30 @@ class ContainerRunner:
                     "AGENT_SOCKET_NAME": socket_name,
                 }
 
-                # Prepare output volume
+                # Resolve paths for volumes
+                # Se estiver rodando dentro de um container (com HOST_PROJECT_PATH), 
+                # precisamos usar o caminho do HOST para os volumes montados em novos sub-containers.
+                host_root = os.environ.get("HOST_PROJECT_PATH")
+                
+                db_path = os.environ.get("SQLITE_DB_PATH", "store/geminiclaw.db")
                 output_base = os.environ.get("OUTPUT_BASE_DIR", "outputs")
                 effective_output_id = output_session_id or session_id
-                output_session_host = str(Path(output_base).absolute() / effective_output_id)
-                # Garante que a pasta no host existe antes de montar
-                Path(output_session_host).mkdir(parents=True, exist_ok=True)
+                
+                if host_root:
+                    # Estamos dentro de um container, mapeamos os caminhos relativos ao HOST_PROJECT_PATH
+                    # Assume-se que store e outputs estão na raiz do projeto no host
+                    db_dir_host = str(Path(host_root) / "store")
+                    output_session_host = str(Path(host_root) / "outputs" / effective_output_id)
+                    ipc_socket_host = str(Path(host_root) / "store" / "ipc")
+                else:
+                    # Rodando diretamente no host
+                    db_dir_host = str(Path(db_path).parent.absolute())
+                    output_session_host = str(Path(output_base).absolute() / effective_output_id)
+                    ipc_socket_host = str(Path(IPC_SOCKET_DIR))
+
+                # Garante que a pasta de outputs existe localmente (no container atual ou host)
+                local_output_session = str(Path(output_base).absolute() / effective_output_id)
+                Path(local_output_session).mkdir(parents=True, exist_ok=True)
 
                 # Volumes padrão
                 volumes = {
@@ -113,7 +131,7 @@ class ContainerRunner:
                     extra_hosts["host.docker.internal"] = "host-gateway"
                 else:
                     # Modo UNIX: monta o diretório de sockets
-                    volumes[str(Path(IPC_SOCKET_DIR))] = {
+                    volumes[ipc_socket_host] = {
                         "bind": "/tmp/geminiclaw-ipc",
                         "mode": "rw",
                     }

@@ -254,6 +254,9 @@ Cobertura   : src/ 84%  |  agents/ 77%
 🌡️  Temperatura: 72°C ✅
 ```
 
+- Sempre deixe a cobertura acima de 80%. 
+- Caso a cobertura fique abaixo, verifique no relatório de cobertura qual arquivo possui menor cobertura e implemente novos testes.
+
 ---
 
 ## O agente nunca deve

@@ -162,7 +162,7 @@ docker compose down -v
 - [x] Adicionar `.dockerignore` cobrindo: `.env`, `.venv/`, `__pycache__/`, `outputs/`, `store/`, `logs/`
 - [x] Atualizar `SETUP.md` substituindo `docker network create` e `docker run` pelos comandos `docker compose`
 - [x] Escrever teste de integração: `docker compose up` → serviços healthy → framework responde
-- [ ] Commit: `ci: adiciona docker-compose com qdrant e geminiclaw`
+- [x] Commit: `ci: adiciona docker-compose com qdrant e geminiclaw`
 
 ---
 
@@ -335,40 +335,40 @@ Cada chunk indexado é armazenado como um ponto Qdrant com:
     timeout: 5s
     retries: 5
   ```
-- [ ] Implementar `src/skills/search_deep/crawler.py` com `DomainCrawler`:
-  - [ ] `crawl(domains: list[str], max_pages_per_domain=50)` → `list[CrawledPage]`
-  - [ ] `CrawledPage` com campos: `url`, `title`, `content`, `crawled_at`, `content_type`
-  - [ ] Respeitar `robots.txt` de cada domínio
-  - [ ] Rate limiting: máximo de 1 requisição por segundo por domínio
-  - [ ] Chunking de conteúdo em trechos de ~500 tokens com sobreposição de ~50 tokens
-  - [ ] Detectar e marcar tipo do chunk: `text`, `code` (blocos `<pre>`, `<code>`), `table`
-  - [ ] Salvar estado do crawl em `store/crawl_state.json` para permitir resumo
-  - [ ] Modo incremental: re-crawlar apenas páginas com `Last-Modified` mais recente que o último crawl
-- [ ] Implementar `src/skills/search_deep/indexer.py` com `VectorIndexer`:
-  - [ ] `init_collection(domain)` → cria coleção Qdrant para o domínio se não existir
-  - [ ] `index(pages: list[CrawledPage])` → gera embeddings e upsert no Qdrant
-  - [ ] `search(query, n_results=5, filters=None)` → `list[IndexResult]`
-    - [ ] `filters` permite restringir por `domain`, `content_type` ou `crawled_at`
-    - [ ] Usa `qdrant_client.models.Filter` com `FieldCondition` para payload filtering
-  - [ ] `IndexResult` com campos: `content`, `url`, `title`, `domain`, `score`, `content_type`
-  - [ ] `reindex(domain)` → deleta e recria a coleção do domínio
-  - [ ] `stats()` → retorna contagem de pontos por coleção via `client.get_collection()`
-- [ ] Implementar `src/skills/search_deep/cache.py` com `DeepSearchCache`:
-  - [ ] Cache em SQLite para queries já realizadas ao índice (evita re-embedding)
-  - [ ] TTL configurável (`DEEP_SEARCH_CACHE_TTL_SECONDS`, padrão: 86400)
-  - [ ] Chave de cache: hash SHA-256 da query + filtros serializados
-- [ ] Implementar `src/skills/search_deep/skill.py` como `DeepSearchSkill(BaseSkill)` com:
-  - [ ] `run(query, domains=None, content_type=None, n_results=5)` → `SkillResult`
-  - [ ] Constrói `filters` do Qdrant a partir de `domains` e `content_type` quando fornecidos
-  - [ ] `description`: *"Use esta skill para buscar em profundidade dentro de fontes indexadas e confiáveis. Forneça uma query em linguagem natural. Opcionalmente filtre por domínio ou tipo de conteúdo (text, code, table). Retorna trechos relevantes com fonte e score de relevância."*
-- [ ] Criar comando CLI para administração do índice:
+- [x] Implementar `src/skills/search_deep/crawler.py` com `DomainCrawler`:
+  - [x] `crawl(domains: list[str], max_pages_per_domain=50)` → `list[CrawledPage]`
+  - [x] `CrawledPage` com campos: `url`, `title`, `content`, `crawled_at`, `content_type`
+  - [x] Respeitar `robots.txt` de cada domínio
+  - [x] Rate limiting: máximo de 1 requisição por segundo por domínio
+  - [x] Chunking de conteúdo em trechos de ~500 tokens com sobreposição de ~50 tokens
+  - [x] Detectar e marcar tipo do chunk: `text`, `code` (blocos `<pre>`, `<code>`), `table`
+  - [x] Salvar estado do crawl em `store/crawl_state.json` para permitir resumo
+  - [x] Modo incremental: re-crawlar apenas páginas com `Last-Modified` mais recente que o último crawl
+- [x] Implementar `src/skills/search_deep/indexer.py` com `VectorIndexer`:
+  - [x] `init_collection(domain)` → cria coleção Qdrant para o domínio se não existir
+  - [x] `index(pages: list[CrawledPage])` → gera embeddings e upsert no Qdrant
+  - [x] `search(query, n_results=5, filters=None)` → `list[IndexResult]`
+    - [x] `filters` permite restringir por `domain`, `content_type` ou `crawled_at`
+    - [x] Usa `qdrant_client.models.Filter` com `FieldCondition` para payload filtering
+  - [x] `IndexResult` com campos: `content`, `url`, `title`, `domain`, `score`, `content_type`
+  - [x] `reindex(domain)` → deleta e recria a coleção do domínio
+  - [x] `stats()` → retorna contagem de pontos por coleção via `client.get_collection()`
+- [x] Implementar `src/skills/search_deep/cache.py` com `DeepSearchCache`:
+  - [x] Cache em SQLite para queries já realizadas ao índice (evita re-embedding)
+  - [x] TTL configurável (`DEEP_SEARCH_CACHE_TTL_SECONDS`, padrão: 86400)
+  - [x] Chave de cache: hash SHA-256 da query + filtros serializados
+- [x] Implementar `src/skills/search_deep/skill.py` como `DeepSearchSkill(BaseSkill)` com:
+  - [x] `run(query, domains=None, content_type=None, n_results=5)` → `SkillResult`
+  - [x] Constrói `filters` do Qdrant a partir de `domains` e `content_type` quando fornecidos
+  - [x] `description`: *"Use esta skill para buscar em profundidade dentro de fontes indexadas e confiáveis. Forneça uma query em linguagem natural. Opcionalmente filtre por domínio ou tipo de conteúdo (text, code, table). Retorna trechos relevantes com fonte e score de relevância."*
+- [x] Criar comando CLI para administração do índice:
   ```bash
   uv run python -m src.skills.search_deep.indexer crawl             # crawl e indexa todos os domínios
   uv run python -m src.skills.search_deep.indexer stats             # pontos por coleção
   uv run python -m src.skills.search_deep.indexer reindex <domain>  # re-indexa domínio específico
   ```
-- [ ] Registrar `DeepSearchSkill` no `SkillRegistry`
-- [ ] Adicionar ao `.env.example`:
+- [x] Registrar `DeepSearchSkill` no `SkillRegistry`
+- [x] Adicionar ao `.env.example`:
   ```
   DEEP_SEARCH_DOMAINS=              # Comma-separated: docs.python.org,arxiv.org
   DEEP_SEARCH_MAX_PAGES_PER_DOMAIN=50
@@ -376,13 +376,13 @@ Cada chunk indexado é armazenado como um ponto Qdrant com:
   QDRANT_URL=http://localhost:6333   # http://geminiclaw-qdrant:6333 dentro do Docker
   EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2   # leve, roda no Pi 5
   ```
-- [ ] Escrever testes unitários do crawler com HTML mockado
-- [ ] Escrever testes unitários do chunking (tamanho correto, sobreposição, detecção de tipo)
-- [ ] Escrever testes unitários do indexer com Qdrant em memória (`QdrantClient(":memory:")` — suportado pelo cliente para testes sem servidor)
-- [ ] Escrever testes unitários do payload filtering (por domínio, por `content_type`)
-- [ ] Escrever testes unitários do cache de queries
-- [ ] Escrever teste de integração: crawl de página real → indexação → busca retorna resultado relevante
-- [ ] Commit: `feat(skills): implementa skill de busca profunda com crawler e Qdrant`
+- [x] Escrever testes unitários do crawler com HTML mockado
+- [x] Escrever testes unitários do chunking (tamanho correto, sobreposição, detecção de tipo)
+- [x] Escrever testes unitários do indexer com Qdrant em memória (`QdrantClient(":memory:")` — suportado pelo cliente para testes sem servidor)
+- [x] Escrever testes unitários do payload filtering (por domínio, por `content_type`)
+- [x] Escrever testes unitários do cache de queries
+- [x] Escrever teste de integração: crawl de página real → indexação → busca retorna resultado relevante
+- [x] Commit: `feat(skills): implementa skill de busca profunda com crawler e Qdrant`
 
 ---
 
@@ -401,15 +401,15 @@ do container ser destruído.
 
 ### Tarefas
 
-- [ ] Implementar `src/skills/code/sandbox.py` com `PythonSandbox`:
-  - [ ] `run(code, session_id, task_name, timeout)` → `SandboxResult`
-  - [ ] Container efêmero `python:3.11-slim` com:
+- [x] Implementar `src/skills/code/sandbox.py` com `PythonSandbox`:
+  - [x] `run(code, session_id, task_name, timeout)` → `SandboxResult`
+  - [x] Container efêmero `python:3.11-slim` com:
     - Volume: `outputs/<session_id>/<task_name>/` → `/outputs`
     - Rede desabilitada (`network_disabled=True`)
     - Memória: `256m`, CPU: `0.5`, usuário non-root
-  - [ ] Injeta código como `/tmp/script.py` e executa `python /tmp/script.py`
-  - [ ] `SandboxResult` com: `stdout`, `stderr`, `exit_code`, `artifacts`
-  - [ ] Destroi o container após execução (`remove=True`)
+  - [x] Injeta código como `/tmp/script.py` e executa `python /tmp/script.py`
+  - [x] `SandboxResult` com: `stdout`, `stderr`, `exit_code`, `artifacts`
+  - [x] Destroi o container após execução (`remove=True`)
 - [x] Implementar `src/skills/code/skill.py` como `CodeSkill(BaseSkill)` com:
   - [x] `run(code, session_id, task_name, packages=None)` → `SkillResult`
   - [x] Se `packages` fornecido, instala com `uv pip install` antes da execução

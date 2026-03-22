@@ -94,23 +94,45 @@ class DomainCrawler:
                 soup = BeautifulSoup(response.text, "lxml")
                 
                 # Extrair metadados
-                title = soup.title.string if soup.title else url
-                content = self._extract_text(soup)
+                title = str(soup.title.string).strip() if soup.title and soup.title.string else url
                 
-                page = CrawledPage(
-                    url=url,
-                    title=str(title).strip(),
-                    content=content,
-                    crawled_at=datetime.utcnow().isoformat(),
-                    domain=domain,
-                    content_type="text" # Por agora apenas texto
-                )
-                pages.append(page)
+                blocks = []
+                
+                # Extrair blocos de código
+                for pre in soup.find_all("pre"):
+                    code_text = pre.get_text(separator="\n").strip()
+                    if code_text:
+                        blocks.append(("code", code_text))
+                    pre.decompose()
+                
+                # Extrair tabelas
+                for table in soup.find_all("table"):
+                    table_text = table.get_text(separator="\n").strip()
+                    if table_text:
+                        blocks.append(("table", table_text))
+                    table.decompose()
+                
+                # Extrair o restante como texto
+                content = self._extract_text(soup)
+                if content:
+                    blocks.append(("text", content))
+                
+                crawled_at = datetime.utcnow().isoformat()
+                for ctype, text_content in blocks:
+                    page = CrawledPage(
+                        url=url,
+                        title=title,
+                        content=text_content,
+                        crawled_at=crawled_at,
+                        domain=domain,
+                        content_type=ctype
+                    )
+                    pages.append(page)
                 
                 # Atualiza estado para crawl incremental
                 self.state[url] = {
                     "last_modified": response.headers.get("Last-Modified"),
-                    "crawled_at": page.crawled_at
+                    "crawled_at": crawled_at
                 }
 
                 # Encontrar novos links (apenas do mesmo domínio)

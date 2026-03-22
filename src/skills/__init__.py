@@ -3,6 +3,7 @@ from .base import BaseSkill
 from .search_quick.skill import QuickSearchSkill
 from .search_deep.skill import DeepSearchSkill
 from .code.skill import CodeSkill
+from .memory.skill import MemorySkill
 
 class SkillRegistry:
     """Registro centralizado de skills disponíveis para os agentes."""
@@ -62,9 +63,10 @@ try:
     registry.register(QuickSearchSkill())
     registry.register(DeepSearchSkill())
     registry.register(CodeSkill())
+    registry.register(MemorySkill())
 except Exception:
     # Pode falhar se variáveis de ambiente não estiverem setadas, 
     # ou durante testes onde preferimos registro manual.
     pass
 
-__all__ = ["BaseSkill", "SkillRegistry", "registry", "QuickSearchSkill", "DeepSearchSkill", "CodeSkill"]
+__all__ = ["BaseSkill", "SkillRegistry", "registry", "QuickSearchSkill", "DeepSearchSkill", "CodeSkill", "MemorySkill"]

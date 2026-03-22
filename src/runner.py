@@ -85,6 +85,11 @@ class ContainerRunner:
                     "SQLITE_DB_PATH": "/data/geminiclaw.db",
                     "AGENT_SOCKET_NAME": socket_name,
                 }
+                
+                # Passa QDRANT_URL adiante se existir
+                qdrant_url = os.environ.get("QDRANT_URL")
+                if qdrant_url:
+                    env["QDRANT_URL"] = qdrant_url
 
                 # Resolve paths for volumes
                 # Se estiver rodando dentro de um container (com HOST_PROJECT_PATH), 

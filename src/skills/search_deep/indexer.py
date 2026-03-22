@@ -112,9 +112,9 @@ class VectorIndexer:
                 must=[FieldCondition(key="domain", match=MatchValue(value=domain))]
             )
         
-        results = self.client.search(
+        results_obj = self.client.query_points(
             collection_name=self.COLLECTION_NAME,
-            query_vector=query_vector,
+            query=query_vector,
             query_filter=query_filter,
             limit=limit,
             with_payload=True
@@ -128,8 +128,19 @@ class VectorIndexer:
                 "score": hit.score,
                 "metadata": hit.payload
             }
-            for hit in results
+            for hit in results_obj.points
         ]
+
+    async def reindex(self, domain: str):
+        """Deleta todos os pontos pertencentes ao domínio especificado para permitir reindexação."""
+        logger.info(f"Removendo todos os pontos do domínio {domain} do índice...")
+        self.client.delete(
+            collection_name=self.COLLECTION_NAME,
+            points_selector=Filter(
+                must=[FieldCondition(key="domain", match=MatchValue(value=domain))]
+            )
+        )
+        logger.info(f"Pontos do domínio {domain} removidos com sucesso.")
 
     def get_stats(self) -> Dict[str, Any]:
         """Retorna estatísticas da coleção."""

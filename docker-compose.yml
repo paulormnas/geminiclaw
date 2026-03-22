@@ -26,6 +26,7 @@ services:
     env_file: .env
     environment:
       - HOST_PROJECT_PATH=${PWD}
+      - QDRANT_URL=http://geminiclaw-qdrant:6333
     volumes:
       - ./store:/app/store
       - ./outputs:/app/outputs

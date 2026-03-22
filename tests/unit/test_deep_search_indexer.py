@@ -69,7 +69,7 @@ async def test_indexer_search():
         mock_qdrant.return_value = mock_client
         mock_client.get_collections.return_value.collections = []
         
-        # Simula retorno do search
+        # Simula retorno do query_points
         mock_hit = MagicMock()
         mock_hit.payload = {
             "content": "Found content",
@@ -77,16 +77,19 @@ async def test_indexer_search():
             "title": "Test Title"
         }
         mock_hit.score = 0.9
-        mock_client.search.return_value = [mock_hit]
+        
+        mock_result = MagicMock()
+        mock_result.points = [mock_hit]
+        mock_client.query_points.return_value = mock_result
         
         indexer = VectorIndexer(url=":memory:")
         results = await indexer.search("query", domain="test.com")
         
         assert len(results) == 1
         assert results[0]["content"] == "Found content"
-        assert mock_client.search.called
+        assert mock_client.query_points.called
         # Verifica se o filtro foi aplicado
-        args, kwargs = mock_client.search.call_args
+        args, kwargs = mock_client.query_points.call_args
         assert "query_filter" in kwargs
         assert kwargs["query_filter"] is not None
 

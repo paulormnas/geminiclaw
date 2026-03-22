@@ -17,7 +17,7 @@ def mock_docker_client():
 @pytest.mark.asyncio
 async def test_runner_spawn_parameters(mock_docker_client):
     """Testa se o runner passa os parâmetros corretos para o docker-py."""
-    with patch.dict(os.environ, {"GEMINI_API_KEY": "test_key", "SQLITE_DB_PATH": "/path/to/db"}):
+    with patch.dict(os.environ, {"GEMINI_API_KEY": "test_key", "SQLITE_DB_PATH": "/path/to/db", "DEFAULT_MODEL": "gemini-3-flash-preview"}, clear=True):
         runner = ContainerRunner()
         
         mock_container = MagicMock()

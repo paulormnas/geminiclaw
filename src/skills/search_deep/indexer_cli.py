@@ -40,9 +40,19 @@ def run_stats():
     print(f"  Pontos (chunks): {stats['points_count']}")
     print(f"  Status: {stats['status']}")
 
+async def run_reindex(domain: str):
+    if not domain:
+        print("Erro: Domínio não fornecido para reindexação")
+        return
+    
+    indexer = VectorIndexer()
+    await indexer.reindex(domain)
+    print(f"Domínio {domain} limpo e pronto para reindexação. Execute o comando crawl para indexar novamente.")
+
 async def main():
     parser = argparse.ArgumentParser(description="Deep Search Indexer CLI")
-    parser.add_argument("command", choices=["crawl", "stats"], help="Comando a executar")
+    parser.add_argument("command", choices=["crawl", "stats", "reindex"], help="Comando a executar")
+    parser.add_argument("domain", nargs="?", help="Domínio para o comando reindex")
     
     args = parser.parse_args()
     
@@ -50,6 +60,10 @@ async def main():
         await run_crawl()
     elif args.command == "stats":
         run_stats()
+    elif args.command == "reindex":
+        if not args.domain:
+            parser.error("O comando reindex exige a especificação de um domínio (ex: reindex docs.python.org)")
+        await run_reindex(args.domain)
 
 if __name__ == "__main__":
     asyncio.run(main())

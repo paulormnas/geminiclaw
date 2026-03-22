@@ -155,13 +155,13 @@ docker compose down -v
 
 ### Tarefas
 
-- [ ] Criar `docker-compose.yml` na raiz do projeto com os serviços `qdrant` e `geminiclaw`
-- [ ] Atualizar `containers/Dockerfile` para servir como imagem do serviço `geminiclaw`
-- [ ] Configurar o `runner.py` para conectar ao socket Docker do host e spawnar containers de agentes na rede `geminiclaw-net`
-- [ ] Garantir que `QDRANT_URL=http://geminiclaw-qdrant:6333` é usado dentro do Docker e `http://localhost:6333` fora (testes locais)
-- [ ] Adicionar `.dockerignore` cobrindo: `.env`, `.venv/`, `__pycache__/`, `outputs/`, `store/`, `logs/`
-- [ ] Atualizar `SETUP.md` substituindo `docker network create` e `docker run` pelos comandos `docker compose`
-- [ ] Escrever teste de integração: `docker compose up` → serviços healthy → framework responde
+- [x] Criar `docker-compose.yml` na raiz do projeto com os serviços `qdrant` e `geminiclaw`
+- [x] Atualizar `containers/Dockerfile` para servir como imagem do serviço `geminiclaw`
+- [x] Configurar o `runner.py` para conectar ao socket Docker do host e spawnar containers de agentes na rede `geminiclaw-net`
+- [x] Garantir que `QDRANT_URL=http://geminiclaw-qdrant:6333` é usado dentro do Docker e `http://localhost:6333` fora (testes locais)
+- [x] Adicionar `.dockerignore` cobrindo: `.env`, `.venv/`, `__pycache__/`, `outputs/`, `store/`, `logs/`
+- [x] Atualizar `SETUP.md` substituindo `docker network create` e `docker run` pelos comandos `docker compose`
+- [x] Escrever teste de integração: `docker compose up` → serviços healthy → framework responde
 - [ ] Commit: `ci: adiciona docker-compose com qdrant e geminiclaw`
 
 ---
@@ -326,8 +326,8 @@ Cada chunk indexado é armazenado como um ponto Qdrant com:
 
 ### Tarefas
 
-- [ ] Garantir que o serviço `qdrant` está definido no `docker-compose.yml` e saudável antes de iniciar o indexer (`depends_on: qdrant: condition: service_healthy`)
-- [ ] Configurar healthcheck do serviço Qdrant no `docker-compose.yml`:
+- [x] Garantir que o serviço `qdrant` está definido no `docker-compose.yml` e saudável antes de iniciar o indexer (`depends_on: qdrant: condition: service_healthy`)
+- [x] Configurar healthcheck do serviço Qdrant no `docker-compose.yml`:
   ```yaml
   healthcheck:
     test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
@@ -410,22 +410,22 @@ do container ser destruído.
   - [ ] Injeta código como `/tmp/script.py` e executa `python /tmp/script.py`
   - [ ] `SandboxResult` com: `stdout`, `stderr`, `exit_code`, `artifacts`
   - [ ] Destroi o container após execução (`remove=True`)
-- [ ] Implementar `src/skills/code/skill.py` como `CodeSkill(BaseSkill)` com:
-  - [ ] `run(code, session_id, task_name, packages=None)` → `SkillResult`
-  - [ ] Se `packages` fornecido, instala com `uv pip install` antes da execução
-  - [ ] Rejeita código com `os.system`, `subprocess` com `shell=True` ou acesso a `/etc/`, `/root/`
-  - [ ] `description`: *"Use esta skill para executar código Python. Forneça o código completo como string. Todo arquivo salvo em '/outputs/' estará disponível como artefato."*
-- [ ] Registrar `CodeSkill` no `SkillRegistry`
-- [ ] Adicionar ao `.env.example`:
+- [x] Implementar `src/skills/code/skill.py` como `CodeSkill(BaseSkill)` com:
+  - [x] `run(code, session_id, task_name, packages=None)` → `SkillResult`
+  - [x] Se `packages` fornecido, instala com `uv pip install` antes da execução
+  - [x] Rejeita código com `os.system`, `subprocess` com `shell=True` ou acesso a `/etc/`, `/root/`
+  - [x] `description`: *"Use esta skill para executar código Python. Forneça o código completo como string. Todo arquivo salvo em '/outputs/' estará disponível como artefato."*
+- [x] Registrar `CodeSkill` no `SkillRegistry`
+- [x] Adicionar ao `.env.example`:
   ```
   CODE_SANDBOX_TIMEOUT_SECONDS=60
   CODE_SANDBOX_MEMORY_LIMIT=256m
   ```
-- [ ] Escrever testes unitários da validação de segurança
-- [ ] Escrever teste de integração: código simples → stdout capturado
-- [ ] Escrever teste de integração: código salva arquivo → artefato disponível no host
-- [ ] Escrever teste de integração: timeout excedido → container destruído corretamente
-- [ ] Commit: `feat(skills): implementa skill de execução de código Python em sandbox`
+- [x] Escrever testes unitários da validação de segurança
+- [x] Escrever teste de integração: código simples → stdout capturado
+- [x] Escrever teste de integração: código salva arquivo → artefato disponível no host
+- [x] Escrever teste de integração: timeout excedido → container destruído corretamente
+- [x] Commit: `feat(skills): implementa skill de execução de código Python em sandbox`
 
 ---
 
@@ -449,20 +449,20 @@ class MemoryEntry:
 
 ### Tarefas
 
-- [ ] Implementar `src/skills/memory/short_term.py` com `ShortTermMemory`:
-  - [ ] `write(session_id, key, value, source, tags=[])` → `MemoryEntry`
-  - [ ] `read(session_id, key)` → `MemoryEntry | None`
-  - [ ] `search(session_id, tags)` → `list[MemoryEntry]`
-  - [ ] `list_all(session_id)` → `list[MemoryEntry]` por `created_at`
-  - [ ] `clear(session_id)` → limpa memória da sessão
-  - [ ] Storage: dicionário em RAM por `session_id`
-- [ ] Implementar `MemorySkill` em `src/skills/memory/skill.py`:
-  - [ ] `remember(key, value, tags=[])` → grava na memória da sessão atual
-  - [ ] `recall(key)` → recupera por chave exata
-  - [ ] `recall_by_tags(tags)` → recupera por tags
-  - [ ] `description`: *"Use 'remember' para registrar descobertas durante a tarefa. Use 'recall' ou 'recall_by_tags' para recuperar o que foi registrado anteriormente na mesma sessão."*
-- [ ] Escrever testes unitários: escrita, leitura, busca por tags, isolamento entre sessões
-- [ ] Commit: `feat(skills): implementa memória de curto prazo por sessão`
+- [x] Implementar `src/skills/memory/short_term.py` com `ShortTermMemory`:
+  - [x] `write(session_id, key, value, source, tags=[])` → `MemoryEntry`
+  - [x] `read(session_id, key)` → `MemoryEntry | None`
+  - [x] `search(session_id, tags)` → `list[MemoryEntry]`
+  - [x] `list_all(session_id)` → `list[MemoryEntry]` por `created_at`
+  - [x] `clear(session_id)` → limpa memória da sessão
+  - [x] Storage: dicionário em RAM por `session_id`
+- [x] Implementar `MemorySkill` em `src/skills/memory/skill.py`:
+  - [x] `remember(key, value, tags=[])` → grava na memória da sessão atual
+  - [x] `recall(key)` → recupera por chave exata
+  - [x] `recall_by_tags(tags)` → recupera por tags
+  - [x] `description`: *"Use 'remember' para registrar descobertas durante a tarefa. Use 'recall' ou 'recall_by_tags' para recuperar o que foi registrado anteriormente na mesma sessão."*
+- [x] Escrever testes unitários: escrita, leitura, busca por tags, isolamento entre sessões
+- [x] Commit: `feat(skills): implementa memória de curto prazo por sessão`
 
 ---
 

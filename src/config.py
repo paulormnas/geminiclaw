@@ -34,8 +34,13 @@ SQLITE_DB_PATH = get_env("SQLITE_DB_PATH", default="store/geminiclaw.db")
 OUTPUT_BASE_DIR = get_env("OUTPUT_BASE_DIR", default="outputs")
 SEARCH_CACHE_TTL_SECONDS = int(get_env("SEARCH_CACHE_TTL_SECONDS", default="3600"))
 
-# Qdrant (S2)
+# Deep Search Skill (S2)
+SKILL_DEEP_SEARCH_ENABLED = get_env("SKILL_DEEP_SEARCH_ENABLED", default="false").lower() == "true"
+DEEP_SEARCH_DOMAINS = get_env("DEEP_SEARCH_DOMAINS", default="docs.python.org,arxiv.org")
+DEEP_SEARCH_MAX_PAGES_PER_DOMAIN = int(get_env("DEEP_SEARCH_MAX_PAGES_PER_DOMAIN", default="50"))
+DEEP_SEARCH_CACHE_TTL_SECONDS = int(get_env("DEEP_SEARCH_CACHE_TTL_SECONDS", default="86400"))
 QDRANT_URL = get_env("QDRANT_URL", default="http://localhost:6333")
+EMBEDDING_MODEL = get_env("EMBEDDING_MODEL", default="sentence-transformers/all-MiniLM-L6-v2")
 
 # Garante que os diretórios necessários existem
 Path(SQLITE_DB_PATH).parent.mkdir(parents=True, exist_ok=True)

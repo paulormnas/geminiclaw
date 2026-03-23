@@ -16,6 +16,7 @@ from src.session import SessionManager
 from src.runner import ContainerRunner
 from src.ipc import IPCChannel, create_message, Message
 from src.output_manager import OutputManager
+from src.autonomous_loop import AutonomousLoop
 
 logger = get_logger(__name__)
 
@@ -140,12 +141,11 @@ class Orchestrator:
         prompt: str,
         agent_tasks: list[AgentTask] | None = None,
     ) -> OrchestratorResult:
-        """Processa uma solicitação do usuário, spawnando e coordenando agentes.
+        """Processa uma solicitação do usuário via loop autônomo.
 
         Args:
             prompt: Solicitação do usuário.
-            agent_tasks: Lista de tarefas de agentes. Se None, cria uma tarefa
-                         padrão com o agente base.
+            agent_tasks: Lista de tarefas de agentes (se fornecido, pula o loop autônomo).
 
         Returns:
             Resultado consolidado com respostas de todos os agentes.
@@ -153,125 +153,49 @@ class Orchestrator:
         # Cria a sessão mestra para a orquestração
         master_session = self.session_manager.create("orchestrator")
         
-        if agent_tasks is None:
-            # Etapa 9: Inicia o ciclo de planejamento e raciocínio
-            agent_tasks = await self._run_planning_loop(prompt, master_session.id)
+        # Se tarefas explícitas forem fornecidas, executa sequencialmente (compatibilidade)
+        if agent_tasks:
+            logger.info("Executando tarefas explícitas fornecidas (bypass autonomous loop)")
+            results = []
+            for task in agent_tasks:
+                result = await self._execute_agent(task, master_session.id)
+                results.append(result)
             
-            # Persiste o plano aprovado na sessão mestra
-            if agent_tasks:
-                plan_payload = {
-                    "prompt": prompt,
-                    "plan": [
-                        {
-                            "agent_id": t.agent_id,
-                            "image": t.image,
-                            "prompt": t.prompt
-                        } for t in agent_tasks
-                    ]
-                }
-                self.session_manager.update(master_session.id, status="executing", payload=plan_payload)
-            else:
-                self.session_manager.update(master_session.id, status="failed", payload={"error": "Planejamento falhou ou foi rejeitado"})
-        
-        if not agent_tasks:
+            succeeded = sum(1 for r in results if r.status == "success")
+            failed = len(results) - succeeded
+            all_artifacts = self.output_manager.list_artifacts(master_session.id)
+            
+            self.session_manager.close(master_session.id)
             return OrchestratorResult(
-                results=[],
-                total=0,
-                succeeded=0,
-                failed=0,
-                artifacts=[],
+                results=results,
+                total=len(results),
+                succeeded=succeeded,
+                failed=failed,
+                artifacts=all_artifacts,
             )
 
-        prompt_preview = prompt[:100]
-        logger.info(
-            "Iniciando orquestração",
-            extra={
-                "prompt_preview": prompt_preview,
-                "agent_count": len(agent_tasks),
-                "agents": [t.agent_id for t in agent_tasks],
-                "plan": [{"agent_id": t.agent_id, "prompt": t.prompt} for t in agent_tasks]
-            },
-        )
-
-        # Executa os agentes sequencialmente (Etapa 9 workaround para compartilhamento de estado via arquivos)
-        raw_results = []
-        for task in agent_tasks:
-            result = await self._execute_agent(task, master_session.id)
-            raw_results.append(result)
-
-        # Processa resultados, convertendo exceções em AgentResult de erro
-        results: list[AgentResult] = []
-        for i, raw in enumerate(raw_results):
-            if isinstance(raw, AgentResult):
-                results.append(raw)
-            elif isinstance(raw, Exception):
-                # Exceção não capturada — cria resultado de erro
-                task = agent_tasks[i]
-                results.append(
-                    AgentResult(
-                        agent_id=task.agent_id,
-                        session_id="",
-                        status="error",
-                        response={},
-                        error=f"Exceção não tratada: {raw}",
-                    )
-                )
-                logger.error(
-                    "Exceção não tratada durante execução de agente",
-                    extra={
-                        "agent_id": task.agent_id,
-                        "error": str(raw),
-                    },
-                )
-
-        succeeded = sum(1 for r in results if r.status == "success")
-        failed = len(results) - succeeded
-
-        # Coleta artefatos de todas as sessões envolvidas (incluindo a mestre)
-        all_artifacts = []
-        unique_sessions = {r.session_id for r in results if r.session_id}
-        if master_session:
-            unique_sessions.add(master_session.id)
-            
-        for sid in unique_sessions:
-            all_artifacts.extend(self.output_manager.list_artifacts(sid))
-
-        # Finaliza a sessão mestra
-        final_status = "success" if succeeded == len(results) and len(results) > 0 else "failed"
+        # Caso contrário, usa o loop autônomo (Etapa S7)
+        loop = AutonomousLoop(self)
+        result = await loop.run(prompt, master_session.id)
+        
+        # Atualiza a sessão mestra com o resultado consolidado
+        final_status = "success" if result.succeeded == result.total and result.total > 0 else "failed"
         self.session_manager.update(
             master_session.id, 
             status=final_status,
             payload={
-                **master_session.payload,
+                "prompt": prompt,
                 "summary": {
-                    "total": len(results),
-                    "succeeded": succeeded,
-                    "failed": failed,
-                    "artifacts_count": len(all_artifacts)
+                    "total": result.total,
+                    "succeeded": result.succeeded,
+                    "failed": result.failed,
+                    "artifacts_count": len(result.artifacts)
                 }
             }
         )
         self.session_manager.close(master_session.id)
-
-        orchestrator_result = OrchestratorResult(
-            results=results,
-            total=len(results),
-            succeeded=succeeded,
-            failed=failed,
-            artifacts=all_artifacts,
-        )
-
-        logger.info(
-            "Orquestração concluída",
-            extra={
-                "total": orchestrator_result.total,
-                "succeeded": orchestrator_result.succeeded,
-                "failed": orchestrator_result.failed,
-                "artifacts_count": len(all_artifacts),
-            },
-        )
-
-        return orchestrator_result
+        
+        return result
 
     async def _execute_agent(self, task: AgentTask, master_session_id: str | None = None) -> AgentResult:
         """Executa o ciclo de vida completo de um único agente.

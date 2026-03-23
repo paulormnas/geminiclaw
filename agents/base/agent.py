@@ -12,10 +12,11 @@ from google.adk.agents import Agent
 from google.adk.agents.context import Context
 from google.genai import types as genai_types
 from agents.base.tools import write_artifact
-
 from src.logger import get_logger
 from src.session import SessionManager
 from src.config import DEFAULT_MODEL, SQLITE_DB_PATH
+from src.skills import registry
+from src.skills.memory.long_term import LongTermMemory
 
 logger = get_logger(__name__)
 
@@ -32,7 +33,12 @@ AGENT_INSTRUCTION = (
     "2. Responder sempre em português brasileiro.\n"
     "3. Ser conciso e direto nas respostas.\n"
     "4. Reportar qualquer erro ou limitação encontrada.\n"
-    "5. **IMPORTANTE**: Todos os artefatos (código, documentos, imagens) que você produzir devem ser salvos em `/outputs/<task_name>/` dentro do container.\n"
+    "5. **MEMÓRIA E PERFIL DO USUÁRIO**: Utilize as ferramentas de memória para "
+    "identificar informações sobre o perfil e preferências do usuário. "
+    "Quando identificar algo relevante e duradouro, registre na memória de longo prazo.\n"
+    "6. **FERRAMENTAS**: Você possui acesso a diversas skills (busca na web, execução de código, memória). "
+    "Use-as conforme a necessidade para resolver as tarefas.\n"
+    "7. **IMPORTANTE**: Todos os artefatos (código, documentos, imagens) que você produzir devem ser salvos em `/outputs/<task_name>/` dentro do container.\n"
     "Se não souber responder, diga claramente que não tem informação suficiente."
 )
 
@@ -135,13 +141,58 @@ async def _persist_session_context(callback_context: Any) -> None:
         )
 
 
+def _setup_skills() -> None:
+    """Configura e registra as skills habilitadas via variáveis de ambiente."""
+    # Como as skills já tentam se registrar no __init__.py de src.skills,
+    # aqui apenas garantimos que respeitamos os flags do .env
+    
+    # Se uma skill não estiver habilitada, removemos do registry se estiver lá
+    if os.environ.get("SKILL_QUICK_SEARCH_ENABLED", "true").lower() != "true":
+        registry._skills.pop("quick_search", None)
+        
+    if os.environ.get("SKILL_DEEP_SEARCH_ENABLED", "false").lower() != "true":
+        registry._skills.pop("deep_search", None)
+        
+    if os.environ.get("SKILL_CODE_ENABLED", "true").lower() != "true":
+        registry._skills.pop("python_interpreter", None)
+        
+    if os.environ.get("SKILL_MEMORY_ENABLED", "true").lower() != "true":
+        registry._skills.pop("memory", None)
+
+    logger.info(
+        "Skills configuradas",
+        extra={"available_skills": [s["name"] for s in registry.list_available()]}
+    )
+
+
+def _get_agent_instruction(base_instruction: str) -> str:
+    """Gera a instrução do agente incluindo o resumo da memória de longo prazo."""
+    instruction = base_instruction
+    
+    try:
+        db_path = os.environ.get("LONG_TERM_MEMORY_DB", "./store/memory.db")
+        ltm = LongTermMemory(db_path)
+        summary = ltm.summarize_for_context(limit=5)
+        
+        if summary:
+            instruction += f"\n\n**CONTEXTO HISTÓRICO (Memória de Longo Prazo)**:\n{summary}"
+            logger.info("Resumo da memória de longo prazo injetado na instrução")
+    except Exception as e:
+        logger.warning(f"Não foi possível carregar memória de longo prazo: {e}")
+        
+    return instruction
+
+
+# Configura as skills antes de inicializar o agente
+_setup_skills()
+
 # Define o root_agent — ponto de entrada obrigatório para o ADK
 root_agent = Agent(
     name=AGENT_NAME,
     model=DEFAULT_MODEL,
     description=AGENT_DESCRIPTION,
-    instruction=AGENT_INSTRUCTION,
-    tools=[write_artifact],
+    instruction=_get_agent_instruction(AGENT_INSTRUCTION),
+    tools=registry.as_adk_tools() + [write_artifact],
     before_agent_callback=_load_session_context,
     after_agent_callback=_persist_session_context,
 )

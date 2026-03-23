@@ -92,30 +92,33 @@ class TestOrchestratorSingleAgent:
         assert result.results[0].session_id == "sess_1"
 
     async def test_handle_request_default_agent(self) -> None:
-        """handle_request sem agent_tasks deve usar agente base padrão via thinking loop."""
+        """handle_request sem agent_tasks deve usar loop autônomo."""
         orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
 
-        # Mock do loop de planejamento para retornar uma tarefa simples
-        default_task = AgentTask(agent_id="base_agent", image="geminiclaw-base", prompt="Teste sem tasks")
+        # Mock do resultado do loop autônomo
+        agent_res = AgentResult(agent_id="base", session_id="sess_1", status="success", response={"text": "ok"})
+        loop_result = OrchestratorResult(results=[agent_res], total=1, succeeded=1, failed=0)
         
-        # Agora o Orchestrator chama create duas vezes: uma para a master session e outra para o agente
         master_session = _make_session("orchestrator", "sess_master")
-        session = _make_session("base_agent", "sess_default")
-        mock_sm.create.side_effect = [master_session, session]
+        mock_sm.create.return_value = master_session
 
-        response_msg = _make_response_message("sess_default", {"result": "ok"})
-        mock_ipc.receive = AsyncMock(return_value=response_msg)
-        
-        with patch.object(Orchestrator, "_run_planning_loop", AsyncMock(return_value=[default_task])):
+        with patch("src.orchestrator.AutonomousLoop") as MockLoop:
+            mock_loop_instance = MockLoop.return_value
+            mock_loop_instance.run = AsyncMock(return_value=loop_result)
+            
             result = await orchestrator.handle_request("Teste sem tasks")
 
         assert result.total == 1
         assert result.succeeded == 1
-        mock_runner.spawn.assert_called_once()
-        # Verifica que usou a imagem padrão definida na tarefa retornada pelo mock
-        call_args = mock_runner.spawn.call_args
-        assert call_args[0][0] == "base_agent"  # agent_id
-        assert call_args[0][1] == "geminiclaw-base"  # image
+        assert result.results[0].agent_id == "base"
+        mock_sm.create.assert_called_with("orchestrator")
+        mock_sm.close.assert_called_with("sess_master")
+
+        assert result.total == 1
+        assert result.succeeded == 1
+        assert result.results[0].agent_id == "base"
+        mock_sm.create.assert_called_with("orchestrator")
+        mock_sm.close.assert_called_with("sess_master")
 
 
 @pytest.mark.unit

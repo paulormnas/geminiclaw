@@ -31,6 +31,14 @@ async def test_runner_spawn_parameters(mock_docker_client):
         # O runner monta o diretório de sockets, o diretório do banco e o diretório de outputs
         from src.runner import IPC_SOCKET_DIR
         output_path = str(Path("outputs").absolute() / "session_123")
+
+        expected_volumes = {
+            "/path/to": {"bind": "/data", "mode": "rw"},
+            output_path: {"bind": "/outputs", "mode": "rw"},
+            str(Path(IPC_SOCKET_DIR)): {"bind": "/tmp/geminiclaw-ipc", "mode": "rw"},
+            str(Path(__file__).parent.parent.parent / "src"): {"bind": "/app/src", "mode": "rw"},
+            str(Path(__file__).parent.parent.parent / "agents"): {"bind": "/app/agents", "mode": "rw"},
+        }
         
         mock_docker_client.containers.run.assert_called_once_with(
             image="test_image",
@@ -50,11 +58,7 @@ async def test_runner_spawn_parameters(mock_docker_client):
                 "SQLITE_DB_PATH": "/data/geminiclaw.db",
                 "AGENT_SOCKET_NAME": "test_agent_session_123.sock",
             },
-            volumes={
-                "/path/to": {"bind": "/data", "mode": "rw"},
-                output_path: {"bind": "/outputs", "mode": "rw"},
-                str(Path(IPC_SOCKET_DIR)): {"bind": "/tmp/geminiclaw-ipc", "mode": "rw"},
-            },
+            volumes=expected_volumes,
             extra_hosts={},
         )
 

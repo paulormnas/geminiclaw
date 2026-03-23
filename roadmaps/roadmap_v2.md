@@ -492,23 +492,23 @@ CREATE INDEX idx_ltm_importance ON long_term_memory(importance DESC);
 
 ### Tarefas
 
-- [ ] Implementar `src/skills/memory/long_term.py` com `LongTermMemory`:
-  - [ ] `write(key, value, source, importance=0.5, tags=[])` → `MemoryEntry`
-  - [ ] `read(key)` → `MemoryEntry | None` (atualiza `last_used` e `use_count`)
-  - [ ] `search(tags=[], min_importance=0.0, limit=10)` → `list[MemoryEntry]`
-  - [ ] `update_importance(key, delta)` → ajusta importância (+/-)
-  - [ ] `forget(key)` → remove entrada obsoleta
-  - [ ] `summarize_for_context(limit=5)` → texto das entradas mais importantes para injetar no contexto
-- [ ] Integrar ao `SessionManager`: ao criar sessão, chamar `summarize_for_context()` e injetar no contexto inicial
-- [ ] Atualizar `MemorySkill` adicionando:
-  - [ ] `memorize(key, value, importance, tags=[])` → grava na memória de longo prazo
-  - [ ] `remember_forever(key)` → promove entrada de curto para longo prazo
-  - [ ] `retrieve(key)` → busca em curto prazo primeiro, depois longo prazo
-  - [ ] `description` atualizada para incluir as novas operações
-- [ ] Adicionar ao `.env.example`: `LONG_TERM_MEMORY_DB=./store/memory.db`
-- [ ] Escrever testes unitários: escrita, leitura, busca, promoção de entradas
-- [ ] Escrever teste de integração: memória gravada em sessão A → recuperada em sessão B
-- [ ] Commit: `feat(skills): implementa memória de longo prazo persistente com SQLite`
+- [x] Implementar `src/skills/memory/long_term.py` com `LongTermMemory`:
+  - [x] `write(key, value, source, importance=0.5, tags=[])` → `MemoryEntry`
+  - [x] `read(key)` → `MemoryEntry | None` (atualiza `last_used` e `use_count`)
+  - [x] `search(tags=[], min_importance=0.0, limit=10)` → `list[MemoryEntry]`
+  - [x] `update_importance(key, delta)` → ajusta importância (+/-)
+  - [x] `forget(key)` → remove entrada obsoleta
+  - [x] `summarize_for_context(limit=5)` → texto das entradas mais importantes para injetar no contexto
+- [x] Integrar ao `SessionManager`: ao criar sessão, chamar `summarize_for_context()` e injetar no contexto inicial
+- [x] Atualizar `MemorySkill` adicionando:
+  - [x] `memorize(key, value, importance, tags=[])` → grava na memória de longo prazo
+  - [x] `remember_forever(key)` → promove entrada de curto para longo prazo
+  - [x] `retrieve(key)` → busca em curto prazo primeiro, depois longo prazo
+  - [x] `description` atualizada para incluir as novas operações
+- [x] Adicionar ao `.env.example`: `LONG_TERM_MEMORY_DB=./store/memory.db`
+- [x] Escrever testes unitários: escrita, leitura, busca, promoção de entradas
+- [x] Escrever teste de integração: memória gravada em sessão A → recuperada em sessão B
+- [x] Commit: `feat(skills): implementa memória de longo prazo persistente com SQLite`
 
 ---
 
@@ -517,23 +517,23 @@ CREATE INDEX idx_ltm_importance ON long_term_memory(importance DESC);
 Objetivo: registrar todas as skills implementadas no agente base e garantir
 que agentes especializados as herdem automaticamente.
 
-- [ ] Atualizar `agents/base/agent.py` para:
-  - [ ] Registrar no `SkillRegistry` as skills habilitadas via `.env` (cada skill é opcional)
-  - [ ] Passar `registry.as_adk_tools()` ao `Agent(tools=...)`
-  - [ ] Injetar `summarize_for_context()` na `instruction` do agente ao iniciar
-- [ ] Definir flags de habilitação no `.env.example`:
+- [x] Atualizar `agents/base/agent.py` para:
+  - [x] Registrar no `SkillRegistry` as skills habilitadas via `.env` (cada skill é opcional)
+  - [x] Passar `registry.as_adk_tools()` ao `Agent(tools=...)`
+  - [x] Injetar `summarize_for_context()` na `instruction` do agente ao iniciar
+- [x] Definir flags de habilitação no `.env.example`:
   ```
   SKILL_QUICK_SEARCH_ENABLED=true
   SKILL_DEEP_SEARCH_ENABLED=false   # Requer crawl prévio
   SKILL_CODE_ENABLED=true
   SKILL_MEMORY_ENABLED=true
   ```
-- [ ] Atualizar `Dockerfile` base com dependências das skills habilitadas
-- [ ] Atualizar `GEMINI.md` com a lista de skills disponíveis e quando cada uma deve ser usada
-- [ ] Escrever teste de integração: agente base inicializa com as skills habilitadas
-- [ ] Escrever teste de integração: agente usa `QuickSearchSkill` → resultado gravado na `ShortTermMemory`
-- [ ] Escrever teste de integração: agente usa `CodeSkill` → artefato em `outputs/<session_id>/<task_name>/`
-- [ ] Commit: `feat(agents): integra skills ao agente base com habilitação por flags`
+- [x] Atualizar `Dockerfile` base com dependências das skills habilitadas
+- [x] Atualizar `GEMINI.md` com a lista de skills disponíveis e quando cada uma deve ser usada
+- [x] Escrever teste de integração: agente base inicializa com as skills habilitadas
+- [x] Escrever teste de integração: agente usa `QuickSearchSkill` → resultado gravado na `ShortTermMemory`
+- [x] Escrever teste de integração: agente usa `CodeSkill` → artefato em `outputs/<session_id>/<task_name>/`
+- [x] Commit: `feat(agents): integra skills ao agente base com habilitação por flags`
 
 ---
 
@@ -562,16 +562,16 @@ intervenção humana a cada passo.
 
 ### Tarefas
 
-- [ ] Implementar `src/autonomous_loop.py` com `AutonomousLoop`:
-  - [ ] `run(agent, task, session_id)` → `LoopResult`
-  - [ ] `MAX_RETRY_PER_SUBTASK` (padrão: 3) — subtarefa marcada como `failed` se atingido
-  - [ ] `MAX_SUBTASKS_PER_TASK` (padrão: 10) — orquestrador notificado se atingido
-  - [ ] Log de cada iteração: subtarefa, skill usada, resultado, número de tentativas
-- [ ] Integrar `AutonomousLoop` ao `src/orchestrator.py` como modo padrão
-- [ ] Escrever testes unitários com agente mockado
-- [ ] Escrever teste de integração: 3 subtarefas → loop completo → artefatos em `outputs/`
-- [ ] Escrever teste de retry: subtarefa falha 3 vezes → `failed` → loop continua
-- [ ] Commit: `feat(orchestrator): implementa loop de execução autônoma`
+- [x] Implementar `src/autonomous_loop.py` com `AutonomousLoop`:
+  - [x] `run(agent, task, session_id)` → `LoopResult`
+  - [x] `MAX_RETRY_PER_SUBTASK` (padrão: 3) — subtarefa marcada como `failed` se atingido
+  - [x] `MAX_SUBTASKS_PER_TASK` (padrão: 10) — orquestrador notificado se atingido
+  - [x] Log de cada iteração: subtarefa, skill usada, resultado, número de tentativas
+- [x] Integrar `AutonomousLoop` ao `src/orchestrator.py` como modo padrão
+- [x] Escrever testes unitários com agente mockado
+- [x] Escrever teste de integração: 3 subtarefas → loop completo → artefatos em `outputs/`
+- [x] Escrever teste de retry: subtarefa falha 3 vezes → `failed` → loop continua
+- [x] Commit: `feat(orchestrator): implementa loop de execução autônoma`
 
 ---
 

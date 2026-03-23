@@ -128,6 +128,15 @@ class ContainerRunner:
                     }
                 }
 
+                # Mapeia pastas de código para permitir desenvolvimento sem rebuild (S1.3)
+                if host_root:
+                    volumes[str(Path(host_root) / "src")] = {"bind": "/app/src", "mode": "rw"}
+                    volumes[str(Path(host_root) / "agents")] = {"bind": "/app/agents", "mode": "rw"}
+                else:
+                    # Rodando fora de container (local)
+                    volumes[str(_root / "src")] = {"bind": "/app/src", "mode": "rw"}
+                    volumes[str(_root / "agents")] = {"bind": "/app/agents", "mode": "rw"}
+
                 # Configurações extras para TCP (Mac compatibility)
                 extra_hosts = {}
                 if ipc_port:

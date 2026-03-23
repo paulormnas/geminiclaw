@@ -1,6 +1,7 @@
 """Ferramentas comuns para todos os agentes GeminiClaw."""
 
 import os
+from typing import Optional
 import logging
 from pathlib import Path
 
@@ -43,3 +44,38 @@ async def write_artifact(filename: str, content: str) -> str:
     except Exception as e:
         logger.error(f"Erro ao salvar artefato: {e}")
         return f"Erro ao salvar artefato: {str(e)}"
+
+async def manage_memory(action: str, key: str, value: Optional[str] = None, importance: float = 0.5, tags: list[str] = []) -> str:
+    """Gerencia memórias de curto e longo prazo do agente.
+
+    Args:
+        action: 'remember' (curto prazo), 'memorize' (longo prazo), 'recall' (lê curto prazo), 'retrieve' (lê ambos), 'remember_forever' (curto -> longo).
+        key: Chave identificadora da memória.
+        value: Conteúdo da memória (obrigatório para 'remember', 'memorize').
+        importance: Nível de importância de 0.0 a 1.0 (apenas para longo prazo).
+        tags: Lista de tags para categorização.
+
+    Returns:
+        Resultado da operação de memória.
+    """
+    from src.skills.memory.skill import MemorySkill
+    import os
+    
+    session_id = os.environ.get("SESSION_ID")
+    agent_id = os.environ.get("AGENT_ID", "agent")
+    
+    skill = MemorySkill()
+    result = await skill.run(
+        action=action,
+        session_id=session_id,
+        key=key,
+        value=value,
+        source=agent_id,
+        importance=importance,
+        tags=tags
+    )
+    
+    if result.success:
+        return result.output
+    else:
+        return f"Erro na operação de memória: {result.error}"

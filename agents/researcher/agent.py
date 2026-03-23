@@ -9,9 +9,9 @@ from google.adk.agents import Agent
 
 from src.logger import get_logger
 from src.config import DEFAULT_MODEL
-from agents.base.agent import _load_session_context, _persist_session_context
+from agents.base.agent import _load_session_context, _persist_session_context, _setup_skills, _get_agent_instruction
 from agents.base.tools import write_artifact
-from agents.researcher.tools import search
+from src.skills import registry
 
 logger = get_logger(__name__)
 
@@ -26,13 +26,12 @@ AGENT_INSTRUCTION = (
     "Você é um agente pesquisador do framework GeminiClaw, especializado em "
     "buscar e sintetizar informações. Suas responsabilidades são:\n"
     "1. Analisar a solicitação recebida e identificar os pontos-chave a pesquisar.\n"
-    "2. Usar a ferramenta 'search' para buscar informações relevantes.\n"
-    "3. Sintetizar os resultados em uma resposta clara, organizada e objetiva.\n"
-    "4. Citar fontes quando disponíveis.\n"
-    "5. Responder sempre em português brasileiro.\n"
-    "6. **IMPORTANTE**: Todos os artefatos (código, documentos, imagens) que você produzir devem ser salvos em `/outputs/<task_name>/` dentro do container.\n"
-    "7. Se não encontrar informações suficientes, diga claramente o que "
-    "foi encontrado e o que ficou faltando.\n\n"
+    "2. Usar as ferramentas de busca ('quick_search' para web, 'deep_search' para fontes locais) para buscar informações relevantes.\n"
+    "3. Usar as ferramentas de memória para registrar descobertas importantes e consultar contexto anterior.\n"
+    "4. Sintetizar os resultados em uma resposta clara, organizada e objetiva.\n"
+    "5. Citar fontes quando disponíveis.\n"
+    "6. Responder sempre em português brasileiro.\n"
+    "7. **IMPORTANTE**: Todos os artefatos (código, documentos, imagens) que você produzir devem ser salvos em `/outputs/<task_name>/` dentro do container.\n\n"
     "Diretrizes de pesquisa:\n"
     "- Faça buscas específicas e focadas, evitando termos genéricos.\n"
     "- Se a primeira busca não retornar resultados satisfatórios, "
@@ -41,13 +40,16 @@ AGENT_INSTRUCTION = (
     "- Organize a resposta com títulos e subtítulos quando apropriado."
 )
 
+# Configura as skills antes de inicializar o agente
+_setup_skills()
+
 # Define o root_agent — ponto de entrada obrigatório para o ADK
 root_agent = Agent(
     name=AGENT_NAME,
     model=DEFAULT_MODEL,
     description=AGENT_DESCRIPTION,
-    instruction=AGENT_INSTRUCTION,
-    tools=[search, write_artifact],
+    instruction=_get_agent_instruction(AGENT_INSTRUCTION),
+    tools=registry.as_adk_tools() + [write_artifact],
     before_agent_callback=_load_session_context,
     after_agent_callback=_persist_session_context,
 )

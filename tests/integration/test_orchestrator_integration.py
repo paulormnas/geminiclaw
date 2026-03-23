@@ -50,7 +50,7 @@ async def test_orchestrator_single_agent_flow() -> None:
             prompt="Qual é a resposta para tudo?",
         )
 
-        async def fake_container(session_id: str) -> None:
+        async def fake_container(session_id: str, output_session_id: str) -> None:
             """Simula o container: conecta ao socket, recebe request, envia response e gera artefato."""
             ipc_id = f"ag1_{session_id}"
             socket_path = ipc._socket_path(ipc_id)
@@ -65,8 +65,8 @@ async def test_orchestrator_single_agent_flow() -> None:
             reader, writer = await asyncio.open_unix_connection(socket_path)
 
             # Simula a escrita de um artefato no "volume" associado à sessão
-            # No teste, escrevemos diretamente no diretório de output controlado pelo OutputManager
-            task_dir = output_manager.get_task_dir(session_id, "ag1")
+            # No teste, usamos o output_session_id (mestra) se fornecido
+            task_dir = output_manager.get_task_dir(output_session_id, "ag1")
             (task_dir / "result.txt").write_text("Resposta final: 42")
 
             # Recebe o request
@@ -90,7 +90,7 @@ async def test_orchestrator_single_agent_flow() -> None:
 
         # Mock do runner.spawn que inicia o "container" fake
         async def fake_spawn(agent_id: str, image: str, session_id: str, ipc_port: int | None = None, output_session_id: str | None = None) -> str:
-            asyncio.create_task(fake_container(session_id))
+            asyncio.create_task(fake_container(session_id, output_session_id or session_id))
             return "fake_container_id"
 
         mock_runner.spawn = AsyncMock(side_effect=fake_spawn)

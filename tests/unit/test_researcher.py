@@ -39,7 +39,8 @@ class TestResearcherAttributes:
         """root_agent deve ter instruction não-vazia."""
         assert root_agent.instruction
         assert len(root_agent.instruction) > 0
-        assert root_agent.instruction == AGENT_INSTRUCTION
+        # Agora a instrução pode conter o log de memória de longo prazo anexado
+        assert root_agent.instruction.startswith(AGENT_INSTRUCTION)
 
     def test_agent_instruction_in_portuguese(self) -> None:
         """Instrução deve estar em português."""
@@ -47,17 +48,20 @@ class TestResearcherAttributes:
 
     def test_agent_instruction_mentions_search(self) -> None:
         """Instrução deve mencionar a ferramenta de busca."""
-        assert "search" in root_agent.instruction.lower() or "busca" in root_agent.instruction.lower()
+        # A instrução agora menciona quick_search e deep_search
+        instr_lower = root_agent.instruction.lower()
+        assert "search" in instr_lower or "busca" in instr_lower or "quick_search" in instr_lower
 
     def test_agent_has_tools(self) -> None:
-        """root_agent deve ter a ferramenta 'search' registrada."""
+        """root_agent deve ter ferramentas registradas."""
         assert root_agent.tools is not None
         assert len(root_agent.tools) > 0
 
     def test_agent_has_search_tool(self) -> None:
-        """A ferramenta 'search' deve estar na lista de tools."""
+        """As ferramentas de busca devem estar na lista de tools."""
         tool_names = [t.__name__ if callable(t) else str(t) for t in root_agent.tools]
-        assert "search" in tool_names
+        # Atualmente usamos 'quick_search' e 'deep_search' via registry
+        assert any(name in tool_names for name in ["quick_search", "deep_search", "search"])
 
     def test_agent_has_before_callback(self) -> None:
         """root_agent deve ter before_agent_callback configurado."""

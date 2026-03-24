@@ -42,7 +42,15 @@ class ContainerRunner:
         except Exception as e:
             logger.warning("Falha ao verificar/criar rede Docker", extra={"error": str(e)})
 
-    async def spawn(self, agent_id: str, image: str, session_id: str, ipc_port: int | None = None, output_session_id: str | None = None) -> str:
+    async def spawn(
+        self, 
+        agent_id: str, 
+        image: str, 
+        session_id: str, 
+        ipc_port: int | None = None, 
+        output_session_id: str | None = None,
+        logs_session_id: str | None = None
+    ) -> str:
         """Cria e inicia um container para um agente.
 
         Args:
@@ -51,6 +59,7 @@ class ContainerRunner:
             session_id: ID da sessão associada (usado para IPC temporário).
             ipc_port: Porta TCP para IPC (opcional, se usar TCP em vez de Unix Sockets).
             output_session_id: ID alternativo para o diretório de outputs compartilhado.
+            logs_session_id: ID da sessão/tarefa para mapeamento de volumes de log.
 
         Returns:
             O ID do container criado.
@@ -98,23 +107,33 @@ class ContainerRunner:
                 
                 db_path = os.environ.get("SQLITE_DB_PATH", "store/geminiclaw.db")
                 output_base = os.environ.get("OUTPUT_BASE_DIR", "outputs")
+                logs_base = os.environ.get("LOGS_BASE_DIR", "logs")
+                
                 effective_output_id = output_session_id or session_id
+                effective_logs_id = logs_session_id or session_id
                 
                 if host_root:
                     # Estamos dentro de um container, mapeamos os caminhos relativos ao HOST_PROJECT_PATH
-                    # Assume-se que store e outputs estão na raiz do projeto no host
                     db_dir_host = str(Path(host_root) / "store")
                     output_session_host = str(Path(host_root) / "outputs" / effective_output_id)
+                    logs_session_host = str(Path(host_root) / "logs" / effective_logs_id)
                     ipc_socket_host = str(Path(host_root) / "store" / "ipc")
                 else:
                     # Rodando diretamente no host
                     db_dir_host = str(Path(db_path).parent.absolute())
                     output_session_host = str(Path(output_base).absolute() / effective_output_id)
+                    logs_session_host = str(Path(logs_base).absolute() / effective_logs_id)
                     ipc_socket_host = str(Path(IPC_SOCKET_DIR))
 
-                # Garante que a pasta de outputs existe localmente (no container atual ou host)
-                local_output_session = str(Path(output_base).absolute() / effective_output_id)
-                Path(local_output_session).mkdir(parents=True, exist_ok=True)
+                # Garante que as pastas existem localmente com permissões adequadas
+                out_path = Path(output_base).absolute().joinpath(effective_output_id)
+                log_path = Path(logs_base).absolute().joinpath(effective_logs_id)
+                
+                out_path.mkdir(parents=True, exist_ok=True)
+                log_path.mkdir(parents=True, exist_ok=True)
+                
+                out_path.chmod(0o777)
+                log_path.chmod(0o777)
 
                 # Volumes padrão
                 volumes = {
@@ -124,6 +143,10 @@ class ContainerRunner:
                     },
                     output_session_host: {
                         "bind": "/outputs",
+                        "mode": "rw",
+                    },
+                    logs_session_host: {
+                        "bind": "/logs",
                         "mode": "rw",
                     }
                 }

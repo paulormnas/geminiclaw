@@ -32,6 +32,7 @@ DEFAULT_MODEL = get_env("DEFAULT_MODEL", default="gemini-3.1-pro-preview")
 AGENT_TIMEOUT_SECONDS = int(get_env("AGENT_TIMEOUT_SECONDS", default="120"))
 SQLITE_DB_PATH = get_env("SQLITE_DB_PATH", default="store/geminiclaw.db")
 OUTPUT_BASE_DIR = get_env("OUTPUT_BASE_DIR", default="outputs")
+LOGS_BASE_DIR = get_env("LOGS_BASE_DIR", default="logs")
 SEARCH_CACHE_TTL_SECONDS = int(get_env("SEARCH_CACHE_TTL_SECONDS", default="3600"))
 
 # Deep Search Skill (S2)
@@ -45,9 +46,10 @@ EMBEDDING_MODEL = get_env("EMBEDDING_MODEL", default="sentence-transformers/all-
 # Garante que os diretórios necessários existem
 Path(SQLITE_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
 
-try:
-    Path(OUTPUT_BASE_DIR).mkdir(parents=True, exist_ok=True)
-except PermissionError:
-    # Em containers, o volume pode já estar montado mas sem permissão de mkdir no root do volume
-    if not Path(OUTPUT_BASE_DIR).exists():
-        raise
+for directory in [OUTPUT_BASE_DIR, LOGS_BASE_DIR]:
+    try:
+        Path(directory).mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        # Em containers, o volume pode já estar montado mas sem permissão de mkdir no root do volume
+        if not Path(directory).exists():
+            raise

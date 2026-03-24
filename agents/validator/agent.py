@@ -8,7 +8,7 @@ from google.adk.agents import Agent
 from typing import Any
 import os
 
-from src.logger import get_logger
+from src.logger import get_logger, setup_file_logging
 from src.config import DEFAULT_MODEL
 from agents.base.agent import _load_session_context, _persist_session_context, _setup_skills
 from src.skills import registry
@@ -55,5 +55,8 @@ root_agent = Agent(
 if __name__ == "__main__":
     import asyncio
     from agents.runner import run_ipc_loop
+    
+    # Configura o logger raiz para escrever também no volume compartilhado
+    setup_file_logging("/logs/agent.log")
     
     asyncio.run(run_ipc_loop(root_agent))

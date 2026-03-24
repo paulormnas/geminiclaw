@@ -1,6 +1,7 @@
 import logging
 import json
 import datetime
+from pathlib import Path
 from typing import Any
 
 class JsonFormatter(logging.Formatter):
@@ -56,10 +57,38 @@ def get_logger(name: str) -> logging.Logger:
     # Define o nível de log para INFO por padrão
     logger.setLevel(logging.INFO)
 
-    # Evita duplicar handlers se get_logger for chamado múltiplas vezes para o mesmo nome
+    # Evita duplicar handlers de stream
     if not logger.handlers:
         handler = logging.StreamHandler()
         handler.setFormatter(JsonFormatter())
         logger.addHandler(handler)
 
     return logger
+
+def setup_file_logging(log_path: str) -> None:
+    """Configura o logger raiz para escrever em um arquivo JSON.
+
+    Args:
+        log_path: Caminho para o arquivo de log.
+    """
+    root_logger = logging.getLogger()
+    
+    # Verifica se já não tem um FileHandler para este path
+    has_file_handler = any(
+        isinstance(h, logging.FileHandler) and h.baseFilename == str(Path(log_path).absolute())
+        for h in root_logger.handlers
+    )
+    
+    if not has_file_handler:
+        try:
+            Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+            file_handler = logging.FileHandler(log_path, encoding="utf-8")
+            file_handler.setFormatter(JsonFormatter())
+            root_logger.addHandler(file_handler)
+            # Garante que o nível do root logger permita INFO
+            if root_logger.level > logging.INFO:
+                root_logger.setLevel(logging.INFO)
+            root_logger.info(f"Log em arquivo ativado: {log_path}")
+        except Exception as e:
+            # Se falhar ao criar arquivo de log, usamos o logger padrão para avisar
+            get_logger(__name__).error(f"Não foi possível criar arquivo de log: {e}")

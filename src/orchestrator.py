@@ -228,19 +228,27 @@ class Orchestrator:
                 },
             )
 
-            # 0. Inicializa diretório de output
+            # 0. Inicializa diretórios de output e logs únicos para esta execução de agente
             # Etapa 9: Usa a sessão mestra se disponível para compartilhamento de arquivos
             effective_session_id = master_session_id or session.id
+            unique_task_id = f"{task.agent_id}_{session.id[:8]}"
+            
             self.output_manager.init_session(effective_session_id)
-            self.output_manager.get_task_dir(effective_session_id, task.agent_id)
+            self.output_manager.get_task_dir(effective_session_id, unique_task_id)
+            self.output_manager.get_logs_dir(effective_session_id, unique_task_id)
 
             # 1. Cria socket IPC
             await self.ipc.create_socket(ipc_id)
 
-            # 2. Spawna container
+            # 2. Spawna container mapeando diretórios específicos para /outputs e /logs
             ipc_port = self.ipc.get_port(ipc_id)
             container_id = await self.runner.spawn(
-                task.agent_id, task.image, session.id, ipc_port=ipc_port, output_session_id=effective_session_id
+                task.agent_id, 
+                task.image, 
+                session.id, 
+                ipc_port=ipc_port, 
+                output_session_id=f"{effective_session_id}/{unique_task_id}",
+                logs_session_id=f"{effective_session_id}/{unique_task_id}"
             )
 
             # 3. Aguarda conexão do container ao socket monitorando saúde

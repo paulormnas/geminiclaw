@@ -7,7 +7,7 @@ resultados configurável por TTL.
 
 from google.adk.agents import Agent
 
-from src.logger import get_logger
+from src.logger import get_logger, setup_file_logging
 from src.config import DEFAULT_MODEL
 from agents.base.agent import _load_session_context, _persist_session_context, _setup_skills, _get_agent_instruction
 from agents.base.tools import write_artifact
@@ -66,6 +66,9 @@ logger.info(
 if __name__ == "__main__":
     import asyncio
     from agents.runner import run_ipc_loop
+    
+    # Configura o logger raiz para escrever também no volume compartilhado
+    setup_file_logging("/logs/agent.log")
     
     # Inicia o loop de conexão IPC quando o container roda este módulo
     asyncio.run(run_ipc_loop(root_agent))

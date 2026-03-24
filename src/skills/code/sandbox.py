@@ -70,6 +70,7 @@ class PythonSandbox:
             # Preparar diretório de saída
             abs_output_dir = pathlib.Path(output_dir).resolve() / session_id / task_name
             abs_output_dir.mkdir(parents=True, exist_ok=True)
+            abs_output_dir.chmod(0o777)  # Garante acesso para escrita em containers
             
             script_path = abs_output_dir / "script.py"
             script_path.write_text(code)
@@ -120,7 +121,7 @@ class PythonSandbox:
                 artifacts=[
                     str(p.relative_to(abs_output_dir))
                     for p in abs_output_dir.glob("**/*")
-                    if p.is_file() and p.name != "script.py"
+                    if p.is_file()
                 ],
                 timed_out=timed_out
             )
@@ -139,9 +140,5 @@ class PythonSandbox:
                     container.remove(force=True)
                 except:
                     pass
-            # Limpar o script temporário
-            # Usando locals() para checar se abs_output_dir foi definido antes do erro
-            if 'abs_output_dir' in locals():
-                script_path = abs_output_dir / "script.py"
-                if script_path.exists():
-                    script_path.unlink()
+            # Preservar o script como solicitado pelo usuário (removido unlink)
+            pass

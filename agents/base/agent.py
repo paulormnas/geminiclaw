@@ -12,7 +12,7 @@ from google.adk.agents import Agent
 from google.adk.agents.context import Context
 from google.genai import types as genai_types
 from agents.base.tools import write_artifact
-from src.logger import get_logger
+from src.logger import get_logger, setup_file_logging
 from src.session import SessionManager
 from src.config import DEFAULT_MODEL, SQLITE_DB_PATH
 from src.skills import registry
@@ -38,7 +38,10 @@ AGENT_INSTRUCTION = (
     "Quando identificar algo relevante e duradouro, registre na memória de longo prazo.\n"
     "6. **FERRAMENTAS**: Você possui acesso a diversas skills (busca na web, execução de código, memória). "
     "Use-as conforme a necessidade para resolver as tarefas.\n"
-    "7. **IMPORTANTE**: Todos os artefatos (código, documentos, imagens) que você produzir devem ser salvos em `/outputs/<task_name>/` dentro do container.\n"
+    "7. **EXECUÇÃO DE CÓDIGO (CRÍTICO)**: Quando sua tarefa envolver criar um pipeline de ML ou qualquer script, "
+    "você DEVE EXECUTAR o código usando a ferramenta 'python_interpreter' para validar os resultados e "
+    "garantir que os arquivos de output (CSV, PNG, JSON, MD) sejam realmente gerados no disco.\n"
+    "8. **IMPORTANTE**: Todos os artefatos finais devem ser salvos em `/outputs/` usando a ferramenta 'write_artifact'.\n"
     "Se não souber responder, diga claramente que não tem informação suficiente."
 )
 
@@ -208,6 +211,10 @@ logger.info(
 if __name__ == "__main__":
     import asyncio
     from agents.runner import run_ipc_loop
+    
+    # Configura o logger raiz para escrever também no volume compartilhado
+    # O diretório /logs/ já é garantido pelo OutputManager no host
+    setup_file_logging("/logs/agent.log")
     
     # Inicia o loop de conexão IPC quando o container roda este módulo
     asyncio.run(run_ipc_loop(root_agent))

@@ -28,18 +28,20 @@ async def test_runner_spawn_parameters(mock_docker_client):
         
         assert container_id == "fake_id_123"
         
-        # O runner monta o diretório de sockets, o diretório do banco e o diretório de outputs
+        # O runner monta o diretório de sockets, o diretório do banco, diretório de outputs e diretório de logs
         from src.runner import IPC_SOCKET_DIR
         output_path = str(Path("outputs").absolute() / "session_123")
+        logs_path = str(Path("logs").absolute() / "session_123")
 
         expected_volumes = {
             "/path/to": {"bind": "/data", "mode": "rw"},
             output_path: {"bind": "/outputs", "mode": "rw"},
+            logs_path: {"bind": "/logs", "mode": "rw"},
             str(Path(IPC_SOCKET_DIR)): {"bind": "/tmp/geminiclaw-ipc", "mode": "rw"},
             str(Path(__file__).parent.parent.parent / "src"): {"bind": "/app/src", "mode": "rw"},
             str(Path(__file__).parent.parent.parent / "agents"): {"bind": "/app/agents", "mode": "rw"},
         }
-        
+
         mock_docker_client.containers.run.assert_called_once_with(
             image="test_image",
             mem_limit="512m",
@@ -50,8 +52,8 @@ async def test_runner_spawn_parameters(mock_docker_client):
             detach=True,
             labels={"project": "geminiclaw", "agent_id": "test_agent", "session_id": "session_123"},
             environment={
-                "SESSION_ID": "session_123",
                 "AGENT_ID": "test_agent",
+                "SESSION_ID": "session_123",
                 "GEMINI_API_KEY": "test_key",
                 "GOOGLE_API_KEY": "test_key",
                 "DEFAULT_MODEL": "gemini-3-flash-preview",

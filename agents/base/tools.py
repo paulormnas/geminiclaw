@@ -21,14 +21,13 @@ async def write_artifact(filename: str, content: str) -> str:
         return "Erro: Nome do arquivo ou conteúdo vazio."
 
     try:
-        agent_id = os.environ.get("AGENT_ID", "default_agent")
-        # O Orquestrador mapeia outputs/<session_id>/ para /outputs/
-        # Espera-se que artefatos fiquem em <agent_id>/artifacts/
+        # O Orquestrador mapeia outputs/<session_id>/<task_id> para /outputs/
+        # Agora salvamos diretamente em /outputs/artifacts/
         base_dir = Path("/outputs")
         if not base_dir.exists():
             return "Erro: Diretório /outputs não encontrado no container."
 
-        task_dir = base_dir / agent_id / "artifacts"
+        task_dir = base_dir / "artifacts"
         
         # Se for um caminho absoluto como "/outputs/.../arquivo.txt", transforma em relativo para a tarefa
         safe_name = Path(filename).name

@@ -53,7 +53,9 @@ async def test_code_skill_artifact_creation():
 @pytest.mark.unit
 def test_code_skill_security_validation():
     """Testa a validação de segurança contra padrões proibidos."""
-    skill = CodeSkill()
+    from unittest.mock import patch
+    with patch("docker.from_env"):
+        skill = CodeSkill()
     
     dangerous_codes = [
         "import os; os.system('ls')",

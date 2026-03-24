@@ -48,6 +48,7 @@ VOLUME /data
 # Criar diretório para socket IPC e outputs
 RUN mkdir -p /tmp/geminiclaw-ipc && chown appuser:appuser /tmp/geminiclaw-ipc
 RUN mkdir -p /outputs && chown appuser:appuser /outputs
+RUN mkdir -p /logs && chown appuser:appuser /logs
 
 # Configurações de ambiente para o agente
 ENV OUTPUT_BASE_DIR=/outputs

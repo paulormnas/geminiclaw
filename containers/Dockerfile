@@ -52,6 +52,7 @@ RUN mkdir -p /logs && chown appuser:appuser /logs
 
 # Configurações de ambiente para o agente
 ENV OUTPUT_BASE_DIR=/outputs
+ENV LOGS_BASE_DIR=/logs
 ENV PYTHONPATH=/app
 ENV PATH="/app/.venv/bin:$PATH"
 

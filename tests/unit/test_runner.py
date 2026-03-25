@@ -42,6 +42,11 @@ async def test_runner_spawn_parameters(mock_docker_client):
             str(Path(__file__).parent.parent.parent / "agents"): {"bind": "/app/agents", "mode": "rw"},
         }
 
+        # Mock group_add logic
+        expected_group_add = []
+        if os.path.exists("/var/run/docker.sock"):
+            expected_group_add = [os.stat("/var/run/docker.sock").st_gid]
+
         mock_docker_client.containers.run.assert_called_once_with(
             image="test_image",
             mem_limit="512m",
@@ -50,6 +55,7 @@ async def test_runner_spawn_parameters(mock_docker_client):
             user="appuser",
             remove=True,
             detach=True,
+            group_add=expected_group_add,
             labels={"project": "geminiclaw", "agent_id": "test_agent", "session_id": "session_123"},
             environment={
                 "AGENT_ID": "test_agent",
@@ -59,6 +65,8 @@ async def test_runner_spawn_parameters(mock_docker_client):
                 "DEFAULT_MODEL": "gemini-3-flash-preview",
                 "SQLITE_DB_PATH": "/data/geminiclaw.db",
                 "AGENT_SOCKET_NAME": "test_agent_session_123.sock",
+                "OUTPUT_BASE_DIR": "/outputs",
+                "LOGS_BASE_DIR": "/logs",
             },
             volumes=expected_volumes,
             extra_hosts={},

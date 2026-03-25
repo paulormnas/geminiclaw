@@ -93,12 +93,22 @@ class ContainerRunner:
                     "DEFAULT_MODEL": os.environ.get("DEFAULT_MODEL", DEFAULT_MODEL),
                     "SQLITE_DB_PATH": "/data/geminiclaw.db",
                     "AGENT_SOCKET_NAME": socket_name,
+                    "OUTPUT_BASE_DIR": "/outputs",
+                    "LOGS_BASE_DIR": "/logs",
                 }
                 
+                # Passa variáveis de skill e configuração do host
+                for key, value in os.environ.items():
+                    if any(key.startswith(p) for p in ["SKILL_", "QUICK_SEARCH_", "DEEP_SEARCH_", "CODE_", "MEMORY_"]):
+                        env[key] = value
+                
                 # Passa QDRANT_URL adiante se existir
-                qdrant_url = os.environ.get("QDRANT_URL")
-                if qdrant_url:
-                    env["QDRANT_URL"] = qdrant_url
+                if "QDRANT_URL" in os.environ:
+                    # Se estiver rodando dentro de Docker, usa o nome do serviço
+                    if os.path.exists("/.dockerenv"):
+                        env["QDRANT_URL"] = os.environ.get("QDRANT_URL", "http://geminiclaw-qdrant:6333")
+                    else:
+                        env["QDRANT_URL"] = os.environ["QDRANT_URL"]
 
                 # Resolve paths for volumes
                 # Se estiver rodando dentro de um container (com HOST_PROJECT_PATH), 
@@ -182,6 +192,7 @@ class ContainerRunner:
                     "user": "appuser",
                     "remove": True,
                     "detach": True,
+                    "group_add": [os.stat("/var/run/docker.sock").st_gid] if os.path.exists("/var/run/docker.sock") else [],
                     "labels": {"project": "geminiclaw", "agent_id": agent_id, "session_id": session_id},
                     "environment": env,
                     "volumes": volumes,

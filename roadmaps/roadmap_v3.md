@@ -227,21 +227,21 @@ Objetivo: substituir o delay fixo de 2 segundos por um sistema adaptativo que re
 
 ### Tarefas
 
-- [ ] Implementar `src/rate_limiter.py` com `AdaptiveRateLimiter`:
+- [x] Implementar `src/rate_limiter.py` com `AdaptiveRateLimiter`:
   - Token bucket com taxa configurável (`GEMINI_REQUESTS_PER_MINUTE=15` requests por minuto)
   - Backoff exponencial automático ao receber HTTP 429
   - Janela deslizante de 60s para contagem de requests
   - `acquire()` → aguarda até que um token esteja disponível
   - `report_429()` → reduz taxa temporariamente (cool-down de 30s)
   - `report_success()` → incrementa taxa gradualmente até o limite
-- [ ] Integrar no `_execute_agent` do orquestrador, substituindo `asyncio.sleep(2)`
-- [ ] Adicionar ao `.env.example`:
+- [x] Integrar no `_execute_agent` do orquestrador, substituindo `asyncio.sleep(2)`
+- [x] Adicionar ao `.env.example`:
   ```
   GEMINI_REQUESTS_PER_MINUTE=15
   GEMINI_RATE_LIMIT_COOLDOWN_SECONDS=30
   ```
-- [ ] Escrever testes unitários do token bucket e backoff
-- [ ] Commit: `feat(rate-limiter): implementa rate limiting adaptativo para API Gemini`
+- [x] Escrever testes unitários do token bucket e backoff
+- [x] Commit: `feat(rate-limiter): implementa rate limiting adaptativo para API Gemini`
 
 ---
 

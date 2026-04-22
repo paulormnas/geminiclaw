@@ -10,13 +10,18 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from src.logger import get_logger
-from src.config import AGENT_TIMEOUT_SECONDS
+from src.config import (
+    AGENT_TIMEOUT_SECONDS,
+    GEMINI_REQUESTS_PER_MINUTE,
+    GEMINI_RATE_LIMIT_COOLDOWN_SECONDS,
+)
 from src.session import SessionManager
 from src.runner import ContainerRunner
 from src.ipc import IPCChannel, create_message, Message
 from src.output_manager import OutputManager
 from src.autonomous_loop import AutonomousLoop
 from src.utils.json_parser import extract_json
+from src.rate_limiter import AdaptiveRateLimiter
 
 logger = get_logger(__name__)
 
@@ -112,6 +117,10 @@ class Orchestrator:
         self.ipc = ipc
         self.session_manager = session_manager
         self.output_manager = output_manager or OutputManager()
+        self.rate_limiter = AdaptiveRateLimiter(
+            requests_per_minute=GEMINI_REQUESTS_PER_MINUTE,
+            cooldown_seconds=GEMINI_RATE_LIMIT_COOLDOWN_SECONDS,
+        )
 
     @staticmethod
     def get_available_agents() -> dict[str, str]:
@@ -197,8 +206,8 @@ class Orchestrator:
         Returns:
             Resultado da execução do agente.
         """
-        # Delay anti-429
-        await asyncio.sleep(2)
+        # Rate limiting adaptativo (Roadmap V3 - Etapa V8)
+        await self.rate_limiter.acquire()
         
         session = self.session_manager.create(task.agent_id)
         container_id: str | None = None
@@ -277,12 +286,25 @@ class Orchestrator:
                 session.id, payload=response_msg.payload
             )
 
+            # Verifica se houve erro 429 na resposta
+            is_429 = False
+            if response_msg.payload.get("status") == "error":
+                error_msg = str(response_msg.payload.get("error", ""))
+                if "429" in error_msg or "Too Many Requests" in error_msg:
+                    is_429 = True
+            
+            if is_429:
+                await self.rate_limiter.report_429()
+            else:
+                await self.rate_limiter.report_success()
+
             logger.info(
-                "Agente executado com sucesso",
+                "Agente executado",
                 extra={
                     "agent_id": task.agent_id,
                     "session_id": session.id,
                     "response_type": response_msg.type,
+                    "is_429": is_429,
                 },
             )
 

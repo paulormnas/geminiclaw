@@ -51,6 +51,10 @@ HEALTH_CHECK_ENABLED = get_env("HEALTH_CHECK_ENABLED", default="true").lower() =
 PI_TEMPERATURE_LIMIT = float(get_env("PI_TEMPERATURE_LIMIT", default="75.0"))
 PI_MIN_AVAILABLE_MEMORY_MB = float(get_env("PI_MIN_AVAILABLE_MEMORY_MB", default="512.0"))
 
+# Rate Limiting (Roadmap V3 - Etapa V8)
+GEMINI_REQUESTS_PER_MINUTE = int(get_env("GEMINI_REQUESTS_PER_MINUTE", default="15"))
+GEMINI_RATE_LIMIT_COOLDOWN_SECONDS = int(get_env("GEMINI_RATE_LIMIT_COOLDOWN_SECONDS", default="30"))
+
 
 # Garante que os diretórios necessários existem
 Path(SQLITE_DB_PATH).parent.mkdir(parents=True, exist_ok=True)

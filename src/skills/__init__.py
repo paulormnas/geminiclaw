@@ -78,15 +78,16 @@ class SkillRegistry:
 registry = SkillRegistry()
 
 # Registrar skills padrão se necessário
-try:
-    registry.register(QuickSearchSkill())
-    registry.register(DeepSearchSkill())
-    registry.register(CodeSkill())
-    registry.register(MemorySkill())
-    registry.register(WebReaderSkill())
-except Exception:
-    # Pode falhar se variáveis de ambiente não estiverem setadas, 
-    # ou durante testes onde preferimos registro manual.
-    pass
+def _safe_register(skill_class):
+    try:
+        registry.register(skill_class())
+    except Exception:
+        pass
+
+_safe_register(QuickSearchSkill)
+_safe_register(DeepSearchSkill)
+_safe_register(CodeSkill)
+_safe_register(MemorySkill)
+_safe_register(WebReaderSkill)
 
 __all__ = ["BaseSkill", "SkillRegistry", "registry", "QuickSearchSkill", "DeepSearchSkill", "CodeSkill", "MemorySkill", "WebReaderSkill"]

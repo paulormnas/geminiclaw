@@ -65,11 +65,15 @@ class MemorySkill(BaseSkill):
         value = kwargs.get("value")
         source = kwargs.get("source", "agent")
         tags = kwargs.get("tags", [])
-        
+
         if not key or not value:
             return SkillResult(success=False, output="", error="key e value são obrigatórios")
-        
+
         self.short_term.write(session_id, key, value, source, tags)
+        logger.info(
+            "Memória gravada em curto prazo",
+            extra={"event": "memory_written", "store": "short_term", "key": key, "session_id": session_id},
+        )
         return SkillResult(success=True, output=f"Informação registrada em curto prazo: '{key}'")
 
     def _handle_memorize(self, **kwargs) -> SkillResult:
@@ -78,11 +82,15 @@ class MemorySkill(BaseSkill):
         source = kwargs.get("source", "agent")
         importance = float(kwargs.get("importance", 0.5))
         tags = kwargs.get("tags", [])
-        
+
         if not key or not value:
             return SkillResult(success=False, output="", error="key e value são obrigatórios")
-        
+
         self.long_term.write(key, value, source, importance, tags)
+        logger.info(
+            "Memória gravada em longo prazo",
+            extra={"event": "memory_written", "store": "long_term", "key": key},
+        )
         return SkillResult(success=True, output=f"Informação registrada em longo prazo: '{key}'")
 
     def _handle_recall(self, session_id: str, **kwargs) -> SkillResult:
@@ -132,13 +140,17 @@ class MemorySkill(BaseSkill):
     def _handle_remember_forever(self, session_id: str, **kwargs) -> SkillResult:
         key = kwargs.get("key")
         importance = float(kwargs.get("importance", 0.5))
-        
+
         if not key:
             return SkillResult(success=False, output="", error="key é obrigatória")
-        
+
         st_entry = self.short_term.read(session_id, key)
         if not st_entry:
             return SkillResult(success=False, output="", error=f"Memória de curto prazo '{key}' não encontrada na sessão")
-        
+
         self.long_term.write(st_entry.key, st_entry.value, st_entry.source, importance, st_entry.tags)
+        logger.info(
+            "Memória promovida de curto para longo prazo",
+            extra={"event": "memory_promoted", "key": key, "importance": importance, "session_id": session_id},
+        )
         return SkillResult(success=True, output=f"Memória '{key}' promovida para longo prazo.")

@@ -58,19 +58,20 @@ class SkillRegistry:
             def create_tool(s: BaseSkill):
                 # Usamos a assinatura real da skill para o ADK
                 async def skill_tool(**kwargs) -> str:
-                    result = await s.run(**kwargs)
+                    result = await s.run_with_logging(**kwargs)
                     if result.success:
                         return f"Resultado de {s.name}: {result.output}"
                     return f"Erro em {s.name}: {result.error}"
-                
+
                 # Injetamos o nome e a descrição da skill na função
                 skill_tool.__name__ = s.name
                 skill_tool.__doc__ = s.description
                 return skill_tool
 
             tools.append(create_tool(skill))
-        
+
         return tools
+
 
 # Instância global para facilitar o acesso
 registry = SkillRegistry()

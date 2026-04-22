@@ -2,13 +2,33 @@ import pytest
 import asyncio
 import time
 import os
+import docker
 from unittest.mock import patch
 from src.runner import ContainerRunner
 
+
+def _geminiclaw_image_exists() -> bool:
+    """Verifica se a imagem geminiclaw-base está disponível localmente."""
+    try:
+        client = docker.from_env()
+        client.images.get("geminiclaw-base:latest")
+        return True
+    except (docker.errors.ImageNotFound, docker.errors.DockerException):
+        return False
+
+
+@pytest.mark.skipif(
+    not _geminiclaw_image_exists(),
+    reason=(
+        "Imagem 'geminiclaw-base' não encontrada. "
+        "Execute 'docker build -t geminiclaw-base -f containers/Dockerfile .' antes de rodar estes testes."
+    ),
+)
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_runner_concurrency_limit():
     """Testa se o runner respeita o limite do semáforo (3 agents)."""
+
     # Usamos um limite baixo para o teste (2 para ser mais rápido e fácil de validar)
     runner = ContainerRunner(semaphore_limit=2)
     image = "geminiclaw-base"

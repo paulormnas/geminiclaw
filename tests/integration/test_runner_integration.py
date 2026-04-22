@@ -5,10 +5,31 @@ import os
 from unittest.mock import patch
 from src.runner import ContainerRunner
 
+
+def _geminiclaw_image_exists() -> bool:
+    """Verifica se a imagem geminiclaw-base está disponível localmente."""
+    try:
+        client = docker.from_env()
+        client.images.get("geminiclaw-base:latest")
+        return True
+    except (docker.errors.ImageNotFound, docker.errors.DockerException):
+        return False
+
+
+_SKIP_NO_IMAGE = pytest.mark.skipif(
+    not _geminiclaw_image_exists(),
+    reason=(
+        "Imagem 'geminiclaw-base' não encontrada. "
+        "Execute 'docker build -t geminiclaw-base -f containers/Dockerfile .' antes de rodar estes testes."
+    ),
+)
+
+
 @pytest.fixture
 def docker_client():
     return docker.from_env()
 
+@_SKIP_NO_IMAGE
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_runner_lifecycle_integration(docker_client):
@@ -39,6 +60,7 @@ async def test_runner_lifecycle_integration(docker_client):
     with pytest.raises(docker.errors.NotFound):
         docker_client.containers.get(container_id)
 
+@_SKIP_NO_IMAGE
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_runner_cleanup_all_integration(docker_client):
@@ -61,6 +83,7 @@ async def test_runner_cleanup_all_integration(docker_client):
     with pytest.raises(docker.errors.NotFound):
         docker_client.containers.get(id2)
 
+@_SKIP_NO_IMAGE
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_session_cleanup_integration(docker_client):

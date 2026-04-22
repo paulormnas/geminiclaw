@@ -6,7 +6,6 @@ gerenciando sessões, IPC e tratamento de falhas parciais.
 
 import asyncio
 import json
-import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -17,6 +16,7 @@ from src.runner import ContainerRunner
 from src.ipc import IPCChannel, create_message, Message
 from src.output_manager import OutputManager
 from src.autonomous_loop import AutonomousLoop
+from src.utils.json_parser import extract_json
 
 logger = get_logger(__name__)
 
@@ -122,25 +122,6 @@ class Orchestrator:
         """
         return dict(AGENT_REGISTRY)
 
-    def _clean_json_text(self, text: str) -> str:
-        """Limpa o texto da resposta para extrair apenas o conteúdo JSON.
-        
-        Tenta encontrar o primeiro '[' ou '{' e o último ']' ou '}' 
-        para extrair o JSON mesmo com texto ao redor.
-        """
-        if not text:
-            return ""
-            
-        # 1. Tenta remover blocos de código markdown
-        text = re.sub(r"```(?:json)?\s*(.*?)\s*```", r"\1", text, flags=re.DOTALL)
-        
-        # 2. Busca pelo conteúdo entre o primeiro [ ou { e o último ] ou }
-        # Isso ajuda se o agente incluir texto fora do markdown
-        match = re.search(r"([\[{].*[\]}])", text, re.DOTALL)
-        if match:
-            text = match.group(1)
-            
-        return text.strip()
 
     async def handle_request(
         self,
@@ -404,14 +385,17 @@ class Orchestrator:
                 return []
             
             # Tenta extrair JSON da resposta
-            plan_text = self._clean_json_text(planner_result.response.get("text", ""))
-            try:
-                plan_data = json.loads(plan_text)
-                last_plan_str = json.dumps(plan_data, indent=2)
-            except Exception as e:
-                logger.error("Erro ao parsear plano do Planner", extra={"error": str(e), "text": plan_text})
-                feedback = f"Erro de formato no JSON: {str(e)}. Envie APENAS o JSON válido."
+            raw_plan = planner_result.response.get("text", "")
+            plan_data = extract_json(raw_plan)
+            if plan_data is None or not isinstance(plan_data, list):
+                logger.error(
+                    "Erro ao parsear plano do Planner",
+                    extra={"text_preview": raw_plan[:200]},
+                )
+                feedback = "Sua resposta anterior não era JSON válido. Responda APENAS com o JSON."
                 continue
+            last_plan_str = json.dumps(plan_data, indent=2)
+
             
             # 2. Executa o Validator
             validator_prompt = f"Revise este plano:\n{last_plan_str}\n\nPara a solicitação: {prompt}"
@@ -427,48 +411,47 @@ class Orchestrator:
                 logger.error("Falha no Agente Validador", extra={"error": err})
                 return []
             
-            val_text = self._clean_json_text(validator_result.response.get("text", ""))
-            try:
-                val_data = json.loads(val_text)
-                
-                status = val_data.get("status", "revision_needed")
-                reason = val_data.get("reason", "")
-                
-                if status == "approved":
-                    logger.info("Plano aprovado pelo Validador", extra={"iteration": iteration + 1})
-                    tasks = []
-                    for t in plan_data:
-                        tasks.append(AgentTask(
-                            agent_id=t.get("agent_id", "base"),
-                            image=t.get("image", AGENT_REGISTRY.get(t.get("agent_id", "base"), "geminiclaw-base")),
-                            prompt=t.get("prompt", prompt),
-                            task_name=t.get("task_name", ""),
-                            depends_on=t.get("depends_on", []),
-                            expected_artifacts=t.get("expected_artifacts", []),
-                        ))
-                    return tasks
-                elif status == "rejected":
-                    logger.warning("Plano rejeitado definitivamente", extra={"reason": reason})
-                    return []
-                else:
-                    # Se o Validator forneceu corrected_plan, usá-lo como ponto de partida
-                    corrected = val_data.get("corrected_plan")
-                    if corrected and isinstance(corrected, list):
-                        try:
-                            plan_data = corrected
-                            last_plan_str = json.dumps(plan_data, indent=2)
-                            logger.info(
-                                "Usando corrected_plan do Validator",
-                                extra={"iteration": iteration + 1, "subtasks": len(plan_data)},
-                            )
-                        except Exception:
-                            pass
-                    feedback = reason or "Plano precisa de revisão."
-                    logger.info("Solicitando revisão do plano", extra={"iteration": iteration + 1, "reason": feedback})
-                    
-            except Exception as e:
-                logger.error("Erro ao parsear resposta do Validador", extra={"error": str(e), "text": val_text})
-                feedback = "Erro ao ler sua validação. Por favor, tente novamente com o formato JSON correto."
+            raw_val = validator_result.response.get("text", "")
+            val_data = extract_json(raw_val)
+            if val_data is None or not isinstance(val_data, dict):
+                logger.error(
+                    "Erro ao parsear resposta do Validador",
+                    extra={"text_preview": raw_val[:200]},
+                )
+                feedback = "Sua resposta anterior não era JSON válido. Responda APENAS com o JSON."
+                continue
+
+            status = val_data.get("status", "revision_needed")
+            reason = val_data.get("reason", "")
+
+            if status == "approved":
+                logger.info("Plano aprovado pelo Validador", extra={"iteration": iteration + 1})
+                tasks = []
+                for t in plan_data:
+                    tasks.append(AgentTask(
+                        agent_id=t.get("agent_id", "base"),
+                        image=t.get("image", AGENT_REGISTRY.get(t.get("agent_id", "base"), "geminiclaw-base")),
+                        prompt=t.get("prompt", prompt),
+                        task_name=t.get("task_name", ""),
+                        depends_on=t.get("depends_on", []),
+                        expected_artifacts=t.get("expected_artifacts", []),
+                    ))
+                return tasks
+            elif status == "rejected":
+                logger.warning("Plano rejeitado definitivamente", extra={"reason": reason})
+                return []
+            else:
+                # Se o Validator forneceu corrected_plan, usá-lo como ponto de partida
+                corrected = val_data.get("corrected_plan")
+                if corrected and isinstance(corrected, list):
+                    plan_data = corrected
+                    last_plan_str = json.dumps(plan_data, indent=2)
+                    logger.info(
+                        "Usando corrected_plan do Validator",
+                        extra={"iteration": iteration + 1, "subtasks": len(plan_data)},
+                    )
+                feedback = reason or "Plano precisa de revisão."
+                logger.info("Solicitando revisão do plano", extra={"iteration": iteration + 1, "reason": feedback})
 
         logger.error("Máximo de iterações de planejamento atingido")
         return []

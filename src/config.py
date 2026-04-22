@@ -43,6 +43,10 @@ DEEP_SEARCH_CACHE_TTL_SECONDS = int(get_env("DEEP_SEARCH_CACHE_TTL_SECONDS", def
 QDRANT_URL = get_env("QDRANT_URL", default="http://localhost:6333")
 EMBEDDING_MODEL = get_env("EMBEDDING_MODEL", default="sentence-transformers/all-MiniLM-L6-v2")
 
+# Web Reader Skill (S5)
+SKILL_WEB_READER_ENABLED = get_env("SKILL_WEB_READER_ENABLED", default="false").lower() == "true"
+
+
 # Garante que os diretórios necessários existem
 Path(SQLITE_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
 

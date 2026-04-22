@@ -1,13 +1,15 @@
 import hashlib
 import time
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Generic, TypeVar
 from src.logger import get_logger
 from src.config import SEARCH_CACHE_TTL_SECONDS
 from .scraper import SearchResult
 
 logger = get_logger(__name__)
 
-class SearchCache:
+T = TypeVar("T")
+
+class SearchCache(Generic[T]):
     """Cache em memória para resultados de busca com TTL.
     
     Utiliza monotonic time para evitar problemas com saltos no relógio do sistema.
@@ -28,7 +30,7 @@ class SearchCache:
         normalized = query.lower().strip()
         return hashlib.sha256(normalized.encode()).hexdigest()
 
-    def get(self, query: str) -> Optional[List[SearchResult]]:
+    def get(self, query: str) -> Optional[T]:
         """Recupera resultados do cache se ainda forem válidos."""
         key = self._get_key(query)
         entry = self._cache.get(key)
@@ -45,7 +47,7 @@ class SearchCache:
         
         return None
 
-    def set(self, query: str, results: List[SearchResult]) -> None:
+    def set(self, query: str, results: T) -> None:
         """Armazena resultados no cache com o timestamp atual."""
         key = self._get_key(query)
         self._cache[key] = {

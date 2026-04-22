@@ -47,39 +47,39 @@ Objetivo: reescrever as instruções de cada agente com foco em **auxiliar de pe
 
 ### Tarefas
 
-- [ ] Reescrever `AGENT_INSTRUCTION` do **Planner** com:
+- [x] Reescrever `AGENT_INSTRUCTION` do **Planner** com:
   - Persona: "Você é um planejador de pesquisa acadêmica"
   - Critérios de decomposição orientados a pesquisa (levantamento → análise → síntese → relatório)
   - Regra de fusão de tarefas com dependência de I/O no mesmo agente
   - Formato JSON de saída com campo `task_name`, `agent_id`, `prompt`, `depends_on`, `expected_artifacts`
   - Limite explícito: máximo de 5 subtarefas por padrão (otimização para Pi 5)
 
-- [ ] Reescrever `AGENT_INSTRUCTION` do **Validator** com:
+- [x] Reescrever `AGENT_INSTRUCTION` do **Validator** com:
   - Checklist explícito: dependências, viabilidade no Pi 5, uso correto de skills, outputs especificados
   - Regra: rejeitar planos com mais de 7 subtarefas (forçar fusão)
   - Regra: verificar que subtarefas de pesquisa usam `quick_search` ou `deep_search`
   - Formato de resposta mais robusto com campo `corrected_plan` quando `revision_needed`
 
-- [ ] Reescrever `AGENT_INSTRUCTION` do **Researcher** com:
+- [x] Reescrever `AGENT_INSTRUCTION` do **Researcher** com:
   - Persona: "Você é um pesquisador especializado em revisão bibliográfica"
   - Estratégia de pesquisa: query inicial → refinamento → síntese
   - Regra: sempre citar fontes com URL
   - Regra: salvar relatório em markdown estruturado via `write_artifact`
   - Instruções para usar `deep_search` quando domínios indexados estiverem disponíveis
 
-- [ ] Reescrever `AGENT_INSTRUCTION` do **Base** com:
+- [x] Reescrever `AGENT_INSTRUCTION` do **Base** com:
   - Persona: "Você é um assistente de análise de dados e geração de código"
   - Foco em execução de código (`python_interpreter`) e produção de artefatos
   - Regra: sempre executar código gerado, nunca apenas exibi-lo
   - Regra: salvar todos os outputs via `write_artifact`
 
-- [ ] Adicionar campo `system_context` dinâmico com:
+- [x] Adicionar campo `system_context` dinâmico com:
   - Lista de skills disponíveis e quando usar cada uma
   - Resumo da memória de longo prazo (já existe, melhorar formato)
   - Informações do hardware (RAM livre, temperatura) quando no Pi 5
 
-- [ ] Escrever testes unitários validando que cada agente contém palavras-chave obrigatórias na instrução
-- [ ] Commit: `refactor(agents): reescreve instruções especializadas para auxiliar de pesquisa`
+- [x] Escrever testes unitários validando que cada agente contém palavras-chave obrigatórias na instrução
+- [x] Commit: `refactor(agents): reescreve instruções especializadas para auxiliar de pesquisa`
 
 ---
 
@@ -89,17 +89,17 @@ Objetivo: permitir que o resultado de uma subtarefa seja injetado no prompt da p
 
 ### Tarefas
 
-- [ ] Adicionar campo `depends_on: list[str]` ao `AgentTask` no orquestrador
-- [ ] No `AutonomousLoop._run_complex_path`, ao executar cada subtarefa:
+- [x] Adicionar campo `depends_on: list[str]` ao `AgentTask` no orquestrador
+- [x] No `AutonomousLoop._run_complex_path`, ao executar cada subtarefa:
   - Verificar `depends_on` e coletar os `response.text` das subtarefas anteriores
   - Injetar como prefixo no prompt: `"Contexto das etapas anteriores:\n{contexto}"`
   - Limitar contexto injetado a 2000 tokens (truncar com aviso no log)
-- [ ] Atualizar o Planner para gerar `depends_on` no JSON de saída
-- [ ] Atualizar o Validator para verificar que `depends_on` referencia `task_name` válidos
-- [ ] Usar `ShortTermMemory` para armazenar resultados intermediários por `master_session_id`
-- [ ] Escrever testes unitários da injeção de contexto
-- [ ] Escrever teste de integração: subtarefa B recebe contexto de subtarefa A
-- [ ] Commit: `feat(orchestrator): implementa compartilhamento de contexto entre subtarefas`
+- [x] Atualizar o Planner para gerar `depends_on` no JSON de saída
+- [x] Atualizar o Validator para verificar que `depends_on` referencia `task_name` válidos
+- [x] Usar `ShortTermMemory` para armazenar resultados intermediários por `master_session_id`
+- [x] Escrever testes unitários da injeção de contexto
+- [x] Escrever teste de integração: subtarefa B recebe contexto de subtarefa A
+- [x] Commit: `feat(orchestrator): implementa compartilhamento de contexto entre subtarefas`
 
 ---
 
@@ -109,17 +109,17 @@ Objetivo: evitar o overhead de spawnar um container Docker apenas para decidir s
 
 ### Tarefas
 
-- [ ] Implementar `src/triage.py` com `TriageClassifier`:
+- [x] Implementar `src/triage.py` com `TriageClassifier`:
   - Heurística baseada em regras (sem LLM):
-    - Comprimento do prompt (< 50 tokens → SIMPLE)
+    - Comprimento do prompt (< 20 tokens → SIMPLE)
     - Presença de palavras-chave de pesquisa ("pesquise", "compare", "analise dados", "pipeline") → COMPLEX
     - Presença de múltiplos verbos de ação → COMPLEX
     - Histórico: se últimas 3 tarefas do mesmo tipo foram COMPLEX → default COMPLEX
   - Fallback para LLM local via API (sem container) apenas quando heurística tem confiança < 0.7
-- [ ] Integrar `TriageClassifier` no `AutonomousLoop` substituindo `_is_complex_triage`
-- [ ] Adicionar variável `TRIAGE_MODE=heuristic|llm|hybrid` no `.env.example`
-- [ ] Escrever testes unitários com exemplos de prompts simples e complexos
-- [ ] Commit: `perf(triage): implementa classificação local sem container`
+- [x] Integrar `TriageClassifier` no `AutonomousLoop` substituindo `_is_complex_triage`
+- [x] Adicionar variável `TRIAGE_MODE=heuristic|llm|hybrid` no `.env.example`
+- [x] Escrever testes unitários com exemplos de prompts simples e complexos
+- [x] Commit: `perf(triage): implementa classificação local sem container`
 
 ---
 
@@ -129,17 +129,17 @@ Objetivo: substituir o regex frágil de `_clean_json_text` por um parser toleran
 
 ### Tarefas
 
-- [ ] Implementar `src/utils/json_parser.py` com `extract_json(text: str) -> dict | list | None`:
+- [x] Implementar `src/utils/json_parser.py` com `extract_json(text: str) -> dict | list | None`:
   - Tentar `json.loads` direto primeiro
   - Remover blocos de código markdown (` ```json ... ``` `)
   - Buscar delimitadores `[` / `{` mais externos com contagem de balanceamento
   - Tratar trailing commas e comentários inline
   - Log de warning quando limpeza for necessária
-- [ ] Substituir `_clean_json_text` no orquestrador por `extract_json`
-- [ ] Adicionar retry com re-prompt quando parsing falhar:
+- [x] Substituir `_clean_json_text` no orquestrador por `extract_json`
+- [x] Adicionar retry com re-prompt quando parsing falhar:
   - Mensagem: "Sua resposta anterior não era JSON válido. Responda APENAS com o JSON."
-- [ ] Escrever testes unitários com exemplos reais de saídas problemáticas de LLMs
-- [ ] Commit: `fix(orchestrator): implementa parser robusto de JSON de LLMs`
+- [x] Escrever testes unitários com exemplos reais de saídas problemáticas de LLMs
+- [x] Commit: `fix(orchestrator): implementa parser robusto de JSON de LLMs`
 
 ---
 
@@ -149,7 +149,7 @@ Objetivo: permitir que o Researcher leia o conteúdo completo de uma URL, extrai
 
 ### Tarefas
 
-- [ ] Implementar `src/skills/web_reader/skill.py` com `WebReaderSkill(BaseSkill)`:
+- [x] Implementar `src/skills/web_reader/skill.py` com `WebReaderSkill(BaseSkill)`:
   - `run(url: str, max_chars: int = 5000) -> SkillResult`
   - Usa `httpx.AsyncClient` para buscar a página
   - Extrai texto limpo via `BeautifulSoup` (remove scripts, styles, nav)
@@ -157,11 +157,11 @@ Objetivo: permitir que o Researcher leia o conteúdo completo de uma URL, extrai
   - Cache em memória com TTL de 1 hora (reusa `SearchCache`)
   - Respeita `robots.txt` antes de acessar
   - `description`: "Use para ler o conteúdo completo de uma URL. Retorna texto extraído da página."
-- [ ] Registrar `WebReaderSkill` no `SkillRegistry`
-- [ ] Adicionar flag `SKILL_WEB_READER_ENABLED=true` ao `.env.example`
-- [ ] Atualizar instrução do Researcher para mencionar a skill
-- [ ] Escrever testes unitários com HTML mockado
-- [ ] Commit: `feat(skills): implementa skill de leitura de URLs`
+- [x] Registrar `WebReaderSkill` no `SkillRegistry`
+- [x] Adicionar flag `SKILL_WEB_READER_ENABLED=true` ao `.env.example`
+- [x] Atualizar instrução do Researcher para mencionar a skill
+- [x] Escrever testes unitários com HTML mockado
+- [x] Commit: `feat(skills): implementa skill de leitura de URLs`
 
 ---
 

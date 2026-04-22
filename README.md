@@ -197,9 +197,11 @@ networks:
 
 Os agentes são containers **efêmeros** gerenciados pelo `ContainerRunner` — não fazem parte do Compose porque têm ciclo de vida dinâmico. Cada container de agente recebe:
 - Volume compartilhado para `/data` (SQLite), `/outputs` e `/logs`
-- Limite de memória de **512 MB** e **1 CPU**
+- Limite de memória otimizado: **256 MB** para agentes leves (Planner/Validator) e **384 MB** para agentes pesados (Base/Researcher)
 - Acesso à rede `geminiclaw-net` para comunicação com Qdrant
 - Socket Docker do host (quando rodando dentro do container principal)
+
+> **Nota sobre Limites de Memória**: As configurações de `mem_limit` (256m / 384m) foram otimizadas para o Raspberry Pi 5. Caso você possua um hardware mais robusto ou enfrente problemas de OOM (Out Of Memory) durante a execução de skills complexas, você pode alterar essas configurações diretamente no arquivo `src/runner.py`.
 
 ### Comandos
 
@@ -225,8 +227,14 @@ docker compose down
 # Criar ambiente virtual
 uv venv .venv && source .venv/bin/activate
 
-# Instalar dependências
-uv sync --all-groups
+# Instalar dependências básicas
+uv sync
+
+# Para instalar as dependências de Deep Search (Qdrant, FastEmbed), use:
+uv sync --all-extras
+
+# Após clonar o projeto ou modificar Dockerfiles, construa as imagens localmente:
+./scripts/build_images.sh
 
 # Rodar todos os testes unitários
 uv run pytest -m unit -v

@@ -183,10 +183,28 @@ class ContainerRunner:
                         "mode": "rw",
                     }
 
+                # Alocações de memória otimizadas para ARM64 (Etapa V6)
+                mem_limit = "256m"
+                if agent_id in ("base", "researcher") or image.startswith("geminiclaw-base") or image.startswith("geminiclaw-researcher"):
+                    mem_limit = "384m"
+
+                # Seleção de imagem (-slim vs full)
+                use_slim = False
+                if agent_id in ("planner", "validator") or image.startswith("geminiclaw-planner") or image.startswith("geminiclaw-validator"):
+                    use_slim = True
+                else:
+                    # Base/Researcher usam slim se deep search estiver desabilitado
+                    if os.environ.get("SKILL_DEEP_SEARCH_ENABLED", "false").lower() != "true":
+                        use_slim = True
+
+                final_image = image
+                if use_slim and not final_image.endswith("-slim"):
+                    final_image = f"{final_image}-slim"
+
                 # Parâmetros para a execução do container
                 run_kwargs: dict[str, Any] = {
-                    "image": image,
-                    "mem_limit": "512m",
+                    "image": final_image,
+                    "mem_limit": mem_limit,
                     "nano_cpus": 1_000_000_000,
                     "network": "geminiclaw-net",
                     "user": "appuser",

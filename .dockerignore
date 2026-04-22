@@ -10,3 +10,7 @@ logs/
 .gemini/
 .vscode/
 node_modules/
+tests/
+roadmaps/
+scripts/
+*.md

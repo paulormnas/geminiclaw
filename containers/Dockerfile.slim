@@ -12,8 +12,8 @@ WORKDIR /app
 # Copiar arquivos de dependências
 COPY pyproject.toml uv.lock ./
 
-# Instalar dependências no virtualenv (incluindo dependências pesadas de deep_search)
-RUN uv sync --extra deep_search --no-dev --no-install-project
+# Instalar dependências no virtualenv (excluindo dependências pesadas de deep_search)
+RUN uv sync --no-dev --no-install-project
 
 # Stage 2: Runtime - Imagem final otimizada
 FROM --platform=linux/arm64 python:3.11-slim-bookworm AS runtime

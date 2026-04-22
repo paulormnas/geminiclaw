@@ -9,14 +9,22 @@ import json
 import asyncio
 from typing import Any, TYPE_CHECKING, List, Dict
 from src.logger import get_logger
+from src.skills.memory.short_term import ShortTermMemory
 
 if TYPE_CHECKING:
     from src.orchestrator import Orchestrator, AgentTask, AgentResult, OrchestratorResult
 
 logger = get_logger(__name__)
 
+# Limite de caracteres de contexto injetado (~2000 tokens ≈ 8000 chars, sendo conservador)
+_CONTEXT_MAX_CHARS = 8_000
+
+
 class AutonomousLoop:
     """Implementa o ciclo de vida autônomo da execução de uma tarefa."""
+
+    # Memória de curto prazo compartilhada entre instâncias (escopo de processo)
+    _short_term_memory: ShortTermMemory = ShortTermMemory()
 
     def __init__(self, orchestrator: "Orchestrator"):
         """Inicializa o loop com uma instância do orquestrador.
@@ -27,6 +35,7 @@ class AutonomousLoop:
         self.orchestrator = orchestrator
         self.max_retries = int(os.environ.get("MAX_RETRY_PER_SUBTASK", "3"))
         self.max_subtasks = int(os.environ.get("MAX_SUBTASKS_PER_TASK", "10"))
+
 
     async def run(self, prompt: str, master_session_id: str) -> "OrchestratorResult":
         """Executa a tarefa utilizando o loop autônomo.
@@ -119,8 +128,57 @@ class AutonomousLoop:
             total=1,
             succeeded=succeeded,
             failed=failed,
-            artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id)
+            artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id),
         )
+
+    def _build_context_prefix(self, master_session_id: str, depends_on: list[str]) -> str:
+        """Constrói o prefixo de contexto das subtarefas anteriores das quais esta depende.
+
+        Lê os resultados já completados da ShortTermMemory e monta um bloco de
+        texto estruturado para ser injetado antes do prompt da subtarefa atual.
+        O texto é truncado em `_CONTEXT_MAX_CHARS` caracteres para não exceder
+        o limite de tokens do modelo (~2000 tokens).
+
+        Args:
+            master_session_id: ID da sessão mestra (chave da ShortTermMemory).
+            depends_on: Lista de task_names cujos resultados devem ser incluídos.
+
+        Returns:
+            String com o bloco de contexto pronta para prefilar o prompt,
+            ou string vazia se não houver contexto disponível.
+        """
+        if not depends_on:
+            return ""
+
+        parts: list[str] = []
+        for task_name in depends_on:
+            entry = self._short_term_memory.read(master_session_id, f"result:{task_name}")
+            if entry:
+                parts.append(f"### Resultado de `{task_name}`\n{entry.value}")
+            else:
+                logger.debug(
+                    "Contexto não encontrado na memória de curto prazo",
+                    extra={"task_name": task_name, "master_session_id": master_session_id},
+                )
+
+        if not parts:
+            return ""
+
+        context = "\n\n".join(parts)
+
+        # Trunca se necessário
+        if len(context) > _CONTEXT_MAX_CHARS:
+            context = context[:_CONTEXT_MAX_CHARS]
+            logger.warning(
+                "Contexto de subtarefas anteriores truncado",
+                extra={
+                    "max_chars": _CONTEXT_MAX_CHARS,
+                    "master_session_id": master_session_id,
+                    "depends_on": depends_on,
+                },
+            )
+
+        return f"Contexto das etapas anteriores:\n{context}\n\n"
 
     async def _run_complex_path(self, prompt: str, master_session_id: str) -> "OrchestratorResult":
         """Executa a tarefa via caminho complexo (Planner -> Loop de Subtarefas)."""
@@ -141,13 +199,34 @@ class AutonomousLoop:
 
         final_results: List[AgentResult] = []
         
-        # 2. Loop de Execução Autônoma (S7.4)
+        # 2. Loop de Execução Autônoma (S7.4) com injeção de contexto (V2)
         for i, task in enumerate(tasks):
-            logger.info(f"Processando subtarefa {i+1}/{len(tasks)}: {task.agent_id}")
-            
-            # TODO (Opcional): Consultar memória de curto prazo (S7.4.a) 
-            # Isso já é feito parcialmente via master_session no orquestrador
-            
+            logger.info(f"Processando subtarefa {i+1}/{len(tasks)}: {task.agent_id} [{task.task_name or 'sem nome'}]")
+
+            # V2: Constrói prefixo de contexto para tarefas com dependências
+            context_prefix = self._build_context_prefix(master_session_id, task.depends_on)
+            effective_prompt = context_prefix + task.prompt if context_prefix else task.prompt
+
+            if context_prefix:
+                logger.info(
+                    "Contexto de etapas anteriores injetado no prompt",
+                    extra={
+                        "task_name": task.task_name,
+                        "depends_on": task.depends_on,
+                        "context_chars": len(context_prefix),
+                    },
+                )
+
+            # Cria uma cópia da tarefa com o prompt enriquecido
+            enriched_task = AgentTask(
+                agent_id=task.agent_id,
+                image=task.image,
+                prompt=effective_prompt,
+                task_name=task.task_name,
+                depends_on=task.depends_on,
+                expected_artifacts=task.expected_artifacts,
+            )
+
             success = False
             last_result = None
             
@@ -156,13 +235,30 @@ class AutonomousLoop:
                 logger.info(f"Executando tentativa {attempt+1}/{self.max_retries} para {task.agent_id}")
                 
                 # Executa a skill/agente
-                result = await self.orchestrator._execute_agent(task, master_session_id)
+                result = await self.orchestrator._execute_agent(enriched_task, master_session_id)
                 last_result = result
                 
-                # Avaliação do resultado (simplificada por enquanto)
+                # Avaliação do resultado
                 if result.status == "success":
-                    # TODO: Futuramente injetar um passo de "Self-Correction" aqui
                     success = True
+                    # V2: Persiste resultado na ShortTermMemory para uso por subtarefas dependentes
+                    if task.task_name:
+                        response_text = result.response.get("text", "")
+                        self._short_term_memory.write(
+                            session_id=master_session_id,
+                            key=f"result:{task.task_name}",
+                            value=response_text,
+                            source=task.agent_id,
+                            tags=["subtask_result", task.task_name],
+                        )
+                        logger.info(
+                            "Resultado da subtarefa persistido na memória de curto prazo",
+                            extra={
+                                "task_name": task.task_name,
+                                "response_chars": len(response_text),
+                                "master_session_id": master_session_id,
+                            },
+                        )
                     break
                 else:
                     logger.warning(f"Tentativa {attempt+1} falhou", extra={"error": result.error})
@@ -174,9 +270,6 @@ class AutonomousLoop:
             
             if not success:
                 logger.error(f"Subtarefa {i+1} ({task.agent_id}) falhou após todas as tentativas")
-                # Interrompe o loop se uma etapa crítica falhar?
-                # Por agora, vamos continuar para tentar as demais etapas, 
-                # mas o resultado final refletirá a falha.
 
         succeeded = sum(1 for r in final_results if r.status == "success")
         failed = len(final_results) - succeeded
@@ -184,6 +277,9 @@ class AutonomousLoop:
         # 3. Finalização (S7.5): Promove descobertas importantes
         if succeeded > 0:
             await self._promote_findings(prompt, master_session_id)
+
+        # Limpa a memória de curto prazo da sessão após conclusão
+        self._short_term_memory.clear(master_session_id)
 
         return OrchestratorResult(
             results=final_results,

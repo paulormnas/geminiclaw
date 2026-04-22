@@ -36,11 +36,17 @@ class AgentTask:
         agent_id: Identificador do agente.
         image: Nome da imagem Docker a ser usada.
         prompt: Prompt/solicitação a ser enviada ao agente.
+        task_name: Identificador único da subtarefa no plano (snake_case).
+        depends_on: Lista de task_names que devem concluir antes desta tarefa.
+        expected_artifacts: Lista de artefatos esperados como output.
     """
 
     agent_id: str
     image: str
     prompt: str
+    task_name: str = ""
+    depends_on: list[str] = field(default_factory=list)
+    expected_artifacts: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -435,13 +441,28 @@ class Orchestrator:
                         tasks.append(AgentTask(
                             agent_id=t.get("agent_id", "base"),
                             image=t.get("image", AGENT_REGISTRY.get(t.get("agent_id", "base"), "geminiclaw-base")),
-                            prompt=t.get("prompt", prompt)
+                            prompt=t.get("prompt", prompt),
+                            task_name=t.get("task_name", ""),
+                            depends_on=t.get("depends_on", []),
+                            expected_artifacts=t.get("expected_artifacts", []),
                         ))
                     return tasks
                 elif status == "rejected":
                     logger.warning("Plano rejeitado definitivamente", extra={"reason": reason})
                     return []
                 else:
+                    # Se o Validator forneceu corrected_plan, usá-lo como ponto de partida
+                    corrected = val_data.get("corrected_plan")
+                    if corrected and isinstance(corrected, list):
+                        try:
+                            plan_data = corrected
+                            last_plan_str = json.dumps(plan_data, indent=2)
+                            logger.info(
+                                "Usando corrected_plan do Validator",
+                                extra={"iteration": iteration + 1, "subtasks": len(plan_data)},
+                            )
+                        except Exception:
+                            pass
                     feedback = reason or "Plano precisa de revisão."
                     logger.info("Solicitando revisão do plano", extra={"iteration": iteration + 1, "reason": feedback})
                     

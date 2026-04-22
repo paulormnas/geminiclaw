@@ -5,7 +5,14 @@ import functools
 from pathlib import Path
 from typing import Any
 from src.logger import get_logger
-from src.config import AGENT_TIMEOUT_SECONDS, DEFAULT_MODEL
+from src.config import (
+    AGENT_TIMEOUT_SECONDS, 
+    DEFAULT_MODEL,
+    HEALTH_CHECK_ENABLED,
+    PI_TEMPERATURE_LIMIT,
+    PI_MIN_AVAILABLE_MEMORY_MB
+)
+from src.health import PiHealthMonitor
 
 logger = get_logger(__name__)
 
@@ -30,6 +37,7 @@ class ContainerRunner:
             raise RuntimeError("Não foi possível conectar ao daemon do Docker.") from e
         
         self.semaphore = asyncio.Semaphore(semaphore_limit)
+        self.health = PiHealthMonitor()
         self._ensure_network()
 
     def _ensure_network(self) -> None:
@@ -41,6 +49,37 @@ class ContainerRunner:
             self.client.networks.create("geminiclaw-net", driver="bridge")
         except Exception as e:
             logger.warning("Falha ao verificar/criar rede Docker", extra={"error": str(e)})
+
+    async def _wait_for_health(self) -> None:
+        """Verifica os limites de saúde e aguarda se o sistema estiver sob stress."""
+        max_wait_seconds = 60
+        waited = 0
+        interval = 5
+        
+        while waited < max_wait_seconds:
+            temp = self.health.get_temperature()
+            mem = self.health.get_memory_usage()
+            
+            # Log de warning se estiver perto do limite (ex: > 70C)
+            if temp is not None and temp > 70.0:
+                logger.warning("Temperatura do sistema elevada", extra={"temperature": temp})
+                
+            # Verifica limites
+            temp_exceeded = temp is not None and temp >= PI_TEMPERATURE_LIMIT
+            mem_exceeded = mem is not None and mem["available_mb"] < PI_MIN_AVAILABLE_MEMORY_MB
+            
+            if not temp_exceeded and not mem_exceeded:
+                return  # Saúde OK
+                
+            reasons = []
+            if temp_exceeded: reasons.append(f"Temperatura alta ({temp} >= {PI_TEMPERATURE_LIMIT})")
+            if mem_exceeded: reasons.append(f"Memória livre baixa ({mem['available_mb']} < {PI_MIN_AVAILABLE_MEMORY_MB})")
+            
+            logger.warning("Aguardando resfriamento/liberação de memória", extra={"reasons": reasons, "waited_seconds": waited})
+            await asyncio.sleep(interval)
+            waited += interval
+            
+        raise RuntimeError("Timeout aguardando saúde do sistema. Limites excedidos por muito tempo.")
 
     async def spawn(
         self, 
@@ -65,6 +104,9 @@ class ContainerRunner:
             O ID do container criado.
         """
         async with self.semaphore:
+            if HEALTH_CHECK_ENABLED:
+                await self._wait_for_health()
+
             logger.info("Iniciando container para agente", extra={"agent_id": agent_id, "image": image, "session_id": session_id, "ipc_mode": "TCP" if ipc_port else "UNIX"})
             
             try:

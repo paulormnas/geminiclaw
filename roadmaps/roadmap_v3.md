@@ -171,23 +171,23 @@ Objetivo: reduzir tempo de build, tamanho de imagem e consumo de memória no Ras
 
 ### Tarefas
 
-- [ ] Otimizar `containers/Dockerfile`:
+- [x] Otimizar `containers/Dockerfile`:
   - Usar `python:3.11-slim-bookworm` com plataforma explícita `--platform=linux/arm64`
   - Separar dependências pesadas (fastembed, qdrant-client) em layer dedicado
   - Usar `--no-cache-dir` em todas as instalações
   - Remover `curl` do runtime (desnecessário para agentes)
   - Target final < 350 MB (atual estimado ~600+ MB por causa do fastembed)
-- [ ] Criar `containers/Dockerfile.slim` para agentes que não usam deep_search:
+- [x] Criar `containers/Dockerfile.slim` para agentes que não usam deep_search:
   - Excluir fastembed e qdrant-client → imagem < 200 MB
   - Usar para planner, validator e base (quando deep_search desabilitado)
-- [ ] Reduzir `mem_limit` de containers de agente:
+- [x] Reduzir `mem_limit` de containers de agente:
   - Planner/Validator: `256m` (apenas texto, sem skills pesadas)
   - Base/Researcher: `384m` (com skills)
   - Sandbox de código: manter `256m`
-- [ ] Adicionar `.dockerignore` mais agressivo: excluir `tests/`, `roadmaps/`, `.git/`, `*.md`
-- [ ] Implementar pre-build de imagens no Pi: script `scripts/build_images.sh`
-- [ ] Escrever teste que verifica tamanho da imagem < limite configurado
-- [ ] Commit: `perf(docker): otimiza imagens para ARM64 e reduz footprint de memória`
+- [x] Adicionar `.dockerignore` mais agressivo: excluir `tests/`, `roadmaps/`, `.git/`, `*.md`
+- [x] Implementar pre-build de imagens no Pi: script `scripts/build_images.sh`
+- [x] Escrever teste que verifica tamanho da imagem < limite configurado
+- [x] Commit: `perf(docker): otimiza imagens para ARM64 e reduz footprint de memória`
 
 ---
 
@@ -197,26 +197,27 @@ Objetivo: evitar throttling térmico e OOM durante execução de múltiplos agen
 
 ### Tarefas
 
-- [ ] Implementar `src/health.py` com `PiHealthMonitor`:
+- [x] Implementar `src/health.py` com `PiHealthMonitor`:
   - `get_temperature() -> float` via `/sys/class/thermal/thermal_zone0/temp` ou `vcgencmd`
   - `get_memory_usage() -> dict` (total, available, percent)
   - `get_cpu_usage() -> float` via `/proc/stat`
   - `is_throttled() -> bool` via `vcgencmd get_throttled`
   - Fallback gracioso em non-Pi (retorna None)
-- [ ] Integrar no `ContainerRunner`:
+- [x] Integrar no `ContainerRunner`:
   - Antes de `spawn()`: verificar temperatura < 75°C e memória disponível > 512 MB
   - Se exceder limites: aguardar com backoff até normalizar (máx 60s) ou recusar spawn
   - Log de warning quando temperatura > 70°C
-- [ ] Adicionar endpoint de saúde no `AutonomousLoop`:
+- [x] Adicionar endpoint de saúde no `AutonomousLoop`:
   - Após cada subtarefa, logar métricas: `{"temp": 68.2, "mem_avail_mb": 2100, "cpu_pct": 45}`
-- [ ] Adicionar variáveis ao `.env.example`:
+- [x] Adicionar variáveis ao `.env.example`:
   ```
   PI_TEMPERATURE_LIMIT=75
   PI_MIN_AVAILABLE_MEMORY_MB=512
   HEALTH_CHECK_ENABLED=true
   ```
-- [ ] Escrever testes unitários com mock de `/sys/class/thermal`
-- [ ] Commit: `feat(health): implementa monitoramento de saúde do Raspberry Pi 5`
+- [x] Escrever testes unitários com mock de `/sys/class/thermal`
+- [ ] Verificar funcionamento do HealthMonitor no hardware real (Raspberry Pi 5)
+- [x] Commit: `feat(health): implementa monitoramento de saúde do Raspberry Pi 5`
 
 ---
 

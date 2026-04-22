@@ -46,6 +46,11 @@ EMBEDDING_MODEL = get_env("EMBEDDING_MODEL", default="sentence-transformers/all-
 # Web Reader Skill (S5)
 SKILL_WEB_READER_ENABLED = get_env("SKILL_WEB_READER_ENABLED", default="false").lower() == "true"
 
+# Health Monitoring (S7)
+HEALTH_CHECK_ENABLED = get_env("HEALTH_CHECK_ENABLED", default="true").lower() == "true"
+PI_TEMPERATURE_LIMIT = float(get_env("PI_TEMPERATURE_LIMIT", default="75.0"))
+PI_MIN_AVAILABLE_MEMORY_MB = float(get_env("PI_MIN_AVAILABLE_MEMORY_MB", default="512.0"))
+
 
 # Garante que os diretórios necessários existem
 Path(SQLITE_DB_PATH).parent.mkdir(parents=True, exist_ok=True)

@@ -11,6 +11,7 @@ from typing import Any, TYPE_CHECKING, List, Dict
 from src.logger import get_logger
 from src.skills.memory.short_term import ShortTermMemory
 from src.triage import TriageClassifier, TriageDecision
+from src.health import PiHealthMonitor
 
 if TYPE_CHECKING:
     from src.orchestrator import Orchestrator, AgentTask, AgentResult, OrchestratorResult
@@ -40,6 +41,7 @@ class AutonomousLoop:
         self._triage_classifier = TriageClassifier(
             confidence_threshold=float(os.environ.get("TRIAGE_CONFIDENCE_THRESHOLD", "0.7"))
         )
+        self._health_monitor = PiHealthMonitor()
 
 
     async def run(self, prompt: str, master_session_id: str) -> "OrchestratorResult":
@@ -319,6 +321,23 @@ class AutonomousLoop:
             
             if last_result:
                 final_results.append(last_result)
+                
+            # Adicionar verificação de saúde após cada sub-tarefa (Etapa V7)
+            from src.config import HEALTH_CHECK_ENABLED
+            if HEALTH_CHECK_ENABLED:
+                try:
+                    temp = self._health_monitor.get_temperature()
+                    mem = self._health_monitor.get_memory_usage()
+                    cpu = self._health_monitor.get_cpu_usage()
+                    
+                    health_data = {
+                        "temp": temp,
+                        "mem_avail_mb": mem["available_mb"] if mem else None,
+                        "cpu_pct": cpu
+                    }
+                    logger.info("Métricas de saúde do sistema após subtarefa", extra=health_data)
+                except Exception as e:
+                    logger.debug("Falha ao coletar métricas de saúde", extra={"error": str(e)})
             
             if not success:
                 logger.error(f"Subtarefa {i+1} ({task.agent_id}) falhou após todas as tentativas")

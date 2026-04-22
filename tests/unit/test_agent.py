@@ -43,8 +43,15 @@ class TestAgentAttributes:
         assert root_agent.description == AGENT_DESCRIPTION
 
     def test_agent_instruction_value(self) -> None:
-        """Instruction deve corresponder à constante AGENT_INSTRUCTION."""
-        assert root_agent.instruction == AGENT_INSTRUCTION
+        """Instruction deve conter o conteúdo base de AGENT_INSTRUCTION.
+
+        O root_agent recebe a instrução processada por _get_agent_instruction(),
+        que anexa um system_context dinâmico (catálogo de skills, memória de
+        longo prazo, informações de hardware). Portanto a instrução final sempre
+        começa com AGENT_INSTRUCTION, mas pode ter conteúdo adicional.
+        """
+        assert root_agent.instruction.startswith(AGENT_INSTRUCTION)
+
 
     def test_agent_has_before_callback(self) -> None:
         """root_agent deve ter before_agent_callback configurado."""

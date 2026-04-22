@@ -27,22 +27,26 @@ AGENT_DESCRIPTION = (
     "genéricas, manter contexto de sessão e responder em português."
 )
 AGENT_INSTRUCTION = (
-    "Você é um agente assistente do framework GeminiClaw, executando em um "
-    "container Docker isolado em um Raspberry Pi 5. Suas responsabilidades são:\n"
-    "1. Processar a solicitação recebida de forma clara e objetiva.\n"
-    "2. Responder sempre em português brasileiro.\n"
-    "3. Ser conciso e direto nas respostas.\n"
-    "4. Reportar qualquer erro ou limitação encontrada.\n"
-    "5. **MEMÓRIA E PERFIL DO USUÁRIO**: Utilize as ferramentas de memória para "
-    "identificar informações sobre o perfil e preferências do usuário. "
-    "Quando identificar algo relevante e duradouro, registre na memória de longo prazo.\n"
-    "6. **FERRAMENTAS**: Você possui acesso a diversas skills (busca na web, execução de código, memória). "
-    "Use-as conforme a necessidade para resolver as tarefas.\n"
-    "7. **EXECUÇÃO DE CÓDIGO (CRÍTICO)**: Quando sua tarefa envolver criar um pipeline de ML ou qualquer script, "
-    "você DEVE EXECUTAR o código usando a ferramenta 'python_interpreter' para validar os resultados e "
-    "garantir que os arquivos de output (CSV, PNG, JSON, MD) sejam realmente gerados no disco.\n"
-    "8. **IMPORTANTE**: Todos os artefatos finais devem ser salvos em `/outputs/` usando a ferramenta 'write_artifact'.\n"
-    "Se não souber responder, diga claramente que não tem informação suficiente."
+    "Você é um assistente de análise de dados e geração de código do framework GeminiClaw, "
+    "executando em um container Docker isolado em um Raspberry Pi 5.\n\n"
+    "RESPONSABILIDADES:\n"
+    "1. **ANÁLISE DE DADOS**: Processar datasets, calcular estatísticas, identificar padrões e tendências.\n"
+    "2. **GERAÇÃO E EXECUÇÃO DE CÓDIGO**: Criar scripts Python para automação, transformação de dados e visualizações.\n"
+    "3. **PRODUÇÃO DE ARTEFATOS**: Gerar relatórios, gráficos e arquivos de dados estruturados.\n\n"
+    "REGRAS OBRIGATÓRIAS:\n"
+    "1. **EXECUTE SEMPRE O CÓDIGO**: Qualquer código Python gerado DEVE ser executado via ferramenta "
+    "`python_interpreter`. Nunca apenas exiba o código sem executá-lo. "
+    "O resultado da execução valida a corretude e garante que os arquivos de output sejam gerados.\n"
+    "2. **SALVE TODOS OS OUTPUTS**: Todos os artefatos produzidos (CSV, PNG, JSON, MD, relatórios) "
+    "DEVEM ser salvos em `/outputs/` via ferramenta `write_artifact`. "
+    "Arquivos gerados apenas em memória durante execução do código não são artefatos válidos.\n"
+    "3. **MEMÓRIA**: Use a ferramenta `memory` (ação `recall`) antes de iniciar uma análise "
+    "para verificar contexto relevante de sessões anteriores. "
+    "Após concluir, persista descobertas importantes com `memorize`.\n"
+    "4. **CLAREZA E OBJETIVIDADE**: Apresente os resultados de forma concisa. "
+    "Inclua a interpretação dos dados, não apenas os números.\n"
+    "5. **IDIOMA**: Responda sempre em português brasileiro.\n\n"
+    "Se não souber responder ou os dados forem insuficientes, declare claramente a limitação."
 )
 
 
@@ -169,21 +173,96 @@ def _setup_skills() -> None:
 
 
 def _get_agent_instruction(base_instruction: str) -> str:
-    """Gera a instrução do agente incluindo o resumo da memória de longo prazo."""
+    """Gera a instrução do agente com system_context dinâmico estruturado.
+
+    Injeta ao final da instrução base:
+    - Catálogo de skills disponíveis com orientação de uso
+    - Resumo da memória de longo prazo
+    - Informações de hardware (quando disponível no Pi 5)
+
+    Args:
+        base_instruction: Texto base da instrução do agente.
+
+    Returns:
+        Instrução completa com contexto dinâmico injetado.
+    """
     instruction = base_instruction
-    
+    context_sections: list[str] = []
+
+    # --- Catálogo de skills disponíveis ---
+    _SKILL_GUIDANCE: dict[str, str] = {
+        "quick_search": "buscas gerais na web, notícias e informações recentes",
+        "deep_search": "pesquisa aprofundada em domínios indexados (ex: docs, arxiv)",
+        "python_interpreter": "execução de código Python, análise de dados, cálculos",
+        "memory": "memorizar preferências e contexto duradouro; recall de sessões anteriores",
+        "web_reader": "leitura do conteúdo completo de uma URL específica",
+    }
+
+    available_skills = registry.list_available()
+    if available_skills:
+        skill_lines = []
+        for s in available_skills:
+            guidance = _SKILL_GUIDANCE.get(s["name"], s["description"])
+            skill_lines.append(f"  - `{s['name']}`: {guidance}")
+        context_sections.append(
+            "**SKILLS DISPONÍVEIS** (use a ferramenta certa para cada tarefa):\n"
+            + "\n".join(skill_lines)
+        )
+
+    # --- Memória de longo prazo ---
     try:
         db_path = os.environ.get("LONG_TERM_MEMORY_DB", "./store/memory.db")
         ltm = LongTermMemory(db_path)
         summary = ltm.summarize_for_context(limit=5)
-        
+
         if summary:
-            instruction += f"\n\n**CONTEXTO HISTÓRICO (Memória de Longo Prazo)**:\n{summary}"
+            context_sections.append(
+                f"**CONTEXTO HISTÓRICO (Memória de Longo Prazo)**:\n{summary}"
+            )
             logger.info("Resumo da memória de longo prazo injetado na instrução")
     except Exception as e:
         logger.warning(f"Não foi possível carregar memória de longo prazo: {e}")
-        
+
+    # --- Informações de hardware (Pi 5 / plataforma atual) ---
+    try:
+        import platform
+        import shutil
+
+        hw_lines: list[str] = []
+
+        # Detecta Raspberry Pi via device-tree
+        cpu_model_path = "/proc/device-tree/model"
+        if os.path.exists(cpu_model_path):
+            with open(cpu_model_path, "r", errors="replace") as f:
+                hw_lines.append(f"  - Plataforma: {f.read().strip()}")
+
+        # Uso de disco (diretório de outputs)
+        outputs_dir = os.environ.get("OUTPUT_BASE_DIR", "./outputs")
+        disk = shutil.disk_usage(outputs_dir if os.path.exists(outputs_dir) else ".")
+        hw_lines.append(
+            f"  - Disco livre: {disk.free // (1024 ** 3)} GB de {disk.total // (1024 ** 3)} GB"
+        )
+
+        # Temperatura (apenas Pi)
+        thermal_path = "/sys/class/thermal/thermal_zone0/temp"
+        if os.path.exists(thermal_path):
+            with open(thermal_path) as f:
+                temp_c = int(f.read().strip()) / 1000
+            hw_lines.append(f"  - Temperatura CPU: {temp_c:.1f}°C")
+
+        if hw_lines:
+            context_sections.append(
+                "**INFORMAÇÕES DO HARDWARE**:\n" + "\n".join(hw_lines)
+            )
+    except Exception as e:
+        logger.debug(f"Não foi possível coletar informações de hardware: {e}")
+
+    if context_sections:
+        instruction += "\n\n---\n**CONTEXTO DO SISTEMA**:\n" + "\n\n".join(context_sections)
+
     return instruction
+
+
 
 
 # Configura as skills antes de inicializar o agente

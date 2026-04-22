@@ -64,7 +64,7 @@ git commit -m "<tipo>(<escopo>): <descrição no imperativo>"
 
 ### Escopos sugeridos
 
-`runner`, `session`, `ipc`, `logger`, `agents`, `containers`, `tests`, `config`, `docs`
+`runner`, `session`, `ipc`, `logger`, `agents`, `memory`, `containers`, `tests`, `config`, `docs`
 
 ### Exemplos
 

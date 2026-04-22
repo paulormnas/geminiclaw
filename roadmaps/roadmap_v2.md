@@ -580,12 +580,13 @@ intervenção humana a cada passo.
 Objetivo: confirmar que as skills funcionam de forma coordenada em
 um cenário realista de tarefa longa com múltiplos agentes.
 
-- [ ] Executar `validation-task.md` com as skills habilitadas e verificar:
-  - [ ] `QuickSearchSkill` (ou `DeepSearchSkill`) usada pelo researcher
-  - [ ] `CodeSkill` usada para o pipeline de ML completo
-  - [ ] `ShortTermMemory` consultada pelo agente de avaliação
-  - [ ] `LongTermMemory` recebe ao menos uma entrada promovida
-  - [ ] Artefatos em `outputs/<session_id>/` com estrutura correta
+- [/] Executar `validation-task.md` com as skills habilitadas e verificar:
+  - [x] Correção de bugs de infraestrutura (permissões de container, env vars)
+  - [ ] `QuickSearchSkill` (ou `DeepSearchSkill`) usada pelo researcher (BLOQUEADO POR 429)
+  - [ ] `CodeSkill` usada para o pipeline de ML completo (BLOQUEADO POR 429)
+  - [ ] `ShortTermMemory` consultada pelo agente de avaliação (BLOQUEADO POR 429)
+  - [ ] `LongTermMemory` recebe ao menos uma entrada promovida (BLOQUEADO POR 429)
+  - [ ] Artefatos em `outputs/<session_id>/` com estrutura correta (BLOQUEADO POR 429)
 - [ ] Verificar no log: `skill_invoked`, `skill_completed`, `memory_written`, `memory_promoted`
 - [ ] Commit: `feat(skills): milestone/skills-v1 — skills validadas em tarefa completa`
 

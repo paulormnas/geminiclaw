@@ -88,7 +88,7 @@ class PythonSandbox:
                 mem_limit=self.memory_limit,
                 cpu_period=self.cpu_period,
                 cpu_quota=self.cpu_quota,
-                network_disabled=False, # Habilitar rede temporariamente se houver setup_commands
+                network_disabled=not bool(setup_commands), # Habilitar rede apenas se houver setup_commands
                 detach=True,
                 remove=False,
             )
@@ -103,20 +103,42 @@ class PythonSandbox:
                         logger.error(f"Falha no comando de setup: {output.decode()}")
 
             logger.info("Executando script principal no sandbox")
-            # start_time = time.time()
+            import threading
             timed_out = False
+
+            def kill_container():
+                nonlocal timed_out
+                timed_out = True
+                try:
+                    container.kill()
+                except Exception:
+                    pass
+
+            timer = threading.Timer(exec_timeout, kill_container)
+            timer.start()
             
-            # TODO: Implementar timeout real para exec_run se necessário.
-            # Por enquanto, o exec_run é bloqueante.
-            exec_result = container.exec_run(["python", "/outputs/script.py"])
+            stdout = ""
+            stderr = ""
+            exit_code = -1
             
-            stdout = exec_result.output.decode("utf-8")
-            stderr = "" 
-            exit_code = exec_result.exit_code
+            try:
+                exec_result = container.exec_run(["python", "/outputs/script.py"])
+                if timed_out:
+                    stdout = ""
+                    exit_code = -1
+                else:
+                    stdout = exec_result.output.decode("utf-8")
+                    exit_code = exec_result.exit_code
+            except Exception as e:
+                if not timed_out:
+                    raise
+            finally:
+                timer.cancel()
+
 
             return SandboxResult(
                 stdout=stdout,
-                stderr=stderr,
+                stderr=stderr if not timed_out else "Timeout atingido durante a execução.",
                 exit_code=exit_code,
                 artifacts=[
                     str(p.relative_to(abs_output_dir))

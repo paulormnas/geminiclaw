@@ -271,10 +271,6 @@ class ContainerRunner:
                 logger.error("Falha ao spawnar container", extra={"agent_id": agent_id, "error": str(e)})
                 raise
 
-            except Exception as e:
-                logger.error("Falha ao spawnar container", extra={"agent_id": agent_id, "error": str(e)})
-                raise
-
         raise RuntimeError("Faixa de código inalcançável atingida em spawn.")
 
 

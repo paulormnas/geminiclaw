@@ -41,6 +41,9 @@ COPY --from=builder /app/.venv /app/.venv
 COPY src/ /app/src/
 COPY agents/ /app/agents/
 
+# Copiar uv para que o CodeSkill possa usar "uv pip install"
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 # Ajustar permissões para o diretório de dados
 RUN mkdir /data && chown appuser:appuser /data
 VOLUME /data

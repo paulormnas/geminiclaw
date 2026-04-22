@@ -354,19 +354,19 @@ class Orchestrator:
             # Cleanup: fecha sessão, socket IPC e container
             try:
                 self.session_manager.close(session.id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"Erro ao fechar sessão {session.id}: {e}")
 
             try:
                 await self.ipc.close(ipc_id)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"Erro ao fechar socket IPC {ipc_id}: {e}")
 
             if container_id:
                 try:
                     await self.runner.stop(container_id)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.error(f"Erro ao parar container {container_id}: {e}")
 
         return result
 

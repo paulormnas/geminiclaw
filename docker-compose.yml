@@ -11,7 +11,11 @@ services:
       - qdrant_data:/qdrant/storage
     networks:
       - geminiclaw-net
-# Healthcheck removed due to missing curl/nc in image
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:6333/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   geminiclaw:
     build:
@@ -31,7 +35,8 @@ services:
     networks:
       - geminiclaw-net
     depends_on:
-      - qdrant
+      qdrant:
+        condition: service_healthy
 
 volumes:
   qdrant_data:

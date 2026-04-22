@@ -251,14 +251,14 @@ Objetivo: corrigir problemas identificados na análise do código.
 
 ### Tarefas
 
-- [ ] **Bloco except duplicado** em `src/runner.py` (linhas 210-216): remover o segundo bloco
-- [ ] **CodeSkill usa `pip install`**: substituir por `uv pip install` no sandbox ou pré-instalar no Dockerfile
-- [ ] **Sandbox sem timeout real**: implementar timeout via `threading.Timer` que mata o container após `exec_timeout`
-- [ ] **MemorySkill instanciada a cada chamada** em `agents/base/tools.py`: usar singleton ou injetar instância compartilhada
-- [ ] **Healthcheck do Qdrant removido**: restaurar healthcheck usando `wget` em vez de `curl` (disponível na imagem Qdrant)
-- [ ] **`except Exception: pass`** nos blocos finally do orquestrador: logar o erro antes de ignorá-lo
-- [ ] **`network_disabled=False`** no sandbox mesmo quando não há setup_commands: habilitar rede apenas quando `setup_commands` existe
-- [ ] Escrever testes para cada correção
+- [x] **Bloco except duplicado** em `src/runner.py` (linhas 210-216): remover o segundo bloco
+- [x] **CodeSkill usa `pip install`**: substituir por `uv pip install` no sandbox ou pré-instalar no Dockerfile
+- [x] **Sandbox sem timeout real**: implementar timeout via `threading.Timer` que mata o container após `exec_timeout`
+- [x] **MemorySkill instanciada a cada chamada** em `agents/base/tools.py`: usar singleton ou injetar instância compartilhada
+- [x] **Healthcheck do Qdrant removido**: restaurar healthcheck usando `wget` em vez de `curl` (disponível na imagem Qdrant)
+- [x] **`except Exception: pass`** nos blocos finally do orquestrador: logar o erro antes de ignorá-lo
+- [x] **`network_disabled=False`** no sandbox mesmo quando não há setup_commands: habilitar rede apenas quando `setup_commands` existe
+- [x] Escrever testes para cada correção
 - [ ] Commit: `fix: corrige bugs e dívida técnica identificados na análise v3`
 
 ---

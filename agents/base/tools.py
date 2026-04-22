@@ -44,6 +44,8 @@ async def write_artifact(filename: str, content: str) -> str:
         logger.error(f"Erro ao salvar artefato: {e}")
         return f"Erro ao salvar artefato: {str(e)}"
 
+_memory_skill_instance = None
+
 async def manage_memory(action: str, key: str, value: Optional[str] = None, importance: float = 0.5, tags: list[str] = []) -> str:
     """Gerencia memórias de curto e longo prazo do agente.
 
@@ -57,14 +59,17 @@ async def manage_memory(action: str, key: str, value: Optional[str] = None, impo
     Returns:
         Resultado da operação de memória.
     """
+    global _memory_skill_instance
     from src.skills.memory.skill import MemorySkill
     import os
     
     session_id = os.environ.get("SESSION_ID")
     agent_id = os.environ.get("AGENT_ID", "agent")
     
-    skill = MemorySkill()
-    result = await skill.run(
+    if _memory_skill_instance is None:
+        _memory_skill_instance = MemorySkill()
+        
+    result = await _memory_skill_instance.run(
         action=action,
         session_id=session_id,
         key=key,

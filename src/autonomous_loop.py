@@ -235,122 +235,197 @@ class AutonomousLoop:
         return f"Contexto das etapas anteriores:\n{context}\n\n"
 
     async def _run_complex_path(self, prompt: str, master_session_id: str) -> "OrchestratorResult":
-        """Executa a tarefa via caminho complexo (Planner -> Loop de Subtarefas)."""
+        """Executa a tarefa via caminho complexo (Planner -> Loop de Subtarefas em DAG)."""
         from src.orchestrator import AgentTask, OrchestratorResult, AGENT_REGISTRY, AgentResult
+        from src.task_scheduler import TaskScheduler
         
-        # 1. Planejamento (S7.3): Decompõe a tarefa
-        tasks = await self.orchestrator._run_planning_loop(prompt, master_session_id)
-        
-        if not tasks:
-            logger.error("Falha ao gerar plano de execução")
-            return OrchestratorResult(results=[], total=0, succeeded=0, failed=0)
-
-        logger.info(f"Plano gerado com {len(tasks)} subtarefas")
-        
-        if len(tasks) > self.max_subtasks:
-            logger.warning(f"Número de subtarefas ({len(tasks)}) excede o limite {self.max_subtasks}")
-            tasks = tasks[:self.max_subtasks]
-
+        max_plan_retries = 3
+        plan_feedback = ""
         final_results: List[AgentResult] = []
+        tasks: List[AgentTask] = []
         
-        # 2. Loop de Execução Autônoma (S7.4) com injeção de contexto (V2)
-        for i, task in enumerate(tasks):
-            logger.info(f"Processando subtarefa {i+1}/{len(tasks)}: {task.agent_id} [{task.task_name or 'sem nome'}]")
+        for plan_attempt in range(max_plan_retries):
+            logger.info(f"Iniciando tentativa de planejamento {plan_attempt+1}/{max_plan_retries}")
+            # 1. Planejamento (S7.3): Decompõe a tarefa
+            effective_prompt = prompt
+            if plan_feedback:
+                effective_prompt = f"{prompt}\n\nATENÇÃO: O plano anterior falhou com os seguintes erros:\n{plan_feedback}\nPor favor, elabore um plano alternativo corrigindo essas falhas."
+                
+            tasks = await self.orchestrator._run_planning_loop(effective_prompt, master_session_id)
+            
+            if not tasks:
+                logger.error("Falha ao gerar plano de execução")
+                return OrchestratorResult(results=[], total=0, succeeded=0, failed=0)
 
-            # V2: Constrói prefixo de contexto para tarefas com dependências
-            context_prefix = self._build_context_prefix(master_session_id, task.depends_on)
-            effective_prompt = context_prefix + task.prompt if context_prefix else task.prompt
+            logger.info(f"Plano gerado com {len(tasks)} subtarefas")
+            
+            if len(tasks) > self.max_subtasks:
+                logger.warning(f"Número de subtarefas ({len(tasks)}) excede o limite {self.max_subtasks}")
+                tasks = tasks[:self.max_subtasks]
 
-            if context_prefix:
-                logger.info(
-                    "Contexto de etapas anteriores injetado no prompt",
-                    extra={
-                        "task_name": task.task_name,
-                        "depends_on": task.depends_on,
-                        "context_chars": len(context_prefix),
-                    },
+            try:
+                TaskScheduler.validate_dag(tasks)
+            except ValueError as e:
+                plan_feedback = f"Grafo de dependências inválido: {e}"
+                logger.error(plan_feedback)
+                continue
+
+            final_results = []
+            
+            # Futures para cada tarefa (para sincronização do DAG)
+            dag_state = {}
+            for t in tasks:
+                if t.task_name:
+                    dag_state[t.task_name] = {
+                        "future": asyncio.Future(),
+                        "status": "pending",
+                        "error": None
+                    }
+
+            async def _execute_task_in_dag(task: AgentTask, index: int):
+                # Aguarda as dependências
+                for dep in task.depends_on:
+                    if dep in dag_state:
+                        await dag_state[dep]["future"]
+                        if dag_state[dep]["status"] != "success":
+                            # Dependência falhou ou foi cancelada -> Cancelar esta tarefa
+                            logger.warning(f"Subtarefa {task.task_name} cancelada porque a dependência '{dep}' falhou.")
+                            if task.task_name:
+                                dag_state[task.task_name]["status"] = "cancelled"
+                                dag_state[task.task_name]["future"].set_result(None)
+                            return
+
+                logger.info(f"Iniciando subtarefa {index+1}/{len(tasks)}: {task.agent_id} [{task.task_name or 'sem nome'}]")
+
+                # V2: Constrói prefixo de contexto
+                context_prefix = self._build_context_prefix(master_session_id, task.depends_on)
+                task_prompt = context_prefix + task.prompt if context_prefix else task.prompt
+
+                if context_prefix:
+                    logger.info(
+                        "Contexto de etapas anteriores injetado no prompt",
+                        extra={
+                            "task_name": task.task_name,
+                            "depends_on": task.depends_on,
+                            "context_chars": len(context_prefix),
+                        },
+                    )
+
+                enriched_task = AgentTask(
+                    agent_id=task.agent_id,
+                    image=task.image,
+                    prompt=task_prompt,
+                    task_name=task.task_name,
+                    depends_on=task.depends_on,
+                    expected_artifacts=task.expected_artifacts,
                 )
 
-            # Cria uma cópia da tarefa com o prompt enriquecido
-            enriched_task = AgentTask(
-                agent_id=task.agent_id,
-                image=task.image,
-                prompt=effective_prompt,
-                task_name=task.task_name,
-                depends_on=task.depends_on,
-                expected_artifacts=task.expected_artifacts,
-            )
-
-            success = False
-            last_result = None
-            
-            # Retry Loop (S7.4.d)
-            for attempt in range(self.max_retries):
-                logger.info(f"Executando tentativa {attempt+1}/{self.max_retries} para {task.agent_id}")
+                success = False
+                last_result = None
                 
-                # Executa a skill/agente
-                result = await self.orchestrator._execute_agent(enriched_task, master_session_id)
-                last_result = result
-                
-                # Avaliação do resultado
-                if result.status == "success":
-                    success = True
-                    # V2: Persiste resultado na ShortTermMemory para uso por subtarefas dependentes
-                    if task.task_name:
-                        response_text = result.response.get("text", "")
-                        self._short_term_memory.write(
-                            session_id=master_session_id,
-                            key=f"result:{task.task_name}",
-                            value=response_text,
-                            source=task.agent_id,
-                            tags=["subtask_result", task.task_name],
-                        )
-                        logger.info(
-                            "Resultado da subtarefa persistido na memória de curto prazo",
-                            extra={
-                                "task_name": task.task_name,
-                                "response_chars": len(response_text),
-                                "master_session_id": master_session_id,
-                            },
-                        )
-                    break
-                else:
-                    logger.warning(f"Tentativa {attempt+1} falhou", extra={"error": result.error})
-                    # Delay básico de retry
-                    await asyncio.sleep(1)
-            
-            if last_result:
-                final_results.append(last_result)
-                
-            # Adicionar verificação de saúde após cada sub-tarefa (Etapa V7)
-            from src.config import HEALTH_CHECK_ENABLED
-            if HEALTH_CHECK_ENABLED:
-                try:
-                    temp = self._health_monitor.get_temperature()
-                    mem = self._health_monitor.get_memory_usage()
-                    cpu = self._health_monitor.get_cpu_usage()
+                # Retry Loop
+                for attempt in range(self.max_retries):
+                    logger.info(f"Executando tentativa {attempt+1}/{self.max_retries} para {task.agent_id} [{task.task_name}]")
+                    result = await self.orchestrator._execute_agent(enriched_task, master_session_id)
+                    last_result = result
                     
-                    health_data = {
-                        "temp": temp,
-                        "mem_avail_mb": mem["available_mb"] if mem else None,
-                        "cpu_pct": cpu
-                    }
-                    logger.info("Métricas de saúde do sistema após subtarefa", extra=health_data)
-                except Exception as e:
-                    logger.debug("Falha ao coletar métricas de saúde", extra={"error": str(e)})
-            
-            if not success:
-                logger.error(f"Subtarefa {i+1} ({task.agent_id}) falhou após todas as tentativas")
+                    if result.status == "success":
+                        success = True
+                        if task.task_name:
+                            response_text = result.response.get("text", "")
+                            self._short_term_memory.write(
+                                session_id=master_session_id,
+                                key=f"result:{task.task_name}",
+                                value=response_text,
+                                source=task.agent_id,
+                                tags=["subtask_result", task.task_name],
+                            )
+                        break
+                    else:
+                        logger.warning(f"Tentativa {attempt+1} de {task.task_name} falhou", extra={"error": result.error})
+                        await asyncio.sleep(1)
 
+                if last_result:
+                    final_results.append(last_result)
+
+                # Monitoramento de Saúde
+                from src.config import HEALTH_CHECK_ENABLED
+                if HEALTH_CHECK_ENABLED:
+                    try:
+                        temp = self._health_monitor.get_temperature()
+                        mem = self._health_monitor.get_memory_usage()
+                        cpu = self._health_monitor.get_cpu_usage()
+                        
+                        health_data = {
+                            "temp": temp,
+                            "mem_avail_mb": mem["available_mb"] if mem else None,
+                            "cpu_pct": cpu
+                        }
+                        logger.info("Métricas de saúde do sistema após subtarefa", extra=health_data)
+                    except Exception as e:
+                        logger.debug("Falha ao coletar métricas de saúde", extra={"error": str(e)})
+
+                if task.task_name:
+                    if success:
+                        dag_state[task.task_name]["status"] = "success"
+                    else:
+                        dag_state[task.task_name]["status"] = "failed"
+                        dag_state[task.task_name]["error"] = last_result.error if last_result else "Unknown error"
+                    
+                    dag_state[task.task_name]["future"].set_result(None)
+
+            # Executa todas as tarefas simultaneamente (o DAG coordena a ordem real)
+            coroutines = [_execute_task_in_dag(t, i) for i, t in enumerate(tasks)]
+            await asyncio.gather(*coroutines)
+
+            # Verifica se houve alguma falha
+            failed_tasks = [t for t, state in dag_state.items() if state["status"] in ("failed", "cancelled")]
+            if not failed_tasks:
+                # Sucesso total
+                succeeded = sum(1 for r in final_results if r.status == "success")
+                failed = len(final_results) - succeeded
+                
+                if succeeded > 0:
+                    await self._promote_findings(prompt, master_session_id)
+
+                self._short_term_memory.clear(master_session_id)
+
+                return OrchestratorResult(
+                    results=final_results,
+                    total=len(tasks),
+                    succeeded=succeeded,
+                    failed=failed,
+                    artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id)
+                )
+            
+            # Se falhou, preparamos o feedback para a próxima tentativa de plano
+            logger.warning(f"O plano falhou nas tarefas: {failed_tasks}. Re-planejando...")
+            errors = []
+            for t in failed_tasks:
+                if dag_state[t]["status"] == "failed":
+                    errors.append(f"Tarefa '{t}' falhou com erro: {dag_state[t]['error']}")
+            plan_feedback = "\n".join(errors)
+
+        # Se esgotou todas as tentativas de plano e ainda falhou
+        logger.error("Limite de re-planejamentos atingido. Interrompendo execução.")
+        self._short_term_memory.clear(master_session_id)
+        
+        help_msg = (
+            f"Limite de tentativas atingido. O plano falhou sucessivamente nas seguintes etapas:\n{plan_feedback}\n\n"
+            f"Por favor, responda se deseja tentar novamente e forneça orientações adicionais para contornar este problema."
+        )
+        
+        help_result = AgentResult(
+            agent_id="orchestrator",
+            session_id=master_session_id,
+            status="error",
+            response={"text": help_msg},
+            error="Limite de re-planejamentos atingido."
+        )
+        final_results.append(help_result)
+        
         succeeded = sum(1 for r in final_results if r.status == "success")
         failed = len(final_results) - succeeded
-        
-        # 3. Finalização (S7.5): Promove descobertas importantes
-        if succeeded > 0:
-            await self._promote_findings(prompt, master_session_id)
-
-        # Limpa a memória de curto prazo da sessão após conclusão
-        self._short_term_memory.clear(master_session_id)
 
         return OrchestratorResult(
             results=final_results,

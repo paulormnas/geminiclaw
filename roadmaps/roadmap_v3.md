@@ -269,19 +269,19 @@ Objetivo: quando o plano contém subtarefas sem dependência entre si, executá-
 
 ### Tarefas
 
-- [ ] Implementar `src/task_scheduler.py` com `TaskScheduler`:
+- [x] Implementar `src/task_scheduler.py` com `TaskScheduler`:
   - Recebe lista de `AgentTask` com campo `depends_on`
   - Constrói grafo de dependências (DAG)
   - Identifica subtarefas que podem rodar em paralelo (mesmo nível no DAG)
   - `schedule() -> list[list[AgentTask]]` → retorna "ondas" de execução
-- [ ] Integrar no `AutonomousLoop._run_complex_path`:
+- [x] Integrar no `AutonomousLoop._run_complex_path`:
   - Substituir loop sequencial por execução em ondas via `asyncio.gather`
   - Respeitar `Semaphore(3)` do runner (máx 3 containers simultâneos)
   - Se uma subtarefa de uma onda falhar, cancelar as demais da mesma onda
-- [ ] Atualizar o Planner para usar `depends_on: []` para tarefas paralelizáveis
-- [ ] Escrever testes unitários do DAG e scheduler
-- [ ] Escrever teste de integração: 2 subtarefas paralelas → ambas completam
-- [ ] Commit: `feat(scheduler): implementa execução paralela de subtarefas independentes`
+- [x] Atualizar o Planner para usar `depends_on: []` para tarefas paralelizáveis
+- [x] Escrever testes unitários do DAG e scheduler
+- [x] Escrever teste de integração: 2 subtarefas paralelas → ambas completam
+- [x] Commit: `feat(scheduler): implementa execução paralela de subtarefas independentes`
 
 ---
 

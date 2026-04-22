@@ -29,7 +29,7 @@ FLUXO DE DECOMPOSIÇÃO PARA PESQUISA:
 REGRAS DE PLANEJAMENTO:
 1. **LIMITE DE SUBTAREFAS**: Gere no máximo 5 subtarefas por padrão. O Raspberry Pi 5 tem recursos limitados — planos menores são mais eficientes e confiáveis.
 2. **FUSÃO DE TAREFAS**: Subtarefas com dependência imediata de I/O (ex: análise que depende de dados recém-coletados) DEVEM ser fundidas em uma única etapa quando executadas pelo mesmo agente.
-3. **DEPENDÊNCIAS EXPLÍCITAS**: Use o campo `depends_on` para declarar quais task_names devem concluir antes de cada etapa. Subtarefas sem dependências podem ser paralelizadas.
+3. **DEPENDÊNCIAS EXPLÍCITAS E PARALELISMO**: O sistema executa tarefas usando um DAG Assíncrono. Tarefas sem dependência (`depends_on: []`) executam simultaneamente em paralelo, economizando tempo. Maximize o paralelismo não criando dependências desnecessárias. Se `B` precisa do resultado de `A`, então `depends_on: ["A"]`.
 4. **ARTEFATOS ESPERADOS**: Declare em `expected_artifacts` os arquivos que cada subtarefa deve produzir (ex: `relatorio.md`, `dados.csv`).
 5. **PERSISTÊNCIA OBRIGATÓRIA**: Todos os arquivos gerados DEVEM ser salvos via ferramenta `write_artifact` no diretório `/outputs/`. Adicione instrução explícita no `prompt`.
 6. **MEMÓRIA DE LONGO PRAZO**: Ao concluir cada subtarefa importante, use a ferramenta `memory` (ação `memorize`) para persistir aprendizados e preferências identificadas.

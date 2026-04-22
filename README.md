@@ -142,11 +142,15 @@ Implementado em `src/autonomous_loop.py`, o loop gerencia tarefas complexas de p
 3. Se COMPLEX:
    a. Planner decompõe a tarefa em subtarefas
    b. Validator aprova/rejeita o plano (até 3 iterações)
-   c. Para cada subtarefa aprovada:
-      - Executa o agente designado (com retry até MAX_RETRY_PER_SUBTASK)
-      - Avalia resultado: sucesso → avança | falha → retry
-   d. Ao final, promove descobertas para memória de longo prazo
-   e. Retorna resultado consolidado com artefatos
+   c. Execução baseada em DAG (Grafo Direcionado Acíclico):
+      - Todas as tarefas são agendadas em paralelo como corrotinas simultâneas.
+      - Cada tarefa aguarda apenas a conclusão de suas próprias dependências (`depends_on`).
+      - Em caso de falha de uma tarefa (após esgotar o retry), apenas as tarefas que dependem dela são canceladas. Tarefas independentes continuam rodando simultaneamente sem interrupção.
+   d. Re-planejamento Automático:
+      - Se ao final da execução do DAG houver falhas, os erros são consolidados e o ciclo retorna ao Planner para uma nova tentativa de plano (até MAX_PLAN_RETRIES).
+      - Se o limite for atingido, o usuário é consultado ativamente.
+   e. Ao final (em caso de sucesso), promove descobertas para memória de longo prazo
+   f. Retorna resultado consolidado com artefatos
 ```
 
 **Configurações:**

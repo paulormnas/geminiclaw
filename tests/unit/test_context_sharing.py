@@ -1,4 +1,4 @@
-"""Testes unitários — Etapa V2: Compartilhamento de contexto entre subtarefas.
+"""Roadmap v3 - Testes unitários — Etapa V2: Compartilhamento de contexto entre subtarefas.
 
 Valida:
 - AgentTask contém os novos campos task_name, depends_on, expected_artifacts

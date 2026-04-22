@@ -10,20 +10,21 @@ import asyncio
 from typing import Any, TYPE_CHECKING, List, Dict
 from src.logger import get_logger
 from src.skills.memory.short_term import ShortTermMemory
+from src.triage import TriageClassifier, TriageDecision
 
 if TYPE_CHECKING:
     from src.orchestrator import Orchestrator, AgentTask, AgentResult, OrchestratorResult
 
 logger = get_logger(__name__)
 
-# Limite de caracteres de contexto injetado (~2000 tokens ≈ 8000 chars, sendo conservador)
+# Roadmap V3 - Etapa V3: limite de chars para injeção de contexto (~2000 tokens)
 _CONTEXT_MAX_CHARS = 8_000
 
 
 class AutonomousLoop:
     """Implementa o ciclo de vida autônomo da execução de uma tarefa."""
 
-    # Memória de curto prazo compartilhada entre instâncias (escopo de processo)
+    # Roadmap V3 - Etapa V2: memória de curto prazo compartilhada entre instâncias (escopo de processo)
     _short_term_memory: ShortTermMemory = ShortTermMemory()
 
     def __init__(self, orchestrator: "Orchestrator"):
@@ -35,6 +36,10 @@ class AutonomousLoop:
         self.orchestrator = orchestrator
         self.max_retries = int(os.environ.get("MAX_RETRY_PER_SUBTASK", "3"))
         self.max_subtasks = int(os.environ.get("MAX_SUBTASKS_PER_TASK", "10"))
+        # Roadmap V3 - Etapa V3: classificador local de triage (sem container)
+        self._triage_classifier = TriageClassifier(
+            confidence_threshold=float(os.environ.get("TRIAGE_CONFIDENCE_THRESHOLD", "0.7"))
+        )
 
 
     async def run(self, prompt: str, master_session_id: str) -> "OrchestratorResult":
@@ -63,50 +68,97 @@ class AutonomousLoop:
         return await self._run_complex_path(prompt, master_session_id)
 
     async def _is_complex_triage(self, prompt: str, master_session_id: str) -> bool:
-        """Avalia se a tarefa exige planejamento ou pode ser resolvida pelo agente base.
-        
-        Utiliza o Planner agent para tomar a decisão de triage.
+        """Classifica se a tarefa é SIMPLE ou COMPLEX sem spawnar container.
+
+        Roadmap V3 - Etapa V3: substitui o agente Planner em container por
+        um classificador local com três modos de operação via TRIAGE_MODE:
+        - heuristic : apenas heurísticas (sem API, sem rede, sem container)
+        - llm       : chamada direta à API Gemini (sem container)
+        - hybrid    : heurísticas primeiro; fallback LLM quando confiança < threshold
+
+        Args:
+            prompt: Solicitação original do usuário.
+            master_session_id: ID da sessão mestra (usado apenas no modo LLM).
+
+        Returns:
+            True se COMPLEX, False se SIMPLE.
         """
-        # Importações locais para evitar recursão circular
-        from src.orchestrator import AgentTask, AGENT_REGISTRY
-        
-        triage_prompt = (
-            f"Analise a solicitação do usuário abaixo e determine se ela é 'SIMPLE' ou 'COMPLEX'.\n\n"
-            f"**Critérios para SIMPLE**:\n"
-            f"- Pode ser respondida diretamente com conhecimento geral.\n"
-            f"- Exige apenas um passo ou uma pergunta simples.\n"
-            f"- Não exige busca profunda, execução de código complexa ou múltiplos agentes.\n\n"
-            f"**Critérios para COMPLEX**:\n"
-            f"- Exige pesquisa em bibliografias ou internet (Researcher).\n"
-            f"- Exige criação e execução de scripts Python para análise (Coder).\n"
-            f"- Exige decomposição em múltiplos passos lógicos.\n"
-            f"- Exige validação de resultados intermediários.\n\n"
-            f"**SOLICITAÇÃO**: {prompt}\n\n"
-            f"Responda APENAS 'SIMPLE' ou 'COMPLEX'."
-        )
-        
-        task = AgentTask(
-            agent_id="planner",
-            image=AGENT_REGISTRY.get("planner", "geminiclaw-planner"),
-            prompt=triage_prompt
-        )
-        
-        # Executa o triage
-        result = await self.orchestrator._execute_agent(task, master_session_id)
-        
-        if result.status == "success":
-            response_text = result.response.get("text", "").upper()
-            if "COMPLEX" in response_text:
+        mode = os.environ.get("TRIAGE_MODE", "hybrid").lower()
+
+        if mode == "heuristic":
+            decision, confidence = self._triage_classifier.classify(prompt)
+            logger.info(
+                "Triage heurístico (modo heuristic)",
+                extra={"decision": decision, "confidence": confidence},
+            )
+            return decision == "COMPLEX"
+
+        if mode == "hybrid":
+            decision, confidence = self._triage_classifier.classify(prompt)
+            logger.info(
+                "Triage heurístico (modo hybrid)",
+                extra={"decision": decision, "confidence": confidence},
+            )
+            if confidence >= self._triage_classifier.confidence_threshold:
+                return decision == "COMPLEX"
+            logger.info(
+                "Confiança abaixo do limiar — acionando LLM direto (sem container)",
+                extra={"confidence": confidence, "threshold": self._triage_classifier.confidence_threshold},
+            )
+            return await self._llm_triage_direct(prompt)
+
+        # modo 'llm': sempre usa LLM direto (sem container)
+        return await self._llm_triage_direct(prompt)
+
+    async def _llm_triage_direct(self, prompt: str) -> bool:
+        """Classifica usando a API Gemini diretamente, sem container.
+
+        Roadmap V3 - Etapa V3: fallback LLM para triage de baixa confiança.
+        Usada nos modos 'llm' e 'hybrid' (quando confiança heurística é baixa).
+
+        Args:
+            prompt: Solicitação original do usuário.
+
+        Returns:
+            True se COMPLEX, False se SIMPLE. Em caso de erro, retorna True
+            (padrão conservador).
+        """
+        try:
+            import google.generativeai as genai  # type: ignore[import-untyped]
+            from src.config import GEMINI_API_KEY, DEFAULT_MODEL
+
+            genai.configure(api_key=GEMINI_API_KEY)
+            model = genai.GenerativeModel(DEFAULT_MODEL)
+
+            triage_prompt = (
+                f"Analise a solicitação abaixo e responda APENAS com 'SIMPLE' ou 'COMPLEX'.\n"
+                f"SIMPLE: pode ser respondida diretamente, sem pesquisa ou código complexo.\n"
+                f"COMPLEX: exige pesquisa, código, múltiplos passos ou validação.\n"
+                f"SOLICITAÇÃO: {prompt}\n"
+                f"Resposta:"
+            )
+
+            response = await asyncio.to_thread(model.generate_content, triage_prompt)
+            text = (response.text or "").strip().upper()
+
+            logger.info(
+                "Triage via LLM direto concluído",
+                extra={"response": text[:50]},
+            )
+
+            if "COMPLEX" in text:
                 return True
-            if "SIMPLE" in response_text:
+            if "SIMPLE" in text:
                 return False
-                
-        # Em caso de incerteza ou erro, tratamos como complexo (padrão conservador)
-        logger.warning(
-            "Falha ou ambiguidade no triage, assumindo COMPLEX", 
-            extra={"status": result.status, "response": result.response.get("text", "")}
-        )
-        return True
+
+        except Exception as e:
+            logger.warning(
+                "Falha no triage LLM direto, assumindo COMPLEX",
+                extra={"error": str(e)},
+            )
+
+        return True  # padrão conservador
+
 
     async def _run_simple_path(self, prompt: str, master_session_id: str) -> "OrchestratorResult":
         """Executa a tarefa via caminho simplificado (apenas agente base)."""

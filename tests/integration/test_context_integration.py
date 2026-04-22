@@ -1,4 +1,4 @@
-"""Teste de integração — Etapa V2: subtarefa B recebe contexto de subtarefa A.
+"""Roadmap V3 - Teste de integração — Etapa V2: subtarefa B recebe contexto de subtarefa A.
 
 Valida o fluxo completo de compartilhamento de contexto dentro do
 AutonomousLoop sem depender de containers Docker ou API real.

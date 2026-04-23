@@ -393,19 +393,19 @@ Objetivo: documentar e automatizar a configuração de swap e ajustes de memóri
 
 ### Tarefas
 
-- [ ] Criar script `scripts/setup_pi.sh` com:
+- [x] Criar script `scripts/setup_pi.sh` com:
   - Configuração de swap de 4 GB (via `dphys-swapfile`)
   - Ajuste de `vm.swappiness=10`
   - Verificação de espaço em disco mínimo (10 GB livres)
   - Instalação de Docker e docker-compose se necessário
   - Criação da rede `geminiclaw-net`
   - Pre-pull das imagens base
-- [ ] Implementar ajuste dinâmico do `Semaphore` baseado em memória disponível:
+- [x] Implementar ajuste dinâmico do `Semaphore` baseado em memória disponível:
   - RAM >= 6 GB livre → Semaphore(3)
   - RAM >= 3 GB livre → Semaphore(2)
   - RAM < 3 GB livre → Semaphore(1)
-- [ ] Documentar no `SETUP.md` (se instruído pelo usuário)
-- [ ] Commit: `chore(pi): implementa script de setup e ajuste dinâmico de concorrência`
+- [x] Documentar no `SETUP.md` (se instruído pelo usuário)
+- [x] Commit: `chore(pi): implementa script de setup e ajuste dinâmico de concorrência`
 
 ---
 

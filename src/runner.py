@@ -24,7 +24,7 @@ IPC_SOCKET_DIR = str((_root / "store" / "ipc").absolute())
 class ContainerRunner:
     """Gerencia o ciclo de vida de containers Docker para agentes."""
 
-    def __init__(self, semaphore_limit: int = 3):
+    def __init__(self, semaphore_limit: int | None = None):
         """Inicializa o runner com um limite de concorrência.
 
         Args:
@@ -35,9 +35,37 @@ class ContainerRunner:
         except Exception as e:
             logger.error("Erro ao conectar ao Docker", extra={"event": "docker_connection_error", "error": str(e)})
             raise RuntimeError("Não foi possível conectar ao daemon do Docker.") from e
-        
-        self.semaphore = asyncio.Semaphore(semaphore_limit)
         self.health = PiHealthMonitor()
+        
+        # Etapa V15: Ajuste dinâmico de recursos
+        if semaphore_limit is None:
+            limit = self._calculate_dynamic_limit()
+        else:
+            limit = semaphore_limit
+            
+        self.semaphore = asyncio.Semaphore(limit)
+        self._ensure_network()
+
+    def _calculate_dynamic_limit(self) -> int:
+        """Calcula o limite de containers simultâneos baseado na RAM disponível."""
+        try:
+            mem = self.health.get_memory_usage()
+            if mem and "available_mb" in mem:
+                avail_gb = mem["available_mb"] / 1024.0
+                if avail_gb >= 6.0:
+                    limit = 3
+                elif avail_gb >= 3.0:
+                    limit = 2
+                else:
+                    limit = 1
+                logger.info(f"Ajuste dinâmico de Semaphore: {limit} (RAM livre: {avail_gb:.2f} GB)")
+                return limit
+            else:
+                logger.warning("Falha ao ler memória (provavelmente macOS). Usando Semaphore(3) por padrão.")
+                return 3
+        except Exception as e:
+            logger.warning(f"Erro ao calcular limite de recursos, usando default (3): {e}")
+            return 3
         self._ensure_network()
 
     def _ensure_network(self) -> None:

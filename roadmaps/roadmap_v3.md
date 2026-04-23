@@ -311,7 +311,7 @@ Objetivo: evitar chamadas repetidas à API para prompts idênticos ou muito simi
 
 ### Tarefas
 
-- [ ] Implementar `src/llm_cache.py` com `LLMResponseCache`:
+- [x] Implementar `src/llm_cache.py` com `LLMResponseCache`:
   - Storage em SQLite (`store/llm_cache.db`)
   - Chave: hash SHA-256 do prompt normalizado + model name
   - TTL configurável (`LLM_CACHE_TTL_SECONDS=3600`)
@@ -319,15 +319,15 @@ Objetivo: evitar chamadas repetidas à API para prompts idênticos ou muito simi
   - `set(prompt, model, response) -> None`
   - `stats() -> dict` (hits, misses, hit_rate)
   - Limite de tamanho: máximo 1000 entradas (FIFO eviction)
-- [ ] Integrar no `agents/runner.py` (antes de chamar `InMemoryRunner.run_async`)
-- [ ] Adicionar ao `.env.example`:
+- [x] Integrar no `agents/runner.py` (antes de chamar `InMemoryRunner.run_async`)
+- [x] Adicionar ao `.env.example`:
   ```
   LLM_CACHE_ENABLED=true
   LLM_CACHE_TTL_SECONDS=3600
   LLM_CACHE_MAX_ENTRIES=1000
   ```
-- [ ] Escrever testes unitários
-- [ ] Commit: `feat(cache): implementa cache de respostas do Gemini`
+- [x] Escrever testes unitários
+- [x] Commit: `feat(cache): implementa cache de respostas do Gemini`
 
 ---
 

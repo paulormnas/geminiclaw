@@ -141,7 +141,7 @@ class ContainerRunner:
                 
                 # Passa variáveis de skill e configuração do host
                 for key, value in os.environ.items():
-                    if any(key.startswith(p) for p in ["SKILL_", "QUICK_SEARCH_", "DEEP_SEARCH_", "CODE_", "MEMORY_", "LLM_CACHE_"]):
+                    if any(key.startswith(p) for p in ["SKILL_", "QUICK_SEARCH_", "DEEP_SEARCH_", "CODE_", "MEMORY_", "LLM_CACHE_", "BRAVE_"]):
                         env[key] = value
                 
                 # Passa QDRANT_URL adiante se existir

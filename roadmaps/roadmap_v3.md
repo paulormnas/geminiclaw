@@ -337,18 +337,18 @@ Objetivo: tornar a busca rápida mais confiável, sem depender exclusivamente do
 
 ### Tarefas
 
-- [ ] Implementar fallback no `QuickSearchSkill`:
+- [x] Implementar fallback no `QuickSearchSkill`:
   - Tentativa 1: DuckDuckGo HTML scraping (atual)
   - Tentativa 2: DuckDuckGo Lite (HTML mais simples, menos propenso a mudanças)
   - Tentativa 3: Brave Search API (free tier, 1 req/s) se `BRAVE_API_KEY` configurada
-- [ ] Implementar `src/skills/search_quick/ddg_lite.py` como scraper alternativo
-- [ ] Adicionar ao `.env.example`:
+- [x] Implementar `src/skills/search_quick/ddg_lite.py` como scraper alternativo
+- [x] Adicionar ao `.env.example`:
   ```
   BRAVE_API_KEY=              # Opcional: fallback para busca rápida
   QUICK_SEARCH_STRATEGY=ddg,ddg_lite,brave
   ```
-- [ ] Escrever testes unitários de cada backend e do mecanismo de fallback
-- [ ] Commit: `feat(skills): adiciona fallback resiliente para busca rápida`
+- [x] Escrever testes unitários de cada backend e do mecanismo de fallback
+- [x] Commit: `feat(skills): adiciona fallback resiliente para busca rápida`
 
 ---
 

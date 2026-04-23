@@ -35,30 +35,42 @@ class LongTermMemory:
         db_dir = Path(self.db_path).parent
         db_dir.mkdir(parents=True, exist_ok=True)
 
-        conn = sqlite3.connect(self.db_path, timeout=300.0)
-        try:
-            conn.execute("PRAGMA journal_mode=DELETE")
-            conn.execute("PRAGMA synchronous=NORMAL")
-            conn.execute("PRAGMA busy_timeout=300000")
-            
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS long_term_memory (
-                    id          TEXT PRIMARY KEY,
-                    key         TEXT NOT NULL,
-                    value       TEXT NOT NULL,
-                    source      TEXT NOT NULL,
-                    importance  REAL NOT NULL DEFAULT 0.5,
-                    tags        TEXT NOT NULL DEFAULT '[]',
-                    created_at  TEXT NOT NULL,
-                    last_used   TEXT NOT NULL,
-                    use_count   INTEGER NOT NULL DEFAULT 0
-                )
-            """)
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_ltm_key ON long_term_memory(key)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_ltm_importance ON long_term_memory(importance DESC)")
-            conn.commit()
-        finally:
-            conn.close()
+        last_err = None
+        for i in range(5):
+            try:
+                conn = sqlite3.connect(self.db_path, timeout=300.0)
+                try:
+                    conn.execute("PRAGMA journal_mode=DELETE")
+                    conn.execute("PRAGMA synchronous=NORMAL")
+                    conn.execute("PRAGMA busy_timeout=300000")
+                    
+                    conn.execute("""
+                        CREATE TABLE IF NOT EXISTS long_term_memory (
+                            id          TEXT PRIMARY KEY,
+                            key         TEXT NOT NULL,
+                            value       TEXT NOT NULL,
+                            source      TEXT NOT NULL,
+                            importance  REAL NOT NULL DEFAULT 0.5,
+                            tags        TEXT NOT NULL DEFAULT '[]',
+                            created_at  TEXT NOT NULL,
+                            last_used   TEXT NOT NULL,
+                            use_count   INTEGER NOT NULL DEFAULT 0
+                        )
+                    """)
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_ltm_key ON long_term_memory(key)")
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_ltm_importance ON long_term_memory(importance DESC)")
+                    conn.commit()
+                    return
+                finally:
+                    conn.close()
+            except sqlite3.OperationalError as e:
+                last_err = e
+                if "locked" in str(e).lower():
+                    time.sleep(1)
+                    continue
+                raise
+        if last_err:
+            raise last_err
 
     def _get_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, timeout=300.0)

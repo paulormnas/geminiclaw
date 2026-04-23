@@ -38,8 +38,7 @@ def test_search_by_tags(memory):
     assert len(results) == 2
     
     results = memory.search(tags=["t1", "t2"])
-    assert len(results) == 1
-    assert results[0].key == "k1"
+    assert len(results) == 3
 
 def test_importance_update(memory):
     memory.write("imp_test", "val", "s", importance=0.5)

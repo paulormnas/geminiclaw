@@ -22,7 +22,7 @@ class PythonSandbox:
 
     def __init__(
         self,
-        image: str = "python:3.11-slim",
+        image: str = "ghcr.io/astral-sh/uv:python3.11-bookworm-slim",
         memory_limit: str = "256m",
         cpu_quota: float = 0.5,
         timeout: int = 60,

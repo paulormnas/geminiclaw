@@ -80,8 +80,8 @@ class CodeSkill(BaseSkill):
         # 2. Preparar comandos de setup
         setup_commands = []
         if packages:
-            # Usando uv pip install dentro da imagem slim para maior velocidade
-            setup_commands.append(["uv", "pip", "install", "--system"] + packages)
+            # Usando uv para instalação ultra-rápida (requer uv na imagem base)
+            setup_commands.append(["uv", "pip", "install", "--system", "--no-cache-dir"] + packages)
 
         # 3. Executar no sandbox
         try:

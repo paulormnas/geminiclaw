@@ -31,6 +31,7 @@ AGENT_REGISTRY: dict[str, str] = {
     "researcher": "geminiclaw-researcher",
     "planner": "geminiclaw-planner",
     "validator": "geminiclaw-validator",
+    "summarizer": "geminiclaw-summarizer",
 }
 
 @dataclass

@@ -34,8 +34,9 @@ REGRAS DE PLANEJAMENTO:
 5. **PERSISTÊNCIA OBRIGATÓRIA**: Todos os arquivos gerados DEVEM ser salvos via ferramenta `write_artifact` no diretório `/outputs/`. Adicione instrução explícita no `prompt`.
 6. **MEMÓRIA DE LONGO PRAZO**: Ao concluir cada subtarefa importante, use a ferramenta `memory` (ação `memorize`) para persistir aprendizados e preferências identificadas.
 7. **AGENTES DISPONÍVEIS**:
-   - `researcher`: levantamento bibliográfico, busca na web, síntese de fontes
-   - `base`: análise de dados, execução de código Python, geração de gráficos e relatórios
+   - `researcher`: levantamento bibliográfico, busca na web, extração de fontes
+   - `base`: análise de dados, execução de código Python, geração de gráficos
+   - `summarizer`: síntese final, cruzamento de dados, consolidação de múltiplos relatórios em um documento coeso
 
 FORMATO DE SAÍDA (Apenas o JSON, sem texto adicional):
 [

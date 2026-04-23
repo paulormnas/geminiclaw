@@ -291,17 +291,17 @@ Objetivo: adicionar um agente especializado em sintetizar resultados de pesquisa
 
 ### Tarefas
 
-- [ ] Criar `agents/summarizer/agent.py` com:
+- [x] Criar `agents/summarizer/agent.py` com:
   - Persona: "Você é um redator acadêmico especializado em síntese"
   - Instrução: receber múltiplos relatórios parciais e produzir um documento final coeso
   - Formato de saída: Markdown com seções, citações e conclusões
   - Skill de memória para consultar descobertas anteriores
   - Skill `write_artifact` para salvar o relatório final
-- [ ] Criar `containers/Dockerfile.summarizer`
-- [ ] Registrar no `AGENT_REGISTRY` do orquestrador
-- [ ] Atualizar o Planner para incluir etapa de síntese final quando o plano tem múltiplas pesquisas
-- [ ] Escrever testes unitários dos atributos do agente
-- [ ] Commit: `feat(agents): implementa agente summarizer para síntese de pesquisas`
+- [x] Criar `containers/Dockerfile.summarizer`
+- [x] Registrar no `AGENT_REGISTRY` do orquestrador
+- [x] Atualizar o Planner para incluir etapa de síntese final quando o plano tem múltiplas pesquisas
+- [x] Escrever testes unitários dos atributos do agente
+- [x] Commit: `feat(agents): implementa agente summarizer para síntese de pesquisas`
 
 ---
 

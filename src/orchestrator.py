@@ -90,6 +90,7 @@ class OrchestratorResult:
     succeeded: int
     failed: int
     artifacts: list[dict[str, Any]] = field(default_factory=list)
+    plan_json: str | None = None
 
 
 class Orchestrator:
@@ -133,21 +134,25 @@ class Orchestrator:
         return dict(AGENT_REGISTRY)
 
 
-    async def handle_request(
-        self,
-        prompt: str,
-        agent_tasks: list[AgentTask] | None = None,
-    ) -> OrchestratorResult:
-        """Processa uma solicitação do usuário via loop autônomo.
+    async def handle_request(self, prompt: str, agent_tasks: list[AgentTask] | None = None) -> OrchestratorResult:
+        """Processa a solicitação do usuário, executando o ciclo de vida completo.
 
         Args:
-            prompt: Solicitação do usuário.
-            agent_tasks: Lista de tarefas de agentes (se fornecido, pula o loop autônomo).
+            prompt: O prompt ou tarefa solicitada.
+            agent_tasks: Lista de tarefas (opcional) para bypassar o autonomous loop.
 
         Returns:
-            Resultado consolidado com respostas de todos os agentes.
+            O resultado final da orquestração.
         """
-        # Cria a sessão mestra para a orquestração
+        import time
+        import json
+        from src.history import ExecutionHistory
+        from datetime import datetime
+        
+        started_at = time.time()
+        start_date = datetime.utcnow().isoformat() + "Z"
+        
+        logger.info("Nova requisição recebida no orquestrador", extra={"prompt_preview": prompt[:50]})
         master_session = self.session_manager.create("orchestrator")
         
         # Se tarefas explícitas forem fornecidas, executa sequencialmente (compatibilidade)
@@ -163,17 +168,18 @@ class Orchestrator:
             all_artifacts = self.output_manager.list_artifacts(master_session.id)
             
             self.session_manager.close(master_session.id)
-            return OrchestratorResult(
+            result = OrchestratorResult(
                 results=results,
                 total=len(results),
                 succeeded=succeeded,
                 failed=failed,
                 artifacts=all_artifacts,
+                plan_json=json.dumps([t.__dict__ for t in agent_tasks])
             )
-
-        # Caso contrário, usa o loop autônomo (Etapa S7)
-        loop = AutonomousLoop(self)
-        result = await loop.run(prompt, master_session.id)
+        else:
+            # Caso contrário, usa o loop autônomo (Etapa S7)
+            loop = AutonomousLoop(self)
+            result = await loop.run(prompt, master_session.id)
         
         # Atualiza a sessão mestra com o resultado consolidado
         final_status = "success" if result.succeeded == result.total and result.total > 0 else "failed"
@@ -191,6 +197,27 @@ class Orchestrator:
             }
         )
         self.session_manager.close(master_session.id)
+        
+        # Etapa V14: Salva no histórico de execuções
+        finished_at = time.time()
+        duration = finished_at - started_at
+        end_date = datetime.utcnow().isoformat() + "Z"
+        
+        history = ExecutionHistory()
+        exec_id = history.record(
+            prompt=prompt,
+            status=final_status,
+            started_at=start_date,
+            finished_at=end_date,
+            duration_seconds=duration,
+            plan_json=result.plan_json,
+            results_json=json.dumps([r.__dict__ for r in result.results]),
+            artifacts_json=json.dumps(result.artifacts),
+            total_subtasks=result.total,
+            succeeded=result.succeeded,
+            failed=result.failed
+        )
+        logger.info("Execução registrada no histórico", extra={"execution_id": exec_id})
         
         return result
 

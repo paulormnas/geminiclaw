@@ -395,7 +395,8 @@ class AutonomousLoop:
                     total=len(tasks),
                     succeeded=succeeded,
                     failed=failed,
-                    artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id)
+                    artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id),
+                    plan_json=json.dumps([t.__dict__ for t in tasks])
                 )
             
             # Se falhou, preparamos o feedback para a próxima tentativa de plano

@@ -358,7 +358,7 @@ Objetivo: salvar o plano aprovado e o resultado de cada execução em SQLite par
 
 ### Tarefas
 
-- [ ] Criar tabela `execution_history` no SQLite:
+- [x] Criar tabela `execution_history` no SQLite:
   ```sql
   CREATE TABLE execution_history (
       id TEXT PRIMARY KEY,
@@ -375,15 +375,15 @@ Objetivo: salvar o plano aprovado e o resultado de cada execução em SQLite par
       failed INTEGER
   );
   ```
-- [ ] Implementar `src/history.py` com `ExecutionHistory`:
+- [x] Implementar `src/history.py` com `ExecutionHistory`:
   - `record(prompt, plan, result) -> str` (retorna ID)
   - `get(execution_id) -> ExecutionRecord | None`
   - `list_recent(limit=10) -> list[ExecutionRecord]`
   - `search(query) -> list[ExecutionRecord]` (busca no prompt)
-- [ ] Integrar no orquestrador: persistir plano aprovado e resultado final
-- [ ] Adicionar comando CLI: `geminiclaw history` para listar execuções anteriores
-- [ ] Escrever testes unitários
-- [ ] Commit: `feat(history): implementa persistência de planos e histórico de execuções`
+- [x] Integrar no orquestrador: persistir plano aprovado e resultado final
+- [x] Adicionar comando CLI: `geminiclaw history` para listar execuções anteriores
+- [x] Escrever testes unitários
+- [x] Commit: `feat(history): implementa persistência de planos e histórico de execuções`
 
 ---
 

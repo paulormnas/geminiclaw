@@ -164,6 +164,39 @@ def format_result(result: OrchestratorResult) -> str:
     return "\n".join(lines)
 
 
+def show_history() -> None:
+    """Exibe o histórico recente de execuções."""
+    from src.history import ExecutionHistory
+    from datetime import datetime
+    
+    history = ExecutionHistory()
+    records = history.list_recent(limit=10)
+    
+    if not records:
+        print(f"\n  {_DIM}Nenhum histórico encontrado.{_RESET}\n")
+        return
+        
+    print(f"\n{_BOLD}  📜 Histórico de Execuções (últimas 10){_RESET}")
+    print(f"{_BOLD}{'─' * 80}{_RESET}")
+    
+    for r in records:
+        status_color = _GREEN if r.status == "success" else _RED
+        date_str = "Desconhecido"
+        if r.started_at:
+            try:
+                dt = datetime.fromisoformat(r.started_at.replace('Z', '+00:00'))
+                date_str = dt.strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                date_str = r.started_at[:16]
+                
+        prompt_trunc = r.prompt[:40] + "..." if len(r.prompt) > 40 else r.prompt
+        dur = f"{r.duration_seconds:.1f}s" if r.duration_seconds else "??"
+        
+        print(f"  {_DIM}{r.id[:8]}{_RESET} | {date_str} | [{status_color}{r.status.upper()}{_RESET}] | ⏱  {dur} | {prompt_trunc}")
+        
+    print(f"{_BOLD}{'─' * 80}{_RESET}\n")
+
+
 def _create_orchestrator() -> tuple[Orchestrator, ContainerRunner]:
     """Cria as dependências e retorna o orquestrador.
 
@@ -244,6 +277,11 @@ def main() -> None:
         sys.exit(130)
 
     signal.signal(signal.SIGINT, _signal_handler)
+
+    if args.prompt:
+        if args.prompt.lower() == "history":
+            show_history()
+            sys.exit(0)
 
     try:
         orchestrator, runner = _create_orchestrator()

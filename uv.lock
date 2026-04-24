@@ -576,6 +576,7 @@ dependencies = [
     { name = "httpx" },
     { name = "lxml" },
     { name = "python-dotenv" },
+    { name = "qdrant-client" },
     { name = "sqlite-utils" },
 ]
 
@@ -603,6 +604,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "lxml", specifier = ">=6.0.2" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
+    { name = "qdrant-client", specifier = ">=1.17.1" },
     { name = "qdrant-client", marker = "extra == 'deep-search'", specifier = ">=1.17.1" },
     { name = "sqlite-utils", specifier = ">=3.39" },
 ]

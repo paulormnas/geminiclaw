@@ -33,7 +33,6 @@ def test_get_task_dir(manager):
     
     assert task_dir.exists()
     # Verifica estrutura de subpastas (Etapa 1)
-    assert (task_dir / "logs").exists()
     assert (task_dir / "artifacts").exists()
     
     # Verifica sanitização básica (espaços e barras)

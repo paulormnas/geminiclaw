@@ -51,9 +51,12 @@ def _make_orchestrator_with_tasks(
     async def fake_execute_agent(task: AgentTask, master_session_id: str) -> AgentResult:
         nonlocal call_idx
         captured_prompts.append(task.prompt)
-        result = responses[call_idx]
-        call_idx += 1
-        return result
+        if call_idx < len(responses):
+            result = responses[call_idx]
+            call_idx += 1
+            return result
+        # Se ficarmos sem respostas (ex: em re-planejamento), retorna erro
+        return AgentResult(agent_id=task.agent_id, session_id="err", status="error", response={}, error="No more mock responses")
 
     mock_orchestrator = MagicMock()
     mock_orchestrator._execute_agent = AsyncMock(side_effect=fake_execute_agent)
@@ -226,7 +229,6 @@ class TestContextInjectionIntegration:
                 response={},
                 error="Erro simulado",
             ),
-            _make_agent_result("tarefa_dependente", "Executei sem contexto."),
         ]
 
         loop, captured_prompts = _make_orchestrator_with_tasks(tasks, responses)
@@ -236,9 +238,11 @@ class TestContextInjectionIntegration:
         loop.max_retries = 1
         result = await loop._run_complex_path("Falha parcial", "master_sess_fail")
 
-        # Tarefa dependente executa mas sem contexto (pois a anterior falhou)
-        prompt_dep = captured_prompts[1]
-        assert "Contexto das etapas anteriores:" not in prompt_dep
+        # Tarefa dependente NÃO deve ser executada se a dependência falhou
+        # 3 chamadas (uma para cada tentativa de planejamento do AutonomousLoop)
+        assert loop.orchestrator._execute_agent.call_count == 3
+        assert result.succeeded == 0
+        assert result.total == 2
 
     async def test_short_term_memory_cleared_after_completion(self) -> None:
         """A ShortTermMemory deve ser limpa após a conclusão do _run_complex_path."""

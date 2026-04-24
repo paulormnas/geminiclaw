@@ -2,8 +2,9 @@ import asyncio
 import docker
 import os
 import functools
+import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, List, Dict
 from src.logger import get_logger
 from src.config import (
     AGENT_TIMEOUT_SECONDS, 
@@ -13,12 +14,17 @@ from src.config import (
     PI_MIN_AVAILABLE_MEMORY_MB
 )
 from src.health import PiHealthMonitor
+from src.utils.terminal import (
+    RESET, BOLD, DIM, RED, GREEN, YELLOW, CYAN, 
+    STATUS_ICONS, print_status
+)
 
 logger = get_logger(__name__)
 
 # Diretório base para sockets IPC
 _root = Path(__file__).parent.parent
 IPC_SOCKET_DIR = str((_root / "store" / "ipc").absolute())
+
 
 
 class ContainerRunner:
@@ -32,9 +38,15 @@ class ContainerRunner:
         """
         try:
             self.client = docker.from_env()
+            # Tenta um comando simples para validar a conexão
+            self.client.ping()
         except Exception as e:
             logger.error("Erro ao conectar ao Docker", extra={"event": "docker_connection_error", "error": str(e)})
-            raise RuntimeError("Não foi possível conectar ao daemon do Docker.") from e
+            print(f"\n{STATUS_ICONS['error']} {RED}Erro: Não foi possível conectar ao Docker.{RESET}")
+            print(f"   Certifique-se de que o Docker Desktop está rodando.")
+            print(f"   Detalhes: {e}\n")
+            sys.exit(1)
+
         self.health = PiHealthMonitor()
         
         # Etapa V15: Ajuste dinâmico de recursos
@@ -44,7 +56,7 @@ class ContainerRunner:
             limit = semaphore_limit
             
         self.semaphore = asyncio.Semaphore(limit)
-        self._ensure_network()
+        self.ensure_infrastructure()
 
     def _calculate_dynamic_limit(self) -> int:
         """Calcula o limite de containers simultâneos baseado na RAM disponível."""
@@ -73,10 +85,100 @@ class ContainerRunner:
         try:
             self.client.networks.get("geminiclaw-net")
         except docker.errors.NotFound:
+            print_status("network", "Criando rede Docker: geminiclaw-net")
             logger.info("Criando rede geminiclaw-net")
             self.client.networks.create("geminiclaw-net", driver="bridge")
         except Exception as e:
             logger.warning("Falha ao verificar/criar rede Docker", extra={"error": str(e)})
+
+    def ensure_infrastructure(self) -> None:
+        """Verifica e prepara a infraestrutura necessária (rede, imagens, qdrant)."""
+        print(f"\n{BOLD}🔍 Verificando infraestrutura do ambiente...{RESET}")
+        self._ensure_network()
+        self._ensure_images()
+        self._ensure_qdrant()
+        print(f"{BOLD}✅ Ambiente pronto.{RESET}\n")
+
+    def _ensure_qdrant(self) -> None:
+        """Verifica se o Qdrant está acessível se a skill de deep search estiver ativa."""
+        from src.config import SKILL_DEEP_SEARCH_ENABLED, QDRANT_URL
+        if not SKILL_DEEP_SEARCH_ENABLED:
+            return
+
+        print(f"🔎 Verificando Qdrant em {QDRANT_URL}...")
+        try:
+            import httpx
+            # Tenta um health check simples
+            if QDRANT_URL.startswith("http"):
+                try:
+                    response = httpx.get(f"{QDRANT_URL}/healthz", timeout=2.0)
+                    if response.status_code == 200:
+                        print(f"{STATUS_ICONS['success']} Qdrant está online.")
+                        return
+                except Exception:
+                    pass
+            
+            # Se falhou o healthz ou não é http, tenta conectar via QdrantClient
+            from qdrant_client import QdrantClient
+            if QDRANT_URL == ":memory:":
+                return
+            
+            client = QdrantClient(url=QDRANT_URL) if QDRANT_URL.startswith("http") else QdrantClient(path=QDRANT_URL)
+            client.get_collections()
+            print(f"{STATUS_ICONS['success']} Qdrant está online.")
+        except Exception as e:
+            print(f"{STATUS_ICONS['warning']}  {YELLOW}Aviso: Não foi possível conectar ao Qdrant.{RESET}")
+            print(f"   A skill 'deep_search' pode falhar.")
+            print(f"   Para rodar o Qdrant localmente: docker run -p 6333:6333 qdrant/qdrant")
+            logger.warning(f"Qdrant inacessível em {QDRANT_URL}: {e}")
+
+    def _ensure_images(self) -> None:
+        """Verifica se as imagens necessárias existem e as constrói se faltarem."""
+        required_images = [
+            ("geminiclaw-base", "containers/Dockerfile"),
+            ("geminiclaw-base-slim", "containers/Dockerfile.slim"),
+            ("geminiclaw-researcher", "containers/Dockerfile.researcher"),
+            ("geminiclaw-planner", "containers/Dockerfile.planner"),
+            ("geminiclaw-validator", "containers/Dockerfile.validator"),
+            ("geminiclaw-summarizer", "containers/Dockerfile.summarizer"),
+        ]
+
+        for tag, dockerfile in required_images:
+            try:
+                self.client.images.get(tag)
+            except docker.errors.ImageNotFound:
+                print_status("package", f"Imagem não encontrada: {tag}. Iniciando build...")
+                logger.info(f"Iniciando build da imagem {tag}", extra={"dockerfile": dockerfile})
+                
+                try:
+                    # Resolve o path do Dockerfile relativo à raiz do projeto
+                    dockerfile_path = _root / dockerfile
+                    if not dockerfile_path.exists():
+                        logger.error(f"Dockerfile não encontrado: {dockerfile_path}")
+                        continue
+
+                    # Stream do build para mostrar progresso no terminal
+                    stream = self.client.api.build(
+                        path=str(_root),
+                        dockerfile=dockerfile,
+                        tag=tag,
+                        decode=True,
+                        rm=True
+                    )
+                    
+                    for chunk in stream:
+                        if 'stream' in chunk:
+                            print(f"   {DIM}{chunk['stream'].strip()}{RESET}")
+                        elif 'error' in chunk:
+                            print(f"   {RED}Erro no build: {chunk['error'].strip()}{RESET}")
+                            raise RuntimeError(f"Falha no build da imagem {tag}: {chunk['error']}")
+
+                    print(f"{STATUS_ICONS['success']} Imagem {tag} criada com sucesso.")
+                except Exception as e:
+                    logger.error(f"Erro ao construir imagem {tag}", extra={"error": str(e)})
+                    print(f"{STATUS_ICONS['error']} Erro ao construir imagem {tag}: {e}")
+            except Exception as e:
+                logger.warning(f"Erro ao verificar imagem {tag}", extra={"error": str(e)})
 
     async def _wait_for_health(self) -> None:
         """Verifica os limites de saúde e aguarda se o sistema estiver sob stress."""

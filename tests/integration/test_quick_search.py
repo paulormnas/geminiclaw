@@ -13,7 +13,7 @@ async def test_quick_search_real_query():
     
     assert result.success is True
     assert len(result.output) > 0
-    assert result.metadata["source"] == "scraper"
+    assert result.metadata["source"] == "ddg"
     
     # Verificar se o campo dict foi preenchido
     for item in result.output:
@@ -30,7 +30,7 @@ async def test_quick_search_cache_integration():
     
     # Primeira vez: deve ir para o scraper
     result1 = await skill.run(query, max_results=3)
-    assert result1.metadata["source"] == "scraper"
+    assert result1.metadata["source"] == "ddg"
     
     # Segunda vez: deve vir do cache
     result2 = await skill.run(query, max_results=3)

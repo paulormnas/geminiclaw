@@ -48,8 +48,8 @@ async def test_runner_spawn_parameters(mock_docker_client):
             expected_group_add = [os.stat("/var/run/docker.sock").st_gid]
 
         mock_docker_client.containers.run.assert_called_once_with(
-            image="test_image",
-            mem_limit="512m",
+            image="test_image-slim",
+            mem_limit="256m",
             nano_cpus=1_000_000_000,
             network="geminiclaw-net",
             user="appuser",

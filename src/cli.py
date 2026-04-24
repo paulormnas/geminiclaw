@@ -24,36 +24,12 @@ from src.session import SessionManager
 from src.runner import ContainerRunner
 from src.ipc import IPCChannel
 from src.orchestrator import Orchestrator, OrchestratorResult, AgentResult
+from src.utils.terminal import (
+    RESET, BOLD, DIM, GREEN, RED, YELLOW, CYAN, MAGENTA,
+    STATUS_ICONS, BANNER, VERSION
+)
 
 logger = get_logger(__name__)
-
-# Códigos ANSI para cores no terminal
-_RESET = "\033[0m"
-_BOLD = "\033[1m"
-_DIM = "\033[2m"
-_GREEN = "\033[32m"
-_RED = "\033[31m"
-_YELLOW = "\033[33m"
-_CYAN = "\033[36m"
-_MAGENTA = "\033[35m"
-
-# Ícones de status
-STATUS_ICONS: dict[str, str] = {
-    "waiting": "⏳",
-    "running": "🔄",
-    "success": "✅",
-    "error": "❌",
-    "timeout": "⏰",
-}
-
-VERSION = "0.1.0"
-
-BANNER = f"""{_CYAN}{_BOLD}
-  ╔═══════════════════════════════════════╗
-  ║          🔮 GeminiClaw v{VERSION}          ║
-  ║   Framework de Orquestração de IA     ║
-  ╚═══════════════════════════════════════╝
-{_RESET}"""
 
 EXIT_COMMANDS = {"exit", "quit", "sair"}
 
@@ -106,26 +82,26 @@ def format_agent_result(result: AgentResult) -> str:
     """
     icon = STATUS_ICONS.get(result.status, "❓")
     status_color = {
-        "success": _GREEN,
-        "error": _RED,
-        "timeout": _YELLOW,
-    }.get(result.status, _DIM)
+        "success": GREEN,
+        "error": RED,
+        "timeout": YELLOW,
+    }.get(result.status, DIM)
 
     lines = [
-        f"  {icon} {_BOLD}{result.agent_id}{_RESET} "
-        f"[{status_color}{result.status}{_RESET}]"
+        f"  {icon} {BOLD}{result.agent_id}{RESET} "
+        f"[{status_color}{result.status}{RESET}]"
     ]
 
     if result.session_id:
-        lines.append(f"     {_DIM}sessão: {result.session_id}{_RESET}")
+        lines.append(f"     {DIM}sessão: {result.session_id}{RESET}")
 
     if result.status == "success" and result.response:
-        lines.append(f"     {_CYAN}resposta:{_RESET}")
+        lines.append(f"     {CYAN}resposta:{RESET}")
         for key, value in result.response.items():
-            lines.append(f"       {_DIM}•{_RESET} {key}: {value}")
+            lines.append(f"       {DIM}•{RESET} {key}: {value}")
 
     if result.error:
-        lines.append(f"     {_RED}erro: {result.error}{_RESET}")
+        lines.append(f"     {RED}erro: {result.error}{RESET}")
 
     return "\n".join(lines)
 
@@ -142,15 +118,15 @@ def format_result(result: OrchestratorResult) -> str:
     lines: list[str] = []
 
     # Cabeçalho do resultado
-    lines.append(f"\n{_BOLD}{'─' * 42}{_RESET}")
-    lines.append(f"{_BOLD}  📊 Resultado da Orquestração{_RESET}")
-    lines.append(f"{_BOLD}{'─' * 42}{_RESET}")
+    lines.append(f"\n{BOLD}{'─' * 42}{RESET}")
+    lines.append(f"{BOLD}  📊 Resultado da Orquestração{RESET}")
+    lines.append(f"{BOLD}{'─' * 42}{RESET}")
 
     # Resumo
-    success_str = f"{_GREEN}{result.succeeded}{_RESET}"
-    failed_str = f"{_RED}{result.failed}{_RESET}" if result.failed > 0 else f"{_DIM}0{_RESET}"
+    success_str = f"{GREEN}{result.succeeded}{RESET}"
+    failed_str = f"{RED}{result.failed}{RESET}" if result.failed > 0 else f"{DIM}0{RESET}"
     lines.append(
-        f"  Total: {_BOLD}{result.total}{_RESET}  |  "
+        f"  Total: {BOLD}{result.total}{RESET}  |  "
         f"✅ {success_str}  |  ❌ {failed_str}"
     )
     lines.append("")
@@ -160,7 +136,7 @@ def format_result(result: OrchestratorResult) -> str:
         lines.append(format_agent_result(agent_result))
         lines.append("")
 
-    lines.append(f"{_DIM}{'─' * 42}{_RESET}")
+    lines.append(f"{DIM}{'─' * 42}{RESET}")
     return "\n".join(lines)
 
 
@@ -173,14 +149,14 @@ def show_history() -> None:
     records = history.list_recent(limit=10)
     
     if not records:
-        print(f"\n  {_DIM}Nenhum histórico encontrado.{_RESET}\n")
+        print(f"\n  {DIM}Nenhum histórico encontrado.{RESET}\n")
         return
         
-    print(f"\n{_BOLD}  📜 Histórico de Execuções (últimas 10){_RESET}")
-    print(f"{_BOLD}{'─' * 80}{_RESET}")
+    print(f"\n{BOLD}  📜 Histórico de Execuções (últimas 10){RESET}")
+    print(f"{BOLD}{'─' * 80}{RESET}")
     
     for r in records:
-        status_color = _GREEN if r.status == "success" else _RED
+        status_color = GREEN if r.status == "success" else RED
         date_str = "Desconhecido"
         if r.started_at:
             try:
@@ -192,9 +168,9 @@ def show_history() -> None:
         prompt_trunc = r.prompt[:40] + "..." if len(r.prompt) > 40 else r.prompt
         dur = f"{r.duration_seconds:.1f}s" if r.duration_seconds else "??"
         
-        print(f"  {_DIM}{r.id[:8]}{_RESET} | {date_str} | [{status_color}{r.status.upper()}{_RESET}] | ⏱  {dur} | {prompt_trunc}")
+        print(f"  {DIM}{r.id[:8]}{RESET} | {date_str} | [{status_color}{r.status.upper()}{RESET}] | ⏱  {dur} | {prompt_trunc}")
         
-    print(f"{_BOLD}{'─' * 80}{_RESET}\n")
+    print(f"{BOLD}{'─' * 80}{RESET}\n")
 
 
 def _create_orchestrator() -> tuple[Orchestrator, ContainerRunner]:
@@ -221,14 +197,14 @@ async def execute_prompt(orchestrator: Orchestrator, prompt: str) -> None:
         orchestrator: Instância do orquestrador.
         prompt: Prompt do usuário.
     """
-    print(f"\n  {STATUS_ICONS['running']} {_DIM}Processando...{_RESET}\n")
+    print(f"\n  {STATUS_ICONS['running']} {DIM}Processando...{RESET}\n")
 
     try:
         result = await orchestrator.handle_request(prompt)
         print(format_result(result))
     except Exception as e:
         logger.error("Erro ao processar prompt", extra={"error": str(e)})
-        print(f"\n  {STATUS_ICONS['error']} {_RED}Erro: {e}{_RESET}\n")
+        print(f"\n  {STATUS_ICONS['error']} {RED}Erro: {e}{RESET}\n")
 
 
 async def interactive_mode(orchestrator: Orchestrator) -> None:
@@ -238,20 +214,20 @@ async def interactive_mode(orchestrator: Orchestrator) -> None:
         orchestrator: Instância do orquestrador.
     """
     print(BANNER)
-    print(f"  {_DIM}Modo interativo. Digite 'sair' para encerrar.{_RESET}\n")
+    print(f"  {DIM}Modo interativo. Digite 'sair' para encerrar.{RESET}\n")
 
     while True:
         try:
-            prompt = input(f"  {_MAGENTA}🔮 >{_RESET} ").strip()
+            prompt = input(f"  {MAGENTA}🔮 >{RESET} ").strip()
         except (EOFError, KeyboardInterrupt):
-            print(f"\n\n  {_DIM}Encerrando...{_RESET}")
+            print(f"\n\n  {DIM}Encerrando...{RESET}")
             break
 
         if not prompt:
             continue
 
         if prompt.lower() in EXIT_COMMANDS:
-            print(f"\n  {_DIM}Até logo! 👋{_RESET}\n")
+            print(f"\n  {DIM}Até logo! 👋{RESET}\n")
             break
 
         await execute_prompt(orchestrator, prompt)
@@ -266,14 +242,14 @@ def main() -> None:
 
     def _signal_handler(sig: int, frame: object) -> None:
         """Handler para SIGINT (Ctrl+C)."""
-        print(f"\n\n  {_YELLOW}⚠  Interrupção recebida. Encerrando containers...{_RESET}")
+        print(f"\n\n  {YELLOW}⚠  Interrupção recebida. Encerrando containers...{RESET}")
         if runner is not None:
             try:
                 runner.cleanup_all()
-                print(f"  {_GREEN}✅ Cleanup concluído.{_RESET}\n")
+                print(f"  {GREEN}✅ Cleanup concluído.{RESET}\n")
             except Exception as e:
                 logger.error("Erro durante cleanup", extra={"error": str(e)})
-                print(f"  {_RED}❌ Erro no cleanup: {e}{_RESET}\n")
+                print(f"  {RED}❌ Erro no cleanup: {e}{RESET}\n")
         sys.exit(130)
 
     signal.signal(signal.SIGINT, _signal_handler)
@@ -286,7 +262,7 @@ def main() -> None:
     try:
         orchestrator, runner = _create_orchestrator()
     except RuntimeError as e:
-        print(f"\n  {STATUS_ICONS['error']} {_RED}Falha na inicialização: {e}{_RESET}\n")
+        print(f"\n  {STATUS_ICONS['error']} {RED}Falha na inicialização: {e}{RESET}\n")
         logger.error("Falha ao inicializar CLI", extra={"error": str(e)})
         sys.exit(1)
 

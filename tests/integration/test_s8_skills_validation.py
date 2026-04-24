@@ -28,9 +28,9 @@ from src.skills.memory.skill import MemorySkill
 # ---------------------------------------------------------------------------
 
 def _docker_available() -> bool:
+    import subprocess
     try:
-        import docker
-        docker.from_env().ping()
+        subprocess.run(["docker", "info"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
         return True
     except Exception:
         return False
@@ -69,7 +69,7 @@ async def test_quick_search_skill_run_with_logging_events(caplog):
     mock_result.url = "http://example.com"
     mock_result.snippet = "O dataset Iris contém 150 amostras."
 
-    with patch.object(skill.scraper, "search", new=AsyncMock(return_value=[mock_result])):
+    with patch.object(skill.backends["ddg"], "search", new=AsyncMock(return_value=[mock_result])):
         with caplog.at_level(logging.INFO, logger="src.skills.base"):
             result = await skill.run_with_logging(query="iris dataset scikit-learn", max_results=1)
 

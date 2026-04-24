@@ -9,11 +9,11 @@ from src.runner import ContainerRunner
 
 def _geminiclaw_image_exists() -> bool:
     """Verifica se a imagem geminiclaw-base está disponível localmente."""
+    import subprocess
     try:
-        client = docker.from_env()
-        client.images.get("geminiclaw-base:latest")
-        return True
-    except (docker.errors.ImageNotFound, docker.errors.DockerException):
+        result = subprocess.run(["docker", "images", "-q", "geminiclaw-base:latest"], check=True, capture_output=True, text=True, timeout=2)
+        return bool(result.stdout.strip())
+    except Exception:
         return False
 
 

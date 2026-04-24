@@ -167,7 +167,6 @@ class Orchestrator:
             failed = len(results) - succeeded
             all_artifacts = self.output_manager.list_artifacts(master_session.id)
             
-            self.session_manager.close(master_session.id)
             result = OrchestratorResult(
                 results=results,
                 total=len(results),

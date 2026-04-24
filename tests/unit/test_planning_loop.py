@@ -70,11 +70,15 @@ async def test_planning_loop_max_iterations(mock_deps):
     orchestrator = Orchestrator(**mock_deps)
     
     with patch.object(orchestrator, "_execute_agent") as mock_exec:
-        # Sempre pede revisão
-        mock_exec.return_value = AgentResult(
-            agent_id="x", session_id="s", status="success", 
-            response={"text": '{"status": "revision_needed"}'} 
-        )
+        # Alterna entre plano válido do Planner e pedido de revisão do Validator
+        mock_exec.side_effect = [
+            AgentResult(agent_id="p1", session_id="s", status="success", response={"text": "[]"}),
+            AgentResult(agent_id="v1", session_id="s", status="success", response={"text": '{"status": "revision_needed"}'}),
+            AgentResult(agent_id="p2", session_id="s", status="success", response={"text": "[]"}),
+            AgentResult(agent_id="v2", session_id="s", status="success", response={"text": '{"status": "revision_needed"}'}),
+            AgentResult(agent_id="p3", session_id="s", status="success", response={"text": "[]"}),
+            AgentResult(agent_id="v3", session_id="s", status="success", response={"text": '{"status": "revision_needed"}'}),
+        ]
         
         tasks = await orchestrator._run_planning_loop("Prompt", "master_s")
         

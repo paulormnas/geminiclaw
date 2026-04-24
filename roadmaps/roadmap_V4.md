@@ -15,60 +15,63 @@ Este roadmap descreve a transição do GeminiClaw de um framework dependente de 
 
 ## Etapa V17 — Abstração do Provedor LLM
 
-Objetivo: Permitir que o framework suporte múltiplos backends (Gemini, OpenAI, Ollama).
+Objetivo: Permitir que o framework suporte múltiplos backends (Gemini, OpenAI, Anthropic, Local).
 
 ### Tarefas
 
 - [ ] Criar `src/llm/` para centralizar a lógica de inferência.
 - [ ] Implementar `LLMProvider` (Interface Base) com métodos `generate()` e `generate_stream()`.
-- [ ] Mover lógica do Google ADK para `src/llm/providers/gemini.py`.
+- [ ] **Atualizar `@[.env.example]`** com as novas variáveis globais:
+  - `LLM_PROVIDER` (google | openai | anthropic | local)
+  - `LLM_MODEL` (ex: gemini-2.0-flash, gpt-4o, gemma-4:9b)
+  - `LLM_PROVIDER_REQUESTS_PER_MINUTE` (antigo GEMINI_REQUESTS_PER_MINUTE)
+  - `LLM_PROVIDER_RATE_LIMIT_COOLDOWN_SECONDS` (antigo GEMINI_RATE_LIMIT_COOLDOWN_SECONDS)
+  - Adicionar placeholders para `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`.
+- [ ] **Atualizar o código do projeto** (`src/config.py`, `src/runner.py`, `src/orchestrator.py`) para utilizar os novos nomes de variáveis.
+- [ ] Mover lógica do Google ADK para `src/llm/providers/google.py`.
 - [ ] Implementar `src/llm/factory.py` para instanciar o provedor baseado no `.env`.
-- [ ] Commit: `feat(llm): introduz abstração de provedores para suporte a modelos locais`
+- [ ] Commit: `feat(llm): introduz abstração de provedores e configuração genérica de LLM`
 
 ---
 
 ## Etapa V18 — Integração com Ollama (Gemma 4)
 
-Objetivo: Rodar o modelo Gemma 4 localmente no Raspberry Pi 5 ou em servidor da rede.
+Objetivo: Rodar o modelo Gemma 4 localmente no Raspberry Pi 5 ou em servidor da rede via provedor `local`.
 
 ### Tarefas
 
 - [ ] Adicionar serviço `ollama` ao `docker-compose.yml` (opcional).
-- [ ] Implementar `src/llm/providers/ollama.py` usando a API REST do Ollama.
-- [ ] Configurar mapeamento de Tool Calling:
-  - Converter definições do ADK para formato de prompt compatível com Gemma.
-  - Implementar parser de saída para capturar chamadas de função locais.
-- [ ] Otimização para Pi 5:
-  - Configurar quantização 4-bit (GGUF) para Gemma 4 9B.
-- [ ] Commit: `feat(llm): adiciona provedor Ollama com suporte a Gemma 4`
+- [ ] Implementar `src/llm/providers/local.py` (ou `ollama.py`) usando a API REST do Ollama.
+- [ ] Garantir que o provedor respeite `LLM_PROVIDER_REQUESTS_PER_MINUTE` para evitar sobrecarga do hardware local.
+- [ ] Configurar mapeamento de Tool Calling para o modelo local.
+- [ ] Commit: `feat(llm): adiciona provedor local com suporte a Gemma 4`
 
 ---
 
-## Etapa V19 — Refatoração dos Agentes para Local-First
+## Etapa V19 — Refatoração dos Agentes e Config
 
-Objetivo: Atualizar o runtime dos agentes para usar a nova abstração.
+Objetivo: Atualizar o runtime dos agentes e o módulo de configuração para usar a nova abstração genérica.
 
 ### Tarefas
 
+- [ ] Atualizar `src/config.py` para carregar as novas variáveis `LLM_PROVIDER_*`.
 - [ ] Atualizar `agents/runner.py` para consumir `src.llm.factory`.
-- [ ] Ajustar `agents/base/agent.py` para lidar com as diferenças de contexto entre modelos.
-- [ ] Implementar fallback: se o modelo local falhar por recursos, tentar Gemini (opcional).
-- [ ] Testar `CodeSkill` com código gerado pelo Gemma 4.
-- [ ] Commit: `refactor(agents): agentes agora utilizam provedores abstraídos (Local ou Cloud)`
+- [ ] Garantir que o `session_id` e contexto sejam propagados corretamente através dos novos wrappers de provedor.
+- [ ] Testar `CodeSkill` com código gerado por diferentes provedores configurados.
+- [ ] Commit: `refactor(agents): agentes agora utilizam provedores abstraídos e configuração genérica`
 
 ---
 
 ## Etapa V20 — Otimização de Recursos e Performance
 
-Objetivo: Garantir fluidez no Raspberry Pi 5 8GB com modelo rodando simultaneamente.
+Objetivo: Garantir fluidez no Raspberry Pi 5 8GB com modelo local ou otimização de custos em nuvem.
 
 ### Tarefas
 
-- [ ] Implementar `ContextCompression`: reduzir histórico de chat antes de enviar ao modelo local.
-- [ ] Ajustar `Runner.py` para detectar uso de NPU (se disponível) ou otimizar threads CPU.
-- [ ] Benchmark comparativo: Gemini vs Gemma 4 (Latência, Consumo de RAM, Precisão).
-- [ ] Finalizar `SETUP.md` com instruções para modo offline total.
-- [ ] Commit: `perf(pi): otimizações de memória para inferência local sustentada`
+- [ ] Implementar `ContextCompression`: reduzir histórico de chat antes de enviar ao modelo (especialmente relevante para provedores locais).
+- [ ] Benchmark comparativo: Google vs Local (Gemma 4) usando as novas métricas de rate limit genéricas.
+- [ ] Finalizar `SETUP.md` com instruções para alternância entre provedores.
+- [ ] Commit: `perf(pi): otimizações de memória e suporte multi-provider finalizado`
 
 ---
 
@@ -76,7 +79,7 @@ Objetivo: Garantir fluidez no Raspberry Pi 5 8GB com modelo rodando simultaneame
 
 | Componente | Mudança Necessária |
 |---|---|
-| **Config** | Adicionar `LLM_BACKEND` (gemini/ollama) e `OLLAMA_URL`. |
-| **Runner** | Parar de instanciar `google.adk.runners.InMemoryRunner` diretamente. |
-| **Dockerfile** | Incluir bibliotecas de inferência se não usar servidor externo. |
-| **Memória** | Reservar ~5GB de RAM para o modelo (Pi 5 8GB recomendado). |
+| **Config** | Mudar de `GEMINI_*` para `LLM_PROVIDER_*`. |
+| **Runner** | Parar de instanciar `google.adk.runners.InMemoryRunner` diretamente; usar Factory. |
+| **Env** | Adicionar chaves para OpenAI/Anthropic para redundância. |
+| **Memória** | Reservar RAM quando `LLM_PROVIDER=local`. |

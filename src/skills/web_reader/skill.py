@@ -57,7 +57,7 @@ class WebReaderSkill(BaseSkill):
         rp = self._robots_parsers[base_url]
         return rp.can_fetch("*", url)
 
-    async def run(self, url: str, max_chars: int = 5000) -> SkillResult:
+    async def run(self, url: str, max_chars: int = 5000, **kwargs) -> SkillResult:
         """Executa a leitura de uma URL."""
         if not url:
             return SkillResult(success=False, output="", error="URL não fornecida.")

@@ -27,13 +27,15 @@ class MemorySkill(BaseSkill):
         db_path = db_path or os.environ.get("LONG_TERM_MEMORY_DB", "./store/memory.db")
         self.long_term = LongTermMemory(db_path)
 
-    async def run(self, action: str, **kwargs) -> SkillResult:
+    async def run(self, action: Optional[str] = None, **kwargs) -> SkillResult:
         """Executa ações de memória.
         
         Args:
             action: 'remember', 'memorize', 'recall', 'recall_by_tags', 'retrieve', 'remember_forever'
-            **kwargs: Argumentos específicos da ação.
+            **kwargs: Argumentos específicos da ação (key, value, source, tags, importance, etc.).
         """
+        if not action:
+            return SkillResult(success=False, output="", error="O parâmetro 'action' é obrigatório.")
         # Removemos session_id de kwargs para evitar passar duas vezes para os handlers
         session_id = kwargs.pop("session_id", None)
         

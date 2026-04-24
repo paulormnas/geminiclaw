@@ -81,8 +81,9 @@ registry = SkillRegistry()
 def _safe_register(skill_class):
     try:
         registry.register(skill_class())
-    except Exception:
-        pass
+    except Exception as e:
+        from src.logger import get_logger
+        get_logger(__name__).error(f"Falha ao registrar skill {skill_class.__name__}: {e}")
 
 _safe_register(QuickSearchSkill)
 _safe_register(DeepSearchSkill)

@@ -135,20 +135,24 @@ class ContainerRunner:
     def _ensure_images(self) -> None:
         """Verifica se as imagens necessárias existem e as constrói se faltarem."""
         required_images = [
-            ("geminiclaw-base", "containers/Dockerfile"),
-            ("geminiclaw-base-slim", "containers/Dockerfile.slim"),
-            ("geminiclaw-researcher", "containers/Dockerfile.researcher"),
-            ("geminiclaw-planner", "containers/Dockerfile.planner"),
-            ("geminiclaw-validator", "containers/Dockerfile.validator"),
-            ("geminiclaw-summarizer", "containers/Dockerfile.summarizer"),
+            ("geminiclaw-base", "containers/Dockerfile", {}),
+            ("geminiclaw-base-slim", "containers/Dockerfile.slim", {}),
+            ("geminiclaw-researcher", "containers/Dockerfile.researcher", {}),
+            ("geminiclaw-researcher-slim", "containers/Dockerfile.researcher", {"BASE_IMAGE": "geminiclaw-base-slim"}),
+            ("geminiclaw-planner", "containers/Dockerfile.planner", {}),
+            ("geminiclaw-planner-slim", "containers/Dockerfile.planner", {"BASE_IMAGE": "geminiclaw-base-slim"}),
+            ("geminiclaw-validator", "containers/Dockerfile.validator", {}),
+            ("geminiclaw-validator-slim", "containers/Dockerfile.validator", {"BASE_IMAGE": "geminiclaw-base-slim"}),
+            ("geminiclaw-summarizer", "containers/Dockerfile.summarizer", {}),
+            ("geminiclaw-summarizer-slim", "containers/Dockerfile.summarizer", {"BASE_IMAGE": "geminiclaw-base-slim"}),
         ]
 
-        for tag, dockerfile in required_images:
+        for tag, dockerfile, buildargs in required_images:
             try:
                 self.client.images.get(tag)
             except docker.errors.ImageNotFound:
                 print_status("package", f"Imagem não encontrada: {tag}. Iniciando build...")
-                logger.info(f"Iniciando build da imagem {tag}", extra={"dockerfile": dockerfile})
+                logger.info(f"Iniciando build da imagem {tag}", extra={"dockerfile": dockerfile, "buildargs": buildargs})
                 
                 try:
                     # Resolve o path do Dockerfile relativo à raiz do projeto
@@ -162,6 +166,7 @@ class ContainerRunner:
                         path=str(_root),
                         dockerfile=dockerfile,
                         tag=tag,
+                        buildargs=buildargs,
                         decode=True,
                         rm=True
                     )
@@ -264,6 +269,7 @@ class ContainerRunner:
                     "GOOGLE_API_KEY": gemini_key,
                     "DEFAULT_MODEL": os.environ.get("DEFAULT_MODEL", DEFAULT_MODEL),
                     "SQLITE_DB_PATH": "/data/geminiclaw.db",
+                    "LONG_TERM_MEMORY_DB": "/data/memory.db",
                     "AGENT_SOCKET_NAME": socket_name,
                     "OUTPUT_BASE_DIR": "/outputs",
                     "LOGS_BASE_DIR": "/logs",
@@ -271,8 +277,14 @@ class ContainerRunner:
                 
                 # Passa variáveis de skill e configuração do host
                 for key, value in os.environ.items():
-                    if any(key.startswith(p) for p in ["SKILL_", "QUICK_SEARCH_", "DEEP_SEARCH_", "CODE_", "MEMORY_", "LLM_CACHE_", "BRAVE_"]):
-                        env[key] = value
+                    prefixes = [
+                        "SKILL_", "QUICK_SEARCH_", "DEEP_SEARCH_", 
+                        "CODE_", "MEMORY_", "LLM_CACHE_", "BRAVE_",
+                        "LONG_TERM_", "SQLITE_", "OUTPUT_", "LOGS_"
+                    ]
+                    if any(key.startswith(p) for p in prefixes):
+                        if key not in env:
+                            env[key] = value
                 
                 # Passa QDRANT_URL adiante se existir
                 if "QDRANT_URL" in os.environ:
@@ -308,12 +320,15 @@ class ContainerRunner:
                     ipc_socket_host = str(Path(IPC_SOCKET_DIR))
 
                 # Garante que as pastas existem localmente com permissões adequadas
+                db_dir_path = Path(db_dir_host)
                 out_path = Path(output_base).absolute().joinpath(effective_output_id)
                 log_path = Path(logs_base).absolute().joinpath(effective_logs_id)
                 
+                db_dir_path.mkdir(parents=True, exist_ok=True)
                 out_path.mkdir(parents=True, exist_ok=True)
                 log_path.mkdir(parents=True, exist_ok=True)
                 
+                db_dir_path.chmod(0o777)
                 out_path.chmod(0o777)
                 log_path.chmod(0o777)
 
@@ -332,15 +347,23 @@ class ContainerRunner:
                         "mode": "rw",
                     }
                 }
+                
+                # Mapeia o socket do Docker apenas se existir (permite spawnar sandboxes)
+                if os.path.exists("/var/run/docker.sock"):
+                    volumes["/var/run/docker.sock"] = {
+                        "bind": "/var/run/docker.sock",
+                        "mode": "rw",
+                    }
 
                 # Mapeia pastas de código para permitir desenvolvimento sem rebuild (S1.3)
-                if host_root:
-                    volumes[str(Path(host_root) / "src")] = {"bind": "/app/src", "mode": "rw"}
-                    volumes[str(Path(host_root) / "agents")] = {"bind": "/app/agents", "mode": "rw"}
-                else:
-                    # Rodando fora de container (local)
-                    volumes[str(_root / "src")] = {"bind": "/app/src", "mode": "rw"}
-                    volumes[str(_root / "agents")] = {"bind": "/app/agents", "mode": "rw"}
+                # Sempre mapeia se estivermos rodando no host ou se host_root for fornecido
+                src_path = str(Path(host_root) / "src") if host_root else str(_root / "src")
+                agents_path = str(Path(host_root) / "agents") if host_root else str(_root / "agents")
+                
+                volumes[src_path] = {"bind": "/app/src", "mode": "rw"}
+                volumes[agents_path] = {"bind": "/app/agents", "mode": "rw"}
+                
+                logger.debug(f"Volume mapping: {src_path} -> /app/src")
 
                 # Configurações extras para TCP (Mac compatibility)
                 extra_hosts = {}

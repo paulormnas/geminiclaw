@@ -1,5 +1,6 @@
 # Dockerfile para o agente Validator
-FROM geminiclaw-base
+ARG BASE_IMAGE=geminiclaw-base
+FROM ${BASE_IMAGE}
 LABEL stage=runtime component=agent-validator
 
 # Sobrescreve o comando padrão para rodar o validator

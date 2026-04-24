@@ -20,7 +20,7 @@ class DeepSearchSkill(BaseSkill):
         self.indexer = indexer or VectorIndexer()
         self.cache = cache or DeepSearchCache()
 
-    async def run(self, query: str, domain: Optional[str] = None, limit: int = 5) -> SkillResult:
+    async def run(self, query: str, domain: Optional[str] = None, limit: int = 5, **kwargs) -> SkillResult:
         """Executa a busca profunda."""
         try:
             # Verifica cache primeiro

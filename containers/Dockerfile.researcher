@@ -1,6 +1,7 @@
 # Dockerfile para o agente researcher do GeminiClaw
 # Stage 1: Builder - Instala nodejs e gemini-cli
-FROM geminiclaw-base AS builder
+ARG BASE_IMAGE=geminiclaw-base
+FROM ${BASE_IMAGE} AS builder
 LABEL stage=builder component=agent-researcher
 
 USER root
@@ -12,7 +13,7 @@ RUN apt-get update && apt-get install -y --install-recommends \
     && npm install -g @google/gemini-cli 2>/dev/null || true
 
 # Stage 2: Runtime - Imagem final otimizada baseada no geminiclaw-base
-FROM geminiclaw-base AS runtime
+FROM ${BASE_IMAGE} AS runtime
 LABEL stage=runtime component=agent-researcher
 
 USER root

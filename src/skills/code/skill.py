@@ -54,7 +54,8 @@ class CodeSkill(BaseSkill):
         code: str, 
         session_id: str, 
         task_name: str, 
-        packages: Optional[List[str]] = None
+        packages: Optional[List[str]] = None,
+        **kwargs
     ) -> SkillResult:
         """Executa o código Python.
 

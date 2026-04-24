@@ -34,7 +34,7 @@ class QuickSearchSkill(BaseSkill):
             
         self.cache = SearchCache(ttl=cache_ttl)
 
-    async def run(self, query: str, max_results: int = 5) -> SkillResult:
+    async def run(self, query: str, max_results: int = 5, **kwargs) -> SkillResult:
         """Executa a busca, verificando o cache e tentando os backends em cascata.
 
         Args:

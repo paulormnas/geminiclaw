@@ -56,11 +56,22 @@ GEMINI_REQUESTS_PER_MINUTE = int(get_env("GEMINI_REQUESTS_PER_MINUTE", default="
 GEMINI_RATE_LIMIT_COOLDOWN_SECONDS = int(get_env("GEMINI_RATE_LIMIT_COOLDOWN_SECONDS", default="30"))
 
 
-# Garante que os diretórios necessários existem
-Path(SQLITE_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+# Garante que os diretórios necessários existem (com tolerância a containers)
+try:
+    Path(SQLITE_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+except PermissionError:
+    if not Path(SQLITE_DB_PATH).parent.exists():
+        raise
 
 for directory in [OUTPUT_BASE_DIR, LOGS_BASE_DIR]:
     try:
+        # Se for um caminho absoluto começando com /, assumimos que é um volume gerenciado
+        # e que o orquestrador já garantiu sua existência e permissões.
+        if directory.startswith("/"):
+             if not Path(directory).exists():
+                 logger.warning(f"Diretório de volume {directory} não encontrado no container.")
+             continue
+             
         Path(directory).mkdir(parents=True, exist_ok=True)
     except PermissionError:
         # Em containers, o volume pode já estar montado mas sem permissão de mkdir no root do volume

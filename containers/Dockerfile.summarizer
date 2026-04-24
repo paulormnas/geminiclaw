@@ -1,5 +1,6 @@
 # Dockerfile para o agente summarizer do GeminiClaw
-FROM geminiclaw-base
+ARG BASE_IMAGE=geminiclaw-base
+FROM ${BASE_IMAGE}
 LABEL stage=runtime component=agent-summarizer
 
 # Sobrescreve o comando padrão para rodar o summarizer

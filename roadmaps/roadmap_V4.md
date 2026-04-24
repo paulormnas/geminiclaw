@@ -1,6 +1,6 @@
 # Roadmap V4 — Inteligência Local (Gemma/Ollama)
 
-Este roadmap descreve a transição do GeminiClaw de um framework dependente de nuvem para uma solução auto-hospedada, utilizando modelos como Gemma 2 através de provedores locais.
+Este roadmap descreve a transição do GeminiClaw de um framework dependente de nuvem para uma solução auto-hospedada, utilizando modelos como Gemma 4 através de provedores locais.
 
 ---
 
@@ -27,9 +27,9 @@ Objetivo: Permitir que o framework suporte múltiplos backends (Gemini, OpenAI, 
 
 ---
 
-## Etapa V18 — Integração com Ollama (Gemma 2)
+## Etapa V18 — Integração com Ollama (Gemma 4)
 
-Objetivo: Rodar o modelo Gemma 2 localmente no Raspberry Pi 5 ou em servidor da rede.
+Objetivo: Rodar o modelo Gemma 4 localmente no Raspberry Pi 5 ou em servidor da rede.
 
 ### Tarefas
 
@@ -39,8 +39,8 @@ Objetivo: Rodar o modelo Gemma 2 localmente no Raspberry Pi 5 ou em servidor da 
   - Converter definições do ADK para formato de prompt compatível com Gemma.
   - Implementar parser de saída para capturar chamadas de função locais.
 - [ ] Otimização para Pi 5:
-  - Configurar quantização 4-bit (GGUF) para Gemma 2 9B.
-- [ ] Commit: `feat(llm): adiciona provedor Ollama com suporte a Gemma 2`
+  - Configurar quantização 4-bit (GGUF) para Gemma 4 9B.
+- [ ] Commit: `feat(llm): adiciona provedor Ollama com suporte a Gemma 4`
 
 ---
 
@@ -53,7 +53,7 @@ Objetivo: Atualizar o runtime dos agentes para usar a nova abstração.
 - [ ] Atualizar `agents/runner.py` para consumir `src.llm.factory`.
 - [ ] Ajustar `agents/base/agent.py` para lidar com as diferenças de contexto entre modelos.
 - [ ] Implementar fallback: se o modelo local falhar por recursos, tentar Gemini (opcional).
-- [ ] Testar `CodeSkill` com código gerado pelo Gemma 2.
+- [ ] Testar `CodeSkill` com código gerado pelo Gemma 4.
 - [ ] Commit: `refactor(agents): agentes agora utilizam provedores abstraídos (Local ou Cloud)`
 
 ---
@@ -66,7 +66,7 @@ Objetivo: Garantir fluidez no Raspberry Pi 5 8GB com modelo rodando simultaneame
 
 - [ ] Implementar `ContextCompression`: reduzir histórico de chat antes de enviar ao modelo local.
 - [ ] Ajustar `Runner.py` para detectar uso de NPU (se disponível) ou otimizar threads CPU.
-- [ ] Benchmark comparativo: Gemini vs Gemma 2 (Latência, Consumo de RAM, Precisão).
+- [ ] Benchmark comparativo: Gemini vs Gemma 4 (Latência, Consumo de RAM, Precisão).
 - [ ] Finalizar `SETUP.md` com instruções para modo offline total.
 - [ ] Commit: `perf(pi): otimizações de memória para inferência local sustentada`
 

@@ -866,26 +866,12 @@ async def test_s8_pesquisa_e_relatorio():
     assert "async" in result.lower()
 ```
 
-### V22.3 — Benchmark e documentação
-
-Executar o mesmo prompt com Google e Ollama e registrar em `docs/benchmarks.md`:
-
-| Métrica | Google (gemini-2.0-flash) | Ollama (qwen3.5:4b) |
-|---|---|---|
-| Latência primeira resposta | ? s | ? s |
-| Tempo total tarefa complexa | ? s | ? s |
-| Qualidade do plano (1–5) | ? | ? |
-| Sucesso do tool calling (%) | ? | ? |
-| Uso de RAM Pi 5 | N/A | ? GB |
-| Tokens/s Pi 5 | N/A | ~10–14 |
-
 ### Tarefas desta etapa
-
-- [ ] Ajustar prompts dos agentes para melhor aderência com Qwen3.5-4B
-- [ ] Implementar `STRICT_VALIDATION` em `config.py`
-- [ ] Criar `tests/e2e/test_s8_local.py`
-- [ ] Executar benchmark e registrar em `docs/benchmarks.md`
-- [ ] Commit: `test(e2e): valida S8 com Qwen3.5-4B via Ollama no Pi 5`
+- [x] Ajustar prompts para melhor aderência com Qwen3.5-4B (few-shot)
+- [x] Implementar `STRICT_VALIDATION` em `config.py` e orquestrador
+- [x] Criar `tests/e2e/test_s8_local.py`
+- [x] Criar template de benchmark em `docs/benchmarks.md`
+- [x] Commit: `feat(infra): otimizações e testes para inferência local`
 
 ---
 

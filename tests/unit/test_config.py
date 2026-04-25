@@ -46,8 +46,8 @@ def test_config_default_values():
     """Testa se os valores padrão são aplicados corretamente."""
     with patch.dict(os.environ, {"GEMINI_API_KEY": "fake_key"}):
         importlib.reload(src.config)
-        # O valor padrão no código é "gemini-2.0-flash"
-        assert src.config.DEFAULT_MODEL == "gemini-2.0-flash"
+        # O valor padrão no código é "gemini-3.1-pro-preview"
+        assert src.config.DEFAULT_MODEL == "gemini-3.1-pro-preview"
         assert src.config.AGENT_TIMEOUT_SECONDS == 120
         assert src.config.SQLITE_DB_PATH == "store/geminiclaw.db"
 

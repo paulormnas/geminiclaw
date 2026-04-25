@@ -37,6 +37,26 @@ REGRAS DE PLANEJAMENTO:
    - `base`: análise de dados, execução de código Python, geração de gráficos
    - `summarizer`: síntese final, cruzamento de dados, consolidação de múltiplos relatórios em um documento coeso
 
+EXEMPLO DE PLANO (para a tarefa: 'Análise de clima em SP'):
+[
+  {
+    "task_name": "clima_sp",
+    "agent_id": "researcher",
+    "image": "geminiclaw-researcher",
+    "prompt": "Pesquise o clima em São Paulo na última semana. Salve em '/outputs/clima.md'.",
+    "depends_on": [],
+    "expected_artifacts": ["clima.md"]
+  },
+  {
+    "task_name": "grafico_clima",
+    "agent_id": "base",
+    "image": "geminiclaw-base",
+    "prompt": "Leia '/outputs/clima.md' e gere um gráfico de temperatura. Salve em '/outputs/temp.png'.",
+    "depends_on": ["clima_sp"],
+    "expected_artifacts": ["temp.png"]
+  }
+]
+
 FORMATO DE SAÍDA (Apenas o JSON, sem texto adicional):
 [
   {
@@ -46,14 +66,6 @@ FORMATO DE SAÍDA (Apenas o JSON, sem texto adicional):
     "prompt": "Pesquise sobre X. Cite todas as fontes com URL. Salve o relatório em '/outputs/fontes.md' via write_artifact.",
     "depends_on": [],
     "expected_artifacts": ["fontes.md"]
-  },
-  {
-    "task_name": "analise_dados",
-    "agent_id": "base",
-    "image": "geminiclaw-base",
-    "prompt": "Com base nos resultados de levantamento_fontes disponíveis em '/outputs/fontes.md', execute o pipeline de análise e salve os gráficos em '/outputs/graficos/' via write_artifact.",
-    "depends_on": ["levantamento_fontes"],
-    "expected_artifacts": ["graficos/resultado.png", "analise.json"]
   }
 ]"""
 

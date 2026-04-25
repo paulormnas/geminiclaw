@@ -24,11 +24,21 @@ def get_env(key: str, default: str | None = None, required: bool = False) -> str
         raise RuntimeError(f"Variável de ambiente obrigatória '{key}' não está definida.")
     return value  # type: ignore
 
+def get_env_bool(key: str, default: bool = False) -> bool:
+    """Obtém uma variável de ambiente convertendo para booleano.
+    
+    Aceita 'true', '1', 't', 'y', 'yes' como True (case-insensitive).
+    """
+    value = os.environ.get(key)
+    if value is None:
+        return default
+    return value.lower() in ("true", "1", "t", "y", "yes")
+
 # --- Configuração LLM (V18) ---
 
 # Provedor e modelo — novos
 LLM_PROVIDER = get_env("LLM_PROVIDER", default="google")
-LLM_MODEL = get_env("LLM_MODEL") or get_env("DEFAULT_MODEL", default="gemini-2.0-flash")
+LLM_MODEL = get_env("LLM_MODEL") or get_env("DEFAULT_MODEL", default="gemini-3.1-pro-preview")
 DEFAULT_MODEL = LLM_MODEL  # Retrocompatibilidade
 
 # Configurações Ollama
@@ -56,6 +66,11 @@ GEMINI_RATE_LIMIT_COOLDOWN_SECONDS = LLM_RATE_LIMIT_COOLDOWN_SECONDS  # Retrocom
 
 # --- Perfil de Deployment (V18.1) ---
 DEPLOYMENT_PROFILE = get_env("DEPLOYMENT_PROFILE", default="default")
+
+# Validação e rigor (Etapa V22)
+STRICT_VALIDATION = get_env_bool("STRICT_VALIDATION", default=True)
+if DEPLOYMENT_PROFILE == "pi5" or LLM_PROVIDER == "ollama":
+    STRICT_VALIDATION = get_env_bool("STRICT_VALIDATION", default=False)
 
 if DEPLOYMENT_PROFILE == "pi5":
     MAX_SUBTASKS_PER_TASK = int(get_env("MAX_SUBTASKS_PER_TASK", default="5"))

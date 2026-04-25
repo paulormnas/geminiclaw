@@ -447,7 +447,17 @@ class Orchestrator:
 
             
             # 2. Executa o Validator
+            from src.config import STRICT_VALIDATION
             validator_prompt = f"Revise este plano:\n{last_plan_str}\n\nPara a solicitação: {prompt}"
+            
+            if not STRICT_VALIDATION:
+                validator_prompt += (
+                    "\n\n**AVISO DE MODO FLEXÍVEL**: O sistema está operando com validação relaxada "
+                    "(STRICT_VALIDATION=false). Seja mais tolerante com pequenas ambiguidades, "
+                    "instruções de ferramentas ligeiramente imprecisas ou planos com menos de 3 subtarefas. "
+                    "Aprove o plano se ele for minimamente viável, mesmo que não seja perfeito."
+                )
+
             validator_task = AgentTask(
                 agent_id="validator", 
                 image=AGENT_REGISTRY["validator"], 

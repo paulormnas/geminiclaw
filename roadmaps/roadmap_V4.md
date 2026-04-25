@@ -146,7 +146,7 @@ src/llm/
 
 ---
 
-## Etapa V17 — Abstração do Provedor LLM
+## Etapa V17 — Abstração do Provedor LLM [CONCLUÍDO]
 
 **Objetivo:** Criar a interface `LLMProvider` e a factory que desacoplam completamente o
 backend de inferência do restante do código.
@@ -363,7 +363,7 @@ def get_provider() -> LLMProvider:
 
 ---
 
-## Etapa V18 — Migração de Config e `.env`
+## Etapa V18 — Migração de Config e `.env` [CONCLUÍDO]
 
 **Objetivo:** Renomear variáveis `GEMINI_*` para `LLM_*` e tornar a API key do Google
 opcional, sem quebrar instalações existentes.
@@ -495,7 +495,7 @@ deep_search = [
 
 ---
 
-## Etapa V19 — Adaptação dos Agentes ao Novo Backend
+## Etapa V19 — Adaptação dos Agentes ao Novo Backend [CONCLUÍDO]
 
 **Objetivo:** Substituir o uso direto do `google.adk.agents.Agent` nos agentes por um
 wrapper que usa `LLMProvider`, mantendo as skills e o protocolo IPC intactos.

@@ -69,10 +69,36 @@ async def run_agent_loop(
     while iterations < max_iterations:
         iterations += 1
         
+        # Converte ferramentas para formato OpenAI se necessário
+        openai_tools = []
+        for tool in tools:
+            if hasattr(tool, "parameters_schema") and tool.parameters_schema:
+                openai_tools.append({
+                    "type": "function",
+                    "function": {
+                        "name": tool.__name__,
+                        "description": tool.__doc__ or "",
+                        "parameters": tool.parameters_schema
+                    }
+                })
+            elif isinstance(tool, dict):
+                openai_tools.append(tool)
+            else:
+                # Fallback simples se não houver schema (não recomendado)
+                openai_tools.append({
+                    "type": "function",
+                    "function": {
+                        "name": tool.__name__,
+                        "description": tool.__doc__ or "",
+                        "parameters": {"type": "object", "properties": {}}
+                    }
+                })
+
         # 2. Chama o LLM
-        response: LLMResponse = await provider.generate_response(
+        response: LLMResponse = await provider.generate(
             messages=list(messages),
-            tools=tools
+            tools=openai_tools if openai_tools else None,
+            system=instruction
         )
         
         # Adiciona resposta do assistente ao histórico
@@ -91,17 +117,21 @@ async def run_agent_loop(
             logger.info(f"Agente chamando ferramenta: {tool_call.name}", extra={"tool_args": tool_call.arguments})
             
             # Encontra a função correspondente
-            tool_func = next((t for t in tools if t.__name__ == tool_call.name), None)
+            tool_func = next((t for t in tools if getattr(t, "__name__", "") == tool_call.name), None)
             
             if not tool_func:
                 result = f"Erro: Ferramenta '{tool_call.name}' não encontrada."
             else:
                 try:
-                    # Verifica se é async
-                    if asyncio.iscoroutinefunction(tool_func):
-                        result = await tool_func(**tool_call.arguments)
+                    # Se for um dicionário de ferramenta OpenAI (raro aqui), não conseguimos executar direto
+                    if isinstance(tool_func, dict):
+                         result = f"Erro: Ferramenta '{tool_call.name}' é um esquema estático, não executável."
                     else:
-                        result = tool_func(**tool_call.arguments)
+                        # Verifica se é async
+                        if asyncio.iscoroutinefunction(tool_func):
+                            result = await tool_func(**tool_call.arguments)
+                        else:
+                            result = tool_func(**tool_call.arguments)
                         
                     # Garante que o resultado seja string
                     if not isinstance(result, str):

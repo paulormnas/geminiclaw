@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Callable
 from .base import BaseSkill
 from .search_quick.skill import QuickSearchSkill
 try:
@@ -77,6 +77,20 @@ class SkillRegistry:
             tools.append(create_tool(skill))
 
         return tools
+
+    def to_openai_tools(self) -> List[Dict[str, Any]]:
+        """Converte as skills para o formato OpenAI Tool Calling."""
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": skill.name,
+                    "description": skill.description,
+                    "parameters": skill.parameters_schema,
+                },
+            }
+            for skill in self._skills.values()
+        ]
 
 
 # Instância global para facilitar o acesso

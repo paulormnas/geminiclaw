@@ -2,10 +2,7 @@ import pytest
 import asyncio
 from unittest.mock import patch, MagicMock, AsyncMock
 
-from google.adk.agents import Agent
-from google.genai import types as genai_types
-
-from agents.base.agent import root_agent, AGENT_NAME
+from agents.base.agent import root_agent, AGENT_NAME, Agent
 
 
 @pytest.mark.unit

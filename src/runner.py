@@ -15,6 +15,8 @@ from src.config import (
     OLLAMA_NUM_CTX,
     OLLAMA_ENABLE_THINKING,
     LLM_REQUESTS_PER_MINUTE,
+    LLM_RATE_LIMIT_COOLDOWN_SECONDS,
+    DEPLOYMENT_PROFILE,
     HEALTH_CHECK_ENABLED,
     SQLITE_DB_PATH,
     OUTPUT_BASE_DIR,
@@ -275,6 +277,8 @@ class ContainerRunner:
                     "OLLAMA_NUM_CTX": str(OLLAMA_NUM_CTX),
                     "OLLAMA_ENABLE_THINKING": str(OLLAMA_ENABLE_THINKING).lower(),
                     "LLM_REQUESTS_PER_MINUTE": str(LLM_REQUESTS_PER_MINUTE),
+                    "LLM_RATE_LIMIT_COOLDOWN_SECONDS": str(LLM_RATE_LIMIT_COOLDOWN_SECONDS),
+                    "DEPLOYMENT_PROFILE": DEPLOYMENT_PROFILE,
                     "SQLITE_DB_PATH": "/data/geminiclaw.db",
                     "LONG_TERM_MEMORY_DB": "/data/memory.db",
                     "AGENT_SOCKET_NAME": socket_name,
@@ -287,7 +291,8 @@ class ContainerRunner:
                     prefixes = [
                         "SKILL_", "QUICK_SEARCH_", "DEEP_SEARCH_", 
                         "CODE_", "MEMORY_", "LLM_CACHE_", "BRAVE_",
-                        "LONG_TERM_", "SQLITE_", "OUTPUT_", "LOGS_"
+                        "LONG_TERM_", "SQLITE_", "OUTPUT_", "LOGS_",
+                        "LLM_", "DEPLOYMENT_"
                     ]
                     if any(key.startswith(p) for p in prefixes):
                         if key not in env:

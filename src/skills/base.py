@@ -19,6 +19,7 @@ class BaseSkill(ABC):
     """Classe base para todas as skills do GeminiClaw."""
     name: str
     description: str
+    parameters_schema: Dict[str, Any] = field(default_factory=dict)
 
     @abstractmethod
     async def run(self, **kwargs) -> SkillResult:

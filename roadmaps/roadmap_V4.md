@@ -146,7 +146,7 @@ src/llm/
 
 ---
 
-## Etapa V17 — Abstração do Provedor LLM [CONCLUÍDO]
+## Etapa V17 — Abstração do Provedor LLM
 
 **Objetivo:** Criar a interface `LLMProvider` e a factory que desacoplam completamente o
 backend de inferência do restante do código.
@@ -354,16 +354,16 @@ def get_provider() -> LLMProvider:
 
 ### Tarefas desta etapa
 
-- [ ] Criar `src/llm/__init__.py`, `base.py`
-- [ ] Implementar `src/llm/providers/ollama.py` com throttling integrado
-- [ ] Implementar `src/llm/providers/google.py` (wrapper do ADK existente)
-- [ ] Implementar `src/llm/factory.py` como singleton
-- [ ] Adicionar testes unitários em `tests/unit/test_llm_factory.py` com mock HTTP
-- [ ] Commit: `feat(llm): introduz abstração LLMProvider com suporte a Ollama e Google`
+- [x] Criar `src/llm/__init__.py`, `base.py`
+- [x] Implementar `src/llm/providers/ollama.py` com throttling integrado
+- [x] Implementar `src/llm/providers/google.py` (wrapper do ADK existente)
+- [x] Implementar `src/llm/factory.py` como singleton
+- [x] Adicionar testes unitários em `tests/unit/test_llm_factory.py` com mock HTTP
+- [x] Commit: `feat(llm): introduz abstração LLMProvider com suporte a Ollama e Google`
 
 ---
 
-## Etapa V18 — Migração de Config e `.env` [CONCLUÍDO]
+## Etapa V18 — Migração de Config e `.env`
 
 **Objetivo:** Renomear variáveis `GEMINI_*` para `LLM_*` e tornar a API key do Google
 opcional, sem quebrar instalações existentes.
@@ -486,16 +486,16 @@ deep_search = [
 
 ### Tarefas desta etapa
 
-- [ ] Atualizar `src/config.py` com as novas variáveis, retrocompatibilidade e `DEPLOYMENT_PROFILE`
-- [ ] Atualizar `.env.example` com bloco de configuração LLM
-- [ ] Mover `google-adk` e `google-genai` para extras em `pyproject.toml`
-- [ ] Atualizar `scripts/build_images.sh` para instalar extras corretos por modo
-- [ ] Atualizar `README.md` com tabela de modos de instalação e exemplo Pi 5
-- [ ] Commit: `feat(config): migra GEMINI_* para LLM_*; adiciona DEPLOYMENT_PROFILE=pi5`
+- [x] Atualizar `src/config.py` com as novas variáveis, retrocompatibilidade e `DEPLOYMENT_PROFILE`
+- [x] Atualizar `.env.example` com bloco de configuração LLM
+- [x] Mover `google-adk` e `google-genai` para extras em `pyproject.toml`
+- [x] Atualizar `scripts/build_images.sh` para instalar extras corretos por modo
+- [x] Atualizar `README.md` com tabela de modos de instalação e exemplo Pi 5
+- [x] Commit: `feat(config): migra GEMINI_* para LLM_*; adiciona DEPLOYMENT_PROFILE=pi5`
 
 ---
 
-## Etapa V19 — Adaptação dos Agentes ao Novo Backend [CONCLUÍDO]
+## Etapa V19 — Adaptação dos Agentes ao Novo Backend
 
 **Objetivo:** Substituir o uso direto do `google.adk.agents.Agent` nos agentes por um
 wrapper que usa `LLMProvider`, mantendo as skills e o protocolo IPC intactos.
@@ -632,15 +632,15 @@ async def run(prompt: str, session_id: str, context: dict | None = None) -> str:
 
 ### Tarefas desta etapa
 
-- [ ] Criar `src/llm/agent_loop.py`
-- [ ] Adicionar `to_openai_tools()`, `execute()` e `parameters_schema` ao `SkillRegistry`/`BaseSkill`
-- [ ] Refatorar `agents/base/agent.py`
-- [ ] Refatorar `agents/planner/agent.py`
-- [ ] Refatorar `agents/validator/agent.py`
-- [ ] Refatorar `agents/researcher/agent.py`
-- [ ] Converter callbacks ADK para funções Python puras
-- [ ] Adicionar testes de integração: `tests/integration/test_agent_with_ollama.py`
-- [ ] Commit: `refactor(agents): substitui google-adk por LLMProvider + agent_loop genérico`
+- [x] Criar `src/llm/agent_loop.py`
+- [x] Adicionar `to_openai_tools()`, `execute()` e `parameters_schema` ao `SkillRegistry`/`BaseSkill`
+- [x] Refatorar `agents/base/agent.py`
+- [x] Refatorar `agents/planner/agent.py`
+- [x] Refatorar `agents/validator/agent.py`
+- [x] Refatorar `agents/researcher/agent.py`
+- [x] Converter callbacks ADK para funções Python puras
+- [x] Adicionar testes de integração: `tests/integration/test_agent_with_ollama.py`
+- [x] Commit: `refactor(agents): substitui google-adk por LLMProvider + agent_loop genérico`
 
 ---
 
@@ -738,12 +738,12 @@ environment = {
 
 ### Tarefas desta etapa
 
-- [ ] Criar `scripts/setup_ollama_pi5.sh` com instalação e configuração systemd
-- [ ] Documentar instalação do Ollama no Pi 5 em `SETUP.md`
-- [ ] Adicionar serviço `ollama` com profile `local-llm` ao `docker-compose.yml`
-- [ ] Adicionar propagação de env vars LLM ao `runner.py`
-- [ ] Testar o boot completo do sistema no Pi 5 com `DEPLOYMENT_PROFILE=pi5`
-- [ ] Commit: `feat(infra): configura Ollama + Qwen3.5-4B para Pi 5 com instalação automatizada`
+- [x] Criar `scripts/setup_ollama_pi5.sh` com instalação e configuração systemd
+- [x] Documentar instalação do Ollama no Pi 5 em `SETUP.md`
+- [x] Adicionar serviço `ollama` com profile `local-llm` ao `docker-compose.yml`
+- [x] Adicionar propagação de env vars LLM ao `runner.py`
+- [x] Testar o boot completo do sistema no Pi 5 com `DEPLOYMENT_PROFILE=pi5`
+- [x] Commit: `feat(infra): configura Ollama + Qwen3.5-4B para Pi 5 com instalação automatizada`
 
 ---
 

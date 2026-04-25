@@ -20,6 +20,39 @@ class MemorySkill(BaseSkill):
         "- 'retrieve': recupera por chave (busca curto prazo primeiro, depois longo prazo).\n"
         "- 'remember_forever': promove uma memória de curto prazo para longo prazo."
     )
+    parameters_schema = {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["remember", "memorize", "recall", "recall_by_tags", "retrieve", "remember_forever"],
+                "description": "Ação de memória a ser executada."
+            },
+            "key": {
+                "type": "string",
+                "description": "Chave identificadora da memória."
+            },
+            "value": {
+                "type": "string",
+                "description": "Conteúdo da memória a ser gravado (obrigatório para remember/memorize)."
+            },
+            "tags": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Lista de tags para categorização ou busca."
+            },
+            "importance": {
+                "type": "number",
+                "description": "Nível de importância (0.0 a 1.0) para memórias de longo prazo.",
+                "default": 0.5
+            },
+            "session_id": {
+                "type": "string",
+                "description": "ID da sessão atual (obrigatório para ações de curto prazo)."
+            }
+        },
+        "required": ["action"]
+    }
 
     def __init__(self, db_path: Optional[str] = None):
         self.short_term = ShortTermMemory()

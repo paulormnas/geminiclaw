@@ -15,6 +15,25 @@ class DeepSearchSkill(BaseSkill):
         "Forneça uma query em linguagem natural. Opcionalmente filtre por domínio. "
         "Retorna trechos relevantes com fonte e score de relevância."
     )
+    parameters_schema = {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "O termo de busca em linguagem natural."
+            },
+            "domain": {
+                "type": "string",
+                "description": "Filtro opcional por domínio (ex: docs.python.org)."
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Número máximo de resultados (padrão: 5).",
+                "default": 5
+            }
+        },
+        "required": ["query"]
+    }
 
     def __init__(self, indexer: Optional[VectorIndexer] = None, cache: Optional[DeepSearchCache] = None):
         self.indexer = indexer or VectorIndexer()

@@ -103,6 +103,8 @@ for directory in [OUTPUT_BASE_DIR, LOGS_BASE_DIR]:
         # Se for um caminho absoluto começando com /, assumimos que é um volume gerenciado
         # e que o orquestrador já garantiu sua existência e permissões.
         if directory.startswith("/"):
+             if not Path(directory).exists():
+                 logger.warning(f"Diretório de volume {directory} não encontrado no container.")
              continue
              
         Path(directory).mkdir(parents=True, exist_ok=True)

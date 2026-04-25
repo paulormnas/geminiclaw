@@ -38,8 +38,22 @@ services:
       qdrant:
         condition: service_healthy
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: geminiclaw-ollama
+    profiles: ["local-llm"]
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - geminiclaw-net
+    # No Pi 5, recomenda-se usar Ollama nativo para melhor performance.
+    # Este serviço é útil para desenvolvimento em x86 ou se preferir isolamento.
+
 volumes:
   qdrant_data:
+  ollama_data:
 
 networks:
   geminiclaw-net:

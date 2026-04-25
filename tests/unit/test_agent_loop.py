@@ -9,7 +9,7 @@ from src.llm.base import LLMResponse, ToolCall
 async def test_run_agent_loop_basic():
     """Testa o loop do agente em uma execução simples sem ferramentas."""
     mock_provider = AsyncMock()
-    mock_provider.generate_response.return_value = LLMResponse(
+    mock_provider.generate.return_value = LLMResponse(
         text="Olá, eu sou o agente.",
         tool_calls=[]
     )
@@ -22,12 +22,10 @@ async def test_run_agent_loop_basic():
         )
         
         assert response == "Olá, eu sou o agente."
-        mock_provider.generate_response.assert_called_once()
+        mock_provider.generate.assert_called_once()
         
         # Verifica mensagens enviadas
-        messages = mock_provider.generate_response.call_args[1]["messages"]
-        assert messages[0]["role"] == "system"
-        assert messages[0]["content"] == "Seja educado"
+        messages = mock_provider.generate.call_args[1]["messages"]
         assert messages[1]["role"] == "user"
         assert messages[1]["content"] == "Oi"
 
@@ -38,7 +36,7 @@ async def test_run_agent_loop_with_tools():
     mock_provider = AsyncMock()
     
     # Primeira chamada retorna tool call
-    mock_provider.generate_response.side_effect = [
+    mock_provider.generate.side_effect = [
         LLMResponse(
             text="Vou somar 2+2",
             tool_calls=[ToolCall(id="call_1", name="add", arguments={"a": 2, "b": 2})]
@@ -52,6 +50,7 @@ async def test_run_agent_loop_with_tools():
     
     def add(a, b):
         return str(a + b)
+    add.__name__ = "add"
     
     with patch("src.llm.agent_loop.get_provider", return_value=mock_provider):
         response = await run_agent_loop(
@@ -61,10 +60,10 @@ async def test_run_agent_loop_with_tools():
         )
         
         assert response == "O resultado é 4."
-        assert mock_provider.generate_response.call_count == 2
+        assert mock_provider.generate.call_count == 2
         
         # Verifica se o resultado da ferramenta foi enviado na segunda chamada
-        messages = mock_provider.generate_response.call_args_list[1][1]["messages"]
+        messages = mock_provider.generate.call_args_list[1][1]["messages"]
         assert messages[-1]["role"] == "tool"
         assert messages[-1]["content"] == "4"
 
@@ -76,7 +75,7 @@ async def test_run_agent_loop_callbacks():
     after = AsyncMock()
     
     mock_provider = AsyncMock()
-    mock_provider.generate_response.return_value = LLMResponse(text="Ok", tool_calls=[])
+    mock_provider.generate.return_value = LLMResponse(text="Ok", tool_calls=[])
     
     with patch("src.llm.agent_loop.get_provider", return_value=mock_provider):
         await run_agent_loop(

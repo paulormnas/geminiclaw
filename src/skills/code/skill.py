@@ -15,6 +15,29 @@ class CodeSkill(BaseSkill):
         "Use esta skill para executar código Python. Forneça o código completo como string. "
         "Todo arquivo salvo em '/outputs/' estará disponível como artefato."
     )
+    parameters_schema = {
+        "type": "object",
+        "properties": {
+            "code": {
+                "type": "string",
+                "description": "O código Python a ser executado."
+            },
+            "session_id": {
+                "type": "string",
+                "description": "ID da sessão atual (obrigatório para isolamento)."
+            },
+            "task_name": {
+                "type": "string",
+                "description": "Nome da tarefa atual (usado para subdiretórios de output)."
+            },
+            "packages": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Lista de pacotes pip adicionais para instalar."
+            }
+        },
+        "required": ["code", "session_id", "task_name"]
+    }
 
     def __init__(self):
         # Carregar configurações do ambiente

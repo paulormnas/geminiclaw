@@ -89,6 +89,8 @@ async def test_runner_spawn_parameters(mock_docker_client):
                         "OLLAMA_NUM_CTX": "4096",
                         "OLLAMA_ENABLE_THINKING": "false",
                         "LLM_REQUESTS_PER_MINUTE": "15",
+                        "LLM_RATE_LIMIT_COOLDOWN_SECONDS": "30",
+                        "DEPLOYMENT_PROFILE": "default",
                         "SQLITE_DB_PATH": "/data/geminiclaw.db",
                         "LONG_TERM_MEMORY_DB": "/data/memory.db",
                         "AGENT_SOCKET_NAME": "base_session_123.sock",

@@ -48,6 +48,6 @@ def test_list_available_skills(registry):
     assert {"name": "skill2", "description": "Desc 2"} in available
 
 @pytest.mark.unit
-def test_as_adk_tools_returns_list(registry):
-    # Por enquanto retorna lista vazia até implementação completa
-    assert isinstance(registry.as_adk_tools(), list)
+def test_as_tools_returns_list(registry):
+    # Por agora retorna lista vazia até implementação completa
+    assert isinstance(registry.as_tools(), list)

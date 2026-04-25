@@ -39,6 +39,8 @@ LLM_MODEL=qwen3.5:4b
 DEPLOYMENT_PROFILE=pi5
 ```
 
+Veja o [guia de configuração do Ollama no Pi 5](OLLAMA_PI5.md) para detalhes de otimização e instalação.
+
 ### 2. Modo Cloud (Fallback)
 Usa **Google Gemini API** para maior inteligência.
 ```bash

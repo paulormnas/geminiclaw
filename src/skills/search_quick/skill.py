@@ -17,6 +17,21 @@ class QuickSearchSkill(BaseSkill):
         "Use esta skill para buscar informações atuais na internet de forma rápida. "
         "Forneça uma query específica. Retorna títulos, URLs e resumos dos primeiros resultados."
     )
+    parameters_schema = {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "O termo de busca a ser pesquisado na internet."
+            },
+            "max_results": {
+                "type": "integer",
+                "description": "Número máximo de resultados (padrão: 5).",
+                "default": 5
+            }
+        },
+        "required": ["query"]
+    }
 
     def __init__(self, timeout: Optional[int] = None, ttl: Optional[int] = None):
         search_timeout = timeout or int(os.getenv("QUICK_SEARCH_TIMEOUT_SECONDS", "10"))

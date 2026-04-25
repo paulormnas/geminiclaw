@@ -17,6 +17,21 @@ class WebReaderSkill(BaseSkill):
     
     name = "web_reader"
     description = "Use para ler o conteúdo completo de uma URL. Retorna texto extraído da página."
+    parameters_schema = {
+        "type": "object",
+        "properties": {
+            "url": {
+                "type": "string",
+                "description": "A URL completa da página a ser lida."
+            },
+            "max_chars": {
+                "type": "integer",
+                "description": "Número máximo de caracteres a retornar (padrão: 5000).",
+                "default": 5000
+            }
+        },
+        "required": ["url"]
+    }
     
     def __init__(self, cache: SearchCache[str] | None = None):
         """Inicializa a skill de WebReader.

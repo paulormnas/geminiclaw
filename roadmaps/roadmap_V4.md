@@ -869,7 +869,7 @@ async def test_s8_pesquisa_e_relatorio():
 ### Tarefas desta etapa
 - [x] Ajustar prompts para melhor aderência com Qwen3.5-4B (few-shot)
 - [x] Implementar `STRICT_VALIDATION` em `config.py` e orquestrador
-- [x] Criar `tests/e2e/test_s8_local.py`
+- [x] Criar `tests/e2e/test_performance_local.py`
 - [x] Criar template de benchmark em `docs/benchmarks.md`
 - [x] Commit: `feat(infra): otimizações e testes para inferência local`
 
@@ -889,7 +889,7 @@ async def test_s8_pesquisa_e_relatorio():
 | `docker-compose.yml` | Serviço Ollama opcional (profile `local-llm`) | V20 |
 | `scripts/setup_ollama_pi5.sh` | Criado do zero | V20 |
 | `src/llm/context_compression.py` | Criado do zero | V21 |
-| `tests/e2e/test_s8_local.py` | Criado do zero | V22 |
+| `tests/e2e/test_performance_local.py` | Criado do zero | V22 |
 | `docs/benchmarks.md` | Criado do zero | V22 |
 
 ---

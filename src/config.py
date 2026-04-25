@@ -38,7 +38,7 @@ def get_env_bool(key: str, default: bool = False) -> bool:
 
 # Provedor e modelo — novos
 LLM_PROVIDER = get_env("LLM_PROVIDER", default="google")
-LLM_MODEL = get_env("LLM_MODEL") or get_env("DEFAULT_MODEL", default="gemini-3.1-pro-preview")
+LLM_MODEL = get_env("LLM_MODEL") or get_env("DEFAULT_MODEL", default="gemini-2.0-flash")
 DEFAULT_MODEL = LLM_MODEL  # Retrocompatibilidade
 
 # Configurações Ollama

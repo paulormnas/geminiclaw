@@ -1,6 +1,9 @@
-# tests/e2e/test_s8_local.py
+# tests/e2e/test_performance_local.py
 """
-Valida o cenário S8 com inferência local (Ollama + Qwen3.5-4B).
+Teste de desempenho E2E com inferência local (Ollama + Qwen3.5-4B).
+Mede a capacidade do framework de executar uma tarefa complexa de ponta a ponta 
+utilizando exclusivamente recursos locais do Raspberry Pi 5.
+
 Requer: Ollama rodando em localhost:11434 com qwen3.5:4b disponível.
 """
 import pytest
@@ -46,8 +49,8 @@ async def run_task(prompt: str):
 
 @pytest.mark.e2e
 @pytest.mark.asyncio
-async def test_s8_pesquisa_e_relatorio_local():
-    """Tarefa complexa: pesquisa sobre Python async + gera relatório em markdown via Ollama."""
+async def test_performance_pesquisa_e_relatorio_local():
+    """Valida o desempenho em tarefa complexa: pesquisa sobre Python async + relatório markdown."""
     
     # Pula se o Ollama não estiver rodando (evita falha em CI sem hardware)
     if not await _ollama_available():

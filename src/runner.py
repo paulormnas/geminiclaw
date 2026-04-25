@@ -378,10 +378,10 @@ class ContainerRunner:
                         "mode": "rw",
                     }
 
-                # Alocações de memória otimizadas para ARM64 (Etapa V6)
-                mem_limit = "256m"
+                # Alocações de memória otimizadas para ARM64
+                mem_limit = "384m"
                 if agent_id in ("base", "researcher") or image.startswith("geminiclaw-base") or image.startswith("geminiclaw-researcher"):
-                    mem_limit = "384m"
+                    mem_limit = "512m"
 
                 # Seleção de imagem (-slim vs full)
                 use_slim = False

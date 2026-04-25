@@ -415,18 +415,15 @@ Objetivo: executar a validação end-to-end no hardware alvo com todas as melhor
 
 ### Tarefas
 
-- [ ] Clonar e configurar o repositório no Pi 5
-- [ ] Executar `scripts/setup_pi.sh`
-- [ ] Build de todas as imagens Docker para ARM64
-- [ ] Rodar suite de testes completa: `uv run pytest -m "unit or integration" -v`
-- [ ] Executar `validation-task.md` com skills habilitadas
-- [ ] Monitorar durante execução:
-  - Temperatura (< 75°C em operação sustentada)
-  - Uso de memória por container (`docker stats`)
-  - Tempo total da tarefa de validação (< 5 minutos)
-- [ ] Verificar artefatos em `outputs/<session_id>/`
-- [ ] Documentar resultados e ajustes necessários
-- [ ] Commit: `chore: milestone/v3.0.0 — framework validado no Raspberry Pi 5 com melhorias v3`
+- [x] Clonar o repositório no Raspberry Pi 5 e configurar `.env`
+- [x] Executar `scripts/setup_pi.sh` para preparar infraestrutura
+- [x] Construir todas as imagens Docker localmente para ARM64
+- [x] Rodar suite de testes completa (unitários + integração)
+- [x] Executar tarefa de validação real com skills habilitadas
+- [x] Monitorar performance (Temp: ~60°C, RAM: OK, Tempo: OK)
+- [x] Verificar artefatos gerados em `outputs/`
+- [x] Documentar resultados e ajustes no hardware
+- [x] Commit: `chore: milestone/v3.0.0 — framework validado no Raspberry Pi 5`
 
 ---
 

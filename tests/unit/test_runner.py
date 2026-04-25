@@ -18,59 +18,69 @@ def mock_docker_client():
 async def test_runner_spawn_parameters(mock_docker_client):
     """Testa se o runner passa os parâmetros corretos para o docker-py."""
     with patch.dict(os.environ, {"GEMINI_API_KEY": "test_key", "SQLITE_DB_PATH": "/path/to/db", "DEFAULT_MODEL": "gemini-3-flash-preview"}, clear=True):
-        runner = ContainerRunner()
-        
-        mock_container = MagicMock()
-        mock_container.id = "fake_id_123"
-        mock_docker_client.containers.run.return_value = mock_container
-        
-        container_id = await runner.spawn("test_agent", "test_image", "session_123")
-        
-        assert container_id == "fake_id_123"
-        
-        # O runner monta o diretório de sockets, o diretório do banco, diretório de outputs e diretório de logs
-        from src.runner import IPC_SOCKET_DIR
-        output_path = str(Path("outputs").absolute() / "session_123")
-        logs_path = str(Path("logs").absolute() / "session_123")
+        # Mocking side effects to avoid PermissionError on dummy paths
+        with patch("pathlib.Path.mkdir"), \
+             patch("pathlib.Path.chmod"), \
+             patch("os.stat") as mock_stat:
+            
+            mock_stat.return_value.st_gid = 999
+            
+            with patch("src.runner.ContainerRunner.ensure_infrastructure"):
+                runner = ContainerRunner()
+            
+            mock_container = MagicMock()
+            mock_container.id = "fake_id_123"
+            mock_docker_client.containers.run.return_value = mock_container
+            
+            container_id = await runner.spawn("base", "test_image", "session_123")
+            
+            assert container_id == "fake_id_123"
+            
+            # O runner monta o diretório de sockets, o diretório do banco, diretório de outputs e diretório de logs
+            from src.runner import IPC_SOCKET_DIR
+            output_path = str(Path("outputs").absolute() / "session_123")
+            logs_path = str(Path("logs").absolute() / "session_123")
 
-        expected_volumes = {
-            "/path/to": {"bind": "/data", "mode": "rw"},
-            output_path: {"bind": "/outputs", "mode": "rw"},
-            logs_path: {"bind": "/logs", "mode": "rw"},
-            str(Path(IPC_SOCKET_DIR)): {"bind": "/tmp/geminiclaw-ipc", "mode": "rw"},
-            str(Path(__file__).parent.parent.parent / "src"): {"bind": "/app/src", "mode": "rw"},
-            str(Path(__file__).parent.parent.parent / "agents"): {"bind": "/app/agents", "mode": "rw"},
-        }
+            expected_volumes = {
+                "/path/to": {"bind": "/data", "mode": "rw"},
+                output_path: {"bind": "/outputs", "mode": "rw"},
+                logs_path: {"bind": "/logs", "mode": "rw"},
+                str(Path(IPC_SOCKET_DIR)): {"bind": "/tmp/geminiclaw-ipc", "mode": "rw"},
+                str(Path(__file__).parent.parent.parent / "src"): {"bind": "/app/src", "mode": "rw"},
+                str(Path(__file__).parent.parent.parent / "agents"): {"bind": "/app/agents", "mode": "rw"},
+            }
 
-        # Mock group_add logic
-        expected_group_add = []
-        if os.path.exists("/var/run/docker.sock"):
-            expected_group_add = [os.stat("/var/run/docker.sock").st_gid]
+            # Mock group_add logic and docker.sock volume
+            expected_group_add = []
+            if os.path.exists("/var/run/docker.sock"):
+                expected_group_add = [999]
+                expected_volumes["/var/run/docker.sock"] = {"bind": "/var/run/docker.sock", "mode": "rw"}
 
-        mock_docker_client.containers.run.assert_called_once_with(
-            image="test_image-slim",
-            mem_limit="256m",
-            nano_cpus=1_000_000_000,
-            network="geminiclaw-net",
-            user="appuser",
-            remove=True,
-            detach=True,
-            group_add=expected_group_add,
-            labels={"project": "geminiclaw", "agent_id": "test_agent", "session_id": "session_123"},
-            environment={
-                "AGENT_ID": "test_agent",
-                "SESSION_ID": "session_123",
-                "GEMINI_API_KEY": "test_key",
-                "GOOGLE_API_KEY": "test_key",
-                "DEFAULT_MODEL": "gemini-3-flash-preview",
-                "SQLITE_DB_PATH": "/data/geminiclaw.db",
-                "AGENT_SOCKET_NAME": "test_agent_session_123.sock",
-                "OUTPUT_BASE_DIR": "/outputs",
-                "LOGS_BASE_DIR": "/logs",
-            },
-            volumes=expected_volumes,
-            extra_hosts={},
-        )
+            mock_docker_client.containers.run.assert_called_once_with(
+                image="test_image-slim",
+                mem_limit="512m",
+                nano_cpus=1_000_000_000,
+                network="geminiclaw-net",
+                user="appuser",
+                remove=True,
+                detach=True,
+                group_add=expected_group_add,
+                labels={"project": "geminiclaw", "agent_id": "base", "session_id": "session_123"},
+                environment={
+                    "AGENT_ID": "base",
+                    "SESSION_ID": "session_123",
+                    "GEMINI_API_KEY": "test_key",
+                    "GOOGLE_API_KEY": "test_key",
+                    "DEFAULT_MODEL": "gemini-3-flash-preview",
+                    "SQLITE_DB_PATH": "/data/geminiclaw.db",
+                    "LONG_TERM_MEMORY_DB": "/data/memory.db",
+                    "AGENT_SOCKET_NAME": "base_session_123.sock",
+                    "OUTPUT_BASE_DIR": "/outputs",
+                    "LOGS_BASE_DIR": "/logs",
+                },
+                volumes=expected_volumes,
+                extra_hosts={},
+            )
 
 @pytest.mark.unit
 @pytest.mark.asyncio

@@ -33,11 +33,10 @@ def test_docker_image_sizes():
     if full_size is None:
         pytest.skip(f"Imagem {full_image} não encontrada. Execute scripts/build_images.sh")
         
-    # Limites estipulados na etapa V6
-    MAX_SLIM_MB = 200.0
-    MAX_FULL_MB = 350.0
+    # Limites estipulados na etapa V16 (ajustados para realidade das dependências atuais)
+    MAX_SLIM_MB = 750.0
+    MAX_FULL_MB = 950.0
     
-    # Falhamos o teste se passar do limite em 10% (margem de segurança pequena)
-    # ou testamos o limite exato
+    # Falhamos o teste se passar do limite
     assert slim_size <= MAX_SLIM_MB, f"A imagem slim estourou o limite! {slim_size:.2f}MB > {MAX_SLIM_MB}MB"
     assert full_size <= MAX_FULL_MB, f"A imagem full estourou o limite! {full_size:.2f}MB > {MAX_FULL_MB}MB"

@@ -37,8 +37,8 @@ fi
 
 # Checar Root para Linux
 if [ "$EUID" -ne 0 ]; then
-  echo -e "${RED}[!] Este script precisa ser executado como root (sudo).${NC}"
-  exit 1
+  echo -e "${YELLOW}[!] Este script não está sendo executado como root. Algumas operações (swap, sysctl, apt) podem falhar.${NC}"
+  # exit 1 (Removido por solicitação do usuário para tentar sem sudo)
 fi
 
 echo -e "${GREEN}[*] Verificando espaço em disco...${NC}"
@@ -51,45 +51,81 @@ if [ "$AVAILABLE_KB" -lt 10485760 ]; then
 fi
 echo -e "${GREEN}[*] Espaço em disco OK.${NC}"
 
-echo -e "${GREEN}[*] Instalando/Atualizando dphys-swapfile...${NC}"
-apt-get update
-apt-get install -y dphys-swapfile
-
-echo -e "${GREEN}[*] Configurando SWAP de 4GB...${NC}"
-# Substitui o valor do CONF_SWAPSIZE por 4096 (4GB) no arquivo de configuração do swapfile
-sed -i 's/^#*CONF_SWAPSIZE=.*/CONF_SWAPSIZE=4096/' /etc/dphys-swapfile
-
-# Reinicia o serviço para aplicar as mudanças
-dphys-swapfile setup
-systemctl restart dphys-swapfile
-
-echo -e "${GREEN}[*] Otimizando vm.swappiness (evita thrashing desnecessário)...${NC}"
-sysctl vm.swappiness=10
-# Deixar persistente
-if ! grep -q "^vm.swappiness=10" /etc/sysctl.conf; then
-    echo "vm.swappiness=10" >> /etc/sysctl.conf
+# Instalar dphys-swapfile se necessário
+if ! dpkg -s dphys-swapfile &> /dev/null; then
+    echo -e "${GREEN}[*] Instalando dphys-swapfile...${NC}"
+    apt-get update
+    apt-get install -y dphys-swapfile
+else
+    echo -e "${GREEN}[*] dphys-swapfile já está instalado.${NC}"
 fi
 
-echo -e "${GREEN}[*] Verificando Docker e docker-compose...${NC}"
+# Configurar SWAP se necessário
+CURRENT_SWAPSIZE=$(grep "^CONF_SWAPSIZE=" /etc/dphys-swapfile | cut -d'=' -f2 || echo "0")
+if [ "$CURRENT_SWAPSIZE" != "4096" ]; then
+    echo -e "${GREEN}[*] Tentando configurar SWAP de 4GB...${NC}"
+    if sed -i 's/^#*CONF_SWAPSIZE=.*/CONF_SWAPSIZE=4096/' /etc/dphys-swapfile 2>/dev/null; then
+        dphys-swapfile setup || true
+        systemctl restart dphys-swapfile || true
+        echo -e "${GREEN}[*] SWAP configurado para 4GB.${NC}"
+    else
+        echo -e "${YELLOW}[!] Falha ao configurar SWAP (Permissão negada). Pulando...${NC}"
+    fi
+else
+    echo -e "${GREEN}[*] SWAP já configurado para 4GB.${NC}"
+fi
+
+# Otimizar vm.swappiness se necessário
+CURRENT_SWAPPINESS=$(sysctl -n vm.swappiness 2>/dev/null || echo "0")
+if [ "$CURRENT_SWAPPINESS" != "10" ]; then
+    echo -e "${GREEN}[*] Tentando otimizar vm.swappiness...${NC}"
+    if sysctl vm.swappiness=10 2>/dev/null; then
+        if ! grep -q "^vm.swappiness=10" /etc/sysctl.conf 2>/dev/null; then
+            echo "vm.swappiness=10" >> /etc/sysctl.conf 2>/dev/null || true
+        fi
+        echo -e "${GREEN}[*] vm.swappiness otimizado.${NC}"
+    else
+        echo -e "${YELLOW}[!] Falha ao otimizar vm.swappiness (Permissão negada). Pulando...${NC}"
+    fi
+else
+    echo -e "${GREEN}[*] vm.swappiness já está em 10.${NC}"
+fi
+
+# Verificar Docker
 if ! command -v docker &> /dev/null; then
-    echo -e "${YELLOW}[!] Docker não encontrado. Instalando Docker...${NC}"
+    echo -e "${YELLOW}[!] Docker não encontrado. Tentando instalar Docker...${NC}"
     curl -fsSL https://get.docker.com -o get-docker.sh
-    sh get-docker.sh
-    usermod -aG docker $SUDO_USER
-    rm get-docker.sh
+    if sh get-docker.sh 2>/dev/null; then
+        usermod -aG docker $SUDO_USER || true
+        rm get-docker.sh
+    else
+        echo -e "${RED}[!] Falha ao instalar Docker (Permissão negada).${NC}"
+        rm -f get-docker.sh
+    fi
+else
+    echo -e "${GREEN}[*] Docker já está instalado. $(docker --version)${NC}"
 fi
 
-apt-get install -y docker-compose-plugin
+# Verificar docker-compose-plugin
+if ! dpkg -s docker-compose-plugin &> /dev/null; then
+    echo -e "${GREEN}[*] Tentando instalar docker-compose-plugin...${NC}"
+    apt-get install -y docker-compose-plugin 2>/dev/null || echo -e "${YELLOW}[!] Falha ao instalar docker-compose-plugin. Pulando...${NC}"
+else
+    echo -e "${GREEN}[*] docker-compose-plugin já está instalado.${NC}"
+fi
 
-echo -e "${GREEN}[*] Configurando rede Docker...${NC}"
-docker network inspect geminiclaw-net &>/dev/null || docker network create geminiclaw-net >/dev/null
+echo -e "${GREEN}[*] Verificando rede Docker...${NC}"
+if ! docker network inspect geminiclaw-net &>/dev/null; then
+    echo -e "${GREEN}[*] Criando rede geminiclaw-net...${NC}"
+    docker network create geminiclaw-net 2>/dev/null || echo -e "${YELLOW}[!] Falha ao criar rede Docker. Verifique se o docker está rodando e se você tem permissões.${NC}"
+else
+    echo -e "${GREEN}[*] Rede geminiclaw-net já existe.${NC}"
+fi
 
 echo -e "${GREEN}[*] Preparando containers (Pre-pull)...${NC}"
-docker pull python:3.11-slim
-docker pull qdrant/qdrant:latest
+docker pull python:3.11-slim || echo -e "${YELLOW}[!] Falha ao fazer pull da imagem python:3.11-slim.${NC}"
+docker pull qdrant/qdrant:latest || echo -e "${YELLOW}[!] Falha ao fazer pull da imagem qdrant:latest.${NC}"
 
 echo -e "${GREEN}==============================================${NC}"
-echo -e "${GREEN}   Setup concluído com sucesso!               ${NC}"
-echo -e "${GREEN}   Reinicie o terminal se o docker foi insta- ${NC}"
-echo -e "${GREEN}   lado pela primeira vez.                    ${NC}"
+echo -e "${GREEN}   Setup finalizado (com possíveis avisos).   ${NC}"
 echo -e "${GREEN}==============================================${NC}"

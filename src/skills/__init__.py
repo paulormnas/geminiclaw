@@ -1,7 +1,12 @@
 from typing import Dict, List, Optional, Any
 from .base import BaseSkill
 from .search_quick.skill import QuickSearchSkill
-from .search_deep.skill import DeepSearchSkill
+try:
+    from .search_deep.skill import DeepSearchSkill
+    _HAS_DEEP_SEARCH = True
+except (ImportError, ModuleNotFoundError):
+    _HAS_DEEP_SEARCH = False
+
 from .code.skill import CodeSkill
 from .memory.skill import MemorySkill
 from .web_reader.skill import WebReaderSkill
@@ -86,7 +91,8 @@ def _safe_register(skill_class):
         get_logger(__name__).error(f"Falha ao registrar skill {skill_class.__name__}: {e}")
 
 _safe_register(QuickSearchSkill)
-_safe_register(DeepSearchSkill)
+if _HAS_DEEP_SEARCH:
+    _safe_register(DeepSearchSkill)
 _safe_register(CodeSkill)
 _safe_register(MemorySkill)
 _safe_register(WebReaderSkill)

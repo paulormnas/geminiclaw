@@ -96,19 +96,28 @@ class SkillRegistry:
 # Instância global para facilitar o acesso
 registry = SkillRegistry()
 
-# Registrar skills padrão se necessário
-def _safe_register(skill_class):
+# Registrar skills padrão respeitando as flags de ativação
+def _safe_register(skill_class, enabled: bool = True):
+    if not enabled:
+        return
     try:
         registry.register(skill_class())
     except Exception as e:
         from src.logger import get_logger
         get_logger(__name__).error(f"Falha ao registrar skill {skill_class.__name__}: {e}")
 
+from src.config import (
+    SKILL_DEEP_SEARCH_ENABLED,
+    SKILL_WEB_READER_ENABLED,
+    SKILL_CODE_ENABLED,
+    SKILL_MEMORY_ENABLED
+)
+
 _safe_register(QuickSearchSkill)
 if _HAS_DEEP_SEARCH:
-    _safe_register(DeepSearchSkill)
-_safe_register(CodeSkill)
-_safe_register(MemorySkill)
-_safe_register(WebReaderSkill)
+    _safe_register(DeepSearchSkill, enabled=SKILL_DEEP_SEARCH_ENABLED)
+_safe_register(CodeSkill, enabled=SKILL_CODE_ENABLED)
+_safe_register(MemorySkill, enabled=SKILL_MEMORY_ENABLED)
+_safe_register(WebReaderSkill, enabled=SKILL_WEB_READER_ENABLED)
 
 __all__ = ["BaseSkill", "SkillRegistry", "registry", "QuickSearchSkill", "DeepSearchSkill", "CodeSkill", "MemorySkill", "WebReaderSkill"]

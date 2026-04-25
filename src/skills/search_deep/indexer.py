@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
-from src.config import QDRANT_URL
+from src.config import QDRANT_URL, QDRANT_CHECK_COMPATIBILITY
 from src.logger import get_logger
 from .crawler import CrawledPage
 
@@ -20,7 +20,7 @@ class VectorIndexer:
         if url == ":memory:":
             self.client = QdrantClient(location=":memory:")
         elif url.startswith("http"):
-            self.client = QdrantClient(url=url)
+            self.client = QdrantClient(url=url, check_compatibility=QDRANT_CHECK_COMPATIBILITY)
         else:
             self.client = QdrantClient(path=url)
         self._ensure_collection()
@@ -31,25 +31,32 @@ class VectorIndexer:
             collections = self.client.get_collections().collections
             exists = any(c.name == self.COLLECTION_NAME for c in collections)
             
-            if not exists:
-                logger.info(f"Criando coleção {self.COLLECTION_NAME}")
-                self.client.create_collection(
-                    collection_name=self.COLLECTION_NAME,
-                    vectors_config=VectorParams(size=384, distance=Distance.COSINE),
-                )
-                # Cria índices para filtros comuns
-                self.client.create_payload_index(
-                    collection_name=self.COLLECTION_NAME,
-                    field_name="domain",
-                    field_schema="keyword",
-                )
-                self.client.create_payload_index(
-                    collection_name=self.COLLECTION_NAME,
-                    field_name="data_type",
-                    field_schema="keyword",
-                )
+            if exists:
+                logger.info(f"Coleção {self.COLLECTION_NAME} já existe.")
+                return
+
+            logger.info(f"Criando coleção {self.COLLECTION_NAME}")
+            self.client.create_collection(
+                collection_name=self.COLLECTION_NAME,
+                vectors_config=VectorParams(size=384, distance=Distance.COSINE),
+            )
+            # Cria índices para filtros comuns
+            self.client.create_payload_index(
+                collection_name=self.COLLECTION_NAME,
+                field_name="domain",
+                field_schema="keyword",
+            )
+            self.client.create_payload_index(
+                collection_name=self.COLLECTION_NAME,
+                field_name="data_type",
+                field_schema="keyword",
+            )
         except Exception as e:
-            logger.error(f"Erro ao verificar/criar coleção Qdrant: {e}")
+            error_msg = str(e)
+            if "Connection refused" in error_msg or "111" in error_msg:
+                logger.error(f"Não foi possível conectar ao Qdrant. Verifique se o container está rodando e é compatível com o sistema (Page Size 16KB no Pi 5): {e}")
+            else:
+                logger.error(f"Erro ao verificar/criar coleção Qdrant: {e}")
 
     async def index_pages(self, pages: List[CrawledPage]):
         """Indexa as páginas no Qdrant com chunking e embeddings."""

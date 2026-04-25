@@ -13,7 +13,7 @@ IMAGE_FULL="geminiclaw-base:latest"
 IMAGE_SLIM="geminiclaw-base-slim:latest"
 
 echo ""
-echo "[1/2] Construindo imagem SLIM (sem dependências pesadas)..."
+echo "[1/2] Construindo imagem SLIM (local-only, sem extras)..."
 docker build \
   --progress=plain \
   -t "$IMAGE_SLIM" \
@@ -21,7 +21,7 @@ docker build \
   "$PROJECT_ROOT"
 
 echo ""
-echo "[2/2] Construindo imagem FULL (com fastembed e qdrant-client)..."
+echo "[2/2] Construindo imagem FULL (com Google e Deep Search extras)..."
 docker build \
   --progress=plain \
   -t "$IMAGE_FULL" \

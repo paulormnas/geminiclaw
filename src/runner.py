@@ -8,8 +8,17 @@ from typing import Any, List, Dict
 from src.logger import get_logger
 from src.config import (
     AGENT_TIMEOUT_SECONDS, 
-    DEFAULT_MODEL,
+    LLM_MODEL,
+    LLM_PROVIDER,
+    GEMINI_API_KEY,
+    OLLAMA_BASE_URL,
+    OLLAMA_NUM_CTX,
+    OLLAMA_ENABLE_THINKING,
+    LLM_REQUESTS_PER_MINUTE,
     HEALTH_CHECK_ENABLED,
+    SQLITE_DB_PATH,
+    OUTPUT_BASE_DIR,
+    LOGS_BASE_DIR,
     PI_TEMPERATURE_LIMIT,
     PI_MIN_AVAILABLE_MEMORY_MB
 )
@@ -252,22 +261,20 @@ class ContainerRunner:
                 socket_name = f"{agent_id}_{session_id}.sock"
                 
                 # Prepara caminhos para volume
-                db_path_host = os.environ.get("SQLITE_DB_PATH", "store/geminiclaw.db")
-                db_dir_host = str(Path(db_path_host).parent.absolute())
+                db_dir_host = str(Path(SQLITE_DB_PATH).parent.absolute())
                 
-                # Validação antecipada da GEMINI_API_KEY
-                gemini_key = os.environ.get("GEMINI_API_KEY")
-                if not gemini_key:
-                    logger.error("GEMINI_API_KEY não encontrada no ambiente do host.")
-                    raise RuntimeError("Variável GEMINI_API_KEY obrigatória não está definida no host.")
-
                 # Variáveis de ambiente padrão
                 env = {
                     "AGENT_ID": agent_id,
                     "SESSION_ID": session_id,
-                    "GEMINI_API_KEY": gemini_key,
-                    "GOOGLE_API_KEY": gemini_key,
-                    "DEFAULT_MODEL": os.environ.get("DEFAULT_MODEL", DEFAULT_MODEL),
+                    "LLM_PROVIDER": LLM_PROVIDER,
+                    "LLM_MODEL": LLM_MODEL,
+                    "GEMINI_API_KEY": GEMINI_API_KEY or "",
+                    "GOOGLE_API_KEY": GEMINI_API_KEY or "",
+                    "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
+                    "OLLAMA_NUM_CTX": str(OLLAMA_NUM_CTX),
+                    "OLLAMA_ENABLE_THINKING": str(OLLAMA_ENABLE_THINKING).lower(),
+                    "LLM_REQUESTS_PER_MINUTE": str(LLM_REQUESTS_PER_MINUTE),
                     "SQLITE_DB_PATH": "/data/geminiclaw.db",
                     "LONG_TERM_MEMORY_DB": "/data/memory.db",
                     "AGENT_SOCKET_NAME": socket_name,
@@ -299,30 +306,26 @@ class ContainerRunner:
                 # precisamos usar o caminho do HOST para os volumes montados em novos sub-containers.
                 host_root = os.environ.get("HOST_PROJECT_PATH")
                 
-                db_path = os.environ.get("SQLITE_DB_PATH", "store/geminiclaw.db")
-                output_base = os.environ.get("OUTPUT_BASE_DIR", "outputs")
-                logs_base = os.environ.get("LOGS_BASE_DIR", "logs")
-                
                 effective_output_id = output_session_id or session_id
                 effective_logs_id = logs_session_id or session_id
                 
                 if host_root:
                     # Estamos dentro de um container, mapeamos os caminhos relativos ao HOST_PROJECT_PATH
                     db_dir_host = str(Path(host_root) / "store")
-                    output_session_host = str(Path(host_root) / "outputs" / effective_output_id)
-                    logs_session_host = str(Path(host_root) / "logs" / effective_logs_id)
+                    output_session_host = str(Path(host_root) / OUTPUT_BASE_DIR / effective_output_id)
+                    logs_session_host = str(Path(host_root) / LOGS_BASE_DIR / effective_logs_id)
                     ipc_socket_host = str(Path(host_root) / "store" / "ipc")
                 else:
                     # Rodando diretamente no host
-                    db_dir_host = str(Path(db_path).parent.absolute())
-                    output_session_host = str(Path(output_base).absolute() / effective_output_id)
-                    logs_session_host = str(Path(logs_base).absolute() / effective_logs_id)
+                    db_dir_host = str(Path(SQLITE_DB_PATH).parent.absolute())
+                    output_session_host = str(Path(OUTPUT_BASE_DIR).absolute() / effective_output_id)
+                    logs_session_host = str(Path(LOGS_BASE_DIR).absolute() / effective_logs_id)
                     ipc_socket_host = str(Path(IPC_SOCKET_DIR))
 
                 # Garante que as pastas existem localmente com permissões adequadas
                 db_dir_path = Path(db_dir_host)
-                out_path = Path(output_base).absolute().joinpath(effective_output_id)
-                log_path = Path(logs_base).absolute().joinpath(effective_logs_id)
+                out_path = Path(OUTPUT_BASE_DIR).absolute().joinpath(effective_output_id)
+                log_path = Path(LOGS_BASE_DIR).absolute().joinpath(effective_logs_id)
                 
                 db_dir_path.mkdir(parents=True, exist_ok=True)
                 out_path.mkdir(parents=True, exist_ok=True)

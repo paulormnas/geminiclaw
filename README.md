@@ -8,6 +8,7 @@ O projeto permite que múltiplos agentes especializados colaborem em tarefas com
 
 ## 📋 Índice
 
+- [Instalação e Modos](#-instalação-e-modos)
 - [Arquitetura](#-arquitetura)
 - [Componentes Principais](#componentes-principais)
 - [Skills Framework](#-skills-framework)
@@ -18,6 +19,38 @@ O projeto permite que múltiplos agentes especializados colaborem em tarefas com
 - [Infraestrutura Docker](#-infraestrutura-docker)
 - [Como testar](#-como-testar)
 - [Status do Desenvolvimento](#-status-do-desenvolvimento)
+
+---
+
+## 🚀 Instalação e Modos
+
+O GeminiClaw pode ser configurado em diferentes modos dependendo do hardware disponível.
+
+### 1. Modo Local (Recomendado para Pi 5)
+Usa **Ollama** para inferência local e não requer internet para o LLM.
+```bash
+# Instalação
+uv sync
+cp .env.example .env
+
+# Configuração .env
+LLM_PROVIDER=ollama
+LLM_MODEL=qwen3.5:4b
+DEPLOYMENT_PROFILE=pi5
+```
+
+### 2. Modo Cloud (Fallback)
+Usa **Google Gemini API** para maior inteligência.
+```bash
+# Instalação
+uv sync --extra google
+cp .env.example .env
+
+# Configuração .env
+LLM_PROVIDER=google
+LLM_MODEL=gemini-2.0-flash
+GEMINI_API_KEY=sua_chave_aqui
+```
 
 ---
 
@@ -231,10 +264,13 @@ docker compose down
 # Criar ambiente virtual
 uv venv .venv && source .venv/bin/activate
 
-# Instalar dependências básicas
+# Instalar apenas dependências locais (Pi 5 / Ollama)
 uv sync
 
-# Para instalar as dependências de Deep Search (Qdrant, FastEmbed), use:
+# Instalar com suporte a Google Gemini
+uv sync --extra google
+
+# Instalar tudo (Deep Search + Google)
 uv sync --all-extras
 
 # Após clonar o projeto ou modificar Dockerfiles, construa as imagens localmente:

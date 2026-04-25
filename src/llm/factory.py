@@ -1,5 +1,5 @@
-import os
 from src.llm.base import LLMProvider
+from src import config
 
 _provider_instance: LLMProvider | None = None
 
@@ -10,25 +10,23 @@ def get_provider() -> LLMProvider:
         return _provider_instance
 
     # LLM_PROVIDER pode ser: google | ollama | local
-    provider_type = os.getenv("LLM_PROVIDER", "google").lower()
+    provider_type = config.LLM_PROVIDER.lower()
 
     if provider_type in ("local", "ollama"):
         from src.llm.providers.ollama import OllamaProvider
         _provider_instance = OllamaProvider(
-            base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-            model=os.getenv("LLM_MODEL", os.getenv("DEFAULT_MODEL", "qwen3.5:4b")),
+            base_url=config.OLLAMA_BASE_URL,
+            model=config.LLM_MODEL,
         )
     elif provider_type == "google":
         from src.llm.providers.google import GoogleProvider
-        _provider_instance = GoogleProvider()
+        _provider_instance = GoogleProvider(
+            api_key=config.GEMINI_API_KEY,
+            model=config.LLM_MODEL,
+        )
     else:
-        # Fallback para google se não especificado corretamente mas houver chave
-        if os.getenv("GEMINI_API_KEY"):
-            from src.llm.providers.google import GoogleProvider
-            _provider_instance = GoogleProvider()
-        else:
-            raise ValueError(
-                f"LLM_PROVIDER inválido: '{provider_type}'. Use: google | ollama | local"
-            )
+        raise ValueError(
+            f"LLM_PROVIDER inválido: '{provider_type}'. Use: google | ollama | local"
+        )
 
     return _provider_instance

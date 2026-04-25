@@ -52,17 +52,17 @@ class SkillRegistry:
             for s in self._skills.values()
         ]
 
-    def as_adk_tools(self) -> List[Any]:
-        """Converte as skills registradas para o formato de ferramentas do ADK.
+    def as_tools(self) -> List[Callable]:
+        """Converte as skills registradas para o formato de ferramentas padrão.
 
         Returns:
-            List[Any]: Lista de ferramentas formatadas para o ADK.
+            List[Callable]: Lista de funções formatadas como ferramentas.
         """
         tools = []
         for skill in self._skills.values():
             # Criamos uma closure para capturar a instância correta da skill
             def create_tool(s: BaseSkill):
-                # Usamos a assinatura real da skill para o ADK
+                # Usamos a assinatura real da skill
                 async def skill_tool(**kwargs) -> str:
                     result = await s.run_with_logging(**kwargs)
                     if result.success:

@@ -89,28 +89,15 @@ async def run_ipc_loop(agent: Any) -> None:
                         full_text = cached_text
                         logger.info("Retornando resposta instantânea do cache LLM")
                     else:
-                        from google.adk.runners import InMemoryRunner
-                        from google.genai.types import Content, Part
+                        from src.llm.agent_loop import run_agent_loop
                         
-                        # Inicializa o Runner para esta execução
-                        runner = InMemoryRunner(agent=agent)
-                        # auto_create_session=True garante que não falhe por falta de sessão no serviço em memória
-                        runner.auto_create_session = True
-                        
-                        # Prepara a mensagem no formato estruturado do ADK
-                        new_msg = Content(role="user", parts=[Part(text=prompt)])
-                        
-                        full_text = ""
-                        async for event in runner.run_async(
-                            user_id="user",
-                            session_id=session_id,
-                            new_message=new_msg
-                        ):
-                            # Coleta texto das partes do conteúdo do evento
-                            if event.content and event.content.parts:
-                                for part in event.content.parts:
-                                    if part.text:
-                                        full_text += part.text
+                        full_text = await run_agent_loop(
+                            prompt=prompt,
+                            instruction=agent.instruction,
+                            tools=agent.tools,
+                            before_callback=agent.before_agent_callback,
+                            after_callback=agent.after_agent_callback
+                        )
                         
                         if full_text:
                             llm_cache.set(prompt, agent.model, full_text)

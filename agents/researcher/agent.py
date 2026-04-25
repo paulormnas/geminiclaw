@@ -5,11 +5,10 @@ Utiliza o Gemini CLI como ferramenta de busca, com cache de
 resultados configurável por TTL.
 """
 
-from google.adk.agents import Agent
-
+from agents.base.agent import Agent, _load_session_context, _persist_session_context, _setup_skills, _get_agent_instruction
+ 
 from src.logger import get_logger, setup_file_logging
 from src.config import DEFAULT_MODEL
-from agents.base.agent import _load_session_context, _persist_session_context, _setup_skills, _get_agent_instruction
 from agents.base.tools import write_artifact
 from src.skills import registry
 
@@ -56,13 +55,12 @@ AGENT_INSTRUCTION = (
 # Configura as skills antes de inicializar o agente
 _setup_skills()
 
-# Define o root_agent — ponto de entrada obrigatório para o ADK
 root_agent = Agent(
     name=AGENT_NAME,
     model=DEFAULT_MODEL,
     description=AGENT_DESCRIPTION,
     instruction=_get_agent_instruction(AGENT_INSTRUCTION),
-    tools=registry.as_adk_tools() + [write_artifact],
+    tools=registry.as_tools() + [write_artifact],
     before_agent_callback=_load_session_context,
     after_agent_callback=_persist_session_context,
 )

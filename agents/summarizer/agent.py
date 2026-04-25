@@ -4,11 +4,10 @@ Agente especializado em síntese acadêmica de múltiplas fontes.
 Recebe contextos parciais e produz relatórios finais coesos e bem estruturados.
 """
 
-from google.adk.agents import Agent
-
+from agents.base.agent import Agent, _load_session_context, _persist_session_context, _setup_skills, _get_agent_instruction
+ 
 from src.logger import get_logger, setup_file_logging
 from src.config import DEFAULT_MODEL
-from agents.base.agent import _load_session_context, _persist_session_context, _setup_skills, _get_agent_instruction
 from agents.base.tools import write_artifact
 from src.skills import registry
 
@@ -56,7 +55,7 @@ _setup_skills()
 # Filtramos apenas as skills que fazem sentido para síntese (memória). 
 # A busca web/crawler/code não são necessárias para o summarizer estrito.
 active_tools = []
-for tool in registry.as_adk_tools():
+for tool in registry.as_tools():
     if getattr(tool, "__name__", "") in ["memory"]:
         active_tools.append(tool)
 

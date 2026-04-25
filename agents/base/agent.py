@@ -6,11 +6,20 @@ e ao logger estruturado para rastreamento de operações.
 """
 
 import os
-from typing import Any
+from typing import Any, List, Callable, Dict, Optional
+from dataclasses import dataclass, field
 
-from google.adk.agents import Agent
-from google.adk.agents.context import Context
-from google.genai import types as genai_types
+@dataclass
+class Agent:
+    """Classe base para agentes GeminiClaw (substitui google-adk)."""
+    name: str
+    description: str
+    instruction: str
+    model: str
+    tools: List[Callable] = field(default_factory=list)
+    before_agent_callback: Optional[Callable] = None
+    after_agent_callback: Optional[Callable] = None
+
 from agents.base.tools import write_artifact
 from src.logger import get_logger, setup_file_logging
 from src.session import SessionManager
@@ -268,13 +277,13 @@ def _get_agent_instruction(base_instruction: str) -> str:
 # Configura as skills antes de inicializar o agente
 _setup_skills()
 
-# Define o root_agent — ponto de entrada obrigatório para o ADK
+# Define o root_agent
 root_agent = Agent(
     name=AGENT_NAME,
     model=DEFAULT_MODEL,
     description=AGENT_DESCRIPTION,
     instruction=_get_agent_instruction(AGENT_INSTRUCTION),
-    tools=registry.as_adk_tools() + [write_artifact],
+    tools=registry.as_tools() + [write_artifact],
     before_agent_callback=_load_session_context,
     after_agent_callback=_persist_session_context,
 )

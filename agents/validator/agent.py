@@ -4,13 +4,12 @@ Especializado em revisar planos de ação gerados pelo Planner.
 Verifica ambiguidade, dependências e conformidade com as regras de output.
 """
 
-from google.adk.agents import Agent
+from agents.base.agent import Agent, _load_session_context, _persist_session_context, _setup_skills
 from typing import Any
 import os
-
+ 
 from src.logger import get_logger, setup_file_logging
 from src.config import DEFAULT_MODEL
-from agents.base.agent import _load_session_context, _persist_session_context, _setup_skills
 from src.skills import registry
 
 logger = get_logger(__name__)
@@ -54,7 +53,7 @@ root_agent = Agent(
     model=DEFAULT_MODEL,
     description=AGENT_DESCRIPTION,
     instruction=AGENT_INSTRUCTION,
-    tools=registry.as_adk_tools(),
+    tools=registry.as_tools(),
     before_agent_callback=_load_session_context,
     after_agent_callback=_persist_session_context,
 )

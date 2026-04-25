@@ -814,10 +814,10 @@ response = await provider.generate(messages=compressed_history, ...)
 
 ### Tarefas desta etapa
 
-- [ ] Criar `src/llm/context_compression.py`
-- [ ] Integrar ao `agent_loop.py`
-- [ ] Adicionar testes unitários para diferentes cenários de truncagem
-- [ ] Commit: `feat(llm): compressão de contexto para modelos com janela limitada`
+- [x] Criar `src/llm/context_compression.py`
+- [x] Integrar ao `agent_loop.py`
+- [x] Adicionar testes unitários para diferentes cenários de truncagem
+- [x] Commit: `feat(llm): compressão de contexto para modelos com janela limitada`
 
 ---
 

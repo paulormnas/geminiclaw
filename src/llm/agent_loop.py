@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 from src.llm.base import LLMProvider, ToolCall, LLMResponse
 from src.llm.factory import get_provider
+from src.llm.context_compression import compress_messages
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -94,9 +95,12 @@ async def run_agent_loop(
                     }
                 })
 
-        # 2. Chama o LLM
+        # 2. Chama o LLM (com compressão de contexto para evitar estouro de memória no Pi 5)
+        max_ctx = int(os.getenv("OLLAMA_NUM_CTX", "4096"))
+        compressed_messages = compress_messages(messages, max_tokens=max_ctx, system=instruction)
+        
         response: LLMResponse = await provider.generate(
-            messages=list(messages),
+            messages=compressed_messages,
             tools=openai_tools if openai_tools else None,
             system=instruction
         )

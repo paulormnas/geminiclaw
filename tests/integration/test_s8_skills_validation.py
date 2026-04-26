@@ -17,6 +17,7 @@ import os
 import json
 import tempfile
 import shutil
+import docker
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.skills.base import SkillResult
@@ -27,10 +28,10 @@ from src.skills.memory.skill import MemorySkill
 # Helpers de verificação de disponibilidade
 # ---------------------------------------------------------------------------
 
-def _docker_available() -> bool:
-    import subprocess
+def is_docker_available():
     try:
-        subprocess.run(["docker", "info"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
+        client = docker.from_env()
+        client.ping()
         return True
     except Exception:
         return False
@@ -262,6 +263,7 @@ o {best_name} oferece o melhor equilíbrio entre performance preditiva e eficiê
 - `train_model_a/logistic_regression.pkl` — Modelo A treinado
 - `train_model_b/random_forest.pkl` — Modelo B treinado
 - `evaluate/evaluation_report.json` — Métricas comparativas
+- `recommend/recommendation.md` — Recomendação final
 """)
 
 print("Pipeline concluído com sucesso!")
@@ -272,7 +274,7 @@ print(f"Recomendação: {best_name}")
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(not _docker_available(), reason="Docker não está disponível.")
+@pytest.mark.skipif(not is_docker_available(), reason="Docker não está disponível.")
 @pytest.mark.asyncio
 async def test_iris_pipeline_via_code_skill(caplog):
     """Executa o pipeline Iris completo via CodeSkill e verifica:
@@ -360,6 +362,7 @@ async def test_iris_pipeline_via_code_skill(caplog):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_docker_available(), reason="Docker não está disponível.")
 async def test_skills_chained_log_events(caplog):
     """Simula o ciclo: CodeSkill executa → resultado gravado na MemorySkill.
 

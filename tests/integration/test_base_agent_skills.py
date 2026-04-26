@@ -1,9 +1,19 @@
 import os
 import pytest
+import docker
 from agents.base.agent import root_agent
 from src.skills import registry
 
+def is_docker_available():
+    try:
+        client = docker.from_env()
+        client.ping()
+        return True
+    except Exception:
+        return False
+
 @pytest.mark.integration
+@pytest.mark.skipif(not is_docker_available(), reason="Docker daemon não está rodando")
 def test_base_agent_has_skills():
     """Verifica se o agente base tem as ferramentas das skills habilitadas."""
     # Como as skills são carregadas no import do agent.py, 

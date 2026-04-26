@@ -6,12 +6,18 @@ import os
 from pathlib import Path
 from src.config import QDRANT_URL
 
+def is_docker_available():
+    try:
+        client = docker.from_env()
+        client.ping()
+        return True
+    except Exception:
+        return False
+
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_qdrant_connectivity():
     """Verifica se o Qdrant está acessível na URL configurada."""
-    # Note: Este teste assume que o qdrant foi subido manualmente ou via docker-compose
-    # Se rodar fora do Docker, usa localhost. Se rodar dentro, usa geminiclaw-qdrant.
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(f"{QDRANT_URL}/healthz")
@@ -38,6 +44,7 @@ def test_docker_compose_structure():
 
 @pytest.mark.asyncio
 @pytest.mark.integration
+@pytest.mark.skipif(not is_docker_available(), reason="Docker daemon não está rodando")
 async def test_runner_uses_correct_network():
     """Verifica se o runner está configurado para usar a rede geminiclaw-net."""
     from src.runner import ContainerRunner

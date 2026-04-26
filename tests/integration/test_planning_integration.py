@@ -1,11 +1,20 @@
 import pytest
 import asyncio
 import os
+import docker
 from src.orchestrator import Orchestrator, AgentTask, AgentResult
 from src.runner import ContainerRunner
 from src.ipc import IPCChannel
 from src.session import SessionManager
 from src.output_manager import OutputManager
+
+def is_docker_available():
+    try:
+        client = docker.from_env()
+        client.ping()
+        return True
+    except Exception:
+        return False
 
 @pytest.fixture
 def orchestrator():
@@ -18,6 +27,7 @@ def orchestrator():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_docker_available(), reason="Docker daemon não está rodando")
 async def test_full_planning_flow_integration(orchestrator):
     """Testa o fluxo completo de planejamento com containers reais.
     
@@ -52,6 +62,3 @@ async def test_full_planning_flow_integration(orchestrator):
     # Verifica se as tarefas planejadas foram executadas
     agent_ids = [r.agent_id for r in result.results]
     assert "researcher" in agent_ids or "base" in agent_ids
-    
-    # Verifica se os artefatos foram gerados conforme o plano (comentado devido ao não-determinismo do LLM)
-    # assert len(result.artifacts) > 0

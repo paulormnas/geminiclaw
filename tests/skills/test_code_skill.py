@@ -1,11 +1,21 @@
 import pytest
 import os
 import pathlib
+import docker
 from src.skills.code.skill import CodeSkill
 from src.skills.code.sandbox import PythonSandbox
 
+def is_docker_available():
+    try:
+        client = docker.from_env()
+        client.ping()
+        return True
+    except Exception:
+        return False
+
 @pytest.mark.integration
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_docker_available(), reason="Docker daemon não está rodando")
 async def test_code_skill_basic_execution():
     """Testa execução básica de código Python."""
     skill = CodeSkill()
@@ -22,6 +32,7 @@ async def test_code_skill_basic_execution():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_docker_available(), reason="Docker daemon não está rodando")
 async def test_code_skill_artifact_creation():
     """Testa criação de artefatos no sandbox."""
     skill = CodeSkill()
@@ -71,6 +82,7 @@ def test_code_skill_security_validation():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_docker_available(), reason="Docker daemon não está rodando")
 async def test_code_skill_package_installation():
     """Testa instalação de pacotes (requer rede no Docker)."""
     # Nota: Este teste pode demorar e requer acesso à internet do daemon Docker

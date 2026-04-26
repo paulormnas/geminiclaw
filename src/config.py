@@ -38,7 +38,7 @@ def get_env_bool(key: str, default: bool = False) -> bool:
 
 # Provedor e modelo — novos
 LLM_PROVIDER = get_env("LLM_PROVIDER", default="google")
-LLM_MODEL = get_env("LLM_MODEL") or get_env("DEFAULT_MODEL", default="gemini-2.0-flash")
+LLM_MODEL = get_env("LLM_MODEL") or get_env("DEFAULT_MODEL", default="gemini-3.1-pro-preview")
 DEFAULT_MODEL = LLM_MODEL  # Retrocompatibilidade
 
 # Configurações Ollama
@@ -90,8 +90,12 @@ OUTPUT_BASE_DIR = get_env("OUTPUT_BASE_DIR", default="outputs")
 LOGS_BASE_DIR = get_env("LOGS_BASE_DIR", default="logs")
 SEARCH_CACHE_TTL_SECONDS = int(get_env("SEARCH_CACHE_TTL_SECONDS", default="3600"))
 
+# Docker settings
+DOCKER_IMAGE_BASE = get_env("DOCKER_IMAGE_BASE", default="geminiclaw-agent-base:latest")
+DOCKER_NETWORK = get_env("DOCKER_NETWORK", default="geminiclaw-net")
+
 # Deep Search Skill (S2)
-SKILL_DEEP_SEARCH_ENABLED = get_env("SKILL_DEEP_SEARCH_ENABLED", default="false").lower() == "true"
+SKILL_DEEP_SEARCH_ENABLED = get_env_bool("SKILL_DEEP_SEARCH_ENABLED", default=False)
 DEEP_SEARCH_DOMAINS = get_env("DEEP_SEARCH_DOMAINS", default="docs.python.org,arxiv.org")
 DEEP_SEARCH_MAX_PAGES_PER_DOMAIN = int(get_env("DEEP_SEARCH_MAX_PAGES_PER_DOMAIN", default="50"))
 DEEP_SEARCH_CACHE_TTL_SECONDS = int(get_env("DEEP_SEARCH_CACHE_TTL_SECONDS", default="86400"))
@@ -99,13 +103,38 @@ QDRANT_URL = get_env("QDRANT_URL", default="http://localhost:6333")
 QDRANT_CHECK_COMPATIBILITY = get_env_bool("QDRANT_CHECK_COMPATIBILITY", default=True)
 EMBEDDING_MODEL = get_env("EMBEDDING_MODEL", default="sentence-transformers/all-MiniLM-L6-v2")
 
+# Quick Search Fallback
+QUICK_SEARCH_STRATEGY = get_env("QUICK_SEARCH_STRATEGY", default="ddg,ddg_lite,brave")
+BRAVE_API_KEY = get_env("BRAVE_API_KEY", default="")
+
 # Web Reader Skill (S5)
-SKILL_WEB_READER_ENABLED = get_env("SKILL_WEB_READER_ENABLED", default="false").lower() == "true"
+SKILL_WEB_READER_ENABLED = get_env_bool("SKILL_WEB_READER_ENABLED", default=True)
+
+# Code Execution Skill (S3)
+SKILL_CODE_ENABLED = get_env_bool("SKILL_CODE_ENABLED", default=True)
+CODE_SANDBOX_TIMEOUT_SECONDS = int(get_env("CODE_SANDBOX_TIMEOUT_SECONDS", default="60"))
+CODE_SANDBOX_MEMORY_LIMIT = get_env("CODE_SANDBOX_MEMORY_LIMIT", default="256m")
 
 # Health Monitoring (S7)
-HEALTH_CHECK_ENABLED = get_env("HEALTH_CHECK_ENABLED", default="true").lower() == "true"
+HEALTH_CHECK_ENABLED = get_env_bool("HEALTH_CHECK_ENABLED", default=True)
 PI_TEMPERATURE_LIMIT = float(get_env("PI_TEMPERATURE_LIMIT", default="75.0"))
 PI_MIN_AVAILABLE_MEMORY_MB = float(get_env("PI_MIN_AVAILABLE_MEMORY_MB", default="512.0"))
+
+# Memory (S4 + S5)
+SKILL_MEMORY_ENABLED = get_env_bool("SKILL_MEMORY_ENABLED", default=True)
+LONG_TERM_MEMORY_DB = get_env("LONG_TERM_MEMORY_DB", default="./store/memory.db")
+
+# LLM Response Cache
+LLM_CACHE_ENABLED = get_env_bool("LLM_CACHE_ENABLED", default=True)
+LLM_CACHE_TTL_SECONDS = int(get_env("LLM_CACHE_TTL_SECONDS", default="3600"))
+LLM_CACHE_MAX_ENTRIES = int(get_env("LLM_CACHE_MAX_ENTRIES", default="1000"))
+
+# Autonomous Loop
+MAX_RETRY_PER_SUBTASK = int(get_env("MAX_RETRY_PER_SUBTASK", default="3"))
+
+# Triage
+TRIAGE_MODE = get_env("TRIAGE_MODE", default="hybrid")
+TRIAGE_CONFIDENCE_THRESHOLD = float(get_env("TRIAGE_CONFIDENCE_THRESHOLD", default="0.7"))
 
 # Garante que os diretórios necessários existem (com tolerância a containers)
 try:
@@ -114,17 +143,16 @@ except PermissionError:
     if not Path(SQLITE_DB_PATH).parent.exists():
         raise
 
+from src.logger import get_logger
+logger = get_logger(__name__)
+
 for directory in [OUTPUT_BASE_DIR, LOGS_BASE_DIR]:
     try:
-        # Se for um caminho absoluto começando com /, assumimos que é um volume gerenciado
-        # e que o orquestrador já garantiu sua existência e permissões.
         if directory.startswith("/"):
              if not Path(directory).exists():
                  logger.warning(f"Diretório de volume {directory} não encontrado no container.")
              continue
-             
         Path(directory).mkdir(parents=True, exist_ok=True)
     except PermissionError:
-        # Em containers, o volume pode já estar montado mas sem permissão de mkdir no root do volume
         if not Path(directory).exists():
             raise

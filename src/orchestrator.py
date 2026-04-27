@@ -265,13 +265,20 @@ class Orchestrator:
 
             # 2. Spawna container mapeando diretórios específicos para /outputs e /logs
             ipc_port = self.ipc.get_port(ipc_id)
+            
+            # Etapa V14: Propaga metadados da tarefa como env vars
+            env_vars = {
+                "TASK_NAME": task.task_name or "default_task"
+            }
+            
             container_id = await self.runner.spawn(
                 task.agent_id, 
                 task.image, 
                 session.id, 
                 ipc_port=ipc_port, 
                 output_session_id=f"{effective_session_id}/{unique_task_id}",
-                logs_session_id=f"{effective_session_id}/{unique_task_id}"
+                logs_session_id=f"{effective_session_id}/{unique_task_id}",
+                env_vars=env_vars
             )
 
             # 3. Aguarda conexão do container ao socket monitorando saúde

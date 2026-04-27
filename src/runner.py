@@ -234,7 +234,8 @@ class ContainerRunner:
         session_id: str, 
         ipc_port: int | None = None, 
         output_session_id: str | None = None,
-        logs_session_id: str | None = None
+        logs_session_id: str | None = None,
+        env_vars: Dict[str, str] | None = None
     ) -> str:
         """Cria e inicia um container para um agente.
 
@@ -297,6 +298,10 @@ class ContainerRunner:
                     if any(key.startswith(p) for p in prefixes):
                         if key not in env:
                             env[key] = value
+                
+                # Adiciona variáveis de ambiente personalizadas passadas via argumento
+                if env_vars:
+                    env.update(env_vars)
                 
                 # Passa QDRANT_URL adiante se existir
                 if "QDRANT_URL" in os.environ:
@@ -390,6 +395,8 @@ class ContainerRunner:
                 mem_limit = "384m"
                 if agent_id in ("base", "researcher") or image.startswith("geminiclaw-base") or image.startswith("geminiclaw-researcher"):
                     mem_limit = "512m"
+                elif agent_id in ("planner", "validator") or image.startswith("geminiclaw-planner") or image.startswith("geminiclaw-validator"):
+                    mem_limit = "768m"
 
                 # Seleção de imagem (-slim vs full)
                 use_slim = False

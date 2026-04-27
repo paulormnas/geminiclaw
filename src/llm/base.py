@@ -11,6 +11,7 @@ class ToolCall:
 @dataclass
 class LLMResponse:
     text: str | None
+    thought: str | None = None
     tool_calls: list[ToolCall] = field(default_factory=list)
     finish_reason: str = "stop"  # "stop" | "tool_calls" | "length"
     usage: dict = field(default_factory=dict)
@@ -20,6 +21,8 @@ class LLMResponse:
         msg = {"role": "assistant"}
         if self.text:
             msg["content"] = self.text
+        if self.thought:
+            msg["thought"] = self.thought
         if self.tool_calls:
             msg["tool_calls"] = [
                 {

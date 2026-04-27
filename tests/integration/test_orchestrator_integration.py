@@ -65,9 +65,10 @@ async def test_orchestrator_single_agent_flow() -> None:
             reader, writer = await asyncio.open_unix_connection(socket_path)
 
             # Simula a escrita de um artefato no "volume" associado à sessão
-            # No teste, usamos o output_session_id (mestra) se fornecido
+            # O orquestrador agora usa session_id/task_id_... como base
+            # No teste, o OutputManager.get_task_dir resolve o caminho completo
             task_dir = output_manager.get_task_dir(output_session_id, "ag1")
-            (task_dir / "result.txt").write_text("Resposta final: 42")
+            (task_dir / "artifacts" / "result.txt").write_text("Resposta final: 42")
 
             # Recebe o request
             header = await reader.readexactly(HEADER_SIZE)
@@ -89,8 +90,9 @@ async def test_orchestrator_single_agent_flow() -> None:
             writer.close()
 
         # Mock do runner.spawn que inicia o "container" fake
-        async def fake_spawn(agent_id: str, image: str, session_id: str, ipc_port: int | None = None, output_session_id: str | None = None, logs_session_id: str | None = None) -> str:
-            asyncio.create_task(fake_container(session_id, output_session_id or session_id))
+        async def fake_spawn(agent_id: str, image: str, session_id: str, **kwargs) -> str:
+            output_session_id = kwargs.get("output_session_id", session_id)
+            asyncio.create_task(fake_container(session_id, output_session_id))
             return "fake_container_id"
 
         mock_runner.spawn = AsyncMock(side_effect=fake_spawn)

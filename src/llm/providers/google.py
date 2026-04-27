@@ -1,4 +1,5 @@
 import os
+import json
 from google import genai
 from google.genai import types as genai_types
 from src.llm.base import LLMProvider, LLMResponse, ToolCall
@@ -24,8 +25,55 @@ class GoogleProvider(LLMProvider):
         # Converter mensagens para formato Google GenAI
         contents = []
         for msg in messages:
-            role = "user" if msg["role"] == "user" else "model"
-            contents.append(genai_types.Content(role=role, parts=[genai_types.Part(text=msg["content"])]))
+            role = msg.get("role")
+            content = msg.get("content") or ""
+            
+            parts = []
+            if content:
+                parts.append(genai_types.Part(text=content))
+            
+            # Tratar pensamentos anteriores (thought_signature)
+            if msg.get("thought"):
+                parts.append(genai_types.Part(thought=True, text=msg["thought"]))
+
+            # Tratar chamadas de ferramenta enviadas pelo modelo no histórico
+            if "tool_calls" in msg and msg["tool_calls"]:
+                for tc in msg["tool_calls"]:
+                    f_name = tc["function"]["name"]
+                    f_args = tc["function"]["arguments"]
+                    if isinstance(f_args, str):
+                        try:
+                            f_args = json.loads(f_args)
+                        except:
+                            pass
+                    
+                    parts.append(genai_types.Part(
+                        function_call=genai_types.FunctionCall(
+                            name=f_name,
+                            args=f_args
+                        )
+                    ))
+            
+            # Tratar resultados de ferramentas
+            if role == "tool":
+                role = "function" # Google usa 'function' para resultados
+                parts = [genai_types.Part(
+                    function_response=genai_types.FunctionResponse(
+                        name=msg.get("name", "unknown"),
+                        response={"result": content}
+                    )
+                )]
+            elif role == "assistant":
+                role = "model"
+            elif role == "system":
+                # Google GenAI trata system instruction separadamente no config, 
+                # mas se aparecer no histórico, ignoramos ou tratamos como user
+                continue
+            else:
+                role = "user"
+                
+            if parts:
+                contents.append(genai_types.Content(role=role, parts=parts))
 
         # Configuração de geração
         config = genai_types.GenerateContentConfig(
@@ -65,12 +113,15 @@ class GoogleProvider(LLMProvider):
 
             # Processar resposta
             text = response.text
+            thought = None
             tool_calls = []
             
-            # Se houver chamadas de função
+            # Se houver partes na resposta
             if response.candidates and response.candidates[0].content.parts:
                 for part in response.candidates[0].content.parts:
-                    if part.function_call:
+                    if part.thought:
+                        thought = part.text
+                    elif part.function_call:
                         fc = part.function_call
                         tool_calls.append(ToolCall(
                             id=fc.name, # Google não tem um ID único por call como OpenAI, usamos nome
@@ -88,6 +139,7 @@ class GoogleProvider(LLMProvider):
 
             return LLMResponse(
                 text=text,
+                thought=thought,
                 tool_calls=tool_calls,
                 finish_reason=finish_reason,
                 usage={

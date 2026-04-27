@@ -13,6 +13,8 @@ def reset_env():
     vars_to_clear = [
         "GEMINI_API_KEY",
         "DEFAULT_MODEL",
+        "LLM_PROVIDER",
+        "LLM_MODEL",
         "AGENT_TIMEOUT_SECONDS",
         "SQLITE_DB_PATH"
     ]

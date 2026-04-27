@@ -72,6 +72,7 @@ class SkillRegistry:
                 # Injetamos o nome e a descrição da skill na função
                 skill_tool.__name__ = s.name
                 skill_tool.__doc__ = s.description
+                skill_tool.parameters_schema = s.parameters_schema
                 return skill_tool
 
             tools.append(create_tool(skill))

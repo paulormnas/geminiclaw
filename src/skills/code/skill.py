@@ -43,7 +43,7 @@ class CodeSkill(BaseSkill):
         # Carregar configurações do ambiente
         timeout = int(os.getenv("CODE_SANDBOX_TIMEOUT_SECONDS", "60"))
         memory = os.getenv("CODE_SANDBOX_MEMORY_LIMIT", "256m")
-        self.output_dir = os.getenv("OUTPUTS_DIR", "outputs")
+        self.output_dir = os.getenv("OUTPUT_BASE_DIR", "/outputs")
         
         self.sandbox = PythonSandbox(
             timeout=timeout,

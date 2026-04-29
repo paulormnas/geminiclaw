@@ -75,7 +75,8 @@ if DEPLOYMENT_PROFILE == "pi5" or LLM_PROVIDER == "ollama":
 if DEPLOYMENT_PROFILE == "pi5":
     MAX_SUBTASKS_PER_TASK = int(get_env("MAX_SUBTASKS_PER_TASK", default="5"))
     MAX_CONCURRENT_AGENTS = int(get_env("MAX_CONCURRENT_AGENTS", default="2"))
-    AGENT_TIMEOUT_SECONDS = int(get_env("AGENT_TIMEOUT_SECONDS", default="300"))
+    AGENT_TIMEOUT_SECONDS = int(get_env("AGENT_TIMEOUT_SECONDS", default="3600"))
+    CODE_SANDBOX_TIMEOUT_SECONDS = int(get_env("CODE_SANDBOX_TIMEOUT_SECONDS", default="300"))
     # No Pi 5, o Ollama local é o padrão se não especificado
     if not os.environ.get("LLM_PROVIDER"):
         LLM_PROVIDER = "ollama"

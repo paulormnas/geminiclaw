@@ -131,6 +131,21 @@ async def run_agent_loop(
                     if isinstance(tool_func, dict):
                          result = f"Erro: Ferramenta '{tool_call.name}' é um esquema estático, não executável."
                     else:
+                        # V14: Injeção automática de metadados se exigidos pela ferramenta
+                        if hasattr(tool_func, "parameters_schema") and tool_func.parameters_schema:
+                            required = tool_func.parameters_schema.get("required", [])
+                            properties = tool_func.parameters_schema.get("properties", {})
+                            
+                            # Injetar SESSION_ID se não fornecido
+                            if "session_id" in required and "session_id" not in tool_call.arguments:
+                                tool_call.arguments["session_id"] = os.environ.get("SESSION_ID", "default_session")
+                                logger.debug(f"Injetando session_id automático em {tool_call.name}")
+                                
+                            # Injetar TASK_NAME se não fornecido
+                            if "task_name" in required and "task_name" not in tool_call.arguments:
+                                tool_call.arguments["task_name"] = os.environ.get("TASK_NAME", "default_task")
+                                logger.debug(f"Injetando task_name automático em {tool_call.name}")
+
                         # Verifica se é async
                         if asyncio.iscoroutinefunction(tool_func):
                             result = await tool_func(**tool_call.arguments)

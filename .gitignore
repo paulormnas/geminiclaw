@@ -220,3 +220,10 @@ outputs/
 
 #Tests
 test_output*
+*.log
+end_temp.txt
+start_time.txt
+end_time.txt
+
+# IDE
+.vscode

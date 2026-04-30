@@ -1,119 +1,102 @@
-"""Cache de respostas do LLM (Gemini) baseado em SQLite."""
+"""Cache de respostas do LLM baseado em PostgreSQL.
 
-import sqlite3
+Substitui a implementação anterior baseada em SQLite (sqlite3).
+Usa hash SHA-256 (prompt + model) como chave primária.
+Suporta TTL e limite máximo de entradas (FIFO eviction).
+
+As tabelas ``llm_cache`` e ``llm_cache_stats`` são criadas pelo
+``scripts/init_db.sql``.
+"""
+
 import hashlib
 import time
-import os
 from typing import Optional, Dict, Any
 
 from src.logger import get_logger
+from src.db import get_connection
 
 logger = get_logger(__name__)
 
+
 class LLMResponseCache:
-    """Implementa um cache SQLite para respostas do LLM.
-    
+    """Implementa um cache PostgreSQL para respostas do LLM.
+
     Usa um hash SHA-256 (prompt + model) como chave.
     Suporta TTL e limite máximo de entradas (FIFO eviction).
     """
-    
-    def __init__(self, db_path: Optional[str] = None):
-        """Inicializa o cache.
-        
-        Args:
-            db_path: Caminho para o DB. Se None, lê de LLM_CACHE_DB ou usa default.
-        """
-        self.db_path = db_path or os.environ.get("LLM_CACHE_DB", "/data/llm_cache.db")
-        # Em testes, podemos passar ':memory:'
+
+    def __init__(self):
+        """Inicializa o cache lendo configurações de variáveis de ambiente."""
+        import os
         self.enabled = str(os.environ.get("LLM_CACHE_ENABLED", "true")).lower() == "true"
         self.ttl_seconds = int(os.environ.get("LLM_CACHE_TTL_SECONDS", "3600"))
         self.max_entries = int(os.environ.get("LLM_CACHE_MAX_ENTRIES", "1000"))
-        
-        if self.enabled:
-            self._init_db()
-            
-    def _get_connection(self) -> sqlite3.Connection:
-        """Cria e retorna uma conexão SQLite."""
-        if self.db_path != ":memory:":
-            os.makedirs(os.path.dirname(os.path.abspath(self.db_path)), exist_ok=True)
-        conn = sqlite3.connect(self.db_path, timeout=10.0)
-        conn.row_factory = sqlite3.Row
-        return conn
 
-    def _init_db(self) -> None:
-        """Cria as tabelas necessárias se não existirem."""
-        try:
-            with self._get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS llm_cache (
-                        hash_key TEXT PRIMARY KEY,
-                        prompt TEXT,
-                        model TEXT,
-                        response TEXT,
-                        timestamp REAL
-                    )
-                """)
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS llm_cache_stats (
-                        id INTEGER PRIMARY KEY CHECK (id = 1),
-                        hits INTEGER DEFAULT 0,
-                        misses INTEGER DEFAULT 0
-                    )
-                """)
-                cursor.execute("""
-                    INSERT OR IGNORE INTO llm_cache_stats (id, hits, misses)
-                    VALUES (1, 0, 0)
-                """)
-                conn.commit()
-                logger.info("LLMResponseCache inicializado", extra={"db_path": self.db_path, "ttl": self.ttl_seconds})
-        except Exception as e:
-            logger.error("Erro ao inicializar db do LLM cache", extra={"error": str(e)})
-            self.enabled = False
+        if self.enabled:
+            logger.info(
+                "LLMResponseCache inicializado",
+                extra={"extra": {"ttl": self.ttl_seconds, "max_entries": self.max_entries}},
+            )
 
     def _generate_hash(self, prompt: str, model: str) -> str:
-        """Gera o hash SHA-256 normalizado para a chave."""
+        """Gera o hash SHA-256 normalizado para a chave.
+
+        Args:
+            prompt: Prompt enviado ao LLM.
+            model: Modelo utilizado.
+
+        Returns:
+            String hexadecimal do hash SHA-256.
+        """
         raw = f"{model}:{prompt.strip()}"
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
     def get(self, prompt: str, model: str) -> Optional[str]:
         """Obtém uma resposta do cache se existir e estiver válida.
-        
+
         Args:
             prompt: Prompt enviado ao LLM.
             model: Modelo utilizado.
-            
+
         Returns:
             String com a resposta cacheada ou None se não existir/expirado.
         """
         if not self.enabled:
             return None
-            
+
         hash_key = self._generate_hash(prompt, model)
         current_time = time.time()
-        
+
         try:
-            with self._get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT response, timestamp FROM llm_cache WHERE hash_key = ?", (hash_key,))
-                row = cursor.fetchone()
-                
+            with get_connection() as conn:
+                row = conn.execute(
+                    "SELECT response, timestamp FROM llm_cache WHERE hash_key = %s",
+                    (hash_key,),
+                ).fetchone()
+
                 if row:
                     age = current_time - row["timestamp"]
                     if age <= self.ttl_seconds:
-                        cursor.execute("UPDATE llm_cache_stats SET hits = hits + 1 WHERE id = 1")
-                        conn.commit()
-                        logger.info("LLM Cache HIT", extra={"hash": hash_key[:8], "age_seconds": round(age, 2)})
+                        conn.execute(
+                            "UPDATE llm_cache_stats SET hits = hits + 1 WHERE id = 1"
+                        )
+                        logger.info(
+                            "LLM Cache HIT",
+                            extra={"extra": {"hash": hash_key[:8], "age_seconds": round(age, 2)}},
+                        )
                         return row["response"]
                     else:
-                        # Expirou, apaga
-                        cursor.execute("DELETE FROM llm_cache WHERE hash_key = ?", (hash_key,))
-                        # Continua para o miss...
-                        
+                        # Expirou — apaga e contabiliza como miss
+                        conn.execute(
+                            "DELETE FROM llm_cache WHERE hash_key = %s",
+                            (hash_key,),
+                        )
+
                 # Miss
-                cursor.execute("UPDATE llm_cache_stats SET misses = misses + 1 WHERE id = 1")
-                conn.commit()
-                logger.info("LLM Cache MISS", extra={"hash": hash_key[:8]})
+                conn.execute(
+                    "UPDATE llm_cache_stats SET misses = misses + 1 WHERE id = 1"
+                )
+                logger.info("LLM Cache MISS", extra={"extra": {"hash": hash_key[:8]}})
                 return None
         except Exception as e:
             logger.error("Erro ao ler LLM cache", extra={"error": str(e)})
@@ -121,7 +104,7 @@ class LLMResponseCache:
 
     def set(self, prompt: str, model: str, response: str) -> None:
         """Armazena ou atualiza uma resposta no cache e aplica eviction se necessário.
-        
+
         Args:
             prompt: Prompt enviado ao LLM.
             model: Modelo utilizado.
@@ -129,56 +112,65 @@ class LLMResponseCache:
         """
         if not self.enabled:
             return
-            
+
         hash_key = self._generate_hash(prompt, model)
         current_time = time.time()
-        
+
         try:
-            with self._get_connection() as conn:
-                cursor = conn.cursor()
-                
-                # Inserir ou atualizar
-                cursor.execute("""
+            with get_connection() as conn:
+                # Inserir ou atualizar (upsert)
+                conn.execute(
+                    """
                     INSERT INTO llm_cache (hash_key, prompt, model, response, timestamp)
-                    VALUES (?, ?, ?, ?, ?)
-                    ON CONFLICT(hash_key) DO UPDATE SET
-                        response = excluded.response,
-                        timestamp = excluded.timestamp
-                """, (hash_key, prompt, model, response, current_time))
-                
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (hash_key) DO UPDATE SET
+                        response = EXCLUDED.response,
+                        timestamp = EXCLUDED.timestamp
+                    """,
+                    (hash_key, prompt, model, response, current_time),
+                )
+
                 # Checar eviction
-                cursor.execute("SELECT COUNT(*) FROM llm_cache")
-                count = cursor.fetchone()[0]
-                
+                count_row = conn.execute("SELECT COUNT(*) AS cnt FROM llm_cache").fetchone()
+                count = count_row["cnt"] if count_row else 0
+
                 if count > self.max_entries:
-                    # Deletar os mais antigos além do limite
                     to_delete = count - self.max_entries
-                    cursor.execute("""
-                        DELETE FROM llm_cache 
+                    conn.execute(
+                        """
+                        DELETE FROM llm_cache
                         WHERE hash_key IN (
-                            SELECT hash_key FROM llm_cache 
-                            ORDER BY timestamp ASC 
-                            LIMIT ?
+                            SELECT hash_key FROM llm_cache
+                            ORDER BY timestamp ASC
+                            LIMIT %s
                         )
-                    """, (to_delete,))
-                    logger.debug("LLM Cache Eviction rodou", extra={"removed": to_delete})
-                
-                conn.commit()
-                logger.info("LLM Cache SET", extra={"hash": hash_key[:8]})
+                        """,
+                        (to_delete,),
+                    )
+                    logger.debug(
+                        "LLM Cache Eviction rodou",
+                        extra={"extra": {"removed": to_delete}},
+                    )
+
+            logger.info("LLM Cache SET", extra={"extra": {"hash": hash_key[:8]}})
         except Exception as e:
             logger.error("Erro ao gravar no LLM cache", extra={"error": str(e)})
 
     def stats(self) -> Dict[str, Any]:
-        """Retorna as estatísticas de hits/misses do cache."""
+        """Retorna as estatísticas de hits/misses do cache.
+
+        Returns:
+            Dicionário com hits, misses, hit_rate e total_requests.
+        """
         if not self.enabled:
             return {"enabled": False}
-            
+
         try:
-            with self._get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT hits, misses FROM llm_cache_stats WHERE id = 1")
-                row = cursor.fetchone()
-                
+            with get_connection() as conn:
+                row = conn.execute(
+                    "SELECT hits, misses FROM llm_cache_stats WHERE id = 1"
+                ).fetchone()
+
                 if row:
                     hits = row["hits"]
                     misses = row["misses"]
@@ -189,7 +181,7 @@ class LLMResponseCache:
                         "hits": hits,
                         "misses": misses,
                         "hit_rate": round(rate, 4),
-                        "total_requests": total
+                        "total_requests": total,
                     }
         except Exception:
             pass

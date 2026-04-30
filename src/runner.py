@@ -18,7 +18,7 @@ from src.config import (
     LLM_RATE_LIMIT_COOLDOWN_SECONDS,
     DEPLOYMENT_PROFILE,
     HEALTH_CHECK_ENABLED,
-    SQLITE_DB_PATH,
+    DATABASE_URL,
     OUTPUT_BASE_DIR,
     LOGS_BASE_DIR,
     PI_TEMPERATURE_LIMIT,
@@ -103,12 +103,27 @@ class ContainerRunner:
             logger.warning("Falha ao verificar/criar rede Docker", extra={"error": str(e)})
 
     def ensure_infrastructure(self) -> None:
-        """Verifica e prepara a infraestrutura necessária (rede, imagens, qdrant)."""
+        """Verifica e prepara a infraestrutura necessária (rede, imagens, qdrant, postgres)."""
         print(f"\n{BOLD}🔍 Verificando infraestrutura do ambiente...{RESET}")
         self._ensure_network()
         self._ensure_images()
         self._ensure_qdrant()
+        self._ensure_postgres()
         print(f"{BOLD}✅ Ambiente pronto.{RESET}\n")
+
+    def _ensure_postgres(self) -> None:
+        """Verifica se o PostgreSQL está acessível via DATABASE_URL."""
+        import httpx
+        try:
+            import psycopg
+            conn = psycopg.connect(DATABASE_URL, connect_timeout=3)
+            conn.close()
+            print(f"{STATUS_ICONS['success']} PostgreSQL está online.")
+        except Exception as e:
+            print(f"{STATUS_ICONS['warning']}  {YELLOW}Aviso: Não foi possível conectar ao PostgreSQL.{RESET}")
+            print(f"   Suba o container: docker compose up postgres -d")
+            print(f"   DATABASE_URL: {DATABASE_URL}")
+            logger.warning("PostgreSQL inacessível", extra={"error": str(e)})
 
     def _ensure_qdrant(self) -> None:
         """Verifica se o Qdrant está acessível se a skill de deep search estiver ativa."""
@@ -263,10 +278,13 @@ class ContainerRunner:
                 # Prepara o caminho do socket IPC para este container (apenas se não for TCP)
                 socket_name = f"{agent_id}_{session_id}.sock"
                 
-                # Prepara caminhos para volume
-                db_dir_host = str(Path(SQLITE_DB_PATH).parent.absolute())
-                
                 # Variáveis de ambiente padrão
+                # DATABASE_URL aponta para o container postgres dentro da rede Docker
+                db_url_for_container = DATABASE_URL.replace(
+                    "@localhost:", "@geminiclaw-postgres:"
+                ).replace(
+                    "@127.0.0.1:", "@geminiclaw-postgres:"
+                )
                 env = {
                     "AGENT_ID": agent_id,
                     "SESSION_ID": session_id,
@@ -280,8 +298,7 @@ class ContainerRunner:
                     "LLM_REQUESTS_PER_MINUTE": str(LLM_REQUESTS_PER_MINUTE),
                     "LLM_RATE_LIMIT_COOLDOWN_SECONDS": str(LLM_RATE_LIMIT_COOLDOWN_SECONDS),
                     "DEPLOYMENT_PROFILE": DEPLOYMENT_PROFILE,
-                    "SQLITE_DB_PATH": "/data/geminiclaw.db",
-                    "LONG_TERM_MEMORY_DB": "/data/memory.db",
+                    "DATABASE_URL": db_url_for_container,
                     "AGENT_SOCKET_NAME": socket_name,
                     "OUTPUT_BASE_DIR": "/outputs",
                     "LOGS_BASE_DIR": "/logs",
@@ -292,7 +309,6 @@ class ContainerRunner:
                     prefixes = [
                         "SKILL_", "QUICK_SEARCH_", "DEEP_SEARCH_", 
                         "CODE_", "MEMORY_", "LLM_CACHE_", "BRAVE_",
-                        "LONG_TERM_", "SQLITE_", "OUTPUT_", "LOGS_",
                         "LLM_", "DEPLOYMENT_"
                     ]
                     if any(key.startswith(p) for p in prefixes):
@@ -321,36 +337,27 @@ class ContainerRunner:
                 
                 if host_root:
                     # Estamos dentro de um container, mapeamos os caminhos relativos ao HOST_PROJECT_PATH
-                    db_dir_host = str(Path(host_root) / "store")
                     output_session_host = str(Path(host_root) / OUTPUT_BASE_DIR / effective_output_id)
                     logs_session_host = str(Path(host_root) / LOGS_BASE_DIR / effective_logs_id)
                     ipc_socket_host = str(Path(host_root) / "store" / "ipc")
                 else:
                     # Rodando diretamente no host
-                    db_dir_host = str(Path(SQLITE_DB_PATH).parent.absolute())
                     output_session_host = str(Path(OUTPUT_BASE_DIR).absolute() / effective_output_id)
                     logs_session_host = str(Path(LOGS_BASE_DIR).absolute() / effective_logs_id)
                     ipc_socket_host = str(Path(IPC_SOCKET_DIR))
 
                 # Garante que as pastas existem localmente com permissões adequadas
-                db_dir_path = Path(db_dir_host)
                 out_path = Path(OUTPUT_BASE_DIR).absolute().joinpath(effective_output_id)
                 log_path = Path(LOGS_BASE_DIR).absolute().joinpath(effective_logs_id)
                 
-                db_dir_path.mkdir(parents=True, exist_ok=True)
                 out_path.mkdir(parents=True, exist_ok=True)
                 log_path.mkdir(parents=True, exist_ok=True)
                 
-                db_dir_path.chmod(0o777)
                 out_path.chmod(0o777)
                 log_path.chmod(0o777)
 
-                # Volumes padrão
+                # Volumes padrão (sem /data — PostgreSQL é acessado via rede Docker)
                 volumes = {
-                    db_dir_host: {
-                        "bind": "/data",
-                        "mode": "rw",
-                    },
                     output_session_host: {
                         "bind": "/outputs",
                         "mode": "rw",

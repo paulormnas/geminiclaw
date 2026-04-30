@@ -23,7 +23,7 @@ class Agent:
 from agents.base.tools import write_artifact
 from src.logger import get_logger, setup_file_logging
 from src.session import SessionManager
-from src.config import DEFAULT_MODEL, SQLITE_DB_PATH
+from src.config import DEFAULT_MODEL
 from src.skills import registry
 from src.skills.memory.long_term import LongTermMemory
 
@@ -62,7 +62,7 @@ AGENT_INSTRUCTION = (
 async def _load_session_context(callback_context: Any) -> None:
     """Callback executado antes do agente processar a solicitação.
 
-    Carrega o payload da sessão do SQLite e injeta no state do agente.
+    Carrega o payload da sessão do PostgreSQL e injeta no state do agente.
 
     Args:
         callback_context: Contexto do callback ADK.
@@ -78,8 +78,7 @@ async def _load_session_context(callback_context: Any) -> None:
         return
 
     try:
-        db_path = os.environ.get("SQLITE_DB_PATH", SQLITE_DB_PATH)
-        manager = SessionManager(db_path)
+        manager = SessionManager()
         session = manager.get(session_id)
 
         if session:
@@ -115,7 +114,7 @@ async def _load_session_context(callback_context: Any) -> None:
 async def _persist_session_context(callback_context: Any) -> None:
     """Callback executado após o agente processar a solicitação.
 
-    Persiste o state do agente de volta na sessão do SQLite.
+    Persiste o state do agente de volta na sessão do PostgreSQL.
 
     Args:
         callback_context: Contexto do callback ADK.
@@ -127,8 +126,7 @@ async def _persist_session_context(callback_context: Any) -> None:
         return
 
     try:
-        db_path = os.environ.get("SQLITE_DB_PATH", SQLITE_DB_PATH)
-        manager = SessionManager(db_path)
+        manager = SessionManager()
 
         # Converte o state para dict serializável
         state_data: dict[str, Any] = {}
@@ -220,8 +218,7 @@ def _get_agent_instruction(base_instruction: str) -> str:
 
     # --- Memória de longo prazo ---
     try:
-        db_path = os.environ.get("LONG_TERM_MEMORY_DB", "./store/memory.db")
-        ltm = LongTermMemory(db_path)
+        ltm = LongTermMemory()
         summary = ltm.summarize_for_context(limit=5)
 
         if summary:

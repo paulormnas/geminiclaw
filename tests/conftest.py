@@ -5,7 +5,12 @@ import pytest
 os.environ["GENAI_API_KEY"] = "dummy_key_for_testing"
 os.environ["DEFAULT_MODEL"] = "gemini-3-flash-preview"
 os.environ["AGENT_TIMEOUT_SECONDS"] = "120"
-os.environ["SQLITE_DB_PATH"] = ":memory:"
+# DATABASE_URL: valor fictício para testes unitários (sem banco real)
+# Testes de integração sobrescrevem com uma URL real
+os.environ.setdefault(
+    "DATABASE_URL",
+    "postgresql://test:test@localhost:5432/test_geminiclaw"
+)
 os.environ["SEARCH_CACHE_TTL_SECONDS"] = "3600"
 
 # Sinaliza para pular testes de integração que consomem cota de API durante a suíte completa

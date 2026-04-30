@@ -42,7 +42,7 @@ async def test_runner_lifecycle_integration(docker_client):
     session_id = "sess_int"
     
     # Spawn
-    with patch.dict(os.environ, {"GEMINI_API_KEY": "fake_key", "SQLITE_DB_PATH": "store/geminiclaw.db"}):
+    with patch.dict(os.environ, {"GEMINI_API_KEY": "fake_key"}):
         container_id = await runner.spawn(agent_id, image, session_id)
     assert container_id is not None
     
@@ -69,7 +69,7 @@ async def test_runner_cleanup_all_integration(docker_client):
     image = "geminiclaw-base"
     
     # Spawn de 2 containers
-    with patch.dict(os.environ, {"GEMINI_API_KEY": "fake_key", "SQLITE_DB_PATH": "store/geminiclaw.db"}):
+    with patch.dict(os.environ, {"GEMINI_API_KEY": "fake_key"}):
         id1 = await runner.spawn("a1", image, "s1")
         id2 = await runner.spawn("a2", image, "s2")
     
@@ -91,7 +91,7 @@ async def test_session_cleanup_integration(docker_client):
     runner = ContainerRunner()
     
     # Spawn
-    with patch.dict(os.environ, {"GEMINI_API_KEY": "fake_key", "SQLITE_DB_PATH": "store/geminiclaw.db"}):
+    with patch.dict(os.environ, {"GEMINI_API_KEY": "fake_key"}):
         container_id = await runner.spawn("cleanup_agent", "geminiclaw-base", "sess_cleanup")
     
     # Valida presença do container rodando associado à sessão

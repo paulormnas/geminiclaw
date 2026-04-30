@@ -86,7 +86,12 @@ else:
     AGENT_TIMEOUT_SECONDS = int(get_env("AGENT_TIMEOUT_SECONDS", default="120"))
 
 # --- Outras Configurações ---
-SQLITE_DB_PATH = get_env("SQLITE_DB_PATH", default="store/geminiclaw.db")
+# Banco de dados PostgreSQL (Roadmap V8) — única config de banco necessária
+DATABASE_URL = get_env(
+    "DATABASE_URL",
+    default="postgresql://geminiclaw:geminiclaw_secret@localhost:5432/geminiclaw",
+)
+
 OUTPUT_BASE_DIR = get_env("OUTPUT_BASE_DIR", default="outputs")
 LOGS_BASE_DIR = get_env("LOGS_BASE_DIR", default="logs")
 SEARCH_CACHE_TTL_SECONDS = int(get_env("SEARCH_CACHE_TTL_SECONDS", default="3600"))
@@ -123,7 +128,7 @@ PI_MIN_AVAILABLE_MEMORY_MB = float(get_env("PI_MIN_AVAILABLE_MEMORY_MB", default
 
 # Memory (S4 + S5)
 SKILL_MEMORY_ENABLED = get_env_bool("SKILL_MEMORY_ENABLED", default=True)
-LONG_TERM_MEMORY_DB = get_env("LONG_TERM_MEMORY_DB", default="./store/memory.db")
+# LONG_TERM_MEMORY_DB removido (Roadmap V8): usa PostgreSQL via DATABASE_URL
 
 # LLM Response Cache
 LLM_CACHE_ENABLED = get_env_bool("LLM_CACHE_ENABLED", default=True)
@@ -137,12 +142,6 @@ MAX_RETRY_PER_SUBTASK = int(get_env("MAX_RETRY_PER_SUBTASK", default="3"))
 TRIAGE_MODE = get_env("TRIAGE_MODE", default="hybrid")
 TRIAGE_CONFIDENCE_THRESHOLD = float(get_env("TRIAGE_CONFIDENCE_THRESHOLD", default="0.7"))
 
-# Garante que os diretórios necessários existem (com tolerância a containers)
-try:
-    Path(SQLITE_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-except PermissionError:
-    if not Path(SQLITE_DB_PATH).parent.exists():
-        raise
 
 from src.logger import get_logger
 logger = get_logger(__name__)

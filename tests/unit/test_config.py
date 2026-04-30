@@ -16,7 +16,7 @@ def reset_env():
         "LLM_PROVIDER",
         "LLM_MODEL",
         "AGENT_TIMEOUT_SECONDS",
-        "SQLITE_DB_PATH"
+        "DATABASE_URL",
     ]
     old_vars = {k: os.environ.get(k) for k in vars_to_clear}
     for k in vars_to_clear:
@@ -48,23 +48,19 @@ def test_config_default_values():
     """Testa se os valores padrão são aplicados corretamente."""
     with patch.dict(os.environ, {"GEMINI_API_KEY": "fake_key"}):
         importlib.reload(src.config)
-        # O valor padrão no código é "gemini-3.1-pro-preview"
         assert src.config.DEFAULT_MODEL == "gemini-3.1-pro-preview"
         assert src.config.AGENT_TIMEOUT_SECONDS == 120
-        assert src.config.SQLITE_DB_PATH == "store/geminiclaw.db"
+        assert "postgresql://" in src.config.DATABASE_URL
+        assert not hasattr(src.config, "SQLITE_DB_PATH") or src.config.DATABASE_URL
 
 @pytest.mark.unit
-def test_config_custom_values():
-    """Testa se valores personalizados no ambiente sobrescrevem os padrões."""
+def test_config_custom_database_url():
+    """Testa se DATABASE_URL personalizada sobrescreve o padrão."""
+    custom_url = "postgresql://user:pass@myhost:5432/mydb"
     custom_env = {
         "GEMINI_API_KEY": "another_key",
-        "DEFAULT_MODEL": "gemini-ultra",
-        "AGENT_TIMEOUT_SECONDS": "240",
-        "SQLITE_DB_PATH": "custom/path.db"
+        "DATABASE_URL": custom_url,
     }
     with patch.dict(os.environ, custom_env):
         importlib.reload(src.config)
-        assert src.config.GEMINI_API_KEY == "another_key"
-        assert src.config.DEFAULT_MODEL == "gemini-ultra"
-        assert src.config.AGENT_TIMEOUT_SECONDS == 240
-        assert src.config.SQLITE_DB_PATH == "custom/path.db"
+        assert src.config.DATABASE_URL == custom_url

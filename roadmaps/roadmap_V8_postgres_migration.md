@@ -172,13 +172,13 @@ CREATE INDEX IF NOT EXISTS idx_dsc_expires ON deep_search_cache(expires_at);
 
 ### Tarefas V8.1
 
-- [ ] Adicionar serviço `postgres` ao `docker-compose.yml` com volume `postgres_data`
-- [ ] Atualizar `depends_on` do serviço `geminiclaw` para incluir `postgres` com `service_healthy`
-- [ ] Criar `scripts/init_db.sql` com todas as 6 tabelas e índices
-- [ ] Adicionar variáveis `POSTGRES_*` e `DATABASE_URL` ao `.env.example`
-- [ ] Adicionar variáveis ao `.env` (sem commitar)
-- [ ] Testar: `docker compose up postgres` → verificar que as tabelas foram criadas
-- [ ] Commit: `feat(infra): adiciona container PostgreSQL ao docker-compose`
+- [x] Adicionar serviço `postgres` ao `docker-compose.yml` com volume `postgres_data`
+- [x] Atualizar `depends_on` do serviço `geminiclaw` para incluir `postgres` com `service_healthy`
+- [x] Criar `scripts/init_db.sql` com todas as 6 tabelas e índices
+- [x] Adicionar variáveis `POSTGRES_*` e `DATABASE_URL` ao `.env.example`
+- [x] Adicionar variáveis ao `.env` (sem commitar)
+- [x] Testar: `docker compose up postgres` → verificar que as tabelas foram criadas
+- [x] Commit: `feat(infra): adiciona container PostgreSQL ao docker-compose`
 
 ---
 
@@ -222,6 +222,7 @@ def get_pool() -> ConnectionPool:
             conninfo=DATABASE_URL,
             min_size=2,
             max_size=10,
+            open=False,       # Lazy: não conecta no construtor
             kwargs={"row_factory": dict_row},
         )
         logger.info("Pool PostgreSQL inicializado", extra={
@@ -249,12 +250,12 @@ def close_pool() -> None:
 
 ### Tarefas V8.2
 
-- [ ] Adicionar `psycopg[binary,pool]>=3.2` ao `pyproject.toml` (dependência principal)
-- [ ] Criar `src/db.py` com pool singleton
-- [ ] Adicionar `DATABASE_URL` ao `src/config.py`
-- [ ] Lógica de fallback: dentro de containers, usar `geminiclaw-postgres` como host; fora, usar `localhost`
-- [ ] Testes unitários: pool inicializa, conexão funciona, pool encerra
-- [ ] Commit: `feat(db): cria módulo centralizado de conexão PostgreSQL`
+- [x] Adicionar `psycopg[binary,pool]>=3.2` ao `pyproject.toml` (dependência principal)
+- [x] Criar `src/db.py` com pool singleton (lazy `open=False`)
+- [x] Adicionar `DATABASE_URL` ao `src/config.py`
+- [x] Lógica de fallback: dentro de containers, usar `geminiclaw-postgres` como host; fora, usar `localhost`
+- [x] Testes unitários: pool inicializa, conexão funciona, pool encerra
+- [x] Commit: `feat(db): cria módulo centralizado de conexão PostgreSQL`
 
 ---
 
@@ -326,13 +327,13 @@ with get_connection() as conn:
 
 ### Tarefas V8.3
 
-- [ ] Migrar `src/session.py` — remover sqlite3, usar `src/db`
-- [ ] Migrar `src/history.py`
-- [ ] Migrar `src/llm_cache.py`
-- [ ] Migrar `src/skills/memory/long_term.py`
-- [ ] Migrar `src/skills/search_deep/cache.py` — remover `sqlite_utils`
-- [ ] Atualizar testes unitários de cada módulo (substituir `sqlite3` in-memory por PostgreSQL de teste ou mock)
-- [ ] Commit: `refactor(db): migra todos os módulos de SQLite para PostgreSQL`
+- [x] Migrar `src/session.py` — remover sqlite3, usar `src/db`
+- [x] Migrar `src/history.py`
+- [x] Migrar `src/llm_cache.py`
+- [x] Migrar `src/skills/memory/long_term.py`
+- [x] Migrar `src/skills/search_deep/cache.py` — remover `sqlite_utils`
+- [x] Atualizar testes unitários de cada módulo (substituir `sqlite3` in-memory por mocks de `get_connection`)
+- [x] Commit: `refactor(db): migra todos os módulos de SQLite para PostgreSQL`
 
 ---
 
@@ -390,12 +391,12 @@ env = {
 
 ### Tarefas V8.4
 
-- [ ] Atualizar `src/config.py`: remover `SQLITE_DB_PATH` e `LONG_TERM_MEMORY_DB`, adicionar `DATABASE_URL`
-- [ ] Atualizar `src/runner.py`: remover volume `/data` para DB, injetar `DATABASE_URL` nos containers
-- [ ] Atualizar `docker-compose.yml`: adicionar `DATABASE_URL` e `depends_on: postgres`
-- [ ] Adicionar método `_ensure_postgres()` ao `ContainerRunner.ensure_infrastructure()`
-- [ ] Atualizar testes unitários de `runner` e `config`
-- [ ] Commit: `refactor(config): remove SQLITE_DB_PATH, usa DATABASE_URL para PostgreSQL`
+- [x] Atualizar `src/config.py`: remover `SQLITE_DB_PATH` e `LONG_TERM_MEMORY_DB`, adicionar `DATABASE_URL`
+- [x] Atualizar `src/runner.py`: remover volume `/data` para DB, injetar `DATABASE_URL` nos containers
+- [x] Atualizar `docker-compose.yml`: adicionar `DATABASE_URL` e `depends_on: postgres`
+- [x] Adicionar método `_ensure_postgres()` ao `ContainerRunner.ensure_infrastructure()`
+- [x] Atualizar testes unitários de `runner` e `config`
+- [x] Commit: `refactor(config): remove SQLITE_DB_PATH, usa DATABASE_URL para PostgreSQL`
 
 ---
 
@@ -433,14 +434,15 @@ env = {
 
 ### Tarefas V8.5
 
-- [ ] Remover `sqlite-utils` do `pyproject.toml`
-- [ ] Rodar `uv sync` para atualizar lockfile
-- [ ] Remover `_retry_db` e imports de `sqlite3` residuais
-- [ ] Atualizar `README.md`: diagrama, tabelas, estrutura
-- [ ] Atualizar `.agents/rules/development.md` se necessário
-- [ ] Rodar `uv run pytest` — todos os testes passam
-- [ ] Rodar validação end-to-end com `docker compose up`
+- [x] Remover `sqlite-utils` do `pyproject.toml`
+- [x] Rodar `uv sync` para atualizar lockfile
+- [x] Remover `_retry_db` e imports de `sqlite3` residuais em `src/`
+- [x] Remover todos os `SQLITE_DB_PATH` e `LONG_TERM_MEMORY_DB` de agentes, CLI e testes
+- [x] Pool com `open=False` (lazy) — não bloqueia em importações sem banco disponível
+- [x] Rodar `uv run pytest tests/unit/ tests/skills/` — **387/387 passando**
+- [ ] Rodar validação end-to-end com `docker compose up` (requer ambiente Pi 5)
 - [ ] Commit: `chore(db): remove dependências SQLite, atualiza documentação`
+
 
 ---
 

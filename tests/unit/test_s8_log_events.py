@@ -6,8 +6,8 @@ corretamente pelas skills sem dependência de Docker ou API Gemini.
 
 import pytest
 import logging
-import tempfile
 import os
+from unittest.mock import MagicMock, patch
 
 from src.skills.base import BaseSkill, SkillResult
 
@@ -112,17 +112,15 @@ async def test_memory_skill_emits_memory_written_on_remember(caplog):
     """MemorySkill com action='remember' deve emitir memory_written (short_term)."""
     from src.skills.memory.skill import MemorySkill
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = os.path.join(tmpdir, "memory.db")
-        skill = MemorySkill(db_path=db_path)
+    skill = MemorySkill()
 
-        with caplog.at_level(logging.INFO, logger="src.skills.memory.skill"):
-            result = await skill.run(
-                action="remember",
-                session_id="sess_test",
-                key="iris_eda",
-                value="150 amostras, 4 features",
-            )
+    with caplog.at_level(logging.INFO, logger="src.skills.memory.skill"):
+        result = await skill.run(
+            action="remember",
+            session_id="sess_test",
+            key="iris_eda",
+            value="150 amostras, 4 features",
+        )
 
     assert result.success, f"Esperava success=True, obteve: {result.error}"
 
@@ -143,10 +141,17 @@ async def test_memory_skill_emits_memory_written_on_memorize(caplog):
     """MemorySkill com action='memorize' deve emitir memory_written (long_term)."""
     from src.skills.memory.skill import MemorySkill
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = os.path.join(tmpdir, "memory.db")
-        skill = MemorySkill(db_path=db_path)
+    skill = MemorySkill()
 
+    # Mock do get_connection para long_term.write()
+    mock_cursor = MagicMock()
+    mock_conn = MagicMock()
+    mock_conn.execute.return_value = mock_cursor
+    ctx = MagicMock()
+    ctx.__enter__ = MagicMock(return_value=mock_conn)
+    ctx.__exit__ = MagicMock(return_value=False)
+
+    with patch("src.skills.memory.long_term.get_connection", return_value=ctx):
         with caplog.at_level(logging.INFO, logger="src.skills.memory.skill"):
             result = await skill.run(
                 action="memorize",
@@ -174,19 +179,25 @@ async def test_memory_skill_emits_memory_promoted_on_remember_forever(caplog):
     """MemorySkill com action='remember_forever' deve emitir memory_promoted."""
     from src.skills.memory.skill import MemorySkill
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = os.path.join(tmpdir, "memory.db")
-        skill = MemorySkill(db_path=db_path)
+    skill = MemorySkill()
 
-        # Primeiro grava na memória de curto prazo
-        await skill.run(
-            action="remember",
-            session_id="sess_test",
-            key="achado_importante",
-            value="Random Forest superou Logistic Regression no Iris",
-        )
+    # Grava no curto prazo (sem mock — in-memory)
+    await skill.run(
+        action="remember",
+        session_id="sess_test",
+        key="achado_importante",
+        value="Random Forest superou Logistic Regression no Iris",
+    )
 
-        # Agora promove para longo prazo
+    # Mock do get_connection para long_term.write() na promoção
+    mock_cursor = MagicMock()
+    mock_conn = MagicMock()
+    mock_conn.execute.return_value = mock_cursor
+    ctx = MagicMock()
+    ctx.__enter__ = MagicMock(return_value=mock_conn)
+    ctx.__exit__ = MagicMock(return_value=False)
+
+    with patch("src.skills.memory.long_term.get_connection", return_value=ctx):
         with caplog.at_level(logging.INFO, logger="src.skills.memory.skill"):
             result = await skill.run(
                 action="remember_forever",

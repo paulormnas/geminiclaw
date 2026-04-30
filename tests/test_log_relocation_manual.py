@@ -8,7 +8,6 @@ from src.session import SessionManager
 from src.runner import ContainerRunner
 from src.ipc import IPCChannel
 from src.output_manager import OutputManager
-from src.config import SQLITE_DB_PATH
 
 @pytest.mark.asyncio
 async def test_log_relocation():
@@ -18,7 +17,6 @@ async def test_log_relocation():
     os.environ["OUTPUT_BASE_DIR"] = "outputs/test_relocation"
     os.environ["LOGS_BASE_DIR"] = "logs/test_relocation"
     db_path = "outputs/test_relocation/test_sessions.db"
-    os.environ["SQLITE_DB_PATH"] = db_path
     
     output_base = Path("outputs/test_relocation")
     logs_base = Path("logs/test_relocation")
@@ -30,7 +28,7 @@ async def test_log_relocation():
     # Inicializa dependências
     runner = ContainerRunner()
     ipc = IPCChannel()
-    session_manager = SessionManager(db_path)
+    session_manager = SessionManager()
     output_manager = OutputManager(output_base, logs_base)
     
     orchestrator = Orchestrator(runner, ipc, session_manager, output_manager)

@@ -1,70 +1,122 @@
+"""Testes unitários para src/history.py (PostgreSQL via mock)."""
+
 import pytest
-import os
-import tempfile
+from unittest.mock import MagicMock, patch
 from src.history import ExecutionHistory
 
+
+def _make_ctx(fetchone=None, fetchall=None):
+    """Cria context manager mock de conexão."""
+    mock_conn = MagicMock()
+    cursor = MagicMock()
+    mock_conn.execute.return_value = cursor
+    cursor.fetchone.return_value = fetchone
+    cursor.fetchall.return_value = fetchall or []
+    ctx = MagicMock()
+    ctx.__enter__ = MagicMock(return_value=mock_conn)
+    ctx.__exit__ = MagicMock(return_value=False)
+    return ctx, mock_conn
+
+
+def _make_row(exec_id="exec-1", prompt="test", status="success"):
+    return {
+        "id": exec_id,
+        "prompt": prompt,
+        "plan_json": None,
+        "status": status,
+        "results_json": None,
+        "artifacts_json": None,
+        "started_at": "2026-01-01T00:00:00+00:00",
+        "finished_at": None,
+        "duration_seconds": None,
+        "total_subtasks": 0,
+        "succeeded": 0,
+        "failed": 0,
+    }
+
+
 @pytest.fixture
-def memory_history():
-    """Retorna um ExecutionHistory isolado."""
-    # Usamos tempfile em vez de :memory: para garantir compatibilidade multithread/conexao se precisar
-    fd, path = tempfile.mkstemp()
-    os.close(fd)
-    history = ExecutionHistory(db_path=path)
-    yield history
-    os.remove(path)
+def history():
+    return ExecutionHistory()
 
-def test_record_and_get(memory_history):
-    exec_id = memory_history.record(
-        prompt="Test Prompt",
-        status="success",
-        started_at="2026-04-23T00:00:00Z",
-        finished_at="2026-04-23T00:00:10Z",
-        duration_seconds=10.0,
-        plan_json='[{"task": "test"}]',
-        results_json="[]",
-        artifacts_json="[]",
-        total_subtasks=1,
-        succeeded=1,
-        failed=0
-    )
-    
-    assert exec_id
-    
-    record = memory_history.get(exec_id)
-    assert record is not None
-    assert record.id == exec_id
-    assert record.prompt == "Test Prompt"
-    assert record.status == "success"
-    assert record.duration_seconds == 10.0
-    assert record.total_subtasks == 1
 
-def test_get_not_found(memory_history):
-    assert memory_history.get("invalid_id") is None
+@pytest.mark.unit
+class TestExecutionHistoryRecord:
+    def test_record_retorna_id(self, history):
+        """record() deve retornar um ID não-vazio."""
+        ctx, _ = _make_ctx()
+        with patch("src.history.get_connection", return_value=ctx):
+            exec_id = history.record(
+                prompt="Test", status="success", started_at="2026-01-01T00:00:00Z"
+            )
+        assert exec_id != ""
 
-def test_list_recent(memory_history):
-    # Insere 3 registros com datas diferentes
-    for i in range(3):
-        memory_history.record(
-            prompt=f"Prompt {i}",
-            status="success",
-            started_at=f"2026-04-23T00:0{i}:00Z",
-            finished_at=f"2026-04-23T00:0{i}:10Z",
-            duration_seconds=10.0
-        )
-        
-    records = memory_history.list_recent(limit=2)
-    assert len(records) == 2
-    # O mais recente deve vir primeiro (i=2)
-    assert records[0].prompt == "Prompt 2"
-    assert records[1].prompt == "Prompt 1"
+    def test_record_chama_insert(self, history):
+        """record() deve executar INSERT na tabela execution_history."""
+        ctx, mock_conn = _make_ctx()
+        with patch("src.history.get_connection", return_value=ctx):
+            history.record(
+                prompt="Test", status="success", started_at="2026-01-01T00:00:00Z"
+            )
+        sql = mock_conn.execute.call_args[0][0]
+        assert "INSERT INTO execution_history" in sql
 
-def test_search(memory_history):
-    memory_history.record("Busca por gatos", "success", "2026-04-23T00:00:00Z")
-    memory_history.record("Busca por cachorros", "success", "2026-04-23T00:01:00Z")
-    
-    results = memory_history.search("gato")
-    assert len(results) == 1
-    assert results[0].prompt == "Busca por gatos"
-    
-    results_vazio = memory_history.search("passarinhos")
-    assert len(results_vazio) == 0
+    def test_record_retorna_vazio_em_erro(self, history):
+        """record() deve retornar string vazia em caso de exceção."""
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(side_effect=Exception("DB error"))
+        ctx.__exit__ = MagicMock(return_value=False)
+
+        with patch("src.history.get_connection", return_value=ctx):
+            result = history.record("prompt", "error", "2026-01-01T00:00:00Z")
+        assert result == ""
+
+
+@pytest.mark.unit
+class TestExecutionHistoryGet:
+    def test_get_retorna_record(self, history):
+        """get() deve retornar ExecutionRecord quando a row existe."""
+        row = _make_row()
+        ctx, _ = _make_ctx(fetchone=row)
+        with patch("src.history.get_connection", return_value=ctx):
+            record = history.get("exec-1")
+        assert record is not None
+        assert record.id == "exec-1"
+        assert record.status == "success"
+
+    def test_get_retorna_none_se_nao_encontrado(self, history):
+        """get() deve retornar None se a row não existir."""
+        ctx, _ = _make_ctx(fetchone=None)
+        with patch("src.history.get_connection", return_value=ctx):
+            result = history.get("inexistente")
+        assert result is None
+
+
+@pytest.mark.unit
+class TestExecutionHistoryList:
+    def test_list_recent_retorna_lista(self, history):
+        """list_recent() deve retornar lista de ExecutionRecord."""
+        rows = [_make_row("e1", "P1"), _make_row("e2", "P2")]
+        ctx, mock_conn = _make_ctx(fetchall=rows)
+        with patch("src.history.get_connection", return_value=ctx):
+            records = history.list_recent(limit=2)
+        assert len(records) == 2
+        sql = mock_conn.execute.call_args[0][0]
+        assert "LIMIT" in sql
+
+    def test_search_usa_ilike(self, history):
+        """search() deve usar ILIKE no SQL."""
+        ctx, mock_conn = _make_ctx(fetchall=[])
+        with patch("src.history.get_connection", return_value=ctx):
+            history.search("gato")
+        sql = mock_conn.execute.call_args[0][0]
+        assert "ILIKE" in sql
+
+    def test_list_recent_retorna_vazio_em_erro(self, history):
+        """list_recent() deve retornar lista vazia em caso de exceção."""
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(side_effect=Exception("DB error"))
+        ctx.__exit__ = MagicMock(return_value=False)
+        with patch("src.history.get_connection", return_value=ctx):
+            result = history.list_recent()
+        assert result == []

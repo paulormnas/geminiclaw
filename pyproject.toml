@@ -9,8 +9,8 @@ dependencies = [
     "docker>=7.1.0",
     "httpx>=0.28.1",
     "lxml>=6.0.2",
+    "psycopg[binary,pool]>=3.2",
     "python-dotenv>=1.2.2",
-    "sqlite-utils>=3.39",
 ]
 
 [project.optional-dependencies]

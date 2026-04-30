@@ -56,9 +56,7 @@ class MemorySkill(BaseSkill):
 
     def __init__(self, db_path: Optional[str] = None):
         self.short_term = ShortTermMemory()
-        # Carrega o caminho do banco de dados do ambiente ou usa o padrão
-        db_path = db_path or os.environ.get("LONG_TERM_MEMORY_DB", "./store/memory.db")
-        self.long_term = LongTermMemory(db_path)
+        self.long_term = LongTermMemory()
 
     async def run(self, action: Optional[str] = None, **kwargs) -> SkillResult:
         """Executa ações de memória.

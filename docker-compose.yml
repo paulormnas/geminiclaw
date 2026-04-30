@@ -17,6 +17,27 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: geminiclaw-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-geminiclaw}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-geminiclaw_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-geminiclaw}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    networks:
+      - geminiclaw-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-geminiclaw}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   geminiclaw:
     build:
       context: .
@@ -27,6 +48,7 @@ services:
     environment:
       - HOST_PROJECT_PATH=${PWD}
       - QDRANT_URL=http://geminiclaw-qdrant:6333
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-geminiclaw}:${POSTGRES_PASSWORD:-geminiclaw_secret}@geminiclaw-postgres:5432/${POSTGRES_DB:-geminiclaw}
     volumes:
       - ./store:/app/store
       - ./outputs:/app/outputs
@@ -36,6 +58,8 @@ services:
       - geminiclaw-net
     depends_on:
       qdrant:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
 
   ollama:
@@ -52,6 +76,7 @@ services:
     # Este serviço é útil para desenvolvimento em x86 ou se preferir isolamento.
 
 volumes:
+  postgres_data:
   qdrant_data:
   ollama_data:
 

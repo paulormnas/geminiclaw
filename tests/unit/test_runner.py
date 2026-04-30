@@ -19,7 +19,7 @@ async def test_runner_spawn_parameters(mock_docker_client):
     """Testa se o runner passa os parâmetros corretos para o docker-py."""
     with patch.dict(os.environ, {}, clear=True):
         with patch("src.runner.GEMINI_API_KEY", "test_key"), \
-             patch("src.runner.SQLITE_DB_PATH", "/path/to/db"), \
+             patch("src.runner.DATABASE_URL", "postgresql://geminiclaw:geminiclaw_secret@localhost:5432/geminiclaw"), \
              patch("src.runner.LLM_MODEL", "gemini-3-flash-preview"), \
              patch("src.runner.LLM_PROVIDER", "google"), \
              patch("src.runner.OLLAMA_BASE_URL", "http://localhost:11434"), \
@@ -53,7 +53,6 @@ async def test_runner_spawn_parameters(mock_docker_client):
                 logs_path = str(Path("logs").absolute() / "session_123")
 
                 expected_volumes = {
-                    "/path/to": {"bind": "/data", "mode": "rw"},
                     output_path: {"bind": "/outputs", "mode": "rw"},
                     logs_path: {"bind": "/logs", "mode": "rw"},
                     str(Path(IPC_SOCKET_DIR)): {"bind": "/tmp/geminiclaw-ipc", "mode": "rw"},
@@ -91,8 +90,7 @@ async def test_runner_spawn_parameters(mock_docker_client):
                         "LLM_REQUESTS_PER_MINUTE": "15",
                         "LLM_RATE_LIMIT_COOLDOWN_SECONDS": "30",
                         "DEPLOYMENT_PROFILE": "default",
-                        "SQLITE_DB_PATH": "/data/geminiclaw.db",
-                        "LONG_TERM_MEMORY_DB": "/data/memory.db",
+                        "DATABASE_URL": "postgresql://geminiclaw:geminiclaw_secret@geminiclaw-postgres:5432/geminiclaw",
                         "AGENT_SOCKET_NAME": "base_session_123.sock",
                         "OUTPUT_BASE_DIR": "/outputs",
                         "LOGS_BASE_DIR": "/logs",

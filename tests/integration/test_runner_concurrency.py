@@ -41,7 +41,7 @@ async def test_runner_concurrency_limit():
     # O semáforo protege a chamada ao docker-py.
     
     async def task(name):
-        with patch.dict(os.environ, {"GEMINI_API_KEY": "fake", "SQLITE_DB_PATH": "store/geminiclaw.db"}):
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "fake"}):
             cid = await runner.spawn(name, image, f"s_{name}")
             # Mantém o container 'rodando' ou simulando ocupação do semáforo
             # No caso real, o semáforo é liberado quando o spawn termina.

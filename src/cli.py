@@ -19,7 +19,7 @@ if root_path not in sys.path:
     sys.path.insert(0, root_path)
 
 from src.logger import get_logger
-from src.config import AGENT_TIMEOUT_SECONDS, DEFAULT_MODEL, SQLITE_DB_PATH
+from src.config import AGENT_TIMEOUT_SECONDS, DEFAULT_MODEL
 from src.session import SessionManager
 from src.runner import ContainerRunner
 from src.ipc import IPCChannel
@@ -179,7 +179,7 @@ def _create_orchestrator() -> tuple[Orchestrator, ContainerRunner]:
     Returns:
         Tupla com (Orchestrator, ContainerRunner).
     """
-    session_manager = SessionManager(SQLITE_DB_PATH)
+    session_manager = SessionManager()
     runner = ContainerRunner()
     ipc = IPCChannel()
     orchestrator = Orchestrator(

@@ -75,3 +75,23 @@ test(runner): adiciona cobertura para timeout de container
 chore(deps): adiciona docker>=7.1.0 ao pyproject.toml
 docs(setup): atualiza checklist com passo de uv sync
 ```
+
+---
+
+## 5. Push para o repositório remoto
+
+```bash
+git push origin HEAD
+```
+
+Sempre faça o push para garantir que as alterações estejam disponíveis no repositório remoto.
+
+---
+
+## 6. Limpeza da worktree
+
+```bash
+git worktree remove . --force
+```
+
+Execute este comando após o push para manter o ambiente limpo. Certifique-se de que não há arquivos não commitados que você deseja manter.

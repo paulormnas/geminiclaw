@@ -171,8 +171,6 @@ container = client.containers.run(
 
 ## Performance (ARM64 / Pi 5)
 
-- Máximo de **3 agentes simultâneos** — use `asyncio.Semaphore(3)`
-- Queries SQLite com índices; evite `SELECT *` em tabelas com histórico longo
 - Temperatura > 75°C: pause benchmarks antes de prosseguir (`vcgencmd measure_temp`)
 - Cache de respostas do Gemini com TTL configurável (padrão: 1 hora)
 
@@ -198,13 +196,13 @@ subprocess.run(f"gemini --model {model_name}", shell=True)
 ## Fluxo de desenvolvimento
 
 ```
-1. Ative o ambiente: source .venv/bin/activate
-2. Crie uma branch: git checkout -b feat/nome-da-feature
+1. Crie uma worktree: `git worktree add ../geminiclaw-<feature> -b <branch>`
+2. Entre na pasta e ative o ambiente: `cd ../geminiclaw-<feature> && uv sync`
 3. Escreva o teste antes do código (TDD quando possível)
-4. Rode os testes: uv run pytest
-5. Verifique containers: docker stats
-6. Commit com mensagem semântica
-7. Abra PR descrevendo: o que mudou, por que, e como testar
+4. Rode os testes: `uv run pytest`
+5. Verifique containers: `docker stats`
+6. Commit o código APENAS se todos os requisitos do desenvolvimento da tarefa forem atendidos.
+7. Commit seguindo o `@.agents/workflows/commit.md`
 ```
 
 ### Mensagens de commit
@@ -231,8 +229,8 @@ chore: atualiza dependências no pyproject.toml
 - Usar `except Exception: pass` — todo erro deve ser logado ou propagado
 - Usar `# type: ignore` sem comentário explicando o motivo
 - Executar `docker rm -f` em recursos não relacionados ao projeto
-- Commitar com testes falhando
-- acessar o arquivo SETUP.md
+- NÃO commitar com testes falhando. Primeiro eles devem ser resolvidos
+- Implementar alterações diretamente na pasta raiz do repositório; sempre utilize `git worktree` para novas features ou correções
 
 ## O agente deve pedir confirmação antes de
 

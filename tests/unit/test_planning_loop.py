@@ -86,3 +86,31 @@ async def test_planning_loop_max_iterations(mock_deps):
         # Para cada iteração: 1 planner + 1 validator = 2 chamadas. 
         # Total 3 iterações = 6 chamadas.
         assert mock_exec.call_count == 6
+@pytest.mark.asyncio
+async def test_planning_loop_with_new_fields(mock_deps):
+    """Testa se os novos campos validation_criteria e preferred_model são parseados corretamente."""
+    orchestrator = Orchestrator(**mock_deps)
+    
+    plan_json = """
+    [
+        {
+            "agent_id": "researcher",
+            "task_name": "task1",
+            "prompt": "search X",
+            "validation_criteria": ["Criterio 1", "Criterio 2"],
+            "preferred_model": "gemini-1.5-flash"
+        }
+    ]
+    """
+    
+    with patch.object(orchestrator, "_execute_agent") as mock_exec:
+        mock_exec.side_effect = [
+            AgentResult(agent_id="planner", session_id="s1", status="success", response={"text": plan_json}),
+            AgentResult(agent_id="validator", session_id="s2", status="success", response={"text": '{"status": "approved"}'})
+        ]
+        
+        tasks = await orchestrator._run_planning_loop("Prompt", "master_s")
+        
+        assert len(tasks) == 1
+        assert tasks[0].validation_criteria == ["Criterio 1", "Criterio 2"]
+        assert tasks[0].preferred_model == "gemini-1.5-flash"

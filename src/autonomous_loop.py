@@ -344,6 +344,8 @@ class AutonomousLoop:
                     task_name=task.task_name,
                     depends_on=task.depends_on,
                     expected_artifacts=task.expected_artifacts,
+                    validation_criteria=task.validation_criteria,
+                    preferred_model=task.preferred_model,
                 )
 
                 success = False

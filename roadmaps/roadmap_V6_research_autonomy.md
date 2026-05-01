@@ -208,12 +208,12 @@ class AgentTask:
 
 ### Tarefas V6.2
 
-- [ ] Adicionar `validation_criteria` e `preferred_model` ao `AgentTask` dataclass
-- [ ] Atualizar `_run_planning_loop` para parsear os novos campos do JSON
-- [ ] Atualizar prompt do Planner para incluir `validation_criteria` no template
-- [ ] Atualizar prompt do Validator para verificar presença de `validation_criteria`
-- [ ] Testes unitários: parsing de plano com `validation_criteria`
-- [ ] Commit: `feat(orchestrator): adiciona validation_criteria ao formato de plano`
+- [x] Adicionar `validation_criteria` e `preferred_model` ao `AgentTask` dataclass
+- [x] Atualizar `_run_planning_loop` para parsear os novos campos do JSON
+- [x] Atualizar prompt do Planner para incluir `validation_criteria` no template
+- [x] Atualizar prompt do Validator para verificar presença de `validation_criteria`
+- [x] Testes unitários: parsing de plano com `validation_criteria`
+- [x] Commit: `feat(orchestrator): adiciona validation_criteria ao formato de plano`
 
 ---
 

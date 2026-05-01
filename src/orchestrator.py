@@ -54,6 +54,8 @@ class AgentTask:
     task_name: str = ""
     depends_on: list[str] = field(default_factory=list)
     expected_artifacts: list[str] = field(default_factory=list)
+    validation_criteria: list[str] = field(default_factory=list)
+    preferred_model: str | None = None
 
 
 @dataclass
@@ -308,6 +310,10 @@ class Orchestrator:
             env_vars = {
                 "TASK_NAME": task.task_name or "default_task"
             }
+            
+            # Etapa V6.2: Propaga modelo preferido se especificado
+            if task.preferred_model:
+                env_vars["LLM_MODEL"] = task.preferred_model
             
             container_id = await self.runner.spawn(
                 task.agent_id, 
@@ -594,6 +600,8 @@ class Orchestrator:
                         task_name=t.get("task_name", ""),
                         depends_on=t.get("depends_on", []),
                         expected_artifacts=t.get("expected_artifacts", []),
+                        validation_criteria=t.get("validation_criteria", []),
+                        preferred_model=t.get("preferred_model"),
                     ))
                 return tasks
             elif status == "rejected":

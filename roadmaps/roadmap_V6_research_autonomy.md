@@ -342,12 +342,12 @@ class SubtaskOutput:
 
 ### Tarefas V6.4
 
-- [ ] Criar `src/subtask_output.py` com `SubtaskOutput` dataclass
-- [ ] Refatorar `_build_context_prefix()` para construir contexto a partir de `SubtaskOutput`
-- [ ] Parsear resposta do agente base/researcher para extrair fontes e artefatos
-- [ ] Atualizar `ShortTermMemory` para armazenar `SubtaskOutput` serializado
-- [ ] Testes unitários: serialização/deserialização de SubtaskOutput
-- [ ] Commit: `refactor(context): implementa passagem de contexto estruturada entre agentes`
+- [x] Criar `src/subtask_output.py` com `SubtaskOutput` dataclass
+- [x] Refatorar `_build_context_prefix()` para construir contexto a partir de `SubtaskOutput`
+- [x] Parsear resposta do agente base/researcher para extrair fontes e artefatos
+- [x] Atualizar `ShortTermMemory` para armazenar `SubtaskOutput` serializado
+- [x] Testes unitários: serialização/deserialização de SubtaskOutput
+- [x] Commit: `refactor(context): implementa passagem de contexto estruturada entre agentes`
 
 ---
 

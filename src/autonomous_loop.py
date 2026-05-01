@@ -217,10 +217,16 @@ class AutonomousLoop:
             return ""
 
         parts: list[str] = []
+        from src.subtask_output import SubtaskOutput
         for task_name in depends_on:
             entry = self._short_term_memory.read(master_session_id, f"result:{task_name}")
             if entry:
-                parts.append(f"### Resultado de `{task_name}`\n{entry.value}")
+                try:
+                    output = SubtaskOutput.from_json(entry.value)
+                    parts.append(output.to_context_string())
+                except Exception:
+                    # Fallback para texto bruto se não for JSON válido (compatibilidade)
+                    parts.append(f"### Resultado de `{task_name}`\n{entry.value}")
             else:
                 logger.debug(
                     "Contexto não encontrado na memória de curto prazo",
@@ -372,17 +378,8 @@ class AutonomousLoop:
                     
                     if result.status == "success":
                         success = True
-                        if task.task_name:
-                            response_text = result.response.get("text", "")
-                            self._short_term_memory.write(
-                                session_id=master_session_id,
-                                key=f"result:{task.task_name}",
-                                value=response_text,
-                                source=task.agent_id,
-                                tags=["subtask_result", task.task_name],
-                            )
-                        
                         # V6.3: Executa Reviewer se habilitado e houver critérios
+                        review = None
                         from src.config import REVIEW_ENABLED, REVIEW_MODE
                         if REVIEW_ENABLED and REVIEW_MODE == "per_subtask" and task.validation_criteria:
                             logger.info(f"Iniciando revisão da subtarefa {task.task_name}")
@@ -394,7 +391,24 @@ class AutonomousLoop:
                                 logger.warning(f"Subtarefa {task.task_name} reprovada na revisão", extra={"issues": review.get("issues")})
                             else:
                                 logger.info(f"Subtarefa {task.task_name} aprovada na revisão")
-                                
+
+                        if success and task.task_name:
+                            # V6.4: Cria output estruturado
+                            from src.subtask_output import SubtaskOutput
+                            output = SubtaskOutput.from_agent_result(
+                                task_name=task.task_name,
+                                agent_id=task.agent_id,
+                                result=result,
+                                review_data=review
+                            )
+                            
+                            self._short_term_memory.write(
+                                session_id=master_session_id,
+                                key=f"result:{task.task_name}",
+                                value=output.to_json(),
+                                source=task.agent_id,
+                                tags=["subtask_result", task.task_name, "structured"],
+                            )
                         break
                     else:
                         logger.warning(f"Tentativa {attempt+1} de {task.task_name} falhou", extra={"error": result.error})

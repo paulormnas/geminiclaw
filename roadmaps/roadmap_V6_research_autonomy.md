@@ -163,8 +163,8 @@ ANÁLISE CRÍTICA:
 - [x] Expandir `agents/validator/agent.py` AGENT_INSTRUCTION com validação de metodologia + plano
 - [x] Reescrever `agents/summarizer/agent.py` AGENT_INSTRUCTION com rastreabilidade
 - [x] Adicionar testes unitários validando que os prompts contêm seções obrigatórias
-- [ ] Atualizar prompts para refletir novos papéis (metodologia no researcher, decomposição no planner)
-- [ ] Commit: `refactor(agents): reescreve prompts com papéis acadêmicos e metodologia`
+- [x] Atualizar prompts para refletir novos papéis (metodologia no researcher, decomposição no planner)
+- [x] Commit: `refactor(agents): reescreve prompts com papéis acadêmicos e metodologia`
 
 ---
 

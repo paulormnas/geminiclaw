@@ -171,6 +171,8 @@ class ContainerRunner:
             ("geminiclaw-validator-slim", "containers/Dockerfile.validator", {"BASE_IMAGE": "geminiclaw-base-slim"}),
             ("geminiclaw-summarizer", "containers/Dockerfile.summarizer", {}),
             ("geminiclaw-summarizer-slim", "containers/Dockerfile.summarizer", {"BASE_IMAGE": "geminiclaw-base-slim"}),
+            ("geminiclaw-reviewer", "containers/Dockerfile.reviewer", {}),
+            ("geminiclaw-reviewer-slim", "containers/Dockerfile.reviewer", {"BASE_IMAGE": "geminiclaw-base-slim"}),
         ]
 
         for tag, dockerfile, buildargs in required_images:

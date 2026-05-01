@@ -205,6 +205,7 @@ Implementado em `src/autonomous_loop.py`, o loop gerencia tarefas complexas de p
 | **Researcher** | `agents/researcher/` | `geminiclaw-researcher` | Pesquisa na web via Google Search ADK, extração de conteúdo e síntese. Cache de resultados integrado. |
 | **Planner** | `agents/planner/` | `geminiclaw-planner` | Decomposição de problemas complexos em tarefas atômicas. Triage (simples/complexo). |
 | **Validator** | `agents/validator/` | `geminiclaw-validator` | Verificação de segurança, formato JSON e consistência lógica de planos. |
+| **Reviewer** | `agents/reviewer/` | `geminiclaw-reviewer` | Validação de resultados de subtarefas contra critérios definidos. |
 
 Todos os agentes compartilham a mesma imagem Docker base (`containers/Dockerfile`) com variações para agentes especializados (`containers/Dockerfile.planner`, `containers/Dockerfile.researcher`, `containers/Dockerfile.validator`).
 

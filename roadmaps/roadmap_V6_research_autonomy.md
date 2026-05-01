@@ -286,15 +286,15 @@ if task.validation_criteria and REVIEW_ENABLED:
 
 ### Tarefas V6.3
 
-- [ ] Criar `agents/reviewer/` com agent.py, prompt especializado
-- [ ] Criar `containers/Dockerfile.reviewer`
-- [ ] Adicionar `"reviewer"` ao `AGENT_REGISTRY` no orchestrator
-- [ ] Implementar `_review_subtask()` no `AutonomousLoop`
-- [ ] Configuração: `REVIEW_MODE=per_subtask|end_only|disabled` via .env
-- [ ] Adicionar script de build da imagem Docker do reviewer
-- [ ] Testes unitários: review de subtarefa com critérios pass/fail
+- [x] Criar `agents/reviewer/` com agent.py, prompt especializado
+- [x] Criar `containers/Dockerfile.reviewer`
+- [x] Adicionar `"reviewer"` ao `AGENT_REGISTRY` no orchestrator
+- [x] Implementar `_review_subtask()` no `AutonomousLoop`
+- [x] Configuração: `REVIEW_ENABLED=per_subtask|end_only|disabled` via .env
+- [x] Adicionar script de build da imagem Docker do reviewer
+- [x] Testes unitários: review de subtarefa com critérios pass/fail
 - [ ] Testes de integração: pipeline completo com reviewer ativo
-- [ ] Commit: `feat(agents): cria agente Reviewer para validação de resultados`
+- [x] Commit: `feat(agents): cria agente Reviewer para validação de resultados`
 
 ---
 

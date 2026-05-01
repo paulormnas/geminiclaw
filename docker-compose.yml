@@ -1,7 +1,9 @@
 services:
 
   qdrant:
-    image: qdrant/qdrant:latest
+    build:
+      context: .
+      dockerfile: containers/Dockerfile.qdrant
     container_name: geminiclaw-qdrant
     restart: unless-stopped
     ports:

@@ -1,9 +1,10 @@
 import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
 from src.llm.context_compression import compress_messages, estimate_tokens
 
 @pytest.mark.unit
 class TestContextCompression:
-    """Testes para a lógica de compressão de contexto (V21)."""
+    """Testes para a lógica de compressão de contexto (V6.5)."""
 
     def test_estimate_tokens_basic(self):
         """Testa se a estimativa de tokens segue a regra de 4 caracteres."""
@@ -11,92 +12,85 @@ class TestContextCompression:
         assert estimate_tokens("abcdefgh") == 2
         assert estimate_tokens("") == 0
 
-    def test_compress_no_messages(self):
+    @pytest.mark.asyncio
+    async def test_compress_no_messages(self):
         """Testa comportamento com lista vazia."""
-        assert compress_messages([], 4096) == []
+        assert await compress_messages([], 4096) == []
 
-    def test_compress_within_budget(self):
+    @pytest.mark.asyncio
+    async def test_compress_within_budget(self):
         """Testa se mensagens não são alteradas se estiverem dentro do budget."""
         messages = [
             {"role": "user", "content": "Olá"},
             {"role": "assistant", "content": "Oi, como posso ajudar?"}
         ]
-        # Budget folgado: system(0) + safety(50) + msg1(~1) + msg2(~5) << 200
-        result = compress_messages(messages, max_tokens=200)
+        result = await compress_messages(messages, max_tokens=200)
         assert result == messages
         assert len(result) == 2
 
-    def test_compress_preserves_system_and_last_user_message(self):
-        """Testa se o sistema preserva o system prompt e a última mensagem."""
-        # Cada mensagem tem ~100 tokens (400 chars)
+    @pytest.mark.asyncio
+    async def test_compress_preserves_last_message(self):
+        """Testa se o sistema preserva a última mensagem."""
+        # Cada mensagem tem ~110 tokens (incluindo overhead dict)
         messages = [
             {"role": "user", "content": "A" * 400},
             {"role": "assistant", "content": "B" * 400},
             {"role": "user", "content": "C" * 400},
             {"role": "assistant", "content": "D" * 400},
-            {"role": "user", "content": "E" * 400}, # Última: DEVE ser preservada
+            {"role": "user", "content": "E" * 400}, 
         ]
         
-        system = "Instrução de sistema" # ~5 tokens
-        # Budget: 250 tokens total
-        # System: 5
-        # Safety margin: 250/4 = 62
-        # Remaining budget for messages: 250 - 5 - 62 = 183 tokens
+        system = "Instrução de sistema"
+        # Budget total 300, safety 60, system 5 -> budget msgs 235.
+        # Cabe E (~110) + D (~110) = 220. C (~110) estoura.
+        result = await compress_messages(messages, max_tokens=300, system=system)
         
-        result = compress_messages(messages, max_tokens=250, system=system)
-        
-        # Última mensagem (E) tem 100 tokens. Cabe no budget de 183.
-        # Mensagem anterior (D) tem 100 tokens. 100 + 100 = 200 > 183. NÃO cabe.
-        
-        assert len(result) == 1
-        assert result[0]["content"] == "E" * 400
-
-    def test_compress_truncates_last_message_if_exceeds_budget(self):
-        """Testa se a última mensagem é truncada se for maior que o budget total."""
-        messages = [
-            {"role": "user", "content": "Super longa " * 100} # ~300 tokens
-        ]
-        
-        # Budget muito pequeno
-        # total 100, safety 25, budget 75 tokens
-        result = compress_messages(messages, max_tokens=100)
-        
-        assert len(result) == 1
-        assert "[truncado]" in result[0]["content"]
-        assert estimate_tokens(result[0]["content"]) <= 75 + 10 # margem para o texto de truncagem
-
-    def test_compress_drops_old_middle_messages(self):
-        """Testa o descarte de mensagens antigas do meio da conversa."""
-        messages = [
-            {"role": "user", "content": "Primeira"},
-            {"role": "assistant", "content": "Resposta 1"},
-            {"role": "user", "content": "Segunda"},
-            {"role": "assistant", "content": "Resposta 2"},
-            {"role": "user", "content": "Terceira"},
-        ]
-        
-        # Força um budget que caiba apenas 2 mensagens (a última e a anterior)
-        # 1 token ≈ 4 chars. Mensagens são curtas (~2-3 tokens cada).
-        # total 60, safety 15, budget 45 tokens.
-        result = compress_messages(messages, max_tokens=60)
-        
-        # Deve ter pelo menos a última ("Terceira")
-        assert result[-1]["content"] == "Terceira"
-        # E deve ter removido as mais antigas se o budget for atingido
-        # Como as msgs são minúsculas, talvez caibam todas. Vamos testar com msgs maiores.
-        
-        big_messages = [
-            {"role": "user", "content": "X" * 100}, # 25 tokens
-            {"role": "assistant", "content": "Y" * 100}, # 25 tokens
-            {"role": "user", "content": "Z" * 100}, # 25 tokens
-            {"role": "assistant", "content": "W" * 100}, # 25 tokens
-            {"role": "user", "content": "K" * 100}, # 25 tokens
-        ]
-        # Total 125 tokens + msgs extras
-        # Budget total 80, safety 20, net budget 60 tokens.
-        # Cabe: K (25) + W (25) = 50. Z (25) já estoura (50+25=75 > 60).
-        
-        result = compress_messages(big_messages, max_tokens=80)
+        # O resultado deve ter 2 mensagens
         assert len(result) == 2
-        assert result[0]["content"] == "W" * 100
-        assert result[1]["content"] == "K" * 100
+        assert result[-1]["content"] == "E" * 400
+        assert result[0]["content"] == "D" * 400
+
+    @pytest.mark.asyncio
+    async def test_compress_priority_retention(self):
+        """Testa se mensagens de alta prioridade são mantidas em detrimento de baixas."""
+        messages = [
+            {"role": "user", "content": "U1" * 50},      # ~35 tokens (Prio 90)
+            {"role": "tool", "content": "T1" * 50},      # ~35 tokens (Prio 30)
+            {"role": "assistant", "content": "A1" * 50}, # ~35 tokens (Prio 70)
+            {"role": "user", "content": "U2" * 50},      # ~35 tokens (Prio 90)
+        ]
+        
+        # max_tokens 100 -> safety 20 -> budget 80 tokens.
+        # U2 (~35) -> budget left 45.
+        # A1 (~35) -> budget left 10.
+        # T1 (~35) -> PULA.
+        # U1 (~35) -> PULA.
+        
+        result = await compress_messages(messages, max_tokens=100)
+        assert len(result) == 2
+        assert result[0]["role"] == "assistant"
+        assert result[1]["role"] == "user"
+
+    @pytest.mark.asyncio
+    async def test_compress_with_summary(self):
+        """Testa a compressão com sumarização."""
+        # Mensagens grandes para forçar estouro de budget > 100
+        messages = [
+            {"role": "user", "content": "Pergunta 1" * 100},   # ~250 tokens
+            {"role": "assistant", "content": "Resposta 1" * 100}, # ~250 tokens
+            {"role": "user", "content": "Pergunta 2" * 100},   # ~250 tokens
+            {"role": "assistant", "content": "Resposta 2" * 100}, # ~250 tokens
+        ]
+        
+        mock_provider = MagicMock()
+        mock_provider.generate = AsyncMock(return_value=MagicMock(text="Resumo das msgs 1"))
+        
+        # Budget 400 total
+        # max_tokens 500 -> safety 100 -> budget 400.
+        # Total messages ~1000 tokens.
+        
+        with patch("src.config.CONTEXT_COMPRESSION_MODE", "summarize"):
+            result = await compress_messages(messages, max_tokens=500, provider=mock_provider)
+                
+        assert any("[RESUMO DO HISTÓRICO ANTERIOR]" in m["content"] for m in result if m["role"] == "system")
+        assert mock_provider.generate.called

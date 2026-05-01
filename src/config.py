@@ -146,6 +146,9 @@ MAX_RETRY_PER_SUBTASK = int(get_env("MAX_RETRY_PER_SUBTASK", default="3"))
 REVIEW_ENABLED = get_env_bool("REVIEW_ENABLED", default=True)
 REVIEW_MODE = get_env("REVIEW_MODE", default="per_subtask") # per_subtask | end_only | disabled
 
+# Context Compression (V6.5)
+CONTEXT_COMPRESSION_MODE = get_env("CONTEXT_COMPRESSION_MODE", default="truncate") # truncate | summarize
+
 # Triage
 TRIAGE_MODE = get_env("TRIAGE_MODE", default="hybrid")
 TRIAGE_CONFIDENCE_THRESHOLD = float(get_env("TRIAGE_CONFIDENCE_THRESHOLD", default="0.7"))

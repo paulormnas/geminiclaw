@@ -402,12 +402,12 @@ async def compress_with_summary(
 
 ### Tarefas V6.5
 
-- [ ] Refatorar `compress_messages()` com priorização por tipo
-- [ ] Implementar `compress_with_summary()` com chamada LLM para sumarização
-- [ ] Adicionar config `CONTEXT_COMPRESSION_MODE=truncate|summarize` via .env
-- [ ] Testes unitários: compressão com priorização
-- [ ] Testes de integração: sumarização efetiva reduz tokens mantendo informação-chave
-- [ ] Commit: `feat(context): implementa compressão em 2 camadas com sumarização`
+- [x] Refatorar `compress_messages()` com priorização por tipo
+- [x] Implementar `compress_with_summary()` com chamada LLM para sumarização
+- [x] Adicionar config `CONTEXT_COMPRESSION_MODE=truncate|summarize` via .env
+- [x] Testes unitários: compressão com priorização
+- [x] Testes de integração: sumarização efetiva reduz tokens mantendo informação-chave
+- [x] Commit: `feat(context): implementa compressão em 2 camadas com sumarização`
 
 ---
 

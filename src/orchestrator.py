@@ -316,6 +316,12 @@ class Orchestrator:
             if task.preferred_model:
                 env_vars["LLM_MODEL"] = task.preferred_model
             
+            # Etapa V6.6: Propaga granular thinking mode se configurado no host
+            # Busca OLLAMA_ENABLE_THINKING_PLANNER, etc.
+            think_key = f"OLLAMA_ENABLE_THINKING_{task.agent_id.upper()}"
+            if think_key in os.environ:
+                env_vars["OLLAMA_ENABLE_THINKING"] = os.environ[think_key].lower()
+            
             container_id = await self.runner.spawn(
                 task.agent_id, 
                 task.image, 

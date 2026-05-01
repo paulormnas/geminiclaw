@@ -149,6 +149,9 @@ REVIEW_MODE = get_env("REVIEW_MODE", default="per_subtask") # per_subtask | end_
 # Context Compression (V6.5)
 CONTEXT_COMPRESSION_MODE = get_env("CONTEXT_COMPRESSION_MODE", default="truncate") # truncate | summarize
 
+# Concurrency Control (V6.6)
+MAX_LOCAL_LLM_CONCURRENT = int(get_env("MAX_LOCAL_LLM_CONCURRENT", default="2"))
+
 # Triage
 TRIAGE_MODE = get_env("TRIAGE_MODE", default="hybrid")
 TRIAGE_CONFIDENCE_THRESHOLD = float(get_env("TRIAGE_CONFIDENCE_THRESHOLD", default="0.7"))

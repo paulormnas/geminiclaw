@@ -446,18 +446,18 @@ MAX_LOCAL_LLM_CONCURRENT=2             # Máximo de agentes usando Ollama simult
 
 ### Implementação
 
-- O `ContainerRunner.spawn()` já recebe `env_vars` — adicionar LLM_MODEL e OLLAMA_ENABLE_THINKING específicos do agente
-- O `agent_loop.py` já lê essas variáveis de ambiente — apenas garantir que o container recebe os valores corretos
-- O Planner inclui `preferred_model` no JSON da subtarefa, e o orquestrador usa como override
+- [x] O `ContainerRunner.spawn()` já recebe `env_vars` — adicionar LLM_MODEL e OLLAMA_ENABLE_THINKING específicos do agente
+- [x] O `agent_loop.py` já lê essas variáveis de ambiente — apenas garantir que o container recebe os valores corretos
+- [x] O Planner inclui `preferred_model` no JSON da subtarefa, e o orquestrador usa como override
 
 ### Tarefas V6.6
 
-- [ ] Adicionar configs `LLM_MODEL_<AGENT>` e `OLLAMA_ENABLE_THINKING_<AGENT>` ao config.py
-- [ ] Adicionar `MAX_LOCAL_LLM_CONCURRENT` como semáforo no orquestrador
-- [ ] Atualizar `.env.example` com as novas variáveis
-- [ ] Modificar `runner.py` para propagar config por tipo de agente (com override via `preferred_model`)
-- [ ] Testes unitários: propagação correta de env vars por agente
-- [ ] Commit: `feat(config): permite seleção de modelo e thinking mode por agente`
+- [x] Adicionar configs `LLM_MODEL_<AGENT>` e `OLLAMA_ENABLE_THINKING_<AGENT>` ao config.py
+- [x] Adicionar `MAX_LOCAL_LLM_CONCURRENT` como semáforo no orquestrador
+- [x] Atualizar `.env.example` com as novas variáveis
+- [x] Modificar `runner.py` para propagar config por tipo de agente (com override via `preferred_model`)
+- [x] Testes unitários: propagação correta de env vars por agente
+- [x] Commit: `feat(config): permite seleção de modelo e thinking mode por agente`
 
 ### V6.6.1 — Tarefa de Validação: Benchmark de Múltiplos Agentes com Modelo Local
 

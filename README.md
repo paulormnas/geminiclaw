@@ -134,7 +134,7 @@ src/skills/
 │   ├── crawler.py           # DomainCrawler (robots.txt, rate limiting, chunking)
 │   ├── indexer.py           # VectorIndexer (Qdrant, fastembed)
 │   ├── indexer_cli.py       # CLI de administração do índice
-│   ├── cache.py             # Cache de queries em SQLite
+│   ├── cache.py             # Cache de queries em PostgreSQL
 │   └── skill.py             # DeepSearchSkill
 ├── code/                    # Execução de código Python
 │   ├── sandbox.py           # PythonSandbox (container efêmero isolado)
@@ -152,7 +152,7 @@ src/skills/
 | **Quick Search** | `quick_search` | `SKILL_QUICK_SEARCH_ENABLED=true` | Busca rápida na web via scraping do DuckDuckGo. Cache com TTL configurável. |
 | **Deep Search** | `deep_search` | `SKILL_DEEP_SEARCH_ENABLED=false` | Busca profunda em base de conhecimento indexada localmente via Qdrant. Requer crawl prévio. |
 | **Code** | `python_interpreter` | `SKILL_CODE_ENABLED=true` | Execução de código Python em container Docker efêmero e isolado (sem rede, 256 MB RAM). |
-| **Memory** | `memory` | `SKILL_MEMORY_ENABLED=true` | Memória de curto prazo (por sessão, em RAM) e longo prazo (entre sessões, SQLite). |
+| **Memory** | `memory` | `SKILL_MEMORY_ENABLED=true` | Memória de curto prazo (por sessão, em RAM) e longo prazo (entre sessões, PostgreSQL). |
 
 Cada skill pode ser habilitada/desabilitada individualmente via variáveis de ambiente. O agente base carrega apenas as skills ativas e injeta o contexto da memória de longo prazo na instrução do agente ao iniciar.
 
@@ -227,10 +227,12 @@ O projeto utiliza `docker-compose.yml` como ponto de entrada único para a infra
 
 ```yaml
 services:
+  postgres:        # Banco relacional centralizado (PostgreSQL 16)
   qdrant:          # Banco vetorial para Deep Search
   geminiclaw:      # Processo principal (orquestrador + CLI)
 
 volumes:
+  postgres_data:   # Persistência do banco relacional
   qdrant_data:     # Persistência do índice vetorial
 
 networks:
@@ -238,9 +240,10 @@ networks:
 ```
 
 Os agentes são containers **efêmeros** gerenciados pelo `ContainerRunner` — não fazem parte do Compose porque têm ciclo de vida dinâmico. Cada container de agente recebe:
-- Volume compartilhado para `/data` (SQLite), `/outputs` e `/logs`
+- Acesso ao PostgreSQL via rede Docker (`geminiclaw-net`) — sem volumes de banco de dados locais
+- Volume compartilhado para `/outputs` e `/logs`
 - Limite de memória otimizado: **256 MB** para agentes leves (Planner/Validator) e **384 MB** para agentes pesados (Base/Researcher)
-- Acesso à rede `geminiclaw-net` para comunicação com Qdrant
+- Acesso à rede `geminiclaw-net` para comunicação com Qdrant e PostgreSQL
 - Socket Docker do host (quando rodando dentro do container principal)
 
 > **Nota sobre Limites de Memória**: As configurações de `mem_limit` (256m / 384m) foram otimizadas para o Raspberry Pi 5. Caso você possua um hardware mais robusto ou enfrente problemas de OOM (Out Of Memory) durante a execução de skills complexas, você pode alterar essas configurações diretamente no arquivo `src/runner.py`.

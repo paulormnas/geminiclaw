@@ -21,7 +21,7 @@ def orchestrator():
     # Usa dependências reais para o teste de integração
     runner = ContainerRunner()
     ipc = IPCChannel()
-    session_manager = SessionManager("store/geminiclaw_test.db")
+    session_manager = SessionManager()
     output_manager = OutputManager()
     return Orchestrator(runner, ipc, session_manager, output_manager)
 

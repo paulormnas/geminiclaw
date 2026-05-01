@@ -92,6 +92,7 @@ async def test_memory_skill_full_cycle_events(caplog):
 
     Verifica que memory_written e memory_promoted são emitidos nos momentos certos.
     """
+
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = os.path.join(tmpdir, "memory.db")
         skill = MemorySkill(db_path=db_path)
@@ -369,6 +370,7 @@ async def test_skills_chained_log_events(caplog):
     Verifica que os 4 eventos aparecem na ordem correta em um cenário encadeado:
     skill_invoked → skill_completed → memory_written → (opcional) memory_promoted
     """
+
     from src.skills.memory.skill import MemorySkill
 
     with tempfile.TemporaryDirectory() as tmpdir:

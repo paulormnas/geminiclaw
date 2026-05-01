@@ -25,8 +25,7 @@ async def test_orchestrator_single_agent_flow() -> None:
 
     try:
         ipc = IPCChannel(socket_dir=ipc_dir, use_tcp=False)
-        db_path = f"{db_dir}/test.db"
-        session_manager = SessionManager(db_path=db_path)
+        session_manager = SessionManager()
         
         from src.output_manager import OutputManager
         output_manager = OutputManager(base_dir=output_dir)

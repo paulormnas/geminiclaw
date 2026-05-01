@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 
 from src.orchestrator import Orchestrator, AgentTask, AgentResult
 from src.session import SessionManager
+from src.db import get_connection
 from src.ipc import IPCChannel
 from src.output_manager import OutputManager
 
@@ -31,8 +32,7 @@ async def test_autonomous_simple_flow_integration():
 
     try:
         ipc = IPCChannel(socket_dir=ipc_dir)
-        db_path = os.path.join(db_dir, "test.db")
-        session_manager = SessionManager(db_path=db_path)
+        session_manager = SessionManager()
         output_manager = OutputManager(base_dir=output_dir)
         mock_runner = MagicMock()
 
@@ -76,8 +76,7 @@ async def test_autonomous_complex_flow_integration():
 
     try:
         ipc = IPCChannel(socket_dir=ipc_dir)
-        db_path = os.path.join(db_dir, "test.db")
-        session_manager = SessionManager(db_path=db_path)
+        session_manager = SessionManager()
         output_manager = OutputManager(base_dir=output_dir)
         mock_runner = MagicMock()
 

@@ -9,6 +9,7 @@ from src.llm.base import LLMProvider, ToolCall, LLMResponse
 from src.llm.factory import get_provider
 from src.llm.context_compression import compress_messages
 from src.logger import get_logger
+from src.telemetry import get_telemetry
 
 logger = get_logger(__name__)
 
@@ -98,11 +99,42 @@ async def run_agent_loop(
         # 2. Chama o LLM (com compressão de contexto para evitar estouro de memória no Pi 5)
         max_ctx = int(os.getenv("OLLAMA_NUM_CTX", "4096"))
         compressed_messages = compress_messages(messages, max_tokens=max_ctx, system=instruction)
-        
+        was_compressed = len(compressed_messages) < len(messages)
+
+        # V5.7 — Telemetria: llm_request
+        import time as _time
+        _t_llm_start = _time.monotonic()
+        _session_id = os.environ.get("SESSION_ID", "unknown")
+        _task_name = os.environ.get("TASK_NAME") or None
+        _exec_id = os.environ.get("EXECUTION_ID", _session_id)
+        _agent_id = os.environ.get("AGENT_ID", "agent")
+        _telemetry = get_telemetry()
+
         response: LLMResponse = await provider.generate(
             messages=compressed_messages,
             tools=openai_tools if openai_tools else None,
             system=instruction
+        )
+        _llm_latency_ms = int((_time.monotonic() - _t_llm_start) * 1000)
+
+        # V5.7 — Telemetria: llm_response (token usage)
+        _prompt_tokens = getattr(response, "prompt_tokens", 0) or len(json.dumps(compressed_messages)) // 4
+        _completion_tokens = getattr(response, "completion_tokens", 0) or len(response.text or "") // 4
+        _provider_name = os.environ.get("LLM_PROVIDER", "unknown")
+        _model_name = os.environ.get("LLM_MODEL", "unknown")
+        _telemetry.record_token_usage(
+            execution_id=_exec_id,
+            session_id=_session_id,
+            agent_id=_agent_id,
+            llm_provider=_provider_name,
+            llm_model=_model_name,
+            prompt_tokens=_prompt_tokens,
+            completion_tokens=_completion_tokens,
+            latency_ms=_llm_latency_ms,
+            task_name=_task_name,
+            context_window_used=_prompt_tokens + _completion_tokens,
+            context_window_max=max_ctx,
+            was_compressed=was_compressed,
         )
         
         # Adiciona resposta do assistente ao histórico
@@ -146,18 +178,60 @@ async def run_agent_loop(
                                 tool_call.arguments["task_name"] = os.environ.get("TASK_NAME", "default_task")
                                 logger.debug(f"Injetando task_name automático em {tool_call.name}")
 
+                        # V5.7 — Telemetria: tool_call_start
+                        _t_tool_start = _time.monotonic()
+
                         # Verifica se é async
                         if asyncio.iscoroutinefunction(tool_func):
                             result = await tool_func(**tool_call.arguments)
                         else:
                             result = tool_func(**tool_call.arguments)
+
+                        _tool_duration_ms = int((_time.monotonic() - _t_tool_start) * 1000)
                         
                     # Garante que o resultado seja string
                     if not isinstance(result, str):
                         result = json.dumps(result, ensure_ascii=False)
+
+                    # V5.7 — Telemetria: tool_call_end (sucesso)
+                    if not isinstance(tool_func, dict):
+                        _now_iso = __import__("datetime").datetime.utcnow().isoformat() + "Z"
+                        _start_iso = __import__("datetime").datetime.utcnow().isoformat() + "Z"
+                        _telemetry.record_tool_usage(
+                            execution_id=_exec_id,
+                            session_id=_session_id,
+                            agent_id=_agent_id,
+                            tool_name=tool_call.name,
+                            started_at=_start_iso,
+                            finished_at=_now_iso,
+                            duration_ms=_tool_duration_ms if 'result' in dir() else 0,
+                            success=True,
+                            arguments={k: str(v)[:100] for k, v in tool_call.arguments.items()},
+                            result_summary=(result or "")[:500],
+                            task_name=_task_name,
+                        )
+
                 except Exception as e:
                     logger.error(f"Erro ao executar {tool_call.name}: {e}", extra={"trace": traceback.format_exc()})
                     result = f"Erro ao executar ferramenta: {str(e)}"
+
+                    # V5.7 — Telemetria: tool_call_end (falha)
+                    try:
+                        _now_iso = __import__("datetime").datetime.utcnow().isoformat() + "Z"
+                        _telemetry.record_tool_usage(
+                            execution_id=_exec_id,
+                            session_id=_session_id,
+                            agent_id=_agent_id,
+                            tool_name=tool_call.name,
+                            started_at=_now_iso,
+                            finished_at=_now_iso,
+                            duration_ms=0,
+                            success=False,
+                            error_message=str(e)[:500],
+                            task_name=_task_name,
+                        )
+                    except Exception:
+                        pass
             
             # Adiciona o resultado da ferramenta ao histórico
             messages.append({

@@ -12,6 +12,7 @@ from src.logger import get_logger
 from src.skills.memory.short_term import ShortTermMemory
 from src.triage import TriageClassifier, TriageDecision
 from src.health import PiHealthMonitor
+from src.telemetry import get_telemetry
 
 if TYPE_CHECKING:
     from src.orchestrator import Orchestrator, AgentTask, AgentResult, OrchestratorResult
@@ -59,8 +60,19 @@ class AutonomousLoop:
             extra={"prompt_preview": prompt[:100], "master_session_id": master_session_id}
         )
         
+        telemetry = get_telemetry()
+
         # 1. Triage: Simples vs Complexo
         is_complex = await self._is_complex_triage(prompt, master_session_id)
+
+        # V5.8 — Telemetria: triage_decision
+        telemetry.record_agent_event(
+            execution_id=master_session_id,
+            session_id=master_session_id,
+            agent_id="autonomous_loop",
+            event_type="triage_decision",
+            payload={"is_complex": is_complex, "mode": os.environ.get("TRIAGE_MODE", "hybrid")},
+        )
         
         if not is_complex:
             logger.info("Tarefa identificada como SIMPLES — Usando Agente Base diretamente")
@@ -258,6 +270,20 @@ class AutonomousLoop:
                 return OrchestratorResult(results=[], total=0, succeeded=0, failed=0)
 
             logger.info(f"Plano gerado com {len(tasks)} subtarefas")
+
+            # V5.8 — Telemetria: plan_generated
+            telemetry = get_telemetry()
+            telemetry.record_agent_event(
+                execution_id=master_session_id,
+                session_id=master_session_id,
+                agent_id="planner",
+                event_type="plan_generated",
+                payload={
+                    "num_subtasks": len(tasks),
+                    "attempt": plan_attempt + 1,
+                    "task_names": [t.task_name for t in tasks],
+                },
+            )
             
             if len(tasks) > self.max_subtasks:
                 logger.warning(f"Número de subtarefas ({len(tasks)}) excede o limite {self.max_subtasks}")
@@ -326,6 +352,19 @@ class AutonomousLoop:
                 # Retry Loop
                 for attempt in range(self.max_retries):
                     logger.info(f"Executando tentativa {attempt+1}/{self.max_retries} para {task.agent_id} [{task.task_name}]")
+
+                    # V5.8 — Telemetria: subtask_start (apenas na primeira tentativa)
+                    if attempt == 0:
+                        telemetry = get_telemetry()
+                        telemetry.record_agent_event(
+                            execution_id=master_session_id,
+                            session_id=master_session_id,
+                            agent_id=task.agent_id,
+                            event_type="subtask_start",
+                            task_name=task.task_name or None,
+                            payload={"depends_on": task.depends_on},
+                        )
+
                     result = await self.orchestrator._execute_agent(enriched_task, master_session_id)
                     last_result = result
                     
@@ -348,13 +387,25 @@ class AutonomousLoop:
                 if last_result:
                     final_results.append(last_result)
 
-                # Monitoramento de Saúde
+                # V5.8 — Telemetria: subtask_end
+                telemetry = get_telemetry()
+                telemetry.record_agent_event(
+                    execution_id=master_session_id,
+                    session_id=master_session_id,
+                    agent_id=task.agent_id,
+                    event_type="subtask_end",
+                    task_name=task.task_name or None,
+                    payload={"success": success, "attempts": attempt + 1},
+                )
+
+                # Fase 3 V5: Hardware snapshot + Monitoramento de Saúde
                 from src.config import HEALTH_CHECK_ENABLED
                 if HEALTH_CHECK_ENABLED:
                     try:
                         temp = self._health_monitor.get_temperature()
                         mem = self._health_monitor.get_memory_usage()
                         cpu = self._health_monitor.get_cpu_usage()
+                        throttled = self._health_monitor.is_throttled()
                         
                         health_data = {
                             "temp": temp,
@@ -362,6 +413,19 @@ class AutonomousLoop:
                             "cpu_pct": cpu
                         }
                         logger.info("Métricas de saúde do sistema após subtarefa", extra=health_data)
+
+                        # V5 — Telemetria: hardware_snapshot após subtarefa
+                        telemetry = get_telemetry()
+                        telemetry.record_hardware_snapshot(
+                            execution_id=master_session_id,
+                            task_name=task.task_name or None,
+                            cpu_temp_c=temp,
+                            cpu_usage_pct=cpu,
+                            mem_total_mb=mem["total_mb"] if mem else None,
+                            mem_available_mb=mem["available_mb"] if mem else None,
+                            mem_usage_pct=mem["percent"] if mem else None,
+                            is_throttled=throttled,
+                        )
                     except Exception as e:
                         logger.debug("Falha ao coletar métricas de saúde", extra={"error": str(e)})
 
@@ -406,6 +470,16 @@ class AutonomousLoop:
                 if dag_state[t]["status"] == "failed":
                     errors.append(f"Tarefa '{t}' falhou com erro: {dag_state[t]['error']}")
             plan_feedback = "\n".join(errors)
+
+            # V5.8 — Telemetria: replan_triggered
+            telemetry = get_telemetry()
+            telemetry.record_agent_event(
+                execution_id=master_session_id,
+                session_id=master_session_id,
+                agent_id="autonomous_loop",
+                event_type="replan_triggered",
+                payload={"failed_tasks": failed_tasks, "attempt": plan_attempt + 1, "errors": errors},
+            )
 
         # Se esgotou todas as tentativas de plano e ainda falhou
         logger.error("Limite de re-planejamentos atingido. Interrompendo execução.")
@@ -459,3 +533,13 @@ class AutonomousLoop:
         
         # Executa sem esperar retorno detalhado, apenas para permitir que o agente memorize
         await self.orchestrator._execute_agent(task, master_session_id)
+
+        # V5.8 — Telemetria: memory_promotion
+        telemetry = get_telemetry()
+        telemetry.record_agent_event(
+            execution_id=master_session_id,
+            session_id=master_session_id,
+            agent_id="planner",
+            event_type="memory_promotion",
+            payload={"source": "session_findings"},
+        )

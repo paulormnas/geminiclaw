@@ -79,7 +79,9 @@ graph TD
         ExecLoop --> IPC[IPCChannel]
         Orch --> SM[SessionManager]
         Orch --> OM[OutputManager]
-        SM --- DB[(SQLite)]
+        SM --- DB[(PostgreSQL)]
+        Orch --> TEL[TelemetryCollector]
+        TEL -.-> DB
     end
     
     subgraph "Agente em Container Docker"
@@ -104,14 +106,15 @@ graph TD
 
 | Componente | Módulo | Função |
 | --- | --- | --- |
-| **Orchestrator** | `src/orchestrator.py` | Coordena o loop de planejamento e a execução sequencial de agentes. Integra o `AutonomousLoop`. |
-| **AutonomousLoop** | `src/autonomous_loop.py` | Triage (simples/complexo), decomposição via Planner→Validator, loop de retentativas por subtarefa. |
+| **Orchestrator** | `src/orchestrator.py` | Coordena o loop de planejamento e a execução sequencial de agentes. Integra o `AutonomousLoop`. Instrumentado com telemetria V5.6. |
+| **AutonomousLoop** | `src/autonomous_loop.py` | Triage (simples/complexo), decomposição via Planner→Validator, loop de retentativas por subtarefa. Instrumentado com telemetria V5.8. |
 | **ContainerRunner** | `src/runner.py` | Gerencia o ciclo de vida Docker (spawn, stop, limites de 512 MB RAM, `asyncio.Semaphore(3)`). |
 | **IPCChannel** | `src/ipc.py` | Comunicação bidirecional via Unix Domain Sockets (Linux) ou TCP loopback (macOS). Protocolo JSON com length-prefix. |
-| **SessionManager** | `src/session.py` | Persistência de histórico e estado em SQLite. |
+| **SessionManager** | `src/session.py` | Persistência de histórico e estado em **PostgreSQL**. |
 | **OutputManager** | `src/output_manager.py` | Gerencia artefatos produzidos e compartilhamento de arquivos entre agentes via `outputs/<session_id>/<task>/`. |
+| **TelemetryCollector** | `src/telemetry.py` | Coleta e persiste métricas de execução (agent_events, tool_usage, token_usage, hardware_snapshots) em batch no PostgreSQL. |
 | **SkillRegistry** | `src/skills/__init__.py` | Registro dinâmico que converte skills Python em ferramentas compatíveis com o Google ADK. |
-| **CLI** | `src/cli.py` | Interface de linha de comando com modo direto e REPL interativo. |
+| **CLI** | `src/cli.py` | Interface de linha de comando com modo direto, REPL interativo e subcomandos `--metrics`, `--export`. |
 
 ---
 
@@ -292,7 +295,9 @@ uv run pytest --cov=src --cov=agents --cov-report=term-missing
 
 ## 📊 Status do Desenvolvimento
 
-O desenvolvimento é guiado pelo [roadmap_v2.md](roadmaps/roadmap_v2.md), que define as etapas de implementação das skills e capacidades autônomas dos agentes.
+O desenvolvimento é guiado pelos roadmaps em `roadmaps/`, que definem as etapas de implementação das skills, capacidades autônomas e infraestrutura de observabilidade.
+
+### Roadmaps de Features
 
 | Etapa | Descrição | Status |
 | --- | --- | --- |
@@ -302,10 +307,39 @@ O desenvolvimento é guiado pelo [roadmap_v2.md](roadmaps/roadmap_v2.md), que de
 | **S2** | Skill de busca profunda (crawler + Qdrant) | ✅ Concluída |
 | **S3** | Skill de execução de código (sandbox Docker) | ✅ Concluída |
 | **S4** | Memória de curto prazo (in-process) | ✅ Concluída |
-| **S5** | Memória de longo prazo (SQLite) | ✅ Concluída |
+| **S5** | Memória de longo prazo (Qdrant + PostgreSQL) | ✅ Concluída |
 | **S6** | Integração das skills ao agente base | ✅ Concluída |
 | **S7** | Loop de execução autônoma | ✅ Concluída |
-| **S8** | Validação integrada em cenário real | 🔄 Em progresso (bloqueado por rate limiting 429) |
+| **S8** | Validação integrada em cenário real | 🔄 Em progresso |
+
+### Roadmaps de Infraestrutura
+
+| Roadmap | Descrição | Status |
+| --- | --- | --- |
+| **V8** | Migração SQLite → PostgreSQL (pool `psycopg` v3, `docker-compose`) | ✅ Concluída |
+| **V9** | Abstração de provedores LLM (Ollama + Google Gemini) | ✅ Concluída |
+| **V5** | Framework de Observabilidade e Métricas | ✅ Concluída |
+
+#### V5 — Observabilidade (concluído)
+
+- **Schema PostgreSQL**: quatro tabelas de telemetria (`agent_events`, `tool_usage`, `token_usage`, `hardware_snapshots`)
+- **`TelemetryCollector`** (`src/telemetry.py`): singleton com buffer de 50 eventos e flush assíncrono no PostgreSQL
+- **Instrumentação de módulos core**: `orchestrator.py` (spawn/IPC/complete/error), `agent_loop.py` (token usage, tool usage), `autonomous_loop.py` (triage, plan, subtask, replan, memory promotion)
+- **Hardware Snapshots**: integração com `PiHealthMonitor` após cada subtarefa
+- **Queries de análise**: timeline, token summary, tool summary, hardware peaks, métricas derivadas
+- **CLI**: `geminiclaw --metrics <id>` e `--export <id>` para exportação em CSV
+- **Testes**: 350 testes unitários passando (incluindo 24 testes específicos de telemetria)
+
+```bash
+# Ver métricas de uma execução
+uv run python -m src.cli --metrics <execution_id>
+
+# Exportar métricas para CSV
+uv run python scripts/export_metrics.py <execution_id>
+
+# Listar execuções recentes
+uv run python scripts/export_metrics.py --list
+```
 
 ---
 
@@ -316,17 +350,28 @@ geminiclaw/
 ├── AGENTS.md                  # Regras e contexto para agentes de IA
 ├── README.md                  # Este arquivo
 ├── pyproject.toml             # Dependências e configuração (uv)
-├── docker-compose.yml         # Infraestrutura de serviços
+├── docker-compose.yml         # Infraestrutura de serviços (PostgreSQL + Qdrant)
+├── scripts/
+│   ├── init_db.sql            # Schema PostgreSQL (idempotente)
+│   └── export_metrics.py      # Exporta métricas de telemetria para CSV
 ├── src/                       # Orquestrador Python
-│   ├── cli.py                 # Interface de linha de comando (REPL)
-│   ├── orchestrator.py        # Orquestrador principal
-│   ├── autonomous_loop.py     # Loop de execução autônoma (S7)
+│   ├── cli.py                 # CLI (REPL + --metrics + --export)
+│   ├── orchestrator.py        # Orquestrador principal (instrumentado V5.6)
+│   ├── autonomous_loop.py     # Loop de execução autônoma S7 (instrumentado V5.8)
 │   ├── runner.py              # ContainerRunner (Docker)
 │   ├── ipc.py                 # IPCChannel (Unix Sockets / TCP)
-│   ├── session.py             # SessionManager (SQLite)
+│   ├── session.py             # SessionManager (PostgreSQL)
+│   ├── db.py                  # Pool singleton PostgreSQL (psycopg v3)
+│   ├── telemetry.py           # TelemetryCollector V5 (buffer + flush + queries)
+│   ├── history.py             # Histórico de execuções
+│   ├── health.py              # PiHealthMonitor (temperatura, CPU, RAM)
 │   ├── output_manager.py      # Gerenciamento de artefatos
 │   ├── config.py              # Configuração centralizada
 │   ├── logger.py              # Logger estruturado JSON
+│   ├── llm/                   # Abstração LLM (Ollama + Google)
+│   │   ├── agent_loop.py      # Loop ReAct do agente (instrumentado V5.7)
+│   │   ├── factory.py         # Factory de provedores LLM
+│   │   └── providers/         # Ollama + Google Gemini
 │   └── skills/                # Framework de skills (S0–S5)
 ├── agents/                    # Agentes ADK
 │   ├── base/                  # Agente base (integra skills)
@@ -335,7 +380,7 @@ geminiclaw/
 │   └── validator/             # Agente de validação
 ├── containers/                # Dockerfiles
 ├── tests/                     # Testes pytest (unit, integration, e2e)
-├── store/                     # SQLite (runtime)
+├── roadmaps/                  # Roadmaps de desenvolvimento
 ├── outputs/                   # Artefatos dos agentes (runtime)
 └── logs/                      # Logs estruturados (runtime)
 ```

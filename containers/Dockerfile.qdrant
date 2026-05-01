@@ -3,13 +3,12 @@ FROM rust:slim AS builder
 RUN apt-get update && apt-get install -y \
     build-essential cmake pkg-config \
     libssl-dev git curl \
+    protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
-# Clona apenas a versão mais recente, sem histórico
 RUN git clone --depth 1 https://github.com/qdrant/qdrant.git /qdrant
 WORKDIR /qdrant
 
-# Compila sem jemalloc
 RUN cargo build --release --no-default-features
 
 FROM debian:bookworm-slim

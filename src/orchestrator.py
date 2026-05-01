@@ -22,6 +22,7 @@ from src.output_manager import OutputManager
 from src.autonomous_loop import AutonomousLoop
 from src.utils.json_parser import extract_json
 from src.rate_limiter import AdaptiveRateLimiter
+from src.telemetry import get_telemetry
 
 logger = get_logger(__name__)
 
@@ -155,6 +156,10 @@ class Orchestrator:
         logger.info("Nova requisição recebida no orquestrador", extra={"prompt_preview": prompt[:50]})
         master_session = self.session_manager.create("orchestrator")
         
+        # V5.6 — Telemetria: evento de início de execução
+        telemetry = get_telemetry()
+        exec_id = ""  # será preenchido após history.record()
+        
         # Se tarefas explícitas forem fornecidas, executa sequencialmente (compatibilidade)
         if agent_tasks:
             logger.info("Executando tarefas explícitas fornecidas (bypass autonomous loop)")
@@ -217,6 +222,24 @@ class Orchestrator:
             failed=result.failed
         )
         logger.info("Execução registrada no histórico", extra={"execution_id": exec_id})
+
+        # V5.6 — Telemetria: evento de fim de execução
+        if exec_id:
+            telemetry.record_agent_event(
+                execution_id=exec_id,
+                session_id=master_session.id,
+                agent_id="orchestrator",
+                event_type="complete",
+                payload={
+                    "status": final_status,
+                    "total": result.total,
+                    "succeeded": result.succeeded,
+                    "failed": result.failed,
+                    "duration_ms": int(duration * 1000),
+                },
+                duration_ms=int(duration * 1000),
+            )
+            await telemetry.flush()
         
         return result
 
@@ -235,6 +258,11 @@ class Orchestrator:
         """
         # Rate limiting adaptativo (Roadmap V3 - Etapa V8)
         await self.rate_limiter.acquire()
+
+        # V5.6 — Telemetria: obtém contexto de telemetria
+        telemetry = get_telemetry()
+        # execution_id sem garantia neste ponto — usamos master_session_id como fallback
+        _exec_id = master_session_id or "unknown"
         
         session = self.session_manager.create(task.agent_id)
         container_id: str | None = None
@@ -249,6 +277,16 @@ class Orchestrator:
                     "session_id": session.id,
                     "image": task.image,
                 },
+            )
+
+            # V5.6 — Telemetria: agent_spawn
+            telemetry.record_agent_event(
+                execution_id=_exec_id,
+                session_id=session.id,
+                agent_id=task.agent_id,
+                event_type="spawn",
+                task_name=task.task_name or None,
+                payload={"image": task.image},
             )
 
             # 0. Inicializa diretórios de output e logs únicos para esta execução de agente
@@ -310,9 +348,34 @@ class Orchestrator:
             )
             await self.ipc.send(ipc_id, request_msg)
 
+            # V5.6 — Telemetria: ipc_send
+            telemetry.record_agent_event(
+                execution_id=_exec_id,
+                session_id=session.id,
+                agent_id="orchestrator",
+                event_type="ipc_send",
+                target_agent_id=task.agent_id,
+                task_name=task.task_name or None,
+                payload={"prompt_chars": len(task.prompt)},
+            )
+
             # 5. Aguarda resposta
+            _t_recv_start = asyncio.get_event_loop().time()
             response_msg = await self.ipc.receive(
                 ipc_id, timeout=AGENT_TIMEOUT_SECONDS
+            )
+            _recv_ms = int((asyncio.get_event_loop().time() - _t_recv_start) * 1000)
+
+            # V5.6 — Telemetria: ipc_receive
+            telemetry.record_agent_event(
+                execution_id=_exec_id,
+                session_id=session.id,
+                agent_id="orchestrator",
+                event_type="ipc_receive",
+                target_agent_id=task.agent_id,
+                task_name=task.task_name or None,
+                payload={"response_type": response_msg.type},
+                duration_ms=_recv_ms,
             )
 
             # 6. Atualiza sessão com a resposta
@@ -349,6 +412,16 @@ class Orchestrator:
                 response=response_msg.payload,
             )
 
+            # V5.6 — Telemetria: agent_complete
+            telemetry.record_agent_event(
+                execution_id=_exec_id,
+                session_id=session.id,
+                agent_id=task.agent_id,
+                event_type="complete",
+                task_name=task.task_name or None,
+                payload={"status": "success"},
+            )
+
         except TimeoutError as e:
             logger.warning(
                 "Agente excedeu timeout",
@@ -367,6 +440,16 @@ class Orchestrator:
                 error=str(e),
             )
 
+            # V5.6 — Telemetria: agent_error (timeout)
+            telemetry.record_agent_event(
+                execution_id=_exec_id,
+                session_id=session.id,
+                agent_id=task.agent_id,
+                event_type="error",
+                task_name=task.task_name or None,
+                payload={"error": "timeout", "message": str(e)[:200]},
+            )
+
         except Exception as e:
             logger.error(
                 "Erro ao executar agente",
@@ -382,6 +465,16 @@ class Orchestrator:
                 status="error",
                 response={},
                 error=str(e),
+            )
+
+            # V5.6 — Telemetria: agent_error (geral)
+            telemetry.record_agent_event(
+                execution_id=_exec_id,
+                session_id=session.id,
+                agent_id=task.agent_id,
+                event_type="error",
+                task_name=task.task_name or None,
+                payload={"error": type(e).__name__, "message": str(e)[:200]},
             )
 
         finally:

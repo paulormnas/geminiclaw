@@ -68,6 +68,26 @@ def build_parser() -> argparse.ArgumentParser:
         action="version",
         version=f"%(prog)s {VERSION}",
     )
+    parser.add_argument(
+        "--metrics",
+        type=str,
+        metavar="EXECUTION_ID",
+        default=None,
+        help="Exibe métricas de telemetria de uma execução específica.",
+    )
+    parser.add_argument(
+        "--export",
+        type=str,
+        metavar="EXECUTION_ID",
+        default=None,
+        help="Exporta métricas de telemetria de uma execução para CSV.",
+    )
+    parser.add_argument(
+        "--export-dir",
+        type=str,
+        default="./metrics",
+        help="Diretório de saída para exportação CSV (padrão: ./metrics).",
+    )
     return parser
 
 
@@ -170,7 +190,94 @@ def show_history() -> None:
         
         print(f"  {DIM}{r.id[:8]}{RESET} | {date_str} | [{status_color}{r.status.upper()}{RESET}] | ⏱  {dur} | {prompt_trunc}")
         
-    print(f"{BOLD}{'─' * 80}{RESET}\n")
+    _sep = "─" * 80
+    print(f"{BOLD}{_sep}{RESET}\n")
+
+
+def show_metrics(execution_id: str) -> None:
+    """Exibe métricas de telemetria de uma execução.
+
+    Args:
+        execution_id: ID da execução a consultar.
+    """
+    from src.telemetry import get_telemetry
+
+    tel = get_telemetry()
+
+    _sep = "─" * 80
+    print(f"\n{BOLD}  \U0001f4ca M\u00e9tricas de Telemetria \u2014 {DIM}{execution_id}{RESET}")
+    print(f"{BOLD}{_sep}{RESET}")
+
+    # Timeline de eventos
+    timeline = tel.get_execution_timeline(execution_id)
+    if timeline:
+        print(f"\n  {BOLD}{CYAN}Timeline de Agentes ({len(timeline)} eventos){RESET}")
+        for ev in timeline[:20]:  # mostra até 20 eventos
+            ts = str(ev.get("timestamp", ""))[:19]
+            agent = ev.get("agent_id", "?")
+            etype = ev.get("event_type", "?")
+            task = ev.get("task_name") or ""
+            dur = f"  [{ev['duration_ms']}ms]" if ev.get("duration_ms") else ""
+            print(f"    {DIM}{ts}{RESET}  {CYAN}{agent:<18}{RESET} {BOLD}{etype:<22}{RESET} {DIM}{task}{dur}{RESET}")
+        if len(timeline) > 20:
+            print(f"    {DIM}... e mais {len(timeline) - 20} eventos{RESET}")
+    else:
+        print(f"  {DIM}Nenhum evento de agente registrado.{RESET}")
+
+    # Token summary
+    token_sum = tel.get_token_summary(execution_id)
+    by_provider = token_sum.get("by_provider_model", [])
+    if by_provider:
+        print(f"\n  {BOLD}{MAGENTA}Consumo de Tokens por Modelo{RESET}")
+        for row in by_provider:
+            prov = f"{row.get('llm_provider', '?')}/{row.get('llm_model', '?')}"
+            tot = row.get("total_tokens", 0)
+            lat = f"{row.get('avg_latency_ms', 0):.0f}ms" if row.get('avg_latency_ms') else "N/A"
+            calls = row.get("calls", 0)
+            cost = f"${row.get('total_cost_usd', 0):.4f}" if row.get('total_cost_usd') else "local"
+            print(f"    {DIM}•{RESET} {prov:<35} {tot:>8} tokens  |  {lat:>8} avg  |  {calls:>4} chamadas  |  {cost}")
+
+    # Tool summary
+    tool_sum = tel.get_tool_summary(execution_id)
+    by_tool = tool_sum.get("by_tool", [])
+    if by_tool:
+        print(f"\n  {BOLD}{GREEN}Uso de Ferramentas{RESET}")
+        for row in by_tool:
+            tool = row.get("tool_name", "?")
+            calls = row.get("total_calls", 0)
+            ok = row.get("successful", 0)
+            avg_ms = f"{row.get('avg_duration_ms', 0):.0f}ms" if row.get('avg_duration_ms') else "N/A"
+            pct = f"{ok/calls*100:.0f}%" if calls else "0%"
+            print(f"    {DIM}•{RESET} {tool:<30} {calls:>4} calls  |  {pct:>6} OK  |  {avg_ms:>8} avg")
+
+    # Hardware peaks
+    hw = tel.get_hardware_peaks(execution_id)
+    if hw:
+        print(f"\n  {BOLD}{YELLOW}Picos de Hardware{RESET}")
+        temp = hw.get("max_temp_c")
+        cpu = hw.get("max_cpu_pct")
+        mem = hw.get("max_mem_pct")
+        throttle = hw.get("throttle_incidents", 0)
+        if temp:
+            print(f"    {DIM}•{RESET} Temp máxima CPU:    {temp:.1f}°C")
+        if cpu:
+            print(f"    {DIM}•{RESET} CPU máxima:        {cpu:.1f}%")
+        if mem:
+            print(f"    {DIM}•{RESET} Memória máxima:    {mem:.1f}%")
+        if throttle:
+            print(f"    {DIM}•{RESET} {RED}Throttling incidents: {throttle}{RESET}")
+
+    # Métricas derivadas
+    derived = tel.get_derived_metrics(execution_id)
+    if derived:
+        print(f"\n  {BOLD}Métricas Derivadas{RESET}")
+        for k, v in derived.items():
+            val = f"{v:.2f}" if isinstance(v, float) else str(v)
+            print(f"    {DIM}•{RESET} {k:<40} {val}")
+
+    _sep2 = "─" * 80
+    print(f"\n{DIM}{_sep2}{RESET}")
+    print(f"  {DIM}Use --export {execution_id} para exportar em CSV.{RESET}\n")
 
 
 def _create_orchestrator() -> tuple[Orchestrator, ContainerRunner]:
@@ -258,6 +365,29 @@ def main() -> None:
         if args.prompt.lower() == "history":
             show_history()
             sys.exit(0)
+
+    # Subcomando: --metrics <execution_id>
+    if args.metrics:
+        from src.db import get_pool
+        pool = get_pool()
+        pool.open()
+        try:
+            show_metrics(args.metrics)
+        finally:
+            pool.close()
+        sys.exit(0)
+
+    # Subcomando: --export <execution_id>
+    if args.export:
+        from scripts.export_metrics import export_all
+        from src.db import get_pool
+        pool = get_pool()
+        pool.open()
+        try:
+            export_all(args.export, Path(args.export_dir))
+        finally:
+            pool.close()
+        sys.exit(0)
 
     try:
         orchestrator, runner = _create_orchestrator()

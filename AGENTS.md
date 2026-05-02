@@ -10,6 +10,7 @@ Nenhum arquivo `.js`, `.ts` ou `.mjs` deve existir neste projeto.
 
 - Desenvolvimento → `.agents/rules/development.md`
 - Testes → `.agents/rules/testing.md`
+- Code Review (Github CLI) → `.agents/rules/review.md`
 
 ---
 

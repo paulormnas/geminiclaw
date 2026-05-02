@@ -72,7 +72,14 @@ class OllamaProvider(LLMProvider):
         payload["messages"] = final_messages
 
         try:
+            logger.debug("Enviando requisição ao Ollama", extra={"model": self._model, "tools_count": len(tools) if tools else 0})
+            # Log payload apenas em modo debug profundo se necessário, mas aqui vamos logar o básico
             response = await self._client.post("/api/chat", json=payload)
+            if response.status_code != 200:
+                logger.error(
+                    f"Ollama retornou erro {response.status_code}", 
+                    extra={"response_body": response.text, "payload_keys": list(payload.keys())}
+                )
             response.raise_for_status()
             data = response.json()
 

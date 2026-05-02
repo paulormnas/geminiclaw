@@ -5,6 +5,7 @@ gerenciando sessões, IPC e tratamento de falhas parciais.
 """
 
 import asyncio
+import os
 import json
 from dataclasses import dataclass, field
 from typing import Any
@@ -543,7 +544,7 @@ class Orchestrator:
             planner_result = await self._execute_agent(planner_task, master_session_id)
             if planner_result.status != "success" or "error" in planner_result.response:
                 err = planner_result.error or planner_result.response.get("error", "Erro desconhecido")
-                logger.error("Falha no Agente Planejador", extra={"error": err})
+                logger.error(f"Falha no Agente Planejador: {err}", extra={"error": err})
                 return []
             
             # Tenta extrair JSON da resposta

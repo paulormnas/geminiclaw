@@ -11,7 +11,7 @@ WORKDIR /qdrant
 
 RUN cargo build --release --no-default-features
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 RUN apt-get update && apt-get install -y \
     libssl3 ca-certificates wget \
     && rm -rf /var/lib/apt/lists/*

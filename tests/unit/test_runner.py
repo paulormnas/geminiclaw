@@ -102,7 +102,7 @@ async def test_runner_spawn_parameters(mock_docker_client):
                         "LOGS_BASE_DIR": "/logs",
                     },
                     "volumes": expected_volumes,
-                    "extra_hosts": {},
+                    "extra_hosts": {"host.docker.internal": "host-gateway"},
                 }
                 
                 # Comparar um por um para facilitar debug se necessário

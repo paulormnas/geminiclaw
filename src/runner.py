@@ -418,12 +418,11 @@ class ContainerRunner:
                 
                 logger.debug(f"Volume mapping: {src_path} -> /app/src")
 
-                # Configurações extras para TCP (Mac compatibility)
-                extra_hosts = {}
+                # Configurações extras para TCP e Host Gateway
+                extra_hosts = {"host.docker.internal": "host-gateway"}
                 if ipc_port:
                     env["AGENT_IPC_PORT"] = str(ipc_port)
                     env["AGENT_IPC_HOST"] = "host.docker.internal"
-                    extra_hosts["host.docker.internal"] = "host-gateway"
                 else:
                     # Modo UNIX: monta o diretório de sockets
                     volumes[ipc_socket_host] = {

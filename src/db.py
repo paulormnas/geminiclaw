@@ -42,11 +42,11 @@ def get_pool() -> ConnectionPool:
             conninfo=DATABASE_URL,
             min_size=2,
             max_size=10,
-            open=False,       # Lazy: não abre conexões no construtor
+            open=True,
             kwargs={"row_factory": dict_row},
         )
         logger.info(
-            "Pool PostgreSQL inicializado (lazy)",
+            "Pool PostgreSQL inicializado",
             extra={"extra": {"min_size": 2, "max_size": 10}},
         )
     return _pool

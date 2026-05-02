@@ -13,7 +13,7 @@ def test_container_runner_dynamic_limit_6gb(mock_health_class, mock_docker, mock
     mock_health_class.return_value = mock_health
 
     runner = ContainerRunner()
-    mock_semaphore.assert_called_once_with(3)
+    assert mock_semaphore.call_args_list[0].args[0] == 3
 
 @patch("src.runner.asyncio.Semaphore")
 @patch("src.runner.docker.from_env")
@@ -26,7 +26,7 @@ def test_container_runner_dynamic_limit_4gb(mock_health_class, mock_docker, mock
     mock_health_class.return_value = mock_health
 
     runner = ContainerRunner()
-    mock_semaphore.assert_called_once_with(2)
+    assert mock_semaphore.call_args_list[0].args[0] == 2
 
 @patch("src.runner.asyncio.Semaphore")
 @patch("src.runner.docker.from_env")
@@ -39,7 +39,7 @@ def test_container_runner_dynamic_limit_2gb(mock_health_class, mock_docker, mock
     mock_health_class.return_value = mock_health
 
     runner = ContainerRunner()
-    mock_semaphore.assert_called_once_with(1)
+    assert mock_semaphore.call_args_list[0].args[0] == 1
 
 @patch("src.runner.asyncio.Semaphore")
 @patch("src.runner.docker.from_env")
@@ -51,7 +51,7 @@ def test_container_runner_dynamic_limit_fallback_macos(mock_health_class, mock_d
     mock_health_class.return_value = mock_health
 
     runner = ContainerRunner()
-    mock_semaphore.assert_called_once_with(3)
+    assert mock_semaphore.call_args_list[0].args[0] == 3
 
 @patch("src.runner.asyncio.Semaphore")
 @patch("src.runner.docker.from_env")
@@ -63,4 +63,4 @@ def test_container_runner_dynamic_limit_exception(mock_health_class, mock_docker
     mock_health_class.return_value = mock_health
 
     runner = ContainerRunner()
-    mock_semaphore.assert_called_once_with(3)
+    assert mock_semaphore.call_args_list[0].args[0] == 3

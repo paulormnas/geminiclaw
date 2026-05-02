@@ -1,4 +1,4 @@
-from src.llm.providers.ollama import OllamaProvider
-from src.llm.providers.google import GoogleProvider
+"""Provedores de LLM para o GeminiClaw."""
 
-__all__ = ["OllamaProvider", "GoogleProvider"]
+# Deixamos vazio ou usamos imports tardios para evitar dependências pesadas
+# se o provedor não for utilizado (ex: google-genai em containers slim)

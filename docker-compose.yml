@@ -13,6 +13,8 @@ services:
       - qdrant_data:/qdrant/storage
     networks:
       - geminiclaw-net
+    environment:
+      QDRANT__TELEMETRY_DISABLED: "true"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:6333/readyz"]
       interval: 10s

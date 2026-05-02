@@ -268,7 +268,7 @@ class TestFlush:
 
         ctx, _ = _make_conn_ctx()
         with patch("src.telemetry.TelemetryCollector._write_snapshot") as mock_write:
-            asyncio.get_event_loop().run_until_complete(col.flush())
+            asyncio.run(col.flush())
 
         assert col._buffer.total() == 0
 
@@ -298,7 +298,7 @@ class TestFlush:
             captured_snapshots.append(snapshot)
 
         col._write_snapshot = _fake_write
-        asyncio.get_event_loop().run_until_complete(col.flush())
+        asyncio.run(col.flush())
 
         assert len(captured_snapshots) == 1
         snap = captured_snapshots[0]
@@ -310,7 +310,7 @@ class TestFlush:
         col = _make_collector()
         called = []
         col._write_snapshot = lambda s: called.append(s)
-        asyncio.get_event_loop().run_until_complete(col.flush())
+        asyncio.run(col.flush())
         assert len(called) == 0
 
     def test_write_snapshot_insere_agent_events(self):

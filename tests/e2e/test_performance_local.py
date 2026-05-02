@@ -21,21 +21,37 @@ async def _ollama_available():
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(f"{url}/api/tags", timeout=2.0)
-            return response.status_code == 200
+            if response.status_code == 200:
+                data = response.json()
+                models = [m.get("name", "") for m in data.get("models", [])]
+                if any("qwen3.5:4b" in m for m in models):
+                    return True
+            return False
     except Exception:
         return False
 
 async def run_task(prompt: str):
     """Helper para executar uma tarefa completa via orquestrador."""
-    runner = ContainerRunner()
-    ipc = IPCChannel()
-    session_manager = SessionManager()
-    orchestrator = Orchestrator(runner, ipc, session_manager)
-    
     # Força o uso do Ollama para o teste e2e local se não estiver configurado
     with pytest.MonkeyPatch().context() as m:
         m.setenv("LLM_PROVIDER", "ollama")
         m.setenv("LLM_MODEL", "qwen3.5:4b")
+        # Container deve usar host.docker.internal para acessar o host
+        m.setenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+        m.setenv("AGENT_TIMEOUT_SECONDS", "600")
+        
+        # Patch as variáveis no módulo src.runner para que o runner as use no spawn
+        import src.runner
+        import src.orchestrator
+        m.setattr(src.runner, "LLM_PROVIDER", "ollama")
+        m.setattr(src.runner, "LLM_MODEL", "qwen3.5:4b")
+        m.setattr(src.runner, "OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+        m.setattr(src.orchestrator, "AGENT_TIMEOUT_SECONDS", 600)
+        
+        runner = ContainerRunner()
+        ipc = IPCChannel()
+        session_manager = SessionManager()
+        orchestrator = Orchestrator(runner, ipc, session_manager)
         
         result = await orchestrator.handle_request(prompt)
         

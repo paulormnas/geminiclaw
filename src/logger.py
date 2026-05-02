@@ -1,3 +1,4 @@
+import os
 import logging
 import json
 import datetime
@@ -54,8 +55,10 @@ def get_logger(name: str) -> logging.Logger:
     """
     logger = logging.getLogger(name)
     
-    # Define o nível de log para INFO por padrão
-    logger.setLevel(logging.INFO)
+    # Define o nível de log baseado na variável de ambiente LOG_LEVEL
+    log_level_str = os.environ.get("LOG_LEVEL", "INFO").upper()
+    log_level = getattr(logging, log_level_str, logging.INFO)
+    logger.setLevel(log_level)
 
     # Evita duplicar handlers de stream
     if not logger.handlers:

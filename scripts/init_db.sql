@@ -176,3 +176,41 @@ CREATE TABLE IF NOT EXISTS hardware_snapshots (
 );
 CREATE INDEX IF NOT EXISTS idx_hw_execution ON hardware_snapshots(execution_id);
 CREATE INDEX IF NOT EXISTS idx_hw_timestamp ON hardware_snapshots(timestamp);
+-- =============================================================
+-- Telemetria V9: Agregação por Subtarefa (Roadmap V9)
+-- =============================================================
+CREATE TABLE IF NOT EXISTS subtask_metrics (
+    id                  TEXT PRIMARY KEY,
+    execution_id        TEXT NOT NULL,
+    task_name           TEXT NOT NULL,
+    agent_id            TEXT NOT NULL,
+    status              TEXT NOT NULL,       -- success | failure | cancelled
+    
+    -- Métricas de Tempo
+    created_at          TIMESTAMPTZ NOT NULL, -- Quando o plano foi gerado
+    started_at          TIMESTAMPTZ,          -- Quando a execução começou
+    finished_at         TIMESTAMPTZ,          -- Quando a execução terminou
+    duration_total_ms   INTEGER,              -- Tempo total no sistema
+    duration_active_ms  INTEGER,              -- Tempo em processamento (LLM + Tools)
+    waiting_time_ms     INTEGER,              -- Tempo em fila/dependência
+    
+    -- Métricas de Recursos (Deltas/Médias)
+    cpu_usage_avg       DOUBLE PRECISION,
+    mem_usage_peak_mb   DOUBLE PRECISION,
+    temp_delta_c        DOUBLE PRECISION,
+    
+    -- Métricas de LLM e Ferramentas
+    total_tokens        INTEGER DEFAULT 0,
+    total_cost_usd      DOUBLE PRECISION DEFAULT 0.0,
+    llm_calls_count     INTEGER DEFAULT 0,
+    tools_used_count    INTEGER DEFAULT 0,
+    
+    -- Metadados
+    retry_count         INTEGER DEFAULT 0,
+    error_type          TEXT,
+    
+    FOREIGN KEY (execution_id) REFERENCES execution_history(id)
+);
+CREATE INDEX IF NOT EXISTS idx_subtask_metrics_exec ON subtask_metrics(execution_id);
+CREATE INDEX IF NOT EXISTS idx_subtask_metrics_task ON subtask_metrics(task_name);
+CREATE INDEX IF NOT EXISTS idx_subtask_metrics_agent ON subtask_metrics(agent_id);

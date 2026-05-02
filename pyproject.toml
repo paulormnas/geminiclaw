@@ -22,6 +22,11 @@ deep_search = [
     "fastembed>=0.7.4",
     "qdrant-client>=1.17.1",
 ]
+documents = [
+    "docling>=2.0.0",
+    "openpyxl>=3.1.0",
+    "pdfplumber>=0.11.0",
+]
 
 [project.scripts]
 geminiclaw = "src.cli:main"

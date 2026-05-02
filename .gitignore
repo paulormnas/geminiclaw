@@ -227,3 +227,6 @@ end_time.txt
 
 # IDE
 .vscode
+
+# Swap de memória para operação pesadas de compilação
+/swap

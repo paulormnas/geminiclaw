@@ -108,11 +108,11 @@ graph TD
 | --- | --- | --- |
 | **Orchestrator** | `src/orchestrator.py` | Coordena o loop de planejamento e a execução sequencial de agentes. Integra o `AutonomousLoop`. Instrumentado com telemetria V5.6. |
 | **AutonomousLoop** | `src/autonomous_loop.py` | Triage (simples/complexo), decomposição via Planner→Validator, loop de retentativas por subtarefa. Instrumentado com telemetria V5.8. |
-| **ContainerRunner** | `src/runner.py` | Gerencia o ciclo de vida Docker (spawn, stop, limites de 512 MB RAM, `asyncio.Semaphore(3)`). |
+| **ContainerRunner** | `src/runner.py` | Gerencia o ciclo de vida Docker (spawn, stop, limites de 512 MB RAM). Implementa controle de concorrência local via `MAX_LOCAL_LLM_CONCURRENT`. |
 | **IPCChannel** | `src/ipc.py` | Comunicação bidirecional via Unix Domain Sockets (Linux) ou TCP loopback (macOS). Protocolo JSON com length-prefix. |
 | **SessionManager** | `src/session.py` | Persistência de histórico e estado em **PostgreSQL**. |
 | **OutputManager** | `src/output_manager.py` | Gerencia artefatos produzidos e compartilhamento de arquivos entre agentes via `outputs/<session_id>/<task>/`. |
-| **TelemetryCollector** | `src/telemetry.py` | Coleta e persiste métricas de execução (agent_events, tool_usage, token_usage, hardware_snapshots) em batch no PostgreSQL. |
+| **TelemetryCollector** | `src/telemetry.py` | Coleta e persiste métricas de execução (agent_events, tool_usage, token_usage, hardware_snapshots) em batch no PostgreSQL. Fornece estatísticas sintetizadas para o Summarizer. |
 | **SkillRegistry** | `src/skills/__init__.py` | Registro dinâmico que converte skills Python em ferramentas compatíveis com o Google ADK. |
 | **CLI** | `src/cli.py` | Interface de linha de comando com modo direto, REPL interativo e subcomandos `--metrics`, `--export`. |
 
@@ -151,6 +151,7 @@ src/skills/
 | --- | --- | --- | --- |
 | **Quick Search** | `quick_search` | `SKILL_QUICK_SEARCH_ENABLED=true` | Busca rápida na web via scraping do DuckDuckGo. Cache com TTL configurável. |
 | **Deep Search** | `deep_search` | `SKILL_DEEP_SEARCH_ENABLED=false` | Busca profunda em base de conhecimento indexada localmente via Qdrant. Requer crawl prévio. |
+| **Document Processor** | `document_processor` | `SKILL_DOCUMENT_PROCESSOR_ENABLED=false` | Ingestão, chunking e indexação (Qdrant + Postgres) de arquivos do usuário (PDF, CSV, TXT, DOCX, XLSX). |
 | **Code** | `python_interpreter` | `SKILL_CODE_ENABLED=true` | Execução de código Python em container Docker efêmero e isolado (sem rede, 256 MB RAM). |
 | **Memory** | `memory` | `SKILL_MEMORY_ENABLED=true` | Memória de curto prazo (por sessão, em RAM) e longo prazo (entre sessões, PostgreSQL). |
 
@@ -187,8 +188,9 @@ Implementado em `src/autonomous_loop.py`, o loop gerencia tarefas complexas de p
    d. Re-planejamento Automático:
       - Se ao final da execução do DAG houver falhas, os erros são consolidados e o ciclo retorna ao Planner para uma nova tentativa de plano (até MAX_PLAN_RETRIES).
       - Se o limite for atingido, o usuário é consultado ativamente.
-   e. Ao final (em caso de sucesso), promove descobertas para memória de longo prazo
-   f. Retorna resultado consolidado com artefatos
+    e. Ao final (em caso de sucesso), promove descobertas para memória de longo prazo
+    f. Etapa de Síntese Final: o Agente Summarizer é invocado para consolidar todos os resultados e estatísticas de telemetria em um relatório acadêmico final.
+    g. Retorna resultado consolidado com artefatos
 ```
 
 **Configurações:**
@@ -206,6 +208,7 @@ Implementado em `src/autonomous_loop.py`, o loop gerencia tarefas complexas de p
 | **Planner** | `agents/planner/` | `geminiclaw-planner` | Decomposição de problemas complexos em tarefas atômicas. Triage (simples/complexo). |
 | **Validator** | `agents/validator/` | `geminiclaw-validator` | Verificação de segurança, formato JSON e consistência lógica de planos. |
 | **Reviewer** | `agents/reviewer/` | `geminiclaw-reviewer` | Validação de resultados de subtarefas contra critérios definidos. |
+| **Summarizer** | `agents/summarizer/` | `geminiclaw-summarizer` | Síntese final de resultados com rastreabilidade acadêmica e metadados de autonomia. |
 
 Todos os agentes compartilham a mesma imagem Docker base (`containers/Dockerfile`) com variações para agentes especializados (`containers/Dockerfile.planner`, `containers/Dockerfile.researcher`, `containers/Dockerfile.validator`).
 
@@ -313,7 +316,9 @@ O desenvolvimento é guiado pelos roadmaps em `roadmaps/`, que definem as etapas
 | **S4** | Memória de curto prazo (in-process) | ✅ Concluída |
 | **S5** | Memória de longo prazo (Qdrant + PostgreSQL) | ✅ Concluída |
 | **S6** | Integração das skills ao agente base | ✅ Concluída |
+| **V7** | Processamento de Documentos e Ingestão (Docling + Fallbacks) | ✅ Concluída |
 | **S7** | Loop de execução autônoma | ✅ Concluída |
+| **V6** | Pesquisa Autônoma e Controle de Concorrência | 🔄 Em progresso |
 | **S8** | Validação integrada em cenário real | 🔄 Em progresso |
 
 ### Roadmaps de Infraestrutura

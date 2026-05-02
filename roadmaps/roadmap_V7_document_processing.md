@@ -141,16 +141,16 @@ class BaseExtractor(ABC):
 
 ### Tarefas V7.1
 
-- [ ] Criar estrutura de diretórios `src/skills/document_processor/`
-- [ ] Implementar `BaseExtractor` e `ExtractedDocument`
-- [ ] Implementar `TextExtractor` (.txt, .md) usando stdlib
-- [ ] Implementar `CsvExtractor` (.csv) usando stdlib `csv`
-- [ ] Implementar `DoclingExtractor` (.pdf, .xlsx, .docx, .pptx) com opções otimizadas para Pi 5
-- [ ] Implementar `FallbackExtractor` (.pdf → pdfplumber, .xlsx → openpyxl)
-- [ ] Criar `ExtractorRegistry` com auto-detecção por extensão e fallback automático
-- [ ] Adicionar `docling`, `openpyxl` e `pdfplumber` ao `pyproject.toml` (optional extras)
-- [ ] Testes unitários para cada extrator com fixtures
-- [ ] Commit: `feat(docs): implementa extratores de documentos com Docling e fallbacks`
+- [x] Criar estrutura de diretórios `src/skills/document_processor/`
+- [x] Implementar `BaseExtractor` e `ExtractedDocument`
+- [x] Implementar `TextExtractor` (.txt, .md) usando stdlib
+- [x] Implementar `CsvExtractor` (.csv) usando stdlib `csv`
+- [x] Implementar `DoclingExtractor` (.pdf, .xlsx, .docx, .pptx) com opções otimizadas para Pi 5
+- [x] Implementar `FallbackExtractor` (.pdf → pdfplumber, .xlsx → openpyxl)
+- [x] Criar `ExtractorRegistry` com auto-detecção por extensão e fallback automático
+- [x] Adicionar `docling`, `openpyxl` e `pdfplumber` ao `pyproject.toml` (optional extras)
+- [x] Testes unitários para cada extrator com fixtures
+- [x] Commit: `feat(docs): implementa extratores de documentos com Docling e fallbacks`
 
 ---
 
@@ -238,16 +238,16 @@ class DocumentChunk:
 
 ### Tarefas V7.2
 
-- [ ] Implementar `DocumentChunker` com 5 estratégias (incluindo Docling nativo)
-- [ ] Implementar `DocumentChunk` dataclass com campo `context_prefix`
-- [ ] Implementar Contextual Retrieval: prepend de título/seção a cada chunk
-- [ ] Implementar auto-detecção de estratégia por formato e disponibilidade do Docling
-- [ ] Integrar com chunking nativo do Docling quando disponível
-- [ ] Testes unitários: chunking de Markdown por seção
-- [ ] Testes unitários: chunking de CSV por linhas
-- [ ] Testes unitários: overlap entre chunks
-- [ ] Testes unitários: Contextual Retrieval (context_prefix preenchido)
-- [ ] Commit: `feat(docs): implementa chunking inteligente com 5 estratégias e Contextual Retrieval`
+- [x] Implementar `DocumentChunker` com 5 estratégias (incluindo Docling nativo)
+- [x] Implementar `DocumentChunk` dataclass com campo `context_prefix`
+- [x] Implementar Contextual Retrieval: prepend de título/seção a cada chunk
+- [x] Implementar auto-detecção de estratégia por formato e disponibilidade do Docling
+- [x] Integrar com chunking nativo do Docling quando disponível
+- [x] Testes unitários: chunking de Markdown por seção
+- [x] Testes unitários: chunking de CSV por linhas
+- [x] Testes unitários: overlap entre chunks
+- [x] Testes unitários: Contextual Retrieval (context_prefix preenchido)
+- [x] Commit: `feat(docs): implementa chunking inteligente com 5 estratégias e Contextual Retrieval`
 
 ---
 
@@ -316,12 +316,12 @@ class DocumentIndexer:
 
 ### Tarefas V7.3
 
-- [ ] Criar tabelas `documents` e `document_chunks` no schema SQLite
-- [ ] Implementar `DocumentIndexer` com pipeline de ingestão dual
-- [ ] Integrar com `VectorIndexer` existente (src/skills/search_deep/indexer.py)
-- [ ] Criar collection Qdrant separada: `geminiclaw_documents` (distinta da web crawl)
-- [ ] Testes de integração: ingerir documento → buscar via Qdrant → buscar via SQLite
-- [ ] Commit: `feat(docs): implementa indexação dual SQLite + Qdrant para documentos`
+- [x] Criar tabelas `documents` e `document_chunks` no schema SQLite
+- [x] Implementar `DocumentIndexer` com pipeline de ingestão dual
+- [x] Integrar com `VectorIndexer` existente (src/skills/search_deep/indexer.py)
+- [x] Criar collection Qdrant separada: `geminiclaw_documents` (distinta da web crawl)
+- [x] Testes de integração: ingerir documento → buscar via Qdrant → buscar via SQLite
+- [x] Commit: `feat(docs): implementa indexação dual SQLite + Qdrant para documentos`
 
 ---
 
@@ -382,13 +382,13 @@ class DocumentProcessorSkill(BaseSkill):
 
 ### Tarefas V7.4
 
-- [ ] Implementar `DocumentProcessorSkill` com ações ingest, search, list, info
-- [ ] Registrar no `SkillRegistry` com flag `SKILL_DOCUMENT_PROCESSOR_ENABLED`
-- [ ] Adicionar config ao `.env.example`: `SKILL_DOCUMENT_PROCESSOR_ENABLED=false`
-- [ ] Adicionar comando CLI: `geminiclaw ingest <arquivo>` para ingestão direta
-- [ ] Testes unitários: cada ação da skill
-- [ ] Testes de integração: ingerir PDF → buscar conteúdo via skill search
-- [ ] Commit: `feat(skills): cria skill document_processor para ingestão de documentos`
+- [x] Implementar `DocumentProcessorSkill` com ações ingest, search, list, info
+- [x] Registrar no `SkillRegistry` com flag `SKILL_DOCUMENT_PROCESSOR_ENABLED`
+- [x] Adicionar config ao `.env.example`: `SKILL_DOCUMENT_PROCESSOR_ENABLED=false`
+- [x] Adicionar comando CLI: `geminiclaw ingest <arquivo>` para ingestão direta
+- [x] Testes unitários: cada ação da skill
+- [x] Testes de integração: ingerir PDF → buscar conteúdo via skill search
+- [x] Commit: `feat(skills): cria skill document_processor para ingestão de documentos`
 
 ---
 
@@ -434,11 +434,11 @@ Isso garante que o conhecimento do usuário é priorizado sobre fontes externas.
 
 ### Tarefas V7.5
 
-- [ ] Injetar lista de documentos disponíveis na instrução dos agentes
-- [ ] Atualizar prompt do Researcher para priorizar consulta a documentos indexados
-- [ ] Implementar auto-detecção: se documentos existem no índice, sugerir consulta
-- [ ] Testes de integração: pipeline com documento indexado → consulta pelo researcher
-- [ ] Commit: `feat(docs): integra documentos indexados ao contexto dos agentes`
+- [x] Injetar lista de documentos disponíveis na instrução dos agentes
+- [x] Atualizar prompt do Researcher para priorizar consulta a documentos indexados
+- [x] Implementar auto-detecção: se documentos existem no índice, sugerir consulta
+- [x] Testes de integração: pipeline com documento indexado → consulta pelo researcher
+- [x] Commit: `feat(docs): integra documentos indexados ao contexto dos agentes`
 
 ---
 

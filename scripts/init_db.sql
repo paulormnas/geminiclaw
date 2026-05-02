@@ -214,3 +214,34 @@ CREATE TABLE IF NOT EXISTS subtask_metrics (
 CREATE INDEX IF NOT EXISTS idx_subtask_metrics_exec ON subtask_metrics(execution_id);
 CREATE INDEX IF NOT EXISTS idx_subtask_metrics_task ON subtask_metrics(task_name);
 CREATE INDEX IF NOT EXISTS idx_subtask_metrics_agent ON subtask_metrics(agent_id);
+
+-- =============================================================
+-- Documentos do Usuário (src/skills/document_processor/indexer.py)
+-- =============================================================
+CREATE TABLE IF NOT EXISTS documents (
+    id              TEXT PRIMARY KEY,
+    source_path     TEXT NOT NULL,
+    filename        TEXT NOT NULL,
+    format          TEXT NOT NULL,      -- pdf | csv | xlsx | txt | md | docx | pptx
+    title           TEXT,
+    num_chunks      INTEGER NOT NULL,
+    num_pages       INTEGER,
+    file_size_bytes INTEGER,
+    language        TEXT DEFAULT 'pt-BR',
+    ingested_at     TIMESTAMPTZ NOT NULL,
+    metadata_json   JSONB
+);
+CREATE INDEX IF NOT EXISTS idx_docs_format ON documents(format);
+
+CREATE TABLE IF NOT EXISTS document_chunks (
+    id              TEXT PRIMARY KEY,
+    document_id     TEXT NOT NULL,
+    chunk_index     INTEGER NOT NULL,
+    content         TEXT NOT NULL,
+    token_count     INTEGER NOT NULL,
+    metadata_json   JSONB,
+
+    FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_chunks_doc ON document_chunks(document_id);
+

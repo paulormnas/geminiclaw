@@ -66,9 +66,11 @@ async def test_run_agent_loop_with_tools():
         # Como a lista é passada por referência e o loop adiciona a resposta final do assistente,
         # a mensagem da ferramenta será a penúltima ou procuramos por role="tool"
         messages = mock_provider.generate.call_args_list[1][1]["messages"]
+        # messages é mutável e a última mensagem adicionada foi a do assistente,
+        # então procuramos a mensagem do tool na penúltima posição ou na lista toda.
         tool_messages = [m for m in messages if m["role"] == "tool"]
         assert len(tool_messages) > 0
-        assert tool_messages[0]["content"] == "4"
+        assert tool_messages[-1]["content"] == "4"
 
 @pytest.mark.unit
 @pytest.mark.asyncio

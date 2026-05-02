@@ -216,6 +216,23 @@ def _get_agent_instruction(base_instruction: str) -> str:
             + "\n".join(skill_lines)
         )
 
+    # --- Documentos do usuário indexados ---
+    try:
+        from src.skills.document_processor.indexer import DocumentIndexer
+        indexer = DocumentIndexer()
+        docs = indexer.list_documents(limit=10)
+
+        if docs:
+            doc_lines = []
+            for d in docs:
+                doc_lines.append(f"  - [{d['format'].upper()}] {d['title']} ({d['filename']}, {d['num_chunks']} chunks)")
+            context_sections.append(
+                "**DOCUMENTOS DO USUÁRIO DISPONÍVEIS** (consulte via `document_processor` ação 'search'):\n"
+                + "\n".join(doc_lines)
+            )
+    except Exception as e:
+        logger.debug(f"Não foi possível listar documentos do usuário: {e}")
+
     # --- Memória de longo prazo ---
     try:
         ltm = LongTermMemory()

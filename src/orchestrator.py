@@ -5,6 +5,7 @@ gerenciando sessões, IPC e tratamento de falhas parciais.
 """
 
 import asyncio
+import os
 import json
 from dataclasses import dataclass, field
 from typing import Any

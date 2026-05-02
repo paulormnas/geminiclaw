@@ -40,7 +40,12 @@ ESTRUTURA DO RELATÓRIO:
 ## Análise Detalhada (com citações [n])
 ## Tabela de Evidências
 ## Conclusões (com Nível de Confiança)
-## Referências Bibliográficas (com URLs)
+## Seção de Metadados de Execução (OBRIGATÓRIO AO FINAL):
+Ao final do relatório, inclua um bloco chamado "### Metadados de Autonomia" contendo:
+- **Tempo Total de Execução**: [tempo fornecido no contexto]
+- **Consumo de Tokens**: [tokens fornecidos no contexto]
+- **Nível de Confiança Consolidado**: [seu julgamento crítico]
+- **Eficiência**: [análise sobre o número de subtarefas vs resultado]
 """
 
 

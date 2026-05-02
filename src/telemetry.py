@@ -727,6 +727,32 @@ class TelemetryCollector:
 
         return metrics
 
+    def get_summarized_stats(self, execution_id: str) -> str:
+        """Retorna um bloco de texto com estatísticas para o Summarizer.
+        
+        Args:
+            execution_id: ID da execução.
+            
+        Returns:
+            String formatada com tempo, tokens, custo e picos.
+        """
+        tokens = self.get_token_summary(execution_id)
+        hw = self.get_hardware_peaks(execution_id)
+        derived = self.get_derived_metrics(execution_id)
+        
+        total_tokens = sum(r.get("total_tokens", 0) for r in tokens.get("by_provider_model", []))
+        total_cost = sum(r.get("total_cost_usd", 0) for r in tokens.get("by_provider_model", []))
+        
+        lines = [
+            f"- Tempo Total Estimado: {derived.get('total_subtasks', 0)} subtarefas processadas",
+            f"- Total de Tokens Consumidos: {total_tokens}",
+            f"- Custo Estimado (Cloud): ${total_cost:.4f}",
+            f"- Latência Média de Inferência: {derived.get('avg_inference_latency_ms', 0):.0f}ms",
+            f"- Pico de Temperatura CPU: {hw.get('max_temp_c', 0):.1f}°C",
+            f"- Utilização Média de Contexto: {derived.get('avg_context_utilization', 0)*100:.1f}%",
+        ]
+        return "\n".join(lines)
+
 
 # ------------------------------------------------------------------
 # Singleton global

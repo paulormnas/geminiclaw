@@ -7,7 +7,7 @@ decomposição de tarefas em subtarefas e loop de retentativas.
 import os
 import json
 import asyncio
-from typing import Any, TYPE_CHECKING, List, Dict
+from typing import Any, TYPE_CHECKING, List, Dict, Optional
 from src.logger import get_logger
 from src.skills.memory.short_term import ShortTermMemory
 from src.triage import TriageClassifier, TriageDecision
@@ -481,6 +481,11 @@ class AutonomousLoop:
                 
                 if succeeded > 0:
                     await self._promote_findings(prompt, master_session_id)
+                    # Etapa V6.7: Síntese final com o Summarizer
+                    final_report = await self._synthesize_results(prompt, final_results, master_session_id)
+                    if final_report:
+                        # Adiciona o relatório final aos resultados
+                        final_results.append(final_report)
 
                 self._short_term_memory.clear(master_session_id)
 
@@ -619,3 +624,59 @@ class AutonomousLoop:
             return {"status": "pass", "issues": ["JSON inválido no revisor"]}
 
         return review_data
+
+    async def _synthesize_results(self, prompt: str, results: List["AgentResult"], master_session_id: str) -> Optional["AgentResult"]:
+        """Consolida os resultados das subtarefas em um relatório final via Summarizer.
+        
+        Args:
+            prompt: Prompt original do usuário.
+            results: Lista de resultados das subtarefas.
+            master_session_id: ID da sessão.
+            
+        Returns:
+            AgentResult com o relatório consolidado ou None em caso de falha.
+        """
+        from src.orchestrator import AgentTask, AGENT_REGISTRY
+        from src.telemetry import get_telemetry
+        
+        logger.info("Iniciando síntese final dos resultados")
+        
+        # Coleta estatísticas de telemetria
+        telemetry = get_telemetry()
+        await telemetry.flush() # Garante que os dados estão no banco
+        stats = telemetry.get_summarized_stats(master_session_id)
+        
+        # Constrói o prompt para o Summarizer
+        # Inclui os resultados das subtarefas estruturados
+        context_parts = []
+        from src.subtask_output import SubtaskOutput
+        for task_name in [r.task_name for r in results if hasattr(r, 'task_name') and r.task_name]:
+            entry = self._short_term_memory.read(master_session_id, f"result:{task_name}")
+            if entry:
+                try:
+                    output = SubtaskOutput.from_json(entry.value)
+                    context_parts.append(output.to_context_string())
+                except Exception:
+                    pass
+        
+        if not context_parts:
+            # Fallback para o texto bruto dos resultados se a memória estiver vazia
+            for res in results:
+                context_parts.append(f"### Resultado do Agente {res.agent_id}\n{res.response.get('text', '')}")
+        
+        synthesis_prompt = (
+            f"Sintetize os resultados da tarefa: '{prompt}'\n\n"
+            f"RESULTADOS DAS SUBTAREFAS:\n\n" + "\n\n".join(context_parts) + "\n\n"
+            f"ESTATÍSTICAS DE EXECUÇÃO:\n{stats}\n\n"
+            f"Por favor, gere o relatório final seguindo as instruções de estrutura acadêmica."
+        )
+        
+        task = AgentTask(
+            agent_id="summarizer",
+            image=AGENT_REGISTRY.get("summarizer", "geminiclaw-summarizer"),
+            prompt=synthesis_prompt,
+            task_name="final_synthesis"
+        )
+        
+        summary_result = await self.orchestrator._execute_agent(task, master_session_id)
+        return summary_result

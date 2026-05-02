@@ -64,8 +64,11 @@ async def test_run_agent_loop_with_tools():
         
         # Verifica se o resultado da ferramenta foi enviado na segunda chamada
         messages = mock_provider.generate.call_args_list[1][1]["messages"]
-        assert messages[-1]["role"] == "tool"
-        assert messages[-1]["content"] == "4"
+        # messages é mutável e a última mensagem adicionada foi a do assistente,
+        # então procuramos a mensagem do tool na penúltima posição ou na lista toda.
+        tool_messages = [m for m in messages if m["role"] == "tool"]
+        assert len(tool_messages) > 0
+        assert tool_messages[-1]["content"] == "4"
 
 @pytest.mark.unit
 @pytest.mark.asyncio

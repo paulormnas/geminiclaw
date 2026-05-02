@@ -95,7 +95,10 @@ async def test_autonomous_complex_flow_integration():
         promo_res = AgentResult(
             agent_id="planner", session_id="s_promo", status="success", response={}
         )
-        orchestrator._execute_agent = AsyncMock(side_effect=[task1_res, promo_res])
+        summary_res = AgentResult(
+            agent_id="summarizer", session_id="s_sum", status="success", response={"text": "resumo final"}
+        )
+        orchestrator._execute_agent = AsyncMock(side_effect=[task1_res, promo_res, summary_res])
 
         # "pesquise" e "analise" → heurística classifica como COMPLEX
         with patch.dict(os.environ, {"TRIAGE_MODE": "heuristic"}):
@@ -107,7 +110,7 @@ async def test_autonomous_complex_flow_integration():
         assert result.succeeded == 1
         assert result.results[0].agent_id == "researcher"
         # Sem container de triage: task1 + promotion = 2 chamadas
-        assert orchestrator._execute_agent.call_count == 2
+        assert orchestrator._execute_agent.call_count == 3
 
         # Verifica que a sessão mestra foi fechada corretamente
         sessions = session_manager.list_recent(limit=10)

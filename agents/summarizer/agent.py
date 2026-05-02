@@ -33,6 +33,9 @@ ANÁLISE CRÍTICA:
 - Aponte gaps na literatura se perceber ausência de cobertura.
 - Classifique o nível de confiança da conclusão (alto/médio/baixo).
 
+SAÍDA OBRIGATÓRIA:
+- O relatório consolidado DEVE ser salvo como `relatorio_final.md` na pasta `/outputs/` usando a ferramenta `write_artifact`.
+
 ESTRUTURA DO RELATÓRIO:
 # Título Consolidado
 ## Resumo Executivo

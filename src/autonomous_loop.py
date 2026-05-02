@@ -7,7 +7,9 @@ decomposição de tarefas em subtarefas e loop de retentativas.
 import os
 import json
 import asyncio
-from typing import Any, TYPE_CHECKING, List, Dict, Optional
+import uuid
+from datetime import datetime, timezone
+from typing import Any, TYPE_CHECKING, List, Dict
 from src.logger import get_logger
 from src.skills.memory.short_term import ShortTermMemory
 from src.triage import TriageClassifier, TriageDecision
@@ -178,10 +180,27 @@ class AutonomousLoop:
         """Executa a tarefa via caminho simplificado (apenas agente base)."""
         from src.orchestrator import AgentTask, AGENT_REGISTRY, OrchestratorResult
         
+        now_iso = datetime.now(timezone.utc).isoformat()
+        subtask_id = uuid.uuid4().hex
+        
         task = AgentTask(
             agent_id="base",
             image=AGENT_REGISTRY.get("base", "geminiclaw-base"),
-            prompt=prompt
+            prompt=prompt,
+            task_name="simple_task",
+            subtask_id=subtask_id,
+            created_at=now_iso
+        )
+        
+        # Registra estado inicial
+        telemetry = get_telemetry()
+        telemetry.record_subtask_metrics(
+            subtask_id=subtask_id,
+            execution_id=master_session_id,
+            task_name="simple_task",
+            agent_id="base",
+            status="pending",
+            created_at=now_iso
         )
         
         result = await self.orchestrator._execute_agent(task, master_session_id)
@@ -279,6 +298,22 @@ class AutonomousLoop:
 
             # V5.8 — Telemetria: plan_generated
             telemetry = get_telemetry()
+            now_iso = datetime.now(timezone.utc).isoformat()
+            
+            # V9: Atribui IDs e timestamps iniciais às tarefas
+            for t in tasks:
+                t.subtask_id = uuid.uuid4().hex
+                t.created_at = now_iso
+                # Registra o estado inicial (pending) na tabela subtask_metrics
+                telemetry.record_subtask_metrics(
+                    subtask_id=t.subtask_id,
+                    execution_id=master_session_id,
+                    task_name=t.task_name or "unnamed",
+                    agent_id=t.agent_id,
+                    status="pending",
+                    created_at=t.created_at
+                )
+
             telemetry.record_agent_event(
                 execution_id=master_session_id,
                 session_id=master_session_id,
@@ -352,6 +387,8 @@ class AutonomousLoop:
                     expected_artifacts=task.expected_artifacts,
                     validation_criteria=task.validation_criteria,
                     preferred_model=task.preferred_model,
+                    subtask_id=task.subtask_id,
+                    created_at=task.created_at,
                 )
 
                 success = False

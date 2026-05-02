@@ -120,6 +120,32 @@ class _HardwareSnapshotRow:
 
 
 @dataclass
+class _SubtaskMetricsRow:
+    """Linha a ser inserida na tabela subtask_metrics."""
+
+    id: str
+    execution_id: str
+    task_name: str
+    agent_id: str
+    status: str
+    created_at: str
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    duration_total_ms: Optional[int] = None
+    duration_active_ms: Optional[int] = None
+    waiting_time_ms: Optional[int] = None
+    cpu_usage_avg: Optional[float] = None
+    mem_usage_peak_mb: Optional[float] = None
+    temp_delta_c: Optional[float] = None
+    total_tokens: int = 0
+    total_cost_usd: float = 0.0
+    llm_calls_count: int = 0
+    tools_used_count: int = 0
+    retry_count: int = 0
+    error_type: Optional[str] = None
+
+
+@dataclass
 class _Buffer:
     """Buffer em memória para batch inserts."""
 
@@ -127,6 +153,7 @@ class _Buffer:
     tool_usage: list[_ToolUsageRow] = field(default_factory=list)
     token_usage: list[_TokenUsageRow] = field(default_factory=list)
     hardware_snapshots: list[_HardwareSnapshotRow] = field(default_factory=list)
+    subtask_metrics: list[_SubtaskMetricsRow] = field(default_factory=list)
 
     def total(self) -> int:
         return (
@@ -134,6 +161,7 @@ class _Buffer:
             + len(self.tool_usage)
             + len(self.token_usage)
             + len(self.hardware_snapshots)
+            + len(self.subtask_metrics)
         )
 
 
@@ -367,6 +395,82 @@ class TelemetryCollector:
         )
         self._maybe_flush_sync()
 
+    def record_subtask_metrics(
+        self,
+        subtask_id: str,
+        execution_id: str,
+        task_name: str,
+        agent_id: str,
+        status: str,
+        created_at: str,
+        started_at: Optional[str] = None,
+        finished_at: Optional[str] = None,
+        duration_total_ms: Optional[int] = None,
+        duration_active_ms: Optional[int] = None,
+        waiting_time_ms: Optional[int] = None,
+        cpu_usage_avg: Optional[float] = None,
+        mem_usage_peak_mb: Optional[float] = None,
+        temp_delta_c: Optional[float] = None,
+        total_tokens: int = 0,
+        total_cost_usd: float = 0.0,
+        llm_calls_count: int = 0,
+        tools_used_count: int = 0,
+        retry_count: int = 0,
+        error_type: Optional[str] = None,
+    ) -> None:
+        """Registra métricas agregadas de uma subtarefa.
+
+        Args:
+            subtask_id: ID único da subtarefa.
+            execution_id: ID da execução pai.
+            task_name: Nome da subtarefa no DAG.
+            agent_id: Agente responsável.
+            status: Status final (success|failure|cancelled).
+            created_at: Timestamp de criação (ISO).
+            started_at: Timestamp de início real.
+            finished_at: Timestamp de término.
+            duration_total_ms: Duração total no sistema.
+            duration_active_ms: Duração em processamento.
+            waiting_time_ms: Tempo em fila.
+            cpu_usage_avg: Média de uso de CPU.
+            mem_usage_peak_mb: Pico de memória em MB.
+            temp_delta_c: Variação de temperatura em °C.
+            total_tokens: Total de tokens consumidos.
+            total_cost_usd: Custo estimado em USD.
+            llm_calls_count: Número de chamadas ao LLM.
+            tools_used_count: Número de ferramentas invocadas.
+            retry_count: Número de retentativas.
+            error_type: Tipo de erro, se houver.
+        """
+        row = _SubtaskMetricsRow(
+            id=subtask_id,
+            execution_id=execution_id,
+            task_name=task_name,
+            agent_id=agent_id,
+            status=status,
+            created_at=created_at,
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_total_ms=duration_total_ms,
+            duration_active_ms=duration_active_ms,
+            waiting_time_ms=waiting_time_ms,
+            cpu_usage_avg=cpu_usage_avg,
+            mem_usage_peak_mb=mem_usage_peak_mb,
+            temp_delta_c=temp_delta_c,
+            total_tokens=total_tokens,
+            total_cost_usd=total_cost_usd,
+            llm_calls_count=llm_calls_count,
+            tools_used_count=tools_used_count,
+            retry_count=retry_count,
+            error_type=error_type,
+        )
+        self._buffer.subtask_metrics.append(row)
+        logger.debug(
+            "Métricas de subtarefa registradas no buffer",
+            extra={"extra": {"subtask_id": subtask_id, "status": status}},
+        )
+        self._maybe_flush_sync()
+
     # ------------------------------------------------------------------
     # Flush
     # ------------------------------------------------------------------
@@ -484,9 +588,50 @@ class TelemetryCollector:
                         ),
                     )
 
+                # subtask_metrics
+                for row in snapshot.subtask_metrics:
+                    conn.execute(
+                        """
+                        INSERT INTO subtask_metrics
+                            (id, execution_id, task_name, agent_id, status,
+                             created_at, started_at, finished_at, duration_total_ms,
+                             duration_active_ms, waiting_time_ms, cpu_usage_avg,
+                             mem_usage_peak_mb, temp_delta_c, total_tokens,
+                             total_cost_usd, llm_calls_count, tools_used_count,
+                             retry_count, error_type)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (id) DO UPDATE SET
+                            status = EXCLUDED.status,
+                            started_at = COALESCE(subtask_metrics.started_at, EXCLUDED.started_at),
+                            finished_at = EXCLUDED.finished_at,
+                            duration_total_ms = EXCLUDED.duration_total_ms,
+                            duration_active_ms = EXCLUDED.duration_active_ms,
+                            waiting_time_ms = EXCLUDED.waiting_time_ms,
+                            cpu_usage_avg = EXCLUDED.cpu_usage_avg,
+                            mem_usage_peak_mb = EXCLUDED.mem_usage_peak_mb,
+                            temp_delta_c = EXCLUDED.temp_delta_c,
+                            total_tokens = EXCLUDED.total_tokens,
+                            total_cost_usd = EXCLUDED.total_cost_usd,
+                            llm_calls_count = EXCLUDED.llm_calls_count,
+                            tools_used_count = EXCLUDED.tools_used_count,
+                            retry_count = EXCLUDED.retry_count,
+                            error_type = EXCLUDED.error_type
+                        """,
+                        (
+                            row.id, row.execution_id, row.task_name, row.agent_id,
+                            row.status, row.created_at, row.started_at, row.finished_at,
+                            row.duration_total_ms, row.duration_active_ms,
+                            row.waiting_time_ms, row.cpu_usage_avg, row.mem_usage_peak_mb,
+                            row.temp_delta_c, row.total_tokens, row.total_cost_usd,
+                            row.llm_calls_count, row.tools_used_count, row.retry_count,
+                            row.error_type,
+                        ),
+                    )
+
             total = (
                 len(snapshot.agent_events) + len(snapshot.tool_usage)
                 + len(snapshot.token_usage) + len(snapshot.hardware_snapshots)
+                + len(snapshot.subtask_metrics)
             )
             logger.info(
                 "Telemetria gravada no PostgreSQL",
@@ -496,6 +641,7 @@ class TelemetryCollector:
                         "tool_usage": len(snapshot.tool_usage),
                         "token_usage": len(snapshot.token_usage),
                         "hardware_snapshots": len(snapshot.hardware_snapshots),
+                        "subtask_metrics": len(snapshot.subtask_metrics),
                         "total": total,
                     }
                 },
@@ -726,6 +872,34 @@ class TelemetryCollector:
             logger.error("Erro ao calcular métricas derivadas", extra={"error": str(e)})
 
         return metrics
+
+    def get_subtask_metrics(self, execution_id: str) -> list[dict[str, Any]]:
+        """Retorna as métricas detalhadas de cada subtarefa de uma execução.
+
+        Args:
+            execution_id: ID da execução a consultar.
+
+        Returns:
+            Lista de métricas por subtarefa.
+        """
+        try:
+            with get_connection() as conn:
+                rows = conn.execute(
+                    """
+                    SELECT 
+                        task_name, agent_id, status, duration_total_ms,
+                        duration_active_ms, waiting_time_ms, total_tokens,
+                        total_cost_usd, retry_count, error_type, started_at
+                    FROM subtask_metrics
+                    WHERE execution_id = %s
+                    ORDER BY created_at ASC
+                    """,
+                    (execution_id,),
+                ).fetchall()
+            return [dict(r) for r in rows]
+        except Exception as e:
+            logger.error("Erro ao consultar subtask metrics", extra={"error": str(e)})
+            return []
 
     def get_summarized_stats(self, execution_id: str) -> str:
         """Retorna um bloco de texto com estatísticas para o Summarizer.

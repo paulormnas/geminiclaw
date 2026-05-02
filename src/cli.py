@@ -224,6 +224,25 @@ def show_metrics(execution_id: str) -> None:
     else:
         print(f"  {DIM}Nenhum evento de agente registrado.{RESET}")
 
+    # Subtask Summary (Roadmap V9)
+    subtasks = tel.get_subtask_metrics(execution_id)
+    if subtasks:
+        print(f"\n  {BOLD}{CYAN}Performance por Subtarefa (Roadmap V9){RESET}")
+        header = f"    {'TASK':<25} {'AGENT':<12} {'STATUS':<10} {'DUR':>8} {'WAIT':>8} {'TOKENS':>8}"
+        print(f"    {DIM}{header}{RESET}")
+        for s in subtasks:
+            name = (s['task_name'] or "unnamed")[:25]
+            agent = s['agent_id'][:12]
+            status = s['status']
+            color = GREEN if status == "success" else (RED if status in ("error", "failure") else YELLOW)
+            
+            dur = f"{s['duration_total_ms']/1000:.1f}s" if s['duration_total_ms'] else "N/A"
+            wait = f"{s['waiting_time_ms']/1000:.1f}s" if s['waiting_time_ms'] else "0s"
+            tokens = s['total_tokens'] or 0
+            
+            print(f"    {name:<25} {agent:<12} {color}{status:<10}{RESET} {dur:>8} {wait:>8} {tokens:>8}")
+    
+
     # Token summary
     token_sum = tel.get_token_summary(execution_id)
     by_provider = token_sum.get("by_provider_model", [])

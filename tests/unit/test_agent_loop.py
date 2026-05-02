@@ -63,6 +63,8 @@ async def test_run_agent_loop_with_tools():
         assert mock_provider.generate.call_count == 2
         
         # Verifica se o resultado da ferramenta foi enviado na segunda chamada
+        # Como a lista é passada por referência e o loop adiciona a resposta final do assistente,
+        # a mensagem da ferramenta será a penúltima ou procuramos por role="tool"
         messages = mock_provider.generate.call_args_list[1][1]["messages"]
         # messages é mutável e a última mensagem adicionada foi a do assistente,
         # então procuramos a mensagem do tool na penúltima posição ou na lista toda.

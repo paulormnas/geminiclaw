@@ -58,6 +58,8 @@ class AgentTask:
     expected_artifacts: list[str] = field(default_factory=list)
     validation_criteria: list[str] = field(default_factory=list)
     preferred_model: str | None = None
+    subtask_id: str | None = None  # V9: ID único para telemetria
+    created_at: str | None = None  # V9: Timestamp de criação
 
 
 @dataclass
@@ -162,7 +164,10 @@ class Orchestrator:
         
         # V5.6 — Telemetria: evento de início de execução
         telemetry = get_telemetry()
-        exec_id = ""  # será preenchido após history.record()
+        history = ExecutionHistory()
+        exec_id = history.start(prompt, start_date)
+        
+        logger.info("Nova requisição registrada", extra={"execution_id": exec_id, "prompt_preview": prompt[:50]})
         
         # Se tarefas explícitas forem fornecidas, executa sequencialmente (compatibilidade)
         if agent_tasks:
@@ -187,7 +192,7 @@ class Orchestrator:
         else:
             # Caso contrário, usa o loop autônomo (Etapa S7)
             loop = AutonomousLoop(self)
-            result = await loop.run(prompt, master_session.id)
+            result = await loop.run(prompt, exec_id or master_session.id)
         
         # Atualiza a sessão mestra com o resultado consolidado
         final_status = "success" if result.succeeded == result.total and result.total > 0 else "failed"
@@ -211,21 +216,20 @@ class Orchestrator:
         duration = finished_at - started_at
         end_date = datetime.utcnow().isoformat() + "Z"
         
-        history = ExecutionHistory()
-        exec_id = history.record(
-            prompt=prompt,
-            status=final_status,
-            started_at=start_date,
-            finished_at=end_date,
-            duration_seconds=duration,
-            plan_json=result.plan_json,
-            results_json=json.dumps([r.__dict__ for r in result.results]),
-            artifacts_json=json.dumps(result.artifacts),
-            total_subtasks=result.total,
-            succeeded=result.succeeded,
-            failed=result.failed
-        )
-        logger.info("Execução registrada no histórico", extra={"execution_id": exec_id})
+        if exec_id:
+            history.finish(
+                exec_id=exec_id,
+                status=final_status,
+                finished_at=end_date,
+                duration_seconds=duration,
+                plan_json=result.plan_json,
+                results_json=json.dumps([r.__dict__ for r in result.results]),
+                artifacts_json=json.dumps(result.artifacts),
+                total_subtasks=result.total,
+                succeeded=result.succeeded,
+                failed=result.failed
+            )
+            logger.info("Execução finalizada no histórico", extra={"execution_id": exec_id})
 
         # V5.6 — Telemetria: evento de fim de execução
         if exec_id:
@@ -267,6 +271,20 @@ class Orchestrator:
         telemetry = get_telemetry()
         # execution_id sem garantia neste ponto — usamos master_session_id como fallback
         _exec_id = master_session_id or "unknown"
+        
+        # V9: Registra início da execução ativa se houver subtask_id
+        from datetime import datetime, timezone
+        started_at_iso = datetime.now(timezone.utc).isoformat()
+        if task.subtask_id:
+            telemetry.record_subtask_metrics(
+                subtask_id=task.subtask_id,
+                execution_id=_exec_id,
+                task_name=task.task_name or "unnamed",
+                agent_id=task.agent_id,
+                status="running",
+                created_at=task.created_at or started_at_iso,
+                started_at=started_at_iso
+            )
         
         session = self.session_manager.create(task.agent_id)
         container_id: str | None = None
@@ -509,6 +527,31 @@ class Orchestrator:
                 except Exception as e:
                     logger.error(f"Erro ao parar container {container_id}: {e}")
 
+            # V9: Registra finalização das métricas da subtarefa
+            if task.subtask_id:
+                finished_at_iso = datetime.now(timezone.utc).isoformat()
+                duration_ms = int((datetime.now(timezone.utc) - datetime.fromisoformat(started_at_iso)).total_seconds() * 1000)
+                
+                # Agrega tokens e custo desta subtarefa (simplificado: busca o que foi gerado nesta sessão de agente)
+                token_summary = telemetry.get_token_summary(_exec_id)
+                # Nota: get_token_summary retorna por execução id, o que pode misturar se várias subtasks rodarem em paralelo.
+                # O ideal seria filtrar por session.id (que é único por agente spawnado).
+                # Para o V9 inicial, usaremos a duração e status.
+                
+                telemetry.record_subtask_metrics(
+                    subtask_id=task.subtask_id,
+                    execution_id=_exec_id,
+                    task_name=task.task_name or "unnamed",
+                    agent_id=task.agent_id,
+                    status=result.status,
+                    created_at=task.created_at or started_at_iso,
+                    started_at=started_at_iso,
+                    finished_at=finished_at_iso,
+                    duration_total_ms=duration_ms,
+                    duration_active_ms=duration_ms, # Por enquanto assumimos que o tempo ativo é o wall time do execute_agent
+                    error_type=result.error[:100] if result.error else None
+                )
+
         return result
 
     async def _run_planning_loop(self, prompt: str, master_session_id: str) -> list[AgentTask]:
@@ -544,7 +587,7 @@ class Orchestrator:
             planner_result = await self._execute_agent(planner_task, master_session_id)
             if planner_result.status != "success" or "error" in planner_result.response:
                 err = planner_result.error or planner_result.response.get("error", "Erro desconhecido")
-                logger.error("Falha no Agente Planejador", extra={"error": err})
+                logger.error(f"Falha no Agente Planejador: {err}", extra={"error": err})
                 return []
             
             # Tenta extrair JSON da resposta
@@ -600,6 +643,9 @@ class Orchestrator:
             if status == "approved":
                 logger.info("Plano aprovado pelo Validador", extra={"iteration": iteration + 1})
                 tasks = []
+                from datetime import datetime, timezone
+                import uuid
+                now_iso = datetime.now(timezone.utc).isoformat()
                 for t in plan_data:
                     tasks.append(AgentTask(
                         agent_id=t.get("agent_id", "base"),
@@ -610,6 +656,8 @@ class Orchestrator:
                         expected_artifacts=t.get("expected_artifacts", []),
                         validation_criteria=t.get("validation_criteria", []),
                         preferred_model=t.get("preferred_model"),
+                        subtask_id=uuid.uuid4().hex,
+                        created_at=now_iso,
                     ))
                 return tasks
             elif status == "rejected":

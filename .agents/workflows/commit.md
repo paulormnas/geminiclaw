@@ -88,10 +88,23 @@ Sempre faça o push para garantir que as alterações estejam disponíveis no re
 
 ---
 
-## 6. Limpeza da worktree
+## 6. Criar Pull Request (GitHub CLI)
 
 ```bash
-git worktree remove . --force
+gh pr create --fill
 ```
 
-Execute este comando após o push para manter o ambiente limpo. Certifique-se de que não há arquivos não commitados que você deseja manter.
+Este comando utilizará o título e descrição dos seus commits recentes para gerar automaticamente o título e o corpo do Pull Request. Certifique-se de executar isso **antes** de remover a worktree, enquanto ainda estiver na branch da feature.
+
+---
+
+## 7. Limpeza da worktree
+
+Volte para o diretório raiz e remova a worktree da feature:
+
+```bash
+cd /home/agent/Documentos/Workspace/geminiclaw
+git worktree remove --force <caminho-da-worktree>
+```
+
+Execute este comando após o push e abertura do PR para manter o ambiente limpo. Certifique-se de que não há arquivos não commitados que você deseja manter.

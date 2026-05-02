@@ -70,6 +70,92 @@ def _row_to_record(row: dict) -> ExecutionRecord:
 class ExecutionHistory:
     """Gerencia a persistência de histórico de execuções do orquestrador."""
 
+    def start(
+        self,
+        prompt: str,
+        started_at: str,
+    ) -> str:
+        """Registra o início de uma execução no histórico.
+
+        Args:
+            prompt: Prompt original enviado ao orquestrador.
+            started_at: Timestamp de início (ISO 8601).
+
+        Returns:
+            ID hexadecimal da execução registrada.
+        """
+        exec_id = uuid.uuid4().hex
+        try:
+            with get_connection() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO execution_history (id, prompt, status, started_at)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (exec_id, prompt, "running", started_at),
+                )
+            return exec_id
+        except Exception as e:
+            logger.error("Erro ao iniciar histórico", extra={"error": str(e)})
+            return ""
+
+    def finish(
+        self,
+        exec_id: str,
+        status: str,
+        finished_at: str,
+        duration_seconds: float,
+        plan_json: Optional[str] = None,
+        results_json: Optional[str] = None,
+        artifacts_json: Optional[str] = None,
+        total_subtasks: int = 0,
+        succeeded: int = 0,
+        failed: int = 0,
+    ) -> bool:
+        """Finaliza uma execução no histórico, atualizando seus dados.
+
+        Args:
+            exec_id: ID da execução a atualizar.
+            status: Status final.
+            finished_at: Timestamp de término.
+            duration_seconds: Duração total em segundos.
+            plan_json: Plano serializado.
+            results_json: Resultados serializados.
+            artifacts_json: Artefatos serializados.
+            total_subtasks: Total de subtarefas.
+            succeeded: Sucessos.
+            failed: Falhas.
+
+        Returns:
+            True se atualizado com sucesso.
+        """
+        try:
+            with get_connection() as conn:
+                conn.execute(
+                    """
+                    UPDATE execution_history SET
+                        status = %s,
+                        finished_at = %s,
+                        duration_seconds = %s,
+                        plan_json = %s,
+                        results_json = %s,
+                        artifacts_json = %s,
+                        total_subtasks = %s,
+                        succeeded = %s,
+                        failed = %s
+                    WHERE id = %s
+                    """,
+                    (
+                        status, finished_at, duration_seconds, plan_json,
+                        results_json, artifacts_json, total_subtasks,
+                        succeeded, failed, exec_id
+                    ),
+                )
+            return True
+        except Exception as e:
+            logger.error("Erro ao finalizar histórico", extra={"error": str(e)})
+            return False
+
     def record(
         self,
         prompt: str,
@@ -84,59 +170,15 @@ class ExecutionHistory:
         succeeded: int = 0,
         failed: int = 0,
     ) -> str:
-        """Registra uma execução no histórico.
-
-        Args:
-            prompt: Prompt original enviado ao orquestrador.
-            status: Status final da execução.
-            started_at: Timestamp de início (ISO 8601).
-            finished_at: Timestamp de término (opcional).
-            duration_seconds: Duração total em segundos (opcional).
-            plan_json: Plano serializado como JSON (opcional).
-            results_json: Resultados serializados como JSON (opcional).
-            artifacts_json: Artefatos gerados serializados como JSON (opcional).
-            total_subtasks: Total de subtarefas.
-            succeeded: Subtarefas bem-sucedidas.
-            failed: Subtarefas que falharam.
-
-        Returns:
-            ID hexadecimal da execução registrada, ou string vazia em caso de erro.
-        """
-        exec_id = uuid.uuid4().hex
-
-        try:
-            with get_connection() as conn:
-                conn.execute(
-                    """
-                    INSERT INTO execution_history (
-                        id, prompt, plan_json, status, results_json, artifacts_json,
-                        started_at, finished_at, duration_seconds, total_subtasks,
-                        succeeded, failed
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """,
-                    (
-                        exec_id,
-                        prompt,
-                        plan_json,
-                        status,
-                        results_json,
-                        artifacts_json,
-                        started_at,
-                        finished_at,
-                        duration_seconds,
-                        total_subtasks,
-                        succeeded,
-                        failed,
-                    ),
-                )
-            logger.info(
-                "Histórico de execução registrado",
-                extra={"extra": {"exec_id": exec_id, "status": status}},
+        """Registra uma execução completa (compatibilidade)."""
+        exec_id = self.start(prompt, started_at)
+        if exec_id and finished_at and duration_seconds is not None:
+            self.finish(
+                exec_id, status, finished_at, duration_seconds,
+                plan_json, results_json, artifacts_json,
+                total_subtasks, succeeded, failed
             )
-            return exec_id
-        except Exception as e:
-            logger.error("Erro ao gravar histórico", extra={"error": str(e)})
-            return ""
+        return exec_id
 
     def get(self, execution_id: str) -> Optional[ExecutionRecord]:
         """Recupera uma execução pelo ID.

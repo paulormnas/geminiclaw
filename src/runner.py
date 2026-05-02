@@ -318,6 +318,11 @@ class ContainerRunner:
                 ).replace(
                     "@127.0.0.1:", "@geminiclaw-postgres:"
                 )
+                ollama_url_for_container = OLLAMA_BASE_URL.replace(
+                    "localhost", "host.docker.internal"
+                ).replace(
+                    "127.0.0.1", "host.docker.internal"
+                )
                 env = {
                     "AGENT_ID": agent_id,
                     "SESSION_ID": session_id,
@@ -325,7 +330,7 @@ class ContainerRunner:
                     "LLM_MODEL": LLM_MODEL,
                     "GEMINI_API_KEY": GEMINI_API_KEY or "",
                     "GOOGLE_API_KEY": GEMINI_API_KEY or "",
-                    "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
+                    "OLLAMA_BASE_URL": ollama_url_for_container,
                     "OLLAMA_NUM_CTX": str(OLLAMA_NUM_CTX),
                     "OLLAMA_ENABLE_THINKING": str(OLLAMA_ENABLE_THINKING).lower(),
                     "LLM_REQUESTS_PER_MINUTE": str(LLM_REQUESTS_PER_MINUTE),
@@ -418,12 +423,11 @@ class ContainerRunner:
                 
                 logger.debug(f"Volume mapping: {src_path} -> /app/src")
 
-                # Configurações extras para TCP (Mac compatibility)
-                extra_hosts = {}
+                # Configurações extras para TCP e Host Gateway
+                extra_hosts = {"host.docker.internal": "host-gateway"}
                 if ipc_port:
                     env["AGENT_IPC_PORT"] = str(ipc_port)
                     env["AGENT_IPC_HOST"] = "host.docker.internal"
-                    extra_hosts["host.docker.internal"] = "host-gateway"
                 else:
                     # Modo UNIX: monta o diretório de sockets
                     volumes[ipc_socket_host] = {

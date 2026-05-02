@@ -95,13 +95,28 @@ def mock_db_connection(request):
     ctx.__enter__ = MagicMock(return_value=mock_conn)
     ctx.__exit__ = MagicMock(return_value=False)
     
-    with patch("src.db.get_connection", return_value=ctx), \
-         patch("src.session.get_connection", return_value=ctx), \
-         patch("src.history.get_connection", return_value=ctx), \
-         patch("src.telemetry.get_connection", return_value=ctx), \
-         patch("src.skills.memory.long_term.get_connection", return_value=ctx), \
-         patch("src.llm_cache.get_connection", return_value=ctx), \
-         patch("src.skills.search_deep.cache.get_connection", return_value=ctx):
+    # Patches obrigatórios
+    patches = [
+        patch("src.db.get_connection", return_value=ctx),
+        patch("src.session.get_connection", return_value=ctx),
+        patch("src.history.get_connection", return_value=ctx),
+        patch("src.telemetry.get_connection", return_value=ctx),
+        patch("src.skills.memory.long_term.get_connection", return_value=ctx),
+        patch("src.llm_cache.get_connection", return_value=ctx),
+    ]
+    
+    # Patches opcionais (Search Deep)
+    try:
+        from src.skills import _HAS_DEEP_SEARCH
+        if _HAS_DEEP_SEARCH:
+            patches.append(patch("src.skills.search_deep.cache.get_connection", return_value=ctx))
+    except (ImportError, AttributeError):
+        pass
+
+    from contextlib import ExitStack
+    with ExitStack() as stack:
+        for p in patches:
+            stack.enter_context(p)
         yield ctx
 
 @pytest.fixture(scope="session", autouse=True)

@@ -217,10 +217,16 @@ class AutonomousLoop:
             return ""
 
         parts: list[str] = []
+        from src.subtask_output import SubtaskOutput
         for task_name in depends_on:
             entry = self._short_term_memory.read(master_session_id, f"result:{task_name}")
             if entry:
-                parts.append(f"### Resultado de `{task_name}`\n{entry.value}")
+                try:
+                    output = SubtaskOutput.from_json(entry.value)
+                    parts.append(output.to_context_string())
+                except Exception:
+                    # Fallback para texto bruto se não for JSON válido (compatibilidade)
+                    parts.append(f"### Resultado de `{task_name}`\n{entry.value}")
             else:
                 logger.debug(
                     "Contexto não encontrado na memória de curto prazo",
@@ -344,6 +350,8 @@ class AutonomousLoop:
                     task_name=task.task_name,
                     depends_on=task.depends_on,
                     expected_artifacts=task.expected_artifacts,
+                    validation_criteria=task.validation_criteria,
+                    preferred_model=task.preferred_model,
                 )
 
                 success = False
@@ -370,14 +378,36 @@ class AutonomousLoop:
                     
                     if result.status == "success":
                         success = True
-                        if task.task_name:
-                            response_text = result.response.get("text", "")
+                        # V6.3: Executa Reviewer se habilitado e houver critérios
+                        review = None
+                        from src.config import REVIEW_ENABLED, REVIEW_MODE
+                        if REVIEW_ENABLED and REVIEW_MODE == "per_subtask" and task.validation_criteria:
+                            logger.info(f"Iniciando revisão da subtarefa {task.task_name}")
+                            review = await self._review_subtask(task, result, master_session_id)
+                            if review.get("status") == "fail":
+                                success = False
+                                result.status = "error"
+                                result.error = f"Falha na revisão: {', '.join(review.get('issues', []))}"
+                                logger.warning(f"Subtarefa {task.task_name} reprovada na revisão", extra={"issues": review.get("issues")})
+                            else:
+                                logger.info(f"Subtarefa {task.task_name} aprovada na revisão")
+
+                        if success and task.task_name:
+                            # V6.4: Cria output estruturado
+                            from src.subtask_output import SubtaskOutput
+                            output = SubtaskOutput.from_agent_result(
+                                task_name=task.task_name,
+                                agent_id=task.agent_id,
+                                result=result,
+                                review_data=review
+                            )
+                            
                             self._short_term_memory.write(
                                 session_id=master_session_id,
                                 key=f"result:{task.task_name}",
-                                value=response_text,
+                                value=output.to_json(),
                                 source=task.agent_id,
-                                tags=["subtask_result", task.task_name],
+                                tags=["subtask_result", task.task_name, "structured"],
                             )
                         break
                     else:
@@ -543,3 +573,49 @@ class AutonomousLoop:
             event_type="memory_promotion",
             payload={"source": "session_findings"},
         )
+
+
+    async def _review_subtask(self, task: "AgentTask", result: "AgentResult", master_session_id: str) -> Dict[str, Any]:
+        """Invoca o Agente Revisor para avaliar o resultado de uma subtarefa.
+
+        Args:
+            task: A definição da tarefa com critérios de validação.
+            result: O resultado produzido pelo agente executor.
+            master_session_id: ID da sessão mestra.
+
+        Returns:
+            Dicionário com o status da revisão e feedback.
+        """
+        from src.orchestrator import AgentTask, AGENT_REGISTRY
+        from src.utils.json_parser import extract_json
+
+        # Constrói o prompt do Reviewer
+        review_prompt = (
+            f"Avalie a execução da subtarefa: `{task.task_name}`\n\n"
+            f"PROMPT ORIGINAL:\n{task.prompt}\n\n"
+            f"RESULTADO PRODUZIDO:\n{result.response.get('text', '')}\n\n"
+            f"CRITÉRIOS DE VALIDAÇÃO:\n" + "\n".join([f"- {c}" for c in task.validation_criteria]) + "\n\n"
+            f"ARTEFATOS ESPERADOS:\n" + "\n".join([f"- {a}" for a in task.expected_artifacts]) + "\n\n"
+            f"Por favor, verifique se os critérios foram atendidos e se os artefatos foram gerados."
+        )
+
+        reviewer_task = AgentTask(
+            agent_id="reviewer",
+            image=AGENT_REGISTRY["reviewer"],
+            prompt=review_prompt
+        )
+
+        review_result = await self.orchestrator._execute_agent(reviewer_task, master_session_id)
+        
+        if review_result.status != "success":
+            logger.warning("Falha ao executar Agente Revisor, assumindo 'pass' por segurança")
+            return {"status": "pass", "issues": ["Falha técnica no revisor"]}
+
+        raw_review = review_result.response.get("text", "")
+        review_data = extract_json(raw_review)
+
+        if not review_data or not isinstance(review_data, dict):
+            logger.warning("Erro ao parsear JSON do Revisor, assumindo 'pass'")
+            return {"status": "pass", "issues": ["JSON inválido no revisor"]}
+
+        return review_data

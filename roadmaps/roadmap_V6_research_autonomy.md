@@ -163,8 +163,8 @@ ANÁLISE CRÍTICA:
 - [x] Expandir `agents/validator/agent.py` AGENT_INSTRUCTION com validação de metodologia + plano
 - [x] Reescrever `agents/summarizer/agent.py` AGENT_INSTRUCTION com rastreabilidade
 - [x] Adicionar testes unitários validando que os prompts contêm seções obrigatórias
-- [ ] Atualizar prompts para refletir novos papéis (metodologia no researcher, decomposição no planner)
-- [ ] Commit: `refactor(agents): reescreve prompts com papéis acadêmicos e metodologia`
+- [x] Atualizar prompts para refletir novos papéis (metodologia no researcher, decomposição no planner)
+- [x] Commit: `refactor(agents): reescreve prompts com papéis acadêmicos e metodologia`
 
 ---
 
@@ -208,12 +208,12 @@ class AgentTask:
 
 ### Tarefas V6.2
 
-- [ ] Adicionar `validation_criteria` e `preferred_model` ao `AgentTask` dataclass
-- [ ] Atualizar `_run_planning_loop` para parsear os novos campos do JSON
-- [ ] Atualizar prompt do Planner para incluir `validation_criteria` no template
-- [ ] Atualizar prompt do Validator para verificar presença de `validation_criteria`
-- [ ] Testes unitários: parsing de plano com `validation_criteria`
-- [ ] Commit: `feat(orchestrator): adiciona validation_criteria ao formato de plano`
+- [x] Adicionar `validation_criteria` e `preferred_model` ao `AgentTask` dataclass
+- [x] Atualizar `_run_planning_loop` para parsear os novos campos do JSON
+- [x] Atualizar prompt do Planner para incluir `validation_criteria` no template
+- [x] Atualizar prompt do Validator para verificar presença de `validation_criteria`
+- [x] Testes unitários: parsing de plano com `validation_criteria`
+- [x] Commit: `feat(orchestrator): adiciona validation_criteria ao formato de plano`
 
 ---
 
@@ -286,15 +286,15 @@ if task.validation_criteria and REVIEW_ENABLED:
 
 ### Tarefas V6.3
 
-- [ ] Criar `agents/reviewer/` com agent.py, prompt especializado
-- [ ] Criar `containers/Dockerfile.reviewer`
-- [ ] Adicionar `"reviewer"` ao `AGENT_REGISTRY` no orchestrator
-- [ ] Implementar `_review_subtask()` no `AutonomousLoop`
-- [ ] Configuração: `REVIEW_MODE=per_subtask|end_only|disabled` via .env
-- [ ] Adicionar script de build da imagem Docker do reviewer
-- [ ] Testes unitários: review de subtarefa com critérios pass/fail
+- [x] Criar `agents/reviewer/` com agent.py, prompt especializado
+- [x] Criar `containers/Dockerfile.reviewer`
+- [x] Adicionar `"reviewer"` ao `AGENT_REGISTRY` no orchestrator
+- [x] Implementar `_review_subtask()` no `AutonomousLoop`
+- [x] Configuração: `REVIEW_ENABLED=per_subtask|end_only|disabled` via .env
+- [x] Adicionar script de build da imagem Docker do reviewer
+- [x] Testes unitários: review de subtarefa com critérios pass/fail
 - [ ] Testes de integração: pipeline completo com reviewer ativo
-- [ ] Commit: `feat(agents): cria agente Reviewer para validação de resultados`
+- [x] Commit: `feat(agents): cria agente Reviewer para validação de resultados`
 
 ---
 
@@ -342,12 +342,12 @@ class SubtaskOutput:
 
 ### Tarefas V6.4
 
-- [ ] Criar `src/subtask_output.py` com `SubtaskOutput` dataclass
-- [ ] Refatorar `_build_context_prefix()` para construir contexto a partir de `SubtaskOutput`
-- [ ] Parsear resposta do agente base/researcher para extrair fontes e artefatos
-- [ ] Atualizar `ShortTermMemory` para armazenar `SubtaskOutput` serializado
-- [ ] Testes unitários: serialização/deserialização de SubtaskOutput
-- [ ] Commit: `refactor(context): implementa passagem de contexto estruturada entre agentes`
+- [x] Criar `src/subtask_output.py` com `SubtaskOutput` dataclass
+- [x] Refatorar `_build_context_prefix()` para construir contexto a partir de `SubtaskOutput`
+- [x] Parsear resposta do agente base/researcher para extrair fontes e artefatos
+- [x] Atualizar `ShortTermMemory` para armazenar `SubtaskOutput` serializado
+- [x] Testes unitários: serialização/deserialização de SubtaskOutput
+- [x] Commit: `refactor(context): implementa passagem de contexto estruturada entre agentes`
 
 ---
 
@@ -402,12 +402,12 @@ async def compress_with_summary(
 
 ### Tarefas V6.5
 
-- [ ] Refatorar `compress_messages()` com priorização por tipo
-- [ ] Implementar `compress_with_summary()` com chamada LLM para sumarização
-- [ ] Adicionar config `CONTEXT_COMPRESSION_MODE=truncate|summarize` via .env
-- [ ] Testes unitários: compressão com priorização
-- [ ] Testes de integração: sumarização efetiva reduz tokens mantendo informação-chave
-- [ ] Commit: `feat(context): implementa compressão em 2 camadas com sumarização`
+- [x] Refatorar `compress_messages()` com priorização por tipo
+- [x] Implementar `compress_with_summary()` com chamada LLM para sumarização
+- [x] Adicionar config `CONTEXT_COMPRESSION_MODE=truncate|summarize` via .env
+- [x] Testes unitários: compressão com priorização
+- [x] Testes de integração: sumarização efetiva reduz tokens mantendo informação-chave
+- [x] Commit: `feat(context): implementa compressão em 2 camadas com sumarização`
 
 ---
 
@@ -446,18 +446,18 @@ MAX_LOCAL_LLM_CONCURRENT=2             # Máximo de agentes usando Ollama simult
 
 ### Implementação
 
-- O `ContainerRunner.spawn()` já recebe `env_vars` — adicionar LLM_MODEL e OLLAMA_ENABLE_THINKING específicos do agente
-- O `agent_loop.py` já lê essas variáveis de ambiente — apenas garantir que o container recebe os valores corretos
-- O Planner inclui `preferred_model` no JSON da subtarefa, e o orquestrador usa como override
+- [x] O `ContainerRunner.spawn()` já recebe `env_vars` — adicionar LLM_MODEL e OLLAMA_ENABLE_THINKING específicos do agente
+- [x] O `agent_loop.py` já lê essas variáveis de ambiente — apenas garantir que o container recebe os valores corretos
+- [x] O Planner inclui `preferred_model` no JSON da subtarefa, e o orquestrador usa como override
 
 ### Tarefas V6.6
 
-- [ ] Adicionar configs `LLM_MODEL_<AGENT>` e `OLLAMA_ENABLE_THINKING_<AGENT>` ao config.py
-- [ ] Adicionar `MAX_LOCAL_LLM_CONCURRENT` como semáforo no orquestrador
-- [ ] Atualizar `.env.example` com as novas variáveis
-- [ ] Modificar `runner.py` para propagar config por tipo de agente (com override via `preferred_model`)
-- [ ] Testes unitários: propagação correta de env vars por agente
-- [ ] Commit: `feat(config): permite seleção de modelo e thinking mode por agente`
+- [x] Adicionar configs `LLM_MODEL_<AGENT>` e `OLLAMA_ENABLE_THINKING_<AGENT>` ao config.py
+- [x] Adicionar `MAX_LOCAL_LLM_CONCURRENT` como semáforo no orquestrador
+- [x] Atualizar `.env.example` com as novas variáveis
+- [x] Modificar `runner.py` para propagar config por tipo de agente (com override via `preferred_model`)
+- [x] Testes unitários: propagação correta de env vars por agente
+- [x] Commit: `feat(config): permite seleção de modelo e thinking mode por agente`
 
 ### V6.6.1 — Tarefa de Validação: Benchmark de Múltiplos Agentes com Modelo Local
 

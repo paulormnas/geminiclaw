@@ -8,9 +8,15 @@ from src.runner import ContainerRunner
 @pytest.fixture
 def mock_docker_client():
     """Fixture para mockar o cliente Docker."""
-    with patch("docker.from_env") as mock:
+    with patch("docker.from_env") as mock, \
+         patch("src.runner.PiHealthMonitor") as mock_health:
         client = MagicMock()
         mock.return_value = client
+        mock_health_instance = MagicMock()
+        mock_health.return_value = mock_health_instance
+        # Mock memory usage to return a safe value
+        mock_health_instance.get_memory_usage.return_value = {"available_mb": 8192}
+        mock_health_instance.get_temperature.return_value = 50.0
         yield client
 
 @pytest.mark.unit
@@ -110,15 +116,9 @@ async def test_runner_spawn_parameters(mock_docker_client):
 @pytest.mark.asyncio
 async def test_runner_concurrency_limit(mock_docker_client):
     """Testa se o semáforo limita a execução paralela."""
-    runner = ContainerRunner(semaphore_limit=2)
+    with patch("src.runner.ContainerRunner.ensure_infrastructure"):
+        runner = ContainerRunner(semaphore_limit=2)
     
-    # Mock para atrasar a execução de run
-    async def delayed_run(*args, **kwargs):
-        await asyncio.sleep(0.1)
-        mock_container = MagicMock()
-        mock_container.id = "id"
-        return mock_container
-
     # Precisamos de um wrapper síncrono para o run_in_executor
     def sync_run(*args, **kwargs):
         import time
@@ -147,9 +147,42 @@ async def test_runner_concurrency_limit(mock_docker_client):
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_runner_local_llm_concurrency_limit(mock_docker_client):
+    """Testa se o semáforo de LLM local limita a execução paralela de Ollama."""
+    with patch("src.runner.LLM_PROVIDER", "ollama"), \
+         patch("src.config.MAX_LOCAL_LLM_CONCURRENT", 1), \
+         patch("src.runner.ContainerRunner.ensure_infrastructure"):
+        
+        runner = ContainerRunner(semaphore_limit=5)
+        
+        def sync_run(*args, **kwargs):
+            import time
+            time.sleep(0.1)
+            mock_container = MagicMock()
+            mock_container.id = "id"
+            return mock_container
+
+        mock_docker_client.containers.run.side_effect = sync_run
+        
+        # Dispara 2 spawns (mesmo com global_semaphore=5, local_semaphore=1 deve segurar)
+        tasks = [
+            runner.spawn("a1", "img", "s1"),
+            runner.spawn("a2", "img", "s2")
+        ]
+        
+        start_time = asyncio.get_event_loop().time()
+        await asyncio.gather(*tasks)
+        end_time = asyncio.get_event_loop().time()
+        
+        # 1 container por vez devido ao local_semaphore (0.1s + 0.1s)
+        assert end_time - start_time >= 0.2
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_runner_stop(mock_docker_client):
     """Testa o encerramento de um container."""
-    runner = ContainerRunner()
+    with patch("src.runner.ContainerRunner.ensure_infrastructure"):
+        runner = ContainerRunner()
     mock_container = MagicMock()
     mock_docker_client.containers.get.return_value = mock_container
     

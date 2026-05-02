@@ -116,6 +116,10 @@ BRAVE_API_KEY = get_env("BRAVE_API_KEY", default="")
 # Web Reader Skill (S5)
 SKILL_WEB_READER_ENABLED = get_env_bool("SKILL_WEB_READER_ENABLED", default=True)
 
+# Document Processor Skill (V7)
+SKILL_DOCUMENT_PROCESSOR_ENABLED = get_env_bool("SKILL_DOCUMENT_PROCESSOR_ENABLED", default=False)
+
+
 # Code Execution Skill (S3)
 SKILL_CODE_ENABLED = get_env_bool("SKILL_CODE_ENABLED", default=True)
 CODE_SANDBOX_TIMEOUT_SECONDS = int(get_env("CODE_SANDBOX_TIMEOUT_SECONDS", default="60"))
@@ -137,6 +141,16 @@ LLM_CACHE_MAX_ENTRIES = int(get_env("LLM_CACHE_MAX_ENTRIES", default="1000"))
 
 # Autonomous Loop
 MAX_RETRY_PER_SUBTASK = int(get_env("MAX_RETRY_PER_SUBTASK", default="3"))
+
+# Reviewer (V6.3)
+REVIEW_ENABLED = get_env_bool("REVIEW_ENABLED", default=True)
+REVIEW_MODE = get_env("REVIEW_MODE", default="per_subtask") # per_subtask | end_only | disabled
+
+# Context Compression (V6.5)
+CONTEXT_COMPRESSION_MODE = get_env("CONTEXT_COMPRESSION_MODE", default="truncate") # truncate | summarize
+
+# Concurrency Control (V6.6)
+MAX_LOCAL_LLM_CONCURRENT = int(get_env("MAX_LOCAL_LLM_CONCURRENT", default="2"))
 
 # Triage
 TRIAGE_MODE = get_env("TRIAGE_MODE", default="hybrid")

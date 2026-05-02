@@ -98,7 +98,12 @@ async def run_agent_loop(
 
         # 2. Chama o LLM (com compressão de contexto para evitar estouro de memória no Pi 5)
         max_ctx = int(os.getenv("OLLAMA_NUM_CTX", "4096"))
-        compressed_messages = compress_messages(messages, max_tokens=max_ctx, system=instruction)
+        compressed_messages = await compress_messages(
+            messages, 
+            max_tokens=max_ctx, 
+            system=instruction,
+            provider=provider
+        )
         was_compressed = len(compressed_messages) < len(messages)
 
         # V5.7 — Telemetria: llm_request

@@ -33,6 +33,7 @@ AGENT_REGISTRY: dict[str, str] = {
     "planner": "geminiclaw-planner",
     "validator": "geminiclaw-validator",
     "summarizer": "geminiclaw-summarizer",
+    "reviewer": "geminiclaw-reviewer",
 }
 
 @dataclass
@@ -54,6 +55,8 @@ class AgentTask:
     task_name: str = ""
     depends_on: list[str] = field(default_factory=list)
     expected_artifacts: list[str] = field(default_factory=list)
+    validation_criteria: list[str] = field(default_factory=list)
+    preferred_model: str | None = None
 
 
 @dataclass
@@ -308,6 +311,16 @@ class Orchestrator:
             env_vars = {
                 "TASK_NAME": task.task_name or "default_task"
             }
+            
+            # Etapa V6.2: Propaga modelo preferido se especificado
+            if task.preferred_model:
+                env_vars["LLM_MODEL"] = task.preferred_model
+            
+            # Etapa V6.6: Propaga granular thinking mode se configurado no host
+            # Busca OLLAMA_ENABLE_THINKING_PLANNER, etc.
+            think_key = f"OLLAMA_ENABLE_THINKING_{task.agent_id.upper()}"
+            if think_key in os.environ:
+                env_vars["OLLAMA_ENABLE_THINKING"] = os.environ[think_key].lower()
             
             container_id = await self.runner.spawn(
                 task.agent_id, 
@@ -594,6 +607,8 @@ class Orchestrator:
                         task_name=t.get("task_name", ""),
                         depends_on=t.get("depends_on", []),
                         expected_artifacts=t.get("expected_artifacts", []),
+                        validation_criteria=t.get("validation_criteria", []),
+                        preferred_model=t.get("preferred_model"),
                     ))
                 return tasks
             elif status == "rejected":

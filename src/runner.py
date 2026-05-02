@@ -67,6 +67,11 @@ class ContainerRunner:
             limit = semaphore_limit
             
         self.semaphore = asyncio.Semaphore(limit)
+        
+        # V6.6: Limite de concorrência específico para inferência local (Ollama)
+        from src.config import MAX_LOCAL_LLM_CONCURRENT
+        self.local_llm_semaphore = asyncio.Semaphore(MAX_LOCAL_LLM_CONCURRENT)
+        
         self.ensure_infrastructure()
 
     def _calculate_dynamic_limit(self) -> int:
@@ -171,6 +176,8 @@ class ContainerRunner:
             ("geminiclaw-validator-slim", "containers/Dockerfile.validator", {"BASE_IMAGE": "geminiclaw-base-slim"}),
             ("geminiclaw-summarizer", "containers/Dockerfile.summarizer", {}),
             ("geminiclaw-summarizer-slim", "containers/Dockerfile.summarizer", {"BASE_IMAGE": "geminiclaw-base-slim"}),
+            ("geminiclaw-reviewer", "containers/Dockerfile.reviewer", {}),
+            ("geminiclaw-reviewer-slim", "containers/Dockerfile.reviewer", {"BASE_IMAGE": "geminiclaw-base-slim"}),
         ]
 
         for tag, dockerfile, buildargs in required_images:
@@ -266,8 +273,34 @@ class ContainerRunner:
             O ID do container criado.
         """
         async with self.semaphore:
-            if HEALTH_CHECK_ENABLED:
-                await self._wait_for_health()
+            # V6.6: Limite de concorrência para Ollama para não travar o Pi 5
+            is_local = (env_vars and env_vars.get("LLM_PROVIDER") == "ollama") or (not env_vars and LLM_PROVIDER == "ollama")
+            
+            if is_local:
+                async with self.local_llm_semaphore:
+                    return await self._do_spawn(
+                        agent_id, image, session_id, ipc_port, 
+                        output_session_id, logs_session_id, env_vars
+                    )
+            else:
+                return await self._do_spawn(
+                    agent_id, image, session_id, ipc_port, 
+                    output_session_id, logs_session_id, env_vars
+                )
+
+    async def _do_spawn(
+        self, 
+        agent_id: str, 
+        image: str, 
+        session_id: str, 
+        ipc_port: int | None = None, 
+        output_session_id: str | None = None,
+        logs_session_id: str | None = None,
+        env_vars: Dict[str, str] | None = None
+    ) -> str:
+        """Execução real do spawn (refatorado de spawn para suportar semáforos aninhados)."""
+        if HEALTH_CHECK_ENABLED:
+            await self._wait_for_health()
 
             logger.info("Iniciando container para agente", extra={"agent_id": agent_id, "image": image, "session_id": session_id, "ipc_mode": "TCP" if ipc_port else "UNIX"})
             

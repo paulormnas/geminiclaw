@@ -186,6 +186,37 @@ def export_hardware_snapshots(execution_id: str, output_dir: Path) -> int:
     )
 
 
+def export_subtask_metrics(execution_id: str, output_dir: Path) -> int:
+    """Exporta subtask_metrics para CSV.
+
+    Args:
+        execution_id: ID da execução.
+        output_dir: Diretório de saída.
+
+    Returns:
+        Número de linhas exportadas.
+    """
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, execution_id, task_name, agent_id, status,
+                   created_at, started_at, finished_at, duration_total_ms,
+                   duration_active_ms, waiting_time_ms, cpu_usage_avg,
+                   mem_usage_peak_mb, temp_delta_c, total_tokens,
+                   total_cost_usd, llm_calls_count, tools_used_count,
+                   retry_count, error_type
+            FROM subtask_metrics
+            WHERE execution_id = %s
+            ORDER BY created_at ASC
+            """,
+            (execution_id,),
+        ).fetchall()
+    return _write_csv(
+        [_serialize_row(dict(r)) for r in rows],
+        output_dir / "subtask_metrics.csv",
+    )
+
+
 def export_derived_metrics(execution_id: str, output_dir: Path) -> None:
     """Exporta métricas derivadas para CSV.
 
@@ -265,6 +296,7 @@ def export_all(execution_id: str, output_dir: Path) -> None:
     n_tools = export_tool_usage(execution_id, target)
     n_tokens = export_token_usage(execution_id, target)
     n_hw = export_hardware_snapshots(execution_id, target)
+    n_subtasks = export_subtask_metrics(execution_id, target)
     export_derived_metrics(execution_id, target)
 
     print("\n✅ Exportação concluída:")
@@ -272,6 +304,7 @@ def export_all(execution_id: str, output_dir: Path) -> None:
     print(f"   tool_usage:         {n_tools:>5} linhas")
     print(f"   token_usage:        {n_tokens:>5} linhas")
     print(f"   hardware_snapshots: {n_hw:>5} linhas")
+    print(f"   subtask_metrics:    {n_subtasks:>5} linhas")
     print(f"   derived_metrics:    exportadas")
     print(f"\n   Diretório: {target.resolve()}")
 

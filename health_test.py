@@ -1,0 +1,12 @@
+from src.health import PiHealthMonitor
+print('Initializing monitor...')
+monitor = PiHealthMonitor()
+print('Getting temperature...')
+print(monitor.get_temperature())
+print('Getting memory...')
+print(monitor.get_memory_usage())
+print('Getting CPU...')
+print(monitor.get_cpu_usage())
+print('Checking throttle...')
+print(monitor.is_throttled())
+print('Done!')

@@ -86,4 +86,5 @@ volumes:
 
 networks:
   geminiclaw-net:
+    name: geminiclaw-net
     driver: bridge

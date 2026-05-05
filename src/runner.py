@@ -34,7 +34,7 @@ logger = get_logger(__name__)
 
 # Diretório base para sockets IPC
 _root = Path(__file__).parent.parent
-IPC_SOCKET_DIR = str((_root / "store" / "ipc").absolute())
+IPC_SOCKET_DIR = os.environ.get("IPC_SOCKET_DIR") or str((_root / "store" / "ipc").absolute())
 
 
 
@@ -462,7 +462,7 @@ class ContainerRunner:
                     "nano_cpus": 1_000_000_000,
                     "network": "geminiclaw-net",
                     "user": "appuser",
-                    "remove": True,
+                    "remove": False,
                     "detach": True,
                     "group_add": [os.stat("/var/run/docker.sock").st_gid] if os.path.exists("/var/run/docker.sock") else [],
                     "labels": {"project": "geminiclaw", "agent_id": agent_id, "session_id": session_id},

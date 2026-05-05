@@ -10,7 +10,11 @@ except (ImportError, ModuleNotFoundError):
 from .code.skill import CodeSkill
 from .memory.skill import MemorySkill
 from .web_reader.skill import WebReaderSkill
-from .document_processor.skill import DocumentProcessorSkill
+try:
+    from .document_processor.skill import DocumentProcessorSkill
+    _HAS_DOC_PROCESSOR = True
+except (ImportError, ModuleNotFoundError):
+    _HAS_DOC_PROCESSOR = False
 
 class SkillRegistry:
     """Registro centralizado de skills disponíveis para os agentes."""
@@ -122,6 +126,7 @@ if _HAS_DEEP_SEARCH:
 _safe_register(CodeSkill, enabled=SKILL_CODE_ENABLED)
 _safe_register(MemorySkill, enabled=SKILL_MEMORY_ENABLED)
 _safe_register(WebReaderSkill, enabled=SKILL_WEB_READER_ENABLED)
-_safe_register(DocumentProcessorSkill, enabled=SKILL_DOCUMENT_PROCESSOR_ENABLED)
+if _HAS_DOC_PROCESSOR:
+    _safe_register(DocumentProcessorSkill, enabled=SKILL_DOCUMENT_PROCESSOR_ENABLED)
 
 __all__ = ["BaseSkill", "SkillRegistry", "registry", "QuickSearchSkill", "DeepSearchSkill", "CodeSkill", "MemorySkill", "WebReaderSkill", "DocumentProcessorSkill"]

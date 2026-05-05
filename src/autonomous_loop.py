@@ -9,7 +9,7 @@ import json
 import asyncio
 import uuid
 from datetime import datetime, timezone
-from typing import Any, TYPE_CHECKING, List, Dict
+from typing import Any, TYPE_CHECKING, List, Dict, Optional
 from src.logger import get_logger
 from src.skills.memory.short_term import ShortTermMemory
 from src.triage import TriageClassifier, TriageDecision

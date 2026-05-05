@@ -133,9 +133,11 @@ class IPCChannel:
             self.socket_dir = Path("/tmp") # Não usado, mas mantido por compatibilidade
         else:
             if socket_dir is None:
-                # Padrão: pasta 'store/ipc' na raiz do projeto
-                root = Path(__file__).parent.parent
-                socket_dir = str((root / "store" / "ipc").absolute())
+                # Prioridade: 1. Variável de ambiente, 2. Pasta local 'store/ipc'
+                socket_dir = os.environ.get("IPC_SOCKET_DIR")
+                if not socket_dir:
+                    root = Path(__file__).parent.parent
+                    socket_dir = str((root / "store" / "ipc").absolute())
                 
             self.socket_dir = Path(socket_dir)
             self.socket_dir.mkdir(parents=True, exist_ok=True)

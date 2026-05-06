@@ -230,3 +230,6 @@ end_time.txt
 
 # Swap de memória para operação pesadas de compilação
 /swap
+
+# Chaves privadas
+*.pem

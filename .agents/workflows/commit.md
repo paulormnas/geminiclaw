@@ -88,13 +88,23 @@ Sempre faça o push para garantir que as alterações estejam disponíveis no re
 
 ---
 
-## 6. Criar Pull Request (GitHub CLI)
+## 6. Autenticar e Criar Pull Request (GitHub App)
+
+Gere o token do App e configure o ambiente antes de criar o PR:
 
 ```bash
+# Gerar token do GitHub App (válido por 1h)
+export GH_TOKEN=$(uv run python scripts/github_app_auth.py)
+
+# Configurar remote para usar o token (evita prompt de senha)
+REPO=$(grep GITHUB_REPO .env | cut -d= -f2)
+git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+
+# Criar PR (usa título e descrição do commit mais recente)
 gh pr create --fill
 ```
 
-Este comando utilizará o título e descrição dos seus commits recentes para gerar automaticamente o título e o corpo do Pull Request. Certifique-se de executar isso **antes** de remover a worktree, enquanto ainda estiver na branch da feature.
+> Se preferir um corpo de PR mais estruturado, consulte a skill `.agents/skills/github_app.md` (Passo 2).
 
 ---
 

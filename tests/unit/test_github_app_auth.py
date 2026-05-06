@@ -1,11 +1,21 @@
-"""Testes unitários para scripts/github_app_auth.py.
+"""Testes unitários para .agents/skills/github_app_auth.py.
 
 Valida a geração do JWT e a troca pelo Installation Token,
 sem realizar chamadas reais à API do GitHub.
 """
 import importlib
 import pytest
+import sys
+import os
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+# Adicionar o diretório da skill ao path para permitir o import de github_app_auth
+skill_dir = str(Path(__file__).parent.parent.parent / ".agents" / "skills")
+if skill_dir not in sys.path:
+    sys.path.append(skill_dir)
+
+import github_app_auth as mod
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -59,8 +69,6 @@ def env_vars(monkeypatch, rsa_keypair):
 def test_jwt_contains_correct_issuer(env_vars):
     """JWT deve conter 'iss' igual ao GITHUB_APP_ID configurado."""
     import jwt as pyjwt
-
-    import scripts.github_app_auth as mod
     importlib.reload(mod)
 
     private_key = env_vars
@@ -75,8 +83,6 @@ def test_jwt_contains_correct_issuer(env_vars):
 def test_jwt_expiry_within_11_minutes(env_vars):
     """JWT deve expirar em no máximo 11 minutos (600s + 60s de skew)."""
     import jwt as pyjwt
-
-    import scripts.github_app_auth as mod
     importlib.reload(mod)
 
     private_key = env_vars
@@ -95,7 +101,6 @@ def test_jwt_fails_if_pem_not_found(monkeypatch, tmp_path):
     monkeypatch.setenv("GITHUB_APP_INSTALLATION_ID", "111")
     monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY_PATH", str(tmp_path / "nao_existe.pem"))
 
-    import scripts.github_app_auth as mod
     importlib.reload(mod)
 
     with pytest.raises(SystemExit):
@@ -110,7 +115,6 @@ def test_jwt_fails_if_pem_not_found(monkeypatch, tmp_path):
 @pytest.mark.unit
 def test_get_installation_token_returns_token(env_vars):
     """get_installation_token() deve retornar o valor do campo 'token' da resposta."""
-    import scripts.github_app_auth as mod
     importlib.reload(mod)
 
     mock_resp = MagicMock()
@@ -126,7 +130,6 @@ def test_get_installation_token_returns_token(env_vars):
 @pytest.mark.unit
 def test_get_installation_token_uses_installation_id_in_url(env_vars):
     """A URL da chamada à API deve conter o GITHUB_APP_INSTALLATION_ID."""
-    import scripts.github_app_auth as mod
     importlib.reload(mod)
 
     mock_resp = MagicMock()
@@ -143,7 +146,6 @@ def test_get_installation_token_uses_installation_id_in_url(env_vars):
 @pytest.mark.unit
 def test_get_installation_token_sends_bearer_jwt(env_vars):
     """O header Authorization deve conter 'Bearer <jwt>'."""
-    import scripts.github_app_auth as mod
     importlib.reload(mod)
 
     mock_resp = MagicMock()
@@ -163,8 +165,6 @@ def test_get_installation_token_sends_bearer_jwt(env_vars):
 def test_get_installation_token_raises_on_http_error(env_vars):
     """get_installation_token() deve propagar HTTPStatusError em caso de erro da API."""
     import httpx
-
-    import scripts.github_app_auth as mod
     importlib.reload(mod)
 
     mock_resp = MagicMock(spec=httpx.Response)
@@ -187,12 +187,10 @@ def test_get_installation_token_raises_on_http_error(env_vars):
 @pytest.mark.unit
 def test_check_env_exits_when_variable_missing(monkeypatch):
     """_check_env() deve encerrar com SystemExit se alguma variável estiver ausente."""
+    # Garantir que as variáveis estão fora do environment
     monkeypatch.delenv("GITHUB_APP_ID", raising=False)
     monkeypatch.delenv("GITHUB_APP_INSTALLATION_ID", raising=False)
     monkeypatch.delenv("GITHUB_APP_PRIVATE_KEY_PATH", raising=False)
-
-    import scripts.github_app_auth as mod
-    importlib.reload(mod)
 
     with pytest.raises(SystemExit):
         mod._check_env()

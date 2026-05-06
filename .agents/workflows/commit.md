@@ -94,17 +94,19 @@ Gere o token do App e configure o ambiente antes de criar o PR:
 
 ```bash
 # Gerar token do GitHub App (válido por 1h)
-export GH_TOKEN=$(uv run python scripts/github_app_auth.py)
+export GH_TOKEN=$(uv run python .agents/skills/github_app_auth.py)
 
 # Configurar remote para usar o token (evita prompt de senha)
 REPO=$(grep GITHUB_REPO .env | cut -d= -f2)
 git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
 
-# Criar PR (usa título e descrição do commit mais recente)
-gh pr create --fill
+# Criar PR com revisor e assignee padrão
+gh pr create --fill \
+  --reviewer paulormnas \
+  --assignee "ideagent[bot]"
 ```
 
-> Se preferir um corpo de PR mais estruturado, consulte a skill `.agents/skills/github_app.md` (Passo 2).
+> Para um corpo de PR mais estruturado, consulte `.agents/skills/github_app.md` (Passo 2).
 
 ---
 

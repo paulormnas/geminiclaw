@@ -19,7 +19,7 @@ Esta skill habilita o agente da IDE a atuar como colaborador autêntico do repos
 grep -E "GITHUB_APP_ID|GITHUB_APP_INSTALLATION_ID|GITHUB_APP_PRIVATE_KEY_PATH|GITHUB_REPO" .env
 
 # 2. Confirmar que o token é gerado com sucesso
-uv run python scripts/github_app_auth.py && echo "✅ Autenticação OK"
+uv run python .agents/skills/github_app_auth.py && echo "✅ Autenticação OK"
 
 # 3. Confirmar que está numa branch de feature (NUNCA main/master)
 git branch --show-current
@@ -38,7 +38,7 @@ Execute este bloco **sempre** antes de qualquer operação com `gh` ou `git push
 
 ```bash
 # Gerar token temporário do GitHub App
-export GH_TOKEN=$(uv run python scripts/github_app_auth.py)
+export GH_TOKEN=$(uv run python .agents/skills/github_app_auth.py)
 
 # Configurar o remote para usar o token (evita prompt de senha)
 REPO=$(grep GITHUB_REPO .env | cut -d= -f2)
@@ -70,14 +70,17 @@ gh pr create \
 
 ---
 *PR aberto automaticamente pelo agente GeminiClaw via GitHub App.*" \
-  --base main \
-  --head "$(git branch --show-current)"
+  --base dev \
+  --head "$(git branch --show-current)" \
+  --reviewer paulormnas \
+  --assignee "ideagent[bot]"
 ```
 
-**Quando usar `--draft`:** se a implementação não estiver 100% finalizada ou os testes ainda não passarem na totalidade:
+**Quando usar `--draft`:** se a implementação não estiver 100% finalizada:
 
 ```bash
-gh pr create --draft --title "..." --body "..."
+gh pr create --draft --title "..." --body "..." \
+  --base dev --reviewer paulormnas --assignee "ideagent[bot]"
 ```
 
 ---

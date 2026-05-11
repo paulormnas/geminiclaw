@@ -12,7 +12,7 @@ class OllamaProvider(LLMProvider):
         # Reutilizar cliente HTTP — evita overhead de conexão no Pi 5
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
-            timeout=httpx.Timeout(3600.0),  # timeout alto: CPU-only é lento
+            timeout=None,  # Sem timeout: Pi 5 pode levar minutos por resposta
         )
         # Throttling interno para não sobrecarregar o Pi 5
         self._rpm_limit = int(os.getenv("LLM_REQUESTS_PER_MINUTE", "15"))

@@ -356,7 +356,7 @@ class Orchestrator:
             elapsed = 0.0
             interval = 0.5
             while ipc_id not in self.ipc._connections:
-                if elapsed >= deadline:
+                if deadline is not None and elapsed >= deadline:
                     raise TimeoutError(
                         f"Container '{task.agent_id}' não conectou dentro de {deadline}s."
                     )
@@ -393,6 +393,8 @@ class Orchestrator:
 
             # 5. Aguarda resposta
             _t_recv_start = asyncio.get_event_loop().time()
+            if AGENT_TIMEOUT_SECONDS is None:
+                 logger.info(f"Aguardando resposta do agente {task.agent_id} sem limite de tempo")
             response_msg = await self.ipc.receive(
                 ipc_id, timeout=AGENT_TIMEOUT_SECONDS
             )

@@ -38,8 +38,8 @@ class AutonomousLoop:
             orchestrator: Orquestrador que fornece as capacidades de execução.
         """
         self.orchestrator = orchestrator
-        self.max_retries = int(os.environ.get("MAX_RETRY_PER_SUBTASK", "3"))
-        self.max_subtasks = int(os.environ.get("MAX_SUBTASKS_PER_TASK", "10"))
+        self.max_retries = int(os.environ.get("MAX_RETRY_PER_SUBTASK", "10"))
+        self.max_subtasks = int(os.environ.get("MAX_SUBTASKS_PER_TASK", "15"))
         # Roadmap V3 - Etapa V3: classificador local de triage (sem container)
         self._triage_classifier = TriageClassifier(
             confidence_threshold=float(os.environ.get("TRIAGE_CONFIDENCE_THRESHOLD", "0.7"))
@@ -127,39 +127,35 @@ class AutonomousLoop:
         return await self._llm_triage_direct(prompt)
 
     async def _llm_triage_direct(self, prompt: str) -> bool:
-        """Classifica usando a API Gemini diretamente, sem container.
-
-        Roadmap V3 - Etapa V3: fallback LLM para triage de baixa confiança.
-        Usada nos modos 'llm' e 'hybrid' (quando confiança heurística é baixa).
+        """Classifica usando o LLM configurado diretamente, sem container.
 
         Args:
             prompt: Solicitação original do usuário.
 
         Returns:
-            True se COMPLEX, False se SIMPLE. Em caso de erro, retorna True
-            (padrão conservador).
+            True se COMPLEX, False se SIMPLE. Em caso de erro, retorna True.
         """
         try:
-            import google.generativeai as genai  # type: ignore[import-untyped]
-            from src.config import GEMINI_API_KEY, DEFAULT_MODEL
-
-            genai.configure(api_key=GEMINI_API_KEY)
-            model = genai.GenerativeModel(DEFAULT_MODEL)
+            from src.llm.factory import get_provider
+            provider = get_provider()
 
             triage_prompt = (
-                f"Analise a solicitação abaixo e responda APENAS com 'SIMPLE' ou 'COMPLEX'.\n"
-                f"SIMPLE: pode ser respondida diretamente, sem pesquisa ou código complexo.\n"
-                f"COMPLEX: exige pesquisa, código, múltiplos passos ou validação.\n"
+                "Analise a solicitação abaixo e responda APENAS com 'SIMPLE' ou 'COMPLEX'.\n"
+                "SIMPLE: pode ser respondida diretamente, sem pesquisa ou código complexo.\n"
+                "COMPLEX: exige pesquisa, código, múltiplos passos ou validação.\n"
                 f"SOLICITAÇÃO: {prompt}\n"
-                f"Resposta:"
+                "Resposta:"
             )
 
-            response = await asyncio.to_thread(model.generate_content, triage_prompt)
+            response = await provider.generate(
+                messages=[{"role": "user", "content": triage_prompt}],
+                max_tokens=10
+            )
             text = (response.text or "").strip().upper()
 
             logger.info(
                 "Triage via LLM direto concluído",
-                extra={"response": text[:50]},
+                extra={"response": text[:50], "provider": provider.model_name},
             )
 
             if "COMPLEX" in text:
@@ -276,7 +272,7 @@ class AutonomousLoop:
         from src.orchestrator import AgentTask, OrchestratorResult, AGENT_REGISTRY, AgentResult
         from src.task_scheduler import TaskScheduler
         
-        max_plan_retries = 3
+        max_plan_retries = 5
         plan_feedback = ""
         final_results: List[AgentResult] = []
         tasks: List[AgentTask] = []

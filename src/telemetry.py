@@ -918,11 +918,14 @@ class TelemetryCollector:
         total_cost = sum(r.get("total_cost_usd", 0) for r in tokens.get("by_provider_model", []))
         
         lines = [
-            f"- Tempo Total Estimado: {derived.get('total_subtasks', 0)} subtarefas processadas",
+            f"- Subtarefas Processadas: {derived.get('total_subtasks', 0)} (Replans: {derived.get('replans', 0)})",
             f"- Total de Tokens Consumidos: {total_tokens}",
             f"- Custo Estimado (Cloud): ${total_cost:.4f}",
             f"- Latência Média de Inferência: {derived.get('avg_inference_latency_ms', 0):.0f}ms",
+            f"- Latência Máxima de Inferência: {derived.get('max_inference_latency_ms', 0):.0f}ms",
             f"- Pico de Temperatura CPU: {hw.get('max_temp_c', 0):.1f}°C",
+            f"- Incidentes de Throttling: {derived.get('throttle_incidents', 0)}",
+            f"- Pico de Pressão de Memória: {derived.get('peak_mem_pressure_pct', 0):.1f}%",
             f"- Utilização Média de Contexto: {derived.get('avg_context_utilization', 0)*100:.1f}%",
         ]
         return "\n".join(lines)

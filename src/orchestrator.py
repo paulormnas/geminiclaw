@@ -560,29 +560,50 @@ class Orchestrator:
 
         return result
 
-    async def _run_planning_loop(self, prompt: str, master_session_id: str) -> list[AgentTask]:
+    async def _run_planning_loop(
+        self, 
+        prompt: str, 
+        master_session_id: str, 
+        previous_plan: list[dict[str, Any]] | None = None,
+        execution_feedback: str | None = None
+    ) -> list[AgentTask]:
         """Executa o ciclo de planejamento (Planner -> Validator).
 
         Args:
             prompt: Solicitação original do usuário.
             master_session_id: ID da sessão mestra para logs.
+            previous_plan: Plano gerado anteriormente para refinamento incremental.
+            execution_feedback: Feedback de erro de execução para recuperação.
 
         Returns:
             Lista de AgentTask aprovadas.
         """
         logger.info(
             "Iniciando ciclo de planejamento", 
-            extra={"prompt": prompt, "master_session_id": master_session_id}
+            extra={
+                "prompt": prompt, 
+                "master_session_id": master_session_id, 
+                "is_incremental": previous_plan is not None
+            }
         )
         
-        feedback = ""
-        last_plan_str = ""
+        feedback = execution_feedback or ""
+        current_plan_data = previous_plan
         
         for iteration in range(MAX_PLANNING_ITERATIONS):
             # 1. Executa o Planner
-            planner_prompt = f"Crie um plano para: {prompt}"
-            if feedback:
-                planner_prompt += f"\n\nO plano anterior foi rejeitado: {feedback}. Por favor, revise."
+            if current_plan_data:
+                last_plan_str = json.dumps(current_plan_data, indent=2)
+                planner_prompt = (
+                    f"Tarefa original: {prompt}\n\n"
+                    f"Este é o plano atual:\n{last_plan_str}\n\n"
+                    f"PROBLEMAS ENCONTRADOS:\n{feedback}\n\n"
+                    "Instrução: Corrija apenas as tarefas com problemas ou adicione tarefas de recuperação. "
+                    "Mantenha as tarefas que já foram bem sucedidas se possível. "
+                    "Retorne o plano COMPLETO atualizado em JSON."
+                )
+            else:
+                planner_prompt = f"Crie um plano para: {prompt}"
             
             planner_task = AgentTask(
                 agent_id="planner", 
@@ -604,11 +625,12 @@ class Orchestrator:
                     "Erro ao parsear plano do Planner",
                     extra={"text_preview": raw_plan[:200]},
                 )
-                feedback = "Sua resposta anterior não era JSON válido. Responda APENAS com o JSON."
+                feedback = "Sua resposta anterior não era JSON válido. Responda APENAS com o JSON da lista de tarefas."
                 continue
-            last_plan_str = json.dumps(plan_data, indent=2)
-
             
+            current_plan_data = plan_data
+            last_plan_str = json.dumps(current_plan_data, indent=2)
+
             # 2. Executa o Validator
             from src.config import STRICT_VALIDATION
             validator_prompt = f"Revise este plano:\n{last_plan_str}\n\nPara a solicitação: {prompt}"
@@ -616,9 +638,7 @@ class Orchestrator:
             if not STRICT_VALIDATION:
                 validator_prompt += (
                     "\n\n**AVISO DE MODO FLEXÍVEL**: O sistema está operando com validação relaxada "
-                    "(STRICT_VALIDATION=false). Seja mais tolerante com pequenas ambiguidades, "
-                    "instruções de ferramentas ligeiramente imprecisas ou planos com menos de 3 subtarefas. "
-                    "Aprove o plano se ele for minimamente viável, mesmo que não seja perfeito."
+                    "(STRICT_VALIDATION=false). Aprove o plano se ele for minimamente viável."
                 )
 
             validator_task = AgentTask(
@@ -645,6 +665,7 @@ class Orchestrator:
 
             status = val_data.get("status", "revision_needed")
             reason = val_data.get("reason", "")
+            issues = val_data.get("issues", [])
 
             if status == "approved":
                 logger.info("Plano aprovado pelo Validador", extra={"iteration": iteration + 1})
@@ -652,7 +673,7 @@ class Orchestrator:
                 from datetime import datetime, timezone
                 import uuid
                 now_iso = datetime.now(timezone.utc).isoformat()
-                for t in plan_data:
+                for t in current_plan_data:
                     tasks.append(AgentTask(
                         agent_id=t.get("agent_id", "base"),
                         image=t.get("image", AGENT_REGISTRY.get(t.get("agent_id", "base"), "geminiclaw-base")),
@@ -670,16 +691,14 @@ class Orchestrator:
                 logger.warning("Plano rejeitado definitivamente", extra={"reason": reason})
                 return []
             else:
-                # Se o Validator forneceu corrected_plan, usá-lo como ponto de partida
-                corrected = val_data.get("corrected_plan")
-                if corrected and isinstance(corrected, list):
-                    plan_data = corrected
-                    last_plan_str = json.dumps(plan_data, indent=2)
-                    logger.info(
-                        "Usando corrected_plan do Validator",
-                        extra={"iteration": iteration + 1, "subtasks": len(plan_data)},
+                # Se o Validator forneceu issues estruturados, usá-los como feedback
+                if issues:
+                    feedback = "O Validador identificou os seguintes problemas:\n" + "\n".join(
+                        [f"- Tarefa '{i.get('task_name')}': {i.get('issue')}" for i in issues]
                     )
-                feedback = reason or "Plano precisa de revisão."
+                else:
+                    feedback = reason or "Plano precisa de revisão."
+                
                 logger.info("Solicitando revisão do plano", extra={"iteration": iteration + 1, "reason": feedback})
 
         logger.error("Máximo de iterações de planejamento atingido")

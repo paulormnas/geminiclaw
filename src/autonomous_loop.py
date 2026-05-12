@@ -274,25 +274,34 @@ class AutonomousLoop:
         from src.task_scheduler import TaskScheduler
         
         max_plan_retries = MAX_PLAN_RETRIES
-        plan_feedback = ""
+        execution_feedback = ""
         final_results: List[AgentResult] = []
         tasks: List[AgentTask] = []
+        current_plan_dicts: List[Dict[str, Any]] = []
         
         for plan_attempt in range(max_plan_retries):
-            logger.info(f"Iniciando tentativa de planejamento {plan_attempt+1}/{max_plan_retries}")
-            # 1. Planejamento (S7.3): Decompõe a tarefa
-            effective_prompt = prompt
-            if plan_feedback:
-                effective_prompt = f"{prompt}\n\nATENÇÃO: O plano anterior falhou com os seguintes erros:\n{plan_feedback}\nPor favor, elabore um plano alternativo corrigindo essas falhas."
-                
-            tasks = await self.orchestrator._run_planning_loop(effective_prompt, master_session_id)
+            logger.info(f"Iniciando ciclo de planejamento/recuperação {plan_attempt+1}/{max_plan_retries}")
+            
+            # 1. Planejamento ou Recuperação Incremental
+            tasks = await self.orchestrator._run_planning_loop(
+                prompt=prompt, 
+                master_session_id=master_session_id,
+                previous_plan=current_plan_dicts if current_plan_dicts else None,
+                execution_feedback=execution_feedback
+            )
             
             if not tasks:
-                plan_feedback = "O orquestrador falhou ao gerar um plano aprovado. Verifique os logs dos agentes planner/validator."
-                logger.error(f"Falha na tentativa {plan_attempt+1} de gerar plano de execução")
+                logger.error(f"Falha na tentativa {plan_attempt+1} de gerar/recuperar plano")
+                execution_feedback = "O orquestrador falhou ao gerar um plano aprovado."
                 continue
 
-            logger.info(f"Plano gerado com {len(tasks)} subtarefas")
+            # Atualiza o estado do plano atual (para a próxima iteração se falhar)
+            current_plan_dicts = [
+                {k: v for k, v in t.__dict__.items() if v is not None and k not in ("subtask_id", "created_at")} 
+                for t in tasks
+            ]
+            
+            logger.info(f"Plano ativo com {len(tasks)} subtarefas")
 
             # V5.8 — Telemetria: plan_generated
             telemetry = get_telemetry()
@@ -331,8 +340,8 @@ class AutonomousLoop:
             try:
                 TaskScheduler.validate_dag(tasks)
             except ValueError as e:
-                plan_feedback = f"Grafo de dependências inválido: {e}"
-                logger.error(plan_feedback)
+                execution_feedback = f"Grafo de dependências inválido: {e}"
+                logger.error(execution_feedback)
                 continue
 
             final_results = []
@@ -533,13 +542,22 @@ class AutonomousLoop:
                     plan_json=json.dumps([t.__dict__ for t in tasks])
                 )
             
-            # Se falhou, preparamos o feedback para a próxima tentativa de plano
-            logger.warning(f"O plano falhou nas tarefas: {failed_tasks}. Re-planejando...")
+            # Se falhou, preparamos o feedback para a próxima tentativa de plano (Recuperação Incremental)
+            succeeded_tasks = [t for t, state in dag_state.items() if state["status"] == "success"]
+            logger.warning(f"O plano falhou nas tarefas: {failed_tasks}. Iniciando recuperação incremental...")
+            
             errors = []
             for t in failed_tasks:
                 if dag_state[t]["status"] == "failed":
                     errors.append(f"Tarefa '{t}' falhou com erro: {dag_state[t]['error']}")
-            plan_feedback = "\n".join(errors)
+            
+            execution_feedback = (
+                f"STATUS DA EXECUÇÃO ANTERIOR:\n"
+                f"- Tarefas concluídas com sucesso: {', '.join(succeeded_tasks) if succeeded_tasks else 'Nenhuma'}\n"
+                f"- Falhas encontradas:\n" + "\n".join(errors) + "\n\n"
+                f"Instrução: Crie um plano de recuperação focado em resolver as falhas e completar os objetivos restantes, "
+                f"sem refazer as tarefas que já tiveram sucesso."
+            )
 
             # V5.8 — Telemetria: replan_triggered
             telemetry = get_telemetry()
@@ -556,8 +574,8 @@ class AutonomousLoop:
         self._short_term_memory.clear(master_session_id)
         
         help_msg = (
-            f"Limite de tentativas atingido. O plano falhou sucessivamente nas seguintes etapas:\n{plan_feedback}\n\n"
-            f"Por favor, responda se deseja tentar novamente e forneça orientações adicionais para contornar este problema."
+            f"Limite de tentativas de recuperação atingido. A execução falhou com os seguintes erros:\n{execution_feedback}\n\n"
+            f"Por favor, revise a solicitação ou forneça orientações adicionais."
         )
         
         help_result = AgentResult(

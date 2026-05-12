@@ -81,13 +81,13 @@
 **Objetivo:** Converter o ciclo Planner/Validator de "destrutivo" para "patching", e permitir que o loop de execução recupere planos falhos de forma inteligente.
 
 #### Tarefas:
-- [ ] **Instrução do Validator:** Alterar `agents/validator/agent.py` para não tentar corrigir o plano (`corrected_plan`), mas sim retornar uma lista rigorosa: `{"status": "revision_needed", "issues": [{"task_name": "x", "issue": "y"}]}`.
-- [ ] **Loop de Planejamento (`src/orchestrator.py`):**
+- [x] **Instrução do Validator:** Alterar `agents/validator/agent.py` para não tentar corrigir o plano (`corrected_plan`), mas sim retornar uma lista rigorosa: `{"status": "revision_needed", "issues": [{"task_name": "x", "issue": "y"}]}`.
+- [x] **Loop de Planejamento (`src/orchestrator.py`):**
   - Armazenar o `last_plan` (JSON object).
   - Na iteração de retry, compor o prompt: *"Este é o plano atual: {json}. O Validator apontou estes problemas: {issues}. Corrija apenas as tarefas com problemas. Retorne o plano completo atualizado."*
-- [ ] **Loop de Execução (`src/autonomous_loop.py`):**
+- [x] **Loop de Execução (`src/autonomous_loop.py`):**
   - Ao invés de abortar no final do DAG se houver `failed_tasks`, injetar o status da execução num prompt de replanejamento: *"O plano original era {plano}. As tarefas {X, Y} completaram com sucesso. A tarefa {Z} falhou com o erro: {erro}. Crie um novo plano focando apenas na recuperação e continuação a partir de {Z}, sem refazer {X, Y}."*
-  - Substituir `max_plan_retries` global por um ciclo de `max_execution_recoveries = 3`.
+  - Substituir `max_plan_retries` global por um ciclo de `max_execution_recoveries = 3`. (Nota: Reaproveitado MAX_PLAN_RETRIES para este fim conforme alinhado com o usuário).
 
 ---
 

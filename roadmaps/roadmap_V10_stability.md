@@ -54,12 +54,12 @@
 **Objetivo:** Refatorar `PythonSandbox.run()` para usar transferência de arquivos por stream (tar archive) via Docker API, eliminando dependência de caminhos absolutos do host.
 
 #### Tarefas:
-- [ ] Criar métodos auxiliares em `PythonSandbox` para empacotar texto/arquivos num buffer `.tar` em memória.
-- [ ] Alterar `run()` para iniciar o container do sandbox *sem* o parâmetro `volumes`.
-- [ ] Usar `container.put_archive("/outputs", tar_buffer)` para injetar o `script.py` antes de rodar o comando principal.
-- [ ] Após a execução, usar `container.get_archive("/outputs")` para extrair os artefatos gerados, descompactá-los na memória e salvá-los no `output_dir` local do agente.
-- [ ] Remover tentativas antigas de `chmod` e cálculos complexos de `pathlib`.
-- [ ] Criar testes unitários em `tests/unit/skills/test_sandbox_archive.py`.
+- [x] Criar métodos auxiliares em `PythonSandbox` para empacotar texto/arquivos num buffer `.tar` em memória.
+- [x] Alterar `run()` para iniciar o container do sandbox *sem* o parâmetro `volumes`.
+- [x] Usar `container.put_archive("/outputs", tar_buffer)` para injetar o `script.py` antes de rodar o comando principal.
+- [x] Após a execução, usar `container.get_archive("/outputs")` para extrair os artefatos gerados, descompactá-los na memória e salvá-los no `output_dir` local do agente.
+- [x] Remover tentativas antigas de `chmod` e cálculos complexos de `pathlib`.
+- [x] Criar testes unitários em `tests/unit/skills/test_sandbox_archive.py`.
 
 ### Etapa V10.2 — Identificadores de Sessão Legíveis e Estrutura Plana
 

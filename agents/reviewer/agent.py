@@ -49,5 +49,9 @@ def create_agent() -> agents.Agent:
     )
 
 if __name__ == "__main__":
+    from src.logger import setup_file_logging
+    agent_id = os.environ.get("AGENT_ID", "reviewer")
+    setup_file_logging(f"/logs/{agent_id}.log")
+    
     agent = create_agent()
     asyncio.run(run_ipc_loop(agent))

@@ -66,6 +66,7 @@ if __name__ == "__main__":
     from agents.runner import run_ipc_loop
     
     # Configura o logger raiz para escrever também no volume compartilhado
-    setup_file_logging("/logs/agent.log")
+    agent_id = os.environ.get("AGENT_ID", "agent")
+    setup_file_logging(f"/logs/{agent_id}.log")
     
     asyncio.run(run_ipc_loop(root_agent))

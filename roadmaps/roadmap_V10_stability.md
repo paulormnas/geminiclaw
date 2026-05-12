@@ -66,15 +66,15 @@
 **Objetivo:** Alterar a fundação da criação de sessões para usar slugs temporais e unificar os diretórios de saída.
 
 #### Tarefas:
-- [ ] Criar função `generate_session_slug(prompt: str) -> str` (ex: `20260512_143000_crie_um_script_python`).
-- [ ] Atualizar o CLI (`src/cli.py`) e a API/Entrypoints para gerar o `session_id` usando essa função em vez de `uuid.uuid4().hex`.
-- [ ] Refatorar `OutputManager`:
-  - Garantir que `/outputs/<session_id>/artifacts` seja o único caminho de saída repassado aos agentes.
-  - O volume `/outputs` no `ContainerRunner` deve apontar sempre para a raiz de `artifacts` da sessão.
-- [ ] Refatorar Logger:
-  - O `setup_file_logging()` dos agentes em container deve salvar em `/logs/<agent_id>.log`.
-  - O `ContainerRunner` mapeia o volume `/logs` para `outputs/<session_id>/logs`.
-- [ ] Opcional: Adicionar comando CLI `uv run adk log <session_id>` para agregar os JSON-lines de `/logs/*.log` e exibi-los em ordem cronológica.
+- [x] Criar função `generate_session_slug(prompt: str) -> str` (ex: `20260512_143000_crie_um_script_python`).
+- [x] Atualizar o CLI (`src/cli.py`) e a API/Entrypoints para gerar o `session_id` usando essa função em vez de `uuid.uuid4().hex`.
+- [x] Refatorar `OutputManager`:
+  - [x] Garantir que `/outputs/<session_id>/artifacts` seja o único caminho de saída repassado aos agentes.
+  - [x] O volume `/outputs` no `ContainerRunner` deve apontar sempre para a raiz de `artifacts` da sessão.
+- [x] Refatorar Logger:
+  - [x] O `setup_file_logging()` dos agentes em container deve salvar em `/logs/<agent_id>.log`.
+  - [x] O `ContainerRunner` mapeia o volume `/logs` para `outputs/<session_id>/logs`.
+- [x] Opcional: Adicionar comando CLI `uv run adk log <session_id>` para agregar os JSON-lines de `/logs/*.log` e exibi-los em ordem cronológica.
 
 ### Etapa V10.3 — Planejamento Incremental Estruturado
 

@@ -21,7 +21,7 @@ from src.config import (
 from src.session import SessionManager
 from src.runner import ContainerRunner
 from src.ipc import IPCChannel, create_message, Message
-from src.output_manager import OutputManager
+from src.output_manager import OutputManager, generate_session_slug
 from src.autonomous_loop import AutonomousLoop
 from src.utils.json_parser import extract_json
 from src.rate_limiter import AdaptiveRateLimiter
@@ -162,12 +162,16 @@ class Orchestrator:
         start_date = datetime.utcnow().isoformat() + "Z"
         
         logger.info("Nova requisição recebida no orquestrador", extra={"prompt_preview": prompt[:50]})
-        master_session = self.session_manager.create("orchestrator")
+        
+        # Gera slug legível para a sessão (V10.2)
+        session_slug = generate_session_slug(prompt)
+        
+        master_session = self.session_manager.create("orchestrator", session_id=session_slug)
         
         # V5.6 — Telemetria: evento de início de execução
         telemetry = get_telemetry()
         history = ExecutionHistory()
-        exec_id = history.start(prompt, start_date)
+        exec_id = history.start(prompt, start_date, exec_id=session_slug)
         
         logger.info("Nova requisição registrada", extra={"execution_id": exec_id, "prompt_preview": prompt[:50]})
         
@@ -251,6 +255,18 @@ class Orchestrator:
             )
             await telemetry.flush()
         
+        # V10.2: Salva plano e resultados no diretório da sessão para facilitar consulta manual
+        try:
+            session_dir = self.output_manager.base_dir / master_session.id
+            if result.plan_json:
+                (session_dir / "plan.json").write_text(result.plan_json, encoding="utf-8")
+            
+            # Converte resultados para formato serializável
+            serializable_results = [r.__dict__ for r in result.results]
+            (session_dir / "results.json").write_text(json.dumps(serializable_results, indent=2), encoding="utf-8")
+        except Exception as e:
+            logger.warning(f"Falha ao salvar artefatos de metadados na sessão: {e}")
+
         return result
 
     async def _execute_agent(self, task: AgentTask, master_session_id: str | None = None) -> AgentResult:
@@ -313,14 +329,9 @@ class Orchestrator:
                 payload={"image": task.image},
             )
 
-            # 0. Inicializa diretórios de output e logs únicos para esta execução de agente
-            # Etapa 9: Usa a sessão mestra se disponível para compartilhamento de arquivos
+            # 0. Inicializa diretório de sessão único (V10.2: Estrutura Plana)
             effective_session_id = master_session_id or session.id
-            unique_task_id = f"{task.agent_id}_{session.id[:8]}"
-            
             self.output_manager.init_session(effective_session_id)
-            self.output_manager.get_task_dir(effective_session_id, unique_task_id)
-            self.output_manager.get_logs_dir(effective_session_id, unique_task_id)
 
             # 1. Cria socket IPC
             await self.ipc.create_socket(ipc_id)
@@ -350,8 +361,8 @@ class Orchestrator:
                 task.image, 
                 session.id, 
                 ipc_port=ipc_port, 
-                output_session_id=f"{effective_session_id}/{unique_task_id}",
-                logs_session_id=f"{effective_session_id}/{unique_task_id}",
+                output_session_id=effective_session_id,
+                logs_session_id=effective_session_id,
                 env_vars=env_vars
             )
 

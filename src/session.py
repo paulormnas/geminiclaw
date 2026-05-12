@@ -33,17 +33,19 @@ class Session:
 class SessionManager:
     """Gerenciador de sessões persistidas no PostgreSQL."""
 
-    def create(self, agent_id: str) -> Session:
+    def create(self, agent_id: str, session_id: Optional[str] = None) -> Session:
         """Cria uma nova sessão para o agente.
 
         Args:
             agent_id: Identificador do agente.
+            session_id: ID customizado para a sessão (opcional).
 
         Returns:
             O objeto Session criado com contexto de memória de longo prazo
             se disponível.
         """
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        final_id = session_id or str(uuid.uuid4())
 
         # Carrega resumo da memória de longo prazo
         lt_memory = LongTermMemory()
@@ -54,7 +56,7 @@ class SessionManager:
             payload["long_term_memory_summary"] = lt_summary
 
         session = Session(
-            id=str(uuid.uuid4()),
+            id=final_id,
             agent_id=agent_id,
             status="active",
             created_at=now,

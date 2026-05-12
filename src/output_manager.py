@@ -5,12 +5,43 @@ além de permitir a listagem de artefatos produzidos pelos agentes.
 """
 
 import shutil
+import re
+import datetime
+import unicodedata
 from pathlib import Path
 from typing import Any
 from src.config import OUTPUT_BASE_DIR
 from src.logger import get_logger
 
 logger = get_logger(__name__)
+
+def generate_session_slug(prompt: str) -> str:
+    """Gera um slug legível para a sessão baseado no prompt e timestamp.
+
+    Args:
+        prompt: O prompt original do usuário.
+
+    Returns:
+        String no formato YYYYMMDD_HHMMSS_slug_do_prompt.
+    """
+    # Timestamp
+    now = datetime.datetime.now()
+    ts = now.strftime("%Y%m%d_%H%M%S")
+    
+    # Limpa o prompt para ser um slug seguro
+    # 1. Normaliza (remove acentos)
+    slug = "".join(
+        c for c in unicodedata.normalize("NFD", prompt)
+        if unicodedata.category(c) != "Mn"
+    )
+    # 2. Lowercase e remove caracteres especiais
+    slug = slug.lower()
+    slug = re.sub(r"[^a-z0-9]+", "_", slug).strip("_")
+    
+    # 3. Limita o tamanho do slug do prompt
+    prompt_slug = slug[:40]
+    
+    return f"{ts}_{prompt_slug}"
 
 class OutputManager:
     """Gerencia a estrutura de diretórios de outputs no host."""
@@ -32,67 +63,66 @@ class OutputManager:
     def init_session(self, session_id: str) -> Path:
         """Cria os diretórios base de sessão para outputs e logs.
 
+        Estrutura:
+        outputs/<session_id>/
+        ├── artifacts/
+        └── logs/
+
         Args:
-            session_id: ID único da sessão.
+            session_id: ID único (slug) da sessão.
 
         Returns:
             Path para o diretório da sessão (outputs).
         """
-        # Inicializa outputs
         session_dir = self.base_dir / session_id
         session_dir.mkdir(parents=True, exist_ok=True)
         session_dir.chmod(0o777)
         
-        # Inicializa logs
-        logs_session_dir = self.logs_base_dir / session_id
-        logs_session_dir.mkdir(parents=True, exist_ok=True)
-        logs_session_dir.chmod(0o777)
+        # Cria pasta de artefatos plana
+        artifacts_dir = session_dir / "artifacts"
+        artifacts_dir.mkdir(exist_ok=True)
+        artifacts_dir.chmod(0o777)
+        
+        # Cria pasta de logs
+        # Note: No V10.2, unificamos os logs dentro da pasta da sessão para facilitar a portabilidade
+        logs_dir = session_dir / "logs"
+        logs_dir.mkdir(exist_ok=True)
+        logs_dir.chmod(0o777)
         
         logger.info("Diretórios de sessão inicializados", extra={
             "session_id": session_id, 
-            "outputs_path": str(session_dir),
-            "logs_path": str(logs_session_dir)
+            "artifacts_path": str(artifacts_dir),
+            "logs_path": str(logs_dir)
         })
         return session_dir
 
-    def get_task_dir(self, session_id: str, task_name: str) -> Path:
-        """Cria e retorna o diretório para uma tarefa específica (outputs).
+    def get_artifacts_dir(self, session_id: str) -> Path:
+        """Retorna o caminho para a pasta de artefatos da sessão.
 
         Args:
             session_id: ID da sessão.
-            task_name: Nome da tarefa.
 
         Returns:
-            Path para o diretório da tarefa.
+            Path para a pasta artifacts.
         """
-        safe_task_name = task_name.replace(" ", "_").replace("/", "_").replace("\\", "_")
-        task_dir = self.base_dir / session_id / safe_task_name
-        
-        task_dir.mkdir(parents=True, exist_ok=True)
-        task_dir.chmod(0o777)
-        
-        arts_dir = task_dir / "artifacts"
-        arts_dir.mkdir(exist_ok=True)
-        arts_dir.chmod(0o777)
-        
-        return task_dir
+        path = self.base_dir / session_id / "artifacts"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
 
-    def get_logs_dir(self, session_id: str, task_name: str) -> Path:
-        """Cria e retorna o diretório de logs para uma tarefa específica.
+    def get_logs_dir(self, session_id: str, agent_id: str | None = None) -> Path:
+        """Retorna o caminho para a pasta de logs da sessão.
 
         Args:
             session_id: ID da sessão.
-            task_name: Nome da tarefa.
+            agent_id: Se fornecido, retorna o caminho para o arquivo de log do agente.
 
         Returns:
-            Path para o diretório de logs da tarefa.
+            Path para a pasta logs ou arquivo de log do agente.
         """
-        safe_task_name = task_name.replace(" ", "_").replace("/", "_").replace("\\", "_")
-        logs_dir = self.logs_base_dir / session_id / safe_task_name
-        
+        logs_dir = self.base_dir / session_id / "logs"
         logs_dir.mkdir(parents=True, exist_ok=True)
-        logs_dir.chmod(0o777)
-        
+        if agent_id:
+            return logs_dir / f"{agent_id}.log"
         return logs_dir
 
     def list_artifacts(self, session_id: str) -> list[dict[str, Any]]:
@@ -102,26 +132,26 @@ class OutputManager:
             session_id: ID da sessão.
 
         Returns:
-            Lista de dicionários com 'task', 'name', 'type', 'size' e 'path'.
+            Lista de dicionários com 'name', 'type', 'size' e 'path'.
         """
-        session_dir = self.base_dir / session_id
-        if not session_dir.exists():
+        artifacts_dir = self.base_dir / session_id / "artifacts"
+        if not artifacts_dir.exists():
             return []
 
         artifacts = []
-        for file_path in session_dir.rglob("*"):
+        for file_path in artifacts_dir.rglob("*"):
             if file_path.is_file():
-                # Determina o tipo via extensão (Etapa 1)
                 file_type = file_path.suffix.lstrip(".").lower() or "unknown"
                 
                 artifacts.append({
-                    "task": file_path.parent.name if file_path.parent.name not in ["logs", "artifacts"] else file_path.parent.parent.name,
                     "name": file_path.name,
                     "type": file_type,
                     "size": file_path.stat().st_size,
-                    "path": str(file_path.absolute())
+                    "path": str(file_path.absolute()),
+                    "task": "shared"
                 })
         return artifacts
+
     def cleanup_session(self, session_id: str) -> None:
         """Remove recursivamente o diretório de uma sessão.
 

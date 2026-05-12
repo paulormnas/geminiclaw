@@ -23,41 +23,40 @@ def test_init_session(manager, tmp_output_dir):
     assert path.exists()
     assert path.is_dir()
     assert path.name == session_id
+    assert (path / "artifacts").exists()
+    assert (path / "logs").exists()
     assert str(tmp_output_dir) in str(path)
 
-def test_get_task_dir(manager):
+def test_get_artifacts_dir(manager):
     session_id = "session-456"
-    task_name = "Minha Tarefa / de Teste"
-    
-    task_dir = manager.get_task_dir(session_id, task_name)
-    
-    assert task_dir.exists()
-    # Verifica estrutura de subpastas (Etapa 1)
-    assert (task_dir / "artifacts").exists()
-    
-    # Verifica sanitização básica (espaços e barras)
-    assert "Minha_Tarefa___de_Teste" in str(task_dir)
+    art_dir = manager.get_artifacts_dir(session_id)
+    assert art_dir.exists()
+    assert art_dir.name == "artifacts"
+    assert art_dir.parent.name == session_id
+
+def test_get_logs_dir(manager):
+    session_id = "session-456"
+    log_dir = manager.get_logs_dir(session_id)
+    assert log_dir.exists()
+    assert log_dir.name == "logs"
+    assert log_dir.parent.name == session_id
 
 def test_list_artifacts(manager):
     session_id = "session-789"
-    task_1 = "task1"
-    task_2 = "task2"
+    art_dir = manager.get_artifacts_dir(session_id)
     
-    dir1 = manager.get_task_dir(session_id, task_1)
-    dir2 = manager.get_task_dir(session_id, task_2)
-    
-    (dir1 / "file1.txt").write_text("conteudo 1")
-    (dir2 / "file2.json").write_text('{"key": "value"}')
-    (dir1 / "subdir").mkdir()
-    (dir1 / "subdir" / "file3.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    (art_dir / "file1.txt").write_text("conteudo 1")
+    (art_dir / "file2.json").write_text('{"key": "value"}')
+    (art_dir / "subdir").mkdir()
+    (art_dir / "subdir" / "file3.png").write_bytes(b"\x89PNG\r\n\x1a\n")
     
     artifacts = manager.list_artifacts(session_id)
     
+    # Deve listar recursivamente (3 arquivos)
     assert len(artifacts) == 3
     
     # Verifica um artefato específico
     file1 = next(a for a in artifacts if a["name"] == "file1.txt")
-    assert file1["task"] == "task1"
     assert file1["type"] == "txt"
     assert file1["size"] == 10
     assert os.path.exists(file1["path"])

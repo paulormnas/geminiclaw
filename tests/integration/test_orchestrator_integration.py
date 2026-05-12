@@ -64,10 +64,9 @@ async def test_orchestrator_single_agent_flow() -> None:
             reader, writer = await asyncio.open_unix_connection(socket_path)
 
             # Simula a escrita de um artefato no "volume" associado à sessão
-            # O orquestrador agora usa session_id/task_id_... como base
-            # No teste, o OutputManager.get_task_dir resolve o caminho completo
-            task_dir = output_manager.get_task_dir(output_session_id, "ag1")
-            (task_dir / "artifacts" / "result.txt").write_text("Resposta final: 42")
+            # O orquestrador agora usa session_id/artifacts como base
+            art_dir = output_manager.get_artifacts_dir(output_session_id)
+            (art_dir / "result.txt").write_text("Resposta final: 42")
 
             # Recebe o request
             header = await reader.readexactly(HEADER_SIZE)
@@ -113,7 +112,7 @@ async def test_orchestrator_single_agent_flow() -> None:
         # Verifica se o artefato foi listado
         assert len(result.artifacts) == 1
         assert result.artifacts[0]["name"] == "result.txt"
-        assert result.artifacts[0]["task"] == "ag1"
+        assert result.artifacts[0]["task"] == "shared"
 
         # Verifica que a sessão foi criada e fechada
         session = session_manager.get(result.results[0].session_id)

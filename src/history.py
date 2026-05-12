@@ -74,17 +74,19 @@ class ExecutionHistory:
         self,
         prompt: str,
         started_at: str,
+        exec_id: Optional[str] = None,
     ) -> str:
         """Registra o início de uma execução no histórico.
 
         Args:
             prompt: Prompt original enviado ao orquestrador.
             started_at: Timestamp de início (ISO 8601).
+            exec_id: ID customizado para a execução (opcional).
 
         Returns:
-            ID hexadecimal da execução registrada.
+            ID da execução registrada.
         """
-        exec_id = uuid.uuid4().hex
+        final_id = exec_id or uuid.uuid4().hex
         try:
             with get_connection() as conn:
                 conn.execute(
@@ -92,9 +94,9 @@ class ExecutionHistory:
                     INSERT INTO execution_history (id, prompt, status, started_at)
                     VALUES (%s, %s, %s, %s)
                     """,
-                    (exec_id, prompt, "running", started_at),
+                    (final_id, prompt, "running", started_at),
                 )
-            return exec_id
+            return final_id
         except Exception as e:
             logger.error("Erro ao iniciar histórico", extra={"error": str(e)})
             return ""

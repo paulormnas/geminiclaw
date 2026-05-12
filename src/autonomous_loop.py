@@ -14,6 +14,7 @@ from src.logger import get_logger
 from src.skills.memory.short_term import ShortTermMemory
 from src.triage import TriageClassifier, TriageDecision
 from src.health import PiHealthMonitor
+from src.config import MAX_PLAN_RETRIES
 from src.telemetry import get_telemetry
 
 if TYPE_CHECKING:
@@ -272,7 +273,7 @@ class AutonomousLoop:
         from src.orchestrator import AgentTask, OrchestratorResult, AGENT_REGISTRY, AgentResult
         from src.task_scheduler import TaskScheduler
         
-        max_plan_retries = 5
+        max_plan_retries = MAX_PLAN_RETRIES
         plan_feedback = ""
         final_results: List[AgentResult] = []
         tasks: List[AgentTask] = []
@@ -287,8 +288,9 @@ class AutonomousLoop:
             tasks = await self.orchestrator._run_planning_loop(effective_prompt, master_session_id)
             
             if not tasks:
-                logger.error("Falha ao gerar plano de execução")
-                return OrchestratorResult(results=[], total=0, succeeded=0, failed=0)
+                plan_feedback = "O orquestrador falhou ao gerar um plano aprovado. Verifique os logs dos agentes planner/validator."
+                logger.error(f"Falha na tentativa {plan_attempt+1} de gerar plano de execução")
+                continue
 
             logger.info(f"Plano gerado com {len(tasks)} subtarefas")
 

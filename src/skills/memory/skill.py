@@ -51,7 +51,7 @@ class MemorySkill(BaseSkill):
                 "description": "ID da sessão atual (obrigatório para ações de curto prazo)."
             }
         },
-        "required": ["action"]
+        "required": ["action", "key", "session_id"]
     }
 
     def __init__(self, db_path: Optional[str] = None):

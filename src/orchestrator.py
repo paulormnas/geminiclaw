@@ -15,6 +15,8 @@ from src.config import (
     AGENT_TIMEOUT_SECONDS,
     GEMINI_REQUESTS_PER_MINUTE,
     GEMINI_RATE_LIMIT_COOLDOWN_SECONDS,
+    OLLAMA_ENABLE_THINKING,
+    MAX_PLANNING_ITERATIONS,
 )
 from src.session import SessionManager
 from src.runner import ContainerRunner
@@ -335,11 +337,13 @@ class Orchestrator:
             if task.preferred_model:
                 env_vars["LLM_MODEL"] = task.preferred_model
             
-            # Etapa V6.6: Propaga granular thinking mode se configurado no host
-            # Busca OLLAMA_ENABLE_THINKING_PLANNER, etc.
-            think_key = f"OLLAMA_ENABLE_THINKING_{task.agent_id.upper()}"
-            if think_key in os.environ:
-                env_vars["OLLAMA_ENABLE_THINKING"] = os.environ[think_key].lower()
+            # Etapa V6.6: Configuração de Thinking Mode (Roadmap V4)
+            # Planner e Validator sempre usam thinking para melhor qualidade lógica.
+            if task.agent_id in ("planner", "validator"):
+                env_vars["OLLAMA_ENABLE_THINKING"] = "true"
+            else:
+                # Agentes de execução podem ter o thinking desabilitado para velocidade
+                env_vars["OLLAMA_ENABLE_THINKING"] = str(OLLAMA_ENABLE_THINKING).lower()
             
             container_id = await self.runner.spawn(
                 task.agent_id, 
@@ -574,7 +578,7 @@ class Orchestrator:
         feedback = ""
         last_plan_str = ""
         
-        for iteration in range(3):
+        for iteration in range(MAX_PLANNING_ITERATIONS):
             # 1. Executa o Planner
             planner_prompt = f"Crie um plano para: {prompt}"
             if feedback:

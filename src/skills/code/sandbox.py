@@ -122,12 +122,15 @@ class PythonSandbox:
             exit_code = -1
             
             try:
-                exec_result = container.exec_run(["python", "/outputs/script.py"])
+                exec_result = container.exec_run(["python", "/outputs/script.py"], demux=True)
                 if timed_out:
                     stdout = ""
+                    stderr = "Timeout atingido durante a execução."
                     exit_code = -1
                 else:
-                    stdout = exec_result.output.decode("utf-8")
+                    out_bytes, err_bytes = exec_result.output
+                    stdout = out_bytes.decode("utf-8") if out_bytes else ""
+                    stderr = err_bytes.decode("utf-8") if err_bytes else ""
                     exit_code = exec_result.exit_code
             except Exception as e:
                 if not timed_out:

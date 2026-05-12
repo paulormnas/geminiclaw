@@ -75,15 +75,27 @@ if DEPLOYMENT_PROFILE == "pi5" or LLM_PROVIDER == "ollama":
 if DEPLOYMENT_PROFILE == "pi5":
     MAX_SUBTASKS_PER_TASK = int(get_env("MAX_SUBTASKS_PER_TASK", default="5"))
     MAX_CONCURRENT_AGENTS = int(get_env("MAX_CONCURRENT_AGENTS", default="2"))
-    AGENT_TIMEOUT_SECONDS = None  # Infinito: Pi 5 pode ser lento
-    CODE_SANDBOX_TIMEOUT_SECONDS = int(get_env("CODE_SANDBOX_TIMEOUT_SECONDS", default="300"))
     # No Pi 5, o Ollama local é o padrão se não especificado
     if not os.environ.get("LLM_PROVIDER"):
         LLM_PROVIDER = "ollama"
 else:
     MAX_SUBTASKS_PER_TASK = int(get_env("MAX_SUBTASKS_PER_TASK", default="10"))
     MAX_CONCURRENT_AGENTS = int(get_env("MAX_CONCURRENT_AGENTS", default="3"))
-    AGENT_TIMEOUT_SECONDS = int(get_env("AGENT_TIMEOUT_SECONDS", default="120"))
+
+# Prioridade para variável de ambiente explícita para o timeout do agente
+env_timeout = get_env("AGENT_TIMEOUT_SECONDS")
+if env_timeout is not None:
+    AGENT_TIMEOUT_SECONDS = int(env_timeout)
+else:
+    # Fallback para perfil
+    if DEPLOYMENT_PROFILE == "pi5":
+        AGENT_TIMEOUT_SECONDS = None  # Infinito por padrão no Pi 5
+    else:
+        AGENT_TIMEOUT_SECONDS = 300   # Default 5min
+
+# Limites de planejamento (Roadmap V4)
+MAX_PLANNING_ITERATIONS = int(get_env("MAX_PLANNING_ITERATIONS", default="10"))
+MAX_PLAN_RETRIES = int(get_env("MAX_PLAN_RETRIES", default="5"))
 
 # --- Outras Configurações ---
 # Banco de dados PostgreSQL (Roadmap V8) — única config de banco necessária

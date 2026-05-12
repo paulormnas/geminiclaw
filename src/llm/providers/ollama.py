@@ -65,10 +65,13 @@ class OllamaProvider(LLMProvider):
         if tools:
             payload["tools"] = tools
         
-        # Injetar system prompt se fornecido
+        # Injetar system prompt se fornecido e não for redundante
         final_messages = list(messages)
         if system:
-            final_messages = [{"role": "system", "content": system}] + final_messages
+            # Verifica se a primeira mensagem já é um system prompt idêntico
+            first_msg = messages[0] if messages else None
+            if not (first_msg and first_msg.get("role") == "system" and first_msg.get("content") == system):
+                final_messages = [{"role": "system", "content": system}] + final_messages
         payload["messages"] = final_messages
 
         try:

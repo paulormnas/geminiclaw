@@ -30,7 +30,7 @@ class LLMResponse:
                     "type": "function",
                     "function": {
                         "name": tc.name,
-                        "arguments": tc.arguments if isinstance(tc.arguments, str) else json.dumps(tc.arguments)
+                        "arguments": tc.arguments
                     }
                 }
                 for tc in self.tool_calls

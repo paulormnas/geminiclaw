@@ -44,6 +44,21 @@ async def write_artifact(filename: str, content: str) -> str:
         logger.error(f"Erro ao salvar artefato: {e}")
         return f"Erro ao salvar artefato: {str(e)}"
 
+write_artifact.parameters_schema = {
+    "type": "object",
+    "properties": {
+        "filename": {
+            "type": "string",
+            "description": "Nome do arquivo (ex: 'resumo.md')."
+        },
+        "content": {
+            "type": "string",
+            "description": "Conteúdo textual do arquivo."
+        }
+    },
+    "required": ["filename", "content"]
+}
+
 _memory_skill_instance = None
 
 async def manage_memory(action: str, key: str, value: Optional[str] = None, importance: float = 0.5, tags: list[str] = []) -> str:

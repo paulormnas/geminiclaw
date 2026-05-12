@@ -88,6 +88,13 @@ def build_parser() -> argparse.ArgumentParser:
         default="./metrics",
         help="Diretório de saída para exportação CSV (padrão: ./metrics).",
     )
+    parser.add_argument(
+        "--log",
+        type=str,
+        metavar="SESSION_ID",
+        default=None,
+        help="Exibe e agrega os logs de todos os agentes de uma sessão.",
+    )
     return parser
 
 
@@ -299,6 +306,65 @@ def show_metrics(execution_id: str) -> None:
     print(f"  {DIM}Use --export {execution_id} para exportar em CSV.{RESET}\n")
 
 
+def show_session_logs(session_id: str) -> None:
+    """Agrega e exibe os logs de todos os agentes de uma sessão em ordem cronológica.
+
+    Args:
+        session_id: ID (slug) da sessão.
+    """
+    from src.output_manager import OutputManager
+    import json
+    
+    om = OutputManager()
+    logs_dir = om.get_logs_dir(session_id)
+    
+    if not logs_dir.exists():
+        print(f"\n  {RED}❌ Erro: Diretório de logs não encontrado para a sessão {session_id}{RESET}\n")
+        return
+        
+    all_logs = []
+    for log_file in logs_dir.glob("*.log"):
+        agent_id = log_file.stem
+        try:
+            with open(log_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        entry = json.loads(line)
+                        entry["_agent"] = agent_id
+                        all_logs.append(entry)
+                    except json.JSONDecodeError:
+                        continue
+        except Exception as e:
+            print(f"  {YELLOW}⚠ Aviso: Erro ao ler log {log_file.name}: {e}{RESET}")
+
+    if not all_logs:
+        print(f"\n  {DIM}Nenhum log estruturado encontrado na sessão {session_id}.{RESET}\n")
+        return
+
+    # Ordena por timestamp
+    all_logs.sort(key=lambda x: x.get("timestamp", ""))
+
+    print(f"\n{BOLD}  📋 Logs Agregados — Sessão: {DIM}{session_id}{RESET}")
+    print(f"{BOLD}{'─' * 100}{RESET}")
+    
+    for entry in all_logs:
+        ts = entry.get("timestamp", "")[11:19] # HH:MM:SS
+        agent = entry.get("_agent", "unknown")
+        level = entry.get("level", "INFO")
+        msg = entry.get("message", "")
+        
+        color = DIM
+        if level == "ERROR": color = RED
+        elif level == "WARNING": color = YELLOW
+        elif level == "INFO": color = GREEN
+        
+        agent_color = CYAN if agent == "orchestrator" else MAGENTA
+        
+        print(f"  {DIM}{ts}{RESET} | {agent_color}{agent:<12}{RESET} | {color}{level:<7}{RESET} | {msg}")
+
+    print(f"{BOLD}{'─' * 100}{RESET}\n")
+
+
 def _create_orchestrator() -> tuple[Orchestrator, ContainerRunner]:
     """Cria as dependências e retorna o orquestrador.
 
@@ -406,6 +472,11 @@ def main() -> None:
             export_all(args.export, Path(args.export_dir))
         finally:
             pool.close()
+        sys.exit(0)
+
+    # Subcomando: --log <session_id>
+    if args.log:
+        show_session_logs(args.log)
         sys.exit(0)
 
     try:

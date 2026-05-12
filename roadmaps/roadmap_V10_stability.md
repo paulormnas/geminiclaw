@@ -54,40 +54,40 @@
 **Objetivo:** Refatorar `PythonSandbox.run()` para usar transferência de arquivos por stream (tar archive) via Docker API, eliminando dependência de caminhos absolutos do host.
 
 #### Tarefas:
-- [ ] Criar métodos auxiliares em `PythonSandbox` para empacotar texto/arquivos num buffer `.tar` em memória.
-- [ ] Alterar `run()` para iniciar o container do sandbox *sem* o parâmetro `volumes`.
-- [ ] Usar `container.put_archive("/outputs", tar_buffer)` para injetar o `script.py` antes de rodar o comando principal.
-- [ ] Após a execução, usar `container.get_archive("/outputs")` para extrair os artefatos gerados, descompactá-los na memória e salvá-los no `output_dir` local do agente.
-- [ ] Remover tentativas antigas de `chmod` e cálculos complexos de `pathlib`.
-- [ ] Criar testes unitários em `tests/unit/skills/test_sandbox_archive.py`.
+- [x] Criar métodos auxiliares em `PythonSandbox` para empacotar texto/arquivos num buffer `.tar` em memória.
+- [x] Alterar `run()` para iniciar o container do sandbox *sem* o parâmetro `volumes`.
+- [x] Usar `container.put_archive("/outputs", tar_buffer)` para injetar o `script.py` antes de rodar o comando principal.
+- [x] Após a execução, usar `container.get_archive("/outputs")` para extrair os artefatos gerados, descompactá-los na memória e salvá-los no `output_dir` local do agente.
+- [x] Remover tentativas antigas de `chmod` e cálculos complexos de `pathlib`.
+- [x] Criar testes unitários em `tests/unit/skills/test_sandbox_archive.py`.
 
 ### Etapa V10.2 — Identificadores de Sessão Legíveis e Estrutura Plana
 
 **Objetivo:** Alterar a fundação da criação de sessões para usar slugs temporais e unificar os diretórios de saída.
 
 #### Tarefas:
-- [ ] Criar função `generate_session_slug(prompt: str) -> str` (ex: `20260512_143000_crie_um_script_python`).
-- [ ] Atualizar o CLI (`src/cli.py`) e a API/Entrypoints para gerar o `session_id` usando essa função em vez de `uuid.uuid4().hex`.
-- [ ] Refatorar `OutputManager`:
-  - Garantir que `/outputs/<session_id>/artifacts` seja o único caminho de saída repassado aos agentes.
-  - O volume `/outputs` no `ContainerRunner` deve apontar sempre para a raiz de `artifacts` da sessão.
-- [ ] Refatorar Logger:
-  - O `setup_file_logging()` dos agentes em container deve salvar em `/logs/<agent_id>.log`.
-  - O `ContainerRunner` mapeia o volume `/logs` para `outputs/<session_id>/logs`.
-- [ ] Opcional: Adicionar comando CLI `uv run adk log <session_id>` para agregar os JSON-lines de `/logs/*.log` e exibi-los em ordem cronológica.
+- [x] Criar função `generate_session_slug(prompt: str) -> str` (ex: `20260512_143000_crie_um_script_python`).
+- [x] Atualizar o CLI (`src/cli.py`) e a API/Entrypoints para gerar o `session_id` usando essa função em vez de `uuid.uuid4().hex`.
+- [x] Refatorar `OutputManager`:
+  - [x] Garantir que `/outputs/<session_id>/artifacts` seja o único caminho de saída repassado aos agentes.
+  - [x] O volume `/outputs` no `ContainerRunner` deve apontar sempre para a raiz de `artifacts` da sessão.
+- [x] Refatorar Logger:
+  - [x] O `setup_file_logging()` dos agentes em container deve salvar em `/logs/<agent_id>.log`.
+  - [x] O `ContainerRunner` mapeia o volume `/logs` para `outputs/<session_id>/logs`.
+- [x] Opcional: Adicionar comando CLI `uv run adk log <session_id>` para agregar os JSON-lines de `/logs/*.log` e exibi-los em ordem cronológica.
 
 ### Etapa V10.3 — Planejamento Incremental Estruturado
 
 **Objetivo:** Converter o ciclo Planner/Validator de "destrutivo" para "patching", e permitir que o loop de execução recupere planos falhos de forma inteligente.
 
 #### Tarefas:
-- [ ] **Instrução do Validator:** Alterar `agents/validator/agent.py` para não tentar corrigir o plano (`corrected_plan`), mas sim retornar uma lista rigorosa: `{"status": "revision_needed", "issues": [{"task_name": "x", "issue": "y"}]}`.
-- [ ] **Loop de Planejamento (`src/orchestrator.py`):**
+- [x] **Instrução do Validator:** Alterar `agents/validator/agent.py` para não tentar corrigir o plano (`corrected_plan`), mas sim retornar uma lista rigorosa: `{"status": "revision_needed", "issues": [{"task_name": "x", "issue": "y"}]}`.
+- [x] **Loop de Planejamento (`src/orchestrator.py`):**
   - Armazenar o `last_plan` (JSON object).
   - Na iteração de retry, compor o prompt: *"Este é o plano atual: {json}. O Validator apontou estes problemas: {issues}. Corrija apenas as tarefas com problemas. Retorne o plano completo atualizado."*
-- [ ] **Loop de Execução (`src/autonomous_loop.py`):**
+- [x] **Loop de Execução (`src/autonomous_loop.py`):**
   - Ao invés de abortar no final do DAG se houver `failed_tasks`, injetar o status da execução num prompt de replanejamento: *"O plano original era {plano}. As tarefas {X, Y} completaram com sucesso. A tarefa {Z} falhou com o erro: {erro}. Crie um novo plano focando apenas na recuperação e continuação a partir de {Z}, sem refazer {X, Y}."*
-  - Substituir `max_plan_retries` global por um ciclo de `max_execution_recoveries = 3`.
+  - Substituir `max_plan_retries` global por um ciclo de `max_execution_recoveries = 3`. (Nota: Reaproveitado MAX_PLAN_RETRIES para este fim conforme alinhado com o usuário).
 
 ---
 

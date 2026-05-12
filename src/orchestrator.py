@@ -21,7 +21,7 @@ from src.config import (
 from src.session import SessionManager
 from src.runner import ContainerRunner
 from src.ipc import IPCChannel, create_message, Message
-from src.output_manager import OutputManager
+from src.output_manager import OutputManager, generate_session_slug
 from src.autonomous_loop import AutonomousLoop
 from src.utils.json_parser import extract_json
 from src.rate_limiter import AdaptiveRateLimiter
@@ -162,12 +162,16 @@ class Orchestrator:
         start_date = datetime.utcnow().isoformat() + "Z"
         
         logger.info("Nova requisição recebida no orquestrador", extra={"prompt_preview": prompt[:50]})
-        master_session = self.session_manager.create("orchestrator")
+        
+        # Gera slug legível para a sessão (V10.2)
+        session_slug = generate_session_slug(prompt)
+        
+        master_session = self.session_manager.create("orchestrator", session_id=session_slug)
         
         # V5.6 — Telemetria: evento de início de execução
         telemetry = get_telemetry()
         history = ExecutionHistory()
-        exec_id = history.start(prompt, start_date)
+        exec_id = history.start(prompt, start_date, exec_id=session_slug)
         
         logger.info("Nova requisição registrada", extra={"execution_id": exec_id, "prompt_preview": prompt[:50]})
         
@@ -251,6 +255,18 @@ class Orchestrator:
             )
             await telemetry.flush()
         
+        # V10.2: Salva plano e resultados no diretório da sessão para facilitar consulta manual
+        try:
+            session_dir = self.output_manager.base_dir / master_session.id
+            if result.plan_json:
+                (session_dir / "plan.json").write_text(result.plan_json, encoding="utf-8")
+            
+            # Converte resultados para formato serializável
+            serializable_results = [r.__dict__ for r in result.results]
+            (session_dir / "results.json").write_text(json.dumps(serializable_results, indent=2), encoding="utf-8")
+        except Exception as e:
+            logger.warning(f"Falha ao salvar artefatos de metadados na sessão: {e}")
+
         return result
 
     async def _execute_agent(self, task: AgentTask, master_session_id: str | None = None) -> AgentResult:
@@ -313,14 +329,9 @@ class Orchestrator:
                 payload={"image": task.image},
             )
 
-            # 0. Inicializa diretórios de output e logs únicos para esta execução de agente
-            # Etapa 9: Usa a sessão mestra se disponível para compartilhamento de arquivos
+            # 0. Inicializa diretório de sessão único (V10.2: Estrutura Plana)
             effective_session_id = master_session_id or session.id
-            unique_task_id = f"{task.agent_id}_{session.id[:8]}"
-            
             self.output_manager.init_session(effective_session_id)
-            self.output_manager.get_task_dir(effective_session_id, unique_task_id)
-            self.output_manager.get_logs_dir(effective_session_id, unique_task_id)
 
             # 1. Cria socket IPC
             await self.ipc.create_socket(ipc_id)
@@ -350,8 +361,8 @@ class Orchestrator:
                 task.image, 
                 session.id, 
                 ipc_port=ipc_port, 
-                output_session_id=f"{effective_session_id}/{unique_task_id}",
-                logs_session_id=f"{effective_session_id}/{unique_task_id}",
+                output_session_id=effective_session_id,
+                logs_session_id=effective_session_id,
                 env_vars=env_vars
             )
 
@@ -560,29 +571,50 @@ class Orchestrator:
 
         return result
 
-    async def _run_planning_loop(self, prompt: str, master_session_id: str) -> list[AgentTask]:
+    async def _run_planning_loop(
+        self, 
+        prompt: str, 
+        master_session_id: str, 
+        previous_plan: list[dict[str, Any]] | None = None,
+        execution_feedback: str | None = None
+    ) -> list[AgentTask]:
         """Executa o ciclo de planejamento (Planner -> Validator).
 
         Args:
             prompt: Solicitação original do usuário.
             master_session_id: ID da sessão mestra para logs.
+            previous_plan: Plano gerado anteriormente para refinamento incremental.
+            execution_feedback: Feedback de erro de execução para recuperação.
 
         Returns:
             Lista de AgentTask aprovadas.
         """
         logger.info(
             "Iniciando ciclo de planejamento", 
-            extra={"prompt": prompt, "master_session_id": master_session_id}
+            extra={
+                "prompt": prompt, 
+                "master_session_id": master_session_id, 
+                "is_incremental": previous_plan is not None
+            }
         )
         
-        feedback = ""
-        last_plan_str = ""
+        feedback = execution_feedback or ""
+        current_plan_data = previous_plan
         
         for iteration in range(MAX_PLANNING_ITERATIONS):
             # 1. Executa o Planner
-            planner_prompt = f"Crie um plano para: {prompt}"
-            if feedback:
-                planner_prompt += f"\n\nO plano anterior foi rejeitado: {feedback}. Por favor, revise."
+            if current_plan_data:
+                last_plan_str = json.dumps(current_plan_data, indent=2)
+                planner_prompt = (
+                    f"Tarefa original: {prompt}\n\n"
+                    f"Este é o plano atual:\n{last_plan_str}\n\n"
+                    f"PROBLEMAS ENCONTRADOS:\n{feedback}\n\n"
+                    "Instrução: Corrija apenas as tarefas com problemas ou adicione tarefas de recuperação. "
+                    "Mantenha as tarefas que já foram bem sucedidas se possível. "
+                    "Retorne o plano COMPLETO atualizado em JSON."
+                )
+            else:
+                planner_prompt = f"Crie um plano para: {prompt}"
             
             planner_task = AgentTask(
                 agent_id="planner", 
@@ -604,11 +636,12 @@ class Orchestrator:
                     "Erro ao parsear plano do Planner",
                     extra={"text_preview": raw_plan[:200]},
                 )
-                feedback = "Sua resposta anterior não era JSON válido. Responda APENAS com o JSON."
+                feedback = "Sua resposta anterior não era JSON válido. Responda APENAS com o JSON da lista de tarefas."
                 continue
-            last_plan_str = json.dumps(plan_data, indent=2)
-
             
+            current_plan_data = plan_data
+            last_plan_str = json.dumps(current_plan_data, indent=2)
+
             # 2. Executa o Validator
             from src.config import STRICT_VALIDATION
             validator_prompt = f"Revise este plano:\n{last_plan_str}\n\nPara a solicitação: {prompt}"
@@ -616,9 +649,7 @@ class Orchestrator:
             if not STRICT_VALIDATION:
                 validator_prompt += (
                     "\n\n**AVISO DE MODO FLEXÍVEL**: O sistema está operando com validação relaxada "
-                    "(STRICT_VALIDATION=false). Seja mais tolerante com pequenas ambiguidades, "
-                    "instruções de ferramentas ligeiramente imprecisas ou planos com menos de 3 subtarefas. "
-                    "Aprove o plano se ele for minimamente viável, mesmo que não seja perfeito."
+                    "(STRICT_VALIDATION=false). Aprove o plano se ele for minimamente viável."
                 )
 
             validator_task = AgentTask(
@@ -645,6 +676,7 @@ class Orchestrator:
 
             status = val_data.get("status", "revision_needed")
             reason = val_data.get("reason", "")
+            issues = val_data.get("issues", [])
 
             if status == "approved":
                 logger.info("Plano aprovado pelo Validador", extra={"iteration": iteration + 1})
@@ -652,7 +684,7 @@ class Orchestrator:
                 from datetime import datetime, timezone
                 import uuid
                 now_iso = datetime.now(timezone.utc).isoformat()
-                for t in plan_data:
+                for t in current_plan_data:
                     tasks.append(AgentTask(
                         agent_id=t.get("agent_id", "base"),
                         image=t.get("image", AGENT_REGISTRY.get(t.get("agent_id", "base"), "geminiclaw-base")),
@@ -670,16 +702,14 @@ class Orchestrator:
                 logger.warning("Plano rejeitado definitivamente", extra={"reason": reason})
                 return []
             else:
-                # Se o Validator forneceu corrected_plan, usá-lo como ponto de partida
-                corrected = val_data.get("corrected_plan")
-                if corrected and isinstance(corrected, list):
-                    plan_data = corrected
-                    last_plan_str = json.dumps(plan_data, indent=2)
-                    logger.info(
-                        "Usando corrected_plan do Validator",
-                        extra={"iteration": iteration + 1, "subtasks": len(plan_data)},
+                # Se o Validator forneceu issues estruturados, usá-los como feedback
+                if issues:
+                    feedback = "O Validador identificou os seguintes problemas:\n" + "\n".join(
+                        [f"- Tarefa '{i.get('task_name')}': {i.get('issue')}" for i in issues]
                     )
-                feedback = reason or "Plano precisa de revisão."
+                else:
+                    feedback = reason or "Plano precisa de revisão."
+                
                 logger.info("Solicitando revisão do plano", extra={"iteration": iteration + 1, "reason": feedback})
 
         logger.error("Máximo de iterações de planejamento atingido")

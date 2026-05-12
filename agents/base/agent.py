@@ -316,7 +316,8 @@ if __name__ == "__main__":
     
     # Configura o logger raiz para escrever também no volume compartilhado
     # O diretório /logs/ já é garantido pelo OutputManager no host
-    setup_file_logging("/logs/agent.log")
+    agent_id = os.environ.get("AGENT_ID", "agent")
+    setup_file_logging(f"/logs/{agent_id}.log")
     
     # Inicia o loop de conexão IPC quando o container roda este módulo
     asyncio.run(run_ipc_loop(root_agent))

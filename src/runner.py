@@ -371,22 +371,21 @@ class ContainerRunner:
                 host_root = os.environ.get("HOST_PROJECT_PATH")
                 
                 effective_output_id = output_session_id or session_id
-                effective_logs_id = logs_session_id or session_id
                 
                 if host_root:
                     # Estamos dentro de um container, mapeamos os caminhos relativos ao HOST_PROJECT_PATH
-                    output_session_host = str(Path(host_root) / OUTPUT_BASE_DIR / effective_output_id)
-                    logs_session_host = str(Path(host_root) / LOGS_BASE_DIR / effective_logs_id)
+                    output_session_host = str(Path(host_root) / OUTPUT_BASE_DIR / effective_output_id / "artifacts")
+                    logs_session_host = str(Path(host_root) / OUTPUT_BASE_DIR / effective_output_id / "logs")
                     ipc_socket_host = str(Path(host_root) / "store" / "ipc")
                 else:
                     # Rodando diretamente no host
-                    output_session_host = str(Path(OUTPUT_BASE_DIR).absolute() / effective_output_id)
-                    logs_session_host = str(Path(LOGS_BASE_DIR).absolute() / effective_logs_id)
+                    output_session_host = str(Path(OUTPUT_BASE_DIR).absolute() / effective_output_id / "artifacts")
+                    logs_session_host = str(Path(OUTPUT_BASE_DIR).absolute() / effective_output_id / "logs")
                     ipc_socket_host = str(Path(IPC_SOCKET_DIR))
 
                 # Garante que as pastas existem localmente com permissões adequadas
-                out_path = Path(OUTPUT_BASE_DIR).absolute().joinpath(effective_output_id)
-                log_path = Path(LOGS_BASE_DIR).absolute().joinpath(effective_logs_id)
+                out_path = Path(OUTPUT_BASE_DIR).absolute().joinpath(effective_output_id, "artifacts")
+                log_path = Path(OUTPUT_BASE_DIR).absolute().joinpath(effective_output_id, "logs")
                 
                 out_path.mkdir(parents=True, exist_ok=True)
                 log_path.mkdir(parents=True, exist_ok=True)

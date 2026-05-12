@@ -43,9 +43,11 @@ FORMATO DE RESPOSTA (JSON):
 {
   "status": "approved" | "rejected" | "revision_needed",
   "reason": "...",
-  "suggestions": ["..."],
-  "corrected_plan": [...]
-}"""
+  "issues": [
+    {"task_name": "nome_da_tarefa", "issue": "descrição do problema"}
+  ]
+}
+Nota: Use 'issues' apenas quando o status for 'revision_needed'."""
 
 # Configura as skills antes de inicializar o agente
 _setup_skills()
@@ -66,6 +68,7 @@ if __name__ == "__main__":
     from agents.runner import run_ipc_loop
     
     # Configura o logger raiz para escrever também no volume compartilhado
-    setup_file_logging("/logs/agent.log")
+    agent_id = os.environ.get("AGENT_ID", "agent")
+    setup_file_logging(f"/logs/{agent_id}.log")
     
     asyncio.run(run_ipc_loop(root_agent))

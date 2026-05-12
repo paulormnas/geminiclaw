@@ -871,6 +871,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "beautifulsoup4" },
+    { name = "cryptography" },
     { name = "docker" },
     { name = "httpx" },
     { name = "lxml" },
@@ -905,6 +906,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.14.3" },
+    { name = "cryptography", specifier = ">=46.0.5" },
     { name = "docker", specifier = ">=7.1.0" },
     { name = "docling", marker = "extra == 'documents'", specifier = ">=2.0.0" },
     { name = "fastembed", marker = "extra == 'deep-search'", specifier = ">=0.7.4" },

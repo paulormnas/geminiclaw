@@ -66,26 +66,27 @@ async def test_planning_loop_revision_needed(mock_deps):
 
 @pytest.mark.asyncio
 async def test_planning_loop_max_iterations(mock_deps):
-    """Testa se o loop para após 3 tentativas de revisão."""
+    """Testa se o loop para após o limite de iterações."""
     orchestrator = Orchestrator(**mock_deps)
     
-    with patch.object(orchestrator, "_execute_agent") as mock_exec:
-        # Alterna entre plano válido do Planner e pedido de revisão do Validator
-        mock_exec.side_effect = [
-            AgentResult(agent_id="p1", session_id="s", status="success", response={"text": "[]"}),
-            AgentResult(agent_id="v1", session_id="s", status="success", response={"text": '{"status": "revision_needed"}'}),
-            AgentResult(agent_id="p2", session_id="s", status="success", response={"text": "[]"}),
-            AgentResult(agent_id="v2", session_id="s", status="success", response={"text": '{"status": "revision_needed"}'}),
-            AgentResult(agent_id="p3", session_id="s", status="success", response={"text": "[]"}),
-            AgentResult(agent_id="v3", session_id="s", status="success", response={"text": '{"status": "revision_needed"}'}),
-        ]
-        
-        tasks = await orchestrator._run_planning_loop("Prompt", "master_s")
-        
-        assert tasks == []
-        # Para cada iteração: 1 planner + 1 validator = 2 chamadas. 
-        # Total 3 iterações = 6 chamadas.
-        assert mock_exec.call_count == 6
+    with patch("src.orchestrator.MAX_PLANNING_ITERATIONS", 3):
+        with patch.object(orchestrator, "_execute_agent") as mock_exec:
+            # Alterna entre plano válido do Planner e pedido de revisão do Validator
+            mock_exec.side_effect = [
+                AgentResult(agent_id="p1", session_id="s", status="success", response={"text": "[]"}),
+                AgentResult(agent_id="v1", session_id="s", status="success", response={"text": '{"status": "revision_needed"}'}),
+                AgentResult(agent_id="p2", session_id="s", status="success", response={"text": "[]"}),
+                AgentResult(agent_id="v2", session_id="s", status="success", response={"text": '{"status": "revision_needed"}'}),
+                AgentResult(agent_id="p3", session_id="s", status="success", response={"text": "[]"}),
+                AgentResult(agent_id="v3", session_id="s", status="success", response={"text": '{"status": "revision_needed"}'}),
+            ]
+            
+            tasks = await orchestrator._run_planning_loop("Prompt", "master_s")
+            
+            assert tasks == []
+            # Para cada iteração: 1 planner + 1 validator = 2 chamadas. 
+            # Total 3 iterações = 6 chamadas.
+            assert mock_exec.call_count == 6
 @pytest.mark.asyncio
 async def test_planning_loop_with_new_fields(mock_deps):
     """Testa se os novos campos validation_criteria e preferred_model são parseados corretamente."""

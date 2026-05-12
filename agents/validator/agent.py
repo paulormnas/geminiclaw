@@ -43,9 +43,11 @@ FORMATO DE RESPOSTA (JSON):
 {
   "status": "approved" | "rejected" | "revision_needed",
   "reason": "...",
-  "suggestions": ["..."],
-  "corrected_plan": [...]
-}"""
+  "issues": [
+    {"task_name": "nome_da_tarefa", "issue": "descrição do problema"}
+  ]
+}
+Nota: Use 'issues' apenas quando o status for 'revision_needed'."""
 
 # Configura as skills antes de inicializar o agente
 _setup_skills()

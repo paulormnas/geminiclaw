@@ -4,6 +4,8 @@ import os
 import docker
 import pathlib
 import time
+import io
+import tarfile
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -33,6 +35,36 @@ class PythonSandbox:
         self.cpu_period = 100000
         self.cpu_quota = int(cpu_quota * self.cpu_period)
         self.timeout = timeout
+
+    def _create_tar_archive(self, files: Dict[str, str]) -> bytes:
+        """Cria um arquivo tar em memória contendo os arquivos especificados.
+        
+        Args:
+            files: Dicionário mapeando nome do arquivo para seu conteúdo (string).
+            
+        Returns:
+            Conteúdo do arquivo tar em bytes.
+        """
+        out = io.BytesIO()
+        with tarfile.open(fileobj=out, mode='w') as tar:
+            for name, content in files.items():
+                content_bytes = content.encode('utf-8')
+                info = tarfile.TarInfo(name=name)
+                info.size = len(content_bytes)
+                tar.addfile(info, io.BytesIO(content_bytes))
+        return out.getvalue()
+
+    def _extract_tar_archive(self, tar_data_gen, output_dir: pathlib.Path):
+        """Extrai um gerador de dados tar para um diretório local.
+        
+        Args:
+            tar_data_gen: Gerador de bytes (retorno do get_archive).
+            output_dir: Diretório destino.
+        """
+        # get_archive retorna um gerador de chunks de bytes
+        full_data = b"".join(tar_data_gen)
+        with tarfile.open(fileobj=io.BytesIO(full_data), mode='r') as tar:
+            tar.extractall(path=output_dir)
 
     def _ensure_image(self):
         """Garante que a imagem base existe localmente."""
@@ -67,31 +99,30 @@ class PythonSandbox:
             
             exec_timeout = timeout or self.timeout
             
-            # Preparar diretório de saída
+            # Preparar diretório de saída local
             abs_output_dir = pathlib.Path(output_dir).resolve() / session_id / task_name
             abs_output_dir.mkdir(parents=True, exist_ok=True)
-            abs_output_dir.chmod(0o777)  # Garante acesso para escrita em containers
             
-            script_path = abs_output_dir / "script.py"
-            script_path.write_text(code)
-
             logger.info(f"Iniciando sandbox para sessão {session_id}, tarefa {task_name}")
 
-            # Criar o container em modo 'idle' para poder rodar comandos de setup
+            # Criar o container em modo 'idle'
+            # SEM volumes montados para compatibilidade com DinD
             container = self.client.containers.run(
                 image=self.image,
-                command=["tail", "-f", "/dev/null"], # Mantém o container vivo
-                volumes={
-                    str(abs_output_dir): {"bind": "/outputs", "mode": "rw"}
-                },
+                command=["tail", "-f", "/dev/null"],
                 working_dir="/outputs",
                 mem_limit=self.memory_limit,
                 cpu_period=self.cpu_period,
                 cpu_quota=self.cpu_quota,
-                network_disabled=not bool(setup_commands), # Habilitar rede apenas se houver setup_commands
+                network_disabled=not bool(setup_commands),
                 detach=True,
                 remove=False,
             )
+
+            # Injetar o script e garantir que o diretório /outputs existe
+            container.exec_run("mkdir -p /outputs")
+            tar_data = self._create_tar_archive({"script.py": code})
+            container.put_archive("/outputs", tar_data)
 
             # Executar comandos de setup (ex: instalação de pacotes)
             if setup_commands:
@@ -138,6 +169,31 @@ class PythonSandbox:
             finally:
                 timer.cancel()
 
+            # Extrair artefatos gerados
+            logger.info("Extraindo artefatos do sandbox")
+            try:
+                # get_archive retorna (generator, stat)
+                bits, stat = container.get_archive("/outputs")
+                self._extract_tar_archive(bits, abs_output_dir)
+            except Exception as e:
+                logger.warning(f"Falha ao extrair artefatos: {str(e)}")
+
+            # O tar extraído pode conter a pasta 'outputs' se o put_archive foi na raiz, 
+            # ou o conteúdo direto se foi no path. No nosso caso, como put_archive foi em /outputs,
+            # o get_archive("/outputs") retorna um tar onde o conteúdo está dentro de uma pasta 'outputs/'.
+            # Vamos mover tudo para a raiz do abs_output_dir.
+            extracted_path = abs_output_dir / "outputs"
+            if extracted_path.exists() and extracted_path.is_dir():
+                for item in extracted_path.iterdir():
+                    dest = abs_output_dir / item.name
+                    if dest.exists():
+                        if dest.is_dir():
+                            import shutil
+                            shutil.rmtree(dest)
+                        else:
+                            dest.unlink()
+                    item.rename(dest)
+                extracted_path.rmdir()
 
             return SandboxResult(
                 stdout=stdout,

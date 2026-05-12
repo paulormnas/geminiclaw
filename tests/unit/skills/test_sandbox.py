@@ -1,3 +1,7 @@
+import os
+os.environ["LLM_PROVIDER"] = "ollama"
+os.environ["GEMINI_API_KEY"] = "dummy"
+
 import pytest
 import time
 from unittest.mock import MagicMock, patch
@@ -16,6 +20,7 @@ def test_sandbox_timeout_real(mock_docker_client):
     # Mock container
     mock_container = MagicMock()
     mock_docker_client.containers.run.return_value = mock_container
+    mock_container.get_archive.return_value = (iter([b""]), MagicMock())
     
     # Simula exec_run demorando 2 segundos (mais que o timeout de 1 segundo)
     def mock_exec_run(*args, **kwargs):
@@ -45,6 +50,7 @@ def test_sandbox_network_disabled(mock_docker_client):
     
     mock_container = MagicMock()
     mock_docker_client.containers.run.return_value = mock_container
+    mock_container.get_archive.return_value = (iter([b""]), MagicMock())
     
     mock_result = MagicMock()
     mock_result.output = b"ok"

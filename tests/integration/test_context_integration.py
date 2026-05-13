@@ -239,8 +239,8 @@ class TestContextInjectionIntegration:
         result = await loop._run_complex_path("Falha parcial", "master_sess_fail")
 
         # Tarefa dependente NÃO deve ser executada se a dependência falhou
-        # 3 chamadas (uma para cada tentativa de planejamento do AutonomousLoop)
-        assert loop.orchestrator._execute_agent.call_count == 3
+        # 5 chamadas (uma para cada tentativa de planejamento do AutonomousLoop)
+        assert loop.orchestrator._execute_agent.call_count == 5
         assert result.succeeded == 0
         assert result.total == 2
 

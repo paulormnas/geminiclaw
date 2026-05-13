@@ -6,8 +6,11 @@ de validação e artefatos esperados definidos no plano.
 
 import asyncio
 import os
-from google.adk import agents
+from agents.base.agent import Agent, _load_session_context, _persist_session_context, _setup_skills
+from src.config import DEFAULT_MODEL
 from agents.runner import run_ipc_loop
+
+AGENT_DESCRIPTION = "Agente revisor especializado em validar a qualidade e completude das subtarefas."
 
 AGENT_INSTRUCTION = """Você é o Agente Revisor do framework GeminiClaw. Sua função é avaliar se o resultado produzido por uma subtarefa atende aos critérios de qualidade definidos.
 
@@ -40,12 +43,16 @@ FORMATO DE RESPOSTA:
 }
 """
 
-def create_agent() -> agents.Agent:
+def create_agent() -> Agent:
     """Cria e configura o agente Reviewer."""
-    return agents.Agent(
-        agent_id="reviewer",
+    _setup_skills()
+    return Agent(
+        name="reviewer",
+        description=AGENT_DESCRIPTION,
         instruction=AGENT_INSTRUCTION,
-        model=os.environ.get("LLM_MODEL", "gemini-1.5-flash"),
+        model=os.environ.get("LLM_MODEL", DEFAULT_MODEL),
+        before_agent_callback=_load_session_context,
+        after_agent_callback=_persist_session_context,
     )
 
 if __name__ == "__main__":

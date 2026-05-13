@@ -307,7 +307,7 @@ class Orchestrator:
         session = self.session_manager.create(task.agent_id)
         container_id: str | None = None
         ipc_id = f"{task.agent_id}_{session.id}"
-        result: AgentResult
+        result: AgentResult | None = None
 
         try:
             logger.info(
@@ -545,7 +545,7 @@ class Orchestrator:
                     logger.error(f"Erro ao parar container {container_id}: {e}")
 
             # V9: Registra finalização das métricas da subtarefa
-            if task.subtask_id:
+            if task.subtask_id and result:
                 finished_at_iso = datetime.now(timezone.utc).isoformat()
                 duration_ms = int((datetime.now(timezone.utc) - datetime.fromisoformat(started_at_iso)).total_seconds() * 1000)
                 
@@ -569,7 +569,13 @@ class Orchestrator:
                     error_type=result.error[:100] if result.error else None
                 )
 
-        return result
+        return result or AgentResult(
+            agent_id=task.agent_id,
+            session_id=session.id,
+            status="error",
+            response={},
+            error="Execução interrompida prematuramente."
+        )
 
     async def _run_planning_loop(
         self, 
@@ -615,6 +621,8 @@ class Orchestrator:
                 )
             else:
                 planner_prompt = f"Crie um plano para: {prompt}"
+                if feedback:
+                    planner_prompt += f"\n\nPROBLEMAS ENCONTRADOS:\n{feedback}"
             
             planner_task = AgentTask(
                 agent_id="planner", 

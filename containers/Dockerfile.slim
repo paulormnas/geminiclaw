@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Criar usuário não-root por segurança (conforme regras de desenvolvimento)
-RUN groupadd -r appuser && useradd -r -g appuser appuser
+RUN groupadd -r appuser && useradd -m -r -g appuser appuser
 
 # Definir diretório de trabalho
 WORKDIR /app

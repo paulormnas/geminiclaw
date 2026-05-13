@@ -12,7 +12,8 @@ class CodeSkill(BaseSkill):
     
     name = "python_interpreter"
     description = (
-        "Use esta skill para executar código Python. Forneça o código completo como string. "
+        "Use esta skill para executar código Python e realizar análise de dados. Forneça o código completo como string. "
+        "Você PODE instalar novos pacotes via parâmetro 'packages' (recomendado) ou usando 'subprocess' no código. "
         "Todo arquivo salvo em '/outputs/' estará disponível como artefato."
     )
     parameters_schema = {
@@ -104,8 +105,13 @@ class CodeSkill(BaseSkill):
         # 2. Preparar comandos de setup
         setup_commands = []
         if packages:
-            # Usando uv para instalação ultra-rápida (requer uv na imagem base)
-            setup_commands.append(["uv", "pip", "install", "--system", "--no-cache-dir"] + packages)
+            # Filtrar pacotes built-in ou inválidos (ex: json)
+            builtin_packages = ["json", "os", "sys", "re", "math", "time", "io", "pathlib", "pickle"]
+            filtered_packages = [p for p in packages if p not in builtin_packages]
+            
+            if filtered_packages:
+                # Usando uv para instalação ultra-rápida (requer uv na imagem base)
+                setup_commands.append(["uv", "pip", "install", "--no-cache-dir"] + filtered_packages)
 
         # 3. Executar no sandbox
         try:

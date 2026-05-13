@@ -233,3 +233,8 @@ end_time.txt
 
 # Chaves privadas
 *.pem
+
+# Ferramentas de limpeza (não versionadas)
+scripts/clean_dev.py
+.agents/workflows/clean.md
+tests/unit/test_clean_dev.py

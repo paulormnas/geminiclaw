@@ -39,6 +39,10 @@ def extract_json(text: str) -> JsonValue:
     if not text or not text.strip():
         return None
 
+    # Verificação rápida: se não houver { ou [, não é JSON (silencioso)
+    if "{" not in text and "[" not in text:
+        return None
+
     # Estratégia 1 — parse direto (caminho feliz, sem log)
     result = _try_loads(text)
     if result is not None:
@@ -68,9 +72,15 @@ def extract_json(text: str) -> JsonValue:
         result = _try_loads(balanced)
         if result is not None:
             return result
-        cleaned = balanced
-
-    # Estratégia 4 — remover trailing commas e comentários inline
+            
+        # Tenta sanitizar o bloco extraído, pois pode conter trailing commas
+        sanitized_balanced = _sanitize(balanced)
+        result = _try_loads(sanitized_balanced)
+        if result is not None:
+            return result
+        
+        # Se não deu certo, NÃO sobrescreve 'cleaned' com 'balanced', 
+        # pois o bloco extraído provavelmente não era o JSON real.
     sanitized = _sanitize(cleaned)
     if sanitized != cleaned:
         logger.warning(

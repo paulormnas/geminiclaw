@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Criar usuário não-root por segurança (conforme regras de desenvolvimento)
-RUN groupadd -r appuser && useradd -r -g appuser appuser
+RUN groupadd -r appuser && useradd -m -r -g appuser appuser
 
 # Definir diretório de trabalho
 WORKDIR /app
@@ -44,8 +44,9 @@ COPY agents/ /app/agents/
 # Copiar uv para que o CodeSkill possa usar "uv pip install"
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Ajustar permissões para o diretório de dados
-RUN mkdir /data && chown appuser:appuser /data
+# Ajustar permissões
+RUN chown -R appuser:appuser /app
+RUN mkdir -p /data && chown appuser:appuser /data
 VOLUME /data
 
 # Criar diretório para socket IPC e outputs

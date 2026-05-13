@@ -24,12 +24,12 @@ class PythonSandbox:
 
     def __init__(
         self,
-        image: str = "ghcr.io/astral-sh/uv:python3.11-bookworm-slim",
+        image: str = "geminiclaw-base",
         memory_limit: str = "256m",
         cpu_quota: float = 0.5,
         timeout: int = 60,
     ):
-        self.client = docker.from_env()
+        self.client = docker.from_env(timeout=300)
         self.image = image
         self.memory_limit = memory_limit
         self.cpu_period = 100000
@@ -115,6 +115,7 @@ class PythonSandbox:
                 cpu_period=self.cpu_period,
                 cpu_quota=self.cpu_quota,
                 network_disabled=not bool(setup_commands),
+                environment={"MPLCONFIGDIR": "/tmp", "VIRTUAL_ENV": "/app/.venv"},
                 detach=True,
                 remove=False,
             )
@@ -129,7 +130,7 @@ class PythonSandbox:
                 for cmd in setup_commands:
                     logger.info(f"Executando comando de setup no sandbox: {' '.join(cmd)}")
                     # Setup costuma ser rápido o suficiente para não precisar de timeout complexo aqui
-                    exit_code, output = container.exec_run(cmd)
+                    exit_code, output = container.exec_run(cmd, user='root')
                     if exit_code != 0:
                         logger.error(f"Falha no comando de setup: {output.decode()}")
 

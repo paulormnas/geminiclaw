@@ -49,7 +49,7 @@ def test_config_default_values():
     with patch.dict(os.environ, {"GEMINI_API_KEY": "fake_key"}):
         importlib.reload(src.config)
         assert src.config.DEFAULT_MODEL == "gemini-3.1-pro-preview"
-        assert src.config.AGENT_TIMEOUT_SECONDS == 120
+        assert src.config.AGENT_TIMEOUT_SECONDS == 300
         assert "postgresql://" in src.config.DATABASE_URL
         assert not hasattr(src.config, "SQLITE_DB_PATH") or src.config.DATABASE_URL
 

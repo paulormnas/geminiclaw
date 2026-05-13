@@ -33,8 +33,10 @@ async def test_code_skill_basic_execution():
 @pytest.mark.integration
 @pytest.mark.asyncio
 @pytest.mark.skipif(not is_docker_available(), reason="Docker daemon não está rodando")
-async def test_code_skill_artifact_creation():
+async def test_code_skill_artifact_creation(monkeypatch):
     """Testa criação de artefatos no sandbox."""
+    output_base = "outputs_test"
+    monkeypatch.setenv("OUTPUT_BASE_DIR", output_base)
     skill = CodeSkill()
     code = (
         "import os\n"
@@ -56,8 +58,7 @@ async def test_code_skill_artifact_creation():
     assert "test_file.txt" in result.metadata["artifacts"]
     
     # Verificar se o arquivo existe no host
-    output_base = os.getenv("OUTPUTS_DIR", "outputs")
-    host_path = pathlib.Path(output_base) / session_id / task_name / "test_file.txt"
+    host_path = pathlib.Path(output_base).resolve() / session_id / task_name / "test_file.txt"
     assert host_path.exists()
     assert host_path.read_text() == "artifact content"
 

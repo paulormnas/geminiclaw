@@ -55,8 +55,8 @@ async def test_runner_spawn_parameters(mock_docker_client):
                 
                 # O runner monta o diretório de sockets, o diretório do banco, diretório de outputs e diretório de logs
                 from src.runner import IPC_SOCKET_DIR
-                output_path = str(Path("outputs").absolute() / "session_123")
-                logs_path = str(Path("logs").absolute() / "session_123")
+                output_path = str(Path("outputs").absolute() / "session_123" / "artifacts")
+                logs_path = str(Path("outputs").absolute() / "session_123" / "logs")
 
                 expected_volumes = {
                     output_path: {"bind": "/outputs", "mode": "rw"},
@@ -90,7 +90,7 @@ async def test_runner_spawn_parameters(mock_docker_client):
                         "LLM_MODEL": "gemini-3-flash-preview",
                         "GEMINI_API_KEY": "test_key",
                         "GOOGLE_API_KEY": "test_key",
-                        "OLLAMA_BASE_URL": "http://localhost:11434",
+                        "OLLAMA_BASE_URL": "http://host.docker.internal:11434",
                         "OLLAMA_NUM_CTX": "4096",
                         "OLLAMA_ENABLE_THINKING": "false",
                         "LLM_REQUESTS_PER_MINUTE": "15",

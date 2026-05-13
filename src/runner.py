@@ -48,7 +48,7 @@ class ContainerRunner:
             semaphore_limit: Número máximo de containers simultâneos.
         """
         try:
-            self.client = docker.from_env()
+            self.client = docker.from_env(timeout=300)
             # Tenta um comando simples para validar a conexão
             self.client.ping()
         except Exception as e:
@@ -461,7 +461,7 @@ class ContainerRunner:
                     "nano_cpus": 1_000_000_000,
                     "network": "geminiclaw-net",
                     "user": "appuser",
-                    "remove": False,
+                    "remove": True,
                     "detach": True,
                     "group_add": [os.stat("/var/run/docker.sock").st_gid] if os.path.exists("/var/run/docker.sock") else [],
                     "labels": {"project": "geminiclaw", "agent_id": agent_id, "session_id": session_id},

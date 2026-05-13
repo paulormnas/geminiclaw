@@ -1,6 +1,6 @@
 import pytest
 import asyncio
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, AsyncMock, patch, ANY
 from dataclasses import dataclass
 
 from src.orchestrator import (
@@ -111,13 +111,13 @@ class TestOrchestratorSingleAgent:
         assert result.total == 1
         assert result.succeeded == 1
         assert result.results[0].agent_id == "base"
-        mock_sm.create.assert_called_with("orchestrator")
+        mock_sm.create.assert_called_with("orchestrator", session_id=ANY)
         mock_sm.close.assert_called_with("sess_master")
 
         assert result.total == 1
         assert result.succeeded == 1
         assert result.results[0].agent_id == "base"
-        mock_sm.create.assert_called_with("orchestrator")
+        mock_sm.create.assert_called_with("orchestrator", session_id=ANY)
         mock_sm.close.assert_called_with("sess_master")
 
 

@@ -278,7 +278,10 @@ class AutonomousLoop:
         final_results: List[AgentResult] = []
         tasks: List[AgentTask] = []
         current_plan_dicts: List[Dict[str, Any]] = []
+        # V12.5.1 — Circuit breaker: hash do progresso do ciclo anterior
+        _previous_progress_hash: int | None = None
         
+
         for plan_attempt in range(max_plan_retries):
             logger.info(f"Iniciando ciclo de planejamento/recuperação {plan_attempt+1}/{max_plan_retries}")
             
@@ -568,7 +571,52 @@ class AutonomousLoop:
             # Se falhou, preparamos o feedback para a próxima tentativa de plano (Recuperação Incremental)
             succeeded_tasks = [t for t, state in dag_state.items() if state["status"] == "success"]
             logger.warning(f"O plano falhou nas tarefas: {failed_tasks}. Iniciando recuperação incremental...")
-            
+
+            # V12.5.1 — Circuit breaker: detecta progresso zero entre ciclos consecutivos
+            _current_progress_hash = hash(frozenset(succeeded_tasks))
+            if _current_progress_hash == _previous_progress_hash:
+                cb_msg = (
+                    "Execução interrompida: nenhum progresso detectado entre ciclos consecutivos.\n"
+                    f"Subtarefas falhas: {failed_tasks}.\n"
+                    f"Erros persistentes: {[dag_state[t]['error'] for t in failed_tasks if dag_state[t]['status'] == 'failed']}.\n"
+                    "Considere revisar o prompt ou as dependências do ambiente."
+                )
+                logger.warning(
+                    "V12.5.1 Circuit Breaker ativado: zero progresso em ciclos consecutivos",
+                    extra={"succeeded_tasks": succeeded_tasks, "failed_tasks": failed_tasks},
+                )
+                telemetry = get_telemetry()
+                telemetry.record_agent_event(
+                    execution_id=master_session_id,
+                    session_id=master_session_id,
+                    agent_id="autonomous_loop",
+                    event_type="circuit_breaker",
+                    payload={
+                        "reason": "zero_progress",
+                        "succeeded_tasks": succeeded_tasks,
+                        "failed_tasks": failed_tasks,
+                    },
+                )
+                cb_result = AgentResult(
+                    agent_id="orchestrator",
+                    session_id=master_session_id,
+                    status="error",
+                    response={"text": cb_msg},
+                    error="Circuit breaker: zero progresso.",
+                )
+                final_results.append(cb_result)
+                self._short_term_memory.clear(master_session_id)
+                succeeded = sum(1 for r in final_results if r.status == "success")
+                failed_count = len(final_results) - succeeded
+                return OrchestratorResult(
+                    results=final_results,
+                    total=len(tasks),
+                    succeeded=succeeded,
+                    failed=failed_count,
+                    artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id),
+                )
+            _previous_progress_hash = _current_progress_hash
+
             errors = []
             for t in failed_tasks:
                 if dag_state[t]["status"] == "failed":

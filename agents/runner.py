@@ -14,6 +14,29 @@ from src.telemetry import get_telemetry
 
 logger = get_logger(__name__)
 
+
+def _build_response_payload(text: str, telemetry: Any) -> dict:
+    """Monta o payload de resposta IPC incluindo snapshot de telemetria (V12.3.1).
+
+    O campo ``_telemetry`` transporta o buffer não-gravado do container para
+    o orquestrador, que o injeta em seu próprio singleton. Funciona mesmo
+    quando o container não tem acesso direto ao PostgreSQL.
+
+    O ``flush()`` normal é o mecanismo primário (executado no ``finally``);
+    este canal é o fallback para garantir zero loss.
+
+    Args:
+        text: Texto de resposta do agente.
+        telemetry: Instância de TelemetryCollector com o buffer atual.
+
+    Returns:
+        Dict com ``text`` e ``_telemetry``.
+    """
+    return {
+        "text": text,
+        "_telemetry": telemetry.drain_buffer(),
+    }
+
 async def run_ipc_loop(agent: Any) -> None:
     """Inicia o loop IPC para receber tarefas e executá-las usando o agente.
 
@@ -103,16 +126,23 @@ async def run_ipc_loop(agent: Any) -> None:
                         if full_text:
                             llm_cache.set(prompt, agent.model, full_text)
                     
-                    resposta = {"text": full_text}
-                    
+
                     logger.info("Agente finalizou execução", extra={"full_text_length": len(full_text), "full_text_preview": full_text[:100]})
                     
                     # Se não houve texto mas houve erro no evento, loga
                     if not full_text:
                         logger.warning("Agente retornou resposta vazia")
 
+                    # V12.3.1 — Inclui snapshot do buffer de telemetria no payload
+                    # para garantir que dados de containers sem acesso direto ao
+                    # PostgreSQL sejam propagados ao orquestrador via IPC.
+                    telemetry_instance = get_telemetry()
+                    resposta = _build_response_payload(full_text, telemetry_instance)
+                    
                     # Enviar a resposta de volta ao orquestrador
                     resp_msg = create_message("response", session_id, resposta)
+
+
                     
                 except Exception as e:
                     logger.error("Erro durante execução do agente", extra={"error": str(e), "trace": traceback.format_exc()})

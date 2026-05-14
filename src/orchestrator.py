@@ -17,6 +17,7 @@ from src.config import (
     GEMINI_RATE_LIMIT_COOLDOWN_SECONDS,
     OLLAMA_ENABLE_THINKING,
     MAX_PLANNING_ITERATIONS,
+    MAX_CONTAINERS_PER_SESSION,
 )
 from src.session import SessionManager
 from src.runner import ContainerRunner
@@ -200,6 +201,8 @@ class Orchestrator:
             requests_per_minute=GEMINI_REQUESTS_PER_MINUTE,
             cooldown_seconds=GEMINI_RATE_LIMIT_COOLDOWN_SECONDS,
         )
+        # V12.5.2 — Rastreia containers spawnados por master_session_id
+        self._session_container_counts: dict[str, int] = {}
 
     @staticmethod
     def get_available_agents() -> dict[str, str]:
@@ -352,6 +355,17 @@ class Orchestrator:
         """
         # Rate limiting adaptativo (Roadmap V3 - Etapa V8)
         await self.rate_limiter.acquire()
+
+        # V12.5.2 — Circuit breaker: limite de containers por sessão
+        if master_session_id:
+            count = self._session_container_counts.get(master_session_id, 0)
+            if count >= MAX_CONTAINERS_PER_SESSION:
+                raise RuntimeError(
+                    f"Limite de containers por sessão atingido "
+                    f"(session={master_session_id}, limite={MAX_CONTAINERS_PER_SESSION}). "
+                    "Execução interrompida pelo circuit breaker."
+                )
+            self._session_container_counts[master_session_id] = count + 1
 
         # V5.6 — Telemetria: obtém contexto de telemetria
         telemetry = get_telemetry()

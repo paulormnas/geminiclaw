@@ -97,6 +97,10 @@ else:
 MAX_PLANNING_ITERATIONS = int(get_env("MAX_PLANNING_ITERATIONS", default="10"))
 MAX_PLAN_RETRIES = int(get_env("MAX_PLAN_RETRIES", default="5"))
 
+# V12.5.2 — Limite máximo de containers por sessão (circuit breaker de recursos)
+MAX_CONTAINERS_PER_SESSION = int(get_env("MAX_CONTAINERS_PER_SESSION", default="30"))
+
+
 # --- Outras Configurações ---
 # Banco de dados PostgreSQL (Roadmap V8) — única config de banco necessária
 DATABASE_URL = get_env(

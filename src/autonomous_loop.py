@@ -477,6 +477,7 @@ class AutonomousLoop:
                             preferred_model=enriched_task.preferred_model,
                             subtask_id=enriched_task.subtask_id,
                             created_at=enriched_task.created_at,
+                            retry_attempt=attempt + 1,  # V12.3.3: próxima tentativa
                         )
                         await asyncio.sleep(1)
 

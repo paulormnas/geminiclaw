@@ -7,14 +7,15 @@ services:
     container_name: geminiclaw-qdrant
     restart: unless-stopped
     ports:
-      - "127.0.0.1:6333:6333"
-      - "127.0.0.1:6334:6334"
+      - "0.0.0.0:6333:6333"
+      - "0.0.0.0:6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
     networks:
       - geminiclaw-net
     environment:
       QDRANT__TELEMETRY_DISABLED: "true"
+      QDRANT__SERVICE__HOST: "0.0.0.0"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:6333/readyz"]
       interval: 10s

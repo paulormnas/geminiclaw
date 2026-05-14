@@ -3,13 +3,16 @@ FROM rust:slim AS builder
 RUN apt-get update && apt-get install -y \
     build-essential cmake pkg-config \
     libssl-dev git curl \
-    protobuf-compiler \
+    protobuf-compiler unzip \
     && rm -rf /var/lib/apt/lists/*
 
 RUN git clone --depth 1 https://github.com/qdrant/qdrant.git /qdrant
 WORKDIR /qdrant
 
-RUN cargo build --release --no-default-features
+# Baixa os assets do Dashboard (Web UI)
+RUN ./tools/sync-web-ui.sh
+
+RUN cargo build --release
 
 FROM debian:trixie-slim
 RUN apt-get update && apt-get install -y \
@@ -18,6 +21,7 @@ RUN apt-get update && apt-get install -y \
 
 COPY --from=builder /qdrant/target/release/qdrant /qdrant/qdrant
 COPY --from=builder /qdrant/config /qdrant/config
+COPY --from=builder /qdrant/static /qdrant/static
 
 EXPOSE 6333 6334
 WORKDIR /qdrant

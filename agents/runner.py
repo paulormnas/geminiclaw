@@ -10,6 +10,7 @@ from typing import Any
 from src.logger import get_logger
 from src.ipc import Message, HEADER_SIZE, create_message
 from src.llm_cache import LLMResponseCache
+from src.telemetry import get_telemetry
 
 logger = get_logger(__name__)
 
@@ -128,5 +129,16 @@ async def run_ipc_loop(agent: Any) -> None:
     except Exception as e:
         logger.error("Erro no loop IPC", extra={"error": str(e), "trace": traceback.format_exc()})
     finally:
+        # V11.1.1 — Flush explícito antes de encerrar o container para garantir
+        # que todos os eventos de telemetria sejam persistidos, mesmo quando o
+        # buffer não atingiu o limiar automático de 50 itens.
+        try:
+            await get_telemetry().flush()
+            logger.info("Flush de telemetria concluído antes do encerramento.")
+        except Exception as _flush_err:
+            logger.error(
+                "Erro no flush de telemetria no encerramento",
+                extra={"error": str(_flush_err)},
+            )
         writer.close()
         await writer.wait_closed()

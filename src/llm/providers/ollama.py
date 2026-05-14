@@ -103,6 +103,14 @@ class OllamaProvider(LLMProvider):
                     arguments=args,
                 ))
 
+            # V11.2.3 — TTFT: Ollama expõe load_duration + prompt_eval_duration em nanosegundos.
+            # load_duration = tempo para carregar o modelo na memória.
+            # prompt_eval_duration = tempo para avaliar o prompt.
+            # Juntos aproximam o Time to First Token no Pi 5.
+            _load_ns = data.get("load_duration", 0) or 0
+            _prompt_eval_ns = data.get("prompt_eval_duration", 0) or 0
+            _ttft_ms = int((_load_ns + _prompt_eval_ns) / 1_000_000)
+
             return LLMResponse(
                 text=message.get("content"),
                 tool_calls=tool_calls,
@@ -111,6 +119,7 @@ class OllamaProvider(LLMProvider):
                     "prompt_tokens": data.get("prompt_eval_count", 0),
                     "completion_tokens": data.get("eval_count", 0),
                     "total_tokens": data.get("prompt_eval_count", 0) + data.get("eval_count", 0),
+                    "ttft_ms": _ttft_ms,
                 },
             )
         except Exception as e:

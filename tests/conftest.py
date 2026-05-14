@@ -3,6 +3,7 @@ import pytest
 
 # Define variáveis de ambiente necessárias para a importação do src.config nos testes unitários
 os.environ["GENAI_API_KEY"] = "dummy_key_for_testing"
+os.environ["GEMINI_API_KEY"] = "dummy_key_for_testing"
 os.environ["DEFAULT_MODEL"] = "gemini-3-flash-preview"
 os.environ["AGENT_TIMEOUT_SECONDS"] = "120"
 # DATABASE_URL: valor fictício para testes unitários (sem banco real)

@@ -44,7 +44,12 @@ class WebReaderSkill(BaseSkill):
         self._robots_parsers: dict[str, urllib.robotparser.RobotFileParser] = {}
 
     async def _can_fetch(self, url: str) -> bool:
-        """Verifica se o robots.txt permite o acesso à URL."""
+        """Verifica se o robots.txt permite o acesso à URL.
+        
+        Trata HTTP 404 no robots.txt como permissão concedida, conforme RFC 9309 §2.3.1:
+        'If the robots.txt resource is not found, that is if its HTTP response status code
+        is 404 (Not Found), crawlers MUST treat this as if the entire site is allowed.'
+        """
         parsed = urlparse(url)
         base_url = f"{parsed.scheme}://{parsed.netloc}"
         robots_url = f"{base_url}/robots.txt"
@@ -53,12 +58,17 @@ class WebReaderSkill(BaseSkill):
             rp = urllib.robotparser.RobotFileParser()
             rp.set_url(robots_url)
             try:
-                # O read() é bloqueante mas razoavelmente rápido, 
-                # seria melhor fazer async, mas urllib.robotparser não suporta.
-                # Como é uma skill, a latência de ler o robots.txt é tolerável, 
-                # ou podemos usar httpx para baixar e fazer parse.
                 async with httpx.AsyncClient(timeout=5.0) as client:
                     resp = await client.get(robots_url, follow_redirects=True)
+                    # V12.4.2 — RFC 9309: robots.txt 404 = todo o site liberado
+                    if resp.status_code == 404:
+                        logger.debug(
+                            "robots.txt ausente (404) — assumindo acesso liberado (RFC 9309)",
+                            extra={"robots_url": robots_url},
+                        )
+                        # Armazena um parser vazio que libera tudo
+                        self._robots_parsers[base_url] = rp
+                        return True
                     if resp.status_code == 200:
                         rp.parse(resp.text.splitlines())
             except Exception as e:
@@ -76,7 +86,26 @@ class WebReaderSkill(BaseSkill):
         """Executa a leitura de uma URL."""
         if not url:
             return SkillResult(success=False, output="", error="URL não fornecida.")
-            
+
+        # V12.4.1 — Validação de schema: apenas http:// e https:// são suportados.
+        # Rejeita schemas como file://, ftp://, data: com mensagem clara e acionável.
+        from urllib.parse import urlparse as _parse
+        parsed_schema = _parse(url).scheme.lower()
+        if parsed_schema not in ("http", "https"):
+            logger.warning(
+                "WebReader: schema de URL não suportado",
+                extra={"url": url, "schema": parsed_schema},
+            )
+            return SkillResult(
+                success=False,
+                output="",
+                error=(
+                    f"Erro: URL com schema '{parsed_schema}' não é suportada pelo web_reader. "
+                    "Apenas URLs http:// e https:// são aceitas. "
+                    "Para ler arquivos locais, use a ferramenta 'python_interpreter' com open()."
+                ),
+            )
+
         # Verifica cache
         cached = self.cache.get(url)
         if cached is not None:

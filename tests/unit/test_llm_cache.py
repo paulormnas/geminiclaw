@@ -74,11 +74,12 @@ class TestLLMCacheGet:
 @pytest.mark.unit
 class TestLLMCacheSet:
     def test_set_chama_upsert(self, cache):
-        """set() deve chamar INSERT ... ON CONFLICT."""
+        """set() deve chamar INSERT ... ON CONFLICT para respostas válidas."""
         count_row = {"cnt": 0}
         ctx, mock_conn = _make_ctx(fetchone=count_row)
+        # V12.1.2: response precisa ter mais de 50 chars para ser cacheada
         with patch("src.llm_cache.get_connection", return_value=ctx):
-            cache.set("prompt", "model", "response")
+            cache.set("prompt", "model", "A" * 51)
         sqls = [c[0][0] for c in mock_conn.execute.call_args_list]
         assert any("ON CONFLICT" in s for s in sqls)
 
@@ -87,8 +88,9 @@ class TestLLMCacheSet:
         cache.max_entries = 5
         count_row = {"cnt": 10}  # Acima do limite
         ctx, mock_conn = _make_ctx(fetchone=count_row)
+        # V12.1.2: response precisa ter mais de 50 chars para ser cacheada
         with patch("src.llm_cache.get_connection", return_value=ctx):
-            cache.set("prompt", "model", "resp")
+            cache.set("prompt", "model", "A" * 51)
         sqls = [c[0][0] for c in mock_conn.execute.call_args_list]
         assert any("DELETE" in s for s in sqls)
 

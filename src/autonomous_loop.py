@@ -456,6 +456,28 @@ class AutonomousLoop:
                         break
                     else:
                         logger.warning(f"Tentativa {attempt+1} de {task.task_name} falhou", extra={"error": result.error})
+
+                        # V12.1.1 — Cache-busting por injeção de contexto de erro.
+                        # O bloco abaixo altera o prompt da próxima tentativa, garantindo
+                        # que o cache faça MISS e o agente receba um novo contexto.
+                        error_context = (
+                            f"\n\n[TENTATIVA ANTERIOR FALHOU]\n"
+                            f"Tentativa: {attempt + 1}/{self.max_retries}\n"
+                            f"Erro: {result.error or 'Erro desconhecido'}\n"
+                            f"Instrução: Tente uma abordagem diferente para resolver o problema.\n"
+                        )
+                        enriched_task = AgentTask(
+                            agent_id=enriched_task.agent_id,
+                            image=enriched_task.image,
+                            prompt=enriched_task.prompt + error_context,
+                            task_name=enriched_task.task_name,
+                            depends_on=enriched_task.depends_on,
+                            expected_artifacts=enriched_task.expected_artifacts,
+                            validation_criteria=enriched_task.validation_criteria,
+                            preferred_model=enriched_task.preferred_model,
+                            subtask_id=enriched_task.subtask_id,
+                            created_at=enriched_task.created_at,
+                        )
                         await asyncio.sleep(1)
 
                 if last_result:
@@ -550,7 +572,29 @@ class AutonomousLoop:
             for t in failed_tasks:
                 if dag_state[t]["status"] == "failed":
                     errors.append(f"Tarefa '{t}' falhou com erro: {dag_state[t]['error']}")
-            
+
+            # V12.1.3 — Invalidar prompts das subtarefas falhas no cache LLM antes de replanear.
+            # Isso garante que o próximo ciclo de planejamento não re-use respostas cacheadas
+            # que originaram as falhas.
+            try:
+                from src.llm_cache import LLMResponseCache
+                from src.orchestrator import AGENT_REGISTRY  # type: ignore[attr-defined]
+                import os as _os
+                _model = _os.environ.get("DEFAULT_MODEL", "unknown")
+                _cache = LLMResponseCache()
+                for failed_task_obj in tasks:
+                    if failed_task_obj.task_name in failed_tasks:
+                        _cache.invalidate(failed_task_obj.prompt, _model)
+                        logger.debug(
+                            "Cache invalidado para subtarefa falha",
+                            extra={"task_name": failed_task_obj.task_name},
+                        )
+            except Exception as _inv_err:
+                logger.warning(
+                    "Falha ao invalidar cache de subtarefas — replan prossegue mesmo assim",
+                    extra={"error": str(_inv_err)},
+                )
+
             execution_feedback = (
                 f"STATUS DA EXECUÇÃO ANTERIOR:\n"
                 f"- Tarefas concluídas com sucesso: {', '.join(succeeded_tasks) if succeeded_tasks else 'Nenhuma'}\n"
@@ -558,6 +602,7 @@ class AutonomousLoop:
                 f"Instrução: Crie um plano de recuperação focado em resolver as falhas e completar os objetivos restantes, "
                 f"sem refazer as tarefas que já tiveram sucesso."
             )
+
 
             # V5.8 — Telemetria: replan_triggered
             telemetry = get_telemetry()

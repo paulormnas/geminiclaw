@@ -18,6 +18,83 @@ class AgentState:
     """Estado interno do agente, compatível com ADK callbacks."""
     state: Dict[str, Any] = field(default_factory=dict)
 
+
+# Padrões heurísticos de respostas declarativas (V12.2.2)
+_DECLARATIVE_PATTERNS = (
+    "vou criar",
+    "vou fazer",
+    "vou gerar",
+    "vou executar",
+    "vou processar",
+    "irei criar",
+    "irei fazer",
+    "irei gerar",
+    "irei executar",
+    "vou usar",
+    "vou tentar",
+)
+
+
+class ErrorTracker:
+    """Rastreia erros consecutivos por ferramenta para ativar recuperação (V12.2.1).
+
+    Attributes:
+        threshold: Número de erros consecutivos na mesma ferramenta/tipo
+                   para acionar o alerta.
+    """
+
+    def __init__(self, threshold: int = 3) -> None:
+        """Inicializa o rastreador com limiar configurável.
+
+        Args:
+            threshold: Número de erros consecutivos para acionar alerta.
+        """
+        self.threshold = threshold
+        self._last_tool: Optional[str] = None
+        self._last_error_type: Optional[str] = None
+        self._count: int = 0
+
+    def track(self, tool_name: str, error_type: str) -> bool:
+        """Registra um erro e verifica se o limiar foi atingido.
+
+        Args:
+            tool_name: Nome da ferramenta que falhou.
+            error_type: Tipo da exceção (ex: 'TypeError').
+
+        Returns:
+            True se o limiar de erros consecutivos foi atingido, False caso
+            contrário.
+        """
+        if tool_name == self._last_tool and error_type == self._last_error_type:
+            self._count += 1
+        else:
+            self._last_tool = tool_name
+            self._last_error_type = error_type
+            self._count = 1
+
+        return self._count >= self.threshold
+
+    def get_message(self, tool_name: str, error_type: str, count: int) -> str:
+        """Gera a mensagem de alerta a ser injetada no contexto do agente.
+
+        Args:
+            tool_name: Nome da ferramenta com erros repetidos.
+            error_type: Tipo da exceção.
+            count: Número de falhas consecutivas.
+
+        Returns:
+            String com a mensagem de recuperação formatada.
+        """
+        return (
+            f"[ATENÇÃO DO SISTEMA]\n"
+            f"A ferramenta '{tool_name}' falhou {count} vezes consecutivas com o erro '{error_type}'.\n"
+            f"Você DEVE mudar completamente sua abordagem. Opções:\n"
+            f"1. Simplificar o código removendo a parte problemática\n"
+            f"2. Usar uma estratégia alternativa\n"
+            f"3. Gerar a resposta sem usar essa ferramenta\n"
+            f"NÃO repita a mesma abordagem."
+        )
+
 async def run_agent_loop(
     prompt: str,
     instruction: str,
@@ -67,13 +144,23 @@ async def run_agent_loop(
     
     final_response = ""
     iterations = 0
-    
+
+    # V12.2.1/V12.2.3 — Rastreamento de erros por ferramenta
+    error_tracker = ErrorTracker(threshold=3)
+    tool_failure_count: Dict[str, int] = {}   # conta falhas acumuladas por ferramenta
+    _alert_injected = False   # para injetar alerta apenas uma vez por sessão
+
     while iterations < max_iterations:
         iterations += 1
         
         # Converte ferramentas para formato OpenAI se necessário
+        # V12.2.3 — Filtra ferramentas que falharam 4+ vezes
+        _failed_tools = {name for name, cnt in tool_failure_count.items() if cnt >= 4}
         openai_tools = []
         for tool in tools:
+            tool_name_key = getattr(tool, "__name__", None)
+            if tool_name_key and tool_name_key in _failed_tools:
+                continue  # Ferramenta banida por excesso de falhas
             if hasattr(tool, "parameters_schema") and tool.parameters_schema:
                 openai_tools.append({
                     "type": "function",
@@ -226,6 +313,29 @@ async def run_agent_loop(
                     logger.error(f"Erro ao executar {tool_call.name}: {e}", extra={"trace": traceback.format_exc()})
                     result = f"Erro ao executar ferramenta: {str(e)}"
 
+                    # V12.2.1 — Rastrear erro; injetar alerta se limiar atingido
+                    error_type = type(e).__name__
+                    tool_failure_count[tool_call.name] = tool_failure_count.get(tool_call.name, 0) + 1
+                    if error_tracker.track(tool_call.name, error_type) and not _alert_injected:
+                        alert_msg = error_tracker.get_message(
+                            tool_call.name, error_type, error_tracker._count
+                        )
+                        messages.append({"role": "user", "content": alert_msg})
+                        logger.warning(
+                            "ErrorTracker: alerta de erros repetitivos injetado",
+                            extra={"tool": tool_call.name, "error_type": error_type, "count": error_tracker._count},
+                        )
+                        _alert_injected = True  # Injeta apenas uma vez por ativação
+                    else:
+                        _alert_injected = False  # Reseta quando o padrão muda
+
+                    # V12.2.3 — Log quando ferramenta será removida na próxima iteração
+                    if tool_failure_count.get(tool_call.name, 0) >= 4:
+                        logger.warning(
+                            "V12.2.3: Ferramenta removida por excesso de falhas",
+                            extra={"tool": tool_call.name, "failures": tool_failure_count[tool_call.name]},
+                        )
+
                     # V5.7 — Telemetria: tool_call_end (falha)
                     try:
                         _now_iso = __import__("datetime").datetime.utcnow().isoformat() + "Z"
@@ -258,5 +368,44 @@ async def run_agent_loop(
             await after_callback(agent_state)
         except Exception as e:
             logger.error(f"Erro no after_callback: {e}")
+
+    # V12.2.2 — Detecção de resposta declarativa sem resultado concreto.
+    # Se a resposta final contém apenas expressões de intenção e não houve
+    # tool calls na última iteração, tenta uma última vez com prompt de recuperação.
+    if final_response:
+        _lower = final_response.lower()
+        _is_declarative = (
+            any(pat in _lower for pat in _DECLARATIVE_PATTERNS)
+            and not response.tool_calls  # sem tool calls na resposta final
+        )
+        if _is_declarative:
+            logger.warning(
+                "V12.2.2: Resposta declarativa detectada, iniciando retry de recuperação",
+                extra={"preview": final_response[:80]},
+            )
+            recovery_msg = (
+                "[REQUÉRIO DO SISTEMA]\n"
+                "Sua resposta anterior descreveu uma intenção, mas não produziu um resultado concreto.\n"
+                "Por favor, EXECUTE a tarefa agora e fornecer um resultado concreto ou abordagem alternativa "
+                "sem usar ferramentas que estão falhando."
+            )
+            messages.append({"role": "user", "content": recovery_msg})
+            try:
+                recovery_response = await provider.generate(
+                    messages=messages,
+                    tools=None,  # sem ferramentas para forçar resposta direta
+                    system=instruction,
+                )
+                if recovery_response.text:
+                    final_response = recovery_response.text
+                    logger.info(
+                        "V12.2.2: Resposta de recuperação obtida",
+                        extra={"preview": final_response[:80]},
+                    )
+            except Exception as _rec_err:
+                logger.warning(
+                    "V12.2.2: Falha no retry de recuperação",
+                    extra={"error": str(_rec_err)},
+                )
 
     return final_response

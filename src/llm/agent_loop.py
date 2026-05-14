@@ -123,8 +123,9 @@ async def run_agent_loop(
         _llm_latency_ms = int((_time.monotonic() - _t_llm_start) * 1000)
 
         # V5.7 — Telemetria: llm_response (token usage)
-        _prompt_tokens = getattr(response, "prompt_tokens", 0) or len(json.dumps(compressed_messages)) // 4
-        _completion_tokens = getattr(response, "completion_tokens", 0) or len(response.text or "") // 4
+        # V11.2.1 — Corrigido: lê usage do dict padronizado em vez de getattr direto
+        _prompt_tokens = response.usage.get("prompt_tokens", 0) or len(json.dumps(compressed_messages)) // 4
+        _completion_tokens = response.usage.get("completion_tokens", 0) or len(response.text or "") // 4
         _provider_name = os.environ.get("LLM_PROVIDER", "unknown")
         _model_name = os.environ.get("LLM_MODEL", "unknown")
         _telemetry.record_token_usage(
@@ -200,8 +201,13 @@ async def run_agent_loop(
 
                     # V5.7 — Telemetria: tool_call_end (sucesso)
                     if not isinstance(tool_func, dict):
-                        _now_iso = __import__("datetime").datetime.utcnow().isoformat() + "Z"
-                        _start_iso = __import__("datetime").datetime.utcnow().isoformat() + "Z"
+                        # V11.2.2 — Corrigido: _start_iso calculado a partir do instante ANTES
+                        # da invocação (usando _t_tool_start já capturado antes), não após.
+                        import datetime as _dt
+                        _finished_dt = _dt.datetime.utcnow()
+                        _started_dt = _finished_dt - _dt.timedelta(milliseconds=_tool_duration_ms)
+                        _start_iso = _started_dt.isoformat() + "Z"
+                        _now_iso = _finished_dt.isoformat() + "Z"
                         _telemetry.record_tool_usage(
                             execution_id=_exec_id,
                             session_id=_session_id,

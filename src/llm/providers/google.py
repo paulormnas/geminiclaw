@@ -146,6 +146,9 @@ class GoogleProvider(LLMProvider):
                     "prompt_tokens": response.usage_metadata.prompt_token_count if response.usage_metadata else 0,
                     "completion_tokens": response.usage_metadata.candidates_token_count if response.usage_metadata else 0,
                     "total_tokens": response.usage_metadata.total_token_count if response.usage_metadata else 0,
+                    # V11.2.3 — Google GenAI não expõe TTFT na API atual; registrado como None
+                    # para manter consistência de schema com OllamaProvider.
+                    "ttft_ms": None,
                 }
             )
         except Exception as e:

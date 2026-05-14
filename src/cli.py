@@ -442,6 +442,15 @@ def main() -> None:
             except Exception as e:
                 logger.error("Erro durante cleanup", extra={"error": str(e)})
                 print(f"  {RED}❌ Erro no cleanup: {e}{RESET}\n")
+        # V11.1.2 — Flush de telemetria antes de encerrar via SIGINT
+        try:
+            from src.telemetry import get_telemetry
+            import asyncio as _asyncio
+            _tel = get_telemetry()
+            _asyncio.run(_tel.flush())
+            logger.info("Flush de telemetria concluído (SIGINT).")
+        except Exception as _e:
+            logger.error("Erro no flush de telemetria (SIGINT)", extra={"error": str(_e)})
         sys.exit(130)
 
     signal.signal(signal.SIGINT, _signal_handler)
@@ -489,9 +498,21 @@ def main() -> None:
     if args.prompt:
         # Modo direto: executa o prompt e sai
         asyncio.run(execute_prompt(orchestrator, args.prompt))
+        # V11.1.2 — Flush explícito ao encerrar modo não-interativo
+        try:
+            from src.telemetry import get_telemetry
+            asyncio.run(get_telemetry().flush())
+        except Exception as _e:
+            logger.error("Erro no flush de telemetria final", extra={"error": str(_e)})
     else:
         # Modo interativo (REPL)
         asyncio.run(interactive_mode(orchestrator))
+        # V11.1.2 — Flush explícito ao sair do modo interativo
+        try:
+            from src.telemetry import get_telemetry
+            asyncio.run(get_telemetry().flush())
+        except Exception as _e:
+            logger.error("Erro no flush de telemetria final (REPL)", extra={"error": str(_e)})
 
 
 if __name__ == "__main__":

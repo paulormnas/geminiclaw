@@ -24,10 +24,14 @@ Uso::
 from __future__ import annotations
 
 import asyncio
+import gzip
 import json
+import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
+from pathlib import Path
 from typing import Any, Optional
 
 from src.logger import get_logger
@@ -37,6 +41,44 @@ logger = get_logger(__name__)
 
 # Tamanho do buffer antes de um flush automático
 _BUFFER_SIZE = 50
+
+# Limite de caracteres para armazenar payload inline no banco.
+# Payloads maiores são "offloaded" para arquivo .json.gz no disco.
+_PAYLOAD_INLINE_LIMIT = 1000
+
+
+class ErrorType(Enum):
+    """Categorias padronizadas de erro para o campo error_type em subtask_metrics.
+
+    O banco de dados armazena apenas o valor string (`.value`), não o nome do Enum.
+    Use `ErrorType.from_str()` para converter strings recebidas de sistemas externos.
+    """
+
+    AUTH_FAILURE = "AUTH_FAILURE"
+    TIMEOUT = "TIMEOUT"
+    INVALID_FORMAT = "INVALID_FORMAT"
+    OOM_KILLED = "OOM_KILLED"
+    TOOL_ERROR = "TOOL_ERROR"
+    LLM_ERROR = "LLM_ERROR"
+    NETWORK_ERROR = "NETWORK_ERROR"
+    UNKNOWN = "UNKNOWN"
+
+    @classmethod
+    def from_str(cls, value: str | None) -> "ErrorType | None":
+        """Converte uma string para ErrorType, retornando None se não reconhecido.
+
+        Args:
+            value: String do código de erro.
+
+        Returns:
+            Membro do Enum correspondente, ou None se valor for None/desconhecido.
+        """
+        if value is None:
+            return None
+        try:
+            return cls(value.upper())
+        except ValueError:
+            return cls.UNKNOWN
 
 
 def _now() -> str:
@@ -69,7 +111,9 @@ class _ToolUsageRow:
     session_id: str
     agent_id: str
     tool_name: str
+    # V11.4.1 — arguments_json pode ser um caminho "file://..." para payload offloaded
     arguments_json: Optional[str]
+    # V11.4.1 — result_summary pode ser um caminho "file://..." para payload offloaded
     result_summary: Optional[str]
     success: bool
     error_message: Optional[str]
@@ -121,7 +165,13 @@ class _HardwareSnapshotRow:
 
 @dataclass
 class _SubtaskMetricsRow:
-    """Linha a ser inserida na tabela subtask_metrics."""
+    """Linha a ser inserida na tabela subtask_metrics.
+
+    V11.3 — Colunas removidas: cpu_usage_avg, mem_usage_peak_mb, temp_delta_c,
+    waiting_time_ms, total_tokens, tools_used_count.
+    Hardware é monitorado em hardware_snapshots; agregações de tokens e ferramentas
+    são obtidas via a view vw_subtask_performance.
+    """
 
     id: str
     execution_id: str
@@ -133,15 +183,10 @@ class _SubtaskMetricsRow:
     finished_at: Optional[str] = None
     duration_total_ms: Optional[int] = None
     duration_active_ms: Optional[int] = None
-    waiting_time_ms: Optional[int] = None
-    cpu_usage_avg: Optional[float] = None
-    mem_usage_peak_mb: Optional[float] = None
-    temp_delta_c: Optional[float] = None
-    total_tokens: int = 0
     total_cost_usd: float = 0.0
     llm_calls_count: int = 0
-    tools_used_count: int = 0
     retry_count: int = 0
+    # V11.4.2 — error_type: string padronizada via ErrorType Enum (banco armazena apenas o valor)
     error_type: Optional[str] = None
 
 
@@ -180,6 +225,42 @@ class TelemetryCollector:
     def __init__(self) -> None:
         self._buffer = _Buffer()
         self._lock = asyncio.Lock()
+
+    # ------------------------------------------------------------------
+    # V11.4.1 — Payload Offloading
+    # ------------------------------------------------------------------
+
+    def _offload_payload(self, payload: str, session_id: str, label: str) -> str:
+        """Salva payload extenso em arquivo .json.gz e retorna referência relativa.
+
+        Se o payload tiver até _PAYLOAD_INLINE_LIMIT caracteres, retorna-o inline.
+        Caso contrário, comprime e salva em logs/<session_id>/payloads/<uuid>_<label>.json.gz
+        e retorna a string "file://logs/<session_id>/payloads/<name>".
+
+        Args:
+            payload: String a ser avaliada e possivelmente offloaded.
+            session_id: ID da sessão, usado para organizar os arquivos.
+            label: Rótulo descritivo para o nome do arquivo (ex: "args", "result").
+
+        Returns:
+            O payload original (inline) ou o caminho relativo do arquivo offloaded.
+        """
+        if len(payload) <= _PAYLOAD_INLINE_LIMIT:
+            return payload
+
+        payloads_dir = Path("logs") / session_id / "payloads"
+        payloads_dir.mkdir(parents=True, exist_ok=True)
+        file_name = f"{uuid.uuid4().hex}_{label}.json.gz"
+        file_path = payloads_dir / file_name
+
+        logger.debug(
+            "Payload offloaded para arquivo",
+            extra={"extra": {"file": str(file_path), "size_chars": len(payload)}},
+        )
+        with gzip.open(file_path, "wt", encoding="utf-8") as fh:
+            fh.write(payload)
+
+        return f"file://logs/{session_id}/payloads/{file_name}"
 
     # ------------------------------------------------------------------
     # Métodos de registro
@@ -244,6 +325,9 @@ class TelemetryCollector:
     ) -> None:
         """Registra o uso de uma skill/ferramenta.
 
+        V11.4.1 — Argumentos e resultados maiores que _PAYLOAD_INLINE_LIMIT chars
+        são salvo em arquivo .json.gz e referenciados por caminho no banco.
+
         Args:
             execution_id: ID da execução.
             session_id: ID da sessão do agente.
@@ -254,19 +338,32 @@ class TelemetryCollector:
             duration_ms: Duração total em milissegundos.
             success: Se a invocação foi bem-sucedida.
             arguments: Argumentos passados (sanitizados).
-            result_summary: Resumo do resultado (truncado em 500 chars).
+            result_summary: Resultado completo (sem truncamento prévio).
             error_message: Mensagem de erro, se houver.
             task_name: Subtarefa do DAG.
         """
-        result_summary = (result_summary or "")[:500] or None
+        # V11.4.1 — Serializa argumentos e aplica offloading se necessário
+        raw_args = json.dumps(arguments, ensure_ascii=False) if arguments else None
+        if raw_args and len(raw_args) > _PAYLOAD_INLINE_LIMIT:
+            args_stored = self._offload_payload(raw_args, session_id, "args")
+        else:
+            args_stored = raw_args
+
+        # V11.4.1 — Aplica offloading no resultado se necessário
+        raw_result = result_summary or ""
+        if raw_result and len(raw_result) > _PAYLOAD_INLINE_LIMIT:
+            result_stored: Optional[str] = self._offload_payload(raw_result, session_id, "result")
+        else:
+            result_stored = raw_result[:500] or None  # mantém truncamento inline em 500
+
         row = _ToolUsageRow(
             id=uuid.uuid4().hex,
             execution_id=execution_id,
             session_id=session_id,
             agent_id=agent_id,
             tool_name=tool_name,
-            arguments_json=json.dumps(arguments) if arguments else None,
-            result_summary=result_summary,
+            arguments_json=args_stored,
+            result_summary=result_stored,
             success=success,
             error_message=error_message,
             started_at=started_at,
@@ -407,18 +504,20 @@ class TelemetryCollector:
         finished_at: Optional[str] = None,
         duration_total_ms: Optional[int] = None,
         duration_active_ms: Optional[int] = None,
-        waiting_time_ms: Optional[int] = None,
-        cpu_usage_avg: Optional[float] = None,
-        mem_usage_peak_mb: Optional[float] = None,
-        temp_delta_c: Optional[float] = None,
-        total_tokens: int = 0,
         total_cost_usd: float = 0.0,
         llm_calls_count: int = 0,
-        tools_used_count: int = 0,
         retry_count: int = 0,
         error_type: Optional[str] = None,
     ) -> None:
         """Registra métricas agregadas de uma subtarefa.
+
+        V11.3 — Assinatura lean: campos removidos (cpu_usage_avg, mem_usage_peak_mb,
+        temp_delta_c, waiting_time_ms, total_tokens, tools_used_count) pois estão
+        permanentemente nulos no Orchestrator. Esses dados são obtidos via
+        vw_subtask_performance ou hardware_snapshots.
+
+        V11.4.2 — error_type deve ser o valor string de um ErrorType Enum
+        (ex: ErrorType.TIMEOUT.value). O banco armazena apenas a string.
 
         Args:
             subtask_id: ID único da subtarefa.
@@ -431,16 +530,10 @@ class TelemetryCollector:
             finished_at: Timestamp de término.
             duration_total_ms: Duração total no sistema.
             duration_active_ms: Duração em processamento.
-            waiting_time_ms: Tempo em fila.
-            cpu_usage_avg: Média de uso de CPU.
-            mem_usage_peak_mb: Pico de memória em MB.
-            temp_delta_c: Variação de temperatura em °C.
-            total_tokens: Total de tokens consumidos.
             total_cost_usd: Custo estimado em USD.
             llm_calls_count: Número de chamadas ao LLM.
-            tools_used_count: Número de ferramentas invocadas.
             retry_count: Número de retentativas.
-            error_type: Tipo de erro, se houver.
+            error_type: String de ErrorType (ex: "TIMEOUT"), ou None.
         """
         row = _SubtaskMetricsRow(
             id=subtask_id,
@@ -453,14 +546,8 @@ class TelemetryCollector:
             finished_at=finished_at,
             duration_total_ms=duration_total_ms,
             duration_active_ms=duration_active_ms,
-            waiting_time_ms=waiting_time_ms,
-            cpu_usage_avg=cpu_usage_avg,
-            mem_usage_peak_mb=mem_usage_peak_mb,
-            temp_delta_c=temp_delta_c,
-            total_tokens=total_tokens,
             total_cost_usd=total_cost_usd,
             llm_calls_count=llm_calls_count,
-            tools_used_count=tools_used_count,
             retry_count=retry_count,
             error_type=error_type,
         )
@@ -588,32 +675,24 @@ class TelemetryCollector:
                         ),
                     )
 
-                # subtask_metrics
+                # subtask_metrics — V11.3: schema lean sem colunas nulas
                 for row in snapshot.subtask_metrics:
                     conn.execute(
                         """
                         INSERT INTO subtask_metrics
                             (id, execution_id, task_name, agent_id, status,
                              created_at, started_at, finished_at, duration_total_ms,
-                             duration_active_ms, waiting_time_ms, cpu_usage_avg,
-                             mem_usage_peak_mb, temp_delta_c, total_tokens,
-                             total_cost_usd, llm_calls_count, tools_used_count,
+                             duration_active_ms, total_cost_usd, llm_calls_count,
                              retry_count, error_type)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (id) DO UPDATE SET
                             status = EXCLUDED.status,
                             started_at = COALESCE(subtask_metrics.started_at, EXCLUDED.started_at),
                             finished_at = EXCLUDED.finished_at,
                             duration_total_ms = EXCLUDED.duration_total_ms,
                             duration_active_ms = EXCLUDED.duration_active_ms,
-                            waiting_time_ms = EXCLUDED.waiting_time_ms,
-                            cpu_usage_avg = EXCLUDED.cpu_usage_avg,
-                            mem_usage_peak_mb = EXCLUDED.mem_usage_peak_mb,
-                            temp_delta_c = EXCLUDED.temp_delta_c,
-                            total_tokens = EXCLUDED.total_tokens,
                             total_cost_usd = EXCLUDED.total_cost_usd,
                             llm_calls_count = EXCLUDED.llm_calls_count,
-                            tools_used_count = EXCLUDED.tools_used_count,
                             retry_count = EXCLUDED.retry_count,
                             error_type = EXCLUDED.error_type
                         """,
@@ -621,10 +700,8 @@ class TelemetryCollector:
                             row.id, row.execution_id, row.task_name, row.agent_id,
                             row.status, row.created_at, row.started_at, row.finished_at,
                             row.duration_total_ms, row.duration_active_ms,
-                            row.waiting_time_ms, row.cpu_usage_avg, row.mem_usage_peak_mb,
-                            row.temp_delta_c, row.total_tokens, row.total_cost_usd,
-                            row.llm_calls_count, row.tools_used_count, row.retry_count,
-                            row.error_type,
+                            row.total_cost_usd, row.llm_calls_count,
+                            row.retry_count, row.error_type,
                         ),
                     )
 

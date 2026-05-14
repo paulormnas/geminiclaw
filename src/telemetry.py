@@ -558,9 +558,33 @@ class TelemetryCollector:
         )
         self._maybe_flush_sync()
 
-    # ------------------------------------------------------------------
-    # Flush
-    # ------------------------------------------------------------------
+    def drain_buffer(self) -> dict:
+        """Serializa o buffer atual para um dict JSON-serializável (V12.3.1).
+
+        Método **não-destrutivo**: o buffer permanece intacto após a chamada.
+        Destina-se ao transporte de telemetria via canal IPC quando o container
+        não tem acesso direto ao PostgreSQL — o orquestrador recebe o payload
+        e injeta os dados em seu próprio singleton via `_ingest_container_telemetry`.
+
+        O `flush()` normal continua sendo o mecanismo primário de gravação.
+        O canal IPC é apenas o fallback.
+
+        Returns:
+            Dicionário com chaves ``token_usage``, ``tool_usage``,
+            ``agent_events``, ``subtask_metrics`` e ``hardware_snapshots``,
+            cada uma contendo uma lista de dicts JSON-serializáveis.
+        """
+        def _row_to_dict(row) -> dict:
+            return {k: v for k, v in row.__dict__.items()}
+
+        return {
+            "token_usage": [_row_to_dict(r) for r in self._buffer.token_usage],
+            "tool_usage": [_row_to_dict(r) for r in self._buffer.tool_usage],
+            "agent_events": [_row_to_dict(r) for r in self._buffer.agent_events],
+            "subtask_metrics": [_row_to_dict(r) for r in self._buffer.subtask_metrics],
+            "hardware_snapshots": [_row_to_dict(r) for r in self._buffer.hardware_snapshots],
+        }
+
 
     def _maybe_flush_sync(self) -> None:
         """Verifica se o buffer atingiu o limite e dispara flush não-bloqueante."""

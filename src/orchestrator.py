@@ -62,6 +62,7 @@ class AgentTask:
     preferred_model: str | None = None
     subtask_id: str | None = None  # V9: ID único para telemetria
     created_at: str | None = None  # V9: Timestamp de criação
+    retry_attempt: int = 0  # V12.3.3: Número da tentativa atual (0-indexed)
 
 
 @dataclass
@@ -100,6 +101,73 @@ class OrchestratorResult:
     failed: int
     artifacts: list[dict[str, Any]] = field(default_factory=list)
     plan_json: str | None = None
+
+
+def _ingest_container_telemetry(
+    payload: dict[str, Any],
+    telemetry: Any,
+) -> None:
+    """Injeta dados de telemetria do container no singleton do orquestrador (V12.3.1).
+
+    Lê o campo ``_telemetry`` do payload IPC recebido do container e chama os
+    métodos de registro correspondentes no singleton local. Caso o container
+    já tenha gravado via ``flush()`` no PostgreSQL (mecanismo primário), as
+    inserções serão idempotentes graças ao ``ON CONFLICT (id) DO NOTHING``.
+
+    Args:
+        payload: Dicionário recebido via IPC (response_msg.payload).
+        telemetry: Instância de TelemetryCollector do orquestrador.
+    """
+    container_tel = payload.get("_telemetry")
+    if not container_tel:
+        return
+
+    for row in container_tel.get("token_usage", []):
+        try:
+            telemetry.record_token_usage(
+                execution_id=row["execution_id"],
+                session_id=row["session_id"],
+                agent_id=row["agent_id"],
+                llm_provider=row["llm_provider"],
+                llm_model=row["llm_model"],
+                prompt_tokens=row["prompt_tokens"],
+                completion_tokens=row["completion_tokens"],
+                latency_ms=row["latency_ms"],
+                task_name=row.get("task_name"),
+                estimated_cost_usd=row.get("estimated_cost_usd"),
+                context_window_used=row.get("context_window_used"),
+                context_window_max=row.get("context_window_max"),
+                was_compressed=row.get("was_compressed", False),
+            )
+        except Exception as _e:
+            logger.warning("Falha ao ingerir token_usage do container", extra={"error": str(_e)})
+
+    for row in container_tel.get("tool_usage", []):
+        try:
+            telemetry.record_tool_usage(
+                execution_id=row["execution_id"],
+                session_id=row["session_id"],
+                agent_id=row["agent_id"],
+                tool_name=row["tool_name"],
+                started_at=row["started_at"],
+                finished_at=row["finished_at"],
+                duration_ms=row["duration_ms"],
+                success=row["success"],
+                arguments=None,
+                result_summary=row.get("result_summary"),
+                error_message=row.get("error_message"),
+                task_name=row.get("task_name"),
+            )
+        except Exception as _e:
+            logger.warning("Falha ao ingerir tool_usage do container", extra={"error": str(_e)})
+
+    ingested_tokens = len(container_tel.get("token_usage", []))
+    ingested_tools = len(container_tel.get("tool_usage", []))
+    if ingested_tokens or ingested_tools:
+        logger.debug(
+            "V12.3.1: Telemetria de container ingerida via IPC",
+            extra={"token_usage": ingested_tokens, "tool_usage": ingested_tools},
+        )
 
 
 class Orchestrator:
@@ -427,7 +495,11 @@ class Orchestrator:
                 duration_ms=_recv_ms,
             )
 
-            # 6. Atualiza sessão com a resposta
+            # V12.3.1 — Ingere telemetria do container via IPC (canal de fallback)
+            # O flush() no container é o mecanismo primário. Este canal garante
+            # zero-loss em containers sem conectividade direta ao PostgreSQL.
+            _ingest_container_telemetry(response_msg.payload, telemetry)
+
             self.session_manager.update(
                 session.id, payload=response_msg.payload
             )
@@ -565,7 +637,8 @@ class Orchestrator:
                     started_at=started_at_iso,
                     finished_at=finished_at_iso,
                     duration_total_ms=duration_ms,
-                    duration_active_ms=duration_ms, # Por enquanto assumimos que o tempo ativo é o wall time do execute_agent
+                    duration_active_ms=duration_ms,
+                    retry_count=task.retry_attempt,  # V12.3.3: propaga tentativa atual
                     error_type=result.error[:100] if result.error else None
                 )
 

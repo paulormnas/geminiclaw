@@ -105,12 +105,24 @@ class LLMResponseCache:
     def set(self, prompt: str, model: str, response: str) -> None:
         """Armazena ou atualiza uma resposta no cache e aplica eviction se necessário.
 
+        V12.1.2: Respostas vazias, compostas apenas de espaços ou com menos de
+        51 caracteres são rejeitadas — elas correspondem a erros ou respostas
+        triviais que nunca devem ser cacheadas.
+
         Args:
             prompt: Prompt enviado ao LLM.
             model: Modelo utilizado.
             response: Resposta do LLM.
         """
         if not self.enabled:
+            return
+
+        # V12.1.2 — Nunca cachear respostas vazias ou trivialmente curtas
+        if not response or len(response.strip()) <= 50:
+            logger.debug(
+                "Cache SET ignorado: resposta vazia ou muito curta",
+                extra={"extra": {"response_len": len(response.strip()) if response else 0}},
+            )
             return
 
         hash_key = self._generate_hash(prompt, model)
@@ -155,6 +167,34 @@ class LLMResponseCache:
             logger.info("LLM Cache SET", extra={"extra": {"hash": hash_key[:8]}})
         except Exception as e:
             logger.error("Erro ao gravar no LLM cache", extra={"error": str(e)})
+
+    def invalidate(self, prompt: str, model: str) -> None:
+        """Remove uma entrada do cache pelo hash do prompt+model.
+
+        V12.1.3: Chamado antes de iniciar um novo ciclo de replanejamento para
+        garantir que hashes de prompts de subtarefas falhas não sejam servidos
+        como Cache HIT nas próximas tentativas.
+
+        Args:
+            prompt: Prompt cujo cache deve ser invalidado.
+            model: Modelo associado ao prompt.
+        """
+        if not self.enabled:
+            return
+
+        hash_key = self._generate_hash(prompt, model)
+        try:
+            with get_connection() as conn:
+                conn.execute(
+                    "DELETE FROM llm_cache WHERE hash_key = %s",
+                    (hash_key,),
+                )
+            logger.info(
+                "LLM Cache INVALIDADO",
+                extra={"extra": {"hash": hash_key[:8]}},
+            )
+        except Exception as e:
+            logger.error("Erro ao invalidar LLM cache", extra={"error": str(e)})
 
     def stats(self) -> Dict[str, Any]:
         """Retorna as estatísticas de hits/misses do cache.

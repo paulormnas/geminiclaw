@@ -43,19 +43,19 @@ Argumentos e respostas de ferramentas estão sendo truncados abruptamente. Preci
 ## Tarefas de Execução
 
 ### Fase 1: Correção Crítica de Persistência (Flush & Tokens)
-- [ ] Inserir `await telemetry.flush()` no encerramento de `agents/runner.py`.
-- [ ] Inserir chamadas de fechamento seguras em `src/cli.py`.
-- [ ] Refatorar a captura de `response.usage` no `agent_loop.py`.
-- [ ] Corrigir o timestamp de início nas chamadas de ferramentas no agente.
+- [x] Inserir `await telemetry.flush()` no encerramento de `agents/runner.py`.
+- [x] Inserir chamadas de fechamento seguras em `src/cli.py`.
+- [x] Refatorar a captura de `response.usage` no `agent_loop.py`.
+- [x] Corrigir o timestamp de início nas chamadas de ferramentas no agente.
 
 ### Fase 2: Limpeza do Banco de Dados
-- [ ] Escrever script de migração para remover colunas nulas (`cpu_usage_avg`, `temp_delta_c`, etc) da tabela `subtask_metrics`.
-- [ ] Escrever e aplicar a definição da View SQL `vw_subtask_performance`.
-- [ ] Atualizar o comando de terminal `geminiclaw --metrics` para consultar a nova View em vez de tentar ler colunas obsoletas.
+- [x] Escrever script de migração para remover colunas nulas (`cpu_usage_avg`, `temp_delta_c`, etc) da tabela `subtask_metrics`.
+- [x] Escrever e aplicar a definição da View SQL `vw_subtask_performance`.
+- [x] Atualizar o comando de terminal `geminiclaw --metrics` para consultar a nova View em vez de tentar ler colunas obsoletas.
 
 ### Fase 3: Rastreabilidade Profunda
-- [ ] Adicionar funcionalidade de Payload Offloading no registro de `tool_usage`.
-- [ ] Definir o enumerador de categorias de erro em `src/telemetry.py` e adotá-lo no orquestrador.
+- [x] Adicionar funcionalidade de Payload Offloading no registro de `tool_usage`.
+- [x] Definir o enumerador de categorias de erro em `src/telemetry.py` e adotá-lo no orquestrador.
 
 ---
 

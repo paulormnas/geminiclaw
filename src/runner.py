@@ -257,7 +257,8 @@ class ContainerRunner:
         ipc_port: int | None = None, 
         output_session_id: str | None = None,
         logs_session_id: str | None = None,
-        env_vars: Dict[str, str] | None = None
+        env_vars: Dict[str, str] | None = None,
+        task_name: str | None = None,
     ) -> str:
         """Cria e inicia um container para um agente.
 
@@ -268,6 +269,10 @@ class ContainerRunner:
             ipc_port: Porta TCP para IPC (opcional, se usar TCP em vez de Unix Sockets).
             output_session_id: ID alternativo para o diretório de outputs compartilhado.
             logs_session_id: ID da sessão/tarefa para mapeamento de volumes de log.
+            task_name: Nome da subtarefa corrente. Quando fornecido, o SESSION_ID
+                propagado para o container é ``{session_id}_{task_name}``, garantindo
+                unicidade por subtarefa e rastreabilidade em relação à sessão mestra
+                (V13.1.2).
 
         Returns:
             O ID do container criado.
@@ -280,12 +285,12 @@ class ContainerRunner:
                 async with self.local_llm_semaphore:
                     return await self._do_spawn(
                         agent_id, image, session_id, ipc_port, 
-                        output_session_id, logs_session_id, env_vars
+                        output_session_id, logs_session_id, env_vars, task_name
                     )
             else:
                 return await self._do_spawn(
                     agent_id, image, session_id, ipc_port, 
-                    output_session_id, logs_session_id, env_vars
+                    output_session_id, logs_session_id, env_vars, task_name
                 )
 
     async def _do_spawn(
@@ -296,9 +301,20 @@ class ContainerRunner:
         ipc_port: int | None = None, 
         output_session_id: str | None = None,
         logs_session_id: str | None = None,
-        env_vars: Dict[str, str] | None = None
+        env_vars: Dict[str, str] | None = None,
+        task_name: str | None = None,
     ) -> str:
-        """Execução real do spawn (refatorado de spawn para suportar semáforos aninhados)."""
+        """Execução real do spawn (refatorado de spawn para suportar semáforos aninhados).
+
+        V13.1.2: Quando task_name é fornecido, o SESSION_ID do container é derivado
+        como ``{session_id}_{task_name}`` para garantir consistência de artefatos
+        entre tool calls dentro da mesma subtarefa.
+        """
+        # V13.1.2 — Deriva o SESSION_ID canônico para o container.
+        # A combinação master_session_id + task_name garante unicidade por subtarefa
+        # e rastreabilidade do diretório de artefatos no host.
+        canonical_session_id = f"{session_id}_{task_name}" if task_name else session_id
+
         if HEALTH_CHECK_ENABLED:
             await self._wait_for_health()
 
@@ -325,7 +341,11 @@ class ContainerRunner:
                 )
                 env = {
                     "AGENT_ID": agent_id,
-                    "SESSION_ID": session_id,
+                    # V13.1.2: SESSION_ID canônico = master_session_id + task_name (quando disponível).
+                    # O agent_loop usa esse valor para sobrescrever o session_id gerado pelo LLM
+                    # em cada chamada à tool python_interpreter (V13.1.1).
+                    "SESSION_ID": canonical_session_id,
+                    "TASK_NAME": task_name or "",
                     "LLM_PROVIDER": LLM_PROVIDER,
                     "LLM_MODEL": LLM_MODEL,
                     "GEMINI_API_KEY": GEMINI_API_KEY or "",

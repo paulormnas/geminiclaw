@@ -86,6 +86,8 @@ async def test_runner_spawn_parameters(mock_docker_client):
                     "environment": {
                         "AGENT_ID": "base",
                         "SESSION_ID": "session_123",
+                        # V13.1.2: TASK_NAME é sempre propagado; sem task_name passa vazio.
+                        "TASK_NAME": "",
                         "LLM_PROVIDER": "google",
                         "LLM_MODEL": "gemini-3-flash-preview",
                         "GEMINI_API_KEY": "test_key",

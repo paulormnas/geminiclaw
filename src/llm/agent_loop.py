@@ -244,6 +244,26 @@ async def run_agent_loop(
         # 5. Executa tool calls
         for tool_call in response.tool_calls:
             logger.info(f"Agente chamando ferramenta: {tool_call.name}", extra={"tool_args": tool_call.arguments})
+
+            # V13.1.1 — Forçar session_id canônico para python_interpreter.
+            # O LLM pode gerar valores arbitrários ("1", "nova_sessao" etc.). Para
+            # garantir que todos os artefatos de uma sessão fiquem no mesmo diretório,
+            # sobrescrevemos sempre com o valor de SESSION_ID do ambiente antes de
+            # qualquer processamento adicional.
+            if tool_call.name == "python_interpreter":
+                env_session_id = os.environ.get("SESSION_ID")
+                if env_session_id:
+                    original_sid = tool_call.arguments.get("session_id", "<ausente>")
+                    tool_call.arguments["session_id"] = env_session_id
+                    if original_sid != env_session_id:
+                        logger.info(
+                            "V13.1.1: session_id sobrescrito pelo valor canônico do ambiente",
+                            extra={
+                                "tool": tool_call.name,
+                                "original": original_sid,
+                                "canonical": env_session_id,
+                            },
+                        )
             
             # Encontra a função correspondente
             tool_func = next((t for t in tools if getattr(t, "__name__", "") == tool_call.name), None)

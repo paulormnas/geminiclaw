@@ -585,6 +585,9 @@ class TelemetryCollector:
             "hardware_snapshots": [_row_to_dict(r) for r in self._buffer.hardware_snapshots],
         }
 
+    # ------------------------------------------------------------------
+    # Flush
+    # ------------------------------------------------------------------
 
     def _maybe_flush_sync(self) -> None:
         """Verifica se o buffer atingiu o limite e dispara flush não-bloqueante."""

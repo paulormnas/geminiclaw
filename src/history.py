@@ -179,7 +179,15 @@ class ExecutionHistory:
                 exec_id, status, finished_at, duration_seconds,
                 plan_json, results_json, artifacts_json,
                 total_subtasks, succeeded, failed
+        """Registra uma execução completa (compatibilidade)."""
+        exec_id = self.start(prompt, started_at)
+        if exec_id and finished_at and duration_seconds is not None:
+            self.finish(
+                exec_id, status, finished_at, duration_seconds,
+                plan_json, results_json, artifacts_json,
+                total_subtasks, succeeded, failed
             )
+        return exec_id
         return exec_id
 
     def get(self, execution_id: str) -> Optional[ExecutionRecord]:

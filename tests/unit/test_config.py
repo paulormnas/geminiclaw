@@ -17,6 +17,7 @@ def reset_env():
         "LLM_MODEL",
         "AGENT_TIMEOUT_SECONDS",
         "DATABASE_URL",
+        "DEPLOYMENT_PROFILE",
     ]
     old_vars = {k: os.environ.get(k) for k in vars_to_clear}
     for k in vars_to_clear:

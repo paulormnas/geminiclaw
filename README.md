@@ -154,6 +154,7 @@ src/skills/
 | **Document Processor** | `document_processor` | `SKILL_DOCUMENT_PROCESSOR_ENABLED=false` | Ingestão, chunking e indexação (Qdrant + Postgres) de arquivos do usuário (PDF, CSV, TXT, DOCX, XLSX). |
 | **Code** | `python_interpreter` | `SKILL_CODE_ENABLED=true` | Execução de código Python em container Docker efêmero e isolado (sem rede, 256 MB RAM). |
 | **Memory** | `memory` | `SKILL_MEMORY_ENABLED=true` | Memória de curto prazo (por sessão, em RAM) e longo prazo (entre sessões, PostgreSQL). |
+| **Web Reader** | `web_reader` | `SKILL_WEB_READER_ENABLED=true` | Leitura de conteúdo completo de URLs (apenas `http://` e `https://`). Valida robots.txt (RFC 9309). Sempre use após `quick_search`. |
 
 Cada skill pode ser habilitada/desabilitada individualmente via variáveis de ambiente. O agente base carrega apenas as skills ativas e injeta o contexto da memória de longo prazo na instrução do agente ao iniciar.
 
@@ -196,6 +197,12 @@ Implementado em `src/autonomous_loop.py`, o loop gerencia tarefas complexas de p
 **Configurações:**
 - `MAX_RETRY_PER_SUBTASK=3` — máximo de tentativas por subtarefa
 - `MAX_SUBTASKS_PER_TASK=10` — limite de subtarefas por tarefa
+- `MAX_PLAN_RETRIES=5` — ciclos máximos de replanejamento (V12.1)
+- `MAX_CONTAINERS_PER_SESSION=30` — limite de containers por sessão; interrompe a execução ao atingir (circuit breaker V12.5)
+
+**Circuit Breakers (V12.5):**
+- **Progresso zero**: Se dois ciclos de replanejamento consecutivos produzirem o mesmo conjunto de subtarefas bem-sucedidas, o loop é interrompido com mensagem diagnóstica.
+- **Limite de containers**: Se o número de containers spawnados em uma sessão atingir `MAX_CONTAINERS_PER_SESSION`, o orquestrador lança `RuntimeError` antes do spawn seguinte.
 
 ---
 
@@ -222,6 +229,7 @@ A comunicação entre host e containers é baseada em **Unix Domain Sockets** (L
 - **Reconexão**: Retry com backoff exponencial (até 3 tentativas) em caso de falha.
 - **Segurança**: Containers sem acesso a rede externa (exceto via skills controladas) e rodando como `non-root` (`appuser`).
 - **Limites**: Máximo de 3 agentes simultâneos (`asyncio.Semaphore(3)`) para preservar o Raspberry Pi 5.
+- **Telemetria Cross-Container (V12.3)**: O payload IPC de resposta inclui um campo `_telemetry` com os dados de `token_usage` e `tool_usage` acumulados. O orquestrador os ingere como canal de fallback para containers sem conectividade direta ao PostgreSQL. Idempotente via `ON CONFLICT (id) DO NOTHING`.
 
 ---
 
@@ -328,6 +336,17 @@ O desenvolvimento é guiado pelos roadmaps em `roadmaps/`, que definem as etapas
 | **V8** | Migração SQLite → PostgreSQL (pool `psycopg` v3, `docker-compose`) | ✅ Concluída |
 | **V9** | Abstração de provedores LLM (Ollama + Google Gemini) | ✅ Concluída |
 | **V5** | Framework de Observabilidade e Métricas | ✅ Concluída |
+| **V11** | Estabilização do Pipeline de Telemetria | ✅ Concluída |
+| **V12** | Resiliência e Observabilidade Avançada | ✅ Concluída |
+
+#### V12 — Resiliência e Observabilidade (concluído)
+
+- **V12.1 (Cache Poisoning Fix)**: Cache-busting por injeção de contexto de erro — garante que o agente receba prompts distintos a cada retry, evitando respostas cacheadas repetitivas.
+- **V12.2 (Agent Loop Resilience)**: `ErrorTracker` com detecção de loops de erro repetitivos, remoção dinâmica de ferramentas com falha sistemática e detecção de respostas declarativas sem ação.
+- **V12.3 (Telemetria Cross-Container)**: Canal IPC de fallback via `drain_buffer()` + `_ingest_container_telemetry()`. Garante persistência de `token_usage`/`tool_usage` mesmo em containers sem acesso direto ao PostgreSQL. `retry_attempt` propagado para `subtask_metrics`.
+- **V12.4 (WebReader)**: Validação de schema de URL (rejeita `file://`, `ftp://` etc.). Correção de robots.txt 404 (RFC 9309). Diretiva search-first nos prompts dos agentes `base` e `researcher`.
+- **V12.5 (Circuit Breaker)**: Detecção de progresso zero entre ciclos de replanejamento (`hash(frozenset(succeeded_tasks))`). Limite de containers por sessão (`MAX_CONTAINERS_PER_SESSION`).
+
 
 #### V5 — Observabilidade (concluído)
 

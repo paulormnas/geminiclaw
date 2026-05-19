@@ -51,7 +51,7 @@ Adicionalmente, o agente `Data_Preprocessing` referenciou `/datasets/iris.csv` (
 **Objetivo:** Impedir que o cache sirva respostas associadas a execuções falhas, sem perder o benefício de caching para respostas bem-sucedidas.
 
 #### Tarefas:
-- [ ] **V12.1.1 — Cache-busting por injeção de contexto de erro.** Quando uma subtarefa falha e é re-executada (retry no `autonomous_loop.py`), o prompt da próxima tentativa deve incluir um prefixo com o erro anterior e o número da tentativa. Isso invalida naturalmente o hash do cache.
+- [x] **V12.1.1 — Cache-busting por injeção de contexto de erro.** Quando uma subtarefa falha e é re-executada (retry no `autonomous_loop.py`), o prompt da próxima tentativa deve incluir um prefixo com o erro anterior e o número da tentativa. Isso invalida naturalmente o hash do cache.
   - **Arquivo:** `src/autonomous_loop.py` — bloco de retry em `_execute_task_in_dag` (L405-459).
   - **Lógica:** Se `result.status != "success"`, concatenar ao `enriched_task.prompt` um bloco:
     ```
@@ -62,15 +62,15 @@ Adicionalmente, o agente `Data_Preprocessing` referenciou `/datasets/iris.csv` (
     ```
   - **Efeito:** O hash do prompt muda entre tentativas, forçando o cache a fazer MISS.
 
-- [ ] **V12.1.2 — Nunca cachear respostas vazias ou com erro.** No runner do agente (`agents/runner.py`), ao verificar se deve gravar no cache, ignorar respostas com `status == "error"` ou texto vazio.
+- [x] **V12.1.2 — Nunca cachear respostas vazias ou com erro.** No runner do agente (`agents/runner.py`), ao verificar se deve gravar no cache, ignorar respostas com `status == "error"` ou texto vazio.
   - **Arquivo:** `agents/runner.py` ou `agents/base/agent.py` — ponto onde `llm_cache.set()` é invocado.
   - **Condição:** `if response_text and len(response_text.strip()) > 50:` (evitar cachear respostas triviais).
 
-- [ ] **V12.1.3 — Invalidação por session ao replanear.** No `autonomous_loop.py`, antes de iniciar um novo ciclo de replanejamento, registrar os hashes de prompts das subtarefas falhas e invalidá-los no cache.
+- [x] **V12.1.3 — Invalidação por session ao replanear.** No `autonomous_loop.py`, antes de iniciar um novo ciclo de replanejamento, registrar os hashes de prompts das subtarefas falhas e invalidá-los no cache.
   - **Arquivo:** `src/llm_cache.py` — adicionar método `invalidate(prompt: str, model: str)`.
   - **Arquivo:** `src/autonomous_loop.py` — chamar invalidação antes de `_run_planning_loop`.
 
-- [ ] **V12.1.4 — Testes unitários para a lógica de invalidação.**
+- [x] **V12.1.4 — Testes unitários para a lógica de invalidação.**
   - Cenário 1: Resposta falha não é cacheada.
   - Cenário 2: Resposta falha existente é invalidada antes de retry.
   - Cenário 3: Retry com cache-busting gera hash diferente.
@@ -83,7 +83,7 @@ Adicionalmente, o agente `Data_Preprocessing` referenciou `/datasets/iris.csv` (
 **Objetivo:** Dotar o loop ReAct de mecanismos de detecção de erros repetitivos e recuperação inteligente, evitando que o agente gaste todas as iterações repetindo a mesma abordagem falha.
 
 #### Tarefas:
-- [ ] **V12.2.1 — Detecção de erros repetitivos no `agent_loop.py`.** Manter um buffer dos últimos N erros de ferramenta. Se o mesmo tipo de exceção (`TypeError`, `FileNotFoundError`, `IndexError`) ocorrer 3 vezes consecutivas na mesma ferramenta, injetar uma mensagem de sistema forçando o agente a mudar de estratégia.
+- [x] **V12.2.1 — Detecção de erros repetitivos no `agent_loop.py`.** Manter um buffer dos últimos N erros de ferramenta. Se o mesmo tipo de exceção (`TypeError`, `FileNotFoundError`, `IndexError`) ocorrer 3 vezes consecutivas na mesma ferramenta, injetar uma mensagem de sistema forçando o agente a mudar de estratégia.
   - **Arquivo:** `src/llm/agent_loop.py` — bloco de execução de ferramentas (L157-247).
   - **Lógica:** Criar uma classe `ErrorTracker` com `track(tool_name, error_type) -> bool` que retorna `True` se o limiar foi atingido.
   - **Mensagem de recuperação injetada:**
@@ -97,14 +97,14 @@ Adicionalmente, o agente `Data_Preprocessing` referenciou `/datasets/iris.csv` (
     NÃO repita a mesma abordagem.
     ```
 
-- [ ] **V12.2.2 — Detecção de resposta final vazia ou declarativa.** Após o loop ReAct encerrar, verificar se `final_response` é vazio ou contém apenas declarações de intenção sem resultado concreto.
+- [x] **V12.2.2 — Detecção de resposta final vazia ou declarativa.** Após o loop ReAct encerrar, verificar se `final_response` é vazio ou contém apenas declarações de intenção sem resultado concreto.
   - **Arquivo:** `src/llm/agent_loop.py` — após o loop (L248-256).
   - **Heurística:** Se a resposta contém padrões como `"Vou criar"`, `"Vou fazer"`, `"Irei"` sem tool calls e sem resultado de dados, marcar como resposta insatisfatória e fazer uma última tentativa com prompt de recuperação.
 
-- [ ] **V12.2.3 — Limite de tentativas por ferramenta.** Implementar um contador por ferramenta dentro do loop ReAct. Após 4 chamadas falhas à mesma ferramenta, removê-la da lista de `openai_tools` disponíveis para o modelo, forçando-o a responder sem ela.
+- [x] **V12.2.3 — Limite de tentativas por ferramenta.** Implementar um contador por ferramenta dentro do loop ReAct. Após 4 chamadas falhas à mesma ferramenta, removê-la da lista de `openai_tools` disponíveis para o modelo, forçando-o a responder sem ela.
   - **Arquivo:** `src/llm/agent_loop.py` — manter `tool_failure_count: Dict[str, int]` e filtrar `openai_tools` antes de cada chamada ao LLM.
 
-- [ ] **V12.2.4 — Testes unitários para detecção de erros e recuperação.**
+- [x] **V12.2.4 — Testes unitários para detecção de erros e recuperação.**
   - **Arquivo:** `tests/unit/llm/test_agent_loop_resilience.py`
   - Cenário 1: Após 3 `TypeError` consecutivos, mensagem de sistema é injetada.
   - Cenário 2: Ferramenta removida da lista após 4 falhas.
@@ -119,20 +119,20 @@ Adicionalmente, o agente `Data_Preprocessing` referenciou `/datasets/iris.csv` (
 > **Nota:** As ações V11.1.1 e V11.2.1 tratam do flush explícito e da correção do `response.usage`. As tarefas aqui complementam com verificação de conectividade e um canal alternativo de propagação via IPC.
 
 #### Tarefas:
-- [ ] **V12.3.1 — Propagar métricas de telemetria via resposta IPC.** O runner do agente (`agents/runner.py`) deve incluir no payload da resposta IPC um campo `_telemetry` com os dados de token_usage e tool_usage acumulados durante a execução. O orquestrador os extrai e grava no singleton central.
+- [x] **V12.3.1 — Propagar métricas de telemetria via resposta IPC.** O runner do agente (`agents/runner.py`) deve incluir no payload da resposta IPC um campo `_telemetry` com os dados de token_usage e tool_usage acumulados durante a execução. O orquestrador os extrai e grava no singleton central.
   - **Arquivo:** `agents/runner.py` — antes de enviar a resposta, serializar o buffer de telemetria pendente.
   - **Arquivo:** `src/orchestrator.py` — em `_execute_agent`, após receber `response_msg`, verificar `response_msg.payload.get("_telemetry")` e gravar via o singleton do orquestrador.
   - **Benefício:** Funciona mesmo que o container não tenha acesso direto ao PostgreSQL.
 
-- [ ] **V12.3.2 — Corrigir extração de tokens do dicionário `usage`.** No `agent_loop.py`, substituir `getattr(response, "prompt_tokens", 0)` por `response.usage.get("prompt_tokens", 0)`. Fazer o mesmo para `completion_tokens`.
+- [x] **V12.3.2 — Corrigir extração de tokens do dicionário `usage`.** No `agent_loop.py`, substituir `getattr(response, "prompt_tokens", 0)` por `response.usage.get("prompt_tokens", 0)`. Fazer o mesmo para `completion_tokens`.
   - **Arquivo:** `src/llm/agent_loop.py` (L126-127).
   - **Nota:** O `OllamaProvider` já popula `usage` com `prompt_eval_count` e `eval_count` mapeados para `prompt_tokens` e `completion_tokens` (L110-114 de `providers/ollama.py`).
 
-- [ ] **V12.3.3 — Propagar `retry_count` para `subtask_metrics`.** No `autonomous_loop.py`, após o retry loop, passar o valor de `attempt` para a chamada final de `record_subtask_metrics` no `_execute_agent`.
+- [x] **V12.3.3 — Propagar `retry_count` para `subtask_metrics`.** No `autonomous_loop.py`, após o retry loop, passar o valor de `attempt` para a chamada final de `record_subtask_metrics` no `_execute_agent`.
   - **Arquivo:** `src/autonomous_loop.py` — enriquecer `enriched_task` com um campo `retry_attempt`.
   - **Arquivo:** `src/orchestrator.py` — usar `task.retry_attempt` no `record_subtask_metrics` final.
 
-- [ ] **V12.3.4 — Teste de integração para fluxo completo de telemetria.**
+- [x] **V12.3.4 — Teste de integração para fluxo completo de telemetria.**
   - **Arquivo:** `tests/integration/test_telemetry_cross_container.py`
   - Cenário: Simular uma execução onde o agente gera token_usage e tool_usage, verificar que os dados aparecem no PostgreSQL após a execução completa via o canal IPC.
 
@@ -143,14 +143,14 @@ Adicionalmente, o agente `Data_Preprocessing` referenciou `/datasets/iris.csv` (
 **Objetivo:** Impedir que o `web_reader` processe URLs inválidas (schema `file://`) e reduzir alucinações de URL adotando uma estratégia de busca → leitura.
 
 #### Tarefas:
-- [ ] **V12.4.1 — Validar schema de URL no `web_reader`.** Rejeitar URLs com schema diferente de `http://` e `https://` com mensagem clara redirecionando para a ferramenta correta.
+- [x] **V12.4.1 — Validar schema de URL no `web_reader`.** Rejeitar URLs com schema diferente de `http://` e `https://` com mensagem clara redirecionando para a ferramenta correta.
   - **Arquivo:** `src/skills/web_reader/skill.py`
   - **Mensagem de retorno:** `"Erro: URL com schema '{schema}' não é suportada. Para ler arquivos locais, use a ferramenta 'python_interpreter' com open()."`
 
-- [ ] **V12.4.2 — Corrigir tratamento de robots.txt para HTTP 404.** Se a requisição ao `robots.txt` retornar status 404, assumir que o acesso é permitido (comportamento padrão da web, conforme RFC 9309).
+- [x] **V12.4.2 — Corrigir tratamento de robots.txt para HTTP 404.** Se a requisição ao `robots.txt` retornar status 404, assumir que o acesso é permitido (comportamento padrão da web, conforme RFC 9309).
   - **Arquivo:** `src/skills/web_reader/skill.py` — bloco de verificação de `robots.txt`.
 
-- [ ] **V12.4.3 — Documentar estratégia Search-First nas instruções dos agentes.** Atualizar as instruções de sistema (system prompts) dos agentes `base` e `researcher` para instruir explicitamente que URLs devem ser obtidas via `quick_search` antes de serem acessadas com `web_reader`, nunca inventadas.
+- [x] **V12.4.3 — Documentar estratégia Search-First nas instruções dos agentes.** Atualizar as instruções de sistema (system prompts) dos agentes `base` e `researcher` para instruir explicitamente que URLs devem ser obtidas via `quick_search` antes de serem acessadas com `web_reader`, nunca inventadas.
   - **Arquivo:** `agents/base/agent.py` — system prompt.
   - **Arquivo:** `agents/researcher/agent.py` — system prompt.
   - **Instrução adicionada:**
@@ -160,7 +160,7 @@ Adicionalmente, o agente `Data_Preprocessing` referenciou `/datasets/iris.csv` (
     conteúdo dessas URLs retornadas pela busca.
     ```
 
-- [ ] **V12.4.4 — Testes unitários para validação de schema e robots.txt.**
+- [x] **V12.4.4 — Testes unitários para validação de schema e robots.txt.**
   - **Arquivo:** `tests/unit/skills/test_web_reader_validation.py`
   - Cenário 1: URL `file://` retorna erro claro.
   - Cenário 2: robots.txt 404 permite acesso.
@@ -173,7 +173,7 @@ Adicionalmente, o agente `Data_Preprocessing` referenciou `/datasets/iris.csv` (
 **Objetivo:** Evitar desperdício de recursos detectando ciclos de execução sem progresso e abortando com mensagem explicativa.
 
 #### Tarefas:
-- [ ] **V12.5.1 — Implementar detecção de progresso zero.** No `autonomous_loop.py`, após cada ciclo de execução, calcular um "hash de progresso" baseado no conjunto de subtarefas bem-sucedidas. Se dois ciclos consecutivos produzirem o mesmo hash, abortar com diagnóstico claro.
+- [x] **V12.5.1 — Implementar detecção de progresso zero.** No `autonomous_loop.py`, após cada ciclo de execução, calcular um "hash de progresso" baseado no conjunto de subtarefas bem-sucedidas. Se dois ciclos consecutivos produzirem o mesmo hash, abortar com diagnóstico claro.
   - **Arquivo:** `src/autonomous_loop.py` — método `_run_complex_path` (L271-598).
   - **Lógica:** `progress_hash = hash(frozenset(succeeded_tasks))`. Se `progress_hash == previous_progress_hash`, encerrar o loop de replanejamento com mensagem:
     ```
@@ -183,11 +183,11 @@ Adicionalmente, o agente `Data_Preprocessing` referenciou `/datasets/iris.csv` (
     Considere revisar o prompt ou as dependências do ambiente."
     ```
 
-- [ ] **V12.5.2 — Limite de containers por sessão.** Adicionar um contador global de containers spawnados por `master_session_id`. Se ultrapassar um limiar configurável (`MAX_CONTAINERS_PER_SESSION`, default: 30), abortar a execução.
+- [x] **V12.5.2 — Limite de containers por sessão.** Adicionar um contador global de containers spawnados por `master_session_id`. Se ultrapassar um limiar configurável (`MAX_CONTAINERS_PER_SESSION`, default: 30), abortar a execução.
   - **Arquivo:** `src/orchestrator.py` — incrementar contador em `_execute_agent`.
   - **Configuração:** `src/config.py` — `MAX_CONTAINERS_PER_SESSION`.
 
-- [ ] **V12.5.3 — Testes unitários para circuit breaker.**
+- [x] **V12.5.3 — Testes unitários para circuit breaker.**
   - **Arquivo:** `tests/unit/test_circuit_breaker.py`
   - Cenário 1: Progresso zero em 2 ciclos → aborta.
   - Cenário 2: Progresso real entre ciclos → continua.

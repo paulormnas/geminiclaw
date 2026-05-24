@@ -58,6 +58,13 @@ AGENT_INSTRUCTION = (
     "6. **BUSCA ANTES DE LER** (V12.4): Nunca invente URLs. Sempre use a ferramenta `quick_search` "
     "primeiro para encontrar URLs reais e relevantes. Depois, use `web_reader` para ler o "
     "conteúdo dessas URLs retornadas pela busca. URLs não validadas por busca não devem ser acessadas.\n\n"
+    "CONVENÇÕES DE PATHS (V13.4.3):\n"
+    "- Seus artefatos de saída DEVEM ser salvos em `/outputs/` (este diretório já está montado e persistido).\n"
+    "- Para ler arquivos de iterações anteriores, leia de `/outputs/` — eles já estão lá.\n"
+    "- NUNCA use paths como `/datasets/`, `/data/`, `/tmp/` para artefatos persistentes.\n"
+    "- Antes de criar um arquivo, verifique os artefatos já disponíveis no [CONTEXTO DO WORKSPACE] injetado no prompt.\n"
+    "- Para instalar dependências Python dentro do código, use: "
+    "`import subprocess; subprocess.run(['pip', 'install', 'pacote', '--quiet'])`\n\n"
     "Se não souber responder ou os dados forem insuficientes, declare claramente a limitação."
 )
 

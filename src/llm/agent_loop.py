@@ -2,12 +2,14 @@ import os
 import json
 import asyncio
 import traceback
+import pathlib
 from typing import Any, List, Dict, Callable, Optional, AsyncGenerator
 from dataclasses import dataclass, field
 
 from src.llm.base import LLMProvider, ToolCall, LLMResponse
 from src.llm.factory import get_provider
 from src.llm.context_compression import compress_messages
+from src.llm.context_injection import build_workspace_context_block
 from src.logger import get_logger
 from src.telemetry import get_telemetry
 
@@ -152,6 +154,34 @@ async def run_agent_loop(
 
     while iterations < max_iterations:
         iterations += 1
+
+        # V13.4.1/V13.4.2 — Injetar bloco de contexto do workspace antes de cada LLM call.
+        # Lê o manifest da sessão atual e inclui artefatos disponíveis, resumo do último
+        # step e, quando falhou, o código anterior + erro específico.
+        _env_session_id = os.environ.get("SESSION_ID")
+        _env_task_name = os.environ.get("TASK_NAME")
+        _env_output_base = os.environ.get("OUTPUT_BASE_DIR")
+        if _env_session_id and _env_task_name and _env_output_base:
+            try:
+                _session_dir = pathlib.Path(_env_output_base) / _env_session_id
+                _max_lines = int(os.environ.get("MAX_CODE_CONTEXT_LINES", "150"))
+                _ctx_block = build_workspace_context_block(
+                    session_dir=_session_dir,
+                    session_id=_env_session_id,
+                    task_name=_env_task_name,
+                    max_code_context_lines=_max_lines,
+                )
+                # Inserir como mensagem de sistema imediatamente antes desta iteração
+                messages.append({"role": "user", "content": _ctx_block})
+                logger.debug(
+                    "V13.4.1: Bloco de contexto do workspace injetado",
+                    extra={"session_id": _env_session_id, "iteration": iterations},
+                )
+            except Exception as _ctx_err:
+                logger.warning(
+                    "V13.4.1: Falha ao construir bloco de contexto; continuando sem ele",
+                    extra={"error": str(_ctx_err)},
+                )
         
         # Converte ferramentas para formato OpenAI se necessário
         # V12.2.3 — Filtra ferramentas que falharam 4+ vezes

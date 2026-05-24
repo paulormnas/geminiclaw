@@ -308,7 +308,7 @@ A solução é organizada em três camadas complementares, cada uma resolvendo u
 
 #### Tarefas:
 
-- [ ] **V13.5.1 — Orquestrador lista artefatos reais antes de cada retry.**
+- [x] **V13.5.1 — Orquestrador lista artefatos reais antes de cada retry.**
   Em `autonomous_loop.py`, antes de disparar o retry de uma subtarefa, chamar `output_manager.list_artifacts(session_id)` e incluir a lista no `enriched_task.prompt` de retry, explicitando que esses artefatos são válidos e não devem ser recriados.
   - **Arquivo:** `src/autonomous_loop.py` — bloco de retry em `_execute_task_in_dag` (L405-459).
   - **Lógica:**
@@ -326,7 +326,7 @@ A solução é organizada em três camadas complementares, cada uma resolvendo u
     enriched_prompt = task.prompt + artifact_context + error_context  # error_context já existe via V12.1.1
     ```
 
-- [ ] **V13.5.2 — Orquestrador popula memória de curto prazo antes do retry.**
+- [x] **V13.5.2 — Orquestrador popula memória de curto prazo antes do retry.**
   Usar a `MemorySkill` com `remember()` para registrar, na sessão do agente que irá executar o retry, o contexto de falha — não apenas via prompt, mas também via memória, de forma que o agente possa consultar em qualquer ponto da sua execução.
   - **Arquivo:** `src/autonomous_loop.py` — antes do dispatch do container de retry.
   - **Lógica:**
@@ -346,7 +346,7 @@ A solução é organizada em três camadas complementares, cada uma resolvendo u
     )
     ```
 
-- [ ] **V13.5.3 — Reviewer inclui lista de artefatos na avaliação.**
+- [x] **V13.5.3 — Reviewer inclui lista de artefatos na avaliação.**
   Atualizar o prompt do Reviewer para incluir os artefatos em disco, de forma que ele possa distinguir entre "tarefa completamente falha" e "tarefa parcialmente executada com artefatos válidos". Isso evita que o Reviewer reprove uma subtarefa cujos artefatos principais foram gerados, mesmo que o `response.text` esteja incompleto.
   - **Arquivo:** `src/autonomous_loop.py` — método `_review_subtask` (L745-752).
   - **Adição ao prompt do Reviewer:**
@@ -358,7 +358,7 @@ A solução é organizada em três camadas complementares, cada uma resolvendo u
     não apenas se o response.text os menciona.
     ```
 
-- [ ] **V13.5.4 — Testes de integração para contexto de retry.**
+- [x] **V13.5.4 — Testes de integração para contexto de retry.**
   - **Arquivo:** `tests/integration/test_retry_context_enrichment.py`
   - Cenário 1: Retry contém lista de artefatos parciais no prompt.
   - Cenário 2: Memória de curto prazo contém `retry_context` antes do dispatch do container.

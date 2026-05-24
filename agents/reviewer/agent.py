@@ -49,7 +49,7 @@ def create_agent() -> Agent:
     return Agent(
         name="reviewer",
         description=AGENT_DESCRIPTION,
-        instruction=AGENT_INSTRUCTION,
+        _instruction=AGENT_INSTRUCTION,
         model=os.environ.get("LLM_MODEL", DEFAULT_MODEL),
         before_agent_callback=_load_session_context,
         after_agent_callback=_persist_session_context,

@@ -113,6 +113,11 @@ class CodeSkill(BaseSkill):
                 # Usando uv para instalação ultra-rápida (requer uv na imagem base)
                 setup_commands.append(["uv", "pip", "install", "--no-cache-dir"] + filtered_packages)
 
+        # Garantir que o diretório da sessão existe antes de rodar o sandbox (V13.2.2)
+        import pathlib
+        session_dir = pathlib.Path(self.output_dir).resolve() / session_id
+        session_dir.mkdir(parents=True, exist_ok=True)
+
         # 3. Executar no sandbox
         try:
             # Nota: PythonSandbox.run não é async pois usa docker-py síncrono.

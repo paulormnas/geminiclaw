@@ -16,8 +16,9 @@ def is_docker_available():
 @pytest.mark.integration
 @pytest.mark.asyncio
 @pytest.mark.skipif(not is_docker_available(), reason="Docker daemon não está rodando")
-async def test_code_skill_basic_execution():
+async def test_code_skill_basic_execution(monkeypatch):
     """Testa execução básica de código Python."""
+    monkeypatch.setenv("OUTPUT_BASE_DIR", "outputs_test")
     skill = CodeSkill()
     code = "print('Hello from Sandbox')"
     result = await skill.run(
@@ -84,8 +85,9 @@ def test_code_skill_security_validation():
 @pytest.mark.integration
 @pytest.mark.asyncio
 @pytest.mark.skipif(not is_docker_available(), reason="Docker daemon não está rodando")
-async def test_code_skill_package_installation():
+async def test_code_skill_package_installation(monkeypatch):
     """Testa instalação de pacotes (requer rede no Docker)."""
+    monkeypatch.setenv("OUTPUT_BASE_DIR", "outputs_test")
     # Nota: Este teste pode demorar e requer acesso à internet do daemon Docker
     skill = CodeSkill()
     code = "import itsdangerous; print('Import success')"

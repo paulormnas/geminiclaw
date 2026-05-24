@@ -189,6 +189,12 @@ class PythonSandbox:
                     raise
             finally:
                 timer.cancel()
+                try:
+                    uid = os.getuid()
+                    gid = os.getgid()
+                    container.exec_run(f"chown -R {uid}:{gid} /outputs")
+                except Exception as e:
+                    logger.warning(f"Falha ao alterar permissões no container: {e}")
 
             # Extrair artefatos gerados
             logger.info("Extraindo artefatos do sandbox")

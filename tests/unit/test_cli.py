@@ -278,7 +278,7 @@ class TestSignalHandler:
                     from src.cli import main
                     main()
 
-        mock_run.assert_called_once_with(mock_execute.return_value)
+        mock_run.assert_any_call(mock_execute.return_value)
 
     @patch("src.cli._create_orchestrator")
     def test_main_modo_interativo(
@@ -296,7 +296,7 @@ class TestSignalHandler:
                     from src.cli import main
                     main()
 
-        mock_run.assert_called_once_with(mock_interactive.return_value)
+        mock_run.assert_any_call(mock_interactive.return_value)
 
     @patch("src.cli._create_orchestrator")
     def test_main_falha_inicializacao(

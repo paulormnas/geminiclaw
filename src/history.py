@@ -182,6 +182,7 @@ class ExecutionHistory:
             )
         return exec_id
 
+
     def get(self, execution_id: str) -> Optional[ExecutionRecord]:
         """Recupera uma execução pelo ID.
 

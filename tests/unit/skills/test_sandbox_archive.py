@@ -51,9 +51,15 @@ def test_sandbox_archive_transfer(mock_docker_client, tmp_path):
         output_dir=str(output_dir)
     )
     
-    # 1. Verify containers.run was called WITHOUT volumes
+    # 1. Verify containers.run was called WITH volumes
     run_kwargs = mock_docker_client.containers.run.call_args[1]
-    assert "volumes" not in run_kwargs or run_kwargs["volumes"] is None
+    assert "volumes" in run_kwargs
+    assert run_kwargs["volumes"] is not None
+    # O volume deve mapear a pasta de saída do host para /outputs no container
+    host_path = str((output_dir / session_id / task_name).resolve())
+    assert host_path in run_kwargs["volumes"]
+    assert run_kwargs["volumes"][host_path]["bind"] == "/outputs"
+    assert run_kwargs["volumes"][host_path]["mode"] == "rw"
     
     # 2. Verify put_archive was called to inject the script
     mock_container.put_archive.assert_called_once()

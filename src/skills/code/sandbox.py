@@ -102,11 +102,30 @@ class PythonSandbox:
             # Preparar diretório de saída local
             abs_output_dir = pathlib.Path(output_dir).resolve() / session_id / task_name
             abs_output_dir.mkdir(parents=True, exist_ok=True)
+            # Garantir permissões de escrita/leitura/execução para todos (evita PermissionError no container)
+            os.chmod(abs_output_dir, 0o777)
             
             logger.info(f"Iniciando sandbox para sessão {session_id}, tarefa {task_name}")
 
-            # Criar o container em modo 'idle'
-            # SEM volumes montados para compatibilidade com DinD
+            # Resolver o caminho correspondente no host para o volume
+            host_root = os.environ.get("HOST_PROJECT_PATH")
+            if host_root:
+                # O volume de outputs no container do agente está montado em /outputs.
+                # O caminho físico no host para /outputs é host_root/outputs/{session_id}/artifacts.
+                # Portanto, o subdiretório {session_id}/{task_name} que criamos localmente em /outputs
+                # equivale no host a host_root/outputs/{session_id}/artifacts/{session_id}/{task_name}.
+                host_output_dir = pathlib.Path(host_root) / "outputs" / session_id / "artifacts" / session_id / task_name
+            else:
+                host_output_dir = abs_output_dir
+
+            volumes = {
+                str(host_output_dir.resolve()): {
+                    "bind": "/outputs",
+                    "mode": "rw"
+                }
+            }
+
+            # Criar o container em modo 'idle' com volume montado
             container = self.client.containers.run(
                 image=self.image,
                 command=["tail", "-f", "/dev/null"],
@@ -116,6 +135,7 @@ class PythonSandbox:
                 cpu_quota=self.cpu_quota,
                 network_disabled=not bool(setup_commands),
                 environment={"MPLCONFIGDIR": "/tmp", "VIRTUAL_ENV": "/app/.venv"},
+                volumes=volumes,
                 detach=True,
                 remove=False,
             )

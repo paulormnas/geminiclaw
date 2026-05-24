@@ -106,11 +106,18 @@ def mock_db_connection(request):
         patch("src.llm_cache.get_connection", return_value=ctx),
     ]
     
-    # Patches opcionais (Search Deep)
+    # Patches opcionais (Search Deep e Doc Processor)
     try:
         from src.skills import _HAS_DEEP_SEARCH
         if _HAS_DEEP_SEARCH:
             patches.append(patch("src.skills.search_deep.cache.get_connection", return_value=ctx))
+    except (ImportError, AttributeError):
+        pass
+
+    try:
+        from src.skills import _HAS_DOC_PROCESSOR
+        if _HAS_DOC_PROCESSOR:
+            patches.append(patch("src.skills.document_processor.indexer.get_connection", return_value=ctx))
     except (ImportError, AttributeError):
         pass
 

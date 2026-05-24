@@ -90,10 +90,15 @@ async def test_parallel_execution_failure_cancels_dependent(mock_orchestrator):
     # task_2 é independente e deve completar.
     # O loop fará re-planejamento. Precisamos simular o segundo planejamento retornando vazio 
     # para sair do loop.
-    mock_orchestrator._run_planning_loop.side_effect = [
-        mock_orchestrator._run_planning_loop.return_value, # 1º round
-        [], # 2º round retorna vazio para finalizar
-    ]
+    call_count = 0
+    async def mock_planning(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return mock_orchestrator._run_planning_loop.return_value
+        return []
+        
+    mock_orchestrator._run_planning_loop.side_effect = mock_planning
     
     result = await loop._run_complex_path("Test Prompt", "session_123")
     

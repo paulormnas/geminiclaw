@@ -158,6 +158,10 @@ LLM_CACHE_MAX_ENTRIES = int(get_env("LLM_CACHE_MAX_ENTRIES", default="1000"))
 # Autonomous Loop
 MAX_RETRY_PER_SUBTASK = int(get_env("MAX_RETRY_PER_SUBTASK", default="3"))
 
+# V13.4.2 — Limite de linhas de código do step anterior injetadas no contexto do LLM.
+# Para qwen3:8b com 8192 tokens, 150 linhas de Python cabem com espaço para o restante.
+MAX_CODE_CONTEXT_LINES = int(get_env("MAX_CODE_CONTEXT_LINES", default="150"))
+
 # Reviewer (V6.3)
 REVIEW_ENABLED = get_env_bool("REVIEW_ENABLED", default=True)
 REVIEW_MODE = get_env("REVIEW_MODE", default="per_subtask") # per_subtask | end_only | disabled

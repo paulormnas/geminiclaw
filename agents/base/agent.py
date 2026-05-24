@@ -14,11 +14,17 @@ class Agent:
     """Classe base para agentes GeminiClaw (substitui google-adk)."""
     name: str
     description: str
-    instruction: str
+    _instruction: str | Callable[[], str]
     model: str
     tools: List[Callable] = field(default_factory=list)
     before_agent_callback: Optional[Callable] = None
     after_agent_callback: Optional[Callable] = None
+
+    @property
+    def instruction(self) -> str:
+        if callable(self._instruction):
+            return self._instruction()
+        return self._instruction
 
 from agents.base.tools import write_artifact
 from src.logger import get_logger, setup_file_logging
@@ -306,7 +312,7 @@ root_agent = Agent(
     name=AGENT_NAME,
     model=DEFAULT_MODEL,
     description=AGENT_DESCRIPTION,
-    instruction=_get_agent_instruction(AGENT_INSTRUCTION),
+    _instruction=lambda: _get_agent_instruction(AGENT_INSTRUCTION),
     tools=registry.as_tools() + [write_artifact],
     before_agent_callback=_load_session_context,
     after_agent_callback=_persist_session_context,

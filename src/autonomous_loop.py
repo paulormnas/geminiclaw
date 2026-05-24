@@ -460,6 +460,35 @@ class AutonomousLoop:
                     else:
                         logger.warning(f"Tentativa {attempt+1} de {task.task_name} falhou", extra={"error": result.error})
 
+                        # V13.5.1: Orquestrador lista artefatos reais antes de cada retry.
+                        artifacts_on_disk = self.orchestrator.output_manager.list_artifacts(master_session_id)
+                        artifact_context = ""
+                        if artifacts_on_disk:
+                            artifact_context = (
+                                f"\n\n[ARTEFATOS PARCIAIS EXISTENTES EM DISCO]\n"
+                                + "\n".join(f"  - {a}" for a in artifacts_on_disk)
+                                + "\nEsses artefatos são válidos. Não os recrie. Continue a partir deles.\n"
+                            )
+
+                        # V13.5.2: Orquestrador popula memória de curto prazo antes do retry.
+                        from src.skills.__init__ import registry
+                        memory_skill = registry.get("memory")
+                        if memory_skill:
+                            memory_context = {
+                                "type": "retry_context",
+                                "task": task.task_name,
+                                "attempt": attempt + 1,
+                                "previous_error": result.error,
+                                "artifacts_available": artifacts_on_disk,
+                                "manifest_path": f"outputs/{master_session_id}/manifest.json"
+                            }
+                            await memory_skill.run(
+                                action="remember",
+                                session_id=master_session_id,
+                                key=f"retry_context_{task.task_name}_{attempt + 1}",
+                                value=json.dumps(memory_context)
+                            )
+
                         # V12.1.1 — Cache-busting por injeção de contexto de erro.
                         # O bloco abaixo altera o prompt da próxima tentativa, garantindo
                         # que o cache faça MISS e o agente receba um novo contexto.
@@ -472,7 +501,7 @@ class AutonomousLoop:
                         enriched_task = AgentTask(
                             agent_id=enriched_task.agent_id,
                             image=enriched_task.image,
-                            prompt=enriched_task.prompt + error_context,
+                            prompt=enriched_task.prompt + artifact_context + error_context,
                             task_name=enriched_task.task_name,
                             depends_on=enriched_task.depends_on,
                             expected_artifacts=enriched_task.expected_artifacts,
@@ -741,14 +770,26 @@ class AutonomousLoop:
         from src.orchestrator import AgentTask, AGENT_REGISTRY
         from src.utils.json_parser import extract_json
 
+        # V13.5.3: Revisor inclui lista de artefatos na avaliação
+        artifacts_on_disk = self.orchestrator.output_manager.list_artifacts(master_session_id)
+        artifacts_context = ""
+        if artifacts_on_disk:
+            artifacts_context = (
+                f"\n\nARTEFATOS EXISTENTES NO DISCO (considerar como parte do resultado):\n"
+                + "\n".join([f"- {a}" for a in artifacts_on_disk]) + "\n\n"
+                f"Avalie se os artefatos esperados estão presentes em disco, "
+                f"não apenas se o texto da resposta os menciona."
+            )
+
         # Constrói o prompt do Reviewer
         review_prompt = (
             f"Avalie a execução da subtarefa: `{task.task_name}`\n\n"
             f"PROMPT ORIGINAL:\n{task.prompt}\n\n"
             f"RESULTADO PRODUZIDO:\n{result.response.get('text', '')}\n\n"
             f"CRITÉRIOS DE VALIDAÇÃO:\n" + "\n".join([f"- {c}" for c in task.validation_criteria]) + "\n\n"
-            f"ARTEFATOS ESPERADOS:\n" + "\n".join([f"- {a}" for a in task.expected_artifacts]) + "\n\n"
-            f"Por favor, verifique se os critérios foram atendidos e se os artefatos foram gerados."
+            f"ARTEFATOS ESPERADOS:\n" + "\n".join([f"- {a}" for a in task.expected_artifacts]) +
+            artifacts_context +
+            f"\n\nPor favor, verifique se os critérios foram atendidos e se os artefatos foram gerados."
         )
 
         reviewer_task = AgentTask(

@@ -400,6 +400,8 @@ class AutonomousLoop:
                     subtask_id=task.subtask_id,
                     created_at=task.created_at,
                 )
+                
+                enriched_task = self._enrich_task_prompt(enriched_task)
 
                 success = False
                 last_result = None
@@ -456,6 +458,9 @@ class AutonomousLoop:
                                 source=task.agent_id,
                                 tags=["subtask_result", task.task_name, "structured"],
                             )
+                            
+                            if task.agent_id == "code":
+                                await self._extract_code_patterns(result, master_session_id)
                         break
                     else:
                         logger.warning(f"Tentativa {attempt+1} de {task.task_name} falhou", extra={"error": result.error})
@@ -750,11 +755,135 @@ class AutonomousLoop:
         telemetry.record_agent_event(
             execution_id=master_session_id,
             session_id=master_session_id,
-            agent_id="planner",
+                    agent_id="planner",
             event_type="memory_promotion",
             payload={"source": "session_findings"},
         )
 
+    def _enrich_task_prompt(self, task: "AgentTask") -> "AgentTask":
+        """Injeta lições relevantes no contexto inicial da subtarefa (V13.6.3)."""
+        if task.agent_id == "code":
+            from src.skills.__init__ import registry
+            memory_skill = registry.get("memory")
+            if memory_skill:
+                inferred_domain = "unknown"
+                prompt_lower = task.prompt.lower()
+                # Tenta inferir o domínio a partir do prompt
+                for d in ["pandas", "sklearn", "matplotlib", "seaborn", "numpy", "tensorflow", "pytorch", "fastapi"]:
+                    if d in prompt_lower:
+                        inferred_domain = d
+                        break
+                        
+                if inferred_domain != "unknown":
+                    # Usamos long_term.search() pois memory_skill.retrieve não suporta buscas abertas/prefixos
+                    patterns = memory_skill.long_term.search(tags=[inferred_domain], limit=3)
+                    if patterns:
+                        lessons = []
+                        for p in patterns:
+                            try:
+                                data = json.loads(p.value)
+                                lesson = f"- Padrão: {data.get('pattern')}"
+                                if data.get("pitfall"):
+                                    lesson += f" | Armadilha: {data.get('pitfall')}"
+                                if data.get("fix"):
+                                    lesson += f" | Correção: {data.get('fix')}"
+                                lessons.append(lesson)
+                            except Exception:
+                                pass
+                                
+                        if lessons:
+                            injection = "\n\n[PADRÕES DE CÓDIGO CONHECIDOS PARA ESTE DOMÍNIO]\n" + "\n".join(lessons) + "\n"
+                            task.prompt = task.prompt + injection
+                            logger.info("Padrões de código injetados", extra={"domain": inferred_domain, "count": len(lessons)})
+                            
+        return task
+
+    async def _extract_code_patterns(self, result: "AgentResult", master_session_id: str) -> None:
+        """Extrai padrões de código pós-conclusão de uma subtarefa (V13.6.1 e V13.6.2)."""
+        if result.status != "success":
+            return
+            
+        import os
+        import json
+        import hashlib
+        
+        # O manifest.json no novo formato (V13.3) fica em outputs/<session_id>/manifest.json
+        # Aqui <session_id> de fato do container code costuma ser master_session_id + "_" + task_name
+        # Mas vamos procurar o manifest associado à session atual (master_session_id, ou a pasta da task_name)
+        # Assumiremos master_session_id como path base, ou obter de config
+        output_dir = os.environ.get("OUTPUT_DIR", "outputs")
+        # Para ser seguro e capturar o manifest correto que foi preenchido:
+        # A task V13.1.2 usa master_session_id_task_name
+        # Mas para a extração não temos acesso fácil ao task_name aqui além de result.task_name (se existir)
+        # O result não tem task_name nativo, mas podemos obter da short term memory
+        # ou tentar ler o manifest global (V13.3) que talvez seja persistido no diretório da task.
+        task_name = getattr(result, "task_name", None)
+        if not task_name:
+            # Em nossa implementação anterior `task.task_name` estava disponível via escopo
+            # Mas `result` só tem session_id (que é master_session_id)
+            # Vamos inferir do short term memory ou usar o fallback 
+            pass
+            
+        # O manifest costuma estar em outputs/<master_session_id>_task_name/manifest.json 
+        # Vamos apenas injetar os últimos logs de execução ou o que houver no result em vez de procurar o arquivo se for difícil.
+        # Mas V13.6.1 exige "Histórico: {manifest_steps}".
+        # O V13.5.2 usava outputs/{master_session_id}/manifest.json. Vou usar esse.
+        manifest_path = os.path.join(output_dir, master_session_id, "manifest.json")
+        manifest_steps = []
+        if os.path.exists(manifest_path):
+            try:
+                with open(manifest_path, "r") as f:
+                    manifest_data = json.load(f)
+                    manifest_steps = manifest_data.get("steps", [])
+            except Exception as e:
+                logger.warning(f"Falha ao ler manifest.json: {e}")
+                
+        # Se não há passos, falhamos silenciosamente pois é apenas extração de padrões
+        if not manifest_steps:
+            return
+
+        extraction_prompt = (
+            f"Dado o histórico de execução desta subtarefa, extraia lições reutilizáveis no formato JSON:\n"
+            f"{{\n"
+            f'  "domain": "nome do domínio (ex: sklearn, pandas, matplotlib)",\n'
+            f'  "pattern": "descrição do padrão que funcionou",\n'
+            f'  "pitfall": "descrição da armadilha encontrada (se houver)",\n'
+            f'  "fix": "como foi resolvida"\n'
+            f"}}\n"
+            f"Histórico:\n{json.dumps(manifest_steps)}\n"
+            f"Responda APENAS com o JSON."
+        )
+
+        from src.orchestrator import AgentTask, AGENT_REGISTRY
+        extraction_task = AgentTask(
+            agent_id="planner",
+            image=AGENT_REGISTRY.get("planner", "geminiclaw-planner"),
+            prompt=extraction_prompt,
+            task_name="extract_patterns"
+        )
+
+        extraction_result = await self.orchestrator._execute_agent(extraction_task, master_session_id)
+        if extraction_result.status == "success":
+            raw_text = extraction_result.response.get("text", "")
+            from src.utils.json_parser import extract_json
+            extracted = extract_json(raw_text)
+            
+            if extracted and isinstance(extracted, dict) and "domain" in extracted and "pattern" in extracted:
+                domain = str(extracted["domain"]).lower().strip()
+                hash_curto = hashlib.md5(str(extracted["pattern"]).encode()).hexdigest()[:6]
+                key = f"code_pattern:{domain}:{hash_curto}"
+                
+                from src.skills.__init__ import registry
+                memory_skill = registry.get("memory")
+                if memory_skill:
+                    await memory_skill.run(
+                        action="memorize",
+                        session_id=master_session_id,
+                        key=key,
+                        value=json.dumps(extracted),
+                        tags=["code_pattern", domain]
+                    )
+                    logger.info("Padrão de código extraído e salvo na memória", extra={"key": key})
 
     async def _review_subtask(self, task: "AgentTask", result: "AgentResult", master_session_id: str) -> Dict[str, Any]:
         """Invoca o Agente Revisor para avaliar o resultado de uma subtarefa.

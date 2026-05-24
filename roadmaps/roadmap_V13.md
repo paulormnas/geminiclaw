@@ -374,7 +374,7 @@ A solução é organizada em três camadas complementares, cada uma resolvendo u
 
 #### Tarefas:
 
-- [ ] **V13.6.1 — Extrair padrões de código pós-conclusão.**
+- [x] **V13.6.1 — Extrair padrões de código pós-conclusão.**
   Após `result.status == "success"` em `_execute_task_in_dag`, disparar uma chamada leve ao LLM (pode usar o modelo local menor, pois é uma tarefa simples de extração) para gerar um resumo estruturado das lições aprendidas durante a execução.
   - **Arquivo:** `src/autonomous_loop.py` — após confirmação de sucesso da subtarefa.
   - **Prompt de extração:**
@@ -389,17 +389,17 @@ A solução é organizada em três camadas complementares, cada uma resolvendo u
     Histórico: {manifest_steps}
     ```
 
-- [ ] **V13.6.2 — Persistir lições na `MemorySkill` de longo prazo.**
+- [x] **V13.6.2 — Persistir lições na `MemorySkill` de longo prazo.**
   Salvar as lições extraídas com chave composta `code_pattern:{domain}:{hash_curto}` para permitir recuperação por domínio.
   - **Arquivo:** `src/autonomous_loop.py` — após extração em V13.6.1.
   - **Integração:** Usar `memory_skill.memorize(key, value)` existente.
 
-- [ ] **V13.6.3 — Injetar lições relevantes no contexto inicial da subtarefa.**
+- [x] **V13.6.3 — Injetar lições relevantes no contexto inicial da subtarefa.**
   Antes de iniciar uma nova subtarefa de código, consultar a memória de longo prazo por padrões no mesmo domínio e incluir no prompt inicial.
   - **Arquivo:** `src/autonomous_loop.py` — em `_enrich_task_prompt()` ou equivalente.
   - **Query:** `memory_skill.retrieve(query=f"code_pattern:{inferred_domain}")`.
 
-- [ ] **V13.6.4 — Testes unitários para extração e recuperação de padrões.**
+- [x] **V13.6.4 — Testes unitários para extração e recuperação de padrões.**
   - **Arquivo:** `tests/unit/test_code_pattern_memory.py`
   - Cenário 1: Extração gera JSON válido a partir de histórico de manifest.
   - Cenário 2: Lição salva é recuperada por domínio na sessão seguinte.

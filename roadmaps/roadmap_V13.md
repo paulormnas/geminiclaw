@@ -99,7 +99,7 @@ A solução é organizada em três camadas complementares, cada uma resolvendo u
 
 #### Tarefas:
 
-- [ ] **V13.1.1 — Forçar `session_id` a partir de variável de ambiente.**
+- [x] **V13.1.1 — Forçar `session_id` a partir de variável de ambiente.**
   No `agent_loop.py`, ao processar os argumentos de qualquer tool call para `python_interpreter`, sobrescrever o campo `session_id` com o valor de `os.environ.get("SESSION_ID")` antes de executar a tool. O modelo ainda pode gerar o campo (para manter o formato de chamada), mas o valor é ignorado.
   - **Arquivo:** `src/llm/agent_loop.py` — bloco de execução de ferramentas (L157-247).
   - **Lógica:**
@@ -111,12 +111,12 @@ A solução é organizada em três camadas complementares, cada uma resolvendo u
     ```
   - **Efeito:** Todos os artefatos de uma sessão vão para o mesmo diretório raiz no host, independentemente de quantas tool calls ocorrem ou do que o LLM gerou.
 
-- [ ] **V13.1.2 — Propagar `SESSION_ID` como variável de ambiente no container do agente.**
+- [x] **V13.1.2 — Propagar `SESSION_ID` como variável de ambiente no container do agente.**
   O `ContainerRunner` já passa variáveis de ambiente para o container do agente. Verificar que `SESSION_ID` está incluído e é derivado do `master_session_id` da subtarefa atual.
   - **Arquivo:** `src/runner.py` — bloco de construção de `environment` no spawn do container.
   - **Lógica:** `environment["SESSION_ID"] = f"{master_session_id}_{task_name}"` — combinação do ID da sessão mestra com o nome da subtarefa, garantindo unicidade mas também rastreabilidade.
 
-- [ ] **V13.1.3 — Testes unitários para consistência de `session_id`.**
+- [x] **V13.1.3 — Testes unitários para consistência de `session_id`.**
   - **Arquivo:** `tests/unit/llm/test_session_id_consistency.py`
   - Cenário 1: Tool call com `session_id="1"` é sobrescrito para o valor do env var.
   - Cenário 2: Tool call sem campo `session_id` recebe o valor do env var.
@@ -130,7 +130,7 @@ A solução é organizada em três camadas complementares, cada uma resolvendo u
 
 #### Tarefas:
 
-- [ ] **V13.2.1 — Montar `outputs/<session_id>/` como volume no container do sandbox.**
+- [x] **V13.2.1 — Montar `outputs/<session_id>/` como volume no container do sandbox.**
   No `PythonSandbox.execute()`, antes de criar o container efêmero, calcular o caminho absoluto do diretório da sessão no host e montá-lo em `/outputs/` dentro do container.
   - **Arquivo:** `src/skills/code/sandbox.py` — método de criação do container (L110-121).
   - **Lógica:**
@@ -147,11 +147,11 @@ A solução é organizada em três camadas complementares, cada uma resolvendo u
   - **Contrato com o agente:** O código gerado pelo LLM deve salvar artefatos em `/outputs/`. O system prompt do agente base deve documentar isso explicitamente (ver V13.4.2).
   - **Efeito:** Arquivos criados pela tool call 1 em `/outputs/` são visíveis na tool call 2 no mesmo caminho, porque ambos os containers efêmeros montam o mesmo diretório do host.
 
-- [ ] **V13.2.2 — Garantir que o diretório existe antes do spawn.**
+- [x] **V13.2.2 — Garantir que o diretório existe antes do spawn.**
   Criar o diretório `outputs/<session_id>/` no host antes de qualquer tool call, não apenas quando o primeiro artefato é salvo. Isso evita race conditions quando o manifest (V13.3) tenta abrir o arquivo antes da primeira execução de código.
   - **Arquivo:** `src/skills/code/skill.py` — método `execute()` da `CodeSkill`, antes de chamar `PythonSandbox`.
 
-- [ ] **V13.2.3 — Testes de integração para acesso cross-tool-call.**
+- [x] **V13.2.3 — Testes de integração para acesso cross-tool-call.**
   - **Arquivo:** `tests/integration/test_sandbox_volume.py`
   - Cenário 1: Arquivo criado na tool call 1 é listado por `os.listdir('/outputs/')` na tool call 2 com o mesmo `session_id`.
   - Cenário 2: Tool calls com `session_id` diferentes não compartilham diretório.
@@ -199,7 +199,7 @@ A solução é organizada em três camadas complementares, cada uma resolvendo u
 
 #### Tarefas:
 
-- [ ] **V13.3.1 — Criar `WorkspaceManifest` como classe utilitária.**
+- [x] **V13.3.1 — Criar `WorkspaceManifest` como classe utilitária.**
   Implementar em `src/skills/code/manifest.py` a classe responsável por criar, atualizar e ler o `manifest.json` da sessão.
   - **Arquivo:** `src/skills/code/manifest.py` (novo arquivo).
   - **Interface pública:**
@@ -215,20 +215,20 @@ A solução é organizada em três camadas complementares, cada uma resolvendo u
         def get_last_error(self) -> dict | None: ...
         def get_step_count(self) -> int: ...
     ```
-  - **Atomicidade:** Usar `write` em arquivo temporário + rename para evitar manifest corrompido em caso de crash durante escrita.
+  - **Atomicidade:** Usar `write` in arquivo temporário + rename para evitar manifest corrompido em caso de crash durante escrita.
 
-- [ ] **V13.3.2 — Atualizar o manifest após cada tool call no `CodeSkill`.**
+- [x] **V13.3.2 — Atualizar o manifest após cada tool call no `CodeSkill`.**
   Após cada execução do `PythonSandbox`, independentemente de sucesso ou falha, chamar `manifest.record_step()` com o resultado. O manifest é atualizado no host, não dentro do container — o `CodeSkill` tem acesso ao resultado e ao `session_dir`.
   - **Arquivo:** `src/skills/code/skill.py` — após `sandbox.execute()`.
   - **Em caso de sucesso:** listar arquivos novos em `/outputs/<session_id>/` comparando com o manifest anterior para identificar `artifacts_created`.
   - **Em caso de falha:** extrair `error_type`, `error_message` e `error_location` do `stderr` ou da `exception` retornada pelo sandbox. Usar regex simples para capturar o padrão `ErrorType: message` e `File "...", line N`.
 
-- [ ] **V13.3.3 — Salvar snapshot do código executado por step.**
+- [x] **V13.3.3 — Salvar snapshot do código executado por step.**
   Antes de executar o código no sandbox, salvá-lo como `step_NN.py` no diretório da sessão (no host, antes do spawn do container). Isso garante que o código está disponível para referência futura mesmo que o container falhe antes de salvar qualquer coisa.
   - **Arquivo:** `src/skills/code/skill.py` — antes de chamar `sandbox.execute()`.
   - **Convenção de nome:** `step_{step_number:02d}.py`, onde `step_number` é `manifest.get_step_count() + 1`.
 
-- [ ] **V13.3.4 — Testes unitários para `WorkspaceManifest`.**
+- [x] **V13.3.4 — Testes unitários para `WorkspaceManifest`.**
   - **Arquivo:** `tests/unit/skills/test_workspace_manifest.py`
   - Cenário 1: Criação de manifest em diretório novo.
   - Cenário 2: `record_step` com sucesso atualiza `artifacts_available` e `steps`.
@@ -244,7 +244,7 @@ A solução é organizada em três camadas complementares, cada uma resolvendo u
 
 #### Tarefas:
 
-- [ ] **V13.4.1 — Injetar bloco de contexto do workspace no prompt do agente base.**
+- [x] **V13.4.1 — Injetar bloco de contexto do workspace no prompt do agente base.**
   No `agent_loop.py`, antes de cada chamada ao LLM (não apenas na primeira da sessão), ler o manifest e construir um bloco de contexto estruturado a ser inserido como mensagem de sistema com role `"tool"` ou como prefixo no `user` message.
   - **Arquivo:** `src/llm/agent_loop.py` — antes da chamada ao LLM no loop (L100-155).
   - **Bloco de contexto injetado:**
@@ -266,7 +266,7 @@ A solução é organizada em três camadas complementares, cada uma resolvendo u
     ```
   - **Leitura do manifest:** O bloco é construído pelo host (no `CodeSkill` ou `agent_loop.py`), lendo o arquivo `manifest.json` do diretório da sessão antes de chamar o LLM. O código de leitura roda no host, não dentro do container.
 
-- [ ] **V13.4.2 — Injetar código do step anterior quando o último step falhou.**
+- [x] **V13.4.2 — Injetar código do step anterior quando o último step falhou.**
   Se `manifest.get_last_error()` retornar um erro (último step com status `"failed"`), ler o arquivo `step_NN.py` correspondente e incluí-lo no bloco de contexto com uma instrução explícita de correção. Limitar a injeção às últimas 150 linhas do código para não extrapolar a context window em modelos menores.
   - **Arquivo:** `src/llm/agent_loop.py` — extensão do bloco de contexto do V13.4.1.
   - **Bloco adicional injetado:**
@@ -278,9 +278,9 @@ A solução é organizada em três camadas complementares, cada uma resolvendo u
     O erro ocorreu na linha {error_location}. Corrija especificamente esse ponto.
     NÃO reescreva o código inteiro — corrija apenas a parte problemática.
     ```
-  - **Limite de linhas:** Configurável via `MAX_CODE_CONTEXT_LINES` em `config.py`, default 150. Para `qwen3:8b` com 8192 tokens, 150 linhas de Python cabem confortavelmente com espaço para o restante do prompt.
+  - **Limite de linhas:** Configurável via `MAX_CODE_CONTEXT_LINES` in `config.py`, default 150. Para `qwen3:8b` com 8192 tokens, 150 linhas de Python cabem confortavelmente com espaço para o restante do prompt.
 
-- [ ] **V13.4.3 — Documentar o contrato de paths no system prompt do agente base.**
+- [x] **V13.4.3 — Documentar o contrato de paths no system prompt do agente base.**
   Atualizar o system prompt do agente base para incluir as convenções de path que o agente deve seguir ao gerar código. Sem isso, o modelo pode continuar inventando paths como `/datasets/iris.csv`.
   - **Arquivo:** `agents/base/agent.py` — system prompt.
   - **Instrução adicionada:**
@@ -293,7 +293,7 @@ A solução é organizada em três camadas complementares, cada uma resolvendo u
     - Para instalar dependências Python, use: import subprocess; subprocess.run(['pip', 'install', 'pacote', '--quiet'])
     ```
 
-- [ ] **V13.4.4 — Testes de integração para injeção de contexto.**
+- [x] **V13.4.4 — Testes de integração para injeção de contexto.**
   - **Arquivo:** `tests/integration/test_context_injection.py`
   - Cenário 1: Com manifest de 1 step bem-sucedido, o prompt contém os artefatos listados.
   - Cenário 2: Com manifest de 1 step falho, o prompt contém o código anterior e o erro.

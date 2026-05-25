@@ -193,6 +193,7 @@ class PythonSandbox:
                     uid = os.getuid()
                     gid = os.getgid()
                     container.exec_run(f"chown -R {uid}:{gid} /outputs")
+                    container.exec_run("chmod -R 777 /outputs")
                 except Exception as e:
                     logger.warning(f"Falha ao alterar permissões no container: {e}")
 
@@ -205,22 +206,30 @@ class PythonSandbox:
             except Exception as e:
                 logger.warning(f"Falha ao extrair artefatos: {str(e)}")
 
-            # O tar extraído pode conter a pasta 'outputs' se o put_archive foi na raiz, 
-            # ou o conteúdo direto se foi no path. No nosso caso, como put_archive foi em /outputs,
-            # o get_archive("/outputs") retorna um tar onde o conteúdo está dentro de uma pasta 'outputs/'.
-            # Vamos mover tudo para a raiz do abs_output_dir.
             extracted_path = abs_output_dir / "outputs"
             if extracted_path.exists() and extracted_path.is_dir():
                 for item in extracted_path.iterdir():
                     dest = abs_output_dir / item.name
                     if dest.exists():
                         if dest.is_dir():
-                            import shutil
-                            shutil.rmtree(dest)
+                            import shutil, stat
+                            def remove_readonly(func, path, _):
+                                os.chmod(path, stat.S_IWRITE | stat.S_IEXEC | stat.S_IREAD)
+                                func(path)
+                            shutil.rmtree(dest, onerror=remove_readonly)
                         else:
-                            dest.unlink()
+                            try:
+                                dest.unlink()
+                            except PermissionError:
+                                import stat
+                                os.chmod(dest, stat.S_IWRITE | stat.S_IREAD)
+                                dest.unlink()
                     item.rename(dest)
-                extracted_path.rmdir()
+                try:
+                    import shutil
+                    shutil.rmtree(extracted_path)
+                except:
+                    extracted_path.rmdir()
 
             return SandboxResult(
                 stdout=stdout,

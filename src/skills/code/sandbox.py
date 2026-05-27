@@ -192,8 +192,8 @@ class PythonSandbox:
                 try:
                     uid = os.getuid()
                     gid = os.getgid()
-                    container.exec_run(f"chown -R {uid}:{gid} /outputs")
-                    container.exec_run("chmod -R 777 /outputs")
+                    container.exec_run(f"chown -R {uid}:{gid} /outputs", user='root')
+                    container.exec_run("chmod -R 777 /outputs", user='root')
                 except Exception as e:
                     logger.warning(f"Falha ao alterar permissões no container: {e}")
 
@@ -225,6 +225,15 @@ class PythonSandbox:
                                 os.chmod(dest, stat.S_IWRITE | stat.S_IREAD)
                                 dest.unlink()
                     item.rename(dest)
+                    # Garantir que o artefato extraído seja gravável por qualquer usuário
+                    # para permitir que o container sobrescreva em execuções futuras.
+                    try:
+                        if dest.is_dir():
+                            os.chmod(dest, 0o777)
+                        else:
+                            os.chmod(dest, 0o666)
+                    except Exception:
+                        pass
                 try:
                     import shutil
                     shutil.rmtree(extracted_path)

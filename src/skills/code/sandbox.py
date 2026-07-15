@@ -141,7 +141,8 @@ class PythonSandbox:
             )
 
             # Injetar o script e garantir que o diretório /outputs existe
-            container.exec_run("mkdir -p /outputs")
+            container.exec_run("mkdir -p /outputs", user='root')
+            container.exec_run("chmod 777 /outputs", user='root')
             tar_data = self._create_tar_archive({"script.py": code})
             container.put_archive("/outputs", tar_data)
 

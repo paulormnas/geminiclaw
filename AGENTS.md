@@ -50,6 +50,8 @@ Ao assumir um papel específico, o agente deve consultar e seguir integralmente 
 | **Analista de Segurança** | [`.agents/rules/security-analyst.md`](.agents/rules/security-analyst.md) | Escape de sandbox, contenção Docker, vazamento de segredos, STRIDE adaptado para agentes de IA. |
 | **Desenvolvedor Core / Agentes** | [`.agents/rules/backend-dev.md`](.agents/rules/backend-dev.md) | Python 3.11+, Google ADK, Docker, `uv`, Clean Architecture, DDD, pytest. |
 | **Tester / QA** | [`.agents/rules/tester.md`](.agents/rules/tester.md) | pytest, pytest-asyncio, fixtures Docker, mocks de LLM, benchmarks no Raspberry Pi 5. |
+| **Revisor de Código / Tech Lead** | [`.agents/rules/reviewer.md`](.agents/rules/reviewer.md) | Code review em 7 eixos, emissão de pareceres via GitHub CLI, homologação de PRs. |
+| **Pentester (Red Team)** | [`.agents/rules/pentester.md`](.agents/rules/pentester.md) | Testes de intrusão, escape de sandbox, contenção de recursos no Pi 5, injeção de prompt e fuzzing. |
 | **Designer de Produto** *(futuro)* | [`.agents/rules/designer.md`](.agents/rules/designer.md) | Design System, tokens semânticos, dark mode e UI para dashboard de monitoramento. |
 | **Desenvolvedor Frontend** *(futuro)* | [`.agents/rules/frontend-dev.md`](.agents/rules/frontend-dev.md) | Frontend Python-first (ou framework a definir), acessibilidade e componentes visuais. |
 
@@ -64,7 +66,7 @@ Procedimentos operacionais padronizados para execução de tarefas complexas:
 - 🧩 **Especificação de Componente:** [`.agents/workflows/component-spec.md`](.agents/workflows/component-spec.md) — Design e estados de componentes visuais *(futuro)*.
 - 🔍 **Análise de Impacto & Proposta Técnica:** [`.agents/workflows/impact-analysis.md`](.agents/workflows/impact-analysis.md) — Avaliação em 6 eixos antes do código.
 - 🛠️ **Ciclo de Correção de NC:** [`.agents/workflows/fix-nc.md`](.agents/workflows/fix-nc.md) — Tratamento de desvios reportados pelo tester.
-- 🔀 **Pull Request, Code Review & Merge:** [`.agents/workflows/do-pull-request.md`](.agents/workflows/do-pull-request.md) — Criação de PR, revisão técnica, ciclo de melhorias e merge.
+- 🔀 **Pull Request, Code Review & Squash Merge:** [`.agents/workflows/do-pull-request.md`](.agents/workflows/do-pull-request.md) — Criação de PR via GitHub App, revisão técnica formal nos 7 eixos e squash merge automatizado.
 - 🚨 **Hotfix em Produção:** [`.agents/workflows/hotfix.md`](.agents/workflows/hotfix.md) — Correção acelerada com validação obrigatória.
 - 🎨 **Auditoria de Design:** [`.agents/workflows/design-review.md`](.agents/workflows/design-review.md) — Conformidade de tokens e acessibilidade *(futuro)*.
 - 🧹 **Limpeza de Ambiente:** [`.agents/workflows/clean.md`](.agents/workflows/clean.md) — Limpa logs, outputs e registros nos bancos.
@@ -103,6 +105,18 @@ uv sync --upgrade
 ## 6. Comandos Essenciais
 
 ```bash
+# Subir serviços de infraestrutura (PostgreSQL e Qdrant)
+docker compose up -d
+
+# Executar o framework com uma tarefa (CLI direta)
+uv run geminiclaw "Sua tarefa aqui"
+
+# Executar em modo interativo (REPL)
+uv run geminiclaw
+
+# Construir as imagens Docker dos agentes (ARM64 / Raspberry Pi 5)
+bash scripts/build_images.sh
+
 # Rodar todos os testes
 uv run pytest
 
@@ -112,10 +126,7 @@ uv run pytest -m unit -v
 # Rodar com cobertura
 uv run pytest --cov=src --cov=agents --cov-report=term-missing
 
-# Subir agente em modo desenvolvimento
-cd agents/<nome-do-agente> && uv run adk web
-
-# Verificar containers ativos
+# Verificar containers ativos do GeminiClaw
 docker ps --filter "name=geminiclaw"
 ```
 
@@ -133,9 +144,10 @@ geminiclaw/
 │   │   ├── backend-dev.md
 │   │   ├── security-analyst.md
 │   │   ├── tester.md
+│   │   ├── reviewer.md
+│   │   ├── pentester.md
 │   │   ├── designer.md        # (futuro)
-│   │   ├── frontend-dev.md    # (futuro)
-│   │   └── review.md
+│   │   └── frontend-dev.md    # (futuro)
 │   └── workflows/             # Workflows operacionais
 │       ├── new-feature.md
 │       ├── do-pull-request.md

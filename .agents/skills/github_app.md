@@ -8,7 +8,9 @@
 
 Esta skill habilita o agente da IDE a atuar como colaborador autêntico do repositório `geminiclaw` via **GitHub App** (`geminiclaw-agent`), usando um **Installation Token** de curta duração (1h) em vez de um Personal Access Token pessoal.
 
-**Regra de ouro:** o agente **abre e atualiza** PRs. O **merge é sempre exclusivo do usuário**.
+Permite:
+1. **Fluxo Interativo:** Abertura e atualização contínua de PRs para revisão pelo usuário.
+2. **Fluxo Automatizado ([`do-pull-request.md`](../workflows/do-pull-request.md)):** Abertura do PR, aprovação formal técnica pelo Reviewer e merge automatizado com **squash** diretamente na branch `dev`.
 
 ---
 
@@ -109,9 +111,10 @@ gh pr comment --body "Ajuste aplicado conforme solicitado. Aguardando nova revis
 
 | Regra | Detalhe |
 |---|---|
-| ❌ **Nunca mergear** | Merge é ação exclusiva do usuário |
+| ❌ **Nunca mergear em `main`** | Merges são permitidos apenas para a branch `dev` |
+| 🔄 **Merge com `--squash`** | No fluxo automatizado, o merge deve usar estritamente squash |
 | ❌ **Nunca `force-push`** | Preservar o histórico do PR |
-| ❌ **Nunca commitar em `main`** | Sempre trabalhar em branch de feature |
+| ❌ **Nunca commitar em `main`** | Sempre trabalhar em branch de feature em worktree |
 | ❌ **Nunca logar o token** | Usar apenas `export GH_TOKEN=...` |
 | ❌ **Nunca `git add .`** | Usar sempre `git add -p` para revisão seletiva |
 | ✅ **Usar `--draft`** | Quando a implementação não está 100% pronta |

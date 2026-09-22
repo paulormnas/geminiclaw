@@ -1,120 +1,197 @@
 ---
-description: Abertura, Code Review e Merge de Pull Request para o GeminiClaw
+description: Criação, revisão e squash merge automatizado de Pull Requests via GitHub App
 ---
 
-# Workflow: Abertura, Code Review e Merge de Pull Request
+# Workflow: Pull Request, Revisão e Squash Merge Automatizado (GitHub App)
 
-Este workflow orquestra o processo completo de fechamento de um ciclo de desenvolvimento: desde a criação do Pull Request a partir de uma Git Worktree ativa, passando pela revisão técnica, aplicação de melhorias, até o merge na branch `dev`, sincronização local e limpeza do ambiente.
+Este workflow orquestra o processo ponta a ponta de fechamento de um ciclo de desenvolvimento: desde a autenticação via GitHub App, validação e publicação da branch da Git Worktree, passando pela revisão técnica formal pelo agente Revisor ([`reviewer.md`](../rules/reviewer.md)), até o **merge automático com squash**, deleção da branch e limpeza da worktree local.
 
 ---
 
 ## 1. Visão Geral e Papéis
 
-- **Agente Reviewer (Code Reviewer)**: Análise crítica do código contra segurança, arquitetura, clean code e cobertura de testes. Segue as regras de [`review.md`](../rules/review.md).
-- **Agente Desenvolvedor** (orientado por [`backend-dev.md`](../rules/backend-dev.md)): Implementa melhorias solicitadas pelo Reviewer, valida localmente e registra commits semânticos.
-- **Agente Tester / QA** (orientado por [`tester.md`](../rules/tester.md)): Garante que nenhuma regressão foi introduzida pelas melhorias aplicadas.
+- **Skill GitHub App (`.agents/skills/github_app_auth.py`):** Gera Installation Tokens de curta duração (1 hora) e configura o remote Git para operações autenticadas sem prompts manuais.
+- **Agente Desenvolvedor** ([`backend-dev.md`](../rules/backend-dev.md)): Conclui a implementação na worktree, garante suíte de testes 100% verde e abre o PR.
+- **Agente Reviewer / Tech Lead** ([`reviewer.md`](../rules/reviewer.md)): Audita o diff nos 7 eixos técnicos e emite o parecer de aprovação (`gh pr review --approve`).
+- **Automação de Squash Merge:** Realiza o merge via GitHub CLI com squash, preservando a linearidade e clareza do histórico da branch `dev`.
 
 ---
 
 ## 2. Gatilho e Pré-requisitos
 
 ### Gatilho:
-Conclusão do desenvolvimento em worktree dedicada (`.worktrees/<nome-da-branch>`).
+Conclusão bem-sucedida do desenvolvimento e testes em worktree dedicada (`.worktrees/<nome-da-branch>`).
 
 ### Pré-requisitos Obrigatórios:
-1. Todas as alterações estão commitadas na branch da worktree usando Conventional Commits.
-2. Validações locais aprovadas:
+1. Variáveis do GitHub App configuradas em `.env`:
+   ```bash
+   grep -E "GITHUB_APP_ID|GITHUB_APP_INSTALLATION_ID|GITHUB_APP_PRIVATE_KEY_PATH|GITHUB_REPO" .env
+   ```
+2. Todas as alterações locais commitadas na worktree usando Conventional Commits (`git status` limpo).
+3. Testes automatizados 100% aprovados localmente:
    ```bash
    uv run pytest -m "unit or integration" -v
    ```
-3. Nenhum arquivo sensível no staging (`.env`, `*.db`, `*.log`).
+4. Nenhum arquivo sensível ou proibido no histórico ou staging (`.env`, `*.db`, `*.log`).
 
 ---
 
-## 3. Fases do Workflow
+## 3. Fases do Workflow Automatizado
 
-### Fase 1: Publicação da Branch e Criação do Pull Request
+### Fase 1: Autenticação via GitHub App e Preparação
 
-1. Rodar todos os testes:
-   ```bash
-   uv run pytest -m "unit or integration" -v
-   ```
-   Só avance se todos os testes passarem.
+Execute a autenticação temporária antes de interagir com o GitHub:
 
-2. Verificar arquivos sensíveis no staging:
-   ```bash
-   git diff --cached --name-only | grep -E "\.env$|\.db$|\.log$"
-   ```
-
-3. Push da branch:
-   ```bash
-   git push origin HEAD
-   ```
-
-4. Gerar token do GitHub App e criar o PR:
-   ```bash
-   export GH_TOKEN=$(uv run python .agents/skills/github_app_auth.py)
-   REPO=$(grep GITHUB_REPO .env | cut -d= -f2)
-   git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
-   gh pr create --fill --base dev --reviewer paulormnas
-   ```
-
----
-
-### Fase 2: Revisão Técnica (Code Review)
-
-O Reviewer analisa o diff do PR nos seguintes eixos (conforme [`review.md`](../rules/review.md)):
-
-1. **Segurança:** Vulnerabilidades óbvias, exposição de portas/segredos, logs com dados sensíveis.
-2. **Performance:** Loops bloqueantes na event loop, vazamento de memória, má gestão de conexões.
-3. **Estabilidade:** Tratamento de exceções que mascaram erros (`except Exception: pass`).
-4. **Arquitetura:** Conformidade com a stack 100% Python, uso correto de `uv`, padrões do projeto.
-
-Emitir parecer via GitHub CLI:
 ```bash
-# Aprovação
-gh pr review <numero> --approve -b "Tudo certo! Código alinhado com a arquitetura."
+# 1. Gerar token de instalação do GitHub App (válido por 1 hora)
+export GH_TOKEN=$(uv run python .agents/skills/github_app_auth.py)
 
-# Solicitar mudanças
-gh pr review <numero> --request-changes -b "Pontos de atenção: ..."
+# 2. Configurar o remote do Git com o token autenticado
+REPO=$(grep GITHUB_REPO .env | cut -d= -f2)
+git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+
+# 3. Confirmar branch atual da worktree (nunca main ou dev)
+BRANCH=$(git branch --show-current)
+echo "Branch ativa: $BRANCH"
 ```
 
 ---
 
-### Fase 3: Ciclo de Melhorias (se necessário)
+### Fase 2: Publicação da Branch e Criação do Pull Request
 
-Se o Reviewer solicitar mudanças:
-
-1. Desenvolvedor analisa o feedback e implementa correções na worktree.
-2. Executa validações locais novamente.
-3. Commits semânticos e push:
+1. **Push da branch para o repositório remoto:**
    ```bash
-   git add -A && git commit -m "fix(<escopo>): <descrição da correção>"
-   git push origin HEAD
+   git push -u origin "$BRANCH"
    ```
-4. Reviewer reavalia as alterações.
+
+2. **Criação do Pull Request apontando para `dev`:**
+   ```bash
+   PR_URL=$(gh pr create \
+     --base dev \
+     --head "$BRANCH" \
+     --title "<tipo>(<escopo>): <descrição no imperativo do Conventional Commits>" \
+     --body "## Contexto
+   <Descrição clara do objetivo e funcionalidade implementada na worktree>
+
+   ## Alterações Realizadas
+   - <resumo 1>
+   - <resumo 2>
+
+   ## Validações Automatizadas
+   - [x] Testes unitários/integração aprovados (\`uv run pytest\`)
+   - [x] Zero secrets e sem arquivos residuais (.env, *.db, *.log)
+   - [x] Conformidade de arquitetura e isolamento de containers
+
+   ---
+   *Pull Request gerado e auditado automaticamente via GitHub App.*")
+
+   PR_NUM=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+   echo "Pull Request #$PR_NUM criado com sucesso: $PR_URL"
+   ```
 
 ---
 
-### Fase 4: Merge e Limpeza
+### Fase 3: Revisão Técnica Automatizada (Code Review)
 
-Após aprovação:
+O agente Reviewer inspeciona o diff gerado (`gh pr diff "$PR_NUM"`) nos **7 eixos técnicos** ([`reviewer.md`](../rules/reviewer.md)):
+1. **Conformidade e Rastreabilidade:** Branch base `dev`, Conventional Commits.
+2. **Arquitetura & Separação:** Orquestrador (`src/`), Agentes (`agents/`), Containers (`containers/`) e IPC.
+3. **Clean Code & Manutenibilidade:** SOLID, tipagem estrita, ausência de prints ou dead code.
+4. **Segurança & Hardening:** Sem segredos, containers non-root (`appuser`), isolamento de sandboxes.
+5. **Robustez & Tipagem:** Sem supressão cega de exceções, type hints completos.
+6. **Performance & Recursos Pi 5:** Footprint mínimo, ausência de bloqueios síncronos na event loop.
+7. **Qualidade de Testes:** Cobertura de cenários felizes e de borda.
 
-1. Merge do PR via GitHub (squash ou merge commit conforme preferência).
+Após constatar conformidade total, o Revisor aprova o PR formalmente:
 
-2. Sincronizar branch `dev` local:
-   ```bash
-   git checkout dev
-   git pull origin dev
-   ```
+```bash
+gh pr review "$PR_NUM" --approve -b "## Parecer de Code Review: Aprovado (LGTM)
 
-3. Limpar worktree e branch:
-   ```bash
-   git worktree remove .worktrees/<nome-da-branch>
-   git branch -d <nome-da-branch>
-   ```
+- [x] **Conformidade:** Branch base apontada exclusivamente para \`dev\`; commits semânticos.
+- [x] **Arquitetura:** Camadas orquestrador, agentes e containers respeitadas.
+- [x] **Clean Code:** Padrões estritos de tipagem e manutenibilidade.
+- [x] **Segurança:** Isolamento de sandboxes e zero secrets.
+- [x] **Testes:** Validações automatizadas 100% verdes.
 
-4. Limpar referências remotas obsoletas:
-   ```bash
-   git fetch origin --prune
-   ```
+Homologado para squash merge automático."
+```
+
+---
+
+### Fase 4: Squash Merge Automático e Remoção Remota
+
+Com a aprovação registrada e os checks validados, executa-se o merge com **squash**:
+
+```bash
+# Executa o squash merge e deleta a branch remota automaticamente
+PR_TITLE=$(gh pr view "$PR_NUM" --json title -q .title)
+gh pr merge "$PR_NUM" --squash --delete-branch --subject "$PR_TITLE"
+
+echo "Pull Request #$PR_NUM mergeado com sucesso em dev via Squash Merge!"
+```
+
+---
+
+### Fase 5: Sincronização da Branch `dev` e Limpeza da Worktree
+
+Após o merge no GitHub, sincronize o ambiente local e descarte a worktree efêmera:
+
+```bash
+# 1. Obter caminho da raiz do repositório
+REPO_ROOT="$(git rev-parse --show-toplevel)/../.."
+cd "$REPO_ROOT" || cd /home/agent/Documentos/Workspace/geminiclaw
+
+# 2. Atualizar a branch dev local
+git checkout dev
+git pull origin dev
+
+# 3. Remover a worktree finalizada
+git worktree remove ".worktrees/$BRANCH"
+
+# 4. Remover a branch local da feature
+git branch -d "$BRANCH"
+
+# 5. Limpar referências remotas obsoletas
+git fetch origin --prune
+
+echo "Ambiente sincronizado e worktree .worktrees/$BRANCH limpa com sucesso!"
+```
+
+---
+
+## 4. Script de Execução Automatizada (One-Liner)
+
+Para rodar todo o pipeline de forma contínua a partir de dentro da worktree:
+
+```bash
+set -e
+
+# Autenticação
+export GH_TOKEN=$(uv run python .agents/skills/github_app_auth.py)
+REPO=$(grep GITHUB_REPO .env | cut -d= -f2)
+git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+
+BRANCH=$(git branch --show-current)
+TITLE=$(git log -1 --pretty=%s)
+
+# Push e PR
+git push -u origin "$BRANCH"
+PR_URL=$(gh pr create --base dev --head "$BRANCH" --title "$TITLE" --fill)
+PR_NUM=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+
+# Aprovação Técnica
+gh pr review "$PR_NUM" --approve -b "Aprovado automaticamente via GitHub App após validação dos 7 eixos de qualidade técnica."
+
+# Squash Merge
+gh pr merge "$PR_NUM" --squash --delete-branch --subject "$TITLE"
+
+# Retorno à raiz e limpeza
+cd /home/agent/Documentos/Workspace/geminiclaw
+git checkout dev
+git pull origin dev
+git worktree remove ".worktrees/$BRANCH"
+git branch -d "$BRANCH"
+git fetch origin --prune
+
+echo "Pipeline de PR, Code Review e Squash Merge concluído com sucesso!"
+```

@@ -103,16 +103,16 @@ Alinhe qualquer solução técnica ou correção de bug com estas fontes antes d
 - Commits devem ser pequenos, coesos e revisáveis. Evite commits que misturam múltiplas preocupações.
 - Use o corpo do commit para explicar **o porquê** da mudança quando necessário.
 
-### Pull Requests
+### Pull Requests & Squash Merge
 
-- Toda mudança deve ser entregue via pull request, com descrição clara do que foi feito, por que e como testar.
-- Nunca faça merge diretamente na `main` ou `dev` sem revisão.
-- Use o GitHub App para autenticação e criação de PRs:
+- Toda mudança deve ser entregue via Pull Request apontando para `dev`, com descrição clara do que foi feito, por que e como testar.
+- O ciclo completo de abertura, code review e squash merge automatizado via GitHub App é regido pelo workflow [`.agents/workflows/do-pull-request.md`](../workflows/do-pull-request.md).
+- Autenticação com GitHub App e criação do PR:
   ```bash
   export GH_TOKEN=$(uv run python .agents/skills/github_app_auth.py)
   REPO=$(grep GITHUB_REPO .env | cut -d= -f2)
   git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
-  gh pr create --fill --reviewer paulormnas
+  gh pr create --fill --base dev
   ```
 
 ---
@@ -130,26 +130,65 @@ Alinhe qualquer solução técnica ou correção de bug com estas fontes antes d
 
 ---
 
+---
+
+## Ciclo de Execução e Orquestração dos Agentes
+
+No GeminiClaw, a execução de agentes não utiliza servidores web externos (`adk web`). O ciclo de vida e execução segue o modelo distribuído via containers e IPC:
+
+```
+[ Usuário / CLI ]
+       │
+       ▼
+[ Orchestrator & AutonomousLoop (Host) ]
+       │
+       ├──→ Triage: Simples (Base) vs Complexo (Planner ➔ Validator ➔ Loop de Subtarefas)
+       ├──→ ContainerRunner: Spawna container Docker específico do agente
+       └──→ IPCChannel: Comunicação bidirecional via Unix Domain Socket (/tmp/geminiclaw-ipc/)
+                │
+                ▼
+       [ Agente em Container Docker ]
+          ├── agents/runner.py: run_ipc_loop conecta ao socket do host
+          ├── agents/<tipo>/agent.py: Executa lógica do agente e tool calls
+          ├── Skills Framework: python_interpreter (sandbox), memory, search
+          └── Saída de Artefatos: /outputs/<session_id>/<task>/
+```
+
+### Regras de Implementação para Agentes e Runners:
+1. **Entrypoint Padrão:** Cada agente expõe `root_agent` e implementa `if __name__ == "__main__": asyncio.run(run_ipc_loop(root_agent))`.
+2. **Protocolo IPC:** Mensagens serializadas em JSON com prefixo de tamanho binário de 4 bytes (`HEADER_SIZE = 4`, `struct.pack('>I', len(data))`).
+3. **Registro de Imagens:** Todo novo agente deve ser registrado no `AGENT_REGISTRY` em `src/orchestrator.py` mapeando `agent_id` para sua respectiva imagem Docker (`geminiclaw-<tipo>`).
+4. **Isolamento e Persistência:** Agentes nunca escrevem diretamente no banco de dados do host se estiverem em container isolado; métricas e telemetria são transportadas via payload IPC (`_telemetry`) e persistidas pelo orquestrador no `SessionManager` e `TelemetryCollector`.
+
+---
+
 ## Docker
 
-Regras obrigatórias para containers do GeminiClaw:
+Regras obrigatórias para execução de containers no GeminiClaw:
 
 ```python
 client.containers.run(
-    image="geminiclaw-agent:latest",
-    mem_limit="512m",
-    nano_cpus=1_000_000_000,
+    image="geminiclaw-base:latest",  # ou geminiclaw-planner, geminiclaw-researcher, etc.
+    mem_limit="512m",                # limite estrito para o Raspberry Pi 5
+    nano_cpus=1_000_000_000,         # 1 núcleo de CPU ARM
     network="geminiclaw-net",
-    volumes={str(data_dir): {"bind": "/data", "mode": "rw"}},
-    detach=True, remove=True, user="appuser",
+    volumes={
+        str(ipc_dir): {"bind": "/tmp/geminiclaw-ipc", "mode": "rw"},
+        str(output_dir): {"bind": "/outputs", "mode": "rw"},
+        str(logs_dir): {"bind": "/logs", "mode": "rw"},
+    },
+    detach=True,
+    remove=True,
+    user="appuser",
 )
 ```
 
-- Imagem base: `python:3.11-slim`.
-- Usuário: non-root (`appuser`).
+- Imagem base: `python:3.11-slim-bookworm`.
+- Usuário: estritamente non-root (`appuser`).
 - Rede: interna isolada (`geminiclaw-net`).
-- Portas: expostas apenas em `127.0.0.1`.
-- Sandboxes efêmeros: rede desabilitada, limites estritos de CPU/memória.
+- Portas: expostas apenas em `127.0.0.1` (nunca `0.0.0.0`).
+- Sandboxes efêmeros de execução de código: `network_disabled=True`, volumes de código somente-leitura ou efêmeros.
+- Build de imagens: `bash scripts/build_images.sh` ou `docker build -t geminiclaw-<tipo> -f containers/Dockerfile.<tipo> .`.
 
 ---
 

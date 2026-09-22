@@ -12,14 +12,20 @@ Este workflow descreve os passos para executar o projeto e comparar o desempenho
 
 ```bash
 source .venv/bin/activate
-uv sync --all-groups
+uv sync
+
+# Subir serviços essenciais (PostgreSQL e Qdrant)
+docker compose up -d
+
+# Garantir que as imagens Docker dos agentes estão construídas
+bash scripts/build_images.sh
 ```
 
 ---
 
 ## 2. Execução do Benchmark: Pipeline Iris
 
-O teste consiste em rodar o prompt abaixo em ambos os provedores e comparar os tempos e artefatos gerados.
+O teste consiste em rodar o prompt do desafio em ambos os provedores e comparar os tempos e artefatos gerados.
 
 **Prompt do Desafio:**
 > "Implemente um pipeline de classificação supervisionada para o dataset Iris. O pipeline deve incluir análise exploratória dos dados, pré-processamento, treinamento de ao menos dois algoritmos diferentes, avaliação comparativa dos modelos e uma recomendação final justificada sobre qual modelo usar em produção. Todos os artefatos gerados devem ser salvos em disco."
@@ -31,7 +37,7 @@ export LLM_MODEL=qwen3.5:4b
 export OLLAMA_BASE_URL=http://localhost:11434
 export OUTPUT_BASE_DIR=outputs/local
 
-uv run main.py "Implemente um pipeline de classificação supervisionada para o dataset Iris. O pipeline deve incluir análise exploratória dos dados, pré-processamento, treinamento de ao menos dois algoritmos diferentes, avaliação comparativa dos modelos e uma recomendação final justificada sobre qual modelo usar em produção. Todos os artefatos gerados devem ser salvos em disco."
+uv run geminiclaw "Implemente um pipeline de classificação supervisionada para o dataset Iris. O pipeline deve incluir análise exploratória dos dados, pré-processamento, treinamento de ao menos dois algoritmos diferentes, avaliação comparativa dos modelos e uma recomendação final justificada sobre qual modelo usar em produção. Todos os artefatos gerados devem ser salvos em disco."
 ```
 
 ### Passo B: Execução em Nuvem (Google Gemini)
@@ -41,7 +47,7 @@ export LLM_MODEL=gemini-2.0-flash
 export OUTPUT_BASE_DIR=outputs/cloud
 unset OLLAMA_BASE_URL
 
-uv run main.py "Implemente um pipeline de classificação supervisionada para o dataset Iris. O pipeline deve incluir análise exploratória dos dados, pré-processamento, treinamento de ao menos dois algoritmos diferentes, avaliação comparativa dos modelos e uma recomendação final justificada sobre qual modelo usar em produção. Todos os artefatos gerados devem ser salvos em disco."
+uv run geminiclaw "Implemente um pipeline de classificação supervisionada para o dataset Iris. O pipeline deve incluir análise exploratória dos dados, pré-processamento, treinamento de ao menos dois algoritmos diferentes, avaliação comparativa dos modelos e uma recomendação final justificada sobre qual modelo usar em produção. Todos os artefatos gerados devem ser salvos em disco."
 ```
 
 ---
@@ -50,9 +56,10 @@ uv run main.py "Implemente um pipeline de classificação supervisionada para o 
 
 Após as duas execuções, utilize os comandos abaixo para realizar a comparação:
 
-### Métricas de Tempo
+### Métricas de Execução
 ```bash
-uv run main.py history
+# Inspecionar telemetria de uma sessão específica
+uv run geminiclaw --metrics <session_id>
 ```
 
 ### Validação de Artefatos

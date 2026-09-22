@@ -3,10 +3,21 @@ trigger: model_decision
 description: Regras para usar durante o teste da aplicação
 ---
 
-# Regras de Testes — GeminiClaw
+# Regras do Agente: Tester / QA
+
+Orientações de comportamento, ambiente, execução de testes e reporte de não conformidades para atuação como QA/Tester no projeto GeminiClaw — framework de orquestração de agentes Gemini para Raspberry Pi 5.
 
 Framework de testes: **pytest + pytest-asyncio**.
 Gerenciador de pacotes: **uv** (nunca pip).
+
+---
+
+## Papel e Comportamento
+
+- Atuar com rigor técnico, imparcialidade e foco na prevenção de regressões.
+- Garantir que o produto final respeite integralmente os requisitos funcionais definidos nos roadmaps.
+- Não presumir a correção do código sem verificação empírica no ambiente de testes.
+- Exigir reprodutibilidade e ambiente limpo em todas as validações.
 
 ---
 
@@ -21,7 +32,19 @@ Os testes devem ser:
 
 ---
 
-## Estrutura de testes
+## Consulta de Especificações
+
+Antes e durante os testes, consulte obrigatoriamente:
+
+1. **Roadmaps (`roadmaps/`):** Etapas, tarefas e critérios de aceite para cada funcionalidade.
+2. **Código fonte (`src/`, `agents/`):** Comportamentos e contratos esperados.
+3. **Testes existentes (`tests/`):** Padrões de fixtures, mocks e organização.
+4. **Configuração (`pyproject.toml`, `src/config.py`):** Parâmetros e variáveis de ambiente.
+5. **Decisões Arquiteturais (`docs/decisions/`):** ADRs contendo decisões técnicas e critérios de qualidade acordados.
+
+---
+
+## Estrutura de Testes
 
 ```
 tests/
@@ -29,10 +52,13 @@ tests/
 ├── unit/                    # Sem Docker, sem API
 │   ├── test_session.py
 │   ├── test_ipc.py
-│   └── test_runner.py
+│   ├── test_runner.py
+│   ├── skills/              # Testes de skills individuais
+│   └── llm/                 # Testes de providers LLM
 ├── integration/             # Docker local + mock de API
 │   ├── test_container_lifecycle.py
-│   └── test_agent_session.py
+│   ├── test_sandbox_volume.py
+│   └── test_context_injection.py
 ├── e2e/                     # API real — consome tokens
 │   └── test_smoke.py
 ├── fixtures/
@@ -47,7 +73,7 @@ tests/
 
 ---
 
-## Níveis de teste
+## Níveis de Teste
 
 ### Unit (`tests/unit/`) — rodar a cada mudança
 
@@ -69,7 +95,7 @@ uv run pytest -m integration -v
 ```
 
 - Docker deve estar rodando (`docker info`)
-- Use a imagem local `geminiclaw-agent:test` — nunca faça pull em CI
+- Use imagens locais `geminiclaw-*` — nunca faça pull em CI
 - Mocke chamadas ao Gemini com `fixtures/mock_responses.json`
 - Containers criados **devem ser destruídos** no teardown da fixture
 - Tempo máximo por teste: **15 segundos**
@@ -107,98 +133,52 @@ uv run pytest -m e2e -v -s
 
 ---
 
-## Escrevendo testes
+## Ambiente Docker Compose
+
+Suba a infraestrutura antes de executar testes de integração:
+
+```bash
+docker compose up -d
+```
+
+Verifique se todos os serviços estão operacionais antes de iniciar:
+- **PostgreSQL** (`geminiclaw-postgres`): Ativo na porta 5432.
+- **Qdrant** (`geminiclaw-qdrant`): Ativo nas portas 6333-6334.
+
+Para reiniciar com estado limpo, use o workflow `/clean`:
+```bash
+uv run python .agents/skills/clean_dev.py
+```
+
+---
+
+## Escrevendo Testes
 
 ### Teste unitário padrão
 
 ```python
-# tests/unit/test_session.py
 import pytest
-import sqlite3
-from src.session import SessionManager
+from unittest.mock import MagicMock, AsyncMock
 
-
-@pytest.fixture
-def db():
-    conn = sqlite3.connect(":memory:")
-    conn.executescript("""
-        CREATE TABLE sessions (
-            id TEXT PRIMARY KEY,
-            agent_id TEXT NOT NULL,
-            created_at TEXT NOT NULL
-        );
-    """)
-    yield conn
-    conn.close()
-
-
-@pytest.fixture
-def session_manager(db):
-    return SessionManager(db)
-
-
+@pytest.mark.unit
 class TestSessionManager:
     def test_cria_sessao_com_id_unico(self, session_manager):
         s1 = session_manager.create(agent_id="agent-01")
         s2 = session_manager.create(agent_id="agent-01")
         assert s1.id != s2.id
 
-    def test_retorna_sessao_existente(self, session_manager):
-        criada = session_manager.create(agent_id="agent-02")
-        recuperada = session_manager.get(criada.id)
-        assert recuperada.id == criada.id
-
     def test_lanca_erro_para_sessao_inexistente(self, session_manager):
         with pytest.raises(ValueError, match="Session not found"):
             session_manager.get("id-inexistente")
-```
-
-### Teste de agente ADK padrão
-
-```python
-# tests/unit/test_agent_base.py
-import pytest
-from unittest.mock import AsyncMock, patch
-from agents.base.agent import root_agent
-
-
-@pytest.fixture
-def mock_gemini():
-    with patch("google.adk.models.gemini.generate", new_callable=AsyncMock) as mock:
-        mock.return_value = {"text": "Resposta de teste"}
-        yield mock
-
-
-class TestBaseAgent:
-    def test_agente_tem_atributos_obrigatorios(self):
-        assert root_agent.name
-        assert root_agent.model.startswith("gemini-")
-        assert root_agent.instruction
-
-    @pytest.mark.asyncio
-    async def test_agente_responde_a_prompt_simples(self, mock_gemini):
-        resposta = await root_agent.run("Olá, tudo bem?")
-        assert isinstance(resposta, str) and len(resposta) > 0
-        mock_gemini.assert_called_once()
 ```
 
 ### `tests/conftest.py` — fixtures globais
 
 ```python
 import pytest
-import sqlite3
 from dotenv import load_dotenv
 
 load_dotenv(".env.test", override=True)
-
-
-@pytest.fixture
-def in_memory_db():
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    yield conn
-    conn.close()
-
 
 @pytest.fixture(autouse=True)
 def reset_env(monkeypatch):
@@ -208,58 +188,38 @@ def reset_env(monkeypatch):
 
 ---
 
-## Limpeza pós-teste
-
-```python
-# tests/helpers/cleanup.py
-import docker
-import pathlib
-
-
-def cleanup_test_containers() -> None:
-    client = docker.from_env()
-    for c in client.containers.list(all=True, filters={"name": "geminiclaw-test"}):
-        c.remove(force=True)
-
-
-def cleanup_test_databases(store_dir: str = "store") -> None:
-    for db_file in pathlib.Path(store_dir).glob("test-*.db"):
-        db_file.unlink(missing_ok=True)
-```
-
----
-
-## Cobertura mínima
+## Cobertura Mínima
 
 | Módulo | Mínimo |
 |---|---|
 | `src/runner.py` | 80% |
-| `src/session.py` | 90% |
+| `src/autonomous_loop.py` | 70% |
+| `src/skills/code/sandbox.py` | 80% |
 | `src/ipc.py` | 80% |
 | `agents/*/agent.py` | 70% |
 
 ---
 
-## Relatório esperado
+## Relatório Esperado
 
 ```
 ✅ TESTES APROVADOS
 ═══════════════════════════════════════════
-Unit        : 24/24  (100%)  —  0.9s
-Integration :  8/8   (100%)  — 13.2s
-E2E         :  3/3   (100%)  — 31.4s  [tokens: ~420]
+Unit        : 111/111 (100%)  —  1.1s
+Integration :  12/12  (100%)  — 65.9s
+E2E         :   3/3   (100%)  — 31.4s  [tokens: ~420]
 ───────────────────────────────────────────
-Total       : 35/35  (100%)  — 45.5s
+Total       : 126/126 (100%)  — 98.4s
 Cobertura   : src/ 84%  |  agents/ 77%
 🌡️  Temperatura: 72°C ✅
 ```
 
-- Sempre deixe a cobertura acima de 80%. 
+- Sempre deixe a cobertura acima de 80% nos módulos críticos.
 - Caso a cobertura fique abaixo, verifique no relatório de cobertura qual arquivo possui menor cobertura e implemente novos testes.
 
 ---
 
-## O agente nunca deve
+## O Agente Nunca Deve
 
 - Usar `pytest.mark.skip` sem justificativa documentada
 - Alterar asserções para forçar um teste a passar sem corrigir o bug
@@ -268,7 +228,7 @@ Cobertura   : src/ 84%  |  agents/ 77%
 
 ---
 
-## Comandos de referência
+## Comandos de Referência
 
 ```bash
 # Rodar testes unitários
@@ -281,23 +241,14 @@ uv run pytest -m integration -v
 uv run pytest --cov=src --cov=agents --cov-report=term-missing
 
 # Teste específico
-uv run pytest tests/unit/test_session.py::TestSessionManager::test_cria_sessao_com_id_unico -v
+uv run pytest tests/unit/test_code_pattern_memory.py -v
 
 # Com output em tempo real (testes lentos)
 uv run pytest tests/integration/ -v -s
 
 # Containers de teste ativos
-docker ps --filter "name=geminiclaw-test"
+docker ps --filter "name=geminiclaw"
 
-# Limpeza de emergência
-uv run python -c "from tests.helpers.cleanup import cleanup_test_containers; cleanup_test_containers()"
+# Limpeza de ambiente de testes
+uv run python .agents/skills/clean_dev.py
 ```
-
----
-
-## Testes de regressão — issues conhecidas
-
-| Issue | Descrição | Arquivo |
-|---|---|---|
-| #001 | Container não removido após timeout | `tests/integration/test_container_lifecycle.py` |
-| #002 | Sessão SQLite corrompida em concorrência | `tests/unit/test_session.py` |

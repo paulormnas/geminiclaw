@@ -27,6 +27,13 @@ import jwt
 from dotenv import load_dotenv
 
 load_dotenv()
+if not os.environ.get("GITHUB_APP_ID"):
+    # Fallback para worktree: procura .env na raiz do repositório
+    for parent in Path(__file__).resolve().parents:
+        env_file = parent / ".env"
+        if env_file.exists():
+            load_dotenv(env_file)
+            break
 
 _REQUIRED_ENVS = [
     "GITHUB_APP_ID",

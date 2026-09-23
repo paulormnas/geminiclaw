@@ -33,6 +33,7 @@ logger = get_logger(__name__)
 
 # Registro de agentes disponíveis: tipo → imagem Docker
 AGENT_REGISTRY: dict[str, str] = {
+    "developer": "geminiclaw-developer",
     "base": "geminiclaw-base",
     "researcher": "geminiclaw-researcher",
     "planner": "geminiclaw-planner",

@@ -1,3 +1,4 @@
+# DEPRECATED: use developer_agent. Será removido na V15.
 """Agente base GeminiClaw usando Google ADK.
 
 Este módulo define o root_agent que serve como agente mínimo funcional.

@@ -181,8 +181,8 @@ class AutonomousLoop:
         subtask_id = uuid.uuid4().hex
         
         task = AgentTask(
-            agent_id="base",
-            image=AGENT_REGISTRY.get("base", "geminiclaw-base"),
+            agent_id="developer",
+            image=AGENT_REGISTRY.get("developer", "geminiclaw-developer"),
             prompt=prompt,
             task_name="simple_task",
             subtask_id=subtask_id,
@@ -195,7 +195,7 @@ class AutonomousLoop:
             subtask_id=subtask_id,
             execution_id=master_session_id,
             task_name="simple_task",
-            agent_id="base",
+            agent_id="developer",
             status="pending",
             created_at=now_iso
         )
@@ -267,6 +267,44 @@ class AutonomousLoop:
             )
 
         return f"Contexto das etapas anteriores:\n{context}\n\n"
+
+    def _dispatch_subtask(self, task: "AgentTask") -> "AgentTask":
+        """Roteia a subtarefa para o agente e imagem adequados (Roadmap V14.4).
+
+        Roteia com base em `task.agent_id`:
+        - 'developer' (ou código/dados) -> geminiclaw-developer
+        - 'researcher' (pesquisa/planejamento) -> geminiclaw-researcher
+        - 'base' legado -> redirecionado para 'developer'
+        - outros agentes preservados conforme AGENT_REGISTRY
+        """
+        from src.orchestrator import AGENT_REGISTRY, AgentTask
+        raw_agent = (task.agent_id or "developer").lower()
+        if raw_agent == "base":
+            agent_id = "developer"
+        elif raw_agent in AGENT_REGISTRY:
+            agent_id = raw_agent
+        else:
+            p_lower = (task.prompt or "").lower()
+            if any(k in p_lower for k in ("pesquis", "search", "artigo", "buscar", "document")):
+                agent_id = "researcher"
+            else:
+                agent_id = "developer"
+
+        image = AGENT_REGISTRY.get(agent_id, AGENT_REGISTRY.get("developer", "geminiclaw-developer"))
+
+        return AgentTask(
+            agent_id=agent_id,
+            image=image,
+            prompt=task.prompt,
+            task_name=task.task_name,
+            depends_on=task.depends_on,
+            expected_artifacts=task.expected_artifacts,
+            validation_criteria=task.validation_criteria,
+            preferred_model=task.preferred_model,
+            subtask_id=task.subtask_id,
+            created_at=task.created_at,
+            retry_attempt=task.retry_attempt,
+        )
 
     async def _run_complex_path(self, prompt: str, master_session_id: str) -> "OrchestratorResult":
         """Executa a tarefa via caminho complexo (Planner -> Loop de Subtarefas em DAG)."""
@@ -402,6 +440,7 @@ class AutonomousLoop:
                 )
                 
                 enriched_task = self._enrich_task_prompt(enriched_task)
+                enriched_task = self._dispatch_subtask(enriched_task)
 
                 success = False
                 last_result = None

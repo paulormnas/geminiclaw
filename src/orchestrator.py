@@ -697,32 +697,41 @@ class Orchestrator:
         current_plan_data = previous_plan
         
         for iteration in range(MAX_PLANNING_ITERATIONS):
-            # 1. Executa o Planner
+            # 1. Executa o Researcher (que absorve o Planner na V14.3)
             if current_plan_data:
-                last_plan_str = json.dumps(current_plan_data, indent=2)
+                last_plan_str = json.dumps(current_plan_data, indent=2, ensure_ascii=False)
                 planner_prompt = (
+                    f"MODO: REPLAN\n\n"
                     f"Tarefa original: {prompt}\n\n"
                     f"Este é o plano atual:\n{last_plan_str}\n\n"
                     f"PROBLEMAS ENCONTRADOS:\n{feedback}\n\n"
-                    "Instrução: Corrija apenas as tarefas com problemas ou adicione tarefas de recuperação. "
-                    "Mantenha as tarefas que já foram bem sucedidas se possível. "
+                    "Instrução: Replaneje apenas as subtarefas com falha ou adicione tarefas de recuperação. "
+                    "NUNCA redefina ou repita subtarefas que já foram concluídas com sucesso. "
+                    "Cada subtarefa DEVE conter 'validation_criteria' obrigatório. "
                     "Retorne o plano COMPLETO atualizado em JSON."
                 )
             else:
-                planner_prompt = f"Crie um plano para: {prompt}"
+                planner_prompt = (
+                    f"MODO: PLAN\n\n"
+                    f"Crie um plano de execução (DAG) para a seguinte tarefa:\n{prompt}\n\n"
+                    "INSTRUÇÃO OBRIGATÓRIA: Se a tarefa envolver domínio técnico ou bibliotecas, "
+                    "execute uma busca com 'quick_search' para verificar contexto antes de formular as subtarefas. "
+                    "Cada subtarefa no plano DEVE conter 'validation_criteria' com ao menos um critério explícito. "
+                    "Retorne a lista de subtarefas em formato JSON."
+                )
                 if feedback:
-                    planner_prompt += f"\n\nPROBLEMAS ENCONTRADOS:\n{feedback}"
-            
+                    planner_prompt += f"\n\nPROBLEMAS ANTERIORES:\n{feedback}"
+
             planner_task = AgentTask(
-                agent_id="planner", 
-                image=AGENT_REGISTRY["planner"], 
-                prompt=planner_prompt
+                agent_id="researcher",
+                image=AGENT_REGISTRY.get("researcher", "geminiclaw-researcher"),
+                prompt=planner_prompt,
             )
-            
+
             planner_result = await self._execute_agent(planner_task, master_session_id)
             if planner_result.status != "success" or "error" in planner_result.response:
                 err = planner_result.error or planner_result.response.get("error", "Erro desconhecido")
-                logger.error(f"Falha no Agente Planejador: {err}", extra={"error": err})
+                logger.error(f"Falha no Agente Researcher (Planner): {err}", extra={"error": err})
                 return []
             
             # Tenta extrair JSON da resposta

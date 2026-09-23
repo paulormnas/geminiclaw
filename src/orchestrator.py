@@ -27,6 +27,7 @@ from src.autonomous_loop import AutonomousLoop
 from src.utils.json_parser import extract_json
 from src.rate_limiter import AdaptiveRateLimiter
 from src.telemetry import get_telemetry
+from src.agents.validator_agent import ValidatorAgent
 
 logger = get_logger(__name__)
 
@@ -201,6 +202,7 @@ class Orchestrator:
             requests_per_minute=GEMINI_REQUESTS_PER_MINUTE,
             cooldown_seconds=GEMINI_RATE_LIMIT_COOLDOWN_SECONDS,
         )
+        self.validator = ValidatorAgent()
         # V12.5.2 — Rastreia containers spawnados por master_session_id
         self._session_container_counts: dict[str, int] = {}
 
@@ -737,43 +739,13 @@ class Orchestrator:
             current_plan_data = plan_data
             last_plan_str = json.dumps(current_plan_data, indent=2)
 
-            # 2. Executa o Validator
-            from src.config import STRICT_VALIDATION
-            validator_prompt = f"Revise este plano:\n{last_plan_str}\n\nPara a solicitação: {prompt}"
-            
-            if not STRICT_VALIDATION:
-                validator_prompt += (
-                    "\n\n**AVISO DE MODO FLEXÍVEL**: O sistema está operando com validação relaxada "
-                    "(STRICT_VALIDATION=false). Aprove o plano se ele for minimamente viável."
-                )
-
-            validator_task = AgentTask(
-                agent_id="validator", 
-                image=AGENT_REGISTRY["validator"], 
-                prompt=validator_prompt
+            # 2. Executa o Validator como corrotina assíncrona (V14.2 - sem Docker)
+            val_result = await self.validator.validate_plan(
+                plan=current_plan_data,
+                prompt=prompt,
             )
-            
-            validator_result = await self._execute_agent(validator_task, master_session_id)
-            if validator_result.status != "success" or "error" in validator_result.response:
-                err = validator_result.error or validator_result.response.get("error", "Erro desconhecido")
-                logger.error("Falha no Agente Validador", extra={"error": err})
-                return []
-            
-            raw_val = validator_result.response.get("text", "")
-            val_data = extract_json(raw_val)
-            if val_data is None or not isinstance(val_data, dict):
-                logger.error(
-                    "Erro ao parsear resposta do Validador",
-                    extra={"text_preview": raw_val[:200]},
-                )
-                feedback = "Sua resposta anterior não era JSON válido. Responda APENAS com o JSON."
-                continue
 
-            status = val_data.get("status", "revision_needed")
-            reason = val_data.get("reason", "")
-            issues = val_data.get("issues", [])
-
-            if status == "approved":
+            if val_result.is_valid:
                 logger.info("Plano aprovado pelo Validador", extra={"iteration": iteration + 1})
                 tasks = []
                 from datetime import datetime, timezone
@@ -793,18 +765,9 @@ class Orchestrator:
                         created_at=now_iso,
                     ))
                 return tasks
-            elif status == "rejected":
-                logger.warning("Plano rejeitado definitivamente", extra={"reason": reason})
-                return []
             else:
-                # Se o Validator forneceu issues estruturados, usá-los como feedback
-                if issues:
-                    feedback = "O Validador identificou os seguintes problemas:\n" + "\n".join(
-                        [f"- Tarefa '{i.get('task_name')}': {i.get('issue')}" for i in issues]
-                    )
-                else:
-                    feedback = reason or "Plano precisa de revisão."
-                
+                issues_str = "\n".join(f"- {i}" for i in val_result.issues) if val_result.issues else val_result.reason
+                feedback = f"O Validador identificou os seguintes problemas:\n{issues_str}"
                 logger.info("Solicitando revisão do plano", extra={"iteration": iteration + 1, "reason": feedback})
 
         logger.error("Máximo de iterações de planejamento atingido")

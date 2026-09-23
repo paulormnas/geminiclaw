@@ -587,3 +587,263 @@ class ContainerRunner:
             logger.info("Cleanup concluído", extra={"count": len(containers)})
         except Exception as e:
             logger.error("Erro durante o cleanup", extra={"error": str(e)})
+
+
+class SessionContainerRunner:
+    """Gerencia o ciclo de vida de containers de agentes por sessão (Roadmap V14.5).
+
+    Mantém containers de Researcher e Developer persistentes durante toda a sessão do usuário,
+    recebendo múltiplas subtarefas via IPC sem recriação recorrente.
+    Implementa health check periódico (30s), auto-recovery com limite de 2 tentativas e shutdown graceful.
+    """
+
+    def __init__(self, runner: ContainerRunner | None = None, ipc: Any | None = None):
+        """Inicializa o runner de sessão.
+
+        Args:
+            runner: Instância de ContainerRunner (ou None para criar nova).
+            ipc: Instância de IPCChannel (ou None para criar nova).
+        """
+        self.runner = runner or ContainerRunner()
+        if ipc is None:
+            from src.ipc import IPCChannel
+            self.ipc = IPCChannel()
+        else:
+            self.ipc = ipc
+
+        # Mapeamento: (session_id, agent_id) -> metadata do container
+        self._active_containers: dict[tuple[str, str], dict[str, Any]] = {}
+        self._health_check_task: asyncio.Task | None = None
+        self._health_check_interval: float = 30.0
+
+    async def start(
+        self,
+        session_id: str,
+        agent_id: str,
+        image: str | None = None,
+        task_name: str | None = None,
+        force_restart: bool = False,
+    ) -> str:
+        """Inicia ou reutiliza container persistente para a sessão.
+
+        Args:
+            session_id: ID da sessão do usuário.
+            agent_id: Identificador do agente ('developer', 'researcher', etc.).
+            image: Imagem Docker a utilizar.
+            task_name: Nome opcional da subtarefa inicial.
+            force_restart: Se True, recria o container mesmo que exista.
+
+        Returns:
+            O container_id em execução.
+        """
+        key = (session_id, agent_id)
+        if not force_restart and key in self._active_containers:
+            entry = self._active_containers[key]
+            if self.is_alive(session_id, agent_id):
+                logger.info(
+                    "Reutilizando container de sessão ativo",
+                    extra={"session_id": session_id, "agent_id": agent_id, "container_id": entry["container_id"]},
+                )
+                return entry["container_id"]
+
+        from src.orchestrator import AGENT_REGISTRY
+        resolved_image = image or AGENT_REGISTRY.get(agent_id, f"geminiclaw-{agent_id}")
+
+        logger.info(
+            "Iniciando container persistente de sessão",
+            extra={"session_id": session_id, "agent_id": agent_id, "image": resolved_image},
+        )
+
+        container_id = await self.runner.spawn(
+            agent_id=agent_id,
+            image=resolved_image,
+            session_id=session_id,
+            task_name=task_name,
+        )
+
+        self._active_containers[key] = {
+            "container_id": container_id,
+            "session_id": session_id,
+            "agent_id": agent_id,
+            "image": resolved_image,
+            "recoveries": 0,
+            "subtask_recoveries": {},
+        }
+
+        return container_id
+
+    def is_alive(self, session_id: str, agent_id: str) -> bool:
+        """Verifica se o container da sessão está ativo e rodando.
+
+        Args:
+            session_id: ID da sessão.
+            agent_id: Identificador do agente.
+
+        Returns:
+            True se o container estiver em estado 'running'.
+        """
+        key = (session_id, agent_id)
+        if key not in self._active_containers:
+            return False
+
+        container_id = self._active_containers[key]["container_id"]
+        try:
+            container = self.runner.client.containers.get(container_id)
+            return container.status == "running"
+        except Exception:
+            return False
+
+    async def send(
+        self,
+        session_id: str,
+        agent_id: str,
+        payload: dict[str, Any],
+        task_name: str | None = None,
+        image: str | None = None,
+    ) -> dict[str, Any]:
+        """Envia mensagem ao container via IPC com auto-recovery transparente.
+
+        Se o container morrer antes ou durante a execução, reconstrói o container
+        e reenvia a subtarefa (máximo de 2 recuperações por subtarefa).
+
+        Args:
+            session_id: ID da sessão.
+            agent_id: Identificador do agente.
+            payload: Conteúdo da mensagem a enviar.
+            task_name: Identificador da subtarefa para controle de retentativas.
+            image: Imagem a utilizar caso precise iniciar o container.
+
+        Returns:
+            Resposta retornada pelo agente via IPC.
+
+        Raises:
+            RuntimeError: Se o circuit breaker for acionado (> 2 recuperações por subtarefa).
+        """
+        key = (session_id, agent_id)
+        subtask_key = task_name or "default"
+
+        # Garante que o container está ativo
+        if not self.is_alive(session_id, agent_id):
+            if key in self._active_containers:
+                entry = self._active_containers[key]
+                sub_rec = entry.setdefault("subtask_recoveries", {}).get(subtask_key, 0)
+                if sub_rec >= 2:
+                    raise RuntimeError(
+                        f"Circuit breaker ativado: limite de 2 recuperações excedido para a subtarefa '{subtask_key}'."
+                    )
+                entry["subtask_recoveries"][subtask_key] = sub_rec + 1
+                logger.warning(
+                    f"Container morto detectado para {agent_id}. Tentando auto-recuperação {sub_rec + 1}/2.",
+                    extra={"session_id": session_id, "agent_id": agent_id, "task_name": subtask_key},
+                )
+            await self.start(session_id, agent_id, image=image, task_name=task_name, force_restart=True)
+
+        from src.ipc import create_message
+        msg = create_message("request", session_id, payload)
+
+        try:
+            response_msg = await self.ipc.send(msg)
+            return response_msg.payload
+        except Exception as e:
+            logger.error(
+                "Falha ao comunicar via IPC com container de sessão",
+                extra={"session_id": session_id, "agent_id": agent_id, "error": str(e)},
+            )
+            # Verifica se o container morreu durante o envio/processamento
+            if not self.is_alive(session_id, agent_id):
+                entry = self._active_containers.get(key, {})
+                sub_rec = entry.setdefault("subtask_recoveries", {}).get(subtask_key, 0)
+                if sub_rec >= 2:
+                    raise RuntimeError(
+                        f"Circuit breaker ativado: limite de 2 recuperações excedido para a subtarefa '{subtask_key}'."
+                    )
+                entry["subtask_recoveries"][subtask_key] = sub_rec + 1
+                logger.warning(
+                    f"Container morreu durante execução da subtarefa '{subtask_key}'. Recuperando ({sub_rec+1}/2)...",
+                    extra={"session_id": session_id, "agent_id": agent_id},
+                )
+                await self.start(session_id, agent_id, image=image, task_name=task_name, force_restart=True)
+                # Reenvia a subtarefa com o container recuperado
+                retry_resp = await self.ipc.send(msg)
+                return retry_resp.payload
+
+            raise
+
+    async def stop(self, session_id: str, agent_id: str | None = None) -> None:
+        """Executa shutdown graceful de container(s) da sessão via IPC.
+
+        Envia {"type": "shutdown"} e aguarda {"type": "shutdown_ack"}.
+        Aplica fallback com container.stop(timeout=15) se necessário.
+
+        Args:
+            session_id: ID da sessão.
+            agent_id: Agente específico ou None para todos os containers da sessão.
+        """
+        keys_to_stop = [
+            k for k in list(self._active_containers.keys())
+            if k[0] == session_id and (agent_id is None or k[1] == agent_id)
+        ]
+
+        from src.ipc import create_message
+
+        for key in keys_to_stop:
+            entry = self._active_containers.pop(key, None)
+            if not entry:
+                continue
+
+            container_id = entry["container_id"]
+            ag_id = key[1]
+            logger.info(
+                "Iniciando shutdown graceful do container",
+                extra={"session_id": session_id, "agent_id": ag_id, "container_id": container_id},
+            )
+
+            # 1. Tenta enviar shutdown via IPC
+            try:
+                shutdown_msg = create_message("shutdown", session_id, {})
+                # Aguarda até 10s pela confirmação shutdown_ack
+                resp = await asyncio.wait_for(self.ipc.send(shutdown_msg), timeout=10.0)
+                if resp.type == "shutdown_ack":
+                    logger.info("Shutdown graceful confirmado pelo container via IPC (shutdown_ack)")
+            except Exception as e:
+                logger.warning(f"Container não respondeu ao shutdown graceful via IPC: {e}")
+
+            # 2. Garante parada do container Docker
+            try:
+                container = self.runner.client.containers.get(container_id)
+                container.stop(timeout=15)
+                logger.info("Container parado com sucesso", extra={"container_id": container_id})
+            except Exception as e:
+                logger.warning(f"Erro ao parar container Docker {container_id}: {e}")
+
+    async def stop_all(self) -> None:
+        """Encerra todos os containers de sessão ativos no orquestrador."""
+        sessions = {k[0] for k in self._active_containers.keys()}
+        for session_id in sessions:
+            await self.stop(session_id)
+        self.stop_health_check()
+
+    def start_health_check(self) -> None:
+        """Inicia tarefa de monitoramento contínuo em background (a cada 30s)."""
+        if self._health_check_task is None or self._health_check_task.done():
+            self._health_check_task = asyncio.create_task(self._health_check_loop())
+
+    def stop_health_check(self) -> None:
+        """Cancela tarefa de monitoramento contínuo."""
+        if self._health_check_task and not self._health_check_task.done():
+            self._health_check_task.cancel()
+            self._health_check_task = None
+
+    async def _health_check_loop(self) -> None:
+        """Loop executado periodicamente a cada 30 segundos verificando a integridade dos containers."""
+        try:
+            while True:
+                await asyncio.sleep(self._health_check_interval)
+                for (session_id, agent_id), entry in list(self._active_containers.items()):
+                    if not self.is_alive(session_id, agent_id):
+                        logger.warning(
+                            "Health check detectou container de sessão inativo",
+                            extra={"session_id": session_id, "agent_id": agent_id, "container_id": entry["container_id"]},
+                        )
+        except asyncio.CancelledError:
+            pass

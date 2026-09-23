@@ -151,6 +151,12 @@ async def run_ipc_loop(agent: Any) -> None:
                 data = resp_msg.serialize()
                 writer.write(data)
                 await writer.drain()
+            elif message.type == "shutdown":
+                logger.info("Recebida solicitacao de shutdown graceful via IPC")
+                ack_msg = create_message("shutdown_ack", session_id, {"status": "ok"})
+                writer.write(ack_msg.serialize())
+                await writer.drain()
+                break
             else:
                 logger.warning(f"Tipo de mensagem inesperado: {message.type}")
     

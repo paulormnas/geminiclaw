@@ -1,7 +1,7 @@
 # ADR 007 — Reestruturação de Papéis de Agentes: 3 Papéis Claros (V14)
 
-**Status:** Proposto (pendente implementação V14)
-**Data:** 2026-09-22
+**Status:** Aceito (implementado na V14)
+**Data:** 2026-09-22 (atualizado em 2026-09-23)
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** `roadmaps/roadmap_V14.md`
 
@@ -153,4 +153,10 @@ V14.5 (Containers por sessão) → depende de V14.2, V14.3, V14.4
 
 ## Revisão
 
-Este ADR deve ser atualizado após a conclusão da V14, passando de "Proposto" para "Aceito" e documentando quaisquer desvios da proposta original.
+Este ADR foi formalmente aceito e implementado na V14 através das 6 entregas:
+- **V14.1 (Model Router):** Suporte a roteamento granular de provedor e modelo por papel (`researcher`, `validator`, `developer`).
+- **V14.2 (Validator como corrotina):** `ValidatorAgent` assíncrono executado no processo host sem containers, com validação de schema e checagem de artefatos em disco.
+- **V14.3 (Researcher absorve Planner):** `ResearcherAgent` unificado com geração de DAG, replanejamento técnico e busca web contextual.
+- **V14.4 (Developer Agent):** `DeveloperAgent` focado exclusivamente em execução de código e manipulação de arquivos com imagem Docker dedicada (`geminiclaw-developer`) e manifest awareness. `base_agent` marcado como depreciado.
+- **V14.5 (Session Container Lifecycle):** `SessionContainerRunner` com containers persistentes por sessão, health check de 30s, auto-recuperação (circuit breaker de 2 retentativas) e encerramento gracioso via IPC (`shutdown`/`shutdown_ack`).
+- **V14.6 (Comandos CLI e SIGINT):** Comandos `geminiclaw sessions` e `geminiclaw stop [--session <id>]`, além de handler SIGINT para encerramento gracioso de containers de sessão.

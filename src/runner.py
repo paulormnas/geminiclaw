@@ -339,15 +339,26 @@ class ContainerRunner:
                 ).replace(
                     "127.0.0.1", "host.docker.internal"
                 )
+                from src.model_config import get_role_model_config
+                try:
+                    role_cfg = get_role_model_config(agent_id)
+                    agent_provider = role_cfg.provider
+                    agent_model = role_cfg.model
+                except ValueError:
+                    agent_provider = LLM_PROVIDER
+                    agent_model = LLM_MODEL
+
                 env = {
                     "AGENT_ID": agent_id,
+                    "AGENT_ROLE": agent_id,
                     # V13.1.2: SESSION_ID canônico = master_session_id + task_name (quando disponível).
                     # O agent_loop usa esse valor para sobrescrever o session_id gerado pelo LLM
                     # em cada chamada à tool python_interpreter (V13.1.1).
                     "SESSION_ID": canonical_session_id,
                     "TASK_NAME": task_name or "",
-                    "LLM_PROVIDER": LLM_PROVIDER,
-                    "LLM_MODEL": LLM_MODEL,
+                    "LLM_PROVIDER": agent_provider,
+                    "LLM_MODEL": agent_model,
+                    "AGENT_MODEL": agent_model,
                     "GEMINI_API_KEY": GEMINI_API_KEY or "",
                     "GOOGLE_API_KEY": GEMINI_API_KEY or "",
                     "OLLAMA_BASE_URL": ollama_url_for_container,

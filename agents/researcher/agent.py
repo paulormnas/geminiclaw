@@ -58,9 +58,15 @@ ESTRUTURA DO RELATÓRIO:
 # Configura as skills antes de inicializar o agente
 _setup_skills()
 
+agent_model = (
+    os.environ.get("AGENT_MODEL")
+    or os.environ.get("RESEARCHER_MODEL")
+    or DEFAULT_MODEL
+)
+
 root_agent = Agent(
     name=AGENT_NAME,
-    model=DEFAULT_MODEL,
+    model=agent_model,
     description=AGENT_DESCRIPTION,
     _instruction=_get_agent_instruction(AGENT_INSTRUCTION),
     tools=registry.as_tools() + [write_artifact],
@@ -72,7 +78,7 @@ logger.info(
     "Agente researcher inicializado",
     extra={
         "agent_name": AGENT_NAME,
-        "model": DEFAULT_MODEL,
+        "model": agent_model,
         "tools": ["search"],
     },
 )

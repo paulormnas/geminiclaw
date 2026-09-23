@@ -41,6 +41,14 @@ LLM_PROVIDER = get_env("LLM_PROVIDER", default="google")
 LLM_MODEL = get_env("LLM_MODEL") or get_env("DEFAULT_MODEL", default="gemini-3.1-pro-preview")
 DEFAULT_MODEL = LLM_MODEL  # Retrocompatibilidade
 
+# Model Router por papel (V14)
+RESEARCHER_PROVIDER = get_env("RESEARCHER_PROVIDER", default="google")
+RESEARCHER_MODEL = get_env("RESEARCHER_MODEL", default="gemini-2.0-flash")
+VALIDATOR_PROVIDER = get_env("VALIDATOR_PROVIDER", default="ollama")
+VALIDATOR_MODEL = get_env("VALIDATOR_MODEL", default="qwen3:8b")
+DEVELOPER_PROVIDER = get_env("DEVELOPER_PROVIDER", default="google")
+DEVELOPER_MODEL = get_env("DEVELOPER_MODEL", default="gemini-2.0-flash")
+
 # Configurações Ollama
 OLLAMA_BASE_URL = get_env("OLLAMA_BASE_URL", default="http://localhost:11434")
 OLLAMA_NUM_CTX = int(get_env("OLLAMA_NUM_CTX", default="4096"))

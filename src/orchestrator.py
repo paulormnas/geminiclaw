@@ -186,6 +186,7 @@ class Orchestrator:
         ipc: IPCChannel,
         session_manager: SessionManager,
         output_manager: OutputManager | None = None,
+        session_runner: Any | None = None,
     ) -> None:
         """Inicializa o orquestrador com dependências injetadas.
 
@@ -194,6 +195,7 @@ class Orchestrator:
             ipc: Canal de comunicação IPC.
             session_manager: Gerenciador de sessões SQLite.
             output_manager: Gerenciador de outputs (opcional).
+            session_runner: Gerenciador de ciclo de vida de containers por sessão (V14.5).
         """
         self.runner = runner
         self.ipc = ipc
@@ -206,6 +208,11 @@ class Orchestrator:
         self.validator = ValidatorAgent()
         # V12.5.2 — Rastreia containers spawnados por master_session_id
         self._session_container_counts: dict[str, int] = {}
+        if session_runner is None:
+            from src.runner import SessionContainerRunner
+            self.session_runner = SessionContainerRunner(runner=self.runner, ipc=self.ipc)
+        else:
+            self.session_runner = session_runner
 
     @staticmethod
     def get_available_agents() -> dict[str, str]:

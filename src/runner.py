@@ -495,7 +495,7 @@ class ContainerRunner:
                     "remove": True,
                     "detach": True,
                     "group_add": [os.stat("/var/run/docker.sock").st_gid] if os.path.exists("/var/run/docker.sock") else [],
-                    "labels": {"project": "geminiclaw", "agent_id": agent_id, "session_id": session_id},
+                    "labels": {"project": "geminiclaw", "geminiclaw.managed": "true", "agent_id": agent_id, "session_id": session_id},
                     "environment": env,
                     "volumes": volumes,
                     "extra_hosts": extra_hosts,
@@ -692,6 +692,24 @@ class SessionContainerRunner:
             return container.status == "running"
         except Exception:
             return False
+
+    def list_active(self) -> list[dict[str, Any]]:
+        """Retorna a lista de containers de sessão atualmente rastreados.
+
+        Returns:
+            Lista de dicionários contendo metadados de cada container de sessão.
+        """
+        result = []
+        for (session_id, agent_id), entry in self._active_containers.items():
+            result.append({
+                "session_id": session_id,
+                "agent_id": agent_id,
+                "container_id": entry["container_id"],
+                "image": entry.get("image", "unknown"),
+                "is_alive": self.is_alive(session_id, agent_id),
+            })
+        return result
+
 
     async def send(
         self,

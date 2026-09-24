@@ -84,14 +84,16 @@ async def test_runner_spawn_parameters(mock_docker_client):
                     "remove": True,
                     "detach": True,
                     "group_add": expected_group_add,
-                    "labels": {"project": "geminiclaw", "agent_id": "base", "session_id": "session_123"},
+                    "labels": {"project": "geminiclaw", "geminiclaw.managed": "true", "agent_id": "base", "session_id": "session_123"},
                     "environment": {
                         "AGENT_ID": "base",
+                        "AGENT_ROLE": "base",
                         "SESSION_ID": "session_123",
                         # V13.1.2: TASK_NAME é sempre propagado; sem task_name passa vazio.
                         "TASK_NAME": "",
                         "LLM_PROVIDER": "google",
                         "LLM_MODEL": "gemini-3-flash-preview",
+                        "AGENT_MODEL": "gemini-3-flash-preview",
                         "GEMINI_API_KEY": "test_key",
                         "GOOGLE_API_KEY": "test_key",
                         "OLLAMA_BASE_URL": "http://host.docker.internal:11434",

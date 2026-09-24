@@ -165,6 +165,10 @@ class ContainerRunner:
 
     def _ensure_images(self) -> None:
         """Verifica se as imagens necessárias existem e as constrói se faltarem."""
+        if os.environ.get("GEMINICLAW_SKIP_IMAGE_BUILD") == "1" or "PYTEST_CURRENT_TEST" in os.environ:
+            logger.debug("Auto-build de imagens desativado em ambiente de teste ou via flag.")
+            return
+
         required_images = [
             ("geminiclaw-base", "containers/Dockerfile", {}),
             ("geminiclaw-base-slim", "containers/Dockerfile.slim", {}),

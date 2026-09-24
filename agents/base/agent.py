@@ -1,3 +1,4 @@
+# DEPRECATED: use developer_agent. Será removido na V15.
 """Agente base GeminiClaw usando Google ADK.
 
 Este módulo define o root_agent que serve como agente mínimo funcional.
@@ -307,10 +308,12 @@ def _get_agent_instruction(base_instruction: str) -> str:
 # Configura as skills antes de inicializar o agente
 _setup_skills()
 
+base_model = os.environ.get("AGENT_MODEL") or DEFAULT_MODEL
+
 # Define o root_agent
 root_agent = Agent(
     name=AGENT_NAME,
-    model=DEFAULT_MODEL,
+    model=base_model,
     description=AGENT_DESCRIPTION,
     _instruction=lambda: _get_agent_instruction(AGENT_INSTRUCTION),
     tools=registry.as_tools() + [write_artifact],
@@ -322,7 +325,7 @@ logger.info(
     "Agente base inicializado",
     extra={
         "agent_name": AGENT_NAME,
-        "model": DEFAULT_MODEL,
+        "model": base_model,
     },
 )
 

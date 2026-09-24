@@ -16,6 +16,8 @@ os.environ["SEARCH_CACHE_TTL_SECONDS"] = "3600"
 
 # Sinaliza para pular testes de integração que consomem cota de API durante a suíte completa
 os.environ["CI_SKIP_INTEGRATION"] = "1"
+os.environ["QDRANT_URL"] = ":memory:"
+os.environ["QDRANT_CHECK_COMPATIBILITY"] = "false"
 
 from unittest.mock import MagicMock, patch
 

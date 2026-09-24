@@ -12,7 +12,7 @@ from src.logger import get_logger
 logger = get_logger(__name__)
 
 # Tipos de mensagem válidos
-VALID_MESSAGE_TYPES = frozenset({"request", "response", "error", "heartbeat"})
+VALID_MESSAGE_TYPES = frozenset({"request", "response", "error", "heartbeat", "shutdown", "shutdown_ack"})
 
 # Tamanho do header de framing (4 bytes, big-endian unsigned int)
 HEADER_SIZE = 4

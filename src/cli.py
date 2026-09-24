@@ -10,7 +10,7 @@ import signal
 import sys
 import os
 from pathlib import Path
-from typing import NoReturn
+from typing import NoReturn, Any
 
 # Adiciona a raiz do projeto ao sys.path para permitir imports de 'src'
 # quando o script é executado diretamente (ex: python3 src/cli.py)
@@ -94,6 +94,13 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SESSION_ID",
         default=None,
         help="Exibe e agrega os logs de todos os agentes de uma sessão.",
+    )
+    parser.add_argument(
+        "--session",
+        type=str,
+        metavar="SESSION_ID",
+        default=None,
+        help="ID da sessão alvo para operações direcionadas (ex: stop --session <id>).",
     )
     return parser
 
@@ -365,6 +372,144 @@ def show_session_logs(session_id: str) -> None:
     print(f"{BOLD}{'─' * 100}{RESET}\n")
 
 
+def show_sessions(docker_client: Any | None = None) -> list[dict[str, Any]]:
+    """Lista containers ativos do GeminiClaw (Roadmap V14.6).
+
+    Args:
+        docker_client: Cliente Docker opcional (para injeção em testes).
+
+    Returns:
+        Lista com metadados dos containers ativos encontrados.
+    """
+    if docker_client is None:
+        try:
+            import docker
+            docker_client = docker.from_env()
+        except Exception as e:
+            print(f"\n  {RED}❌ Erro ao conectar ao Docker: {e}{RESET}\n")
+            return []
+
+    try:
+        containers = docker_client.containers.list(
+            filters={"label": "project=geminiclaw"}
+        )
+    except Exception as e:
+        print(f"\n  {RED}❌ Erro ao listar containers: {e}{RESET}\n")
+        return []
+
+    _sep = "─" * 80
+    print(f"\n{BOLD}  📦 Sessões e Containers Ativos do GeminiClaw{RESET}")
+    print(f"{BOLD}{_sep}{RESET}")
+
+    if not containers:
+        print(f"  {DIM}Nenhum container de sessão ativo encontrado.{RESET}")
+        print(f"{BOLD}{_sep}{RESET}\n")
+        return []
+
+    header = f"  {BOLD}{'SESSION ID':<24} {'CONTAINER ID':<14} {'AGENT':<12} {'IMAGE':<24} {'STATUS'}{RESET}"
+    print(header)
+    print(f"  {DIM}{'─' * 78}{RESET}")
+
+    active_info = []
+    for c in containers:
+        labels = getattr(c, "labels", {}) or {}
+        session_id = labels.get("session_id", "unknown")
+        agent_id = labels.get("agent_id", "unknown")
+        cid = getattr(c, "short_id", getattr(c, "id", "unknown")[:12])
+
+        image_name = "unknown"
+        if hasattr(c, "image"):
+            if hasattr(c.image, "tags") and c.image.tags:
+                image_name = c.image.tags[0]
+            else:
+                image_name = str(c.image)
+
+        status = getattr(c, "status", "unknown")
+        status_color = GREEN if status == "running" else YELLOW
+
+        print(f"  {CYAN}{session_id:<24}{RESET} {DIM}{cid:<14}{RESET} {agent_id:<12} {image_name:<24} [{status_color}{status}{RESET}]")
+        active_info.append({
+            "session_id": session_id,
+            "container_id": cid,
+            "agent_id": agent_id,
+            "image": image_name,
+            "status": status,
+        })
+
+    print(f"{BOLD}{_sep}{RESET}\n")
+    return active_info
+
+
+def stop_sessions(
+    session_id: str | None = None,
+    docker_client: Any | None = None,
+    session_runner: Any | None = None,
+) -> int:
+    """Encerra containers ativos de sessão (graciosamente via SessionContainerRunner se disponível, ou via Docker) (Roadmap V14.6).
+
+    Args:
+        session_id: ID da sessão a encerrar, ou None para encerrar todas as sessões.
+        docker_client: Cliente Docker opcional (para injeção em testes).
+        session_runner: Instância opcional de SessionContainerRunner.
+
+    Returns:
+        Número de containers encerrados.
+    """
+    if session_runner is not None:
+        import asyncio
+        if session_id:
+            asyncio.run(session_runner.stop(session_id))
+        else:
+            asyncio.run(session_runner.stop_all())
+        print(f"\n  {GREEN}✅ Containers de sessão encerrados graciosamente.{RESET}\n")
+        return 1
+
+    if docker_client is None:
+        try:
+            import docker
+            docker_client = docker.from_env()
+        except Exception as e:
+            print(f"\n  {RED}❌ Erro ao conectar ao Docker: {e}{RESET}\n")
+            return 0
+
+    try:
+        containers = docker_client.containers.list(
+            filters={"label": "project=geminiclaw"}
+        )
+    except Exception as e:
+        print(f"\n  {RED}❌ Erro ao listar containers para encerramento: {e}{RESET}\n")
+        return 0
+
+    if session_id:
+        targets = [c for c in containers if (getattr(c, "labels", {}) or {}).get("session_id") == session_id]
+    else:
+        targets = containers
+
+    if not targets:
+        if session_id:
+            print(f"\n  {DIM}Nenhum container ativo encontrado para a sessão: {session_id}{RESET}\n")
+        else:
+            print(f"\n  {DIM}Nenhum container ativo do GeminiClaw encontrado.{RESET}\n")
+        return 0
+
+    stopped_count = 0
+    print(f"\n  {YELLOW}🛑 Encerrando {len(targets)} container(s)...{RESET}")
+    for c in targets:
+        cid = getattr(c, "short_id", getattr(c, "id", "unknown")[:12])
+        labels = getattr(c, "labels", {}) or {}
+        s_id = labels.get("session_id", "unknown")
+        try:
+            c.stop(timeout=10)
+            stopped_count += 1
+            print(f"    {GREEN}✔{RESET} Container {BOLD}{cid}{RESET} (sessão: {DIM}{s_id}{RESET}) encerrado.")
+        except Exception as e:
+            print(f"    {RED}✘{RESET} Erro ao parar container {cid}: {e}")
+
+    print(f"  {GREEN}✅ {stopped_count} container(s) encerrado(s) com sucesso.{RESET}\n")
+    return stopped_count
+
+
+
 def _create_orchestrator() -> tuple[Orchestrator, ContainerRunner]:
     """Cria as dependências e retorna o orquestrador.
 
@@ -422,6 +567,16 @@ async def interactive_mode(orchestrator: Orchestrator) -> None:
             print(f"\n  {DIM}Até logo! 👋{RESET}\n")
             break
 
+        if prompt.lower() == "sessions":
+            show_sessions()
+            continue
+
+        if prompt.lower() == "stop" or prompt.lower().startswith("stop "):
+            parts = prompt.split()
+            s_id = parts[1] if len(parts) > 1 else None
+            stop_sessions(session_id=s_id, session_runner=getattr(orchestrator, "session_runner", None))
+            continue
+
         await execute_prompt(orchestrator, prompt)
 
 
@@ -431,10 +586,20 @@ def main() -> None:
     args = parser.parse_args()
 
     runner: ContainerRunner | None = None
+    orchestrator: Orchestrator | None = None
 
     def _signal_handler(sig: int, frame: object) -> None:
         """Handler para SIGINT (Ctrl+C)."""
         print(f"\n\n  {YELLOW}⚠  Interrupção recebida. Encerrando containers...{RESET}")
+        # V14.6 — Encerramento gracioso de containers de sessão via SessionContainerRunner
+        if orchestrator is not None and hasattr(orchestrator, "session_runner"):
+            try:
+                import asyncio as _asyncio
+                _asyncio.run(orchestrator.session_runner.stop_all())
+                print(f"  {GREEN}✅ Encerramento gracioso dos containers de sessão concluído.{RESET}")
+            except Exception as e:
+                logger.error("Erro durante encerramento gracioso de containers de sessão", extra={"error": str(e)})
+
         if runner is not None:
             try:
                 runner.cleanup_all()
@@ -456,8 +621,18 @@ def main() -> None:
     signal.signal(signal.SIGINT, _signal_handler)
 
     if args.prompt:
-        if args.prompt.lower() == "history":
+        p_lower = args.prompt.strip().lower()
+        if p_lower == "history":
             show_history()
+            sys.exit(0)
+        elif p_lower == "sessions":
+            show_sessions()
+            sys.exit(0)
+        elif p_lower == "stop" or p_lower.startswith("stop "):
+            target_sess = args.session
+            if not target_sess and " " in args.prompt.strip():
+                target_sess = args.prompt.strip().split(maxsplit=1)[1]
+            stop_sessions(session_id=target_sess)
             sys.exit(0)
 
     # Subcomando: --metrics <execution_id>

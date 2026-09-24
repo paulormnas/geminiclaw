@@ -36,13 +36,13 @@ O relatório de falhas `pipeline_failure_analysis.md` e `execution_analysis_repo
 - **ADR relacionado:** [ADR 006](../docs/decisions/adr_006_abstracao_provedores_llm.md), [ADR 007](../docs/decisions/adr_007_reestruturacao_papeis_agentes.md)
 - **Complexidade estimada:** Média
 - **Critérios de aceite:**
-  - [ ] `src/model_config.py` criado com mapeamento `researcher → gemini-2.0-flash`, `validator → qwen3:8b`, `developer → gemini-2.0-flash`
-  - [ ] `src/model_router.py` implementado com `ModelRouter.get_provider(role: str) -> BaseLLMProvider`
-  - [ ] `ModelRouter.get_provider("papel_inexistente")` levanta `ValueError` com mensagem clara
-  - [ ] Variáveis de ambiente `RESEARCHER_PROVIDER`, `RESEARCHER_MODEL`, `VALIDATOR_PROVIDER`, `VALIDATOR_MODEL`, `DEVELOPER_PROVIDER`, `DEVELOPER_MODEL` adicionadas ao `.env.example`
-  - [ ] `agents/base/agent.py` e `agents/researcher/agent.py` recebem provider via injeção em vez de ler `DEFAULT_MODEL`
-  - [ ] Fallback para `DEFAULT_MODEL` quando nenhum papel especificado (compatibilidade retroativa)
-  - [ ] Testes unitários em `tests/unit/test_model_router.py` (4 cenários)
+  - [x] `src/model_config.py` criado com mapeamento `researcher → gemini-2.0-flash`, `validator → qwen3:8b`, `developer → gemini-2.0-flash`
+  - [x] `src/model_router.py` implementado com `ModelRouter.get_provider(role: str) -> BaseLLMProvider`
+  - [x] `ModelRouter.get_provider("papel_inexistente")` levanta `ValueError` com mensagem clara
+  - [x] Variáveis de ambiente `RESEARCHER_PROVIDER`, `RESEARCHER_MODEL`, `VALIDATOR_PROVIDER`, `VALIDATOR_MODEL`, `DEVELOPER_PROVIDER`, `DEVELOPER_MODEL` adicionadas ao `.env.example`
+  - [x] `agents/base/agent.py` e `agents/researcher/agent.py` recebem provider via injeção em vez de ler `DEFAULT_MODEL`
+  - [x] Fallback para `DEFAULT_MODEL` quando nenhum papel especificado (compatibilidade retroativa)
+  - [x] Testes unitários em `tests/unit/test_model_router.py` (4 cenários)
 
 ---
 
@@ -55,14 +55,14 @@ O relatório de falhas `pipeline_failure_analysis.md` e `execution_analysis_repo
 - **Complexidade estimada:** Alta
 - **Depende de:** Tarefa 1 (Model Router)
 - **Critérios de aceite:**
-  - [ ] `src/agents/validator_agent.py` criado com métodos `validate_plan(plan: dict) -> ValidationResult` e `review_result(task, response_text, artifacts_on_disk) -> ReviewResult`
-  - [ ] `ValidatorAgent` usa `model_router.get_provider("validator")` (Ollama local)
-  - [ ] System prompt do ValidatorAgent contém schema JSON explícito das chaves obrigatórias de cada subtarefa
-  - [ ] Plano sem `validation_criteria` em qualquer subtarefa → SEMPRE rejeitado (10/10 execuções)
-  - [ ] `autonomous_loop.py` substituiu chamadas LLM avulsas de validação por `await validator.validate_plan(plan)` e `await validator.review_result(...)`
-  - [ ] Zero containers Docker criados durante fase de validação de plano
-  - [ ] `review_result` verifica artefatos em disco (via manifest), não apenas `response_text`
-  - [ ] Testes unitários em `tests/unit/agents/test_validator_agent.py` (4 cenários)
+  - [x] `src/agents/validator_agent.py` criado com métodos `validate_plan(plan: dict) -> ValidationResult` e `review_result(task, response_text, artifacts_on_disk) -> ReviewResult`
+  - [x] `ValidatorAgent` usa `model_router.get_provider("validator")` (Ollama local)
+  - [x] System prompt do ValidatorAgent contém schema JSON explícito das chaves obrigatórias de cada subtarefa
+  - [x] Plano sem `validation_criteria` em qualquer subtarefa → SEMPRE rejeitado (10/10 execuções)
+  - [x] `autonomous_loop.py` substituiu chamadas LLM avulsas de validação por `await validator.validate_plan(plan)` e `await validator.review_result(...)`
+  - [x] Zero containers Docker criados durante fase de validação de plano
+  - [x] `review_result` verifica artefatos em disco (via manifest), não apenas `response_text`
+  - [x] Testes unitários em `tests/unit/agents/test_validator_agent.py` (4 cenários)
 
 ---
 
@@ -75,14 +75,14 @@ O relatório de falhas `pipeline_failure_analysis.md` e `execution_analysis_repo
 - **Complexidade estimada:** Alta
 - **Depende de:** Tarefa 1 (Model Router)
 - **Critérios de aceite:**
-  - [ ] `agents/researcher/agent.py` expõe métodos `plan(task, context) -> ExecutionPlan` e `replan(original_plan, failed_tasks, artifacts_available) -> ExecutionPlan`
-  - [ ] Para tarefa de domínio técnico (ex: "comparar Random Forest e SVM no Iris"), log contém ao menos 1 chamada `web_search` antes do plano
-  - [ ] Web search no Researcher é para contexto técnico, NUNCA para busca bibliográfica (ver ADR 001)
-  - [ ] Plano gerado contém `validation_criteria` em todas as subtarefas
-  - [ ] `replan` não redefine subtarefas já concluídas com sucesso
-  - [ ] `autonomous_loop.py` chama `researcher.plan(task, context)` via IPC em vez de chamada LLM avulsa do Planner
-  - [ ] URL retornada por `web_search` é lida corretamente por `web_reader`
-  - [ ] Testes de integração em `tests/integration/agents/test_researcher_agent.py` (4 cenários)
+  - [x] `agents/researcher/agent.py` expõe métodos `plan(task, context) -> ExecutionPlan` e `replan(original_plan, failed_tasks, artifacts_available) -> ExecutionPlan`
+  - [x] Para tarefa de domínio técnico (ex: "comparar Random Forest e SVM no Iris"), log contém ao menos 1 chamada `web_search` antes do plano
+  - [x] Web search no Researcher é para contexto técnico, NUNCA para busca bibliográfica (ver ADR 001)
+  - [x] Plano gerado contém `validation_criteria` em todas as subtarefas
+  - [x] `replan` não redefine subtarefas já concluídas com sucesso
+  - [x] `autonomous_loop.py` chama `researcher.plan(task, context)` via IPC em vez de chamada LLM avulsa do Planner
+  - [x] URL retornada por `web_search` é lida corretamente por `web_reader`
+  - [x] Testes de integração em `tests/integration/agents/test_researcher_agent.py` (4 cenários)
 
 ---
 
@@ -95,14 +95,14 @@ O relatório de falhas `pipeline_failure_analysis.md` e `execution_analysis_repo
 - **Complexidade estimada:** Alta
 - **Depende de:** Tarefa 1 (Model Router), Tarefa 3 (Researcher)
 - **Critérios de aceite:**
-  - [ ] `agents/developer/agent.py` criado com system prompt focado exclusivamente em geração de código
-  - [ ] Developer Agent lê manifest antes de cada geração de código (contexto do V13)
-  - [ ] Com manifest registrando 1 step bem-sucedido, código do step 2 referencia artefatos do step 1 (não os recria)
-  - [ ] Developer Agent recebe subtarefa de pesquisa via IPC → retorna erro claro ("use researcher_agent para pesquisa")
-  - [ ] `containers/developer/Dockerfile` criado com numpy, pandas, scikit-learn, matplotlib, seaborn, scipy pré-instalados
-  - [ ] `autonomous_loop.py` tem método `_dispatch_subtask(task)` com routing baseado em `task.agent_id`
-  - [ ] `agents/base/agent.py` marcado como `# DEPRECATED: use developer_agent. Será removido na V15.`
-  - [ ] Testes de integração em `tests/integration/agents/test_developer_agent.py` (4 cenários)
+  - [x] `agents/developer/agent.py` criado com system prompt focado exclusivamente em geração de código
+  - [x] Developer Agent lê manifest antes de cada geração de código (contexto do V13)
+  - [x] Com manifest registrando 1 step bem-sucedido, código do step 2 referencia artefatos do step 1 (não os recria)
+  - [x] Developer Agent recebe subtarefa de pesquisa via IPC → retorna erro claro ("use researcher_agent para pesquisa")
+  - [x] `containers/developer/Dockerfile` criado com numpy, pandas, scikit-learn, matplotlib, seaborn, scipy pré-instalados
+  - [x] `autonomous_loop.py` tem método `_dispatch_subtask(task)` com routing baseado em `task.agent_id`
+  - [x] `agents/base/agent.py` marcado como `# DEPRECATED: use developer_agent. Será removido na V15.`
+  - [x] Testes de integração em `tests/integration/agents/test_developer_agent.py` (4 cenários)
 
 ---
 
@@ -114,13 +114,13 @@ O relatório de falhas `pipeline_failure_analysis.md` e `execution_analysis_repo
 - **Complexidade estimada:** Alta
 - **Depende de:** Tarefa 2, Tarefa 3, Tarefa 4
 - **Critérios de aceite:**
-  - [ ] `SessionContainerRunner` implementado em `src/runner.py` com métodos `start`, `send`, `stop`, `is_alive`
-  - [ ] Um único container de Developer permanece ativo durante 3 subtarefas consecutivas (container ID não muda entre subtarefas)
-  - [ ] Health check periódico a cada 30s detecta container morto
-  - [ ] Container morto durante subtarefa → reconstrói com contexto do manifest + reenvio da subtarefa
-  - [ ] Máximo 2 recuperações automáticas por subtarefa; se exceder → circuit breaker
-  - [ ] Shutdown graceful via IPC: orquestrador envia `{"type": "shutdown"}`, container confirma `shutdown_ack` antes de encerrar
-  - [ ] Testes de integração em `tests/integration/test_session_container_lifecycle.py` (4 cenários)
+  - [x] `SessionContainerRunner` implementado em `src/runner.py` com métodos `start`, `send`, `stop`, `is_alive`
+  - [x] Um único container de Developer permanece ativo durante 3 subtarefas consecutivas (container ID não muda entre subtarefas)
+  - [x] Health check periódico a cada 30s detecta container morto
+  - [x] Container morto durante subtarefa → reconstrói com contexto do manifest + reenvio da subtarefa
+  - [x] Máximo 2 recuperações automáticas por subtarefa; se exceder → circuit breaker
+  - [x] Shutdown graceful via IPC: orquestrador envia `{"type": "shutdown"}`, container confirma `shutdown_ack` antes de encerrar
+  - [x] Testes de integração em `tests/integration/test_session_container_lifecycle.py` (4 cenários)
 
 ---
 
@@ -132,12 +132,12 @@ O relatório de falhas `pipeline_failure_analysis.md` e `execution_analysis_repo
 - **Complexidade estimada:** Baixa
 - **Depende de:** Tarefa 5
 - **Critérios de aceite:**
-  - [ ] `geminiclaw sessions` lista sessões ativas com containers e status
-  - [ ] `geminiclaw stop` encerra todos os containers ativos via shutdown graceful em < 15s
-  - [ ] `geminiclaw stop --session <id>` encerra containers de sessão específica
-  - [ ] `Ctrl+C` durante execução aciona `SIGINT` handler que derruba containers antes de encerrar o processo
-  - [ ] Após `stop`, `docker ps` não lista nenhum container do projeto
-  - [ ] Testes de integração em `tests/integration/test_cli_session_management.py` (3 cenários)
+  - [x] `geminiclaw sessions` lista sessões ativas com containers e status
+  - [x] `geminiclaw stop` encerra todos os containers ativos via shutdown graceful em < 15s
+  - [x] `geminiclaw stop --session <id>` encerra containers de sessão específica
+  - [x] `Ctrl+C` durante execução aciona `SIGINT` handler que derruba containers antes de encerrar o processo
+  - [x] Após `stop`, `docker ps` não lista nenhum container do projeto
+  - [x] Testes de integração em `tests/integration/test_cli_session_management.py` (3 cenários)
 
 ---
 
@@ -163,11 +163,11 @@ Tarefa 1 — Model Router (pré-requisito absoluto)
 
 ## Validação da Etapa
 
-- [ ] Todos os testes unitários e de integração passam: `uv run pytest -m "unit or integration" -v`
-- [ ] Cobertura mínima de 80% nos módulos novos (`model_router`, `validator_agent`, `developer`)
-- [ ] Zero containers criados para validação de plano (Validator é corrotina)
-- [ ] Pipeline benchmark Iris executado com sucesso: Researcher planeja com web search, Validator aprova em ≤ 2 tentativas, Developer constrói código incrementalmente
-- [ ] ADR 007 atualizado de "Proposto" para "Aceito" após implementação
+- [x] Todos os testes unitários e de integração passam: `uv run pytest -m "unit or integration" -v`
+- [x] Cobertura mínima de 80% nos módulos novos (`model_router`, `validator_agent`, `developer`)
+- [x] Zero containers criados para validação de plano (Validator é corrotina)
+- [x] Pipeline benchmark Iris executado com sucesso: Researcher planeja com web search, Validator aprova em ≤ 2 tentativas, Developer constrói código incrementalmente
+- [x] ADR 007 atualizado de "Proposto" para "Aceito" após implementação
 - [ ] PR merged em `dev` via workflow `do-pull-request.md`
 
 ---

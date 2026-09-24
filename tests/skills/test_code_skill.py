@@ -13,9 +13,22 @@ def is_docker_available():
     except Exception:
         return False
 
+def _geminiclaw_image_exists() -> bool:
+    try:
+        client = docker.from_env()
+        client.images.get("geminiclaw-base:latest")
+        return True
+    except Exception:
+        return False
+
+_SKIP_SANDBOX = pytest.mark.skipif(
+    not is_docker_available() or not _geminiclaw_image_exists(),
+    reason="Docker daemon inacessível ou imagem 'geminiclaw-base' não encontrada (execute 'bash scripts/build_images.sh')."
+)
+
 @pytest.mark.integration
 @pytest.mark.asyncio
-@pytest.mark.skipif(not is_docker_available(), reason="Docker daemon não está rodando")
+@_SKIP_SANDBOX
 async def test_code_skill_basic_execution(monkeypatch):
     """Testa execução básica de código Python."""
     monkeypatch.setenv("OUTPUT_BASE_DIR", "outputs_test")
@@ -33,7 +46,7 @@ async def test_code_skill_basic_execution(monkeypatch):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-@pytest.mark.skipif(not is_docker_available(), reason="Docker daemon não está rodando")
+@_SKIP_SANDBOX
 async def test_code_skill_artifact_creation(monkeypatch):
     """Testa criação de artefatos no sandbox."""
     output_base = "outputs_test"
@@ -84,7 +97,7 @@ def test_code_skill_security_validation():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-@pytest.mark.skipif(not is_docker_available(), reason="Docker daemon não está rodando")
+@_SKIP_SANDBOX
 async def test_code_skill_package_installation(monkeypatch):
     """Testa instalação de pacotes (requer rede no Docker)."""
     monkeypatch.setenv("OUTPUT_BASE_DIR", "outputs_test")

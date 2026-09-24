@@ -181,8 +181,8 @@ class AutonomousLoop:
         subtask_id = uuid.uuid4().hex
         
         task = AgentTask(
-            agent_id="base",
-            image=AGENT_REGISTRY.get("base", "geminiclaw-base"),
+            agent_id="developer",
+            image=AGENT_REGISTRY.get("developer", "geminiclaw-developer"),
             prompt=prompt,
             task_name="simple_task",
             subtask_id=subtask_id,
@@ -195,7 +195,7 @@ class AutonomousLoop:
             subtask_id=subtask_id,
             execution_id=master_session_id,
             task_name="simple_task",
-            agent_id="base",
+            agent_id="developer",
             status="pending",
             created_at=now_iso
         )
@@ -267,6 +267,44 @@ class AutonomousLoop:
             )
 
         return f"Contexto das etapas anteriores:\n{context}\n\n"
+
+    def _dispatch_subtask(self, task: "AgentTask") -> "AgentTask":
+        """Roteia a subtarefa para o agente e imagem adequados (Roadmap V14.4).
+
+        Roteia com base em `task.agent_id`:
+        - 'developer' (ou código/dados) -> geminiclaw-developer
+        - 'researcher' (pesquisa/planejamento) -> geminiclaw-researcher
+        - 'base' legado -> redirecionado para 'developer'
+        - outros agentes preservados conforme AGENT_REGISTRY
+        """
+        from src.orchestrator import AGENT_REGISTRY, AgentTask
+        raw_agent = (task.agent_id or "developer").lower()
+        if raw_agent == "base":
+            agent_id = "developer"
+        elif raw_agent in AGENT_REGISTRY:
+            agent_id = raw_agent
+        else:
+            p_lower = (task.prompt or "").lower()
+            if any(k in p_lower for k in ("pesquis", "search", "artigo", "buscar", "document")):
+                agent_id = "researcher"
+            else:
+                agent_id = "developer"
+
+        image = AGENT_REGISTRY.get(agent_id, AGENT_REGISTRY.get("developer", "geminiclaw-developer"))
+
+        return AgentTask(
+            agent_id=agent_id,
+            image=image,
+            prompt=task.prompt,
+            task_name=task.task_name,
+            depends_on=task.depends_on,
+            expected_artifacts=task.expected_artifacts,
+            validation_criteria=task.validation_criteria,
+            preferred_model=task.preferred_model,
+            subtask_id=task.subtask_id,
+            created_at=task.created_at,
+            retry_attempt=task.retry_attempt,
+        )
 
     async def _run_complex_path(self, prompt: str, master_session_id: str) -> "OrchestratorResult":
         """Executa a tarefa via caminho complexo (Planner -> Loop de Subtarefas em DAG)."""
@@ -402,6 +440,7 @@ class AutonomousLoop:
                 )
                 
                 enriched_task = self._enrich_task_prompt(enriched_task)
+                enriched_task = self._dispatch_subtask(enriched_task)
 
                 success = False
                 last_result = None
@@ -899,48 +938,23 @@ class AutonomousLoop:
         from src.orchestrator import AgentTask, AGENT_REGISTRY
         from src.utils.json_parser import extract_json
 
-        # V13.5.3: Revisor inclui lista de artefatos na avaliação
+        # V14.2: Reviewer executado via corrotina ValidatorAgent (sem container Docker)
         artifacts_on_disk = self.orchestrator.output_manager.list_artifacts(master_session_id)
-        artifacts_context = ""
-        if artifacts_on_disk:
-            artifacts_context = (
-                f"\n\nARTEFATOS EXISTENTES NO DISCO (considerar como parte do resultado):\n"
-                + "\n".join([f"- {a}" for a in artifacts_on_disk]) + "\n\n"
-                f"Avalie se os artefatos esperados estão presentes em disco, "
-                f"não apenas se o texto da resposta os menciona."
-            )
+        validator = getattr(self.orchestrator, "validator", None)
+        if validator is None:
+            from src.agents.validator_agent import ValidatorAgent
+            validator = ValidatorAgent()
 
-        # Constrói o prompt do Reviewer
-        review_prompt = (
-            f"Avalie a execução da subtarefa: `{task.task_name}`\n\n"
-            f"PROMPT ORIGINAL:\n{task.prompt}\n\n"
-            f"RESULTADO PRODUZIDO:\n{result.response.get('text', '')}\n\n"
-            f"CRITÉRIOS DE VALIDAÇÃO:\n" + "\n".join([f"- {c}" for c in task.validation_criteria]) + "\n\n"
-            f"ARTEFATOS ESPERADOS:\n" + "\n".join([f"- {a}" for a in task.expected_artifacts]) +
-            artifacts_context +
-            f"\n\nPor favor, verifique se os critérios foram atendidos e se os artefatos foram gerados."
+        review = await validator.review_result(
+            task=task,
+            response_text=result.response.get("text", ""),
+            artifacts_on_disk=artifacts_on_disk,
         )
-
-        reviewer_task = AgentTask(
-            agent_id="reviewer",
-            image=AGENT_REGISTRY["reviewer"],
-            prompt=review_prompt
-        )
-
-        review_result = await self.orchestrator._execute_agent(reviewer_task, master_session_id)
-        
-        if review_result.status != "success":
-            logger.warning("Falha ao executar Agente Revisor, assumindo 'pass' por segurança")
-            return {"status": "pass", "issues": ["Falha técnica no revisor"]}
-
-        raw_review = review_result.response.get("text", "")
-        review_data = extract_json(raw_review)
-
-        if not review_data or not isinstance(review_data, dict):
-            logger.warning("Erro ao parsear JSON do Revisor, assumindo 'pass'")
-            return {"status": "pass", "issues": ["JSON inválido no revisor"]}
-
-        return review_data
+        return {
+            "status": review.status,
+            "issues": review.issues,
+            "feedback": review.feedback,
+        }
 
     async def _synthesize_results(self, prompt: str, results: List["AgentResult"], master_session_id: str) -> Optional["AgentResult"]:
         """Consolida os resultados das subtarefas em um relatório final via Summarizer.

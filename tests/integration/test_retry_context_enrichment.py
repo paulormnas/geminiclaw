@@ -88,12 +88,17 @@ async def test_retry_context_enrichment(monkeypatch):
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_reviewer_receives_artifacts_context(monkeypatch):
-    """V13.5.3: Verifica se _review_subtask injeta contexto de artefatos existentes."""
+    """V13.5.3 / V14.2: Verifica se _review_subtask injeta contexto de artefatos existentes no Validator."""
     orchestrator = MagicMock()
     orchestrator.output_manager.list_artifacts.return_value = ["file_on_disk.csv"]
-    
+
+    mock_validator = AsyncMock()
+    mock_review_result = MagicMock(status="pass", issues=[], feedback="")
+    mock_validator.review_result = AsyncMock(return_value=mock_review_result)
+    orchestrator.validator = mock_validator
+
     loop = AutonomousLoop(orchestrator)
-    
+
     task = AgentTask(
         agent_id="test_agent",
         image="test_image",
@@ -107,21 +112,13 @@ async def test_reviewer_receives_artifacts_context(monkeypatch):
         status="success",
         response={"text": "Aí está o csv"}
     )
-    
-    review_mock_result = AgentResult(
-        agent_id="reviewer",
-        session_id="sess_123",
-        status="success",
-        response={"text": '{"status": "pass", "issues": []}'}
-    )
-    orchestrator._execute_agent = AsyncMock(return_value=review_mock_result)
-    
+
     review_data = await loop._review_subtask(task, result, "sess_123")
-    
+
     assert review_data["status"] == "pass"
-    assert orchestrator._execute_agent.call_count == 1
-    
-    # Inspeciona o prompt passado para o reviewer
-    reviewer_task = orchestrator._execute_agent.call_args[0][0]
-    assert "ARTEFATOS EXISTENTES NO DISCO (considerar como parte do resultado):" in reviewer_task.prompt
-    assert "- file_on_disk.csv" in reviewer_task.prompt
+    assert mock_validator.review_result.call_count == 1
+
+    call_kwargs = mock_validator.review_result.call_args.kwargs
+    assert call_kwargs["task"] == task
+    assert call_kwargs["artifacts_on_disk"] == ["file_on_disk.csv"]
+

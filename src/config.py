@@ -1,9 +1,23 @@
 import os
+from enum import Enum
 from pathlib import Path
 from dotenv import load_dotenv
 
 # Carrega o arquivo .env se existir
 load_dotenv()
+
+
+class SessionMode(str, Enum):
+    """Nível de autonomia da sessão (Roadmap V15.6 / Spec G10).
+
+    ASSISTED: consulta o pesquisador quando o contexto está genuinamente ausente.
+    SEMI: nunca bloqueia — documenta suposições e continua.
+    AUTO: totalmente autônomo — resolve incertezas via busca web quando possível.
+    """
+
+    ASSISTED = "assisted"
+    SEMI = "semi"
+    AUTO = "auto"
 
 def get_env(key: str, default: str | None = None, required: bool = False) -> str:
     """Obtém uma variável de ambiente com opção de valor padrão ou obrigatoriedade.
@@ -107,6 +121,15 @@ MAX_PLAN_RETRIES = int(get_env("MAX_PLAN_RETRIES", default="5"))
 
 # V12.5.2 — Limite máximo de containers por sessão (circuit breaker de recursos)
 MAX_CONTAINERS_PER_SESSION = int(get_env("MAX_CONTAINERS_PER_SESSION", default="30"))
+
+# --- Perfil de Sessão (Roadmap V15.6 / Spec G10) ---
+# Nível de autonomia padrão quando nenhuma flag --mode é fornecida.
+# Ambientes headless (ex: servidores sem pesquisador disponível) podem usar 'semi' ou 'auto'.
+_session_default_mode_raw = get_env("SESSION_DEFAULT_MODE", default=SessionMode.ASSISTED.value).lower()
+try:
+    SESSION_DEFAULT_MODE = SessionMode(_session_default_mode_raw).value
+except ValueError:
+    SESSION_DEFAULT_MODE = SessionMode.ASSISTED.value
 
 
 # --- Outras Configurações ---

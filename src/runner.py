@@ -22,7 +22,8 @@ from src.config import (
     OUTPUT_BASE_DIR,
     LOGS_BASE_DIR,
     PI_TEMPERATURE_LIMIT,
-    PI_MIN_AVAILABLE_MEMORY_MB
+    PI_MIN_AVAILABLE_MEMORY_MB,
+    SESSION_DEFAULT_MODE,
 )
 from src.health import PiHealthMonitor
 from src.utils.terminal import (
@@ -391,6 +392,9 @@ class ContainerRunner:
                 # Adiciona variáveis de ambiente personalizadas passadas via argumento
                 if env_vars:
                     env.update(env_vars)
+
+                # Roadmap V15.6 / Spec G10 — garante SESSION_MODE sempre definido no container
+                env.setdefault("SESSION_MODE", SESSION_DEFAULT_MODE)
                 
                 # Passa QDRANT_URL adiante se existir
                 if "QDRANT_URL" in os.environ:
@@ -499,7 +503,13 @@ class ContainerRunner:
                     "remove": True,
                     "detach": True,
                     "group_add": [os.stat("/var/run/docker.sock").st_gid] if os.path.exists("/var/run/docker.sock") else [],
-                    "labels": {"project": "geminiclaw", "geminiclaw.managed": "true", "agent_id": agent_id, "session_id": session_id},
+                    "labels": {
+                        "project": "geminiclaw",
+                        "geminiclaw.managed": "true",
+                        "agent_id": agent_id,
+                        "session_id": session_id,
+                        "session_mode": env.get("SESSION_MODE", SESSION_DEFAULT_MODE),
+                    },
                     "environment": env,
                     "volumes": volumes,
                     "extra_hosts": extra_hosts,

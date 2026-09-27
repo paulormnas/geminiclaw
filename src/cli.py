@@ -19,7 +19,7 @@ if root_path not in sys.path:
     sys.path.insert(0, root_path)
 
 from src.logger import get_logger
-from src.config import AGENT_TIMEOUT_SECONDS, DEFAULT_MODEL
+from src.config import AGENT_TIMEOUT_SECONDS, DEFAULT_MODEL, SessionMode, SESSION_DEFAULT_MODE
 from src.session import SessionManager
 from src.runner import ContainerRunner
 from src.ipc import IPCChannel
@@ -32,6 +32,50 @@ from src.utils.terminal import (
 logger = get_logger(__name__)
 
 EXIT_COMMANDS = {"exit", "quit", "sair"}
+
+# Roadmap V15.6 / Spec G10 — texto de ajuda completo exibido em --help / -h / sem argumentos
+FULL_HELP_TEXT = f"""{CYAN}{BOLD}
+╔══════════════════════════════════════════════════════════════╗
+║           GeminiClaw — Harness de Pesquisa Científica        ║
+╚══════════════════════════════════════════════════════════════╝
+{RESET}
+{BOLD}USO:{RESET}
+  geminiclaw [opções] "<tarefa>"
+  geminiclaw sessions
+  geminiclaw stop [--session <id>]
+  geminiclaw history
+  geminiclaw --metrics <execution_id>
+
+{BOLD}MODOS DE OPERAÇÃO (--mode):{RESET}
+  {GREEN}assisted{RESET}   Padrão. Consulta o pesquisador apenas quando o contexto
+              está genuinamente ausente. Divergências são investigadas
+              autonomamente antes de qualquer consulta.
+
+  {YELLOW}semi{RESET}       Nunca bloqueia. Faz suposições razoáveis, documenta
+              todas as decisões e continua. Ideal para execuções
+              longas sem supervisão ativa.
+
+  {RED}auto{RESET}       Totalmente autônomo. Consulta a web para resolver
+              incertezas técnicas. Use apenas sem pesquisador disponível.
+
+{BOLD}CONTEXTO DE ENTRADA:{RESET}
+  Deposite arquivos em input_context/ antes de executar (ver Spec G9).
+
+{BOLD}EXEMPLOS:{RESET}
+  geminiclaw "Reproduza a Tabela 3 do artigo"
+  geminiclaw --mode semi "Análise exploratória do dataset"
+  geminiclaw --mode auto "Execute sem interrupção"
+  geminiclaw sessions
+  geminiclaw stop --session 20260922_iris
+
+{BOLD}RELATÓRIO:{RESET}
+  Sempre gerado em outputs/<session>/relatorio_final.md (ver Spec G8).
+"""
+
+
+def print_full_help() -> None:
+    """Exibe o texto de ajuda completo (banner + modos + exemplos)."""
+    print(FULL_HELP_TEXT)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -101,6 +145,16 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SESSION_ID",
         default=None,
         help="ID da sessão alvo para operações direcionadas (ex: stop --session <id>).",
+    )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=[m.value for m in SessionMode],
+        default=None,
+        help=(
+            "Nível de autonomia da sessão: assisted (padrão), semi ou auto "
+            f"(padrão configurável via SESSION_DEFAULT_MODE, atualmente '{SESSION_DEFAULT_MODE}')."
+        ),
     )
     return parser
 
@@ -372,6 +426,47 @@ def show_session_logs(session_id: str) -> None:
     print(f"{BOLD}{'─' * 100}{RESET}\n")
 
 
+def print_session_banner(mode: str, context_dir: str = "input_context") -> None:
+    """Exibe o banner de inicialização de sessão (Roadmap V15.6 / Spec G10).
+
+    Não bloqueia: apenas informa o pesquisador do estado atual antes de iniciar.
+
+    Args:
+        mode: Modo de operação ativo da sessão (SessionMode).
+        context_dir: Diretório de contexto de entrada a inspecionar.
+    """
+    mode_label = {
+        SessionMode.ASSISTED.value: "assistido",
+        SessionMode.SEMI.value: "semi-autônomo",
+        SessionMode.AUTO.value: "autônomo",
+    }.get(mode, mode)
+
+    context_path = Path(context_dir)
+    file_count = 0
+    file_names: list[str] = []
+    if context_path.is_dir():
+        file_names = sorted(p.name for p in context_path.iterdir() if p.is_file())
+        file_count = len(file_names)
+
+    if file_count == 0:
+        context_desc = f"{YELLOW}⚠ Nenhum contexto detectado{RESET}"
+    elif file_count <= 3:
+        context_desc = f"{file_count} arquivo(s): {', '.join(file_names)}"
+    else:
+        context_desc = f"{file_count} arquivos"
+
+    print(
+        f"\n{DIM}┌──────────────────────────────────────────────────────────────┐{RESET}\n"
+        f"{DIM}│{RESET}  GeminiClaw  │  Modo: {BOLD}{mode_label}{RESET}  │  Contexto: {context_desc}\n"
+        f"{DIM}│{RESET}  Pressione Ctrl+C para suspender │  -h para ajuda\n"
+        f"{DIM}└──────────────────────────────────────────────────────────────┘{RESET}"
+    )
+
+    if mode == SessionMode.AUTO.value:
+        print(f"  {YELLOW}⚠ Modo autônomo ativo — sem consulta ao pesquisador{RESET}")
+    print()
+
+
 def show_sessions(docker_client: Any | None = None) -> list[dict[str, Any]]:
     """Lista containers ativos do GeminiClaw (Roadmap V14.6).
 
@@ -406,15 +501,16 @@ def show_sessions(docker_client: Any | None = None) -> list[dict[str, Any]]:
         print(f"{BOLD}{_sep}{RESET}\n")
         return []
 
-    header = f"  {BOLD}{'SESSION ID':<24} {'CONTAINER ID':<14} {'AGENT':<12} {'IMAGE':<24} {'STATUS'}{RESET}"
+    header = f"  {BOLD}{'SESSION ID':<24} {'CONTAINER ID':<14} {'AGENT':<12} {'MODE':<10} {'IMAGE':<24} {'STATUS'}{RESET}"
     print(header)
-    print(f"  {DIM}{'─' * 78}{RESET}")
+    print(f"  {DIM}{'─' * 88}{RESET}")
 
     active_info = []
     for c in containers:
         labels = getattr(c, "labels", {}) or {}
         session_id = labels.get("session_id", "unknown")
         agent_id = labels.get("agent_id", "unknown")
+        session_mode = labels.get("session_mode", "—")
         cid = getattr(c, "short_id", getattr(c, "id", "unknown")[:12])
 
         image_name = "unknown"
@@ -427,11 +523,12 @@ def show_sessions(docker_client: Any | None = None) -> list[dict[str, Any]]:
         status = getattr(c, "status", "unknown")
         status_color = GREEN if status == "running" else YELLOW
 
-        print(f"  {CYAN}{session_id:<24}{RESET} {DIM}{cid:<14}{RESET} {agent_id:<12} {image_name:<24} [{status_color}{status}{RESET}]")
+        print(f"  {CYAN}{session_id:<24}{RESET} {DIM}{cid:<14}{RESET} {agent_id:<12} {session_mode:<10} {image_name:<24} [{status_color}{status}{RESET}]")
         active_info.append({
             "session_id": session_id,
             "container_id": cid,
             "agent_id": agent_id,
+            "mode": session_mode,
             "image": image_name,
             "status": status,
         })
@@ -527,31 +624,34 @@ def _create_orchestrator() -> tuple[Orchestrator, ContainerRunner]:
     return orchestrator, runner
 
 
-async def execute_prompt(orchestrator: Orchestrator, prompt: str) -> None:
+async def execute_prompt(orchestrator: Orchestrator, prompt: str, mode: str | None = None) -> None:
     """Executa um prompt no orquestrador e exibe o resultado.
 
     Args:
         orchestrator: Instância do orquestrador.
         prompt: Prompt do usuário.
+        mode: Nível de autonomia da sessão (SessionMode). Se omitido, usa o padrão.
     """
     print(f"\n  {STATUS_ICONS['running']} {DIM}Processando...{RESET}\n")
 
     try:
-        result = await orchestrator.handle_request(prompt)
+        result = await orchestrator.handle_request(prompt, mode=mode)
         print(format_result(result))
     except Exception as e:
         logger.error("Erro ao processar prompt", extra={"error": str(e)})
         print(f"\n  {STATUS_ICONS['error']} {RED}Erro: {e}{RESET}\n")
 
 
-async def interactive_mode(orchestrator: Orchestrator) -> None:
+async def interactive_mode(orchestrator: Orchestrator, mode: str | None = None) -> None:
     """Executa a CLI em modo interativo (REPL).
 
     Args:
         orchestrator: Instância do orquestrador.
+        mode: Nível de autonomia da sessão (SessionMode). Se omitido, usa o padrão.
     """
     print(BANNER)
     print(f"  {DIM}Modo interativo. Digite 'sair' para encerrar.{RESET}\n")
+    print_session_banner(mode or SESSION_DEFAULT_MODE)
 
     while True:
         try:
@@ -577,13 +677,19 @@ async def interactive_mode(orchestrator: Orchestrator) -> None:
             stop_sessions(session_id=s_id, session_runner=getattr(orchestrator, "session_runner", None))
             continue
 
-        await execute_prompt(orchestrator, prompt)
+        await execute_prompt(orchestrator, prompt, mode=mode)
 
 
 def main() -> None:
     """Ponto de entrada principal da CLI."""
+    # Roadmap V15.6 / Spec G10 — help completo customizado, sem passar pelo argparse padrão
+    if any(a in ("-h", "--help") for a in sys.argv[1:]):
+        print_full_help()
+        sys.exit(0)
+
     parser = build_parser()
     args = parser.parse_args()
+    mode = args.mode or SESSION_DEFAULT_MODE
 
     runner: ContainerRunner | None = None
     orchestrator: Orchestrator | None = None
@@ -672,7 +778,8 @@ def main() -> None:
 
     if args.prompt:
         # Modo direto: executa o prompt e sai
-        asyncio.run(execute_prompt(orchestrator, args.prompt))
+        print_session_banner(mode)
+        asyncio.run(execute_prompt(orchestrator, args.prompt, mode=mode))
         # V11.1.2 — Flush explícito ao encerrar modo não-interativo
         try:
             from src.telemetry import get_telemetry
@@ -681,7 +788,7 @@ def main() -> None:
             logger.error("Erro no flush de telemetria final", extra={"error": str(_e)})
     else:
         # Modo interativo (REPL)
-        asyncio.run(interactive_mode(orchestrator))
+        asyncio.run(interactive_mode(orchestrator, mode=mode))
         # V11.1.2 — Flush explícito ao sair do modo interativo
         try:
             from src.telemetry import get_telemetry

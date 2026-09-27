@@ -84,7 +84,14 @@ async def test_runner_spawn_parameters(mock_docker_client):
                     "remove": True,
                     "detach": True,
                     "group_add": expected_group_add,
-                    "labels": {"project": "geminiclaw", "geminiclaw.managed": "true", "agent_id": "base", "session_id": "session_123"},
+                    "labels": {
+                        "project": "geminiclaw",
+                        "geminiclaw.managed": "true",
+                        "agent_id": "base",
+                        "session_id": "session_123",
+                        # V15.6/G10: modo de operação da sessão propagado ao container.
+                        "session_mode": "assisted",
+                    },
                     "environment": {
                         "AGENT_ID": "base",
                         "AGENT_ROLE": "base",
@@ -106,6 +113,8 @@ async def test_runner_spawn_parameters(mock_docker_client):
                         "AGENT_SOCKET_NAME": "base_session_123.sock",
                         "OUTPUT_BASE_DIR": "/outputs",
                         "LOGS_BASE_DIR": "/logs",
+                        # V15.6/G10: modo de operação padrão quando não especificado via env_vars.
+                        "SESSION_MODE": "assisted",
                     },
                     "volumes": expected_volumes,
                     "extra_hosts": {"host.docker.internal": "host-gateway"},

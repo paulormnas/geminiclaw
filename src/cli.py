@@ -41,7 +41,7 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
 {RESET}
 {BOLD}USO:{RESET}
   geminiclaw [opções] "<tarefa>"
-  geminiclaw sessions [--status running|suspended|completed]
+  geminiclaw sessions
   geminiclaw stop [--session <id>]
   geminiclaw history
   geminiclaw --metrics <execution_id>
@@ -65,7 +65,7 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
   geminiclaw "Reproduza a Tabela 3 do artigo"
   geminiclaw --mode semi "Análise exploratória do dataset"
   geminiclaw --mode auto "Execute sem interrupção"
-  geminiclaw sessions --status running
+  geminiclaw sessions
   geminiclaw stop --session 20260922_iris
 
 {BOLD}RELATÓRIO:{RESET}

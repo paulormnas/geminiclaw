@@ -213,6 +213,30 @@ def _get_agent_instruction(base_instruction: str) -> str:
     instruction = base_instruction
     context_sections: list[str] = []
 
+    # --- Modo de operação da sessão (Roadmap V15.6 / Spec G10) ---
+    session_mode = os.environ.get("SESSION_MODE", "assisted").lower()
+    _MODE_GUIDANCE: dict[str, str] = {
+        "assisted": (
+            "Modo ASSISTIDO (padrão). Quando o contexto necessário estiver genuinamente ausente "
+            "e bloquear o progresso, use a ferramenta `ask_researcher` (quando disponível) para "
+            "consultar o pesquisador. Antes de perguntar, investigue autonomamente: revise o "
+            "contexto disponível, tente abordagens alternativas documentadas, e só pergunte se "
+            "permanecer genuinamente bloqueado."
+        ),
+        "semi": (
+            "Modo SEMI-AUTÔNOMO. NUNCA bloqueie aguardando resposta do pesquisador. Quando "
+            "faltar contexto, documente a suposição adotada (e por quê) e continue a execução."
+        ),
+        "auto": (
+            "Modo TOTALMENTE AUTÔNOMO. Não há pesquisador disponível para consulta. Resolva "
+            "incertezas autonomamente, usando busca web técnica quando necessário, e documente "
+            "todas as decisões tomadas sem confirmação humana."
+        ),
+    }
+    context_sections.append(
+        f"**MODO DE OPERAÇÃO DA SESSÃO**: `{session_mode}`\n{_MODE_GUIDANCE.get(session_mode, _MODE_GUIDANCE['assisted'])}"
+    )
+
     # --- Catálogo de skills disponíveis ---
     _SKILL_GUIDANCE: dict[str, str] = {
         "quick_search": "buscas gerais na web, notícias e informações recentes",

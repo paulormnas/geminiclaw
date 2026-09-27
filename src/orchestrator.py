@@ -66,6 +66,7 @@ class AgentTask:
     subtask_id: str | None = None  # V9: ID único para telemetria
     created_at: str | None = None  # V9: Timestamp de criação
     retry_attempt: int = 0  # V12.3.3: Número da tentativa atual (0-indexed)
+    mode: str = ""  # V15.6/G10: SessionMode ("assisted" | "semi" | "auto")
 
 
 @dataclass
@@ -224,12 +225,19 @@ class Orchestrator:
         return dict(AGENT_REGISTRY)
 
 
-    async def handle_request(self, prompt: str, agent_tasks: list[AgentTask] | None = None) -> OrchestratorResult:
+    async def handle_request(
+        self,
+        prompt: str,
+        agent_tasks: list[AgentTask] | None = None,
+        mode: str | None = None,
+    ) -> OrchestratorResult:
         """Processa a solicitação do usuário, executando o ciclo de vida completo.
 
         Args:
             prompt: O prompt ou tarefa solicitada.
             agent_tasks: Lista de tarefas (opcional) para bypassar o autonomous loop.
+            mode: Nível de autonomia da sessão (SessionMode). Se omitido, usa
+                ``SESSION_DEFAULT_MODE`` (Roadmap V15.6 / Spec G10).
 
         Returns:
             O resultado final da orquestração.
@@ -238,36 +246,49 @@ class Orchestrator:
         import json
         from src.history import ExecutionHistory
         from datetime import datetime
-        
+        from src.config import SESSION_DEFAULT_MODE
+
         started_at = time.time()
         start_date = datetime.utcnow().isoformat() + "Z"
-        
-        logger.info("Nova requisição recebida no orquestrador", extra={"prompt_preview": prompt[:50]})
-        
+
+        effective_mode = mode or SESSION_DEFAULT_MODE
+
+        logger.info(
+            "Nova requisição recebida no orquestrador",
+            extra={"prompt_preview": prompt[:50], "mode": effective_mode},
+        )
+
         # Gera slug legível para a sessão (V10.2)
         session_slug = generate_session_slug(prompt)
-        
+
         master_session = self.session_manager.create("orchestrator", session_id=session_slug)
-        
+
+        # V15.6/G10 — Persiste o modo de operação no payload da sessão mestra
+        self.session_manager.update(
+            master_session.id,
+            payload={**master_session.payload, "mode": effective_mode},
+        )
+
         # V5.6 — Telemetria: evento de início de execução
         telemetry = get_telemetry()
         history = ExecutionHistory()
         exec_id = history.start(prompt, start_date, exec_id=session_slug)
-        
+
         logger.info("Nova requisição registrada", extra={"execution_id": exec_id, "prompt_preview": prompt[:50]})
-        
+
         # Se tarefas explícitas forem fornecidas, executa sequencialmente (compatibilidade)
         if agent_tasks:
             logger.info("Executando tarefas explícitas fornecidas (bypass autonomous loop)")
             results = []
             for task in agent_tasks:
+                task.mode = task.mode or effective_mode
                 result = await self._execute_agent(task, master_session.id)
                 results.append(result)
-            
+
             succeeded = sum(1 for r in results if r.status == "success")
             failed = len(results) - succeeded
             all_artifacts = self.output_manager.list_artifacts(master_session.id)
-            
+
             result = OrchestratorResult(
                 results=results,
                 total=len(results),
@@ -279,15 +300,16 @@ class Orchestrator:
         else:
             # Caso contrário, usa o loop autônomo (Etapa S7)
             loop = AutonomousLoop(self)
-            result = await loop.run(prompt, exec_id or master_session.id)
-        
+            result = await loop.run(prompt, exec_id or master_session.id, mode=effective_mode)
+
         # Atualiza a sessão mestra com o resultado consolidado
         final_status = "success" if result.succeeded == result.total and result.total > 0 else "failed"
         self.session_manager.update(
-            master_session.id, 
+            master_session.id,
             status=final_status,
             payload={
                 "prompt": prompt,
+                "mode": effective_mode,
                 "summary": {
                     "total": result.total,
                     "succeeded": result.succeeded,
@@ -447,7 +469,11 @@ class Orchestrator:
             else:
                 # Agentes de execução podem ter o thinking desabilitado para velocidade
                 env_vars["OLLAMA_ENABLE_THINKING"] = str(OLLAMA_ENABLE_THINKING).lower()
-            
+
+            # Roadmap V15.6 / Spec G10 — Propaga o modo de operação da sessão (SessionMode)
+            if task.mode:
+                env_vars["SESSION_MODE"] = task.mode
+
             container_id = await self.runner.spawn(
                 task.agent_id, 
                 task.image, 

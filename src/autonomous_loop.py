@@ -46,23 +46,30 @@ class AutonomousLoop:
             confidence_threshold=float(os.environ.get("TRIAGE_CONFIDENCE_THRESHOLD", "0.7"))
         )
         self._health_monitor = PiHealthMonitor()
+        # Roadmap V15.6 / Spec G10 — modo de operação da sessão corrente
+        self._session_mode: str = ""
 
 
-    async def run(self, prompt: str, master_session_id: str) -> "OrchestratorResult":
+    async def run(self, prompt: str, master_session_id: str, mode: str = "") -> "OrchestratorResult":
         """Executa a tarefa utilizando o loop autônomo.
-        
+
         Args:
             prompt: Solicitação original do usuário.
             master_session_id: ID da sessão mestra para coordenação.
-            
+            mode: Nível de autonomia da sessão (SessionMode). Se omitido, usa
+                ``SESSION_DEFAULT_MODE``.
+
         Returns:
             OrchestratorResult consolidado.
         """
+        from src.config import SESSION_DEFAULT_MODE
+        self._session_mode = mode or SESSION_DEFAULT_MODE
+
         logger.info(
-            "Iniciando loop autônomo", 
-            extra={"prompt_preview": prompt[:100], "master_session_id": master_session_id}
+            "Iniciando loop autônomo",
+            extra={"prompt_preview": prompt[:100], "master_session_id": master_session_id, "mode": self._session_mode}
         )
-        
+
         telemetry = get_telemetry()
 
         # 1. Triage: Simples vs Complexo
@@ -186,7 +193,8 @@ class AutonomousLoop:
             prompt=prompt,
             task_name="simple_task",
             subtask_id=subtask_id,
-            created_at=now_iso
+            created_at=now_iso,
+            mode=self._session_mode,
         )
         
         # Registra estado inicial
@@ -437,6 +445,7 @@ class AutonomousLoop:
                     preferred_model=task.preferred_model,
                     subtask_id=task.subtask_id,
                     created_at=task.created_at,
+                    mode=self._session_mode,
                 )
                 
                 enriched_task = self._enrich_task_prompt(enriched_task)
@@ -554,6 +563,7 @@ class AutonomousLoop:
                             subtask_id=enriched_task.subtask_id,
                             created_at=enriched_task.created_at,
                             retry_attempt=attempt + 1,  # V12.3.3: próxima tentativa
+                            mode=enriched_task.mode,
                         )
                         await asyncio.sleep(1)
 

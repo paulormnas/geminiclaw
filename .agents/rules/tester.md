@@ -73,6 +73,29 @@ tests/
 
 ---
 
+## Lint Estático (Ruff) — rodar antes de qualquer nível de teste
+
+Antes de executar a suíte de testes, rode o Ruff para pegar erros de sintaxe, imports
+quebrados/desordenados e problemas de estilo antes de gastar tempo com pytest:
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+```
+
+- **Escopo:** ao validar um PR ou uma worktree de feature, rode o Ruff sobre os arquivos
+  alterados (`git diff --name-only dev... -- '*.py'`) e trate achados nesses arquivos como
+  bloqueantes, na mesma lógica dos eixos de revisão em [`reviewer.md`](reviewer.md#4-metodologia-de-inspeção-com-github-cli-gh).
+- **Débito pré-existente:** o repositório ainda não tinha lint automatizado antes da adoção
+  do Ruff, então `uv run ruff check .` roda hoje com centenas de achados fora do escopo de
+  qualquer mudança pontual. Não é responsabilidade do Tester corrigir esse débito em um PR
+  não relacionado — reporte um achado apenas quando ele estiver em uma linha tocada pela
+  mudança sob validação.
+- Nunca use `pip install ruff` — a dependência já está declarada em `[dependency-groups] dev`
+  no `pyproject.toml`; sincronize com `uv sync`.
+
+---
+
 ## Níveis de Teste
 
 ### Unit (`tests/unit/`) — rodar a cada mudança

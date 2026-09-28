@@ -1,13 +1,12 @@
 import pytest
+
+from agents.base.agent import Agent, _load_session_context, _persist_session_context
 from agents.researcher.agent import (
-    root_agent,
-    AGENT_NAME,
     AGENT_DESCRIPTION,
     AGENT_INSTRUCTION,
+    AGENT_NAME,
+    root_agent,
 )
-from agents.base.agent import Agent
-from agents.researcher.tools import search
-from agents.base.agent import _load_session_context, _persist_session_context
 from src.config import DEFAULT_MODEL
 
 

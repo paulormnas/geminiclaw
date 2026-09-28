@@ -1,13 +1,12 @@
 import pytest
-from unittest.mock import patch
 
 from agents.base.agent import (
-    root_agent,
-    AGENT_NAME,
     AGENT_DESCRIPTION,
     AGENT_INSTRUCTION,
+    AGENT_NAME,
     _load_session_context,
     _persist_session_context,
+    root_agent,
 )
 from src.config import DEFAULT_MODEL
 

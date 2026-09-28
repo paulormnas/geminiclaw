@@ -28,6 +28,7 @@ from src.utils.json_parser import extract_json
 from src.rate_limiter import AdaptiveRateLimiter
 from src.telemetry import get_telemetry
 from src.agents.validator_agent import ValidatorAgent
+from src.context_loader import ContextLoader, ContextBundle
 
 logger = get_logger(__name__)
 
@@ -105,6 +106,7 @@ class OrchestratorResult:
     failed: int
     artifacts: list[dict[str, Any]] = field(default_factory=list)
     plan_json: str | None = None
+    session_id: str | None = None  # V15.5/G9: id da sessão mestra (usado para input_snapshot/)
 
 
 def _ingest_container_telemetry(
@@ -209,6 +211,8 @@ class Orchestrator:
         self.validator = ValidatorAgent()
         # V12.5.2 — Rastreia containers spawnados por master_session_id
         self._session_container_counts: dict[str, int] = {}
+        # V15.5/G9 — Bloco de texto do ContextBundle ativo, injetado no plano inicial do Researcher
+        self._current_context_block: str = ""
         if session_runner is None:
             from src.runner import SessionContainerRunner
             self.session_runner = SessionContainerRunner(runner=self.runner, ipc=self.ipc)
@@ -230,6 +234,7 @@ class Orchestrator:
         prompt: str,
         agent_tasks: list[AgentTask] | None = None,
         mode: str | None = None,
+        context_bundle: ContextBundle | None = None,
     ) -> OrchestratorResult:
         """Processa a solicitação do usuário, executando o ciclo de vida completo.
 
@@ -238,6 +243,8 @@ class Orchestrator:
             agent_tasks: Lista de tarefas (opcional) para bypassar o autonomous loop.
             mode: Nível de autonomia da sessão (SessionMode). Se omitido, usa
                 ``SESSION_DEFAULT_MODE`` (Roadmap V15.6 / Spec G10).
+            context_bundle: Contexto pré-carregado de ``input_context/`` (Spec G9).
+                Se omitido, é carregado internamente via ``ContextLoader``.
 
         Returns:
             O resultado final da orquestração.
@@ -268,6 +275,20 @@ class Orchestrator:
             master_session.id,
             payload={**master_session.payload, "mode": effective_mode},
         )
+
+        # V15.5/G9 — Carrega (ou reutiliza) o contexto de input_context/ e o disponibiliza
+        # para o Researcher no primeiro ciclo de planejamento; salva snapshot imutável.
+        # O carregamento automático só ocorre no caminho real de uso (loop autônomo):
+        # `agent_tasks` é um bypass de compatibilidade para chamadores programáticos que
+        # montam seu próprio plano (sem Researcher), logo não há prompt de planejamento
+        # para injetar contexto — evitamos o custo (e o I/O) quando não é utilizável.
+        bundle = context_bundle
+        if bundle is None and not agent_tasks:
+            bundle = ContextLoader().load()
+        if bundle is not None:
+            self._current_context_block = bundle.to_prompt_context()
+            self.output_manager.init_session(master_session.id)
+            self._snapshot_input_context(bundle, master_session.id)
 
         # V5.6 — Telemetria: evento de início de execução
         telemetry = get_telemetry()
@@ -370,7 +391,40 @@ class Orchestrator:
         except Exception as e:
             logger.warning(f"Falha ao salvar artefatos de metadados na sessão: {e}")
 
+        result.session_id = master_session.id
         return result
+
+    def _snapshot_input_context(self, bundle: ContextBundle, session_id: str) -> None:
+        """Copia os arquivos de ``input_context/`` usados para ``outputs/<session_id>/input_snapshot/``
+        (Roadmap V15.5 / Spec G9), garantindo rastreabilidade imutável da sessão.
+        """
+        if bundle.total_files == 0:
+            return
+
+        import shutil
+
+        snapshot_dir = self.output_manager.base_dir / session_id / "input_snapshot"
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+
+        source_paths = (
+            [d.source_path for d in bundle.text_documents]
+            + [d.source_path for d in bundle.structured_data]
+            + [d.source_path for d in bundle.images]
+            + bundle.raw_files
+        )
+        for src_path in source_paths:
+            try:
+                shutil.copy2(src_path, snapshot_dir / src_path.name)
+            except Exception as e:
+                logger.warning(
+                    "Falha ao copiar arquivo para input_snapshot/",
+                    extra={"path": str(src_path), "error": str(e)},
+                )
+
+        logger.info(
+            "input_snapshot/ salvo",
+            extra={"session_id": session_id, "files": len(source_paths)},
+        )
 
     async def _execute_agent(self, task: AgentTask, master_session_id: str | None = None) -> AgentResult:
         """Executa o ciclo de vida completo de um único agente.
@@ -745,9 +799,13 @@ class Orchestrator:
                     "Retorne o plano COMPLETO atualizado em JSON."
                 )
             else:
+                # V15.5/G9 — Injeta o contexto pré-curado de input_context/ apenas no
+                # plano inicial (nunca em replans, para não repetir payload grande).
+                context_block = f"\n\n{self._current_context_block}\n" if self._current_context_block else ""
                 planner_prompt = (
                     f"MODO: PLAN\n\n"
-                    f"Crie um plano de execução (DAG) para a seguinte tarefa:\n{prompt}\n\n"
+                    f"Crie um plano de execução (DAG) para a seguinte tarefa:\n{prompt}\n"
+                    f"{context_block}\n"
                     "INSTRUÇÃO OBRIGATÓRIA: Se a tarefa envolver domínio técnico ou bibliotecas, "
                     "execute uma busca com 'quick_search' para verificar contexto antes de formular as subtarefas. "
                     "Cada subtarefa no plano DEVE conter 'validation_criteria' com ao menos um critério explícito. "

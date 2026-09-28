@@ -287,3 +287,56 @@ def test_update_next_hint_persists(tmp_path: pathlib.Path) -> None:
 
     data = manifest.read()
     assert data["next_step_hint"] == hint
+
+
+# ---------------------------------------------------------------------------
+# Roadmap V15.2 / Spec G2 — params_path, metrics_path, seed_used, divergence_detected
+# ---------------------------------------------------------------------------
+@pytest.mark.unit
+def test_record_step_stores_scientific_fields(tmp_path: pathlib.Path) -> None:
+    """record_step deve persistir os campos científicos quando fornecidos."""
+    manifest = WorkspaceManifest(
+        session_dir=tmp_path / "sess",
+        session_id="sess_sci",
+        task_name="treinar_modelo",
+    )
+
+    manifest.record_step(
+        step=1,
+        status="success",
+        artifacts=["metrics.json", "params.json"],
+        summary="Modelo treinado.",
+        params_path="treinar_modelo/params.json",
+        metrics_path="treinar_modelo/metrics.json",
+        seed_used=42,
+        divergence_detected=False,
+    )
+
+    step = manifest.read()["steps"][0]
+    assert step["params_path"] == "treinar_modelo/params.json"
+    assert step["metrics_path"] == "treinar_modelo/metrics.json"
+    assert step["seed_used"] == 42
+    assert step["divergence_detected"] is False
+
+
+@pytest.mark.unit
+def test_record_step_scientific_fields_default_to_none(tmp_path: pathlib.Path) -> None:
+    """Retrocompatibilidade: subtarefas sem metrics.json/params.json recebem None."""
+    manifest = WorkspaceManifest(
+        session_dir=tmp_path / "sess",
+        session_id="sess_no_sci",
+        task_name="buscar_contexto",
+    )
+
+    manifest.record_step(
+        step=1,
+        status="success",
+        artifacts=["contexto.md"],
+        summary="Contexto salvo.",
+    )
+
+    step = manifest.read()["steps"][0]
+    assert step["params_path"] is None
+    assert step["metrics_path"] is None
+    assert step["seed_used"] is None
+    assert step["divergence_detected"] is None

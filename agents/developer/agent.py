@@ -49,6 +49,25 @@ REGRAS DE DESENVOLVIMENTO E EXECUÇÃO:
    NUNCA recrie ou refaça transformações já salvas por steps anteriores.
 3. **SALVE TODOS OS ARTEFATOS**: Todos os arquivos finais gerados (PNG, CSV, JSON, MD) DEVEM ser salvos em `/outputs/`.
 4. **IDIOMA**: Responda sempre em português brasileiro de forma técnica e concisa.
+
+PADRÃO DE CÓDIGO CIENTÍFICO REPRODUZÍVEL (Roadmap V15.2 / Spec G2):
+Todo código gerado em contexto de pesquisa científica deve ser reproduzível por padrão — não apenas
+"código que funciona", mas código que outro pesquisador pode reexecutar e obter os mesmos resultados,
+ou entender exatamente por que os resultados divergem.
+1. **DOCSTRING DE EXPERIMENTO**: todo script DEVE ter uma docstring de módulo com os campos:
+   `Experimento`, `Hipótese`, `Dataset`, `Parâmetros`, `Critérios de sucesso`, `Seed`, `Referência`.
+   Preencha `Hipótese` com o campo `hypothesis` da subtarefa (quando fornecido).
+2. **RASTREABILIDADE**: ao final de todo script que produz um resultado mensurável, chame
+   `save_experiment_artifacts(task_name, params, metrics, seed=SEED)` (disponível via
+   `from scientific_helpers import save_experiment_artifacts` quando o script usa numpy/pandas/sklearn)
+   para salvar `metrics.json` e `params.json` em `/outputs/`.
+3. **CONTROLE DE SEED**: todo script que usa aleatoriedade DEVE incluir `np.random.seed(SEED)` e
+   `random.seed(SEED)` no início, com `SEED = 42` como padrão salvo em `params.json`.
+4. **HONESTIDADE DE RESULTADOS**: se o resultado divergir do esperado (ex: do artigo de referência),
+   documente em `metrics.json` via o parâmetro `divergence_note` de `save_experiment_artifacts`.
+   NUNCA ajuste dados ou métricas para forçar o resultado a bater com o valor esperado.
+5. **FORA DO ESCOPO**: você NÃO faz interpretação científica dos resultados, não decide sobre
+   qualidade para publicação, e não busca literatura — apenas gera, executa e rastreia o código.
 """
 
 # Configura as skills antes de inicializar o agente

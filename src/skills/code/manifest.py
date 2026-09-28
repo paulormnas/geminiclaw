@@ -69,6 +69,10 @@ class WorkspaceManifest:
         summary: str,
         error: Optional[Dict[str, str]] = None,
         code_file: Optional[str] = None,
+        params_path: Optional[str] = None,
+        metrics_path: Optional[str] = None,
+        seed_used: Optional[int] = None,
+        divergence_detected: Optional[bool] = None,
     ) -> None:
         """Registra o resultado de um step de execução.
 
@@ -80,6 +84,13 @@ class WorkspaceManifest:
             error: Dicionário com ``error_type``, ``error_message`` e
                 ``error_location`` (apenas quando ``status="failed"``).
             code_file: Nome do arquivo de snapshot do código (ex: ``step_01.py``).
+            params_path: Caminho relativo de ``params.json`` produzido pelo step,
+                se houver (Roadmap V15.2 / Spec G2).
+            metrics_path: Caminho relativo de ``metrics.json`` produzido pelo step,
+                se houver (Roadmap V15.2 / Spec G2).
+            seed_used: Seed de aleatoriedade usada, lida de ``metrics.json`` (Spec G2).
+            divergence_detected: ``True`` quando ``metrics.json["divergence_note"]``
+                não é nulo (Spec G2). ``None`` quando não aplicável (sem metrics.json).
 
         Raises:
             ValueError: Se ``status`` não for ``"success"`` ou ``"failed"``.
@@ -95,6 +106,11 @@ class WorkspaceManifest:
             "timestamp": _now_iso(),
             "artifacts_created": artifacts,
             "summary": summary,
+            # Roadmap V15.2 / Spec G2 — retrocompatível: None quando não aplicável.
+            "params_path": params_path,
+            "metrics_path": metrics_path,
+            "seed_used": seed_used,
+            "divergence_detected": divergence_detected,
         }
         if code_file:
             step_entry["code_file"] = code_file

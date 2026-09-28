@@ -82,6 +82,7 @@ class PythonSandbox:
         output_dir: str,
         timeout: Optional[int] = None,
         setup_commands: Optional[List[List[str]]] = None,
+        extra_files: Optional[Dict[str, str]] = None,
     ) -> SandboxResult:
         """Executa o código fornecido em um container isolado.
 
@@ -92,6 +93,8 @@ class PythonSandbox:
             output_dir: Diretório raiz para artefatos no host.
             timeout: Tempo limite em segundos (sobrescreve o default).
             setup_commands: Comandos de setup (ex: [['pip', 'install', 'pandas']])
+            extra_files: Arquivos adicionais para copiar para /outputs junto do script
+                (ex: {"scientific_helpers.py": "<código-fonte>"} — Roadmap V15.2 / Spec G2).
         """
         container = None
         try:
@@ -143,7 +146,7 @@ class PythonSandbox:
             # Injetar o script e garantir que o diretório /outputs existe
             container.exec_run("mkdir -p /outputs", user='root')
             container.exec_run("chmod 777 /outputs", user='root')
-            tar_data = self._create_tar_archive({"script.py": code})
+            tar_data = self._create_tar_archive({"script.py": code, **(extra_files or {})})
             container.put_archive("/outputs", tar_data)
 
             # Executar comandos de setup (ex: instalação de pacotes)

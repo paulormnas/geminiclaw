@@ -266,3 +266,110 @@ async def test_validator_requires_quantitative_criterion_for_validation_type(moc
 
     assert result.is_valid is False
     assert any("critério quantitativo" in issue for issue in result.issues)
+
+
+# ---------------------------------------------------------------------------
+# Roadmap V15.2 / Spec G2 — review_result contra metrics.json real
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_review_result_approves_when_metrics_meet_threshold(tmp_path, mock_validator_provider):
+    """metrics.json com acurácia 0.87 e critério '> 0.85' -> aprovado, sem chamar o LLM."""
+    validator = ValidatorAgent(provider=mock_validator_provider)
+
+    task_dir = tmp_path / "treinar_modelo"
+    task_dir.mkdir()
+    (task_dir / "metrics.json").write_text(
+        '{"task_name": "treinar_modelo", "seed": 42, "metrics": {"accuracy": 0.87}, "divergence_note": null}',
+        encoding="utf-8",
+    )
+
+    task = {
+        "task_name": "treinar_modelo",
+        "validation_criteria": ["Acurácia > 0.85 no conjunto de teste"],
+    }
+
+    result = await validator.review_result(task=task, response_text="ok", output_dir=tmp_path)
+
+    assert result.is_approved is True
+    assert result.status == "pass"
+    mock_validator_provider.generate.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_review_result_fails_when_metrics_below_threshold(tmp_path, mock_validator_provider):
+    """metrics.json com acurácia 0.60 e critério '> 0.85' -> reprovado."""
+    validator = ValidatorAgent(provider=mock_validator_provider)
+
+    task_dir = tmp_path / "treinar_modelo"
+    task_dir.mkdir()
+    (task_dir / "metrics.json").write_text(
+        '{"metrics": {"accuracy": 0.60}, "divergence_note": null}', encoding="utf-8"
+    )
+
+    task = {"task_name": "treinar_modelo", "validation_criteria": ["Acurácia > 0.85"]}
+
+    result = await validator.review_result(task=task, response_text="ok", output_dir=tmp_path)
+
+    assert result.is_approved is False
+    assert result.status == "fail"
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_review_result_fails_when_metrics_json_missing(tmp_path, mock_validator_provider):
+    """Critério quantitativo sem metrics.json em disco -> reprovado com issue clara."""
+    validator = ValidatorAgent(provider=mock_validator_provider)
+
+    task = {"task_name": "treinar_modelo", "validation_criteria": ["Acurácia > 0.85"]}
+
+    result = await validator.review_result(task=task, response_text="ok", output_dir=tmp_path)
+
+    assert result.is_approved is False
+    assert result.status == "fail"
+    assert any("metrics.json" in issue for issue in result.issues)
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_review_result_divergent_but_documented(tmp_path, mock_validator_provider):
+    """metrics.json com divergence_note preenchido -> status divergent_but_documented, não fail."""
+    validator = ValidatorAgent(provider=mock_validator_provider)
+
+    task_dir = tmp_path / "treinar_modelo"
+    task_dir.mkdir()
+    (task_dir / "metrics.json").write_text(
+        '{"metrics": {"accuracy": 0.60}, '
+        '"divergence_note": "Resultado diverge do artigo por diferença no pré-processamento."}',
+        encoding="utf-8",
+    )
+
+    task = {"task_name": "treinar_modelo", "validation_criteria": ["Acurácia > 0.85"]}
+
+    result = await validator.review_result(task=task, response_text="ok", output_dir=tmp_path)
+
+    assert result.is_approved is True
+    assert result.status == "divergent_but_documented"
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_review_result_sem_criterio_quantitativo_nao_exige_metrics_json(tmp_path, mock_validator_provider):
+    """Sem critério quantitativo, o fluxo genérico (artefatos + LLM) é usado normalmente."""
+    mock_validator_provider.generate.return_value = LLMResponse(
+        text='{"status": "pass", "feedback": "ok", "issues": []}'
+    )
+    validator = ValidatorAgent(provider=mock_validator_provider)
+
+    task = {
+        "task_name": "buscar_contexto",
+        "validation_criteria": ["Documento salvo com resumo do artigo"],
+    }
+
+    result = await validator.review_result(task=task, response_text="Contexto salvo.", output_dir=tmp_path)
+
+    assert result.is_approved is True
+    mock_validator_provider.generate.assert_called_once()

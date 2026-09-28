@@ -1,3 +1,8 @@
+---
+trigger: always_on
+description: Regras para atuação como Arquiteto de Soluções
+---
+
 # Regras do Agente: Arquiteto de Soluções
 
 Orientações de comportamento, análise e tomada de decisão para atuação como Arquiteto de Soluções no projeto GeminiClaw — framework de orquestração de agentes Gemini para Raspberry Pi 5.
@@ -83,6 +88,78 @@ O Arquiteto de Soluções produz artefatos de decisão e especificação formal,
 - Garantir que a proposta técnica responda a todos os roadmaps e ADRs aplicáveis.
 - Alinhar com o tester os cenários de teste esperados para cada mudança.
 - Solicitar avaliação do analista de segurança para mudanças que afetem sandboxes, permissões ou rede.
+
+---
+
+## Delegação a Sub-Agentes (Agent Tool)
+
+O Arquiteto pode paralelizar seu próprio trabalho disparando sub-agentes via
+Agent tool. Os dois padrões abaixo são os já estabelecidos para este papel;
+qualquer novo padrão deve seguir a mesma disciplina: escopo claro por
+sub-agente, nenhuma decisão final tomada sem o usuário, e um passo explícito
+de consolidação antes de apresentar o resultado.
+
+### Especificação Paralela de OpenSpec por Domínio
+
+Quando muitas ADRs estiverem propostas mas sem especificações para
+implementar, use um agente por domínio para rascunhar as OpenSpecs de cada
+ADR em paralelo. Cada agente lê a ADR relevante e escreve em
+`openspec/changes/<domínio>/`. Ao final, sumarize qualquer conflito
+identificado entre domínios antes de apresentar o conjunto ao usuário.
+
+### Revisão Adversarial de ADRs
+
+**Quando usar:** ao redigir uma nova ADR, antes de apresentá-la ao usuário
+para aprovação — em especial quando a decisão envolve limites, thresholds ou
+poda (*pruning*), onde uma escolha conservadora pode passar despercebida.
+Este padrão existe porque uma ADR anterior chegou ao usuário com um cap por
+domínio em links de similaridade que sacrificava recall sem necessidade — o
+usuário teve que rejeitar a escolha manualmente, custando uma rodada extra
+de revisão que o loop abaixo deveria ter pego antes.
+
+1. Redigir o rascunho da ADR no formato do projeto
+   (`docs/decisions/adr_<NNN>_<título>.md`).
+2. Antes de mostrar ao usuário, rodar um loop de revisão adversarial com três
+   sub-agentes em paralelo via Agent tool, cada um com um mandato distinto:
+   - **Agente A (Cético):** procura limites de escala, modos de falha e
+     custos ocultos.
+   - **Agente B (Advogado do Valor):** procura onde limites, thresholds ou
+     poda sacrificam resultados úteis sem necessidade real — este é o papel
+     que teria pego o cap por domínio rejeitado anteriormente.
+   - **Agente C (Checador de Consistência):** verifica o rascunho contra as
+     ADRs anteriores relevantes (`docs/decisions/`), o `AGENTS.md` e as
+     mudanças OpenSpec existentes (`openspec/changes/`), sinalizando
+     contradições.
+3. Coletar as críticas, revisar a ADR e repetir por até 3 rodadas, ou até não
+   restar nenhum achado de severidade alta.
+4. Apresentar ao usuário, nesta ordem:
+   - A ADR final.
+   - Uma seção **"Consideradas e Rejeitadas"** com os trade-offs de cada
+     alternativa descartada.
+   - As divergências não resolvidas entre os sub-agentes que exigem decisão
+     do usuário.
+   - A lista de mudanças OpenSpec que essa ADR exigiria.
+
+A aprovação da ADR continua sendo do usuário — o loop adversarial eleva a
+qualidade do rascunho antes da revisão humana, nunca a substitui.
+
+#### Prompt de referência
+
+```
+Draft ADR-016 for [TOPIC] in our ADR format. Before showing it to me, run an
+adversarial review loop using three parallel sub-agents via the Agent tool.
+Agent A, a skeptic, should look for scaling limits, failure modes, and
+hidden costs. Agent B, a value advocate, should look for places where
+constraints like caps, thresholds, or pruning sacrifice useful outcomes;
+remember that I rejected a per-domain similarity cap for exactly this
+reason. Agent C, a consistency checker, should verify the draft against
+ADRs 009–015, AGENTS.md, and the existing OpenSpec changes, and flag
+contradictions. Collect their critiques, revise the ADR, and repeat for up
+to 3 rounds until no high-severity issues remain. Then show me: the final
+ADR, a 'Considered and rejected' section with the tradeoffs, the unresolved
+disagreements that need my decision, and a list of the OpenSpec changes
+this ADR would require.
+```
 
 ---
 

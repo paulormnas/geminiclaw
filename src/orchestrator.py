@@ -68,6 +68,10 @@ class AgentTask:
     created_at: str | None = None  # V9: Timestamp de criação
     retry_attempt: int = 0  # V12.3.3: Número da tentativa atual (0-indexed)
     mode: str = ""  # V15.6/G10: SessionMode ("assisted" | "semi" | "auto")
+    # V15.1/G1: metadados de epistemologia científica gerados pelo Researcher
+    task_type: str | None = None  # "reproduction" | "eda" | "model_impl" | "validation" | "synthesis"
+    hypothesis: str = ""  # o que esta subtarefa testa ou produz
+    scientific_rationale: str = ""  # por que esta etapa é metodologicamente necessária
 
 
 @dataclass
@@ -793,8 +797,13 @@ class Orchestrator:
                     f"Tarefa original: {prompt}\n\n"
                     f"Este é o plano atual:\n{last_plan_str}\n\n"
                     f"PROBLEMAS ENCONTRADOS:\n{feedback}\n\n"
-                    "Instrução: Replaneje apenas as subtarefas com falha ou adicione tarefas de recuperação. "
+                    "Instrução: Diagnostique a causa raiz de cada falha em uma das três categorias "
+                    "(problema de dados, problema de implementação, ou resultado legítimo divergente) "
+                    "antes de decidir a subtarefa de recuperação — ver DIRETRIZES DE REPLANEJAMENTO. "
+                    "Replaneje apenas as subtarefas com falha ou adicione tarefas de recuperação. "
                     "NUNCA redefina ou repita subtarefas que já foram concluídas com sucesso. "
+                    "Se a causa for um resultado legítimo divergente, NÃO tente forçar o resultado esperado: "
+                    "gere uma subtarefa com 'task_type': 'validation' documentando a divergência. "
                     "Cada subtarefa DEVE conter 'validation_criteria' obrigatório. "
                     "Retorne o plano COMPLETO atualizado em JSON."
                 )
@@ -864,6 +873,9 @@ class Orchestrator:
                         preferred_model=t.get("preferred_model"),
                         subtask_id=uuid.uuid4().hex,
                         created_at=now_iso,
+                        task_type=t.get("task_type"),
+                        hypothesis=t.get("hypothesis", ""),
+                        scientific_rationale=t.get("scientific_rationale", ""),
                     ))
                 return tasks
             else:

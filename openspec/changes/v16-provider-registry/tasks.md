@@ -12,7 +12,7 @@
 
 ## 3. Provedor OpenAI-compatível
 - [ ] 3.1 Criar `src/llm/providers/openai_compatible.py` (`generate`, `generate_stream`, `health_check`, `model_name`).
-- [ ] 3.2 Adicionar `OPENAI_COMPATIBLE_BASE_URL` e `OPENAI_COMPATIBLE_API_KEY` em `src/config.py` e `.env.example`.
+- [ ] 3.2 Adicionar `OPENAI_BASE_URL` e `OPENAI_API_KEY` em `src/config.py` e `.env.example` (mapeamento explícito para o provedor `openai_compatible`, ver `design.md`).
 - [ ] 3.3 Testes com `respx`: texto simples, tool call, argumentos inválidos, 429 com retentativa, streaming SSE, health check.
 
 ## 4. Remoção do ADK

@@ -36,9 +36,13 @@ def available_providers() -> list[str]
   instalado (ex.: `google-genai`) não quebra os demais; a falha só ocorre ao pedir aquele
   provedor, com mensagem indicando o extra a instalar (`uv sync --extra google`).
 - `create_provider` resolve `base_url` e `api_key` a partir de `config` por convenção de
-  nome: `<PROVIDER>_BASE_URL`, `<PROVIDER>_API_KEY` (ex.: `OPENAI_COMPATIBLE_BASE_URL`,
-  `OPENAI_COMPATIBLE_API_KEY`). Os nomes existentes (`OLLAMA_BASE_URL`, `GEMINI_API_KEY`) são
-  mantidos como mapeamento explícito para compatibilidade.
+  nome: `<PROVIDER>_BASE_URL`, `<PROVIDER>_API_KEY`. Nomes existentes que fogem à convenção
+  literal são mantidos como mapeamento explícito, quando o nome do ecossistema já é outro:
+  `OLLAMA_BASE_URL` (compatibilidade), `GEMINI_API_KEY` (provedor `google`, nome do
+  ecossistema Gemini) e `OPENAI_BASE_URL`/`OPENAI_API_KEY` (provedor `openai_compatible`,
+  mesmo nome que vLLM, LM Studio e litellm já usam para apontar para um servidor compatível
+  — evita o sufixo redundante `_COMPATIBLE_` na variável de ambiente sem abrir mão do nome
+  `openai_compatible` no registro, que evita colidir com um futuro provedor nativo `openai`).
 - Nome desconhecido → `ValueError` listando `available_providers()`.
 
 ### 2. Consumidores

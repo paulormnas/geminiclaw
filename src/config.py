@@ -74,6 +74,13 @@ GEMINI_API_KEY = get_env(
     required=(LLM_PROVIDER == "google"),
 )
 
+# Configurações do provedor openai_compatible (V16) — servidores que falam o
+# protocolo /v1/chat/completions (llama.cpp server, vLLM, LM Studio, serviços
+# hospedados compatíveis). Nomes seguem o padrão já consagrado no ecossistema
+# (vLLM, LM Studio, litellm), não o prefixo do nome do provedor no registro.
+OPENAI_BASE_URL = get_env("OPENAI_BASE_URL")
+OPENAI_API_KEY = get_env("OPENAI_API_KEY")
+
 # Rate limiting — ler nova variável com fallback para a antiga (retrocompatibilidade)
 LLM_REQUESTS_PER_MINUTE = int(
     get_env("LLM_REQUESTS_PER_MINUTE")

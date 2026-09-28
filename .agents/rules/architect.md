@@ -18,7 +18,7 @@ Antes de propor qualquer solução ou mudança arquitetural, consulte obrigatori
 
 1. **Roadmaps (`roadmaps/`):** Roadmaps de versões (V10–V14+) com etapas, tarefas e critérios de aceite.
 2. **Decisões Arquiteturais (`docs/decisions/`):** Histórico de ADRs anteriores para manter consistência nas decisões.
-3. **Código fonte (`src/`, `agents/`, `containers/`):** Orquestrador, agentes ADK, Dockerfiles e skills existentes.
+3. **Código fonte (`src/`, `agents/`, `containers/`):** Orquestrador, agentes, Dockerfiles e skills existentes.
 4. **Testes (`tests/`):** Testes unitários e de integração que documentam comportamentos esperados.
 5. **Configuração (`pyproject.toml`, `.env.example`, `src/config.py`):** Dependências, variáveis de ambiente e parâmetros do sistema.
 
@@ -31,7 +31,7 @@ Nunca proponha uma solução que contradiga os roadmaps aprovados ou ADRs vigent
 O Arquiteto de Soluções deve avaliar e documentar cada mudança nos seguintes eixos:
 
 - **Orquestrador & Loop Autônomo:** Planejamento de subtarefas, DAG de execução, dispatch, retries, injeção de contexto, manifest de workspace e ciclo ReAct.
-- **Agentes ADK & Prompts:** System instructions, tools registradas, schemas de tool call, modelos atribuídos por papel e contratos IPC entre orquestrador e agentes containerizados.
+- **Agentes & Prompts:** System instructions, tools registradas, schemas de tool call, modelos atribuídos por papel e contratos IPC entre orquestrador e agentes containerizados.
 - **Sandboxes & Containers Docker:** Volumes montados, isolamento de execução, limites de memória/CPU adequados ao Raspberry Pi 5, rede `geminiclaw-net`, usuário `appuser` non-root.
 - **Persistência de Estado:** PostgreSQL (sessões, eventos, métricas, cache LLM), Qdrant (índices vetoriais, embeddings), SQLite (cache/runtime local), `manifest.json` por sessão.
 - **Segurança & Hardening:** Isolamento de sandbox (rede desabilitada nos efêmeros), controle de permissões em `/outputs`, contenção de privilégios, prevenção de escape.

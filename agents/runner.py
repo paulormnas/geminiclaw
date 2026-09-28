@@ -1,4 +1,4 @@
-"""Runner IPC para execução de agentes ADK GeminiClaw em modo container."""
+"""Runner IPC para execução de agentes GeminiClaw em modo container."""
 
 import asyncio
 import os
@@ -52,7 +52,7 @@ async def run_ipc_loop(agent: Any) -> None:
     """Inicia o loop IPC para receber tarefas e executá-las usando o agente.
 
     Args:
-        agent: A instância do google.adk.agents.Agent configurada.
+        agent: A instância de `Agent` (`agents/base/agent.py`) configurada.
     """
     session_id = os.environ.get("SESSION_ID", "")
     agent_id = os.environ.get("AGENT_ID", "")

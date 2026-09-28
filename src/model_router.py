@@ -5,10 +5,13 @@ adequados para cada papel arquitetural (Researcher, Validator, Developer).
 """
 
 from typing import Dict, Optional
+
+# Import com efeito colateral: popula o registro de provedores (src.llm.providers.__init__).
+import src.llm.providers  # noqa: F401
 from src.llm.base import LLMProvider
-from src.model_config import get_role_model_config, RoleModelConfig
-from src import config
+from src.llm.registry import create_provider
 from src.logger import get_logger
+from src.model_config import RoleModelConfig, get_role_model_config
 
 logger = get_logger(__name__)
 
@@ -34,7 +37,7 @@ class ModelRouter:
             ValueError: Se o papel ou o provedor configurado for inválido.
         """
         if role is None:
-            # Fallback para o provedor singleton padrão (V18/retrocompatibilidade)
+            # Fallback para o provedor singleton padrão (compatibilidade retroativa)
             from src.llm.factory import get_provider
             return get_provider()
 
@@ -44,26 +47,7 @@ class ModelRouter:
         if cache_key in _provider_cache:
             return _provider_cache[cache_key]
 
-        provider_type = role_cfg.provider.lower()
-        provider_instance: LLMProvider
-
-        if provider_type == "google":
-            from src.llm.providers.google import GoogleProvider
-            provider_instance = GoogleProvider(
-                api_key=config.GEMINI_API_KEY,
-                model=role_cfg.model,
-            )
-        elif provider_type in ("ollama", "local"):
-            from src.llm.providers.ollama import OllamaProvider
-            provider_instance = OllamaProvider(
-                base_url=config.OLLAMA_BASE_URL,
-                model=role_cfg.model,
-            )
-        else:
-            raise ValueError(
-                f"Provedor '{provider_type}' não suportado para o papel '{role}'. "
-                "Use: google | ollama | local."
-            )
+        provider_instance = create_provider(role_cfg.provider, role_cfg.model)
 
         logger.info(
             "ModelRouter instanciou provedor",

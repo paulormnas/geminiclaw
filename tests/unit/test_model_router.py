@@ -1,13 +1,14 @@
-"""Testes unitários para o Model Router (Roadmap V14.1)."""
+"""Testes unitários para o Model Router (Roadmap V14.1 / V16)."""
 
-import os
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
-from src.model_config import get_role_model_config, DEFAULT_ROLE_CONFIGS
-from src.model_router import ModelRouter
-from src.llm.providers.google import GoogleProvider
+from src.llm import registry
+from src.llm.base import LLMProvider, LLMResponse
 from src.llm.providers.ollama import OllamaProvider
+from src.model_config import get_role_model_config
+from src.model_router import ModelRouter
 
 
 @pytest.fixture(autouse=True)
@@ -33,15 +34,20 @@ def test_model_router_default_roles():
     assert developer_cfg.provider == "google"
     assert developer_cfg.model == "gemini-2.0-flash"
 
-    # Testa instanciação dos provedores com mocks
+    # Provedor 'ollama' (validator) não depende de pacote opcional.
+    with patch("src.config.OLLAMA_BASE_URL", "http://test:11434"):
+        validator_provider = ModelRouter.get_provider("validator")
+        assert isinstance(validator_provider, OllamaProvider)
+        assert validator_provider.model_name == "qwen3:8b"
+
+    # Provedor 'google' (researcher/developer) só é exercido se google-genai estiver instalado.
+    pytest.importorskip("google.genai")
+    from src.llm.providers.google import GoogleProvider
+
     with patch("src.config.GEMINI_API_KEY", "dummy_key"):
         researcher_provider = ModelRouter.get_provider("researcher")
         assert isinstance(researcher_provider, GoogleProvider)
         assert researcher_provider.model_name == "gemini-2.0-flash"
-
-        validator_provider = ModelRouter.get_provider("validator")
-        assert isinstance(validator_provider, OllamaProvider)
-        assert validator_provider.model_name == "qwen3:8b"
 
         developer_provider = ModelRouter.get_provider("developer")
         assert isinstance(developer_provider, GoogleProvider)
@@ -51,17 +57,17 @@ def test_model_router_default_roles():
 @pytest.mark.unit
 def test_model_router_env_overrides(monkeypatch):
     """Cenário 2: Sobrescrita de modelo e provedor via variáveis de ambiente."""
-    monkeypatch.setenv("VALIDATOR_PROVIDER", "google")
-    monkeypatch.setenv("VALIDATOR_MODEL", "gemini-custom-validator")
-    monkeypatch.setenv("GEMINI_API_KEY", "dummy_key")
+    monkeypatch.setenv("VALIDATOR_PROVIDER", "ollama")
+    monkeypatch.setenv("VALIDATOR_MODEL", "qwen-custom-validator")
+    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://test:11434")
 
     cfg = get_role_model_config("validator")
-    assert cfg.provider == "google"
-    assert cfg.model == "gemini-custom-validator"
+    assert cfg.provider == "ollama"
+    assert cfg.model == "qwen-custom-validator"
 
     provider = ModelRouter.get_provider("validator")
-    assert isinstance(provider, GoogleProvider)
-    assert provider.model_name == "gemini-custom-validator"
+    assert isinstance(provider, OllamaProvider)
+    assert provider.model_name == "qwen-custom-validator"
 
 
 @pytest.mark.unit
@@ -89,3 +95,37 @@ def test_model_router_fallback_none_role():
         result = ModelRouter.get_provider(None)
         assert result == dummy_provider
         mock_get_provider.assert_called_once()
+
+
+class _FakeProvider(LLMProvider):
+    """Provedor fictício usado para validar a extensibilidade do registro (spec V16)."""
+
+    def __init__(self, model: str):
+        self._model = model
+
+    async def generate(self, messages, tools=None, system=None, temperature=0.7, max_tokens=4096):
+        return LLMResponse(text="ok")
+
+    async def generate_stream(self, messages, system=None):
+        yield "ok"
+
+    async def health_check(self) -> bool:
+        return True
+
+    @property
+    def model_name(self) -> str:
+        return self._model
+
+
+@pytest.mark.unit
+def test_model_router_uses_provider_registered_without_touching_router_code(monkeypatch):
+    """Cenário: um provedor registrado só em teste é resolvido pelo ModelRouter sem editar
+    `model_router.py` — valida o requisito 'Adicionar provedor sem editar código central'."""
+    registry.register_provider("fake", lambda settings: _FakeProvider(settings.model))
+    monkeypatch.setenv("VALIDATOR_PROVIDER", "fake")
+    monkeypatch.setenv("VALIDATOR_MODEL", "fake-model")
+
+    provider = ModelRouter.get_provider("validator")
+
+    assert isinstance(provider, _FakeProvider)
+    assert provider.model_name == "fake-model"

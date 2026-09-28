@@ -42,8 +42,9 @@ experimentos, formular hipóteses, validar suposições e relatar resultados.
    e o porquê das decisões de caminho (ADR 012).
 6. **Continua explorando** de forma iterativa até encontrar uma solução ou atingir um limite
    de uso definido pelo pesquisador responsável (ADR 012).
-7. **Relata resultados** em relatório científico estruturado e rastreável (Spec G8).
-8. **Busca na web apenas para suporte técnico** (documentação de bibliotecas, APIs, erros),
+7. **Nunca perde o avanço da pesquisa** ao parar: ver "Continuidade entre execuções" abaixo.
+8. **Relata resultados** em relatório científico estruturado e rastreável (Spec G8).
+9. **Busca na web apenas para suporte técnico** (documentação de bibliotecas, APIs, erros),
    como já definido no ADR 001.
 
 ### O que o sistema NÃO FAZ
@@ -54,6 +55,8 @@ experimentos, formular hipóteses, validar suposições e relatar resultados.
 - ❌ **Inventar dados ou conclusões.** Toda conclusão precisa de evidência rastreável.
 - ❌ **Agir sem limites.** A exploração é sempre limitada por orçamento definido pelo
   pesquisador responsável (tokens, tempo, retentativas, etc.).
+- ❌ **Recomeçar do zero após uma parada.** Atingir um limite interrompe a execução, não a
+  pesquisa.
 
 ### Autonomia governada pelo modo de sessão
 
@@ -64,10 +67,30 @@ A formulação e execução de hipóteses respeita o `SessionMode` (Spec G10):
 - **`semi` / `auto`**: o sistema executa as hipóteses mais promissoras dentro do orçamento,
   documentando cada decisão.
 
+### Continuidade entre execuções
+
+O sistema sempre roda dentro dos limites definidos pelo pesquisador responsável (tokens,
+tempo, retentativas — ADR 012). Ao atingir um limite, ele **não descarta o trabalho feito**:
+antes de parar, registra todo o avanço da pesquisa, incluindo no mínimo:
+
+- o estado do plano e das subtarefas (concluídas, em andamento, pendentes);
+- os resultados e artefatos já produzidos;
+- as hipóteses em aberto, validadas e refutadas;
+- as decisões de caminho e suas justificativas;
+- as descobertas registradas pelo Curator (ADR 012) e o motivo da parada.
+
+Na execução seguinte, o sistema **retoma a partir desse registro** e usa toda a informação da
+sessão ou execução anterior, sem recomeçar do zero. O `geminiclaw resume` da Spec G5 é o
+ponto de partida; o formato e o conteúdo do registro serão definidos na spec. O mesmo vale
+para paradas inesperadas (queda de energia, erro fatal): o avanço deve ser registrado de forma
+incremental, não apenas no encerramento.
+
 ### Visão de longo prazo
 
 Nós do GeminiClaw em diferentes instituições poderão compartilhar descobertas e
-oportunidades de pesquisa em uma rede pública (ADR 013). Essa capacidade é a **última** a ser
+oportunidades de pesquisa em uma rede pública (ADR 013). Oportunidades vindas da rede são
+apenas documentadas e apresentadas: cabe ao pesquisador responsável decidir se serão
+investigadas. Essa capacidade é a **última** a ser
 implementada, após todas as funcionalidades de pesquisa estarem completas e validadas.
 
 ### Sequência de implementação
@@ -104,6 +127,8 @@ tarefa de outro agente que opera separadamente.
 
 - O sistema passa a contribuir com a investigação, não apenas com a execução.
 - A experiência acumulada torna cada nova pesquisa mais eficiente.
+- Limites de uso não desperdiçam trabalho: uma pesquisa longa pode avançar ao longo de várias
+  execuções.
 - O escopo permanece claro: a entrada de literatura continua sendo responsabilidade externa.
 
 ### Negativas / Trade-offs
@@ -112,6 +137,8 @@ tarefa de outro agente que opera separadamente.
   (ex.: proibição de gerar hipóteses). Isso é trabalho da V16.
 - **Maior risco de gasto de recursos:** exploração iterativa exige limites de uso bem
   definidos e respeitados (ADR 012).
+- **Registro incremental do avanço** acrescenta escrita frequente em disco e banco, e o
+  registro precisa ser consistente mesmo se a parada ocorrer no meio de uma subtarefa.
 - **Hipóteses de baixa qualidade** podem consumir orçamento; a pontuação e priorização de
   hipóteses serão definidas na spec da V18.
 - **A Spec G7** (`roadmaps/specs/G7_equipment_control_mhs.md`) deve ser renumerada de V16

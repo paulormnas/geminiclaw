@@ -84,6 +84,10 @@ Os limites operacionais da Spec G5 (tokens, custo, duração, containers) hoje a
 o pesquisador. Aqui eles passam a ser também **condições de parada** do ciclo. A unificação
 entre avisos e limites de parada será definida na spec.
 
+Atingir um limite **interrompe a execução, não a pesquisa**: todo o avanço — incluindo as
+descobertas do Curator e as sugestões ainda não exploradas — é registrado para que a próxima
+execução continue de onde parou (ADR 010, "Continuidade entre execuções").
+
 ### 6. Fora do escopo deste ADR
 
 Ficam para as specs: o formato das mensagens entre agentes, o momento exato em que o Curator

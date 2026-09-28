@@ -51,11 +51,26 @@ publicam confirmações ou refutações assinadas. A confiança em uma descobert
 reproduções independentes, e a reputação de um nó cresce quando suas descobertas se
 sustentam.
 
-### 4. Oportunidades de pesquisa compartilhadas
+### 4. Oportunidades de pesquisa: documentar, e o humano decide
 
 Cada nó publica descobertas e **oportunidades de pesquisa** (hipóteses abertas, possíveis
-transferências entre problemas). Qualquer nó pode explorá-las e dar continuidade à
-investigação, com o resultado ligado ao registro de origem.
+transferências entre problemas). Essas oportunidades podem ter valor para áreas muito
+diferentes da que as gerou: pesquisas de um instituto de química podem abrir oportunidades
+para um instituto de história — e o instituto de química pode não ter interesse em investir
+recursos e esforço para desenvolvê-las.
+
+Por isso:
+
+- **Um nó nunca inicia pesquisas por conta própria** a partir de oportunidades vindas da
+  rede, nem de oportunidades que ele mesmo publicou para outras áreas.
+- O nó **documenta a oportunidade** — o que foi observado, a evidência de origem e por que
+  pode ser relevante — e a apresenta ao **pesquisador responsável, que decide** se ela será
+  investigada.
+- Se decidir prosseguir, a nova pesquisa segue o fluxo normal (insumos, limites de uso,
+  `SessionMode`) e fica ligada ao registro de origem.
+
+O mesmo vale para a validação por reprodução (§3): reproduzir experimentos de outros nós
+consome recursos e só ocorre com a decisão do pesquisador responsável.
 
 ### 5. Conhecimento remoto é sempre dado não confiável
 
@@ -68,7 +83,8 @@ Mesmo sem implementar a federação agora, as camadas anteriores devem prever:
 
 - **Identificadores estáveis** para cada registro de conhecimento (ex.: baseados em conteúdo).
 - **Proveniência obrigatória** (já exigida pelo ADR 009).
-- **Embeddings versionados**, com texto de origem preservado (ADR 011).
+- **Embeddings versionados**, com texto de origem preservado (ADR 011). Vetores não são
+  compartilhados: cada nó gera os seus localmente a partir dos registros recebidos.
 - **Separação entre conhecimento privado e compartilhável.**
 
 ---
@@ -79,8 +95,10 @@ Mesmo sem implementar a federação agora, as camadas anteriores devem prever:
   compartilhamento é opcional por projeto e desativado por padrão? Há restrições para dados
   sensíveis (ex.: médicos)?
 - **Nós maliciosos:** como mitigar descobertas falsas, spam e ataques Sybil numa rede aberta?
-- **Custo computacional:** quanto de seu hardware cada nó dedica a reproduzir experimentos de
-  outros?
+- **Custo computacional:** quanto de seu hardware cada nó aceita dedicar, quando o
+  pesquisador responsável decide reproduzir experimentos ou explorar oportunidades de outros?
+- **Descoberta de oportunidades:** como apresentar ao pesquisador responsável as
+  oportunidades relevantes para a sua área, sem sobrecarregá-lo?
 - **Governança:** quem opera os servidores de entrada? Quem define e evolui o formato dos
   registros?
 - **Variação de hardware:** qual tolerância define que um resultado foi "reproduzido" entre um

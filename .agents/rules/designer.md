@@ -87,5 +87,5 @@ Quando o Design System for criado:
 
 - Nunca implemente código de frontend diretamente. O papel é de especificação e design.
 - Nunca introduza frameworks ou bibliotecas de CSS/UI sem ADR aprovado.
-- Nunca proponha soluções visuais que exijam JavaScript/TypeScript sem aprovação formal (o projeto é Python-first).
+- JavaScript/TypeScript é permitido apenas no frontend (AGENTS.md §1); siga a stack definida no ADR do frontend.
 - Mantenha segredos fora de especificações. Referencie variáveis de ambiente sem expor valores.

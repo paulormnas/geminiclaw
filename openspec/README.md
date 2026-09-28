@@ -4,8 +4,9 @@ Este diretório segue a abordagem [OpenSpec](https://github.com/Fission-AI/OpenS
 mudança do sistema é especificada **antes** da implementação, em um pacote autocontido que
 qualquer agente consegue implementar sem reler toda a conversa que originou a decisão.
 
-> A ferramenta CLI do OpenSpec (Node.js) **não** é usada neste projeto (AGENTS.md proíbe
-> arquivos `.js`/`.ts`). Seguimos apenas a estrutura e o formato, validados na revisão.
+> A ferramenta CLI do OpenSpec (Node.js) **não** é usada por enquanto: seguimos apenas a
+> estrutura e o formato, validados na revisão. JavaScript/TypeScript é permitido pelo
+> AGENTS.md somente no frontend; adotar a CLI exigiria decisão própria.
 
 ---
 

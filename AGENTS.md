@@ -9,7 +9,7 @@ Este documento é o **ponto de entrada e fonte primária de governança** para a
 
 ## 1. Princípios Invioláveis de Governança
 
-1. **100% Python:** Nenhum arquivo `.js`, `.ts` ou `.mjs` deve existir neste projeto. Node.js existe apenas como runtime do Gemini CLI, nunca do projeto.
+1. **Python no backend; JavaScript/TypeScript apenas no frontend:** Orquestrador, agentes, skills, scripts e testes do backend são 100% Python. Arquivos `.js`, `.ts`, `.mjs`, `.jsx` e `.tsx` são permitidos **somente** no frontend, em diretório próprio, a ser definido pela spec do frontend (junto com o gerenciador de pacotes e as ferramentas de build e teste do frontend). Código JavaScript/TypeScript nunca substitui nem executa lógica do backend.
 2. **Nunca comitar em `main` ou `dev`:** Todas as alterações devem ser feitas em branches dedicadas com prefixos semânticos (`feat/`, `fix/`, `refactor/`, `chore/`, `docs/`, `test/`).
 3. **Uso Obrigatório de Git Worktree:** Toda nova alteração deve ser desenvolvida em worktree exclusiva criada em `.worktrees/<nome-da-branch>`.
 4. **Commits Semânticos:** Todos os commits devem seguir [Conventional Commits](https://www.conventionalcommits.org/) (`feat: ...`, `fix: ...`, `test: ...`, `docs: ...`, `refactor: ...`).
@@ -177,7 +177,7 @@ geminiclaw/
 ## 8. Limites — O Agente Nunca Deve
 
 - Usar `pip install` em qualquer circunstância
-- Criar arquivos `.js`, `.ts` ou `.mjs`
+- Criar arquivos `.js`, `.ts`, `.mjs`, `.jsx` ou `.tsx` fora do diretório do frontend
 - Commitar `.env`, `*.db` ou arquivos de log
 - Alterar `GEMINI.md` sem instrução explícita do usuário
 - Executar operações destrutivas (`docker rm -f`, `DROP TABLE`) sem confirmação

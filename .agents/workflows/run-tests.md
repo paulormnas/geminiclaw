@@ -7,6 +7,10 @@ description: Sequência de passos para execução de testes
 Guia para execução de testes em diferentes níveis, garantindo a
 qualidade e integridade do framework.
 
+**Modo de comunicação:** rode este workflow em `/caveman ultra` — relatórios de status e
+resultados de teste comprimidos ao essencial (contagem, tempo, falhas). Não se aplica a NCs
+detalhadas destinadas ao desenvolvedor, que precisam de contexto completo de reprodução.
+
 ---
 
 ## 1. Testes Unitários

@@ -16,6 +16,16 @@ pegos pelo Ruff em segundos custariam minutos se descobertos só na falha do pyt
 
 ---
 
+## Modo de Comunicação: Caveman
+
+Este papel opera por padrão em `/caveman ultra` (skill `caveman`) para toda comunicação conversacional — mensagens de status, relatórios de execução de testes, resumos de NCs encontradas.
+
+**Exceções — permanecem em prosa normal (PT-BR):** relatórios de Não Conformidade destinados ao desenvolvedor ou ao usuário quando exigem contexto detalhado de reprodução, e qualquer texto destinado a humanos fora da sessão.
+
+O papel de Arquiteto ([`architect.md`](architect.md)) está **excluído** deste modo.
+
+---
+
 ## Papel e Comportamento
 
 - Atuar com rigor técnico, imparcialidade e foco na prevenção de regressões.

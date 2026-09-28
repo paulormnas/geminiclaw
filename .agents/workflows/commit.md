@@ -7,6 +7,12 @@ description: Sequência de passos para commit
 Sequência obrigatória que o agente deve seguir para registrar
 uma mudança no projeto. Execute os passos na ordem apresentada.
 
+**Modo de comunicação:** narre este workflow em `/caveman ultra` (mensagens de status entre
+passos). Ao rascunhar a mensagem do passo 4, use o skill `caveman-commit` para comprimir ao
+essencial — a intenção da mudança — mas o texto do commit em si segue Conventional Commits em
+prosa normal legível (nunca em fragmentos estilo caveman): é um artefato persistido, lido por
+humanos fora da sessão.
+
 ---
 
 ## 1. Rodar os testes

@@ -6,9 +6,10 @@ principal sem instanciar containers Docker (ADR 007).
 
 import json
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.logger import get_logger
 from src.model_router import ModelRouter
@@ -52,6 +53,101 @@ SCHEMA_INSTRUCTION = """Cada subtarefa no plano DEVE ser um objeto JSON contendo
 - "expected_artifacts": list[str] (arquivos esperados a serem gerados em /outputs/)
 - "depends_on": list[str] (nomes de tarefas das quais esta depende)
 """
+
+# Roadmap V15.2 / Spec G2 — parsing de critérios quantitativos contra metrics.json real.
+_METRIC_ALIASES = {
+    "acuracia": "accuracy",
+    "accuracy": "accuracy",
+    "precisao": "precision",
+    "precision": "precision",
+    "recall": "recall",
+    "revocacao": "recall",
+    "sensibilidade": "recall",
+    "f1": "f1",
+    "f1score": "f1",
+    "erro": "error",
+    "error": "error",
+    "mse": "mse",
+    "rmse": "rmse",
+    "mae": "mae",
+    "r2": "r2",
+    "auc": "auc",
+    "loss": "loss",
+    "perda": "loss",
+}
+
+_CRITERION_VALUE_PATTERN = re.compile(r"([^<>=]+?)\s*(>=|<=|==|>|<)\s*(\d+(?:[.,]\d+)?)\s*%?")
+
+
+def _normalize_metric_name(name: str) -> str:
+    """Normaliza um nome de métrica para comparação (remove acentos, minúsculas, sem espaços)."""
+    stripped = "".join(c for c in unicodedata.normalize("NFD", name) if unicodedata.category(c) != "Mn")
+    return re.sub(r"[^a-z0-9]+", "", stripped.lower())
+
+
+def _evaluate_quantitative_criteria(
+    criteria: List[Any], metrics: Dict[str, Any]
+) -> Optional[Tuple[bool, str]]:
+    """Avalia critérios textuais contra valores reais em ``metrics.json``.
+
+    Retorna ``(passou, detalhe)`` para o primeiro critério reconhecível e comparável
+    contra uma métrica real, ou ``None`` se nenhum critério pôde ser mapeado
+    (nesse caso o chamador deve recorrer à avaliação genérica via LLM).
+    """
+    normalized_metrics = {_normalize_metric_name(k): v for k, v in (metrics or {}).items()}
+
+    for criterion in criteria:
+        if not isinstance(criterion, str):
+            continue
+        match = _CRITERION_VALUE_PATTERN.search(criterion)
+        if not match:
+            continue
+
+        raw_name, operator, raw_value = match.groups()
+        key_candidate = _normalize_metric_name(raw_name)
+        metric_key = _METRIC_ALIASES.get(key_candidate, key_candidate)
+        if metric_key not in normalized_metrics:
+            continue
+
+        try:
+            actual = float(normalized_metrics[metric_key])
+            threshold = float(raw_value.replace(",", "."))
+        except (TypeError, ValueError):
+            continue
+
+        passed = {
+            ">": actual > threshold,
+            ">=": actual >= threshold,
+            "<": actual < threshold,
+            "<=": actual <= threshold,
+            "==": actual == threshold,
+        }[operator]
+
+        detail = (
+            f"Critério '{criterion.strip()}' avaliado contra metrics.json: "
+            f"valor real = {actual}, threshold {operator} {threshold} -> "
+            f"{'atendido' if passed else 'não atendido'}."
+        )
+        return passed, detail
+
+    return None
+
+
+def _resolve_artifact_path(
+    available_artifacts: set, output_dir: Optional[Path | str], filename: str
+) -> Optional[Path]:
+    """Localiza o caminho real de um arquivo (ex: metrics.json) entre os artefatos conhecidos."""
+    if output_dir:
+        out_p = Path(output_dir)
+        if out_p.exists():
+            matches = list(out_p.rglob(filename))
+            if matches:
+                return matches[0]
+    for artifact in available_artifacts:
+        candidate = Path(artifact)
+        if candidate.name == filename and candidate.is_file():
+            return candidate
+    return None
 
 
 @dataclass
@@ -250,6 +346,48 @@ class ValidatorAgent:
                     if f.is_file():
                         available_artifacts.add(f.name)
                         available_artifacts.add(str(f))
+
+        # 0. Roadmap V15.2 / Spec G2 — validação científica via metrics.json quando o
+        # critério de aceite exige um threshold quantitativo (reprodução/validação).
+        # Avaliada ANTES do response_text, que é frequentemente otimista ou impreciso.
+        if isinstance(validation_criteria, list) and _has_quantitative_criterion(validation_criteria):
+            metrics_file = _resolve_artifact_path(available_artifacts, output_dir, "metrics.json")
+            if metrics_file is None:
+                msg = f"metrics.json não encontrado em /outputs/{task_name}/"
+                logger.warning(
+                    "Subtarefa reprovada: critério quantitativo sem metrics.json",
+                    extra={"task_name": task_name},
+                )
+                return ReviewResult(is_approved=False, status="fail", feedback=msg, issues=[msg])
+
+            try:
+                metrics_data = json.loads(metrics_file.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError) as e:
+                msg = f"Falha ao ler metrics.json: {e}"
+                return ReviewResult(is_approved=False, status="fail", feedback=msg, issues=[msg])
+
+            divergence_note = metrics_data.get("divergence_note")
+            if divergence_note:
+                return ReviewResult(
+                    is_approved=True,
+                    status="divergent_but_documented",
+                    feedback=f"Resultado diverge do esperado, mas está documentado: {divergence_note}",
+                    issues=[],
+                )
+
+            evaluation = _evaluate_quantitative_criteria(
+                validation_criteria, metrics_data.get("metrics", {})
+            )
+            if evaluation is not None:
+                passed, detail = evaluation
+                return ReviewResult(
+                    is_approved=passed,
+                    status="pass" if passed else "fail",
+                    feedback=detail,
+                    issues=[] if passed else [detail],
+                )
+            # Nenhum critério pôde ser mapeado a uma métrica real em metrics.json —
+            # prossegue para a avaliação genérica abaixo (artefatos + LLM).
 
         # 1. Verificação estrita de artefatos em disco
         missing_artifacts = []

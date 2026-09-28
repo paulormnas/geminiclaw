@@ -1,3 +1,4 @@
+import json
 import os
 import pathlib
 import re
@@ -8,6 +9,22 @@ from src.skills.code.manifest import WorkspaceManifest
 from src.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Roadmap V15.2 / Spec G2 — bibliotecas cuja presença no código indica um script
+# científico/de dados, para o qual scientific_helpers.py é injetado automaticamente.
+_SCIENTIFIC_LIBRARY_MARKERS = ("numpy", "pandas", "sklearn")
+
+_SCIENTIFIC_HELPERS_PATH = pathlib.Path(__file__).parent / "scientific_helpers.py"
+
+
+def _uses_scientific_libraries(code: str) -> bool:
+    """Detecta se o código importa bibliotecas científicas/de dados (Spec G2)."""
+    return any(marker in code for marker in _SCIENTIFIC_LIBRARY_MARKERS)
+
+
+def _load_scientific_helpers_source() -> str:
+    """Lê o código-fonte de scientific_helpers.py para injeção no sandbox."""
+    return _SCIENTIFIC_HELPERS_PATH.read_text(encoding="utf-8")
 
 class CodeSkill(BaseSkill):
     """Skill para execução de código Python em sandbox seguro."""
@@ -147,12 +164,19 @@ class CodeSkill(BaseSkill):
         try:
             # Nota: PythonSandbox.run não é async pois usa docker-py síncrono.
             # Em um cenário real, poderíamos usar um wrapper async ou threads.
+            # Roadmap V15.2 / Spec G2 — injeta scientific_helpers.py quando o código
+            # usa bibliotecas científicas/de dados, permitindo save_experiment_artifacts().
+            extra_files = None
+            if _uses_scientific_libraries(code):
+                extra_files = {"scientific_helpers.py": _load_scientific_helpers_source()}
+
             result: SandboxResult = self.sandbox.run(
                 code=code,
                 session_id=session_id,
                 task_name=task_name,
                 output_dir=self.output_dir,
-                setup_commands=setup_commands
+                setup_commands=setup_commands,
+                extra_files=extra_files,
             )
 
             success = not result.timed_out and result.exit_code == 0
@@ -168,12 +192,36 @@ class CodeSkill(BaseSkill):
                     f"Execução bem-sucedida. "
                     f"Artefatos gerados: {new_artifacts or 'nenhum'}."
                 )
+
+                # Roadmap V15.2 / Spec G2 — rastreia params.json/metrics.json no manifest
+                params_path: Optional[str] = None
+                metrics_path: Optional[str] = None
+                seed_used = None
+                divergence_detected: Optional[bool] = None
+                task_output_dir = session_dir / task_name
+                metrics_file = task_output_dir / "metrics.json"
+                if metrics_file.exists():
+                    metrics_path = str(metrics_file.relative_to(session_dir))
+                    try:
+                        metrics_data = json.loads(metrics_file.read_text(encoding="utf-8"))
+                        seed_used = metrics_data.get("seed")
+                        divergence_detected = metrics_data.get("divergence_note") is not None
+                    except (json.JSONDecodeError, OSError) as e:
+                        logger.warning(f"Falha ao ler metrics.json para o manifest: {e}")
+                params_file = task_output_dir / "params.json"
+                if params_file.exists():
+                    params_path = str(params_file.relative_to(session_dir))
+
                 manifest.record_step(
                     step=step_number,
                     status="success",
                     artifacts=new_artifacts,
                     summary=summary,
                     code_file=code_filename,
+                    params_path=params_path,
+                    metrics_path=metrics_path,
+                    seed_used=seed_used,
+                    divergence_detected=divergence_detected,
                 )
             else:
                 error_info = _extract_error_info(result.stderr)

@@ -1044,6 +1044,10 @@ ocr = [
     { name = "pymupdf" },
     { name = "pytesseract" },
 ]
+reports = [
+    { name = "markdown" },
+    { name = "python-docx" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -1064,6 +1068,7 @@ requires-dist = [
     { name = "google-genai", marker = "extra == 'google'", specifier = ">=1.3.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "lxml", specifier = ">=6.0.2" },
+    { name = "markdown", marker = "extra == 'reports'", specifier = ">=3.11" },
     { name = "matplotlib", specifier = ">=3.10.9" },
     { name = "numpy", specifier = ">=2.4.3" },
     { name = "openpyxl", marker = "extra == 'documents'", specifier = ">=3.1.0" },
@@ -1074,12 +1079,13 @@ requires-dist = [
     { name = "pyjwt", specifier = ">=2.12.1" },
     { name = "pymupdf", marker = "extra == 'ocr'", specifier = ">=1.28.2" },
     { name = "pytesseract", marker = "extra == 'ocr'", specifier = ">=0.3.13" },
+    { name = "python-docx", marker = "extra == 'reports'", specifier = ">=1.2.0" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "qdrant-client", marker = "extra == 'deep-search'", specifier = ">=1.17.1" },
     { name = "scikit-learn", specifier = ">=1.8.0" },
     { name = "seaborn", specifier = ">=0.13.2" },
 ]
-provides-extras = ["google", "deep-search", "documents", "ocr"]
+provides-extras = ["google", "deep-search", "documents", "ocr", "reports"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2279,6 +2285,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/9e/38/bd5b78a920a64d708fe6bc8e0a2c075e1389d53bef8413725c63ba041535/mako-1.3.10.tar.gz", hash = "sha256:99579a6f39583fa7e5630a28c3c1f440e4e97a414b80372649c0ce338da2ea28", size = 392474, upload-time = "2025-04-10T12:44:31.16Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/87/fb/99f81ac72ae23375f22b7afdb7642aba97c00a713c217124420147681a2f/mako-1.3.10-py3-none-any.whl", hash = "sha256:baef24a52fc4fc514a0887ac600f9f1cff3d82c61d4d700a1fa84d597b88db59", size = 78509, upload-time = "2025-04-10T12:50:53.297Z" },
+]
+
+[[package]]
+name = "markdown"
+version = "3.11"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f8/4f/700155c8c20d9e655dd0732b5fc3c7614f291b9148da271d7388e50bf774/markdown-3.11.tar.gz", hash = "sha256:180224db6aed87ba9ce1f2781ebcd5826253de8ff637112090e24b84502bbf9f", size = 485623, upload-time = "2026-09-25T13:46:23.473Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ec/1e/32971905a7ab47f8b66866ed949fa48b104ba1c4a6fa57794c4f2c4b2cb8/markdown-3.11-py3-none-any.whl", hash = "sha256:cd6c89e7eb308c8b332ed673215a52d208a43f8bacc030b1419376129408719e", size = 111296, upload-time = "2026-09-25T13:46:22.163Z" },
 ]
 
 [[package]]

@@ -13,6 +13,6 @@ def test_summarizer_agent_initialization():
 def test_summarizer_instruction():
     """Testa se a instrução do agente contém as regras essenciais."""
     instruction = root_agent.instruction
-    assert "redator acadêmico especializado em síntese" in instruction
+    assert "redator científico especializado em síntese" in instruction
     assert "write_artifact" in instruction
     assert "relatorio_final.md" in instruction

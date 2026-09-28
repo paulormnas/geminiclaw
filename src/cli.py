@@ -26,6 +26,7 @@ from src.config import (
     SESSION_DEFAULT_MODE,
     INPUT_CONTEXT_DIR,
     CONTEXT_TOKEN_WARNING_THRESHOLD,
+    OUTPUT_BASE_DIR,
 )
 from src.session import SessionManager
 from src.runner import ContainerRunner
@@ -52,6 +53,7 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
   geminiclaw sessions
   geminiclaw stop [--session <id>]
   geminiclaw resume --session <id>
+  geminiclaw convert --session <id> --format latex|html|docx
   geminiclaw clear-context
   geminiclaw history
   geminiclaw --metrics <execution_id>
@@ -82,9 +84,11 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
   geminiclaw --mode auto "Execute sem interrupção"
   geminiclaw sessions
   geminiclaw stop --session 20260922_iris
+  geminiclaw convert --session 20260922_iris --format latex
 
 {BOLD}RELATÓRIO:{RESET}
-  Sempre gerado em outputs/<session>/relatorio_final.md (ver Spec G8).
+  Sempre gerado em outputs/<session>/relatorio_final.md.
+  Use 'geminiclaw convert' para gerar também em LaTeX, DOCX ou HTML.
 """
 
 
@@ -170,6 +174,13 @@ def build_parser() -> argparse.ArgumentParser:
             "Nível de autonomia da sessão: assisted (padrão), semi ou auto "
             f"(padrão configurável via SESSION_DEFAULT_MODE, atualmente '{SESSION_DEFAULT_MODE}')."
         ),
+    )
+    parser.add_argument(
+        "--format",
+        type=str,
+        choices=["latex", "html", "docx"],
+        default=None,
+        help="Formato de saída para 'geminiclaw convert --session <id> --format <fmt>'.",
     )
     return parser
 
@@ -555,6 +566,39 @@ async def resume_session(orchestrator: Orchestrator, session_id: str) -> None:
     await execute_prompt(orchestrator, original_prompt, mode=mode, context_bundle=context_bundle)
 
 
+def convert_report(session_id: str, format: str) -> None:
+    """Converte o relatório final de uma sessão para outro formato (Roadmap V15.4 / Spec G8).
+
+    Args:
+        session_id: ID da sessão cujo `relatorio_final.md` será convertido.
+        format: Formato de saída (``latex`` | ``html`` | ``docx``).
+    """
+    from src.report.base_converter import ReportConverterFactory
+
+    session_dir = Path(OUTPUT_BASE_DIR) / session_id
+    markdown_path = session_dir / "relatorio_final.md"
+    if not markdown_path.exists():
+        print(f"\n  {RED}❌ Sessão '{session_id}' não encontrada em /outputs/ (ou sem relatorio_final.md).{RESET}\n")
+        return
+
+    try:
+        converter = ReportConverterFactory.create(format)
+    except ValueError as e:
+        print(f"\n  {RED}❌ {e}{RESET}\n")
+        return
+
+    extension = {"latex": "tex", "html": "html", "docx": "docx"}[format.lower().strip()]
+    output_path = session_dir / f"relatorio_final.{extension}"
+    try:
+        converter.convert(markdown_path, output_path)
+    except Exception as e:
+        print(f"\n  {RED}❌ Falha ao converter relatório: {e}{RESET}\n")
+        logger.error("Falha ao converter relatório", extra={"session_id": session_id, "format": format, "error": str(e)})
+        return
+
+    print(f"\n  {GREEN}✅ Relatório convertido: {output_path}{RESET}\n")
+
+
 def print_session_banner(mode: str, context_dir: str = "input_context") -> None:
     """Exibe o banner de inicialização de sessão (Roadmap V15.6 / Spec G10).
 
@@ -898,6 +942,12 @@ def main() -> None:
             sys.exit(0)
         elif p_lower == "clear-context":
             clear_context()
+            sys.exit(0)
+        elif p_lower == "convert":
+            if not args.session or not args.format:
+                print(f"\n  {RED}❌ Use: geminiclaw convert --session <id> --format latex|html|docx{RESET}\n")
+                sys.exit(1)
+            convert_report(args.session, args.format)
             sys.exit(0)
 
     # Subcomando: --metrics <execution_id>

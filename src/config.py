@@ -323,6 +323,24 @@ VERDICT_THRESHOLDS: tuple[float, float, float] = tuple(
     float(x) for x in _verdict_thresholds_raw.split(",")
 )  # type: ignore[assignment]
 
+# --- Grafo de Conhecimento (Roadmap V17 / ADR 009, ADR 015) ---
+# Nome do grafo Apache AGE (sem o nome do produto — ADR 011).
+KNOWLEDGE_GRAPH_NAME = get_env("KNOWLEDGE_GRAPH_NAME", default="knowledge")
+# DSN somente-leitura (papel `knowledge_reader`) usado por GraphStore.read_query
+# (Curator, CLI). Obrigatória apenas quando o grafo é efetivamente utilizado —
+# a leitura tardia em AgeGraphStore levanta erro explícito se ausente.
+KNOWLEDGE_READER_DATABASE_URL = get_env("KNOWLEDGE_READER_DATABASE_URL")
+KNOWLEDGE_READ_TIMEOUT_MS = int(get_env("KNOWLEDGE_READ_TIMEOUT_MS", default="5000"))
+
+# Identificador estável deste computador (fator de independência, ADR 015 §9).
+# Gerado uma vez e persistido em ~/.config/geminiclaw/node_id (ou $XDG_CONFIG_HOME).
+_node_id_env = get_env("NODE_ID")
+if _node_id_env:
+    NODE_ID = _node_id_env
+else:
+    from src.knowledge.ids import get_or_create_node_id
+    NODE_ID = get_or_create_node_id()
+
 
 from src.logger import get_logger
 logger = get_logger(__name__)

@@ -56,6 +56,7 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
   geminiclaw convert --session <id> --format latex|html|docx
   geminiclaw clear-context
   geminiclaw history
+  geminiclaw embeddings reindex [--collection <nome>] [--yes]
   geminiclaw --metrics <execution_id>
 
 {BOLD}MODOS DE OPERAÇÃO (--mode):{RESET}
@@ -599,6 +600,81 @@ def convert_report(session_id: str, format: str) -> None:
     print(f"\n  {GREEN}✅ Relatório convertido: {output_path}{RESET}\n")
 
 
+def run_embeddings_reindex(collection: str | None, auto_confirm: bool) -> None:
+    """Executa `geminiclaw embeddings reindex` (Roadmap V16 / ADR 011 §3).
+
+    Revetoriza as coleções do Qdrant com o provedor de embeddings local
+    atualmente configurado. É uma operação sobre dados persistidos: apaga os
+    vetores existentes de cada ponto reescrito. Por isso, pede confirmação
+    interativa a menos que `--yes` seja informado (AGENTS.md §1 regra 5).
+
+    Args:
+        collection: Nome da coleção a reindexar, ou None para reindexar todas
+            as coleções reindexáveis (`geminiclaw_knowledge`,
+            `geminiclaw_documents`).
+        auto_confirm: Se True, pula a confirmação interativa.
+    """
+    from src.embeddings.reindex import (
+        REINDEXABLE_COLLECTIONS,
+        CollectionNotFoundError,
+        CollectionReindexer,
+    )
+
+    if collection is not None and collection not in REINDEXABLE_COLLECTIONS:
+        print(
+            f"\n  {RED}❌ Coleção '{collection}' não é reindexável. "
+            f"Coleções suportadas: {', '.join(REINDEXABLE_COLLECTIONS)}.{RESET}\n"
+        )
+        sys.exit(1)
+
+    targets = [collection] if collection else list(REINDEXABLE_COLLECTIONS)
+
+    print(f"\n  {CYAN}Verificando pontos desatualizados...{RESET}")
+    reindexers: dict[str, CollectionReindexer] = {}
+    outdated_counts: dict[str, int] = {}
+    for name in targets:
+        reindexer = CollectionReindexer(name)
+        try:
+            outdated_counts[name] = reindexer.count_outdated()
+            reindexers[name] = reindexer
+        except CollectionNotFoundError:
+            print(f"  {YELLOW}⚠ Coleção '{name}' não existe no Qdrant configurado — ignorada.{RESET}")
+
+    if not reindexers:
+        print(f"\n  {YELLOW}Nenhuma coleção reindexável encontrada no Qdrant configurado.{RESET}\n")
+        return
+
+    total_outdated = sum(outdated_counts.values())
+    print(f"\n  {BOLD}Resumo:{RESET}")
+    for name, count in outdated_counts.items():
+        print(f"    {name}: {count} ponto(s) desatualizado(s)")
+
+    if total_outdated == 0:
+        print(f"\n  {GREEN}✅ Todas as coleções já estão vetorizadas com o modelo atual.{RESET}\n")
+        return
+
+    print(
+        f"\n  {YELLOW}⚠ Esta operação reescreve vetores persistidos no Qdrant e é IRREVERSÍVEL "
+        f"para os pontos afetados.{RESET}"
+    )
+    if not auto_confirm:
+        answer = input(f"  Confirma a reindexação de {total_outdated} ponto(s)? [s/N] ").strip().lower()
+        if answer not in ("s", "sim", "y", "yes"):
+            print(f"\n  {YELLOW}Reindexação cancelada pelo usuário.{RESET}\n")
+            return
+
+    for name, reindexer in reindexers.items():
+        print(f"\n  {CYAN}Reindexando '{name}'...{RESET}")
+        report = reindexer.run()
+        print(f"  {GREEN}{report.summary()}{RESET}")
+        if report.recreated_collection:
+            print(
+                f"  {YELLOW}⚠ A dimensão do modelo mudou: '{name}' foi recriada vazia. "
+                f"Reingerir a fonte (crawl/documentos) para repovoá-la.{RESET}"
+            )
+    print()
+
+
 def print_session_banner(mode: str, context_dir: str = "input_context") -> None:
     """Exibe o banner de inicialização de sessão (Roadmap V15.6 / Spec G10).
 
@@ -880,11 +956,58 @@ async def interactive_mode(
         await execute_prompt(orchestrator, prompt, mode=mode, context_bundle=context_bundle)
 
 
+def _handle_embeddings_command(argv: list[str]) -> None:
+    """Trata `geminiclaw embeddings <ação> [opções]` (Roadmap V16 / ADR 011 §3).
+
+    Tratado separadamente do parser principal (que só aceita um único
+    argumento posicional de prompt) para suportar a sintaxe de subcomando
+    `geminiclaw embeddings reindex --collection <nome> --yes` sem exigir que
+    o usuário cite (quote) as duas palavras juntas.
+
+    Args:
+        argv: Argumentos após "embeddings" (ex.: ``["reindex", "--yes"]``).
+    """
+    sub_parser = argparse.ArgumentParser(
+        prog="geminiclaw embeddings",
+        description="Comandos de gestão de embeddings locais.",
+    )
+    sub_parsers = sub_parser.add_subparsers(dest="action", required=True)
+    reindex_parser = sub_parsers.add_parser(
+        "reindex",
+        help="Revetoriza coleções do Qdrant com o modelo de embeddings atual.",
+    )
+    reindex_parser.add_argument(
+        "--collection",
+        type=str,
+        default=None,
+        help="Coleção a reindexar (padrão: todas as coleções reindexáveis).",
+    )
+    reindex_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Pula a confirmação interativa.",
+    )
+    try:
+        sub_args = sub_parser.parse_args(argv)
+    except SystemExit as e:
+        sys.exit(e.code)
+
+    if sub_args.action == "reindex":
+        run_embeddings_reindex(collection=sub_args.collection, auto_confirm=sub_args.yes)
+
+
 def main() -> None:
     """Ponto de entrada principal da CLI."""
     # Roadmap V15.6 / Spec G10 — help completo customizado, sem passar pelo argparse padrão
     if any(a in ("-h", "--help") for a in sys.argv[1:]):
         print_full_help()
+        sys.exit(0)
+
+    # Roadmap V16 — 'geminiclaw embeddings <ação>' é um subcomando de verdade
+    # (múltiplas palavras sem aspas), tratado antes do parser genérico de
+    # prompt (que só aceita um único argumento posicional).
+    if len(sys.argv) >= 2 and sys.argv[1] == "embeddings":
+        _handle_embeddings_command(sys.argv[2:])
         sys.exit(0)
 
     parser = build_parser()

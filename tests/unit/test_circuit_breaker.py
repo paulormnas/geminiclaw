@@ -2,8 +2,13 @@
 
 Cobre:
   V12.5.1: Detecção de progresso zero — dois ciclos consecutivos com o mesmo
-           conjunto de subtarefas bem-sucedidas abortam o loop com mensagem
-           explicativa.
+           conjunto de subtarefas bem-sucedidas abortavam o loop com mensagem
+           explicativa. V18/usage-limits (design §3) SUBSTITUI esse
+           comportamento para o caso de uma única subtarefa persistentemente
+           falha: ela agora é ABANDONADA (SESSION_MAX_TASK_RETRIES esgotado,
+           contado cumulativamente entre ciclos — ver src/usage.py), e o
+           restante do DAG e a sessão continuam, em vez de abortar a sessão
+           inteira. Ver `test_persistent_task_failure_is_abandoned_not_session_aborted`.
   V12.5.2: Limite de containers por sessão — ao atingir MAX_CONTAINERS_PER_SESSION
            em _execute_agent, a execução é abortada com RuntimeError descritivo.
 """
@@ -13,18 +18,23 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 
 # ---------------------------------------------------------------------------
-# V12.5.1 — Detecção de progresso zero
+# V12.5.1 — Detecção de progresso zero (comportamento substituído por V18 para
+# o caso de uma única tarefa persistentemente falha — ver módulo acima)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_circuit_breaker_aborta_com_progresso_zero():
-    """Dois ciclos consecutivos com as mesmas subtarefas bem-sucedidas devem
-    abortar o loop de replanejamento com mensagem de diagnóstico."""
+async def test_persistent_task_failure_is_abandoned_not_session_aborted():
+    """V18/usage-limits (design §3): uma subtarefa que esgota
+    SESSION_MAX_TASK_RETRIES é ABANDONADA — não aciona mais o antigo circuit
+    breaker de progresso zero (V12.5.1), que abortava a sessão inteira. O
+    restante do DAG ('tarefa_ok', independente) e a sessão continuam
+    normalmente."""
     from src.orchestrator import AgentTask, AgentResult, AGENT_REGISTRY
     from src.autonomous_loop import AutonomousLoop
+    from src.usage import UsageBudget
 
-    # Planner sempre retorna o mesmo plano com as mesmas 2 tarefas
+    # Planner sempre retorna o mesmo plano com as mesmas 2 tarefas independentes
     tarefas = [
         AgentTask(
             agent_id="base",
@@ -40,11 +50,8 @@ async def test_circuit_breaker_aborta_com_progresso_zero():
         ),
     ]
 
-    call_count = [0]
-
     async def mock_execute(task, master_session_id=None):
-        call_count[0] += 1
-        # tarefa_ok sempre sucesso, tarefa_falha sempre falha → zero progresso
+        # tarefa_ok sempre sucesso, tarefa_falha sempre falha
         if task.task_name == "tarefa_ok":
             return AgentResult(
                 agent_id=task.agent_id,
@@ -67,20 +74,25 @@ async def test_circuit_breaker_aborta_com_progresso_zero():
     mock_orchestrator.output_manager.list_artifacts.return_value = []
 
     loop = AutonomousLoop(mock_orchestrator)
-    loop.max_retries = 1  # 1 tentativa por subtarefa para acelerar o teste
+    budget = UsageBudget(
+        max_tokens=500_000, max_minutes=120, max_task_retries=1,
+        max_connection_retries=20, closing_reserve_pct=0.05,
+    )
 
     with patch("src.autonomous_loop.get_telemetry", return_value=MagicMock()):
         with patch.object(loop, "_is_complex_triage", AsyncMock(return_value=True)):
-            result = await loop.run("tarefa complexa", "exec_test")
+            result = await loop.run("tarefa complexa", "exec_test", budget=budget)
 
-    # Deve ter encerrado antes de esgotar todas as tentativas do loop de plano
-    # (no máximo 2 ciclos para detectar zero progresso)
+    # tarefa_ok concluiu com sucesso; tarefa_falha foi abandonada (não "failed"),
+    # então a sessão NÃO aborta com uma mensagem de circuit breaker.
+    assert result.succeeded == 1
+    assert "tarefa_falha" in loop._usage_tracker.abandoned_tasks
     final_texts = " ".join(
         r.response.get("text", "") or ""
         for r in result.results
     )
-    assert "progresso" in final_texts.lower(), (
-        f"Mensagem de circuit breaker não encontrada. Textos: {final_texts}"
+    assert "progresso" not in final_texts.lower(), (
+        f"Circuit breaker antigo (V12.5.1) não deveria mais ser acionado. Textos: {final_texts}"
     )
 
 

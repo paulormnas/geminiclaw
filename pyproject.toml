@@ -53,6 +53,7 @@ dev = [
     "pytest-asyncio>=1.3.0",
     "pytest-cov>=7.0.0",
     "respx>=0.22.0",
+    "ruff>=0.16.9",
 ]
 
 [tool.pytest.ini_options]
@@ -64,4 +65,13 @@ markers = [
     "integration: marks tests as integration tests",
     "e2e: marks tests as end-to-end tests (require real API)",
 ]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+# Conjunto inicial conservador: erros/pyflakes, estilo pycodestyle e import order.
+# Ampliar gradualmente conforme o débito de lint existente for resolvido.
+select = ["E", "F", "I"]
 

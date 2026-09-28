@@ -21,6 +21,7 @@ def no_real_sleep(monkeypatch):
     monkeypatch.setattr("src.llm.providers.openai_compatible.asyncio.sleep", _instant_sleep)
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_generate_simple_text():
     provider = OpenAICompatibleProvider(base_url=BASE_URL, model=MODEL, api_key="secret-key")
@@ -48,6 +49,7 @@ async def test_generate_simple_text():
         }
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_generate_with_tool_call():
     provider = OpenAICompatibleProvider(base_url=BASE_URL, model=MODEL)
@@ -88,6 +90,7 @@ async def test_generate_with_tool_call():
     assert response.tool_calls[0].arguments == {"location": "São Paulo"}
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_generate_with_invalid_tool_call_arguments():
     provider = OpenAICompatibleProvider(base_url=BASE_URL, model=MODEL)
@@ -117,6 +120,7 @@ async def test_generate_with_invalid_tool_call_arguments():
     assert response.tool_calls[0].arguments == {"_raw": "{not valid json"}
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_generate_retries_on_rate_limit_then_succeeds():
     provider = OpenAICompatibleProvider(base_url=BASE_URL, model=MODEL)
@@ -140,6 +144,7 @@ async def test_generate_retries_on_rate_limit_then_succeeds():
     assert response.usage["retry_count"] == 1
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_generate_gives_up_after_exhausting_retries():
     provider = OpenAICompatibleProvider(base_url=BASE_URL, model=MODEL)
@@ -155,6 +160,7 @@ async def test_generate_gives_up_after_exhausting_retries():
     assert route.call_count == 4
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_generate_stream_yields_text_chunks():
     provider = OpenAICompatibleProvider(base_url=BASE_URL, model=MODEL)
@@ -176,6 +182,7 @@ async def test_generate_stream_yields_text_chunks():
     assert chunks == ["Ol", "á!"]
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_health_check_true_when_models_endpoint_ok():
     provider = OpenAICompatibleProvider(base_url=BASE_URL, model=MODEL)
@@ -185,6 +192,7 @@ async def test_health_check_true_when_models_endpoint_ok():
         assert await provider.health_check() is True
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_health_check_false_on_error():
     provider = OpenAICompatibleProvider(base_url=BASE_URL, model=MODEL)
@@ -194,6 +202,7 @@ async def test_health_check_false_on_error():
         assert await provider.health_check() is False
 
 
+@pytest.mark.unit
 def test_missing_base_url_raises_value_error():
     with pytest.raises(ValueError, match="OPENAI_BASE_URL"):
         OpenAICompatibleProvider(base_url=None, model=MODEL)

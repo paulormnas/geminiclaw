@@ -39,6 +39,10 @@ ocr = [
     "pymupdf>=1.28.2",
     "pytesseract>=0.3.13",
 ]
+reports = [
+    "markdown>=3.11",
+    "python-docx>=1.2.0",
+]
 
 [project.scripts]
 geminiclaw = "src.cli:main"

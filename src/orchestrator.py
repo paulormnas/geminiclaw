@@ -388,12 +388,44 @@ class Orchestrator:
             session_dir = self.output_manager.base_dir / master_session.id
             if result.plan_json:
                 (session_dir / "plan.json").write_text(result.plan_json, encoding="utf-8")
-            
+
             # Converte resultados para formato serializável
             serializable_results = [r.__dict__ for r in result.results]
             (session_dir / "results.json").write_text(json.dumps(serializable_results, indent=2), encoding="utf-8")
         except Exception as e:
             logger.warning(f"Falha ao salvar artefatos de metadados na sessão: {e}")
+
+        # Roadmap V15.4 / Spec G8 — session_metadata.json: registro definitivo da
+        # execução (interações, métricas, custo) para consulta e para os conversores
+        # de formato (geminiclaw convert).
+        try:
+            final_session = self.session_manager.get(master_session.id)
+            final_payload = final_session.payload if final_session is not None else master_session.payload
+            token_summary = telemetry.get_token_summary(exec_id or master_session.id)
+            token_rows = token_summary.get("by_provider_model", [])
+            total_tokens = sum(r.get("total_tokens") or 0 for r in token_rows)
+            total_cost = sum(r.get("total_cost_usd") or 0 for r in token_rows)
+
+            session_metadata = {
+                "session_id": master_session.id,
+                "task": prompt,
+                "mode": effective_mode,
+                "started_at": start_date,
+                "ended_at": end_date,
+                "duration_seconds": duration,
+                "subtasks": [r.__dict__ for r in result.results],
+                "researcher_interactions": final_payload.get("researcher_interactions", []),
+                "divergence_reports": final_payload.get("divergence_reports", []),
+                "token_usage": {"total_tokens": total_tokens, "by_provider_model": token_rows},
+                "cost_usd": total_cost,
+                "containers_used": self._session_container_counts.get(master_session.id, 0),
+                "report_path": "relatorio_final.md",
+            }
+            (session_dir / "session_metadata.json").write_text(
+                json.dumps(session_metadata, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
+            )
+        except Exception as e:
+            logger.warning(f"Falha ao salvar session_metadata.json: {e}")
 
         result.session_id = master_session.id
         return result

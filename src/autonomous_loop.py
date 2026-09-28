@@ -1150,14 +1150,14 @@ class AutonomousLoop:
         """
         from src.orchestrator import AgentTask, AGENT_REGISTRY
         from src.telemetry import get_telemetry
-        
+
         logger.info("Iniciando síntese final dos resultados")
-        
+
         # Coleta estatísticas de telemetria
         telemetry = get_telemetry()
         await telemetry.flush() # Garante que os dados estão no banco
         stats = telemetry.get_summarized_stats(master_session_id)
-        
+
         # Constrói o prompt para o Summarizer
         # Inclui os resultados das subtarefas estruturados
         context_parts = []
@@ -1170,17 +1170,45 @@ class AutonomousLoop:
                     context_parts.append(output.to_context_string())
                 except Exception:
                     pass
-        
+
         if not context_parts:
             # Fallback para o texto bruto dos resultados se a memória estiver vazia
             for res in results:
                 context_parts.append(f"### Resultado do Agente {res.agent_id}\n{res.response.get('text', '')}")
-        
+
+        # Roadmap V15.4 / Spec G8 — dados REAIS de métricas/interações injetados no
+        # contexto do Summarizer, para que a tabela de resultados e a seção "Decisões
+        # do Pesquisador" sejam construídas a partir de dados de disco, não de texto
+        # solto gerado pelo LLM.
+        from src.report.artifact_reader import ArtifactReader
+
+        session_dir = self.orchestrator.output_manager.base_dir / master_session_id
+        artifact_reader = ArtifactReader(session_dir)
+        metrics_block = artifact_reader.build_metrics_context_block()
+        input_snapshot_files = artifact_reader.read_input_snapshot_files()
+
+        session = self.orchestrator.session_manager.get(master_session_id)
+        session_payload = getattr(session, "payload", None)
+        if not isinstance(session_payload, dict):
+            session_payload = {}
+        researcher_interactions = session_payload.get("researcher_interactions", [])
+        divergence_reports = session_payload.get("divergence_reports", [])
+
+        scientific_context = (
+            f"DADOS REAIS DE MÉTRICAS (use estes valores exatos na tabela de Resultados):\n{metrics_block}\n\n"
+            f"ARQUIVOS DE REFERÊNCIA USADOS (input_snapshot/): {input_snapshot_files or 'nenhum'}\n\n"
+            f"DECISÕES DO PESQUISADOR (researcher_interactions — use estes dados, não reconstrua):\n"
+            f"{json.dumps(researcher_interactions, ensure_ascii=False, indent=2) if researcher_interactions else 'Nenhuma interação registrada — sessão totalmente autônoma.'}\n\n"
+            f"DIVERGÊNCIAS DETECTADAS (divergence_reports):\n"
+            f"{json.dumps(divergence_reports, ensure_ascii=False, indent=2) if divergence_reports else 'Nenhuma divergência registrada.'}"
+        )
+
         synthesis_prompt = (
             f"Sintetize os resultados da tarefa: '{prompt}'\n\n"
             f"RESULTADOS DAS SUBTAREFAS:\n\n" + "\n\n".join(context_parts) + "\n\n"
             f"ESTATÍSTICAS DE EXECUÇÃO:\n{stats}\n\n"
-            f"Por favor, gere o relatório final seguindo as instruções de estrutura acadêmica."
+            f"{scientific_context}\n\n"
+            f"Por favor, gere o relatório final seguindo a ESTRUTURA OBRIGATÓRIA DO RELATÓRIO."
         )
         
         task = AgentTask(

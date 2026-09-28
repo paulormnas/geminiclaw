@@ -308,6 +308,41 @@ class TelemetryCollector:
         )
         self._maybe_flush_sync()
 
+    def record_connection_retry(
+        self,
+        execution_id: str,
+        session_id: str,
+        agent_id: str,
+        component: str,
+        error_message: str,
+        task_name: Optional[str] = None,
+    ) -> None:
+        """Registra uma retentativa de conexão (Roadmap V18 / Spec `usage-limits`).
+
+        Emitido pelos provedores LLM (erro de conexão/timeout/429/5xx) e pelo
+        sandbox de código (falha de conexão com o daemon Docker) a cada
+        retentativa individual. `src.usage.UsageTracker` soma estes eventos
+        por sessão via `get_connection_retry_count` para aplicar
+        `SESSION_MAX_CONNECTION_RETRIES` como condição de parada.
+
+        Args:
+            execution_id: ID da execução.
+            session_id: ID da sessão do agente.
+            agent_id: Agente que sofreu a retentativa.
+            component: Componente de origem (ex: "llm_provider:google",
+                "llm_provider:ollama", "sandbox_docker").
+            error_message: Descrição resumida do erro que motivou a retentativa.
+            task_name: Subtarefa do DAG, se aplicável.
+        """
+        self.record_agent_event(
+            execution_id=execution_id,
+            session_id=session_id,
+            agent_id=agent_id,
+            event_type="connection_retry",
+            task_name=task_name,
+            payload={"component": component, "error": error_message[:200]},
+        )
+
     def record_tool_usage(
         self,
         execution_id: str,
@@ -1004,6 +1039,38 @@ class TelemetryCollector:
         except Exception as e:
             logger.error("Erro ao consultar subtask metrics", extra={"error": str(e)})
             return []
+
+    def get_connection_retry_count(self, execution_id: str) -> int:
+        """Retorna o total de retentativas de conexão registradas para uma execução.
+
+        Conta os eventos ``connection_retry`` emitidos pelos provedores LLM
+        (erro de conexão/timeout/429/5xx) e pelo sandbox de código (falha de
+        conexão com o daemon Docker) — ver Roadmap V18 / Spec `usage-limits`,
+        design §2. Usado por `src.usage.UsageTracker` para aplicar
+        `SESSION_MAX_CONNECTION_RETRIES` como condição de parada da sessão.
+
+        Args:
+            execution_id: ID da execução a consultar.
+
+        Returns:
+            Número de eventos ``connection_retry`` registrados. Retorna 0 em
+            caso de falha de consulta (fail-safe: nunca bloqueia a sessão por
+            erro de leitura de telemetria).
+        """
+        try:
+            with get_connection() as conn:
+                row = conn.execute(
+                    """
+                    SELECT COUNT(*) AS retry_count
+                    FROM agent_events
+                    WHERE execution_id = %s AND event_type = 'connection_retry'
+                    """,
+                    (execution_id,),
+                ).fetchone()
+            return int(row["retry_count"]) if row else 0
+        except Exception as e:
+            logger.error("Erro ao consultar connection_retry_count", extra={"error": str(e)})
+            return 0
 
     def get_summarized_stats(self, execution_id: str) -> str:
         """Retorna um bloco de texto com estatísticas para o Summarizer.

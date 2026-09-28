@@ -20,9 +20,9 @@ class TestResearcherAttributes:
         assert isinstance(root_agent, Agent)
 
     def test_agent_has_correct_name(self) -> None:
-        """O nome do agente deve ser 'geminiclaw_researcher'."""
+        """O nome do agente deve ser 'researcher' (identificador de papel, Roadmap V16 / ADR 011)."""
         assert root_agent.name == AGENT_NAME
-        assert root_agent.name == "geminiclaw_researcher"
+        assert root_agent.name == "researcher"
 
     def test_agent_has_model(self) -> None:
         """root_agent deve usar o DEFAULT_MODEL."""

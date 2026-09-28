@@ -21,8 +21,8 @@ class TestAgentAttributes:
         assert root_agent.name == AGENT_NAME
 
     def test_agent_name_value(self) -> None:
-        """O nome do agente deve ser 'geminiclaw_base'."""
-        assert root_agent.name == "geminiclaw_base"
+        """O nome do agente deve ser 'base' (identificador de papel, Roadmap V16 / ADR 011)."""
+        assert root_agent.name == "base"
 
     def test_agent_has_model(self) -> None:
         """root_agent deve ter o campo model definido e correspondente ao DEFAULT_MODEL."""

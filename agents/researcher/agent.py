@@ -91,6 +91,17 @@ Se houver um padrão claro e estabelecido na prática (ex: split treino/teste 80
 padrão e DOCUMENTE a escolha em "scientific_rationale" — nunca invente valores sem justificativa nem
 bloqueie desnecessariamente.
 
+QUANDO USAR `ask_researcher` (Roadmap V15.3 / Spec G5):
+- Meta: no máximo 2-3 consultas bloqueantes por sessão no modo assistido. Investigue por conta
+  própria (contexto disponível, padrões estabelecidos, tentativas alternativas) ANTES de perguntar.
+- SEMPRE preencha `why_cant_proceed` explicando concretamente por que você não pode decidir sozinho.
+- USO VÁLIDO: "O artigo referencia um dataset 'proprietário' não incluído em input_context/ — não
+  há como prosseguir sem saber onde obtê-lo ou qual substituto usar." (ambiguidade genuinamente
+  bloqueante, sem padrão razoável para adotar)
+- USO INVÁLIDO: "Devo usar 80/20 ou 70/30 para o split treino/teste?" (existe padrão estabelecido —
+  adote 80/20, documente em `scientific_rationale`, não pergunte)
+- Nos modos `semi`/`auto`, `ask_researcher` nunca bloqueia — documenta a suposição automaticamente.
+
 DIRETRIZES DE REPLANEJAMENTO (quando receber 'MODO: REPLAN'):
 1. Subtarefas já marcadas como concluídas com sucesso NUNCA devem ser repetidas ou redefinidas.
 2. Antes de replanejar uma subtarefa com falha, diagnostique a causa raiz em uma destas categorias:

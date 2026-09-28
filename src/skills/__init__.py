@@ -10,6 +10,7 @@ except (ImportError, ModuleNotFoundError):
 from .code.skill import CodeSkill
 from .memory.skill import MemorySkill
 from .web_reader.skill import WebReaderSkill
+from .human_feedback.skill import HumanFeedbackSkill
 try:
     from .document_processor.skill import DocumentProcessorSkill
     _HAS_DOC_PROCESSOR = True
@@ -117,7 +118,8 @@ from src.config import (
     SKILL_WEB_READER_ENABLED,
     SKILL_CODE_ENABLED,
     SKILL_MEMORY_ENABLED,
-    SKILL_DOCUMENT_PROCESSOR_ENABLED
+    SKILL_DOCUMENT_PROCESSOR_ENABLED,
+    SKILL_HUMAN_FEEDBACK_ENABLED,
 )
 
 _safe_register(QuickSearchSkill)
@@ -128,5 +130,6 @@ _safe_register(MemorySkill, enabled=SKILL_MEMORY_ENABLED)
 _safe_register(WebReaderSkill, enabled=SKILL_WEB_READER_ENABLED)
 if _HAS_DOC_PROCESSOR:
     _safe_register(DocumentProcessorSkill, enabled=SKILL_DOCUMENT_PROCESSOR_ENABLED)
+_safe_register(HumanFeedbackSkill, enabled=SKILL_HUMAN_FEEDBACK_ENABLED)
 
-__all__ = ["BaseSkill", "SkillRegistry", "registry", "QuickSearchSkill", "DeepSearchSkill", "CodeSkill", "MemorySkill", "WebReaderSkill", "DocumentProcessorSkill"]
+__all__ = ["BaseSkill", "SkillRegistry", "registry", "QuickSearchSkill", "DeepSearchSkill", "CodeSkill", "MemorySkill", "WebReaderSkill", "DocumentProcessorSkill", "HumanFeedbackSkill"]

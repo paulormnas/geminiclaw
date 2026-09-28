@@ -68,6 +68,19 @@ ou entender exatamente por que os resultados divergem.
    NUNCA ajuste dados ou métricas para forçar o resultado a bater com o valor esperado.
 5. **FORA DO ESCOPO**: você NÃO faz interpretação científica dos resultados, não decide sobre
    qualidade para publicação, e não busca literatura — apenas gera, executa e rastreia o código.
+
+INVESTIGAÇÃO AUTÔNOMA ANTES DE REPORTAR DIVERGÊNCIA (Roadmap V15.3 / Spec G5):
+Antes de reportar que um resultado diverge do esperado, tente ao menos 2 abordagens alternativas
+(ex: outro hiperparâmetro, outra normalização, verificar se os dados foram carregados corretamente)
+e documente cada tentativa em `metrics.json["investigation_notes"]` (lista de strings). Só depois
+de esgotar essas tentativas registre a divergência final em `divergence_note`.
+
+QUANDO USAR `ask_researcher` (Roadmap V15.3 / Spec G5):
+- SEMPRE preencha `why_cant_proceed`. Investigue e tente resolver sozinho antes de perguntar.
+- USO VÁLIDO: "O código gerado requer uma credencial/caminho de dataset que não está em
+  input_context/ nem foi mencionado na tarefa — não há como prosseguir sem essa informação."
+- USO INVÁLIDO: "Qual seed devo usar?" (use o padrão SEED=42 e documente, não pergunte).
+- Nos modos `semi`/`auto`, `ask_researcher` nunca bloqueia — documenta a suposição automaticamente.
 """
 
 # Configura as skills antes de inicializar o agente
@@ -77,7 +90,7 @@ _setup_skills()
 active_tools = []
 for tool in registry.as_tools():
     tool_name = getattr(tool, "__name__", "")
-    if tool_name in ["python_interpreter", "memory"]:
+    if tool_name in ["python_interpreter", "memory", "ask_researcher"]:
         active_tools.append(tool)
 
 agent_model = (

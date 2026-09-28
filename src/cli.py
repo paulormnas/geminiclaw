@@ -51,6 +51,7 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
   geminiclaw [opções] "<tarefa>"
   geminiclaw sessions
   geminiclaw stop [--session <id>]
+  geminiclaw resume --session <id>
   geminiclaw clear-context
   geminiclaw history
   geminiclaw --metrics <execution_id>
@@ -514,6 +515,46 @@ def clear_context(context_dir: str | None = None) -> None:
     print(f"  {GREEN}✅ input_context/ limpo com sucesso.{RESET}\n")
 
 
+async def resume_session(orchestrator: Orchestrator, session_id: str) -> None:
+    """Retoma uma sessão suspensa (Roadmap V15.3 / Spec G5).
+
+    Limitação conhecida: o framework não faz checkpoint do estado de execução do DAG,
+    então "retomar" reinicia o ciclo de planejamento a partir do prompt original —
+    não é uma resumição exata do ponto de suspensão. Artefatos já gerados antes da
+    suspensão permanecem em `outputs/<session_id>/` e são reconhecidos e reaproveitados
+    pelo Developer Agent (WorkspaceManifest), reduzindo retrabalho na prática.
+
+    Args:
+        orchestrator: Instância do orquestrador.
+        session_id: ID da sessão suspensa a retomar.
+    """
+    session = orchestrator.session_manager.get(session_id)
+    if session is None:
+        print(f"\n  {RED}❌ Sessão '{session_id}' não encontrada.{RESET}\n")
+        return
+    if session.status != "suspended":
+        print(f"\n  {YELLOW}⚠ Sessão '{session_id}' não está suspensa (status: {session.status}).{RESET}\n")
+        return
+
+    original_prompt = session.payload.get("prompt")
+    if not original_prompt:
+        print(f"\n  {RED}❌ Sessão '{session_id}' não tem um prompt original registrado — não é possível retomar.{RESET}\n")
+        return
+
+    mode = session.payload.get("mode", SESSION_DEFAULT_MODE)
+    print(
+        f"\n  {DIM}Retomando a partir do prompt original em um novo ciclo de planejamento "
+        f"(modo: {mode}). Artefatos da sessão suspensa permanecem em outputs/{session_id}/ "
+        f"e são reaproveitados automaticamente quando reconhecidos pelo Developer Agent.{RESET}\n"
+    )
+
+    context_bundle = load_context_with_confirmation()
+    if context_bundle is None:
+        return
+
+    await execute_prompt(orchestrator, original_prompt, mode=mode, context_bundle=context_bundle)
+
+
 def print_session_banner(mode: str, context_dir: str = "input_context") -> None:
     """Exibe o banner de inicialização de sessão (Roadmap V15.6 / Spec G10).
 
@@ -783,6 +824,15 @@ async def interactive_mode(
             clear_context()
             continue
 
+        if prompt.lower() == "resume" or prompt.lower().startswith("resume "):
+            parts = prompt.split()
+            s_id = parts[1] if len(parts) > 1 else None
+            if not s_id:
+                print(f"\n  {RED}❌ Use: resume <session_id>{RESET}\n")
+            else:
+                await resume_session(orchestrator, s_id)
+            continue
+
         await execute_prompt(orchestrator, prompt, mode=mode, context_bundle=context_bundle)
 
 
@@ -884,6 +934,19 @@ def main() -> None:
         print(f"\n  {STATUS_ICONS['error']} {RED}Falha na inicialização: {e}{RESET}\n")
         logger.error("Falha ao inicializar CLI", extra={"error": str(e)})
         sys.exit(1)
+
+    # Roadmap V15.3 / Spec G5 — retomar sessão suspensa
+    if args.prompt:
+        p_lower_resume = args.prompt.strip().lower()
+        if p_lower_resume == "resume" or p_lower_resume.startswith("resume "):
+            target_sess = args.session
+            if not target_sess and " " in args.prompt.strip():
+                target_sess = args.prompt.strip().split(maxsplit=1)[1]
+            if not target_sess:
+                print(f"\n  {RED}❌ Especifique --session <id> (ex: geminiclaw resume --session <id>).{RESET}\n")
+                sys.exit(1)
+            asyncio.run(resume_session(orchestrator, target_sess))
+            sys.exit(0)
 
     # Roadmap V15.5 / Spec G9 — carrega input_context/ uma única vez por invocação
     context_bundle = load_context_with_confirmation()

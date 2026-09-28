@@ -277,7 +277,7 @@ class Orchestrator:
         # V15.6/G10 — Persiste o modo de operação no payload da sessão mestra
         self.session_manager.update(
             master_session.id,
-            payload={**master_session.payload, "mode": effective_mode},
+            payload={**master_session.payload, "mode": effective_mode, "prompt": prompt},
         )
 
         # V15.5/G9 — Carrega (ou reutiliza) o contexto de input_context/ e o disponibiliza
@@ -428,6 +428,109 @@ class Orchestrator:
         logger.info(
             "input_snapshot/ salvo",
             extra={"session_id": session_id, "files": len(source_paths)},
+        )
+
+    async def _handle_ask_researcher(
+        self, message: Message, task: AgentTask, master_session_id: str | None
+    ) -> str:
+        """Trata uma mensagem ``ask_researcher`` recebida durante a execução de um agente
+        (Roadmap V15.3 / Spec G5): reutiliza uma resposta anterior similar se houver, ou
+        exibe a pergunta e bloqueia aguardando a resposta do pesquisador via stdin.
+
+        Args:
+            message: Mensagem IPC do tipo ``ask_researcher``.
+            task: Tarefa em execução no momento da pergunta.
+            master_session_id: ID da sessão mestra, usado para persistência/dedup.
+
+        Returns:
+            A resposta do pesquisador (ou reaproveitada de uma pergunta similar anterior).
+        """
+        import asyncio as _asyncio
+        from src.utils.terminal import RESET, BOLD, YELLOW, CYAN, DIM
+
+        payload = message.payload
+        question = payload.get("question", "")
+        context = payload.get("context", "")
+        why_cant_proceed = payload.get("why_cant_proceed", "")
+        options = payload.get("options") or []
+        session_key = master_session_id or task.task_name or "unknown"
+
+        cached_answer = self._find_similar_researcher_answer(session_key, question)
+        if cached_answer is not None:
+            logger.info(
+                "ask_researcher: pergunta similar já respondida nesta sessão — reutilizando resposta",
+                extra={"question": question[:100], "session_id": session_key},
+            )
+            return cached_answer
+
+        print(f"\n{YELLOW}{BOLD}❓ O agente '{task.agent_id}' está bloqueado e precisa da sua ajuda:{RESET}")
+        print(f"  {BOLD}Pergunta:{RESET} {question}")
+        if context:
+            print(f"  {DIM}Contexto: {context}{RESET}")
+        if why_cant_proceed:
+            print(f"  {DIM}Por que não pode prosseguir sozinho: {why_cant_proceed}{RESET}")
+        if options:
+            print(f"  {CYAN}Opções:{RESET}")
+            for i, opt in enumerate(options, start=1):
+                print(f"    [{i}] {opt}")
+
+        answer = await _asyncio.to_thread(input, f"  {BOLD}Sua resposta:{RESET} ")
+
+        self._record_researcher_interaction(session_key, question, why_cant_proceed, options, answer, task)
+        return answer
+
+    def _find_similar_researcher_answer(self, session_key: str, question: str) -> str | None:
+        """Procura, nas interações já registradas na sessão, uma pergunta textualmente
+        similar (Roadmap V15.3 / Spec G5) — evita perguntar a mesma dúvida duas vezes.
+
+        Usa ``difflib.SequenceMatcher`` como heurística de similaridade textual (sem
+        dependência de embeddings/Qdrant, suficiente para o caso de uso: perguntas quase
+        idênticas repetidas na mesma sessão).
+        """
+        import difflib
+        from src.config import ASK_RESEARCHER_DEDUP_SIMILARITY
+
+        session = self.session_manager.get(session_key)
+        if session is None:
+            return None
+        interactions = session.payload.get("researcher_interactions", []) or []
+        for interaction in interactions:
+            prior_question = interaction.get("question", "")
+            ratio = difflib.SequenceMatcher(None, question.lower(), prior_question.lower()).ratio()
+            if ratio >= ASK_RESEARCHER_DEDUP_SIMILARITY:
+                return interaction.get("researcher_response")
+        return None
+
+    def _record_researcher_interaction(
+        self,
+        session_key: str,
+        question: str,
+        why_cant_proceed: str,
+        options: list[str],
+        answer: str,
+        task: AgentTask,
+    ) -> None:
+        """Persiste uma interação ask_researcher no payload da sessão (Roadmap V15.3 / Spec G5)."""
+        from datetime import datetime, timezone
+
+        session = self.session_manager.get(session_key)
+        payload = dict(session.payload) if session is not None else {}
+        interactions = list(payload.get("researcher_interactions", []))
+        interactions.append(
+            {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "question": question,
+                "why_cant_proceed": why_cant_proceed,
+                "options": options,
+                "researcher_response": answer,
+                "subtask_name": task.task_name,
+            }
+        )
+        payload["researcher_interactions"] = interactions
+        self.session_manager.update(session_key, payload=payload)
+        logger.info(
+            "Interação ask_researcher persistida",
+            extra={"session_id": session_key, "subtask_name": task.task_name},
         )
 
     async def _execute_agent(self, task: AgentTask, master_session_id: str | None = None) -> AgentResult:
@@ -582,13 +685,24 @@ class Orchestrator:
                 payload={"prompt_chars": len(task.prompt)},
             )
 
-            # 5. Aguarda resposta
+            # 5. Aguarda resposta — pode incluir 0+ round-trips de ask_researcher
+            # (Roadmap V15.3 / Spec G5) antes da mensagem final "response".
             _t_recv_start = asyncio.get_event_loop().time()
             if AGENT_TIMEOUT_SECONDS is None:
                  logger.info(f"Aguardando resposta do agente {task.agent_id} sem limite de tempo")
-            response_msg = await self.ipc.receive(
-                ipc_id, timeout=AGENT_TIMEOUT_SECONDS
-            )
+            while True:
+                response_msg = await self.ipc.receive(
+                    ipc_id, timeout=AGENT_TIMEOUT_SECONDS
+                )
+                if response_msg.type != "ask_researcher":
+                    break
+                answer = await self._handle_ask_researcher(
+                    response_msg, task, master_session_id
+                )
+                await self.ipc.send(
+                    ipc_id,
+                    create_message("ask_researcher_answer", session.id, {"answer": answer}),
+                )
             _recv_ms = int((asyncio.get_event_loop().time() - _t_recv_start) * 1000)
 
             # V5.6 — Telemetria: ipc_receive

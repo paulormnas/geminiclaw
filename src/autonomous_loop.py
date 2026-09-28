@@ -7,6 +7,7 @@ decomposição de tarefas em subtarefas e loop de retentativas.
 import os
 import json
 import asyncio
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, TYPE_CHECKING, List, Dict, Optional
@@ -64,6 +65,8 @@ class AutonomousLoop:
         """
         from src.config import SESSION_DEFAULT_MODE
         self._session_mode = mode or SESSION_DEFAULT_MODE
+        # Roadmap V15.3 / Spec G5 — usado para calcular session_duration_min
+        self._session_started_at = time.time()
 
         logger.info(
             "Iniciando loop autônomo",
@@ -220,6 +223,145 @@ class AutonomousLoop:
             failed=failed,
             artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id),
         )
+
+    async def _check_operational_thresholds(self, master_session_id: str) -> bool:
+        """Monitora limites operacionais (tokens, custo, duração, containers) e, no modo
+        `assisted`, oferece ao pesquisador a opção de suspender a sessão (Roadmap V15.3 / Spec G5).
+
+        Não-bloqueante por padrão: apenas registra em log nos modos `semi`/`auto`. No modo
+        `assisted`, exibe um aviso e aguarda `OPERATIONAL_THRESHOLD_WAIT_SECONDS` por uma
+        resposta; se o pesquisador digitar 's', a sessão é marcada como suspensa.
+
+        Returns:
+            True se o pesquisador optou por suspender a sessão; False caso contrário.
+        """
+        from src.config import (
+            OPERATIONAL_THRESHOLDS,
+            MAX_SESSION_TOKENS,
+            MAX_CONTAINERS_PER_SESSION,
+            OPERATIONAL_THRESHOLD_WAIT_SECONDS,
+        )
+
+        telemetry = get_telemetry()
+        token_summary = telemetry.get_token_summary(master_session_id)
+        rows = token_summary.get("by_provider_model", [])
+        total_tokens = sum(r.get("total_tokens") or 0 for r in rows)
+        total_cost = sum(r.get("total_cost_usd") or 0 for r in rows)
+
+        token_pct = (total_tokens / MAX_SESSION_TOKENS) if MAX_SESSION_TOKENS else 0.0
+        container_counts = getattr(self.orchestrator, "_session_container_counts", None)
+        container_count = (
+            container_counts.get(master_session_id, 0) if isinstance(container_counts, dict) else 0
+        )
+        container_pct = (container_count / MAX_CONTAINERS_PER_SESSION) if MAX_CONTAINERS_PER_SESSION else 0.0
+        duration_min = (time.time() - getattr(self, "_session_started_at", time.time())) / 60
+
+        triggered: list[str] = []
+        if token_pct >= OPERATIONAL_THRESHOLDS["token_usage_pct"]:
+            triggered.append(f"Uso de tokens: {token_pct*100:.0f}% do limite ({total_tokens}/{MAX_SESSION_TOKENS})")
+        if total_cost >= OPERATIONAL_THRESHOLDS["cost_usd"]:
+            triggered.append(f"Custo estimado: ${total_cost:.2f} (limite ${OPERATIONAL_THRESHOLDS['cost_usd']:.2f})")
+        if duration_min >= OPERATIONAL_THRESHOLDS["session_duration_min"]:
+            triggered.append(
+                f"Duração da sessão: {duration_min:.0f}min (limite {OPERATIONAL_THRESHOLDS['session_duration_min']:.0f}min)"
+            )
+        if container_pct >= OPERATIONAL_THRESHOLDS["container_count_pct"]:
+            triggered.append(
+                f"Containers usados: {container_pct*100:.0f}% do limite ({container_count}/{MAX_CONTAINERS_PER_SESSION})"
+            )
+
+        if not triggered:
+            return False
+
+        logger.warning(
+            "Limite(s) operacional(is) atingido(s)",
+            extra={"triggered": triggered, "mode": self._session_mode, "master_session_id": master_session_id},
+        )
+
+        if self._session_mode != "assisted":
+            # Nos modos semi/auto, apenas registra em log — nunca bloqueia (Spec G5).
+            return False
+
+        from src.utils.terminal import RESET, BOLD, YELLOW
+
+        print(f"\n{YELLOW}{BOLD}⚠ Limite(s) operacional(is) atingido(s):{RESET}")
+        for item in triggered:
+            print(f"  {YELLOW}•{RESET} {item}")
+
+        try:
+            answer = await asyncio.wait_for(
+                asyncio.to_thread(input, "  Digite 's' para suspender a sessão, ou aguarde para continuar: "),
+                timeout=OPERATIONAL_THRESHOLD_WAIT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            answer = None
+
+        if answer and answer.strip().lower() in ("s", "sim"):
+            self.orchestrator.session_manager.update(master_session_id, status="suspended")
+            logger.info("Sessão suspensa pelo pesquisador", extra={"master_session_id": master_session_id})
+            return True
+
+        return False
+
+    async def _report_divergence(
+        self, task: "AgentTask", attempt_errors: List[str], master_session_id: str
+    ) -> None:
+        """Gera e registra um DivergenceReport quando uma subtarefa esgota todas as
+        tentativas de retry (Roadmap V15.3 / Spec G5): esperado, obtido em cada
+        tentativa, hipótese de causa e opções concretas para o pesquisador.
+
+        Apenas exibe/registra — NUNCA bloqueia diretamente aqui. Se o Researcher, ao
+        replanejar com este feedback (via `execution_feedback`), decidir que a
+        ambiguidade é genuinamente bloqueante, ele consulta o pesquisador através da
+        ferramenta `ask_researcher` (que já tem semântica de bloqueio, deduplicação e
+        orçamento de consultas por sessão corretas — ver src/skills/human_feedback).
+        No modo `assisted`, o relatório é exibido no terminal; nos modos `semi`/`auto`,
+        apenas registrado em log e no payload da sessão.
+        """
+        options = [
+            "Aceitar o resultado divergente e documentar (recomendado)",
+            "Tentar novamente com uma abordagem diferente na próxima iteração de replanejamento",
+            "Abortar esta subtarefa e prosseguir sem ela",
+        ]
+        expected = task.hypothesis or (task.validation_criteria[0] if task.validation_criteria else "não especificado")
+        report: Dict[str, Any] = {
+            "task_name": task.task_name,
+            "expected": expected,
+            "obtained_per_attempt": attempt_errors,
+            "hypothesis_of_cause": (
+                "Falha recorrente após múltiplas tentativas — revisar dados/implementação "
+                "ou considerar divergência legítima do resultado esperado."
+            ),
+            "options": options,
+        }
+
+        if self._session_mode == "assisted":
+            from src.utils.terminal import RESET, BOLD, YELLOW, CYAN
+
+            print(
+                f"\n{YELLOW}{BOLD}⚠ DivergenceReport — subtarefa '{task.task_name}' falhou "
+                f"após {len(attempt_errors)} tentativas{RESET}"
+            )
+            print(f"  {BOLD}Esperado:{RESET} {expected}")
+            print(f"  {BOLD}Obtido em cada tentativa:{RESET}")
+            for i, err in enumerate(attempt_errors, start=1):
+                print(f"    [{i}] {err}")
+            print(f"  {BOLD}Hipótese de causa:{RESET} {report['hypothesis_of_cause']}")
+            print(f"  {CYAN}Opções consideradas no replanejamento:{RESET}")
+            for i, opt in enumerate(options, start=1):
+                print(f"    [{i}] {opt}")
+        else:
+            logger.info(
+                "DivergenceReport gerado (modo não-assistido, apenas registrado)",
+                extra={"task_name": task.task_name, "mode": self._session_mode},
+            )
+
+        session = self.orchestrator.session_manager.get(master_session_id)
+        payload = dict(session.payload) if session is not None else {}
+        reports = list(payload.get("divergence_reports", []))
+        reports.append(report)
+        payload["divergence_reports"] = reports
+        self.orchestrator.session_manager.update(master_session_id, payload=payload)
 
     def _build_context_prefix(self, master_session_id: str, depends_on: list[str]) -> str:
         """Constrói o prefixo de contexto das subtarefas anteriores das quais esta depende.
@@ -381,7 +523,29 @@ class AutonomousLoop:
                     "task_names": [t.task_name for t in tasks],
                 },
             )
-            
+
+            # Roadmap V15.3 / Spec G5 — monitoramento de limites operacionais, checado uma
+            # vez por ciclo de planejamento (não por subtarefa, para evitar corridas entre
+            # subtarefas concorrentes do mesmo ciclo).
+            if await self._check_operational_thresholds(master_session_id):
+                suspend_result = AgentResult(
+                    agent_id="orchestrator",
+                    session_id=master_session_id,
+                    status="success",
+                    response={"text": "Sessão suspensa pelo pesquisador após aviso de limite operacional."},
+                )
+                final_results.append(suspend_result)
+                self._short_term_memory.clear(master_session_id)
+                succeeded = sum(1 for r in final_results if r.status == "success")
+                return OrchestratorResult(
+                    results=final_results,
+                    total=len(tasks),
+                    succeeded=succeeded,
+                    failed=len(final_results) - succeeded,
+                    artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id),
+                )
+
+
             if len(tasks) > self.max_subtasks:
                 logger.warning(f"Número de subtarefas ({len(tasks)}) excede o limite {self.max_subtasks}")
                 tasks = tasks[:self.max_subtasks]
@@ -453,7 +617,8 @@ class AutonomousLoop:
 
                 success = False
                 last_result = None
-                
+                attempt_errors: List[str] = []  # V15.3/G5 — insumo do DivergenceReport
+
                 # Retry Loop
                 for attempt in range(self.max_retries):
                     logger.info(f"Executando tentativa {attempt+1}/{self.max_retries} para {task.agent_id} [{task.task_name}]")
@@ -512,6 +677,7 @@ class AutonomousLoop:
                         break
                     else:
                         logger.warning(f"Tentativa {attempt+1} de {task.task_name} falhou", extra={"error": result.error})
+                        attempt_errors.append(result.error or "Erro desconhecido")
 
                         # V13.5.1: Orquestrador lista artefatos reais antes de cada retry.
                         artifacts_on_disk = self.orchestrator.output_manager.list_artifacts(master_session_id)
@@ -569,6 +735,11 @@ class AutonomousLoop:
 
                 if last_result:
                     final_results.append(last_result)
+
+                # Roadmap V15.3 / Spec G5 — DivergenceReport quando a subtarefa esgota
+                # todas as tentativas (padrão de falha recorrente detectado).
+                if not success and len(attempt_errors) >= self.max_retries:
+                    await self._report_divergence(task, attempt_errors, master_session_id)
 
                 # V5.8 — Telemetria: subtask_end
                 telemetry = get_telemetry()

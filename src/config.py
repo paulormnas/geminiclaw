@@ -188,6 +188,25 @@ PI_MIN_AVAILABLE_MEMORY_MB = float(get_env("PI_MIN_AVAILABLE_MEMORY_MB", default
 SKILL_MEMORY_ENABLED = get_env_bool("SKILL_MEMORY_ENABLED", default=True)
 # LONG_TERM_MEMORY_DB removido (Roadmap V8): usa PostgreSQL via DATABASE_URL
 
+# Human-in-the-Loop (Roadmap V15.3 / Spec G5)
+SKILL_HUMAN_FEEDBACK_ENABLED = get_env_bool("SKILL_HUMAN_FEEDBACK_ENABLED", default=True)
+# Limites operacionais monitorados a cada ciclo de planejamento (não-bloqueantes por padrão;
+# apenas o modo 'assisted' pausa e pergunta se o pesquisador quer suspender a sessão).
+OPERATIONAL_THRESHOLDS: dict[str, float] = {
+    "token_usage_pct": float(get_env("OPERATIONAL_THRESHOLD_TOKEN_USAGE_PCT", default="0.80")),
+    "cost_usd": float(get_env("OPERATIONAL_THRESHOLD_COST_USD", default="5.0")),
+    "session_duration_min": float(get_env("OPERATIONAL_THRESHOLD_SESSION_DURATION_MIN", default="60")),
+    "container_count_pct": float(get_env("OPERATIONAL_THRESHOLD_CONTAINER_COUNT_PCT", default="0.85")),
+}
+# Orçamento de tokens da sessão usado para calcular token_usage_pct (não existia limite
+# de tokens por sessão antes desta spec).
+MAX_SESSION_TOKENS = int(get_env("MAX_SESSION_TOKENS", default="500000"))
+# Tempo que a CLI aguarda a resposta do pesquisador ao aviso de limite antes de continuar.
+OPERATIONAL_THRESHOLD_WAIT_SECONDS = int(get_env("OPERATIONAL_THRESHOLD_WAIT_SECONDS", default="30"))
+# Similaridade textual mínima (0-1, via difflib) para considerar duas perguntas ao
+# pesquisador "a mesma dúvida" e reutilizar a resposta anterior sem perguntar de novo.
+ASK_RESEARCHER_DEDUP_SIMILARITY = float(get_env("ASK_RESEARCHER_DEDUP_SIMILARITY", default="0.85"))
+
 # LLM Response Cache
 LLM_CACHE_ENABLED = get_env_bool("LLM_CACHE_ENABLED", default=True)
 LLM_CACHE_TTL_SECONDS = int(get_env("LLM_CACHE_TTL_SECONDS", default="3600"))

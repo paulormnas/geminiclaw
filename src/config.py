@@ -240,6 +240,25 @@ MAX_LOCAL_LLM_CONCURRENT = int(get_env("MAX_LOCAL_LLM_CONCURRENT", default="2"))
 TRIAGE_MODE = get_env("TRIAGE_MODE", default="hybrid")
 TRIAGE_CONFIDENCE_THRESHOLD = float(get_env("TRIAGE_CONFIDENCE_THRESHOLD", default="0.7"))
 
+# --- Veredito de Evidência (Roadmap V17 / ADR 015 §9) ---
+# Parâmetros calibráveis da equação de confiança usada por src/knowledge/verdict.py.
+# Ver ADR 015 §9.8 para a tabela de referência e o significado de cada peso.
+VERDICT_Q_VALIDATED_COMPLETE = float(get_env("VERDICT_Q_VALIDATED_COMPLETE", default="1.0"))
+VERDICT_Q_VALIDATED_INCOMPLETE = float(get_env("VERDICT_Q_VALIDATED_INCOMPLETE", default="0.7"))
+VERDICT_Q_DIVERGENT = float(get_env("VERDICT_Q_DIVERGENT", default="0.3"))
+VERDICT_D_NEW_NODE_OR_DATASET = float(get_env("VERDICT_D_NEW_NODE_OR_DATASET", default="1.0"))
+VERDICT_D_NEW_SESSION = float(get_env("VERDICT_D_NEW_SESSION", default="0.5"))
+VERDICT_D_NEW_SEED = float(get_env("VERDICT_D_NEW_SEED", default="0.2"))
+VERDICT_GAMMA = float(get_env("VERDICT_GAMMA", default="0.5"))
+VERDICT_LAMBDA_AMBIGUOUS = float(get_env("VERDICT_LAMBDA_AMBIGUOUS", default="0.5"))
+VERDICT_APPROACH_FAILURE_Q = float(get_env("VERDICT_APPROACH_FAILURE_Q", default="0.3"))
+VERDICT_APPROACH_FAILURE_MIN_REPEATS = int(get_env("VERDICT_APPROACH_FAILURE_MIN_REPEATS", default="2"))
+VERDICT_PRIOR = float(get_env("VERDICT_PRIOR", default="1.0"))
+_verdict_thresholds_raw = get_env("VERDICT_THRESHOLDS", default="0.1,0.3,0.5")
+VERDICT_THRESHOLDS: tuple[float, float, float] = tuple(
+    float(x) for x in _verdict_thresholds_raw.split(",")
+)  # type: ignore[assignment]
+
 
 from src.logger import get_logger
 logger = get_logger(__name__)

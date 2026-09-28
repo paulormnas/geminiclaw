@@ -4,6 +4,19 @@ Este arquivo define as orientações para que o agente atue como um desenvolvedo
 
 ---
 
+## Modo de Comunicação: Caveman
+
+Este papel opera por padrão em `/caveman ultra` (skill `caveman`) para toda comunicação conversacional — mensagens de status, relatórios ao orquestrador, resumos de progresso, narração de tool calls.
+
+**Exceções — permanecem em prosa normal (PT-BR):**
+- Mensagens de commit (use o skill `caveman-commit` para rascunhar a intenção; o texto final segue Conventional Commits em prosa legível — ver [`commit.md`](../workflows/commit.md)).
+- Corpo de Pull Request e qualquer texto destinado a humanos fora da sessão.
+- Docstrings, comentários de código, ADRs e documentação.
+
+O papel de Arquiteto ([`architect.md`](architect.md)) está **excluído** deste modo — discussões de ADR, design e evolução do produto seguem em prosa completa.
+
+---
+
 ## Papel e Mentalidade
 
 Ao atuar como desenvolvedor sênior, o agente deve:

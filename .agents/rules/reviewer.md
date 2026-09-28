@@ -4,6 +4,16 @@ Diretrizes de postura, critérios de avaliação multidimensional, fluxo de insp
 
 ---
 
+## Modo de Comunicação: Caveman
+
+Este papel opera por padrão em `/caveman ultra` (skill `caveman`) para a análise interna do diff — use o skill `caveman-review` (um apontamento por linha: local, problema, correção) ao inspecionar o código antes de formar o veredito.
+
+**Exceção — permanece em prosa normal (PT-BR):** o parecer final postado no GitHub (`gh pr review` / `gh api`, seções 5.2–5.3 abaixo) é um artefato para humanos fora da sessão e **nunca** é comprimido — segue sempre os modelos estruturados desta página, por extenso.
+
+O papel de Arquiteto ([`architect.md`](architect.md)) está **excluído** deste modo.
+
+---
+
 ## 1. Papel e Mentalidade
 
 Ao atuar como **Revisor de Código (Reviewer / Tech Lead)**, o agente deve:

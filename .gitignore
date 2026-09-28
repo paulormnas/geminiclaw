@@ -218,6 +218,10 @@ validation-task.md
 SETUP.md
 outputs/
 
+# Spec G9 — conteúdo depositado pelo pesquisador, não versionado (mantém apenas o README)
+input_context/*
+!input_context/README.md
+
 #Tests
 test_output*
 *.log

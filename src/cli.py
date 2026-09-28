@@ -19,11 +19,19 @@ if root_path not in sys.path:
     sys.path.insert(0, root_path)
 
 from src.logger import get_logger
-from src.config import AGENT_TIMEOUT_SECONDS, DEFAULT_MODEL, SessionMode, SESSION_DEFAULT_MODE
+from src.config import (
+    AGENT_TIMEOUT_SECONDS,
+    DEFAULT_MODEL,
+    SessionMode,
+    SESSION_DEFAULT_MODE,
+    INPUT_CONTEXT_DIR,
+    CONTEXT_TOKEN_WARNING_THRESHOLD,
+)
 from src.session import SessionManager
 from src.runner import ContainerRunner
 from src.ipc import IPCChannel
 from src.orchestrator import Orchestrator, OrchestratorResult, AgentResult
+from src.context_loader import ContextLoader, ContextBundle
 from src.utils.terminal import (
     RESET, BOLD, DIM, GREEN, RED, YELLOW, CYAN, MAGENTA,
     STATUS_ICONS, BANNER, VERSION
@@ -43,6 +51,7 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
   geminiclaw [opções] "<tarefa>"
   geminiclaw sessions
   geminiclaw stop [--session <id>]
+  geminiclaw clear-context
   geminiclaw history
   geminiclaw --metrics <execution_id>
 
@@ -59,7 +68,12 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
               incertezas técnicas. Use apenas sem pesquisador disponível.
 
 {BOLD}CONTEXTO DE ENTRADA:{RESET}
-  Deposite arquivos em input_context/ antes de executar (ver Spec G9).
+  Deposite arquivos em input_context/ antes de executar:
+    context.md   → objetivo, hipóteses, instruções
+    artigo.pdf   → artigos de referência
+    dados.csv    → datasets
+    imagem.tif   → imagens para análise
+  Use 'geminiclaw clear-context' para limpar input_context/ entre sessões.
 
 {BOLD}EXEMPLOS:{RESET}
   geminiclaw "Reproduza a Tabela 3 do artigo"
@@ -426,6 +440,80 @@ def show_session_logs(session_id: str) -> None:
     print(f"{BOLD}{'─' * 100}{RESET}\n")
 
 
+def load_context_with_confirmation(context_dir: str | None = None) -> ContextBundle | None:
+    """Carrega `input_context/` e confirma com o pesquisador se o volume for grande
+    (Roadmap V15.5 / Spec G9).
+
+    Args:
+        context_dir: Diretório de contexto a carregar (usa o padrão de config se omitido).
+
+    Returns:
+        O `ContextBundle` carregado, ou None se o pesquisador optou por não continuar.
+    """
+    bundle = ContextLoader(context_dir).load()
+
+    if bundle.total_files == 0:
+        print(f"  {DIM}📂 Nenhum contexto encontrado em input_context/.{RESET}")
+        return bundle
+
+    print(
+        f"  {GREEN}📂 Contexto carregado:{RESET} {bundle.total_files} arquivo(s) "
+        f"({bundle.total_tokens_estimated} tokens estimados)"
+    )
+
+    if bundle.total_tokens_estimated > CONTEXT_TOKEN_WARNING_THRESHOLD:
+        print(
+            f"  {YELLOW}⚠ Contexto muito grande (~{bundle.total_tokens_estimated} tokens).{RESET} "
+            f"Recomendado: remover arquivos menos relevantes ou usar chunking."
+        )
+        answer = input("  Continuar? [s/N] ").strip().lower()
+        if answer not in ("s", "sim", "y", "yes"):
+            print(f"  {DIM}Execução cancelada pelo pesquisador.{RESET}")
+            return None
+
+    return bundle
+
+
+def print_context_lifecycle_message(session_id: str, bundle: ContextBundle) -> None:
+    """Exibe a instrução de gestão do ciclo de vida do contexto ao final da sessão
+    (Roadmap V15.5 / Spec G9).
+    """
+    if bundle.total_files == 0:
+        return
+    print(
+        f"\n  {DIM}Contexto salvo em outputs/{session_id}/input_snapshot/. "
+        f"Execute 'geminiclaw clear-context' para limpar input_context/ para a próxima sessão.{RESET}"
+    )
+
+
+def clear_context(context_dir: str | None = None) -> None:
+    """Limpa `input_context/` após confirmação do pesquisador (Roadmap V15.5 / Spec G9)."""
+    target_dir = Path(context_dir or INPUT_CONTEXT_DIR)
+    if not target_dir.is_dir():
+        print(f"\n  {DIM}input_context/ não existe — nada para limpar.{RESET}\n")
+        return
+
+    files = [p for p in target_dir.iterdir() if p.is_file() and p.name != "README.md"]
+    dirs = [p for p in target_dir.iterdir() if p.is_dir()]
+    if not files and not dirs:
+        print(f"\n  {DIM}input_context/ já está vazio.{RESET}\n")
+        return
+
+    print(f"\n  {YELLOW}⚠ Isso removerá {len(files) + len(dirs)} item(ns) de input_context/ (README.md é preservado).{RESET}")
+    answer = input("  Confirmar limpeza? [s/N] ").strip().lower()
+    if answer not in ("s", "sim", "y", "yes"):
+        print(f"  {DIM}Operação cancelada.{RESET}\n")
+        return
+
+    import shutil
+    for p in files:
+        p.unlink()
+    for d in dirs:
+        shutil.rmtree(d)
+
+    print(f"  {GREEN}✅ input_context/ limpo com sucesso.{RESET}\n")
+
+
 def print_session_banner(mode: str, context_dir: str = "input_context") -> None:
     """Exibe o banner de inicialização de sessão (Roadmap V15.6 / Spec G10).
 
@@ -624,30 +712,44 @@ def _create_orchestrator() -> tuple[Orchestrator, ContainerRunner]:
     return orchestrator, runner
 
 
-async def execute_prompt(orchestrator: Orchestrator, prompt: str, mode: str | None = None) -> None:
+async def execute_prompt(
+    orchestrator: Orchestrator,
+    prompt: str,
+    mode: str | None = None,
+    context_bundle: ContextBundle | None = None,
+) -> None:
     """Executa um prompt no orquestrador e exibe o resultado.
 
     Args:
         orchestrator: Instância do orquestrador.
         prompt: Prompt do usuário.
         mode: Nível de autonomia da sessão (SessionMode). Se omitido, usa o padrão.
+        context_bundle: Contexto pré-carregado de `input_context/` (Spec G9).
     """
     print(f"\n  {STATUS_ICONS['running']} {DIM}Processando...{RESET}\n")
 
     try:
-        result = await orchestrator.handle_request(prompt, mode=mode)
+        result = await orchestrator.handle_request(prompt, mode=mode, context_bundle=context_bundle)
         print(format_result(result))
+        if context_bundle and result.session_id:
+            print_context_lifecycle_message(result.session_id, context_bundle)
     except Exception as e:
         logger.error("Erro ao processar prompt", extra={"error": str(e)})
         print(f"\n  {STATUS_ICONS['error']} {RED}Erro: {e}{RESET}\n")
 
 
-async def interactive_mode(orchestrator: Orchestrator, mode: str | None = None) -> None:
+async def interactive_mode(
+    orchestrator: Orchestrator,
+    mode: str | None = None,
+    context_bundle: ContextBundle | None = None,
+) -> None:
     """Executa a CLI em modo interativo (REPL).
 
     Args:
         orchestrator: Instância do orquestrador.
         mode: Nível de autonomia da sessão (SessionMode). Se omitido, usa o padrão.
+        context_bundle: Contexto pré-carregado de `input_context/` (Spec G9), reutilizado
+            em todas as interações do REPL.
     """
     print(BANNER)
     print(f"  {DIM}Modo interativo. Digite 'sair' para encerrar.{RESET}\n")
@@ -677,7 +779,11 @@ async def interactive_mode(orchestrator: Orchestrator, mode: str | None = None) 
             stop_sessions(session_id=s_id, session_runner=getattr(orchestrator, "session_runner", None))
             continue
 
-        await execute_prompt(orchestrator, prompt, mode=mode)
+        if prompt.lower() == "clear-context":
+            clear_context()
+            continue
+
+        await execute_prompt(orchestrator, prompt, mode=mode, context_bundle=context_bundle)
 
 
 def main() -> None:
@@ -740,6 +846,9 @@ def main() -> None:
                 target_sess = args.prompt.strip().split(maxsplit=1)[1]
             stop_sessions(session_id=target_sess)
             sys.exit(0)
+        elif p_lower == "clear-context":
+            clear_context()
+            sys.exit(0)
 
     # Subcomando: --metrics <execution_id>
     if args.metrics:
@@ -776,10 +885,15 @@ def main() -> None:
         logger.error("Falha ao inicializar CLI", extra={"error": str(e)})
         sys.exit(1)
 
+    # Roadmap V15.5 / Spec G9 — carrega input_context/ uma única vez por invocação
+    context_bundle = load_context_with_confirmation()
+    if context_bundle is None:
+        sys.exit(1)
+
     if args.prompt:
         # Modo direto: executa o prompt e sai
         print_session_banner(mode)
-        asyncio.run(execute_prompt(orchestrator, args.prompt, mode=mode))
+        asyncio.run(execute_prompt(orchestrator, args.prompt, mode=mode, context_bundle=context_bundle))
         # V11.1.2 — Flush explícito ao encerrar modo não-interativo
         try:
             from src.telemetry import get_telemetry
@@ -788,7 +902,7 @@ def main() -> None:
             logger.error("Erro no flush de telemetria final", extra={"error": str(_e)})
     else:
         # Modo interativo (REPL)
-        asyncio.run(interactive_mode(orchestrator, mode=mode))
+        asyncio.run(interactive_mode(orchestrator, mode=mode, context_bundle=context_bundle))
         # V11.1.2 — Flush explícito ao sair do modo interativo
         try:
             from src.telemetry import get_telemetry

@@ -143,6 +143,13 @@ OUTPUT_BASE_DIR = get_env("OUTPUT_BASE_DIR", default="outputs")
 LOGS_BASE_DIR = get_env("LOGS_BASE_DIR", default="logs")
 SEARCH_CACHE_TTL_SECONDS = int(get_env("SEARCH_CACHE_TTL_SECONDS", default="3600"))
 
+# --- Pipeline de Contexto de Entrada (Roadmap V15.5 / Spec G9) ---
+INPUT_CONTEXT_DIR = get_env("INPUT_CONTEXT_DIR", default="./input_context")
+# Acima deste total estimado de tokens, a CLI avisa o pesquisador antes de prosseguir.
+CONTEXT_TOKEN_WARNING_THRESHOLD = int(get_env("CONTEXT_TOKEN_WARNING_THRESHOLD", default="100000"))
+# Estratégia de OCR para imagens: 'local' (pytesseract) ou 'gemini' (Gemini Vision).
+OCR_PROVIDER = get_env("OCR_PROVIDER", default="local")
+
 # Docker settings
 DOCKER_IMAGE_BASE = get_env("DOCKER_IMAGE_BASE", default="geminiclaw-agent-base:latest")
 DOCKER_NETWORK = get_env("DOCKER_NETWORK", default="geminiclaw-net")

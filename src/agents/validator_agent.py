@@ -1,7 +1,8 @@
 """Agente Validador e Revisor residente como corrotina assíncrona (Roadmap V14.2).
 
 Absorve a validação estrutural de planos e a revisão de subtarefas no processo
-principal sem instanciar containers Docker (ADR 007).
+principal, sem instanciar container próprio (ADR 014) — o Validator sempre rodou
+como corrotina no orquestrador, sem Docker.
 """
 
 import json
@@ -11,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from src.config import APP_NAME
 from src.logger import get_logger
 from src.model_router import ModelRouter
 from src.llm.base import LLMProvider
@@ -262,7 +264,7 @@ class ValidatorAgent:
         # Validação semântica e lógica via LLM
         plan_str = json.dumps(plan, indent=2, ensure_ascii=False)
         system_prompt = (
-            "Você é o ValidatorAgent do framework GeminiClaw. Sua função é avaliar planos de execução.\n"
+            f"Você é o ValidatorAgent do {APP_NAME}. Sua função é avaliar planos de execução.\n"
             f"{SCHEMA_INSTRUCTION}\n"
             "Avalie se a sequência de subtarefas atende à solicitação original e se as dependências fazem sentido lógico.\n"
             "Responda EXCLUSIVAMENTE em formato JSON com o seguinte schema:\n"
@@ -417,7 +419,7 @@ class ValidatorAgent:
         if validation_criteria:
             criteria_str = "\n".join(f"- {c}" for c in validation_criteria)
             system_prompt = (
-                "Você é o Reviewer do framework GeminiClaw. Sua função é avaliar se o resultado de uma subtarefa "
+                f"Você é o Reviewer do {APP_NAME}. Sua função é avaliar se o resultado de uma subtarefa "
                 "satisfaz os critérios de aceite definidos.\n"
                 "Responda estritamente em JSON com o formato:\n"
                 '{\n  "status": "pass" | "fail",\n  "feedback": "explicação do parecer",\n  "issues": []\n}'

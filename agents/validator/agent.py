@@ -1,26 +1,29 @@
-"""Agente validator do GeminiClaw usando Google ADK.
+"""Agente validator do assistente digital de pesquisa (ADR 010).
 
-Especializado em revisar planos de ação gerados pelo Planner.
+Especializado em revisar planos de ação gerados pelo Researcher/Planner.
 Verifica ambiguidade, dependências e conformidade com as regras de output.
 """
 
 from agents.base.agent import Agent, _load_session_context, _persist_session_context, _setup_skills
 from typing import Any
 import os
- 
+
 from src.logger import get_logger, setup_file_logging
 from src.config import DEFAULT_MODEL
+from src.prompts import render_instruction
 from src.skills import registry
 
 logger = get_logger(__name__)
 
 # Constantes do agente
-AGENT_NAME = "geminiclaw_validator"
-AGENT_DESCRIPTION = (
-    "Agente validador do framework GeminiClaw. Especializado em revisar "
+AGENT_NAME = "validator"
+AGENT_DESCRIPTION = render_instruction(
+    "Agente validador do {app_name}. Especializado em revisar "
     "planos de execução, identificar falhas, ambiguidades ou erros de diretriz."
 )
-AGENT_INSTRUCTION = """Você é o Agente Validador do framework GeminiClaw. Sua função é revisar tanto a METODOLOGIA quanto o PLANO propostos, garantindo rigor acadêmico e viabilidade técnica.
+_INSTRUCTION_TEMPLATE = """Você é o Agente Validador do {app_name}, assistente digital de pesquisa
+científica (ADR 010). Sua função é revisar tanto a METODOLOGIA quanto o PLANO propostos, garantindo
+rigor acadêmico e viabilidade técnica.
  
 VALIDAÇÃO DE METODOLOGIA (Researcher):
 1. **OBJETIVO CLARO**: A pesquisa tem um objetivo bem definido?
@@ -48,6 +51,7 @@ FORMATO DE RESPOSTA (JSON):
   ]
 }
 Nota: Use 'issues' apenas quando o status for 'revision_needed'."""
+AGENT_INSTRUCTION = render_instruction(_INSTRUCTION_TEMPLATE)
 
 # Configura as skills antes de inicializar o agente
 _setup_skills()

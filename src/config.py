@@ -48,6 +48,12 @@ def get_env_bool(key: str, default: bool = False) -> bool:
         return default
     return value.lower() in ("true", "1", "t", "y", "yes")
 
+# --- Identidade do produto (Roadmap V16 / ADR 011) ---
+# Nome exibido nos prompts dos agentes, banners de CLI e mensagens ao
+# pesquisador. Centralizado aqui para que o nome do projeto (que será trocado
+# no futuro — ADR 011) não fique repetido literalmente em cada módulo.
+APP_NAME = get_env("APP_NAME", default="GeminiClaw")
+
 # --- Configuração LLM (V18) ---
 
 # Provedor e modelo — novos

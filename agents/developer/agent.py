@@ -1,7 +1,9 @@
-"""Agente Developer do GeminiClaw (Roadmap V14.4).
+"""Agente Developer do assistente digital de pesquisa (ADR 010, Roadmap V14.4).
 
 Especializado exclusivamente em geração e execução incremental de código Python,
 análise de dados e produção de artefatos. Substitui o legado base_agent (ADR 007).
+Todo código roda exclusivamente via sandbox de execução (ADR 014); o Developer
+nunca executa nada diretamente no host.
 Integrado ao WorkspaceManifest para reutilização de artefatos entre etapas.
 """
 
@@ -20,19 +22,23 @@ from agents.base.agent import (
 from agents.base.tools import write_artifact
 from src.config import DEFAULT_MODEL
 from src.logger import get_logger, setup_file_logging
+from src.prompts import render_instruction
 from src.skills import registry
 from src.skills.code.manifest import WorkspaceManifest
 
 logger = get_logger(__name__)
 
-AGENT_NAME = "geminiclaw_developer"
-AGENT_DESCRIPTION = (
-    "Agente especializado exclusivamente em desenvolvimento de software e análise de dados em Python. "
-    "Gera scripts estruturados, executa código em sandbox e produz artefatos incrementais."
+AGENT_NAME = "developer"
+AGENT_DESCRIPTION = render_instruction(
+    "Agente especializado exclusivamente em desenvolvimento de software e análise de dados em Python "
+    "do {app_name}. Gera scripts estruturados, executa código em sandbox e produz artefatos incrementais."
 )
 
-AGENT_INSTRUCTION = """Você é o Developer Agent do framework GeminiClaw, executando em um container Docker isolado.
+_INSTRUCTION_TEMPLATE = """Você é o Developer Agent do {app_name}, assistente digital de pesquisa científica (ADR 010).
 Sua responsabilidade é EXCLUSIVAMENTE a geração, depuração e execução de código Python e análise de dados.
+Você não roda em um container próprio: todo código que você gera é executado exclusivamente pela
+ferramenta de execução de código (`python_interpreter`), em sandbox isolado (ADR 014). Nunca proponha
+executar comandos no computador principal; dependências novas vão no parâmetro `packages` dessa ferramenta.
 
 RESTRIÇÃO ESTRITA DE ESCOPO:
 - Você NÃO realiza pesquisa bibliográfica, buscas na web ou revisão de literatura.
@@ -82,6 +88,7 @@ QUANDO USAR `ask_researcher` (Roadmap V15.3 / Spec G5):
 - USO INVÁLIDO: "Qual seed devo usar?" (use o padrão SEED=42 e documente, não pergunte).
 - Nos modos `semi`/`auto`, `ask_researcher` nunca bloqueia — documenta a suposição automaticamente.
 """
+AGENT_INSTRUCTION = render_instruction(_INSTRUCTION_TEMPLATE)
 
 # Configura as skills antes de inicializar o agente
 _setup_skills()

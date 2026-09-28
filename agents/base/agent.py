@@ -1,5 +1,5 @@
 # DEPRECATED: use developer_agent. Será removido na V15.
-"""Agente base GeminiClaw usando Google ADK.
+"""Agente base do assistente digital de pesquisa (ADR 010).
 
 Este módulo define o root_agent que serve como agente mínimo funcional.
 Integra-se ao SessionManager para carregar e persistir contexto,
@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class Agent:
-    """Classe base para agentes GeminiClaw (substitui google-adk)."""
+    """Classe base para os agentes do sistema (ADR 011 — sem SDK de agentes de terceiros)."""
     name: str
     description: str
     _instruction: str | Callable[[], str]
@@ -29,6 +29,7 @@ class Agent:
 
 from agents.base.tools import write_artifact
 from src.logger import get_logger, setup_file_logging
+from src.prompts import render_instruction
 from src.session import SessionManager
 from src.config import DEFAULT_MODEL
 from src.skills import registry
@@ -37,21 +38,23 @@ from src.skills.memory.long_term import LongTermMemory
 logger = get_logger(__name__)
 
 # Constantes do agente
-AGENT_NAME = "geminiclaw_base"
+AGENT_NAME = "base"
 AGENT_DESCRIPTION = (
-    "Agente base do framework GeminiClaw. Capaz de processar solicitações "
+    "Agente base do {app_name}. Capaz de processar solicitações "
     "genéricas, manter contexto de sessão e responder em português."
 )
-AGENT_INSTRUCTION = (
-    "Você é um assistente de análise de dados e geração de código do framework GeminiClaw, "
-    "executando em um container Docker isolado em um Raspberry Pi 5.\n\n"
+_INSTRUCTION_TEMPLATE = (
+    "Você é um assistente de análise de dados e geração de código do {app_name}, "
+    "assistente digital de pesquisa científica (ADR 010) rodando no processo do orquestrador "
+    "em um Raspberry Pi 5.\n\n"
     "RESPONSABILIDADES:\n"
     "1. **ANÁLISE DE DADOS**: Processar datasets, calcular estatísticas, identificar padrões e tendências.\n"
     "2. **GERAÇÃO E EXECUÇÃO DE CÓDIGO**: Criar scripts Python para automação, transformação de dados e visualizações.\n"
     "3. **PRODUÇÃO DE ARTEFATOS**: Gerar relatórios, gráficos e arquivos de dados estruturados.\n\n"
     "REGRAS OBRIGATÓRIAS:\n"
     "1. **EXECUTE SEMPRE O CÓDIGO**: Qualquer código Python gerado DEVE ser executado via ferramenta "
-    "`python_interpreter`. Nunca apenas exiba o código sem executá-lo. "
+    "`python_interpreter`, que roda em sandbox isolado. Nunca apenas exiba o código sem executá-lo, e "
+    "nunca proponha executar comandos no computador principal. "
     "O resultado da execução valida a corretude e garante que os arquivos de output sejam gerados.\n"
     "2. **SALVE TODOS OS OUTPUTS**: Todos os artefatos produzidos (CSV, PNG, JSON, MD, relatórios) "
     "DEVEM ser salvos em `/outputs/` via ferramenta `write_artifact`. "
@@ -70,10 +73,12 @@ AGENT_INSTRUCTION = (
     "- Para ler arquivos de iterações anteriores, leia de `/outputs/` — eles já estão lá.\n"
     "- NUNCA use paths como `/datasets/`, `/data/`, `/tmp/` para artefatos persistentes.\n"
     "- Antes de criar um arquivo, verifique os artefatos já disponíveis no [CONTEXTO DO WORKSPACE] injetado no prompt.\n"
-    "- Para instalar dependências Python dentro do código, use: "
-    "`import subprocess; subprocess.run(['pip', 'install', 'pacote', '--quiet'])`\n\n"
+    "- Dependências Python declare-as no parâmetro `packages` da ferramenta `python_interpreter` — "
+    "nunca instale pacotes por conta própria fora do sandbox.\n\n"
     "Se não souber responder ou os dados forem insuficientes, declare claramente a limitação."
 )
+AGENT_INSTRUCTION = render_instruction(_INSTRUCTION_TEMPLATE)
+AGENT_DESCRIPTION = render_instruction(AGENT_DESCRIPTION)
 
 
 async def _load_session_context(callback_context: Any) -> None:

@@ -1,10 +1,11 @@
-"""Agente researcher do GeminiClaw com capacidade de planejamento integrada (Roadmap V14.3).
+"""Agente researcher do assistente digital de pesquisa, com planejamento integrado (ADR 010, Roadmap V14.3).
 
 Consolida o papel de pesquisa científica e planejamento técnico em um único agente.
 O Researcher é responsável por:
-1. Decomposição de tarefas em subtarefas (DAG) com contexto de domínio técnico.
-2. Busca web técnica para suporte de implementação (NUNCA busca bibliográfica — ADR 001).
-3. Replanejamento incremental preservando subtarefas já concluídas com sucesso.
+1. Formular hipóteses a partir dos insumos do pesquisador e dos resultados obtidos.
+2. Decomposição de tarefas em subtarefas (DAG) com contexto de domínio técnico.
+3. Busca web técnica para suporte de implementação (NUNCA busca bibliográfica — ADR 010).
+4. Replanejamento incremental preservando subtarefas já concluídas com sucesso.
 """
 
 import json
@@ -22,24 +23,35 @@ from agents.base.agent import (
 from agents.base.tools import write_artifact
 from src.config import DEFAULT_MODEL
 from src.logger import get_logger, setup_file_logging
+from src.prompts import render_instruction
 from src.skills import registry
 from src.utils.json_parser import extract_json
 
 logger = get_logger(__name__)
 
 # Constantes do agente
-AGENT_NAME = "geminiclaw_researcher"
-AGENT_DESCRIPTION = (
-    "Agente especializado em pesquisa técnica e planejamento do framework GeminiClaw. "
-    "Pesquisa contexto de domínio, sintetiza requisitos e gera planos de execução (DAG)."
+AGENT_NAME = "researcher"
+AGENT_DESCRIPTION = render_instruction(
+    "Agente especializado em pesquisa técnica e planejamento do {app_name}. "
+    "Formula hipóteses, pesquisa contexto de domínio, sintetiza requisitos e gera planos de "
+    "execução (DAG)."
 )
 
-AGENT_INSTRUCTION = """Você é o Researcher e Planner do framework GeminiClaw — um harness de execução
-de pesquisa científica (ADR 001). Sua responsabilidade é operacionalizar contexto científico
-(artigos, dados, instruções) em planos de execução (DAG) estruturados, com raciocínio metodológico
-explícito. Sempre responda em português.
+_INSTRUCTION_TEMPLATE = """Você é o Researcher e Planner do {app_name}, assistente digital de
+pesquisa científica (ADR 010) capaz de conduzir experimentos, formular hipóteses, validar
+suposições e relatar resultados. Sua responsabilidade é operacionalizar os insumos do pesquisador
+responsável (artigos, dados, instruções) em planos de execução (DAG) estruturados, com raciocínio
+metodológico explícito. Sempre responda em português.
 
-MODO DE OPERAÇÃO (ADR 001):
+FORMULAÇÃO DE HIPÓTESES (ADR 010):
+Você pode formular hipóteses a partir dos insumos fornecidos pelo pesquisador em `input_context/`
+e dos resultados de subtarefas anteriores já executadas na sessão. Toda hipótese formulada por
+você DEVE vir acompanhada de um `scientific_rationale` explícito, justificando por que ela é
+metodologicamente razoável a partir do que já se sabe. Formular hipóteses NUNCA dispensa a busca
+por evidência: elas ainda precisam ser validadas contra dados reais (`metrics.json`), nunca contra
+texto otimista gerado por LLM.
+
+MODO DE OPERAÇÃO (ADR 010):
 Você recebe contexto CIENTÍFICO PRÉ-CURADO (via input_context/ ou diretamente no prompt) e NUNCA
 realiza busca bibliográfica autônoma de artigos — isso é responsabilidade de um agente externo, fora
 do seu escopo. Use a busca web (`quick_search`) EXCLUSIVAMENTE para dúvidas técnicas operacionais de
@@ -115,6 +127,7 @@ DIRETRIZES DE REPLANEJAMENTO (quando receber 'MODO: REPLAN'):
    experimento indefinidamente.
 5. Certifique-se de que os nós de recuperação referenciem os artefatos parciais já disponíveis.
 """
+AGENT_INSTRUCTION = render_instruction(_INSTRUCTION_TEMPLATE)
 
 
 @dataclass

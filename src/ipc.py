@@ -12,7 +12,11 @@ from src.logger import get_logger
 logger = get_logger(__name__)
 
 # Tipos de mensagem válidos
-VALID_MESSAGE_TYPES = frozenset({"request", "response", "error", "heartbeat", "shutdown", "shutdown_ack"})
+VALID_MESSAGE_TYPES = frozenset({
+    "request", "response", "error", "heartbeat", "shutdown", "shutdown_ack",
+    # Roadmap V15.3 / Spec G5 — round-trip bloqueante de Human-in-the-Loop
+    "ask_researcher", "ask_researcher_answer",
+})
 
 # Tamanho do header de framing (4 bytes, big-endian unsigned int)
 HEADER_SIZE = 4

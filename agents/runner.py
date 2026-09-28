@@ -14,6 +14,17 @@ from src.telemetry import get_telemetry
 
 logger = get_logger(__name__)
 
+# Roadmap V15.3 / Spec G5 — conexão IPC ativa exposta para skills que precisam de
+# um round-trip bloqueante com o host durante a execução (ex: ask_researcher).
+# Seguro em processo único: um container processa uma tarefa por vez, sem
+# concorrência entre chamadas de skill na mesma conexão.
+_active_ipc_connection: tuple[Any, Any] | None = None
+
+
+def get_active_ipc_connection() -> tuple[Any, Any] | None:
+    """Retorna a conexão IPC (reader, writer) ativa deste container, se houver."""
+    return _active_ipc_connection
+
 
 def _build_response_payload(text: str, telemetry: Any) -> dict:
     """Monta o payload de resposta IPC incluindo snapshot de telemetria (V12.3.1).
@@ -72,6 +83,8 @@ async def run_ipc_loop(agent: Any) -> None:
                 reader, writer = await asyncio.open_unix_connection(socket_path)
             
             logger.info("Conectado ao socket IPC do orquestrador")
+            global _active_ipc_connection
+            _active_ipc_connection = (reader, writer)
             break
         except (FileNotFoundError, ConnectionRefusedError, OSError):
             if attempt == 0:

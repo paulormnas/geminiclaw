@@ -1,6 +1,6 @@
 # Spec G7 — Controle de Equipamentos Físicos: Estratégia MHS + Interface Proprietária
 
-**Versão:** V16.1
+**Versão:** V19.1 (renumerada de V16.1 — ADR 010)
 **Status:** Proposta aprovada — depende de V15 completo; MHS em avaliação contínua
 **Gap:** G7 — Sem arquitetura para controle de equipamentos físicos
 **ADRs relacionados:**
@@ -35,18 +35,18 @@ colaborando com HHMI Janelia Research Campus, Genentech, CMU, University of Wash
 de suporte a ARM/Raspberry Pi 5. Anthropic comprometeu-se a open-source futuro.
 
 **Decisão de design:** Implementar interface proprietária com primitivas MHS-compatíveis
-(Fase V16), e migrar para MHS nativo quando disponível (Fase V17+).
+(Fase V19), e migrar para MHS nativo quando disponível (fase posterior, a definir).
 
 ---
 
 ## Dependências
 
 - **V15 completo:** Agentes estabilizados, modo de operação funcional, `ask_researcher` disponível
-- **MHS não é pré-requisito:** Fase V16 não depende do MHS ser público
+- **MHS não é pré-requisito:** Fase V19 não depende do MHS ser público
 
 ---
 
-## Fase V16 — Interface Proprietária MHS-Compatível
+## Fase V19 — Interface Proprietária MHS-Compatível
 
 ### Tarefa 1: Definir `BaseEquipmentDriver` com primitivas MHS-compatíveis
 
@@ -147,7 +147,7 @@ de suporte a ARM/Raspberry Pi 5. Anthropic comprometeu-se a open-source futuro.
 
 ---
 
-## Validação da Etapa (V16)
+## Validação da Etapa (V19)
 
 - [ ] `uv run pytest -m "unit or integration" -v` — todos os testes passam
 - [ ] Mock hardware test: GPIODriver lê e escreve em pino simulado sem hardware físico
@@ -158,7 +158,7 @@ de suporte a ARM/Raspberry Pi 5. Anthropic comprometeu-se a open-source futuro.
 
 ---
 
-## Arquivos (V16)
+## Arquivos (V19)
 
 | Arquivo | Ação | Descrição |
 |---|---|---|

@@ -34,7 +34,7 @@ V14 (fundação — concluir primeiro)
 │
 ├──► G8:  Relatório Científico (V15.4) ← depende de G2 e G5
 │
-└──► G7:  Controle de Equipamentos (V16.1) ← V16, após V15 completo
+└──► G7:  Controle de Equipamentos (V19.1) ← V19, após o ciclo de hipóteses (V18) — ADR 010
 ```
 
 ---
@@ -46,7 +46,7 @@ V14 (fundação — concluir primeiro)
 | **G1** | [Researcher Agent: Contexto Científico](./G1_researcher_scientific_context.md) | V15.1 | Baixa | V14.3 |
 | **G2** | [Código Reproduzível](./G2_reproducible_code_contracts.md) | V15.2 | Média | V14.4, G1 |
 | **G5** | [Human Feedback Loop](./G5_human_feedback_loop.md) | V15.3 | Alta | G9, G10 |
-| **G7** | [Controle de Equipamentos + MHS](./G7_equipment_control_mhs.md) | V16.1 | Alta | V15 completo |
+| **G7** | [Controle de Equipamentos + MHS](./G7_equipment_control_mhs.md) | V19.1 | Alta | V18 completo |
 | **G8** | [Relatório Científico](./G8_scientific_report.md) | V15.4 | Alta | G2, G5 |
 | **G9** | [Pipeline input_context](./G9_input_context_pipeline.md) | V15.5 | Alta | V14 |
 | **G10** | [CLI Session Profile](./G10_cli_session_profile.md) | V15.6 | Baixa-Média | V14 |
@@ -65,7 +65,7 @@ Iteração 2 (Perfil Científico dos Agentes):
 Iteração 3 (Interação Humana e Relatório):
   G5 → G8
 
-Iteração 4 (Hardware — V16):
+Iteração 4 (Hardware — V19):
   G7
 ```
 
@@ -74,5 +74,5 @@ Iteração 4 (Hardware — V16):
 ## O que está fora do escopo de V15
 
 - **Busca bibliográfica:** responsabilidade de agente externo (ADR 001)
-- **Controle de equipamentos:** specs em G7, mas implementação em V16
+- **Controle de equipamentos:** specs em G7, mas implementação em V19 (ADR 010)
 - **Interface visual / dashboard:** roadmap futuro (V17+)

@@ -1,6 +1,6 @@
 # ADR 004 — Protocolo IPC via Unix Domain Sockets com Length-Prefix
 
-**Status:** Aceito
+**Status:** Aceito — em revisão; será substituído (exceto o sandbox de código) por [ADR 014](adr_014_agentes_em_processo_sandbox_codigo.md) quando este for aceito
 **Data:** 2026-09-22
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** `roadmaps/roadmap.md` (Etapa 6), `roadmaps/roadmap_V12.md` (V12.3)

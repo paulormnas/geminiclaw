@@ -9,7 +9,7 @@
 - Entenda o fluxo do usuário (operador do GeminiClaw) e valide o design antes de escrever código.
 - Priorize acessibilidade, performance e manutenibilidade.
 - Componentes pequenos, compostos e reutilizáveis. Sem complexidade desnecessária.
-- **Nenhum arquivo `.js`, `.ts` ou `.mjs` deve existir no projeto** até que a stack frontend seja formalmente decidida e documentada em um ADR.
+- **JavaScript/TypeScript é permitido somente no diretório do frontend** (AGENTS.md §1). A stack, o diretório, o gerenciador de pacotes e as ferramentas de build e teste serão definidos em ADR e spec próprios antes da implementação.
 
 ---
 
@@ -40,11 +40,11 @@ Se qualquer especificação estiver ambígua, solicite esclarecimento. Não tome
 
 A stack frontend será decidida via ADR no momento da implementação. Possibilidades incluem:
 
-- **Python-first:** Streamlit, Gradio, NiceGUI, ou FastHTML para manter a stack 100% Python.
-- **Web tradicional:** Se aprovado via ADR, uma stack web poderá ser adotada em diretório isolado.
+- **Web com JavaScript/TypeScript:** permitida pelo AGENTS.md, em diretório isolado do backend.
+- **Python-first:** Streamlit, Gradio, NiceGUI ou FastHTML, se o ADR concluir que atendem melhor.
 
 Independentemente da stack escolhida:
-- O gerenciamento de dependências Python deve usar `uv`.
+- O gerenciamento de dependências Python deve usar `uv`; o gerenciador de pacotes JavaScript será definido no ADR do frontend.
 - O frontend deve ser containerizado e rodar na rede `geminiclaw-net`.
 - Os arquivos de frontend devem ficar em diretório dedicado (`frontend/` ou similar).
 

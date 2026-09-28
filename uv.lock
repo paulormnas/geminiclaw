@@ -944,6 +944,7 @@ dependencies = [
     { name = "beautifulsoup4" },
     { name = "cryptography" },
     { name = "docker" },
+    { name = "fastembed" },
     { name = "httpx" },
     { name = "lxml" },
     { name = "matplotlib" },
@@ -958,7 +959,6 @@ dependencies = [
 
 [package.optional-dependencies]
 deep-search = [
-    { name = "fastembed" },
     { name = "qdrant-client" },
 ]
 documents = [
@@ -994,7 +994,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=46.0.5" },
     { name = "docker", specifier = ">=7.1.0" },
     { name = "docling", marker = "extra == 'documents'", specifier = ">=2.0.0" },
-    { name = "fastembed", marker = "extra == 'deep-search'", specifier = ">=0.7.4" },
+    { name = "fastembed", specifier = ">=0.7.4" },
     { name = "google-genai", marker = "extra == 'google'", specifier = ">=1.3.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "lxml", specifier = ">=6.0.2" },

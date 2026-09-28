@@ -1,6 +1,6 @@
-"""Interface de linha de comando do GeminiClaw.
+"""Interface de linha de comando do assistente digital de pesquisa (ADR 010).
 
-Ponto de entrada para o usuário interagir com o framework.
+Ponto de entrada para o pesquisador interagir com o framework.
 Suporta execução direta com prompt ou modo interativo (REPL).
 """
 
@@ -21,6 +21,7 @@ if root_path not in sys.path:
 from src.logger import get_logger
 from src.config import (
     AGENT_TIMEOUT_SECONDS,
+    APP_NAME,
     DEFAULT_MODEL,
     SessionMode,
     SESSION_DEFAULT_MODE,
@@ -43,9 +44,10 @@ logger = get_logger(__name__)
 EXIT_COMMANDS = {"exit", "quit", "sair"}
 
 # Roadmap V15.6 / Spec G10 — texto de ajuda completo exibido em --help / -h / sem argumentos
+_BANNER_TITLE = f"{APP_NAME} — Assistente Digital de Pesquisa Científica"
 FULL_HELP_TEXT = f"""{CYAN}{BOLD}
 ╔══════════════════════════════════════════════════════════════╗
-║           GeminiClaw — Harness de Pesquisa Científica        ║
+║{_BANNER_TITLE:^62}║
 ╚══════════════════════════════════════════════════════════════╝
 {RESET}
 {BOLD}USO:{RESET}
@@ -105,7 +107,7 @@ def build_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(
         prog="geminiclaw",
-        description="GeminiClaw — Framework de orquestração de agentes IA.",
+        description=f"{APP_NAME} — assistente digital de pesquisa científica.",
         epilog="Sem argumentos, entra em modo interativo (REPL).",
     )
     parser.add_argument(
@@ -630,7 +632,7 @@ def print_session_banner(mode: str, context_dir: str = "input_context") -> None:
 
     print(
         f"\n{DIM}┌──────────────────────────────────────────────────────────────┐{RESET}\n"
-        f"{DIM}│{RESET}  GeminiClaw  │  Modo: {BOLD}{mode_label}{RESET}  │  Contexto: {context_desc}\n"
+        f"{DIM}│{RESET}  {APP_NAME}  │  Modo: {BOLD}{mode_label}{RESET}  │  Contexto: {context_desc}\n"
         f"{DIM}│{RESET}  Pressione Ctrl+C para suspender │  -h para ajuda\n"
         f"{DIM}└──────────────────────────────────────────────────────────────┘{RESET}"
     )
@@ -666,7 +668,7 @@ def show_sessions(docker_client: Any | None = None) -> list[dict[str, Any]]:
         return []
 
     _sep = "─" * 80
-    print(f"\n{BOLD}  📦 Sessões e Containers Ativos do GeminiClaw{RESET}")
+    print(f"\n{BOLD}  📦 Sessões e Containers Ativos do {APP_NAME}{RESET}")
     print(f"{BOLD}{_sep}{RESET}")
 
     if not containers:
@@ -759,7 +761,7 @@ def stop_sessions(
         if session_id:
             print(f"\n  {DIM}Nenhum container ativo encontrado para a sessão: {session_id}{RESET}\n")
         else:
-            print(f"\n  {DIM}Nenhum container ativo do GeminiClaw encontrado.{RESET}\n")
+            print(f"\n  {DIM}Nenhum container ativo do {APP_NAME} encontrado.{RESET}\n")
         return 0
 
     stopped_count = 0

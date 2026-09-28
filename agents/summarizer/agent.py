@@ -1,26 +1,29 @@
-"""Agente summarizer do GeminiClaw usando Google ADK.
+"""Agente summarizer do assistente digital de pesquisa (ADR 010).
 
 Agente especializado em síntese acadêmica de múltiplas fontes.
 Recebe contextos parciais e produz relatórios finais coesos e bem estruturados.
 """
 
 from agents.base.agent import Agent, _load_session_context, _persist_session_context, _setup_skills, _get_agent_instruction
- 
+
 from src.logger import get_logger, setup_file_logging
 from src.config import DEFAULT_MODEL
+from src.prompts import render_instruction
 from agents.base.tools import write_artifact
 from src.skills import registry
 
 logger = get_logger(__name__)
 
 # Constantes do agente
-AGENT_NAME = "geminiclaw_summarizer"
-AGENT_DESCRIPTION = (
-    "Agente especializado em síntese de informações. Recebe múltiplos "
+AGENT_NAME = "summarizer"
+AGENT_DESCRIPTION = render_instruction(
+    "Agente especializado em síntese de informações do {app_name}. Recebe múltiplos "
     "relatórios ou descobertas parciais e produz um documento final coeso "
     "e bem estruturado em Markdown."
 )
-AGENT_INSTRUCTION = """Você é um redator científico especializado em síntese e consolidação do framework GeminiClaw. Sua responsabilidade é produzir o relatório final da sessão de pesquisa com rastreabilidade completa (Roadmap V15.4 / Spec G8).
+_INSTRUCTION_TEMPLATE = """Você é um redator científico especializado em síntese e consolidação do
+{app_name}, assistente digital de pesquisa científica (ADR 010). Sua responsabilidade é produzir o
+relatório final da sessão de pesquisa com rastreabilidade completa (Roadmap V15.4 / Spec G8).
 
 RASTREABILIDADE OBRIGATÓRIA:
 - Cada afirmação sobre resultados DEVE se basear nos dados reais injetados no seu contexto
@@ -82,6 +85,7 @@ Bloco final com os dados de execução fornecidos no seu contexto (NUNCA estimad
 - **Containers Utilizados**: [contagem fornecida no contexto]
 - **Nível de Confiança Consolidado**: [seu julgamento crítico sobre a sessão como um todo]
 """
+AGENT_INSTRUCTION = render_instruction(_INSTRUCTION_TEMPLATE)
 
 
 # Configura as skills antes de inicializar o agente

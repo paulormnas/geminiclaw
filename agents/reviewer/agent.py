@@ -1,4 +1,4 @@
-"""Agente Reviewer para o framework GeminiClaw.
+"""Agente Reviewer do assistente digital de pesquisa (ADR 010).
 
 Responsável por validar se o resultado de uma subtarefa atende aos critérios
 de validação e artefatos esperados definidos no plano.
@@ -8,11 +8,15 @@ import asyncio
 import os
 from agents.base.agent import Agent, _load_session_context, _persist_session_context, _setup_skills
 from src.config import DEFAULT_MODEL
+from src.prompts import render_instruction
 from agents.runner import run_ipc_loop
 
+AGENT_NAME = "reviewer"
 AGENT_DESCRIPTION = "Agente revisor especializado em validar a qualidade e completude das subtarefas."
 
-AGENT_INSTRUCTION = """Você é o Agente Revisor do framework GeminiClaw. Sua função é avaliar se o resultado produzido por uma subtarefa atende aos critérios de qualidade definidos.
+_INSTRUCTION_TEMPLATE = """Você é o Agente Revisor do {app_name}, assistente digital de pesquisa
+científica (ADR 010). Sua função é avaliar se o resultado produzido por uma subtarefa atende aos
+critérios de qualidade definidos.
 
 VOCÊ RECEBE:
 1. O resultado/output da subtarefa (texto ou referência a artefatos)
@@ -42,12 +46,13 @@ FORMATO DE RESPOSTA:
   "confidence": 0.0-1.0
 }
 """
+AGENT_INSTRUCTION = render_instruction(_INSTRUCTION_TEMPLATE)
 
 def create_agent() -> Agent:
     """Cria e configura o agente Reviewer."""
     _setup_skills()
     return Agent(
-        name="reviewer",
+        name=AGENT_NAME,
         description=AGENT_DESCRIPTION,
         _instruction=AGENT_INSTRUCTION,
         model=os.environ.get("LLM_MODEL", DEFAULT_MODEL),

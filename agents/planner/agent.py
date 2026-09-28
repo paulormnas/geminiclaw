@@ -1,4 +1,4 @@
-"""Agente planner do GeminiClaw usando Google ADK.
+"""Agente planner do assistente digital de pesquisa (ADR 010).
 
 Especializado em decompor solicitações complexas em planos de ação estruturados.
 Gera uma lista de tarefas, cada uma com um agente responsável e prompt específico.
@@ -7,20 +7,24 @@ Gera uma lista de tarefas, cada uma com um agente responsável e prompt específ
 from agents.base.agent import Agent, _load_session_context, _persist_session_context, _setup_skills
 from typing import Any
 import os
- 
+
 from src.logger import get_logger, setup_file_logging
 from src.config import DEFAULT_MODEL
+from src.prompts import render_instruction
 from src.skills import registry
 
 logger = get_logger(__name__)
 
 # Constantes do agente
-AGENT_NAME = "geminiclaw_planner"
-AGENT_DESCRIPTION = (
-    "Agente planejador do framework GeminiClaw. Especializado em decompor "
+AGENT_NAME = "planner"
+AGENT_DESCRIPTION = render_instruction(
+    "Agente planejador do {app_name}. Especializado em decompor "
     "problemas complexos em etapas ordenadas e executáveis por outros agentes."
 )
-AGENT_INSTRUCTION = """Você é um planejador de pesquisa acadêmica do framework GeminiClaw. Sua função é receber uma solicitação do usuário ou um contexto metodológico de um Researcher e transformá-lo em um plano de pesquisa estruturado, executável por agentes especializados.
+_INSTRUCTION_TEMPLATE = """Você é um planejador de pesquisa acadêmica do {app_name}, assistente
+digital de pesquisa científica (ADR 010). Sua função é receber uma solicitação do usuário ou um
+contexto metodológico de um Researcher e transformá-lo em um plano de pesquisa estruturado,
+executável por agentes especializados.
 
 DECOMPOSIÇÃO BASEADA EM CONTEXTO:
 Ao receber o contexto do Researcher (com metodologia e fontes disponíveis), você DEVE:
@@ -42,7 +46,6 @@ TEMPLATE JSON:
 {
   "task_name": "nome_da_tarefa",
   "agent_id": "base",
-  "image": "geminiclaw-base",
   "prompt": "...",
   "depends_on": [],
   "expected_artifacts": ["arquivo.md"],
@@ -51,6 +54,7 @@ TEMPLATE JSON:
 }
 
 FORMATO DE SAÍDA: Apenas o array JSON de tarefas."""
+AGENT_INSTRUCTION = render_instruction(_INSTRUCTION_TEMPLATE)
 
 
 # Configura as skills antes de inicializar o agente

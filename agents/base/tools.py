@@ -5,10 +5,42 @@ from typing import Optional
 import logging
 from pathlib import Path
 
+from src.agent_runtime.context import get_agent_context_optional
+
 logger = logging.getLogger(__name__)
 
+
+def _resolve_artifacts_dir() -> Path | None:
+    """Resolve o diretório de artefatos confinado à sessão da tarefa atual.
+
+    Roadmap V16/ADR 014 (Design §4) — no runtime em processo, o diretório vem
+    do ``AgentContext`` vinculado à tarefa (``ctx.output_dir / "artifacts"``).
+    No modo container legado, sem ``AgentContext``, usa o caminho fixo
+    ``/outputs/artifacts`` montado pelo orquestrador no container.
+
+    Returns:
+        Caminho resolvido do diretório de artefatos, ou ``None`` se
+        indisponível (ex.: modo container sem ``/outputs`` montado).
+    """
+    ctx = get_agent_context_optional()
+    if ctx is not None:
+        return (ctx.output_dir / "artifacts").resolve()
+
+    base_dir = Path("/outputs")
+    if not base_dir.exists():
+        return None
+    return (base_dir / "artifacts").resolve()
+
+
 async def write_artifact(filename: str, content: str) -> str:
-    """Salva um artefato (arquivo) no diretório de saídas do container.
+    """Salva um artefato (arquivo) confinado ao diretório de artefatos da sessão.
+
+    Roadmap V16/ADR 014 (Design §4) — a escrita é sempre confinada a
+    ``<output_dir>/artifacts/``: o nome do arquivo é normalizado (apenas o
+    componente final do caminho é usado, descartando qualquer tentativa de
+    ``../``), o caminho final resolvido é verificado como descendente do
+    diretório de artefatos, e symlinks existentes com o mesmo nome são
+    recusados (podem apontar para fora do diretório permitido).
 
     Args:
         filename: Nome do arquivo (ex: 'resumo.md').
@@ -21,24 +53,44 @@ async def write_artifact(filename: str, content: str) -> str:
         return "Erro: Nome do arquivo ou conteúdo vazio."
 
     try:
-        # O Orquestrador mapeia outputs/<session_id>/<task_id> para /outputs/
-        # Agora salvamos diretamente em /outputs/artifacts/
-        base_dir = Path("/outputs")
-        if not base_dir.exists():
-            return "Erro: Diretório /outputs não encontrado no container."
+        task_dir = _resolve_artifacts_dir()
+        if task_dir is None:
+            return "Erro: Diretório de outputs não encontrado."
 
-        task_dir = base_dir / "artifacts"
-        
-        # Se for um caminho absoluto como "/outputs/.../arquivo.txt", transforma em relativo para a tarefa
+        # Apenas o componente final do path é usado — descarta qualquer
+        # tentativa de path traversal (ex.: "../../etc/passwd" -> "passwd").
         safe_name = Path(filename).name
-        
+        if not safe_name or safe_name in (".", ".."):
+            return "Erro: Nome de arquivo inválido."
+
         task_dir.mkdir(parents=True, exist_ok=True)
 
         file_path = task_dir / safe_name
-        with open(file_path, "w", encoding="utf-8") as f:
+
+        # Recusa symlinks existentes com este nome — podem apontar para fora
+        # do diretório de artefatos (Design §4 / Spec agent-runtime, cenário Symlink).
+        if file_path.is_symlink():
+            # Nota: a chave de log não pode se chamar "filename" — colide com o
+            # atributo reservado LogRecord.filename e faz logging levantar
+            # ValueError ("Attempt to overwrite 'filename' in LogRecord").
+            logger.warning(
+                "write_artifact: escrita recusada — destino é um symlink",
+                extra={"artifact_filename": filename, "resolved": str(file_path)},
+            )
+            return "Erro: escrita recusada — destino é um link simbólico."
+
+        resolved_path = file_path.resolve()
+        if not resolved_path.is_relative_to(task_dir):
+            logger.warning(
+                "write_artifact: escrita recusada — caminho fora do diretório de artefatos",
+                extra={"artifact_filename": filename, "resolved": str(resolved_path)},
+            )
+            return "Erro: escrita recusada — caminho fora do diretório permitido."
+
+        with open(resolved_path, "w", encoding="utf-8") as f:
             f.write(content)
 
-        return f"Artefato salvo com sucesso em {file_path}"
+        return f"Artefato salvo com sucesso em {resolved_path}"
 
     except Exception as e:
         logger.error(f"Erro ao salvar artefato: {e}")
@@ -76,11 +128,18 @@ async def manage_memory(action: str, key: str, value: Optional[str] = None, impo
     """
     global _memory_skill_instance
     from src.skills.memory.skill import MemorySkill
-    import os
-    
-    session_id = os.environ.get("SESSION_ID")
-    agent_id = os.environ.get("AGENT_ID", "agent")
-    
+
+    # Roadmap V16/ADR 014 — estado por tarefa via AgentContext no runtime em
+    # processo (contextvars, isolado por tarefa concorrente); os.environ
+    # apenas no modo container legado.
+    ctx = get_agent_context_optional()
+    if ctx is not None:
+        session_id = ctx.agent_session_id
+        agent_id = ctx.agent_id
+    else:
+        session_id = os.environ.get("SESSION_ID")
+        agent_id = os.environ.get("AGENT_ID", "agent")
+
     if _memory_skill_instance is None:
         _memory_skill_instance = MemorySkill()
         

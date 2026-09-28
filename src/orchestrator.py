@@ -12,13 +12,17 @@ from typing import Any
 
 from src.logger import get_logger
 from src.config import (
+    AGENT_RUNTIME,
     AGENT_TIMEOUT_SECONDS,
+    DEFAULT_MODEL,
     GEMINI_REQUESTS_PER_MINUTE,
     GEMINI_RATE_LIMIT_COOLDOWN_SECONDS,
+    MAX_AGENT_RUNS_PER_SESSION,
     OLLAMA_ENABLE_THINKING,
     MAX_PLANNING_ITERATIONS,
     MAX_CONTAINERS_PER_SESSION,
 )
+from src.model_config import DEFAULT_ROLE_CONFIGS, get_role_model_config
 from src.session import SessionManager
 from src.runner import ContainerRunner
 from src.ipc import IPCChannel, create_message, Message
@@ -28,6 +32,8 @@ from src.utils.json_parser import extract_json
 from src.rate_limiter import AdaptiveRateLimiter
 from src.telemetry import get_telemetry
 from src.agents.validator_agent import ValidatorAgent
+from src.agent_runtime.context import AgentContext
+from src.agent_runtime.runtime import AgentRuntime
 from src.context_loader import ContextLoader, ContextBundle
 
 logger = get_logger(__name__)
@@ -194,6 +200,8 @@ class Orchestrator:
         session_manager: SessionManager,
         output_manager: OutputManager | None = None,
         session_runner: Any | None = None,
+        agent_runtime: AgentRuntime | None = None,
+        agent_runtime_mode: str | None = None,
     ) -> None:
         """Inicializa o orquestrador com dependências injetadas.
 
@@ -203,6 +211,12 @@ class Orchestrator:
             session_manager: Gerenciador de sessões SQLite.
             output_manager: Gerenciador de outputs (opcional).
             session_runner: Gerenciador de ciclo de vida de containers por sessão (V14.5).
+            agent_runtime: Runtime de agentes em processo (Roadmap V16/ADR 014).
+                Se omitido, uma instância padrão é criada.
+            agent_runtime_mode: ``"inprocess"`` ou ``"container"`` — seleciona o
+                caminho de execução usado por ``_execute_agent``. Se omitido, usa
+                ``src.config.AGENT_RUNTIME``. Parâmetro explícito existe
+                principalmente para testes que precisam fixar um dos dois modos.
         """
         self.runner = runner
         self.ipc = ipc
@@ -215,6 +229,8 @@ class Orchestrator:
         self.validator = ValidatorAgent()
         # V12.5.2 — Rastreia containers spawnados por master_session_id
         self._session_container_counts: dict[str, int] = {}
+        # Roadmap V16/ADR 014 — Rastreia execuções de agente em processo por master_session_id
+        self._session_agent_run_counts: dict[str, int] = {}
         # V15.5/G9 — Bloco de texto do ContextBundle ativo, injetado no plano inicial do Researcher
         self._current_context_block: str = ""
         if session_runner is None:
@@ -222,6 +238,9 @@ class Orchestrator:
             self.session_runner = SessionContainerRunner(runner=self.runner, ipc=self.ipc)
         else:
             self.session_runner = session_runner
+
+        self.agent_runtime = agent_runtime or AgentRuntime()
+        self.agent_runtime_mode = (agent_runtime_mode or AGENT_RUNTIME).lower()
 
     @staticmethod
     def get_available_agents() -> dict[str, str]:
@@ -465,9 +484,8 @@ class Orchestrator:
     async def _handle_ask_researcher(
         self, message: Message, task: AgentTask, master_session_id: str | None
     ) -> str:
-        """Trata uma mensagem ``ask_researcher`` recebida durante a execução de um agente
-        (Roadmap V15.3 / Spec G5): reutiliza uma resposta anterior similar se houver, ou
-        exibe a pergunta e bloqueia aguardando a resposta do pesquisador via stdin.
+        """Trata uma mensagem ``ask_researcher`` recebida via IPC durante a execução de um
+        agente em container (Roadmap V15.3 / Spec G5).
 
         Args:
             message: Mensagem IPC do tipo ``ask_researcher``.
@@ -477,14 +495,44 @@ class Orchestrator:
         Returns:
             A resposta do pesquisador (ou reaproveitada de uma pergunta similar anterior).
         """
+        payload = message.payload
+        return await self._ask_researcher_core(
+            question=payload.get("question", ""),
+            context=payload.get("context", ""),
+            why_cant_proceed=payload.get("why_cant_proceed", ""),
+            options=payload.get("options") or [],
+            task=task,
+            master_session_id=master_session_id,
+        )
+
+    async def _ask_researcher_core(
+        self,
+        question: str,
+        context: str,
+        why_cant_proceed: str,
+        options: list[str],
+        task: AgentTask,
+        master_session_id: str | None,
+    ) -> str:
+        """Núcleo de ``ask_researcher`` compartilhado pelos caminhos IPC (container) e
+        callback direto (runtime em processo, Roadmap V16/ADR 014): reutiliza uma resposta
+        anterior similar se houver, ou exibe a pergunta e bloqueia aguardando a resposta do
+        pesquisador via stdin.
+
+        Args:
+            question: Pergunta objetiva para o pesquisador.
+            context: Contexto relevante para a decisão.
+            why_cant_proceed: Por que o agente não pode decidir sozinho.
+            options: Opções sugeridas ao pesquisador.
+            task: Tarefa em execução no momento da pergunta.
+            master_session_id: ID da sessão mestra, usado para persistência/dedup.
+
+        Returns:
+            A resposta do pesquisador (ou reaproveitada de uma pergunta similar anterior).
+        """
         import asyncio as _asyncio
         from src.utils.terminal import RESET, BOLD, YELLOW, CYAN, DIM
 
-        payload = message.payload
-        question = payload.get("question", "")
-        context = payload.get("context", "")
-        why_cant_proceed = payload.get("why_cant_proceed", "")
-        options = payload.get("options") or []
         session_key = master_session_id or task.task_name or "unknown"
 
         cached_answer = self._find_similar_researcher_answer(session_key, question)
@@ -566,10 +614,181 @@ class Orchestrator:
         )
 
     async def _execute_agent(self, task: AgentTask, master_session_id: str | None = None) -> AgentResult:
-        """Executa o ciclo de vida completo de um único agente.
+        """Executa um único agente, delegando ao caminho de execução configurado.
+
+        Roadmap V16/ADR 014: o caminho é escolhido por ``self.agent_runtime_mode``
+        (``"inprocess"`` por padrão, ou ``"container"`` para o modo legado com
+        container Docker efêmero + IPC, mantido durante a Fase 1 para
+        validação/rollback).
+
+        Args:
+            task: Definição da tarefa do agente.
+            master_session_id: ID da sessão mestra para compartilhamento de estado.
+
+        Returns:
+            Resultado da execução do agente.
+        """
+        if self.agent_runtime_mode == "inprocess":
+            return await self._execute_agent_inprocess(task, master_session_id)
+        return await self._execute_agent_container(task, master_session_id)
+
+    async def _execute_agent_inprocess(
+        self, task: AgentTask, master_session_id: str | None = None
+    ) -> AgentResult:
+        """Executa um agente em processo via ``AgentRuntime`` (Roadmap V16/ADR 014).
+
+        Substitui o ciclo spawn-container/IPC por uma chamada direta e
+        supervisionada dentro do processo do orquestrador. Mantém o mesmo
+        contrato de telemetria, circuit breaker e persistência de sessão do
+        caminho container, para que o restante do orquestrador (histórico,
+        replanejamento, ask_researcher) não precise saber qual caminho rodou.
+
+        Args:
+            task: Definição da tarefa do agente.
+            master_session_id: ID da sessão mestra para compartilhamento de estado.
+
+        Returns:
+            Resultado da execução do agente.
+        """
+        # Rate limiting adaptativo (Roadmap V3 - Etapa V8) — mesmo limite do LLM
+        # se aplica independentemente do caminho de execução.
+        await self.rate_limiter.acquire()
+
+        # Roadmap V16/ADR 014 — Circuit breaker: limite de execuções de agente por sessão
+        if master_session_id:
+            count = self._session_agent_run_counts.get(master_session_id, 0)
+            if count >= MAX_AGENT_RUNS_PER_SESSION:
+                raise RuntimeError(
+                    f"Limite de execuções de agente por sessão atingido "
+                    f"(session={master_session_id}, limite={MAX_AGENT_RUNS_PER_SESSION}). "
+                    "Execução interrompida pelo circuit breaker."
+                )
+            self._session_agent_run_counts[master_session_id] = count + 1
+
+        telemetry = get_telemetry()
+        _exec_id = master_session_id or "unknown"
+
+        from datetime import datetime, timezone
+        started_at_iso = datetime.now(timezone.utc).isoformat()
+        if task.subtask_id:
+            telemetry.record_subtask_metrics(
+                subtask_id=task.subtask_id,
+                execution_id=_exec_id,
+                task_name=task.task_name or "unnamed",
+                agent_id=task.agent_id,
+                status="running",
+                created_at=task.created_at or started_at_iso,
+                started_at=started_at_iso,
+            )
+
+        session = self.session_manager.create(task.agent_id)
+        effective_session_id = master_session_id or session.id
+        self.output_manager.init_session(effective_session_id)
+        session_dir = (self.output_manager.base_dir / effective_session_id).resolve()
+
+        logger.info(
+            "Executando agente em processo",
+            extra={"agent_id": task.agent_id, "session_id": session.id, "runtime": "inprocess"},
+        )
+        telemetry.record_agent_event(
+            execution_id=_exec_id,
+            session_id=session.id,
+            agent_id=task.agent_id,
+            event_type="spawn",
+            task_name=task.task_name or None,
+            payload={"runtime": "inprocess"},
+        )
+
+        role_cfg = get_role_model_config(task.agent_id) if task.agent_id in DEFAULT_ROLE_CONFIGS else None
+        model = task.preferred_model or (role_cfg.model if role_cfg else DEFAULT_MODEL)
+        enable_thinking = OLLAMA_ENABLE_THINKING if task.agent_id not in ("planner", "validator") else True
+
+        async def _ask_researcher_callback(
+            question: str, context: str, why_cant_proceed: str, options: list[str]
+        ) -> str:
+            return await self._ask_researcher_core(
+                question=question,
+                context=context,
+                why_cant_proceed=why_cant_proceed,
+                options=options,
+                task=task,
+                master_session_id=master_session_id,
+            )
+
+        ctx = AgentContext(
+            session_id=effective_session_id,
+            agent_session_id=session.id,
+            agent_id=task.agent_id,
+            task_name=task.task_name,
+            mode=task.mode or "",
+            output_dir=session_dir,
+            model=model,
+            enable_thinking=enable_thinking,
+            execution_id=_exec_id,
+            ask_researcher=_ask_researcher_callback,
+        )
+
+        result = await self.agent_runtime.run(task, ctx)
+
+        self.session_manager.update(session.id, payload=result.response)
+
+        if result.status == "success":
+            await self.rate_limiter.report_success()
+        else:
+            error_msg = str(result.error or "")
+            if "429" in error_msg or "Too Many Requests" in error_msg:
+                await self.rate_limiter.report_429()
+            else:
+                await self.rate_limiter.report_success()
+
+        telemetry.record_agent_event(
+            execution_id=_exec_id,
+            session_id=session.id,
+            agent_id=task.agent_id,
+            event_type="complete" if result.status == "success" else "error",
+            task_name=task.task_name or None,
+            payload={"status": result.status, "runtime": "inprocess"},
+        )
+
+        try:
+            self.session_manager.close(session.id)
+        except Exception as e:
+            logger.error(f"Erro ao fechar sessão {session.id}: {e}")
+
+        if task.subtask_id:
+            finished_at_iso = datetime.now(timezone.utc).isoformat()
+            duration_ms = int(
+                (datetime.now(timezone.utc) - datetime.fromisoformat(started_at_iso)).total_seconds() * 1000
+            )
+            telemetry.record_subtask_metrics(
+                subtask_id=task.subtask_id,
+                execution_id=_exec_id,
+                task_name=task.task_name or "unnamed",
+                agent_id=task.agent_id,
+                status=result.status,
+                created_at=task.created_at or started_at_iso,
+                started_at=started_at_iso,
+                finished_at=finished_at_iso,
+                duration_total_ms=duration_ms,
+                duration_active_ms=duration_ms,
+                retry_count=task.retry_attempt,
+                error_type=result.error[:100] if result.error else None,
+            )
+
+        return result
+
+    async def _execute_agent_container(
+        self, task: AgentTask, master_session_id: str | None = None
+    ) -> AgentResult:
+        """Executa o ciclo de vida completo de um único agente em container (modo legado).
 
         Ciclo: cria sessão → cria socket IPC → spawna container →
         aguarda conexão → envia prompt → recebe resposta → cleanup.
+
+        Roadmap V16/ADR 014: mantido durante a Fase 1 sob
+        ``AGENT_RUNTIME=container`` para validação/rollback do runtime em
+        processo (``_execute_agent_inprocess``, caminho padrão). Removido na
+        Fase 2, sujeita a aprovação explícita.
 
         Args:
             task: Definição da tarefa do agente.

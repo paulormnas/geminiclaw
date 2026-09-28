@@ -40,7 +40,15 @@ def _create_orchestrator():
 
     mock_session_manager = MagicMock()
 
-    orchestrator = Orchestrator(runner=mock_runner, ipc=mock_ipc, session_manager=mock_session_manager)
+    # Roadmap V16/ADR 014: AGENT_RUNTIME tem padrão "inprocess" — este módulo
+    # testa especificamente o round-trip ask_researcher via IPC/container
+    # (TestExecuteAgentAskResearcherRoundTrip), então fixa o modo legado.
+    orchestrator = Orchestrator(
+        runner=mock_runner,
+        ipc=mock_ipc,
+        session_manager=mock_session_manager,
+        agent_runtime_mode="container",
+    )
     return orchestrator, mock_ipc, mock_session_manager
 
 

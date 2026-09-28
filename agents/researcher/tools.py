@@ -1,28 +1,60 @@
 """Ferramentas do agente researcher.
 
-Implementa a ferramenta de busca que executa o Gemini CLI como
-subprocesso assíncrono, com integração ao cache de resultados.
+Implementa a ferramenta de busca técnica usada pelo Researcher, delegando à
+skill ``search_quick`` (Roadmap V16/ADR 014, Design §4). Historicamente esta
+função executava o binário ``gemini`` como subprocesso — removido porque
+nenhuma ferramenta do host deve criar processos externos a partir de código
+ou parâmetros derivados do LLM (Requirement "Busca do Researcher sem
+subprocesso de fornecedor").
 """
 
-import asyncio
-import asyncio.subprocess
-from pathlib import Path
+from typing import Optional
 
 from src.logger import get_logger
-from src.config import AGENT_TIMEOUT_SECONDS
 from agents.researcher.cache import SearchCache
+from src.skills.search_quick.skill import QuickSearchSkill
 
 logger = get_logger(__name__)
 
 # Cache global compartilhado pela sessão do agente
 _search_cache = SearchCache()
 
+# Instância compartilhada da skill de busca rápida (sem estado sensível por tarefa).
+_quick_search_skill: Optional[QuickSearchSkill] = None
+
+
+def _get_quick_search_skill() -> QuickSearchSkill:
+    """Retorna a instância (lazy) de ``QuickSearchSkill`` usada por ``search``."""
+    global _quick_search_skill
+    if _quick_search_skill is None:
+        _quick_search_skill = QuickSearchSkill()
+    return _quick_search_skill
+
+
+def _format_results(results: list[dict]) -> str:
+    """Formata os resultados de ``QuickSearchSkill`` como texto legível.
+
+    Args:
+        results: Lista de dicionários com campos de ``SearchResult``
+            (``title``, ``url``, ``snippet``, tipicamente).
+
+    Returns:
+        Texto formatado com os resultados, um bloco por resultado.
+    """
+    blocks = []
+    for r in results:
+        title = r.get("title", "") or "(sem título)"
+        url = r.get("url", "")
+        snippet = r.get("snippet", "") or r.get("description", "")
+        blocks.append(f"- {title}\n  {url}\n  {snippet}".rstrip())
+    return "\n\n".join(blocks)
+
 
 async def search(query: str) -> str:
-    """Busca informações usando o Gemini CLI como subprocesso.
+    """Busca informações técnicas usando a skill ``search_quick``.
 
-    Consulta o cache antes de executar o subprocesso. Se o resultado
-    estiver cacheado e dentro do TTL, retorna imediatamente.
+    Consulta o cache antes de executar a busca. Se o resultado estiver
+    cacheado e dentro do TTL, retorna imediatamente.
 
     Args:
         query: Termo ou pergunta de busca.
@@ -42,59 +74,49 @@ async def search(query: str) -> str:
         )
         return cached
 
-    # 2. Executa Gemini CLI como subprocesso
+    # 2. Executa busca via skill search_quick (sem subprocesso)
     logger.info(
-        "Executando busca via Gemini CLI",
+        "Executando busca técnica via search_quick",
         extra={"query": query[:100]},
     )
 
     try:
-        process = await asyncio.create_subprocess_exec(
-            "gemini",
-            "-p",
-            query,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        skill_result = await _get_quick_search_skill().run(query=query)
 
-        stdout, stderr = await asyncio.wait_for(
-            process.communicate(),
-            timeout=AGENT_TIMEOUT_SECONDS,
-        )
-
-        if process.returncode != 0:
-            error_msg = stderr.decode("utf-8", errors="replace").strip()
-            logger.error(
-                "Gemini CLI retornou erro",
-                extra={
-                    "query": query[:100],
-                    "returncode": process.returncode,
-                    "stderr": error_msg[:500],
-                },
-            )
-            return f"Erro na busca (código {process.returncode}): {error_msg}"
-
-        result = stdout.decode("utf-8", errors="replace").strip()
-
-        if not result:
+        if not skill_result.success:
             logger.warning(
-                "Gemini CLI retornou resultado vazio",
+                "search_quick retornou erro",
+                extra={"query": query[:100], "error": skill_result.error},
+            )
+            return f"Erro na busca: {skill_result.error}"
+
+        results = skill_result.output or []
+        if not results:
+            logger.warning(
+                "search_quick retornou resultado vazio",
                 extra={"query": query[:100]},
             )
             return "Nenhum resultado encontrado para a busca."
+
+        result = _format_results(results)
 
         # 3. Armazena no cache
         _search_cache.set(query, result)
 
         # 4. Salva o artefato de pesquisa (Etapa 1)
+        #
+        # Roadmap V16/ADR 014 — reaproveita a mesma resolução confinada de
+        # `agents.base.tools` (``ctx.output_dir / "artifacts"`` no runtime em
+        # processo via AgentContext; ``/outputs/artifacts`` no modo container
+        # legado) em vez de ler ``os.environ`` diretamente, que não é isolado
+        # por tarefa quando várias execuções rodam concorrentemente no mesmo
+        # processo.
         try:
-            import os
-            agent_id = os.environ.get("AGENT_ID", "researcher")
-            # O Orquestrador cria outputs/<session_id>/<agent_id>/artifacts
-            # No container, /outputs mapeia para outputs/<session_id>/
-            art_dir = Path("/outputs") / agent_id / "artifacts"
-            
-            if art_dir.exists() or Path("/outputs").exists():
+            from agents.base.tools import _resolve_artifacts_dir
+
+            art_dir = _resolve_artifacts_dir()
+
+            if art_dir is not None:
                 art_dir.mkdir(parents=True, exist_ok=True)
                 research_file = art_dir / "research_results.md"
                 with open(research_file, "a", encoding="utf-8") as f:
@@ -107,28 +129,6 @@ async def search(query: str) -> str:
             extra={"query": query[:100], "result_length": len(result)},
         )
         return result
-
-    except asyncio.TimeoutError:
-        logger.error(
-            "Timeout ao executar busca",
-            extra={
-                "query": query[:100],
-                "timeout": AGENT_TIMEOUT_SECONDS,
-            },
-        )
-        # Tenta encerrar o processo se ainda estiver rodando
-        try:
-            process.kill()  # type: ignore[possibly-unbound] — process é definido antes do timeout
-        except (ProcessLookupError, OSError):
-            pass
-        return f"Erro: busca excedeu o timeout de {AGENT_TIMEOUT_SECONDS}s."
-
-    except FileNotFoundError:
-        logger.error(
-            "Gemini CLI não encontrado no PATH",
-            extra={"query": query[:100]},
-        )
-        return "Erro: Gemini CLI ('gemini') não encontrado. Verifique a instalação."
 
     except Exception as e:
         logger.error(

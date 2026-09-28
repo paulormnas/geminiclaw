@@ -6,6 +6,7 @@ import pathlib
 from typing import Any, List, Dict, Callable, Optional, AsyncGenerator
 from dataclasses import dataclass, field
 
+from src.agent_runtime.context import get_agent_context_optional
 from src.llm.base import LLMProvider, ToolCall, LLMResponse
 from src.llm.factory import get_provider
 from src.llm.context_compression import compress_messages
@@ -14,6 +15,49 @@ from src.logger import get_logger
 from src.telemetry import get_telemetry
 
 logger = get_logger(__name__)
+
+
+def _task_env() -> Dict[str, str]:
+    """Resolve o estado por tarefa (sessão, papel, diretório de output, etc.).
+
+    Roadmap V16/ADR 014: no runtime em processo (``AGENT_RUNTIME=inprocess``),
+    esse estado vem do ``AgentContext`` vinculado à ``Task`` asyncio corrente
+    (``contextvars``), nunca de ``os.environ`` (global ao processo e portanto
+    inseguro com múltiplas tarefas concorrentes). No modo container legado,
+    não há ``AgentContext`` e o estado continua vindo de ``os.environ``,
+    definido pelo orquestrador ao spawnar o container.
+
+    Returns:
+        Dicionário com as mesmas chaves antes lidas diretamente de
+        ``os.environ`` (``SESSION_ID``, ``TASK_NAME``, ``OUTPUT_BASE_DIR``,
+        ``AGENT_ID``, ``EXECUTION_ID``, ``LLM_PROVIDER``, ``LLM_MODEL``).
+    """
+    ctx = get_agent_context_optional()
+    if ctx is not None:
+        return {
+            "SESSION_ID": ctx.session_id,
+            "TASK_NAME": ctx.task_name,
+            "OUTPUT_BASE_DIR": str(ctx.output_dir.parent) if ctx.output_dir else "",
+            "AGENT_ID": ctx.agent_id,
+            "EXECUTION_ID": ctx.execution_id or ctx.session_id,
+            "LLM_PROVIDER": "",  # resolvido pelo ModelRouter; provider já é explícito aqui
+            "LLM_MODEL": ctx.model,
+        }
+    return {
+        # SESSION_ID sem default "truthy": código a jusante (override de
+        # session_id em tool calls) depende de string vazia == "ausente" para
+        # decidir se sobrescreve o argumento gerado pelo LLM (V13.1.1). Um
+        # default como "unknown" aqui faria esse código achar que sempre há
+        # um SESSION_ID canônico definido. O fallback "unknown" para exibição/
+        # telemetria é aplicado no ponto de uso (``_session_id or "unknown"``).
+        "SESSION_ID": os.environ.get("SESSION_ID", ""),
+        "TASK_NAME": os.environ.get("TASK_NAME", ""),
+        "OUTPUT_BASE_DIR": os.environ.get("OUTPUT_BASE_DIR", ""),
+        "AGENT_ID": os.environ.get("AGENT_ID", "agent"),
+        "EXECUTION_ID": os.environ.get("EXECUTION_ID", os.environ.get("SESSION_ID", "")),
+        "LLM_PROVIDER": os.environ.get("LLM_PROVIDER", "unknown"),
+        "LLM_MODEL": os.environ.get("LLM_MODEL", "unknown"),
+    }
 
 @dataclass
 class AgentState:
@@ -104,10 +148,11 @@ async def run_agent_loop(
     history: List[Dict[str, Any]] = None,
     before_callback: Optional[Callable] = None,
     after_callback: Optional[Callable] = None,
-    max_iterations: int = 10
+    max_iterations: int = 10,
+    provider: Optional[LLMProvider] = None,
 ) -> str:
     """Executa o loop de pensamento do agente (ReAct).
-    
+
     Args:
         prompt: Pergunta ou tarefa do usuário.
         instruction: Instrução de sistema (system prompt).
@@ -116,11 +161,15 @@ async def run_agent_loop(
         before_callback: Função chamada antes do loop começar (ex: carregar sessão).
         after_callback: Função chamada após o loop terminar (ex: persistir sessão).
         max_iterations: Limite de chamadas de ferramenta para evitar loops infinitos.
-    
+        provider: Provedor LLM a usar (Roadmap V16: resolvido por papel via
+            ``ModelRouter`` no runtime em processo). Se omitido, usa o provedor
+            singleton padrão (``get_provider()``) — compatibilidade retroativa
+            com o modo container, que não resolve provedor por papel aqui.
+
     Returns:
         Resposta final do agente como string.
     """
-    provider = get_provider()
+    provider = provider or get_provider()
     history = history or []
     
     # Estado para callbacks
@@ -158,9 +207,12 @@ async def run_agent_loop(
         # V13.4.1/V13.4.2 — Injetar bloco de contexto do workspace antes de cada LLM call.
         # Lê o manifest da sessão atual e inclui artefatos disponíveis, resumo do último
         # step e, quando falhou, o código anterior + erro específico.
-        _env_session_id = os.environ.get("SESSION_ID")
-        _env_task_name = os.environ.get("TASK_NAME")
-        _env_output_base = os.environ.get("OUTPUT_BASE_DIR")
+        # V16 — estado por tarefa vem do AgentContext (contextvars) no runtime em
+        # processo, ou de os.environ no modo container legado (ver _task_env()).
+        _task = _task_env()
+        _env_session_id = _task["SESSION_ID"]
+        _env_task_name = _task["TASK_NAME"]
+        _env_output_base = _task["OUTPUT_BASE_DIR"]
         if _env_session_id and _env_task_name and _env_output_base:
             try:
                 _session_dir = pathlib.Path(_env_output_base) / _env_session_id
@@ -226,10 +278,10 @@ async def run_agent_loop(
         # V5.7 — Telemetria: llm_request
         import time as _time
         _t_llm_start = _time.monotonic()
-        _session_id = os.environ.get("SESSION_ID", "unknown")
-        _task_name = os.environ.get("TASK_NAME") or None
-        _exec_id = os.environ.get("EXECUTION_ID", _session_id)
-        _agent_id = os.environ.get("AGENT_ID", "agent")
+        _session_id = _env_session_id or "unknown"
+        _task_name = _env_task_name or None
+        _exec_id = _task["EXECUTION_ID"] or _session_id
+        _agent_id = _task["AGENT_ID"] or "agent"
         _telemetry = get_telemetry()
 
         response: LLMResponse = await provider.generate(
@@ -243,8 +295,12 @@ async def run_agent_loop(
         # V11.2.1 — Corrigido: lê usage do dict padronizado em vez de getattr direto
         _prompt_tokens = response.usage.get("prompt_tokens", 0) or len(json.dumps(compressed_messages)) // 4
         _completion_tokens = response.usage.get("completion_tokens", 0) or len(response.text or "") // 4
-        _provider_name = os.environ.get("LLM_PROVIDER", "unknown")
-        _model_name = os.environ.get("LLM_MODEL", "unknown")
+        # V16 — no runtime em processo, o provedor é explícito (parâmetro `provider`,
+        # resolvido por papel via ModelRouter); deriva o nome a partir da própria
+        # instância em vez de LLM_PROVIDER (global, não confiável com múltiplos papéis
+        # concorrentes). Mantém fallback em os.environ para o modo container legado.
+        _provider_name = type(provider).__name__.removesuffix("Provider").lower() or _task["LLM_PROVIDER"] or "unknown"
+        _model_name = provider.model_name or _task["LLM_MODEL"] or "unknown"
         _telemetry.record_token_usage(
             execution_id=_exec_id,
             session_id=_session_id,
@@ -281,7 +337,7 @@ async def run_agent_loop(
             # sobrescrevemos sempre com o valor de SESSION_ID do ambiente antes de
             # qualquer processamento adicional.
             if tool_call.name == "python_interpreter":
-                env_session_id = os.environ.get("SESSION_ID")
+                env_session_id = _env_session_id
                 if env_session_id:
                     original_sid = tool_call.arguments.get("session_id", "<ausente>")
                     tool_call.arguments["session_id"] = env_session_id
@@ -313,12 +369,12 @@ async def run_agent_loop(
                             
                             # Injetar SESSION_ID se não fornecido
                             if "session_id" in required and "session_id" not in tool_call.arguments:
-                                tool_call.arguments["session_id"] = os.environ.get("SESSION_ID", "default_session")
+                                tool_call.arguments["session_id"] = _env_session_id or "default_session"
                                 logger.debug(f"Injetando session_id automático em {tool_call.name}")
-                                
+
                             # Injetar TASK_NAME se não fornecido
                             if "task_name" in required and "task_name" not in tool_call.arguments:
-                                tool_call.arguments["task_name"] = os.environ.get("TASK_NAME", "default_task")
+                                tool_call.arguments["task_name"] = _env_task_name or "default_task"
                                 logger.debug(f"Injetando task_name automático em {tool_call.name}")
 
                         # V5.7 — Telemetria: tool_call_start

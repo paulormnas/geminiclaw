@@ -32,7 +32,9 @@ class CodeSkill(BaseSkill):
     name = "python_interpreter"
     description = (
         "Use esta skill para executar código Python e realizar análise de dados. Forneça o código completo como string. "
-        "Você PODE instalar novos pacotes via parâmetro 'packages' (recomendado) ou usando 'subprocess' no código. "
+        "Para instalar pacotes adicionais, use EXCLUSIVAMENTE o parâmetro 'packages' — "
+        "instalação via 'subprocess'/'pip' dentro do código não é suportada (a instalação de "
+        "pacotes acontece no próprio sandbox, fora do código gerado). "
         "Todo arquivo salvo em '/outputs/' estará disponível como artefato."
     )
     parameters_schema = {

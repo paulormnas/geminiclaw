@@ -1,66 +1,81 @@
-import pytest
-import asyncio
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, patch
 
-from agents.researcher.tools import search, reset_search_cache, get_search_cache
+import pytest
+
+from agents.researcher.tools import get_search_cache, reset_search_cache, search
+from src.skills.base import SkillResult
 
 
 @pytest.fixture(autouse=True)
 def _clean_cache() -> None:
     """Reseta o cache antes de cada teste para garantir isolamento."""
     reset_search_cache(ttl_seconds=3600)
+    import agents.researcher.tools as tools_module
+
+    tools_module._quick_search_skill = None
+
+
+def _mock_skill_run(result: SkillResult) -> AsyncMock:
+    return AsyncMock(return_value=result)
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 class TestSearchToolSuccess:
-    """Testes de sucesso da ferramenta de busca."""
+    """Testes de sucesso da ferramenta de busca (Roadmap V16/ADR 014: via search_quick, sem subprocesso)."""
 
     async def test_search_returns_result(self) -> None:
-        """search deve retornar stdout do Gemini CLI quando exit code 0."""
-        mock_process = AsyncMock()
-        mock_process.communicate.return_value = (
-            b"Resultado da busca sobre Python",
-            b"",
-        )
-        mock_process.returncode = 0
-
-        with patch("agents.researcher.tools.asyncio.create_subprocess_exec",
-                    new_callable=AsyncMock, return_value=mock_process):
+        """search deve retornar texto formatado a partir dos resultados de search_quick."""
+        results = [{"title": "Python frameworks", "url": "https://example.com", "snippet": "Django e Flask"}]
+        with patch(
+            "agents.researcher.tools.QuickSearchSkill.run",
+            new=_mock_skill_run(SkillResult(success=True, output=results)),
+        ):
             result = await search("Python frameworks")
 
-        assert result == "Resultado da busca sobre Python"
+        assert "Python frameworks" in result
+        assert "https://example.com" in result
+        assert "Django e Flask" in result
 
     async def test_search_caches_result(self) -> None:
         """search deve armazenar resultado no cache após sucesso."""
-        mock_process = AsyncMock()
-        mock_process.communicate.return_value = (
-            b"Django e Flask",
-            b"",
-        )
-        mock_process.returncode = 0
-
-        with patch("agents.researcher.tools.asyncio.create_subprocess_exec",
-                    new_callable=AsyncMock, return_value=mock_process):
+        results = [{"title": "Web frameworks", "url": "https://example.com/web", "snippet": "Django e Flask"}]
+        with patch(
+            "agents.researcher.tools.QuickSearchSkill.run",
+            new=_mock_skill_run(SkillResult(success=True, output=results)),
+        ):
             await search("web frameworks python")
 
-        # Verifica que o cache foi populado
         cache = get_search_cache()
         cached = cache.get("web frameworks python")
-        assert cached == "Django e Flask"
+        assert cached is not None
+        assert "Web frameworks" in cached
 
     async def test_search_uses_cache_on_hit(self) -> None:
-        """search deve retornar do cache sem chamar subprocesso."""
-        # Popula o cache manualmente
+        """search deve retornar do cache sem chamar a skill de busca."""
         cache = get_search_cache()
         cache.set("cached query", "cached result")
 
-        with patch("agents.researcher.tools.asyncio.create_subprocess_exec",
-                    new_callable=AsyncMock) as mock_exec:
+        mock_run = _mock_skill_run(SkillResult(success=True, output=[]))
+        with patch("agents.researcher.tools.QuickSearchSkill.run", new=mock_run):
             result = await search("cached query")
 
         assert result == "cached result"
-        mock_exec.assert_not_called()
+        mock_run.assert_not_called()
+
+    async def test_search_does_not_spawn_subprocess(self) -> None:
+        """Requirement 'Busca do Researcher sem subprocesso de fornecedor' (Spec agent-runtime)."""
+        results = [{"title": "T", "url": "https://example.com", "snippet": "S"}]
+        with (
+            patch(
+                "agents.researcher.tools.QuickSearchSkill.run",
+                new=_mock_skill_run(SkillResult(success=True, output=results)),
+            ),
+            patch("asyncio.create_subprocess_exec") as mock_subprocess,
+        ):
+            await search("qualquer busca técnica")
+
+        mock_subprocess.assert_not_called()
 
 
 @pytest.mark.unit
@@ -76,60 +91,33 @@ class TestSearchToolErrors:
         result = await search("   ")
         assert "Erro" in result
 
-    async def test_search_nonzero_exit_code(self) -> None:
-        """search deve retornar erro quando Gemini CLI retorna exit code != 0."""
-        mock_process = AsyncMock()
-        mock_process.communicate.return_value = (
-            b"",
-            b"Error: API key invalid",
-        )
-        mock_process.returncode = 1
-
-        with patch("agents.researcher.tools.asyncio.create_subprocess_exec",
-                    new_callable=AsyncMock, return_value=mock_process):
+    async def test_search_skill_error(self) -> None:
+        """search deve retornar erro quando a skill search_quick falha."""
+        with patch(
+            "agents.researcher.tools.QuickSearchSkill.run",
+            new=_mock_skill_run(SkillResult(success=False, output=[], error="todos os backends falharam")),
+        ):
             result = await search("test query")
 
         assert "Erro" in result
-        assert "código 1" in result
+        assert "todos os backends falharam" in result
 
-    async def test_search_timeout(self) -> None:
-        """search deve tratar timeout do subprocesso."""
-        mock_process = AsyncMock()
-        mock_process.communicate.side_effect = asyncio.TimeoutError()
-        mock_process.kill = MagicMock()
-
-        with patch("agents.researcher.tools.asyncio.create_subprocess_exec",
-                    new_callable=AsyncMock, return_value=mock_process):
-            result = await search("query lenta")
-
-        assert "timeout" in result.lower()
-
-    async def test_search_gemini_not_found(self) -> None:
-        """search deve tratar caso onde Gemini CLI não está instalado."""
-        with patch("agents.researcher.tools.asyncio.create_subprocess_exec",
-                    new_callable=AsyncMock,
-                    side_effect=FileNotFoundError("gemini not found")):
-            result = await search("test query")
-
-        assert "não encontrado" in result.lower() or "not found" in result.lower()
-
-    async def test_search_empty_stdout(self) -> None:
-        """search deve retornar mensagem informativa quando stdout é vazio."""
-        mock_process = AsyncMock()
-        mock_process.communicate.return_value = (b"", b"")
-        mock_process.returncode = 0
-
-        with patch("agents.researcher.tools.asyncio.create_subprocess_exec",
-                    new_callable=AsyncMock, return_value=mock_process):
+    async def test_search_empty_results(self) -> None:
+        """search deve retornar mensagem informativa quando não há resultados."""
+        with patch(
+            "agents.researcher.tools.QuickSearchSkill.run",
+            new=_mock_skill_run(SkillResult(success=True, output=[])),
+        ):
             result = await search("query sem resultado")
 
         assert "nenhum resultado" in result.lower()
 
     async def test_search_unexpected_exception(self) -> None:
         """search deve tratar exceções inesperadas."""
-        with patch("agents.researcher.tools.asyncio.create_subprocess_exec",
-                    new_callable=AsyncMock,
-                    side_effect=RuntimeError("unexpected")):
+        with patch(
+            "agents.researcher.tools.QuickSearchSkill.run",
+            new=AsyncMock(side_effect=RuntimeError("unexpected")),
+        ):
             result = await search("test query")
 
         assert "Erro" in result
@@ -142,30 +130,23 @@ class TestSearchCacheIntegration:
 
     async def test_cache_miss_then_hit(self) -> None:
         """Primeira chamada faz busca, segunda usa cache."""
-        mock_process = AsyncMock()
-        mock_process.communicate.return_value = (b"result", b"")
-        mock_process.returncode = 0
-
-        with patch("agents.researcher.tools.asyncio.create_subprocess_exec",
-                    new_callable=AsyncMock, return_value=mock_process) as mock_exec:
-            # Primeira chamada — cache miss
+        results = [{"title": "T", "url": "https://example.com", "snippet": "result"}]
+        mock_run = _mock_skill_run(SkillResult(success=True, output=results))
+        with patch("agents.researcher.tools.QuickSearchSkill.run", new=mock_run):
             result1 = await search("same query")
-            assert result1 == "result"
-            assert mock_exec.call_count == 1
+            assert "result" in result1
+            assert mock_run.call_count == 1
 
-            # Segunda chamada — cache hit
             result2 = await search("same query")
-            assert result2 == "result"
-            assert mock_exec.call_count == 1  # Não deve ter chamado novamente
+            assert result2 == result1
+            assert mock_run.call_count == 1  # Não deve ter chamado novamente
 
     async def test_error_does_not_cache(self) -> None:
         """Resultados de erro não devem ser cacheados."""
-        mock_process = AsyncMock()
-        mock_process.communicate.return_value = (b"", b"error")
-        mock_process.returncode = 1
-
-        with patch("agents.researcher.tools.asyncio.create_subprocess_exec",
-                    new_callable=AsyncMock, return_value=mock_process):
+        with patch(
+            "agents.researcher.tools.QuickSearchSkill.run",
+            new=_mock_skill_run(SkillResult(success=False, output=[], error="falha")),
+        ):
             await search("failing query")
 
         cache = get_search_cache()

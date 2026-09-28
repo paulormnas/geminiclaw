@@ -50,10 +50,14 @@ def _create_orchestrator():
 
     mock_session_manager = MagicMock()
 
+    # Roadmap V16/ADR 014: AGENT_RUNTIME tem padrão "inprocess" — este módulo
+    # testa especificamente a propagação de SESSION_MODE para env_vars do
+    # container spawnado (caminho legado), então fixa o modo.
     orchestrator = Orchestrator(
         runner=mock_runner,
         ipc=mock_ipc,
         session_manager=mock_session_manager,
+        agent_runtime_mode="container",
     )
     return orchestrator, mock_runner, mock_ipc, mock_session_manager
 

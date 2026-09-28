@@ -137,8 +137,24 @@ else:
 MAX_PLANNING_ITERATIONS = int(get_env("MAX_PLANNING_ITERATIONS", default="10"))
 MAX_PLAN_RETRIES = int(get_env("MAX_PLAN_RETRIES", default="5"))
 
-# V12.5.2 — Limite máximo de containers por sessão (circuit breaker de recursos)
+# V12.5.2 — Limite máximo de containers por sessão (circuit breaker de recursos).
+# Roadmap V16/ADR 014: no modo AGENT_RUNTIME=inprocess, este limite passa a contar
+# apenas containers de sandbox de código (skill de código); execuções de agente
+# em processo são contadas por MAX_AGENT_RUNS_PER_SESSION.
 MAX_CONTAINERS_PER_SESSION = int(get_env("MAX_CONTAINERS_PER_SESSION", default="30"))
+
+# Roadmap V16/ADR 014 — runtime de execução de agentes: 'inprocess' (novo,
+# padrão) executa agentes dentro do processo do orquestrador via
+# src/agent_runtime/; 'container' preserva o modo legado (container Docker
+# efêmero por agente + IPC) para validação/rollback durante a Fase 1.
+AGENT_RUNTIME = get_env("AGENT_RUNTIME", default="inprocess").lower()
+
+# Roadmap V16/ADR 014 — circuit breaker de execuções de agente por sessão no
+# runtime em processo (equivalente ao MAX_CONTAINERS_PER_SESSION do modo
+# container, mas sem consumir o orçamento de containers de sandbox).
+MAX_AGENT_RUNS_PER_SESSION = int(
+    get_env("MAX_AGENT_RUNS_PER_SESSION") or get_env("MAX_CONTAINERS_PER_SESSION", default="30")
+)
 
 # --- Perfil de Sessão (Roadmap V15.6 / Spec G10) ---
 # Nível de autonomia padrão quando nenhuma flag --mode é fornecida.

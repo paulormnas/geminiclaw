@@ -1,3 +1,6 @@
+import asyncio
+import ipaddress
+import socket
 import urllib.robotparser
 from urllib.parse import urlparse
 import httpx
@@ -8,6 +11,53 @@ from src.logger import get_logger
 from src.skills.search_quick.cache import SearchCache
 
 logger = get_logger(__name__)
+
+# Roadmap V16/ADR 014 (Design §4) — ferramentas web no host nunca podem alcançar
+# rede interna: bloqueia loopback, faixas privadas (RFC 1918), link-local e o
+# serviço de metadados de nuvem (169.254.169.254), independentemente de o alvo
+# ter sido informado como IP literal ou como um nome que resolve para um deles.
+_CLOUD_METADATA_HOST = "169.254.169.254"
+
+
+async def resolve_and_check_host(hostname: str) -> str | None:
+    """Resolve ``hostname`` e verifica se algum endereço resultante é bloqueado.
+
+    Args:
+        hostname: Nome de host ou endereço IP literal a verificar.
+
+    Returns:
+        ``None`` se o host é seguro para acessar; caso contrário, uma mensagem
+        explicando por que o acesso foi bloqueado.
+    """
+    try:
+        infos = await asyncio.to_thread(socket.getaddrinfo, hostname, None)
+    except socket.gaierror:
+        # Falha de resolução não é um bloqueio de segurança — a própria requisição
+        # HTTP falhará da mesma forma; falha aberta aqui evita falsos positivos
+        # (ex.: ambientes de teste/CI sem rede) sem enfraquecer a proteção real
+        # (endereços internos literais continuam bloqueados sem depender de DNS).
+        logger.debug("resolve_and_check_host: falha ao resolver host, prosseguindo", extra={"hostname": hostname})
+        return None
+
+    for info in infos:
+        raw_addr = info[4][0]
+        try:
+            addr = ipaddress.ip_address(raw_addr.split("%")[0])
+        except ValueError:
+            continue
+        if (
+            addr.is_loopback
+            or addr.is_private
+            or addr.is_link_local
+            or addr.is_reserved
+            or addr.is_multicast
+            or str(addr) == _CLOUD_METADATA_HOST
+        ):
+            return (
+                f"o host '{hostname}' resolve para o endereço interno/reservado "
+                f"'{addr}', bloqueado para acesso via ferramentas web."
+            )
+    return None
 
 class WebReaderSkill(BaseSkill):
     """Lê o conteúdo completo de uma URL e extrai o texto limpo.
@@ -111,7 +161,18 @@ class WebReaderSkill(BaseSkill):
         if cached is not None:
             logger.info("WebReader: Cache hit", extra={"url": url})
             return SkillResult(success=True, output=cached)
-            
+
+        # V16/ADR 014 — Bloqueia acesso a rede interna (loopback, RFC 1918,
+        # link-local, metadados de nuvem) antes de qualquer requisição de rede,
+        # inclusive o robots.txt.
+        hostname = urlparse(url).hostname
+        if not hostname:
+            return SkillResult(success=False, output="", error="URL sem host válido.")
+        block_reason = await resolve_and_check_host(hostname)
+        if block_reason is not None:
+            logger.warning("WebReader: acesso bloqueado a rede interna", extra={"url": url, "reason": block_reason})
+            return SkillResult(success=False, output="", error=f"Acesso bloqueado: {block_reason}")
+
         # Verifica robots.txt
         can_fetch = await self._can_fetch(url)
         if not can_fetch:

@@ -10,6 +10,10 @@ Orientações de comportamento, ambiente, execução de testes e reporte de não
 Framework de testes: **pytest + pytest-asyncio**.
 Gerenciador de pacotes: **uv** (nunca pip).
 
+**Sequência obrigatória de validação:** Lint (Ruff) → Unit → Integration → E2E (manual).
+Nunca pule a etapa de lint para "economizar tempo" — erros de sintaxe e imports quebrados
+pegos pelo Ruff em segundos custariam minutos se descobertos só na falha do pytest.
+
 ---
 
 ## Papel e Comportamento
@@ -73,10 +77,11 @@ tests/
 
 ---
 
-## Lint Estático (Ruff) — rodar antes de qualquer nível de teste
+## Passo 1 — Lint Estático (Ruff), sempre antes de rodar a suíte de testes
 
-Antes de executar a suíte de testes, rode o Ruff para pegar erros de sintaxe, imports
-quebrados/desordenados e problemas de estilo antes de gastar tempo com pytest:
+Antes de executar qualquer nível de teste automatizado (Unit/Integration/E2E), rode o
+Ruff para pegar erros de sintaxe, imports quebrados/desordenados e problemas de estilo
+antes de gastar tempo com pytest:
 
 ```bash
 uv run ruff check .
@@ -96,9 +101,9 @@ uv run ruff format --check .
 
 ---
 
-## Níveis de Teste
+## Passos 2-4 — Níveis de Teste Automatizado
 
-### Unit (`tests/unit/`) — rodar a cada mudança
+### Passo 2 — Unit (`tests/unit/`) — rodar a cada mudança
 
 ```bash
 uv run pytest -m unit -v
@@ -111,7 +116,7 @@ uv run pytest -m unit -v
 
 ---
 
-### Integration (`tests/integration/`) — rodar antes de todo commit
+### Passo 3 — Integration (`tests/integration/`) — rodar antes de todo commit
 
 ```bash
 uv run pytest -m integration -v
@@ -143,7 +148,7 @@ async def test_container(docker_client):
 
 ---
 
-### E2E (`tests/e2e/`) — rodar manualmente
+### Passo 4 — E2E (`tests/e2e/`) — rodar manualmente
 
 ```bash
 uv run pytest -m e2e -v -s
@@ -254,6 +259,10 @@ Cobertura   : src/ 84%  |  agents/ 77%
 ## Comandos de Referência
 
 ```bash
+# Passo 1 — Lint estático (sempre antes dos testes)
+uv run ruff check .
+uv run ruff format --check .
+
 # Rodar testes unitários
 uv run pytest -m unit -v
 

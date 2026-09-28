@@ -22,6 +22,31 @@ os.environ["QDRANT_CHECK_COMPATIBILITY"] = "false"
 from unittest.mock import MagicMock, patch
 
 @pytest.fixture(autouse=True)
+def mock_embedding_provider(monkeypatch):
+    """Evita carregar o modelo FastEmbed real durante a suíte de testes.
+
+    Roadmap V16 removeu os embeddings aleatórios de código de produção
+    (`_generate_mock_embedding`); qualquer indexador construído sem um
+    `embedding_provider` explícito cairia no `FastEmbedProvider` real, o que
+    tentaria carregar/baixar um modelo ONNX em toda suíte de testes. Este
+    fixture injeta um provedor falso e determinístico
+    (`tests.support.fake_embedding_provider.FakeEmbeddingProvider`) no
+    singleton do processo antes de cada teste.
+
+    Testes que precisam validar comportamento semântico real (ex.:
+    relevância de busca) devem chamar `reset_embedding_provider()` e
+    construir um `FastEmbedProvider()` explicitamente, injetando-o via
+    parâmetro no indexador — nesse caso este fixture é contornado.
+    """
+    from src.embeddings import base as embeddings_base
+    from tests.support.fake_embedding_provider import FakeEmbeddingProvider
+
+    fake = FakeEmbeddingProvider()
+    monkeypatch.setattr(embeddings_base, "_provider_singleton", fake)
+    yield fake
+    monkeypatch.setattr(embeddings_base, "_provider_singleton", None)
+
+@pytest.fixture(autouse=True)
 def mock_db_connection(request):
     """Mock global do banco de dados com estado em memória.
     

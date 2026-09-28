@@ -9,6 +9,7 @@ def indexer():
     # Usar memória pura para testes rápidos e isolados
     return VectorIndexer(url=":memory:")
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_indexer_flow(indexer):
     pages = [
@@ -63,6 +64,7 @@ async def test_indexer_flow(indexer):
     remaining = await indexer.search("anything")
     assert remaining[0]["metadata"]["domain"] == "rust-lang.org"
 
+@pytest.mark.unit
 def test_indexer_chunking(indexer):
     text = "A" * 2000
     chunks = indexer._chunk_text(text, chunk_size=1500, overlap=150)

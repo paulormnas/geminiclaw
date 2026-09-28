@@ -46,6 +46,11 @@ O Curator registra, entre outros:
 Para o último item, o Researcher Agent passa a **registrar a justificativa de cada decisão
 de caminho** ao planejar e replanejar, para que o Curator possa consolidá-la.
 
+Antes de criar qualquer nó, o Curator revisa minuciosamente o que já existe, evitando
+duplicações e criando apenas nós significativos — que apontem novos caminhos de pesquisa ou
+documentem caminhos explorados, inclusive os que ficaram sem conclusão. As diretrizes
+detalhadas estão no ADR 015 §10.
+
 ### 2. Qualquer agente pode sinalizar ao Curator
 
 Researcher, Developer e Validator podem **indicar ao Curator** algo novo e importante que

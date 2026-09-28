@@ -24,6 +24,7 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 | [012](adr_012_agente_curator_ciclo_exploracao.md) | Agente Curator e Ciclo de Exploração Contínua | 🔵 Proposto | 2026-09-28 |
 | [013](adr_013_federacao_rede_publica.md) | Federação: Rede Pública de Conhecimento entre Nós (Princípios) | 🔵 Proposto | 2026-09-28 |
 | [014](adr_014_agentes_em_processo_sandbox_codigo.md) | Agentes em Processo no Host; Containers Apenas como Sandbox de Código | 🔵 Proposto | 2026-09-28 |
+| [015](adr_015_modelo_dados_grafo_conhecimento.md) | Modelo de Dados do Grafo de Conhecimento e Ligação com Embeddings | 🔵 Proposto | 2026-09-28 |
 
 ---
 
@@ -86,6 +87,7 @@ ADR 010 (Propósito: Assistente de Pesquisa) ← define o escopo de tudo (substi
   │     └── ADR 014 (Agentes em Processo) ← agentes no host; só o código roda em sandbox (revisa 003/004)
   ├── ADR 005 (Persistência) ← onde o estado é guardado
   │     └── ADR 009 (Conhecimento Experimental) ← como a experiência de pesquisa é acumulada
+  │           ├── ADR 015 (Modelo do Grafo) ← nós, relações, propriedades e embeddings
   │           ├── ADR 012 (Curator) ← quem registra o conhecimento e mantém a exploração
   │           └── ADR 013 (Federação) ← como o conhecimento é compartilhado entre nós (último)
   ├── ADR 011 (Provedores Agnósticos) ← quais modelos e embeddings são usados (substitui ADR 006)

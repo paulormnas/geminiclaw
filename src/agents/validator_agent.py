@@ -5,6 +5,7 @@ principal sem instanciar containers Docker (ADR 007).
 """
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -18,11 +19,36 @@ logger = get_logger(__name__)
 
 MANDATORY_KEYS = ["agent_id", "task_name", "prompt", "validation_criteria"]
 
+# Roadmap V15.1 / Spec G1 — tipos de tarefa que exigem ao menos 1 critério quantitativo
+# (com threshold numérico) em validation_criteria, por serem confirmatórios por natureza.
+_QUANTITATIVE_REQUIRED_TASK_TYPES = {"reproduction", "validation"}
+
+# Heurística de "critério quantitativo": presença de um dígito combinado com um operador
+# de comparação (símbolo ou palavra) — ex: "acurácia > 0.85", "pelo menos 90% de cobertura".
+_QUANTITATIVE_PATTERN = re.compile(
+    r"\d.*(?:[<>]=?|==)|(?:[<>]=?|==).*\d"
+    r"|\d.*(?:maior|menor|acima|abaixo|m[ií]nimo|m[áa]ximo|pelo menos|no m[íi]nimo|no m[áa]ximo|igual)"
+    r"|(?:maior|menor|acima|abaixo|m[ií]nimo|m[áa]ximo|pelo menos|no m[íi]nimo|no m[áa]ximo|igual).*\d",
+    re.IGNORECASE,
+)
+
+
+def _has_quantitative_criterion(criteria: List[Any]) -> bool:
+    """Verifica se ao menos um critério de validação contém um threshold numérico explícito."""
+    return any(
+        isinstance(c, str) and _QUANTITATIVE_PATTERN.search(c) for c in criteria
+    )
+
+
 SCHEMA_INSTRUCTION = """Cada subtarefa no plano DEVE ser um objeto JSON contendo estritamente:
 - "agent_id": string (ex: 'developer', 'researcher')
 - "task_name": string única em snake_case (ex: 'carregar_dados')
+- "task_type": opcional — 'reproduction' | 'eda' | 'model_impl' | 'validation' | 'synthesis'
 - "prompt": string com instrução clara e completa
-- "validation_criteria": list[str] (OBRIGATÓRIO: lista com ao menos 1 critério verificável de aceite)
+- "hypothesis": opcional (recomendado) — o que esta subtarefa testa ou produz
+- "scientific_rationale": opcional (recomendado) — por que esta etapa é metodologicamente necessária
+- "validation_criteria": list[str] (OBRIGATÓRIO: lista com ao menos 1 critério verificável de aceite;
+  para task_type 'reproduction' ou 'validation', ao menos 1 critério deve conter um threshold numérico)
 - "expected_artifacts": list[str] (arquivos esperados a serem gerados em /outputs/)
 - "depends_on": list[str] (nomes de tarefas das quais esta depende)
 """
@@ -96,6 +122,33 @@ class ValidatorAgent:
             if not criteria or not isinstance(criteria, list) or len(criteria) == 0:
                 structural_issues.append(
                     f"Subtarefa '{task.get('task_name', idx+1)}' NÃO possui 'validation_criteria' válido e não-vazio."
+                )
+
+            # Roadmap V15.1 / Spec G1 — hypothesis/scientific_rationale, quando presentes,
+            # não podem ser strings vazias. Ausência é aceita (retrocompatibilidade com
+            # planos gerados antes desta spec).
+            hypothesis = task.get("hypothesis")
+            if hypothesis is not None and not str(hypothesis).strip():
+                structural_issues.append(
+                    f"Subtarefa '{task.get('task_name', idx+1)}' possui 'hypothesis' vazia."
+                )
+            rationale = task.get("scientific_rationale")
+            if rationale is not None and not str(rationale).strip():
+                structural_issues.append(
+                    f"Subtarefa '{task.get('task_name', idx+1)}' possui 'scientific_rationale' vazia."
+                )
+
+            # task_type 'reproduction'/'validation' exige ao menos 1 critério quantitativo
+            task_type = task.get("task_type")
+            if (
+                task_type in _QUANTITATIVE_REQUIRED_TASK_TYPES
+                and isinstance(criteria, list)
+                and criteria
+                and not _has_quantitative_criterion(criteria)
+            ):
+                structural_issues.append(
+                    f"Subtarefa '{task.get('task_name', idx+1)}' é do tipo '{task_type}' mas não possui "
+                    "nenhum critério quantitativo (com threshold numérico) em 'validation_criteria'."
                 )
 
         if structural_issues:

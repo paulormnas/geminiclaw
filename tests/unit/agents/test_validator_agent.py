@@ -152,3 +152,117 @@ async def test_validator_review_result_checks_artifacts_on_disk(tmp_path):
     )
     assert result_present.is_approved is True
     assert result_present.status == "pass"
+
+
+# ---------------------------------------------------------------------------
+# Roadmap V15.1 / Spec G1 — hypothesis, scientific_rationale, task_type
+# ---------------------------------------------------------------------------
+
+
+def _base_task(**overrides):
+    task = {
+        "agent_id": "developer",
+        "task_name": "treinar_modelo",
+        "prompt": "Treinar modelo de classificação",
+        "validation_criteria": ["Modelo treinado com sucesso"],
+    }
+    task.update(overrides)
+    return task
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_validator_rejects_empty_hypothesis(mock_validator_provider):
+    """Subtarefa com 'hypothesis' vazia é rejeitada deterministicamente."""
+    validator = ValidatorAgent(provider=mock_validator_provider)
+    plan = [_base_task(hypothesis="   ")]
+
+    result = await validator.validate_plan(plan, prompt="Treinar modelo")
+
+    assert result.is_valid is False
+    assert any("hypothesis" in issue for issue in result.issues)
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_validator_accepts_missing_scientific_rationale(mock_validator_provider):
+    """Ausência de 'scientific_rationale' é aceita (campo opcional retrocompatível)."""
+    mock_validator_provider.generate.return_value = LLMResponse(
+        text='{"status": "approved", "reason": "ok", "issues": []}'
+    )
+    validator = ValidatorAgent(provider=mock_validator_provider)
+    plan = [_base_task(hypothesis="O modelo atinge acurácia > 0.85")]
+    assert "scientific_rationale" not in plan[0]
+
+    result = await validator.validate_plan(plan, prompt="Treinar modelo")
+
+    assert result.is_valid is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_validator_rejects_empty_scientific_rationale(mock_validator_provider):
+    """Subtarefa com 'scientific_rationale' vazia (presente, mas em branco) é rejeitada."""
+    validator = ValidatorAgent(provider=mock_validator_provider)
+    plan = [_base_task(scientific_rationale="")]
+
+    result = await validator.validate_plan(plan, prompt="Treinar modelo")
+
+    assert result.is_valid is False
+    assert any("scientific_rationale" in issue for issue in result.issues)
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_validator_requires_quantitative_criterion_for_reproduction(mock_validator_provider):
+    """task_type='reproduction' sem critério quantitativo é rejeitado."""
+    validator = ValidatorAgent(provider=mock_validator_provider)
+    plan = [_base_task(task_type="reproduction", validation_criteria=["Gráfico gerado corretamente"])]
+
+    result = await validator.validate_plan(plan, prompt="Reproduzir Tabela 3 do artigo")
+
+    assert result.is_valid is False
+    assert any("critério quantitativo" in issue for issue in result.issues)
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_validator_accepts_quantitative_criterion_for_reproduction(mock_validator_provider):
+    """task_type='reproduction' com critério quantitativo (threshold numérico) é aceito."""
+    mock_validator_provider.generate.return_value = LLMResponse(
+        text='{"status": "approved", "reason": "ok", "issues": []}'
+    )
+    validator = ValidatorAgent(provider=mock_validator_provider)
+    plan = [_base_task(task_type="reproduction", validation_criteria=["Acurácia > 0.85 no conjunto de teste"])]
+
+    result = await validator.validate_plan(plan, prompt="Reproduzir Tabela 3 do artigo")
+
+    assert result.is_valid is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_validator_accepts_qualitative_criterion_for_eda(mock_validator_provider):
+    """task_type='eda' aceita validation_criteria qualitativo, sem exigir threshold numérico."""
+    mock_validator_provider.generate.return_value = LLMResponse(
+        text='{"status": "approved", "reason": "ok", "issues": []}'
+    )
+    validator = ValidatorAgent(provider=mock_validator_provider)
+    plan = [_base_task(task_type="eda", validation_criteria=["Gráficos de distribuição gerados para todas as colunas"])]
+
+    result = await validator.validate_plan(plan, prompt="Fazer EDA do dataset Iris")
+
+    assert result.is_valid is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_validator_requires_quantitative_criterion_for_validation_type(mock_validator_provider):
+    """task_type='validation' também exige critério quantitativo, assim como 'reproduction'."""
+    validator = ValidatorAgent(provider=mock_validator_provider)
+    plan = [_base_task(task_type="validation", validation_criteria=["Resultado documentado"])]
+
+    result = await validator.validate_plan(plan, prompt="Validar hipótese X")
+
+    assert result.is_valid is False
+    assert any("critério quantitativo" in issue for issue in result.issues)

@@ -18,6 +18,7 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 | [006](adr_006_abstracao_provedores_llm.md) | Abstração de Provedores LLM: Ollama + Google Gemini | ✅ Aceito | 2026-09-22 |
 | [007](adr_007_reestruturacao_papeis_agentes.md) | Reestruturação de Papéis de Agentes: 3 Papéis Claros (V14) | 🔵 Proposto | 2026-09-22 |
 | [008](adr_008_workspace_manifest_session_scoped.md) | Workspace Manifest e Session-Scoped Volumes (V13) | ✅ Aceito | 2026-09-22 |
+| [009](adr_009_camada_conhecimento_experimental.md) | Camada de Conhecimento Experimental: Grafo (Apache AGE) + Vetorial (Qdrant) | 🔵 Proposto | 2026-09-28 |
 
 ---
 
@@ -78,6 +79,7 @@ ADR 001 (Propósito) ← define o escopo de tudo
   │     ├── ADR 004 (IPC) ← como orquestrador e agentes se comunicam
   │     └── ADR 007 (Papéis V14) ← como os papéis serão reestruturados
   ├── ADR 005 (Persistência) ← onde o estado é guardado
+  │     └── ADR 009 (Conhecimento Experimental) ← como a experiência de pesquisa é acumulada
   ├── ADR 006 (LLM Providers) ← quais modelos são usados
   └── ADR 008 (Manifest V13) ← como o contexto de código é persistido
 ```

@@ -126,6 +126,28 @@ echo -e "${GREEN}[*] Preparando containers (Pre-pull)...${NC}"
 docker pull python:3.11-slim || echo -e "${YELLOW}[!] Falha ao fazer pull da imagem python:3.11-slim.${NC}"
 docker pull qdrant/qdrant:latest || echo -e "${YELLOW}[!] Falha ao fazer pull da imagem qdrant:latest.${NC}"
 
+# Roadmap V16 / ADR 011 §3 — pré-download do modelo de embeddings local
+# (FastEmbed/ONNX) para que o Pi 5 possa rodar com EMBEDDING_OFFLINE=true
+# (nenhum download em tempo de execução, apenas o cache local já preenchido).
+echo -e "${GREEN}[*] Pré-baixando o modelo de embeddings local (FastEmbed)...${NC}"
+if command -v uv &> /dev/null; then
+    if uv run --project "$(dirname "$0")/.." python -c "
+from src.config import EMBEDDING_CACHE_DIR, EMBEDDING_MODEL
+from fastembed import TextEmbedding
+
+print(f'Baixando {EMBEDDING_MODEL} em {EMBEDDING_CACHE_DIR}...')
+TextEmbedding(model_name=EMBEDDING_MODEL, cache_dir=EMBEDDING_CACHE_DIR)
+print('Modelo de embeddings pronto em cache.')
+"; then
+        echo -e "${GREEN}[*] Modelo de embeddings baixado com sucesso.${NC}"
+        echo -e "${YELLOW}[!] Dica: defina EMBEDDING_OFFLINE=true no seu .env para impedir downloads em tempo de execução.${NC}"
+    else
+        echo -e "${YELLOW}[!] Falha ao pré-baixar o modelo de embeddings. Ele será baixado sob demanda na primeira busca (requer rede).${NC}"
+    fi
+else
+    echo -e "${YELLOW}[!] 'uv' não encontrado — pulando pré-download do modelo de embeddings. Instale 'uv' e rode 'uv sync' antes de usar EMBEDDING_OFFLINE=true.${NC}"
+fi
+
 echo -e "${GREEN}==============================================${NC}"
 echo -e "${GREEN}   Setup finalizado (com possíveis avisos).   ${NC}"
 echo -e "${GREEN}==============================================${NC}"

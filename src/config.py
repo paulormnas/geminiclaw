@@ -7,6 +7,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+# Nome do aplicativo — usado, por exemplo, para compor caminhos de cache
+# default (ex.: EMBEDDING_CACHE_DIR) sem repetir a string literal.
+APP_NAME = "geminiclaw"
+
+
 class SessionMode(str, Enum):
     """Nível de autonomia da sessão (Roadmap V15.6 / Spec G10).
 
@@ -175,6 +180,16 @@ DEEP_SEARCH_CACHE_TTL_SECONDS = int(get_env("DEEP_SEARCH_CACHE_TTL_SECONDS", def
 QDRANT_URL = get_env("QDRANT_URL", default="http://localhost:6333")
 QDRANT_CHECK_COMPATIBILITY = get_env_bool("QDRANT_CHECK_COMPATIBILITY", default=True)
 EMBEDDING_MODEL = get_env("EMBEDDING_MODEL", default="sentence-transformers/all-MiniLM-L6-v2")
+
+# Embeddings locais (Roadmap V16 / ADR 011 §3) — ver src/embeddings/
+EMBEDDING_CACHE_DIR = get_env(
+    "EMBEDDING_CACHE_DIR",
+    default=str(Path.home() / ".cache" / APP_NAME / "embeddings"),
+)
+EMBEDDING_BATCH_SIZE = int(get_env("EMBEDDING_BATCH_SIZE", default="32"))
+# Quando true, nenhum download do modelo é tentado (modelo deve já estar em
+# EMBEDDING_CACHE_DIR — ver scripts/setup_pi.sh). Usado em produção no Pi 5.
+EMBEDDING_OFFLINE = get_env_bool("EMBEDDING_OFFLINE", default=False)
 
 # Quick Search Fallback
 QUICK_SEARCH_STRATEGY = get_env("QUICK_SEARCH_STRATEGY", default="ddg,ddg_lite,brave")

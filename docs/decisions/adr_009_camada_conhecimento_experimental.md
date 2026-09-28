@@ -101,7 +101,7 @@ que momento do ciclo da sessão isso ocorre, e a estratégia de deduplicação d
 Banco de grafos mais maduro, com o melhor ecossistema de ferramentas.
 
 **Descartado porque:** é baseado em JVM e consome memória significativa. No Raspberry Pi 5
-(8 GB), competiria por RAM com PostgreSQL, Qdrant e os containers de agentes.
+(8 GB), competiria por RAM com PostgreSQL, Qdrant e o sandbox de código.
 
 ### Alternativa B: Memgraph
 

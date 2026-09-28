@@ -34,8 +34,8 @@ experimentos, formular hipóteses, validar suposições e relatar resultados.
 2. **Formula hipóteses** a partir desses insumos, dos resultados de seus próprios experimentos
    e do conhecimento experimental acumulado (ADR 009) — inclusive por transferência: o que
    funcionou no problema X como candidato para o problema Y.
-3. **Conduz experimentos** decompostos em DAG, executados em sandbox isolado, com contratos de
-   reprodutibilidade (Spec G2).
+3. **Conduz experimentos** decompostos em DAG, com contratos de reprodutibilidade (Spec G2).
+   Todo código gerado executa em sandbox isolado, nunca no computador principal (ADR 014).
 4. **Valida suposições e resultados** contra evidências em disco (`metrics.json`), nunca contra
    texto otimista gerado por LLM.
 5. **Registra o que aprendeu:** o que funcionou, o que não funcionou, oportunidades a explorar
@@ -73,7 +73,7 @@ implementada, após todas as funcionalidades de pesquisa estarem completas e val
 ### Sequência de implementação
 
 ```
-V16  Fundações: provedores agnósticos (ADR 011), revisão de prompts ao novo propósito
+V16  Fundações: provedores agnósticos (ADR 011), agentes em processo (ADR 014), revisão de prompts
 V17  Camada de conhecimento experimental (ADR 009) + agente Curator (ADR 012)
 V18  Ciclo de hipóteses: formulação, exploração iterativa, validação de suposições
 V19  Controle de equipamentos físicos (Spec G7, antes prevista como V16)

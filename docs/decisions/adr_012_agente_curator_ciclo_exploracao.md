@@ -3,7 +3,7 @@
 **Status:** Proposto
 **Data:** 2026-09-28
 **Autores:** Arquiteto de Soluções (GeminiClaw)
-**ADRs relacionados:** ADR 007 (papéis), ADR 009 (conhecimento experimental), ADR 010 (propósito)
+**ADRs relacionados:** ADR 007 (papéis), ADR 009 (conhecimento experimental), ADR 010 (propósito), ADR 014 (agentes em processo)
 
 ---
 
@@ -65,11 +65,10 @@ continuamente, até que:
 - **uma solução seja encontrada**, ou
 - **um limite de uso definido pelo pesquisador responsável seja atingido**.
 
-A comunicação continua **mediada pelo orquestrador** — não há conexão direta entre
-containers. Isso preserva o isolamento (ADR 003), a rastreabilidade de todas as mensagens e o
-modelo de IPC do ADR 004. O padrão de mensagens no meio da execução, já usado pelo
-`ask_researcher` (Spec G5), é o precedente para as novas mensagens (sinalizações ao Curator e
-sugestões ao Researcher).
+A comunicação continua **mediada pelo orquestrador**, que registra todas as mensagens. Com
+os agentes rodando como processo no host (ADR 014), essas trocas são baratas. O padrão de
+mensagens no meio da execução, já usado pelo `ask_researcher` (Spec G5), é o precedente para
+as novas mensagens (sinalizações ao Curator e sugestões ao Researcher).
 
 ### 5. Limites de uso definidos pelo pesquisador responsável
 
@@ -79,7 +78,7 @@ responsável, incluindo no mínimo:
 - **Tokens** consumidos.
 - **Tempo** de sessão.
 - **Retentativas da mesma tarefa.**
-- **Retentativas de conexão** (com provedores, containers ou serviços).
+- **Retentativas de conexão** (com provedores, sandbox ou serviços).
 
 Os limites operacionais da Spec G5 (tokens, custo, duração, containers) hoje apenas **avisam**
 o pesquisador. Aqui eles passam a ser também **condições de parada** do ciclo. A unificação
@@ -88,7 +87,7 @@ entre avisos e limites de parada será definida na spec.
 ### 6. Fora do escopo deste ADR
 
 Ficam para as specs: o formato das mensagens entre agentes, o momento exato em que o Curator
-atua no ciclo, se ele roda em container ou como corrotina no orquestrador, qual modelo usa, e
+atua no ciclo, qual modelo usa, e
 os critérios para considerar que "uma solução foi encontrada". O modelo de dados do grafo
 continua fora do escopo, conforme o ADR 009.
 
@@ -106,10 +105,10 @@ não observa as decisões de caminho do Researcher.
 **Descartado porque:** o Researcher já é o papel mais carregado (planejamento, replanejamento,
 pesquisa técnica). Concentrar também a curadoria dificultaria controlar a qualidade do grafo.
 
-### Alternativa C: Comunicação direta entre agentes
+### Alternativa C: Comunicação direta entre agentes, sem mediação
 
-**Descartado porque:** exigiria rede entre containers, quebrando o isolamento e a
-rastreabilidade centralizada do orquestrador.
+**Descartado porque:** perderia a rastreabilidade centralizada do orquestrador e o controle
+dos limites de uso.
 
 ---
 
@@ -125,12 +124,12 @@ rastreabilidade centralizada do orquestrador.
 
 ### Negativas / Trade-offs
 
-- **Mais um papel** para manter, com prompt, testes e possivelmente container próprios.
+- **Mais um papel** para manter, com prompt e testes próprios.
 - **Mais chamadas LLM por sessão:** o Curator consome orçamento; os limites de uso precisam
   contabilizá-lo.
 - **Risco de loop improdutivo:** Curator e Researcher podem se realimentar sem progresso. Os
   limites de uso e o circuit breaker de progresso zero (V12.5.1) continuam necessários.
-- **Protocolo de IPC precisa crescer:** novos tipos de mensagem, com validação estrita.
+- **Novos tipos de mensagem entre agentes**, com validação estrita.
 
 ---
 

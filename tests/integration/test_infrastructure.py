@@ -21,10 +21,11 @@ async def test_qdrant_connectivity():
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(f"{QDRANT_URL}/healthz")
-            assert response.status_code == 200
-            assert response.text == "all good"
-    except Exception as e:
+    except httpx.HTTPError as e:
         pytest.skip(f"Qdrant não está rodando em {QDRANT_URL}: {e}")
+
+    # O corpo de /healthz varia entre versões ("all good", "healthz check passed"); só o status é contrato.
+    assert response.status_code == 200
 
 @pytest.mark.integration
 def test_docker_compose_structure():

@@ -27,6 +27,7 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 | [015](adr_015_modelo_dados_grafo_conhecimento.md) | Modelo de Dados do Grafo de Conhecimento e Ligação com Embeddings | 🔵 Proposto | 2026-09-28 |
 | [016](adr_016_imagem_postgres_apache_age_colacao.md) | Imagem do PostgreSQL para Apache AGE (musl → glibc) e Colação de Índices | 🔵 Proposto | 2026-09-29 |
 | [017](adr_017_catalogo_modelos_roteador.md) | Catálogo de Modelos e Roteador de Provedores por Papel | 🔵 Proposto | 2026-09-29 |
+| [018](adr_018_imagem_sandbox_enxuta_e_imagens_por_plataforma.md) | Imagem Enxuta do Sandbox de Código e Seleção de Imagens por Plataforma (registro de ideias) | 🔵 Proposto | 2026-09-29 |
 
 ---
 
@@ -87,6 +88,7 @@ ADR 010 (Propósito: Assistente de Pesquisa) ← define o escopo de tudo (substi
   │     ├── ADR 004 (IPC) ← como orquestrador e agentes se comunicam
   │     ├── ADR 007 (Papéis V14) ← como os papéis serão reestruturados
   │     └── ADR 014 (Agentes em Processo) ← agentes no host; só o código roda em sandbox (revisa 003/004)
+  │           └── ADR 018 (Imagem do Sandbox) ← sandbox enxuto, pacotes sob demanda, imagens por plataforma
   ├── ADR 005 (Persistência) ← onde o estado é guardado
   │     └── ADR 009 (Conhecimento Experimental) ← como a experiência de pesquisa é acumulada
   │           ├── ADR 015 (Modelo do Grafo) ← nós, relações, propriedades e embeddings

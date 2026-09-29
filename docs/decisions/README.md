@@ -96,6 +96,6 @@ ADR 010 (Propósito: Assistente de Pesquisa) ← define o escopo de tudo (substi
   │           ├── ADR 012 (Curator) ← quem registra o conhecimento e mantém a exploração
   │           └── ADR 013 (Federação) ← como o conhecimento é compartilhado entre nós (último)
   ├── ADR 011 (Provedores Agnósticos) ← quais modelos e embeddings são usados (substitui ADR 006)
-  ├── ADR 019 (Localidade e Proveniência) ← o que sai do nó e de onde vem cada número (após 017/018, antes de 013)
+  ├── ADR 019 (Localidade e Proveniência) ← o que sai do nó e de onde vem cada número (após a V18, antes da V19)
   └── ADR 008 (Manifest V13) ← como o contexto de código é persistido
 ```

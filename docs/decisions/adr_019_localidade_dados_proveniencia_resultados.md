@@ -3,7 +3,7 @@
 **Status:** Proposto
 **Data:** 2026-09-29
 **Autores:** Arquiteto de Soluções (GeminiClaw)
-**Roadmaps relacionados:** a definir — implementação depois das mudanças em andamento dos ADRs 017 e 018 e das specs V16–V18, e antes da federação (V20, ADR 013), da qual é pré-requisito
+**Roadmaps relacionados:** implementação depois da V18 (incluindo as mudanças em andamento dos ADRs 017 e 018) e **antes da V19** (`roadmaps/roadmap_V19.md`); é também pré-requisito da federação (V20, ADR 013)
 **ADRs relacionados:** ADR 009 e 015 (conhecimento), ADR 010 (propósito), ADR 011 (embeddings locais), ADR 012 (Curator), ADR 013 (federação), ADR 014 (sandbox), ADR 017 (catálogo e roteador), ADR 018 (imagem do sandbox)
 
 ---
@@ -111,9 +111,9 @@ protocolos) seguem a `LLM_DATA_POLICY` do ADR 017, como hoje.
 1. **O que pode ir a um modelo sem `aceita_dados_brutos`:** esquemas (colunas, tipos, unidades),
    metadados (tamanho, origem, formato), descritores de formato sem valores (ex.: "decimal com
    vírgula, separador `;`, codificação latin-1") e estatísticas agregadas (média, desvio,
-   contagens) sobre grupos com pelo menos **k** registros (`LOCALITY_MIN_GROUP_SIZE`, padrão 5;
-   valores menores, como 3, são aceitos para delineamentos com poucas réplicas e ficam
-   registrados). Abaixo de k, vão só contagem e tipo. **Mínimo, máximo e quantis são valores de
+   contagens) sobre grupos com pelo menos **k** registros (`LOCALITY_MIN_GROUP_SIZE`,
+   configurável e registrado na sessão; o valor padrão fica em aberto e será definido na
+   spec). Abaixo de k, vão só contagem e tipo. **Mínimo, máximo e quantis são valores de
    registros**: nunca vão exatos, em qualquer tamanho de grupo; no máximo como faixa
    arredondada. **Linhas, registros e pixels brutos, não.**
 2. **Modelo com `aceita_dados_brutos`** (no nó ou servidor próprio declarado) pode receber
@@ -144,7 +144,9 @@ protocolos) seguem a `LLM_DATA_POLICY` do ADR 017, como hoje.
    Só a camada de ingestão pode fazê-lo, e sob as regras acima. É uma restrição nova sobre o
    ADR 014 §3, que hoje permite ler qualquer arquivo do diretório da sessão.
 7. **Volume acumulado:** o egresso de saídas de execução por sessão tem limite configurável.
-   Por padrão, o limite só gera aviso ao pesquisador, como os limites da Spec G5.
+   Atingido o limite, a execução para de forma graciosa, como os demais limites de uso da V18,
+   e a pesquisa pode ser retomada. O pesquisador pode desligar o limite pelo modo sem limite
+   (§11).
 8. **Contaminação entre papéis:** o que um modelo com `aceita_dados_brutos` produz (código,
    comentários, respostas, contexto persistido da sessão) é tratado como **dado de pesquisa**.
    A camada de saída reaplica as regras deste parágrafo sobre o prompt inteiro, inclusive o
@@ -291,6 +293,28 @@ limites de segurança. Este ADR acrescenta duas regras:
 
 Nenhuma ferramenta desse tipo está implementada hoje.
 
+### 11. Limites de uso respeitados, com modo sem limite explícito
+
+Os limites de uso (V18: tokens, tempo, retentativas) e o limite de volume de egresso (§3.7)
+existem para que a pesquisa não gere custos além do planejado. Por padrão, **todos são
+condições de parada**.
+
+O pesquisador pode optar pelo **modo sem limite**, para que o sistema continue até encontrar um
+resultado:
+
+- A opção é **explícita** por sessão ou projeto e exige confirmação no início da execução.
+  Nunca é ativada por padrão nem por decisão de um agente.
+- Ela remove os limites de **tokens, tempo, custo e volume de egresso**. Os limites de
+  retentativas da mesma tarefa e de conexão continuam valendo, porque protegem contra laços
+  de falha, não contra custo.
+- A execução continua parando quando uma solução é encontrada ou quando não há mais caminhos
+  promissores (critérios de parada da V18), e o pesquisador pode interrompê-la a qualquer
+  momento sem perder o avanço.
+- O modo aparece no banner, no registro da sessão e no relatório. Tokens, custo e egresso
+  continuam registrados (§8), e o pesquisador é avisado periodicamente do consumo acumulado.
+- As regras de localidade (§3) **não** são afetadas: o modo sem limite remove limites de
+  quantidade, nunca as restrições sobre o que pode sair do nó.
+
 ---
 
 ## Impacto em ADRs e specs anteriores
@@ -311,9 +335,9 @@ ajustes abaixo:
 | `v16-research-assistant-prompts` | Developer imprime agregados; Summarizer e Curator escrevem referências e expressões (§2, §3.4). |
 | Spec G9 (`input_context/`) | Fim das amostras de linhas e de mínimo/máximo para modelos sem `aceita_dados_brutos`; tamanho mínimo de grupo; marcação de arquivos como compartilháveis ou como dados de pesquisa; visão passa pela camada de saída (§3). |
 | Spec G8 (relatório) | Renderização por referências e expressões; marcação de números não verificados; afirmações com status; ponta da cadeia e perfil de alocação no relatório. |
-| Spec G5 | Limite de volume de egresso ao lado dos demais avisos (§3.7). |
+| Spec G5 | Limite de volume de egresso como condição de parada, ao lado dos demais limites (§3.7). |
 | Spec G7 (V19.1), `roadmap_V19.md` | Somente leitura por padrão e confirmação humana para escrita em qualquer modo (§10), na revisão da G7 já prevista no roadmap. |
-| `v18-usage-limits` | Chamadas de verificação e métricas de custo no orçamento (§6, §8). |
+| `v18-usage-limits` | Chamadas de verificação e métricas de custo no orçamento (§6, §8); limite de egresso como condição de parada (§3.7); modo sem limite explícito, já que hoje `UsageBudget` exige todos os limites positivos (§11). |
 | `v18-research-continuity` | Ponta da cadeia e registros de término pendentes no `checkpoint.json` (§4); verificações pendentes retomadas (§6); marca de contaminação preservada no contexto retomado (§3.8); encerramento no checkpoint em modo `strict` (§7). |
 
 ---

@@ -28,6 +28,7 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 | [016](adr_016_imagem_postgres_apache_age_colacao.md) | Imagem do PostgreSQL para Apache AGE (musl → glibc) e Colação de Índices | 🔵 Proposto | 2026-09-29 |
 | [017](adr_017_catalogo_modelos_roteador.md) | Catálogo de Modelos e Roteador de Provedores por Papel | 🔵 Proposto | 2026-09-29 |
 | [018](adr_018_imagem_sandbox_enxuta_e_imagens_por_plataforma.md) | Imagem Enxuta do Sandbox de Código e Seleção de Imagens por Plataforma (registro de ideias) | 🔵 Proposto | 2026-09-29 |
+| [019](adr_019_localidade_dados_proveniencia_resultados.md) | Localidade dos Dados de Pesquisa e Proveniência dos Resultados | 🔵 Proposto | 2026-09-29 |
 
 ---
 
@@ -95,5 +96,6 @@ ADR 010 (Propósito: Assistente de Pesquisa) ← define o escopo de tudo (substi
   │           ├── ADR 012 (Curator) ← quem registra o conhecimento e mantém a exploração
   │           └── ADR 013 (Federação) ← como o conhecimento é compartilhado entre nós (último)
   ├── ADR 011 (Provedores Agnósticos) ← quais modelos e embeddings são usados (substitui ADR 006)
+  ├── ADR 019 (Localidade e Proveniência) ← o que sai do nó e de onde vem cada número (após 017/018, antes de 013)
   └── ADR 008 (Manifest V13) ← como o contexto de código é persistido
 ```

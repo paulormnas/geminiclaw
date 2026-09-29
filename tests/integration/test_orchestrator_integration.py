@@ -41,6 +41,7 @@ async def test_orchestrator_single_agent_flow() -> None:
             ipc=ipc,
             session_manager=session_manager,
             output_manager=output_manager,
+            agent_runtime_mode="container",
         )
 
         task = AgentTask(

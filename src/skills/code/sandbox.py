@@ -94,6 +94,41 @@ def _is_safe_tar_member(member: tarfile.TarInfo, dest: pathlib.Path) -> bool:
     return True
 
 
+def _purge_escaping_symlinks(root: pathlib.Path) -> list[str]:
+    """Remove de ``root`` os links simbólicos cujo alvo resolve para fora dele.
+
+    O ``/outputs`` do container é um bind mount de escrita da pasta da tarefa, então o
+    que o código gerado cria (inclusive symlinks para arquivos do host) aparece no host
+    imediatamente, sem passar pelo tar. Deixar esses links ali faria qualquer leitor do
+    host (manifest, leitor de relatórios, ingestão) seguir o link e ler fora da sessão.
+    Links que permanecem dentro de ``root`` são preservados.
+
+    Args:
+        root: Pasta da tarefa a varrer.
+
+    Returns:
+        Caminhos (relativos a ``root``) dos links removidos.
+    """
+    real_root = os.path.realpath(root)
+    removed: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        for name in [*dirnames, *filenames]:
+            path = os.path.join(dirpath, name)
+            if not os.path.islink(path):
+                continue
+            real = os.path.realpath(path)
+            if real == real_root or real.startswith(real_root + os.sep):
+                continue
+            os.unlink(path)
+            removed.append(os.path.relpath(path, root))
+    if removed:
+        logger.warning(
+            "Symlinks que apontavam para fora da pasta da tarefa foram removidos",
+            extra={"removed": removed},
+        )
+    return removed
+
+
 class PythonSandbox:
     """Implementa um sandbox seguro para execução de código Python via Docker."""
 
@@ -407,6 +442,11 @@ class PythonSandbox:
                     shutil.rmtree(extracted_path)
                 except:
                     extracted_path.rmdir()
+
+            try:
+                _purge_escaping_symlinks(abs_output_dir)
+            except OSError as e:
+                logger.warning(f"Falha ao varrer symlinks da pasta da tarefa: {e}")
 
             return SandboxResult(
                 stdout=stdout,

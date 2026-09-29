@@ -41,7 +41,7 @@ a `code`, e ela delega ao sandbox (requisito da spec atendido).
 |---|---|---|---|---|
 | F1 | Alta | I, E | Guard de SSRF do `web_reader` era lista de bloqueio e **deixava passar a faixa CGNAT `100.64.0.0/10`** (Tailscale). *Verificado* no Python 3.11.2 do Pi: `100.110.171.110` (IP Tailscale do próprio Pi) não era bloqueado. O Qdrant está publicado em `0.0.0.0:6333` sem autenticação, então um `web_reader` induzido por injeção de prompt lia coleções do Qdrant por esse IP. | **Corrigido** (`is_global`) |
 | F2 | Alta | D | `CodeSkill.run` chamava o sandbox síncrono **dentro da corrotina**, congelando o event loop do processo (todos os agentes, timeouts e Ctrl+C). Além disso, a instalação de pacotes (`uv pip install`, com rede) **não tinha timeout**: um mirror travado congelava o orquestrador indefinidamente. | **Corrigido** (`asyncio.to_thread` + `CODE_SANDBOX_SETUP_TIMEOUT_SECONDS`) |
-| F3 | Média | T, E | O tar devolvido pelo container era extraído sem filtro e o host executava `os.chmod` seguindo symlinks. Código no sandbox podia criar um symlink para um arquivo do host e fazê-lo virar `0666`. *Verificado* com experimento: `600` → `666` no alvo fora da sessão. | **Corrigido** (filtro de membros do tar; `chmod` ignora symlinks) |
+| F3 | Média | T, E, I | O tar devolvido pelo container era extraído sem filtro e o host executava `os.chmod` seguindo symlinks: código no sandbox criava um symlink para um arquivo do host e o fazia virar `0666` (*verificado* com experimento: `600` → `666` no alvo fora da sessão). Além disso, o `/outputs` é um **bind mount de escrita**, então os symlinks criados no container aparecem direto na pasta do host e ficavam ali para qualquer leitor do host seguir (*verificado* no sandbox real do Pi). | **Corrigido** (filtro de membros do tar; `chmod` ignora symlinks; varredura pós-execução remove symlinks que apontam para fora da pasta da tarefa) |
 | F4 | Alta (latente) | I | `document_processor.ingest` aceitava **qualquer caminho** vindo do LLM (`os.path.exists` apenas): leitura de `.env`, chaves privadas, `/etc/*` e indexação do conteúdo. | **Mitigado** (confinado a `input_snapshot/` e `artifacts/` da sessão, com symlinks resolvidos) |
 | F4b | Média | (funcional) | `DocumentProcessorSkill` não implementa `run` (abstrato em `BaseSkill`): a instanciação falha e `_safe_register` só loga. **A skill nunca é registrada**, mesmo com `SKILL_DOCUMENT_PROCESSOR_ENABLED=true`. Por isso F4 é latente. | Pendente (fora do escopo; a skill precisa ser concluída antes de ser habilitada) |
 | F5 | Média | I, T | Qdrant publicado em `0.0.0.0:6333/6334` sem autenticação; PostgreSQL com senha padrão `geminiclaw_secret` no compose quando `POSTGRES_PASSWORD` não é definida. | Pendente, decisão do pesquisador (ver ADR 018) |
@@ -90,7 +90,7 @@ a `code`, e ela delega ao sandbox (requisito da spec atendido).
 - [x] Timeout da execução do script
 - [x] Timeout da instalação de pacotes (F2)
 - [x] Sandbox fora do event loop (F2)
-- [x] Retorno de artefatos filtrado e sem seguir links (F3)
+- [x] Retorno de artefatos filtrado, sem seguir links, e symlinks para fora removidos da pasta da tarefa (F3)
 - [x] Limites de memória e CPU do container
 - [ ] Usuário não-root (F6)
 - [ ] Rede desligada durante a execução do script (F6)

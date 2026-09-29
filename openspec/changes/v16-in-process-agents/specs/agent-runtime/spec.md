@@ -133,8 +133,14 @@ da tarefa, e MUST NOT alterar permissões de arquivos fora dela.
 
 #### Scenario: Symlink para arquivo do host
 - **GIVEN** código no sandbox que cria um link simbólico para um arquivo do host
-- **WHEN** os artefatos são extraídos
-- **THEN** o link não é criado e as permissões do arquivo do host permanecem inalteradas
+- **WHEN** a execução termina e os artefatos são extraídos
+- **THEN** o link não existe mais na pasta da tarefa (mesmo tendo sido criado pelo bind mount)
+- **AND** as permissões do arquivo do host permanecem inalteradas
+
+#### Scenario: Symlink interno à pasta da tarefa
+- **GIVEN** um link simbólico cujo alvo está dentro da própria pasta da tarefa
+- **WHEN** a execução termina
+- **THEN** o link é preservado
 
 #### Scenario: Caminho fora da pasta
 - **GIVEN** um membro do tar com caminho absoluto ou `../`

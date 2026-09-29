@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.skills.code.sandbox import PythonSandbox, _is_safe_tar_member
+from src.skills.code.sandbox import PythonSandbox, _is_safe_tar_member, _purge_escaping_symlinks
 
 
 @pytest.fixture
@@ -130,6 +130,54 @@ class TestRunDoesNotTouchFilesOutsideSession:
         assert not (task_dir / "ataque").exists()
         assert (task_dir / "legitimo.txt").read_text() == "ok"
         assert "legitimo.txt" in result.artifacts
+
+
+@pytest.mark.unit
+class TestPurgeEscapingSymlinks:
+    def test_removes_only_links_that_leave_the_task_dir(self, tmp_path: Path) -> None:
+        task = tmp_path / "tarefa"
+        (task / "sub").mkdir(parents=True)
+        outside = tmp_path / "host.txt"
+        outside.write_text("segredo")
+        (task / "real.txt").write_text("ok")
+        (task / "sub" / "interno").symlink_to(task / "real.txt")  # fica dentro: preservado
+        (task / "ataque").symlink_to(outside)  # arquivo do host
+        (task / "sub" / "sobe").symlink_to("../../host.txt")  # relativo que escapa
+        (task / "dir_ataque").symlink_to(tmp_path)  # diretório fora da tarefa
+
+        removed = _purge_escaping_symlinks(task)
+
+        assert sorted(removed) == ["ataque", "dir_ataque", os.path.join("sub", "sobe")]
+        assert (task / "sub" / "interno").is_symlink()
+        assert (task / "real.txt").read_text() == "ok"
+        assert outside.read_text() == "segredo"
+
+    def test_run_removes_symlink_created_through_the_bind_mount(
+        self, sandbox: PythonSandbox, tmp_path: Path
+    ) -> None:
+        """O container escreve direto na pasta do host (bind mount), sem passar pelo tar."""
+        outside = tmp_path / "host_secret.txt"
+        outside.write_text("segredo")
+        outside.chmod(0o600)
+        task_dir = tmp_path / "out" / "s" / "t"
+
+        container = MagicMock()
+
+        def run_container(**kwargs):
+            (task_dir / "ataque").symlink_to(outside)  # o que o código no container faria
+            (task_dir / "legitimo.txt").write_text("ok")
+            return container
+
+        sandbox.client.containers.run.side_effect = run_container
+        container.exec_run.return_value = MagicMock(output=(b"", b""), exit_code=0)
+        container.get_archive.side_effect = RuntimeError("sem tar neste teste")
+
+        result = sandbox.run(code="pass", session_id="s", task_name="t", output_dir=str(tmp_path / "out"))
+
+        assert not (task_dir / "ataque").is_symlink()
+        assert (task_dir / "legitimo.txt").read_text() == "ok"
+        assert stat.S_IMODE(os.stat(outside).st_mode) == 0o600
+        assert "ataque" not in result.artifacts
 
 
 @pytest.mark.unit

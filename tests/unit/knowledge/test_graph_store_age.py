@@ -14,7 +14,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.knowledge.errors import DisallowedRelationError, InvalidEnumValueError, NodeNotFoundError, UnknownLabelError
+from src.knowledge.errors import (
+    DisallowedRelationError,
+    InvalidEnumValueError,
+    NodeNotFoundError,
+    UnknownLabelError,
+    UnknownPropertyError,
+)
 from src.knowledge.graph_store import AgeGraphStore, Node
 from src.knowledge.provenance import Actor
 
@@ -69,6 +75,40 @@ class TestCreateNodeValidatesBeforeDb:
         cypher_body, params = mock_run.call_args[0]
         assert payload not in cypher_body
         assert params["props"]["titulo"] == payload
+
+
+@pytest.mark.unit
+class TestFindNodesValidatesBeforeDb:
+    """PR #64 review, achado 'Importante': find_nodes interpola as CHAVES de
+    ``filters`` como identificadores Cypher (``n.{key} = $filters.{key}``).
+    ``validate_node_filter_keys`` deve rodar antes de montar/enviar qualquer
+    Cypher, recusando chaves fora do schema do rótulo.
+    """
+
+    def test_chave_de_filtro_desconhecida_nao_chama_banco(self):
+        store = _make_store()
+        with patch.object(store, "_run_cypher") as mock_run:
+            with pytest.raises(UnknownPropertyError):
+                store.find_nodes("Projeto", {"campo_invalido": 1})
+        mock_run.assert_not_called()
+
+    def test_chave_forjada_para_injecao_nao_chama_banco(self):
+        """Uma chave de filtro com sintaxe Cypher embutida também é recusada antes do banco."""
+        store = _make_store()
+        payload = "titulo = 'x' OR 1=1 // "
+        with patch.object(store, "_run_cypher") as mock_run:
+            with pytest.raises(UnknownPropertyError):
+                store.find_nodes("Projeto", {payload: "y"})
+        mock_run.assert_not_called()
+
+    def test_filtro_com_chaves_conhecidas_so_interpola_nomes_validos(self):
+        """Chaves conhecidas do schema podem compor o corpo Cypher; valores vão só por parâmetro."""
+        store = _make_store()
+        with patch.object(store, "_run_cypher", return_value=[]) as mock_run:
+            store.find_nodes("Projeto", {"status": "ativo"})
+        cypher_body, params = mock_run.call_args[0]
+        assert "n.status = $filters.status" in cypher_body
+        assert params["filters"]["status"] == "ativo"
 
 
 @pytest.mark.unit

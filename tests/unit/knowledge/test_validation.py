@@ -126,6 +126,42 @@ class TestValidateNodeUpdate:
 
 
 @pytest.mark.unit
+class TestValidateNodeFilterKeys:
+    """PR #64 review, achado 'Importante': find_nodes interpola chaves de filtro
+    como identificadores Cypher (``n.{key} = $filters.{key}``) sem checar o
+    schema. ``validate_node_filter_keys`` deve recusar qualquer chave que não
+    seja propriedade conhecida (comum ou específica) do rótulo, antes de
+    qualquer interpolação.
+    """
+
+    def test_rotulo_desconhecido(self):
+        with pytest.raises(UnknownLabelError):
+            validation.validate_node_filter_keys("Pessoa", {"status": "ativo"})
+
+    def test_chave_de_filtro_desconhecida_e_recusada(self):
+        with pytest.raises(UnknownPropertyError) as exc_info:
+            validation.validate_node_filter_keys("Projeto", {"status": "ativo", "campo_invalido": 1})
+        assert exc_info.value.prop == "campo_invalido"
+
+    def test_chave_com_tentativa_de_injecao_cypher_e_recusada(self):
+        """Uma chave forjada para escapar da interpolação também é apenas 'desconhecida'."""
+        payload = "titulo = 'x' OR 1=1 //"
+        with pytest.raises(UnknownPropertyError) as exc_info:
+            validation.validate_node_filter_keys("Projeto", {payload: "y"})
+        assert exc_info.value.prop == payload
+
+    def test_filtro_vazio_passa(self):
+        validation.validate_node_filter_keys("Projeto", {})
+
+    def test_chave_de_propriedade_especifica_valida_passa(self):
+        validation.validate_node_filter_keys("Projeto", {"status": "ativo"})
+
+    def test_chave_de_propriedade_comum_valida_passa(self):
+        """Propriedades comuns (ex.: 'projeto_id') também são filtros válidos."""
+        validation.validate_node_filter_keys("Projeto", {"projeto_id": "p1"})
+
+
+@pytest.mark.unit
 class TestValidateEdgeWrite:
     _COMMON_EDGE = {
         "criado_em": "2026-01-01T00:00:00Z",

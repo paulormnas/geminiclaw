@@ -16,8 +16,9 @@ Uso::
 
 from __future__ import annotations
 
-from psycopg_pool import ConnectionPool
+from psycopg.errors import UndefinedFile
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
 from src.logger import get_logger
 
@@ -39,13 +40,24 @@ def _configure_age_session(conn) -> None:
     desta mudança), a falha é registrada e ignorada: o restante do projeto
     continua funcionando normalmente sem o grafo de conhecimento.
 
+    Apenas ``psycopg.errors.UndefinedFile`` (SQLSTATE ``58P01`` — "could not
+    access file", o erro que o PostgreSQL emite quando ``LOAD 'age'`` não
+    encontra a biblioteca compartilhada da extensão) é tratado como "extensão
+    ainda não instalada". Qualquer outra falha (permissão, conectividade,
+    erro de sintaxe, etc.) é propagada — mascará-la aqui esconderia problemas
+    reais em toda conexão do pool (AGENTS.md §1.6, fail-fast).
+
     Args:
         conn: Conexão recém-aberta pelo ``ConnectionPool``.
+
+    Raises:
+        psycopg.Error: Qualquer falha de configuração que não seja a
+            extensão ``age`` ausente é propagada sem tratamento.
     """
     try:
         conn.execute("LOAD 'age'")
         conn.execute('SET search_path = ag_catalog, "$user", public')
-    except Exception as exc:  # extensão ainda não instalada — grafo é opcional até a migração
+    except UndefinedFile as exc:  # extensão ainda não instalada — grafo é opcional até a migração
         conn.rollback()
         logger.debug(
             "Extensão Apache AGE indisponível nesta conexão (grafo de conhecimento desativado).",

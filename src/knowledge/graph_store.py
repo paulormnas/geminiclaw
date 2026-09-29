@@ -353,6 +353,9 @@ class InMemoryGraphStore(GraphStore):
         return self._nodes.get(node_id)
 
     def find_nodes(self, label: str, filters: dict[str, Any], limit: int = 50) -> list[Node]:
+        # Paridade com AgeGraphStore.find_nodes: mesma validação de rótulo/chaves,
+        # ainda que InMemoryGraphStore não interpole nada em Cypher.
+        validation.validate_node_filter_keys(label, filters)
         results = []
         for node in self._nodes.values():
             if node.label != label:
@@ -687,10 +690,12 @@ class AgeGraphStore(GraphStore):
         return self._node_from_agtype(results[0])
 
     def find_nodes(self, label: str, filters: dict[str, Any], limit: int = 50) -> list[Node]:
-        validation.validate_label(label)
-        # Construímos igualdade por campo (AND) — nomes de campo vêm de `filters.keys()`,
-        # informados pelo chamador interno (nunca texto livre de usuário); ainda assim só os
-        # NOMES são interpolados, os valores sempre viajam pelo parâmetro agtype `$filters`.
+        # `validate_node_filter_keys` checa `label` e as CHAVES de `filters` contra o
+        # schema do rótulo antes de qualquer interpolação — os nomes de campo são
+        # interpolados como identificadores Cypher abaixo (os valores sempre viajam
+        # pelo parâmetro agtype `$filters`), então só chaves conhecidas do schema
+        # podem chegar até a montagem da string (PR #64 review, achado "Importante").
+        validation.validate_node_filter_keys(label, filters)
         if filters:
             conditions = " AND ".join(f"n.{key} = $filters.{key}" for key in filters)
             cypher_body = f"MATCH (n:{label}) WHERE {conditions} RETURN n LIMIT $limit"

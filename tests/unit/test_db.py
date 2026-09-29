@@ -117,6 +117,65 @@ class TestClosePool:
 
 
 @pytest.mark.unit
+class TestConfigureAgeSession:
+    """Testes para ``_configure_age_session`` (PR #64 review, achado 'Importante').
+
+    A exceção capturada deve ser restrita a ``psycopg.errors.UndefinedFile``
+    (extensão AGE ainda não instalada — ``LOAD 'age'`` não encontra a
+    biblioteca compartilhada). Qualquer outra falha deve propagar, sem ser
+    mascarada como "grafo opcional".
+    """
+
+    def test_sucesso_carrega_age_e_ajusta_search_path(self):
+        """Caminho feliz: LOAD e SET search_path executam sem exceção."""
+        from src.db import _configure_age_session
+
+        mock_conn = MagicMock()
+        _configure_age_session(mock_conn)
+
+        mock_conn.execute.assert_any_call("LOAD 'age'")
+        mock_conn.execute.assert_any_call('SET search_path = ag_catalog, "$user", public')
+        mock_conn.rollback.assert_not_called()
+
+    def test_extensao_ausente_e_ignorada_silenciosamente(self):
+        """UndefinedFile (extensão AGE não instalada) é registrado e engolido."""
+        from psycopg.errors import UndefinedFile
+
+        from src.db import _configure_age_session
+
+        mock_conn = MagicMock()
+        mock_conn.execute.side_effect = UndefinedFile(
+            'could not access file "$libdir/age": No such file or directory'
+        )
+
+        _configure_age_session(mock_conn)  # não deve levantar
+
+        mock_conn.rollback.assert_called_once()
+
+    def test_outra_falha_de_psycopg_e_propagada(self):
+        """Uma falha real de conectividade/permissão não deve ser mascarada (fail-fast)."""
+        from psycopg.errors import InsufficientPrivilege
+
+        from src.db import _configure_age_session
+
+        mock_conn = MagicMock()
+        mock_conn.execute.side_effect = InsufficientPrivilege("permission denied for database")
+
+        with pytest.raises(InsufficientPrivilege):
+            _configure_age_session(mock_conn)
+
+    def test_excecao_generica_nao_relacionada_a_psycopg_e_propagada(self):
+        """Um erro que não seja de banco (ex.: bug de programação) também deve propagar."""
+        from src.db import _configure_age_session
+
+        mock_conn = MagicMock()
+        mock_conn.execute.side_effect = RuntimeError("erro inesperado, não relacionado ao AGE")
+
+        with pytest.raises(RuntimeError):
+            _configure_age_session(mock_conn)
+
+
+@pytest.mark.unit
 class TestGetConnection:
     """Testes para a função get_connection()."""
 

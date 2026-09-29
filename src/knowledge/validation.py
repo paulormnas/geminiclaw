@@ -148,6 +148,36 @@ def validate_node_update(label: str, changes: dict[str, object]) -> None:
             raise InvalidEnumValueError(label, field_name, value, prop_schema.enum)
 
 
+def validate_node_filter_keys(label: str, filters: dict[str, object]) -> NodeSchema:
+    """Garante que as chaves de ``filters`` (``GraphStore.find_nodes``) são propriedades conhecidas.
+
+    ``find_nodes`` interpola os *nomes* das chaves de ``filters`` como
+    identificadores de propriedade Cypher (``n.{key} = $filters.{key}``) —
+    os valores sempre viajam por parâmetro, mas os nomes não. Esta validação
+    é o que impede que uma chave arbitrária injete sintaxe Cypher no texto
+    da consulta: ela é checada contra o mesmo schema declarativo usado para
+    validar escritas, antes de qualquer interpolação.
+
+    Args:
+        label: Rótulo do nó sendo buscado.
+        filters: Mapa propriedade → valor exigido, informado pelo chamador.
+
+    Returns:
+        O ``NodeSchema`` correspondente ao rótulo.
+
+    Raises:
+        UnknownLabelError: Rótulo desconhecido.
+        UnknownPropertyError: Alguma chave de ``filters`` não é uma
+            propriedade conhecida (comum ou específica) do rótulo.
+    """
+    node_schema = validate_label(label)
+    known_names = set(schema.COMMON_NODE_PROPERTIES) | set(node_schema.properties)
+    unknown = set(filters) - known_names
+    if unknown:
+        raise UnknownPropertyError(label, sorted(unknown)[0])
+    return node_schema
+
+
 def validate_edge_write(
     src_label: str,
     rel_type: str,

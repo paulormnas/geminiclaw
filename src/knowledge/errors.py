@@ -90,12 +90,13 @@ class NodeNotFoundError(GraphStoreError):
 
 
 class ReadOnlyQueryViolation(GraphStoreError):
-    """Consulta livre (``read_query``) contém operação de escrita proibida."""
+    """Consulta livre (``read_query``) contém operação de escrita ou token proibido."""
 
     def __init__(self, keyword: str) -> None:
         super().__init__(
-            f"Consulta livre recusada: contém palavra-chave de escrita '{keyword}'. "
-            "read_query aceita apenas leitura."
+            f"Consulta livre recusada: contém token proibido '{keyword}'. "
+            "read_query aceita apenas leitura e não permite o literal '$$' (fecharia o "
+            "dollar-quote SQL usado para encapsular a consulta)."
         )
         self.keyword = keyword
 

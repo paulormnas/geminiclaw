@@ -10,6 +10,11 @@
 > implementação, não tem OpenSpec associado e não deve ser tratado como decisão fechada. A
 > discussão fica para depois que a segunda onda de implementação do ADR 014 for concluída.
 
+> **Atualização 2026-09-29 (Qdrant):** o item 4 foi resolvido e implementado no PR #74. A imagem
+> oficial `qdrant/qdrant:v1.19.1` roda no Raspberry Pi 5 com o kernel padrão (páginas de 16K), o
+> `Dockerfile.qdrant` foi removido e o Qdrant deixou de ser compilado. Os demais itens seguem
+> como ideias em aberto.
+
 ---
 
 ## Contexto
@@ -28,8 +33,9 @@ de container ainda reflete o modelo anterior:
   `docker.sock` montado) deixa de fazer sentido.
 - O `docker-compose.yml` publica o Qdrant em `0.0.0.0` e usa a rede `geminiclaw-net`, criada
   para os containers de agente.
-- O `Dockerfile.qdrant` compila o Qdrant do código-fonte (Rust), porque uma imagem pré-compilada
-  testada meses atrás **não funcionou no Raspberry Pi**. Esse build é lento e pesado no Pi.
+- *(Resolvido no PR #74.)* O `Dockerfile.qdrant` compilava o Qdrant do código-fonte (Rust), porque
+  uma imagem pré-compilada testada meses atrás **não funcionou no Raspberry Pi**. A compilação
+  derrubava o Pi (memória/temperatura) e o arquivo foi removido.
 - Não há hoje uma forma única de descobrir a plataforma em que o projeto roda (macOS/ARM64 em
   desenvolvimento, Raspberry Pi 5/ARM64, x86_64) e obter as imagens corretas para ela. Os
   Dockerfiles fixam `--platform=linux/arm64`.
@@ -68,13 +74,21 @@ de container ainda reflete o modelo anterior:
 - Em aberto: como conciliar a montagem com um usuário não-root (propriedade e permissões sem
   `chmod 777`), e como confinar a montagem ao diretório da sessão.
 
-### 4. Qdrant em ARM64
+### 4. Qdrant em ARM64 — resolvido (PR #74)
 
-- A imagem pré-compilada do Qdrant falhou no Raspberry Pi meses atrás; por isso o projeto
-  compila do código-fonte. É possível que as versões atuais já tenham suporte estável a ARM64.
-- Ideia: **reavaliar a imagem oficial do Qdrant** no Raspberry Pi 5 e, se funcionar, abandonar o
-  `Dockerfile.qdrant` e o build em Rust. Se continuar falhando, registrar o motivo (versão,
-  tamanho de página do kernel, erro observado) para embasar a manutenção do build próprio.
+- A imagem pré-compilada falhava no Raspberry Pi por causa do jemalloc: o kernel padrão do Pi 5
+  usa páginas de 16K e o jemalloc das versões relatadas nos issues (1.7.4, 1.11.4 e o `latest` de
+  fev/2025) abortava com `<jemalloc>: Unsupported system page size` (issues
+  [#5952](https://github.com/qdrant/qdrant/issues/5952) e
+  [#7246](https://github.com/qdrant/qdrant/issues/7246) do Qdrant). Não foi verificado em qual
+  release exata o problema deixou de ocorrer; as notas da 1.19.1 não o mencionam.
+- Validado em 2026-09-29: `qdrant/qdrant:v1.19.1` sobe no Pi 5 com o kernel padrão
+  (`getconf PAGESIZE` = 16384, kernel `6.12.109+rpt-rpi-2712`), sem trocar para o kernel de 4K.
+  O serviço fica `healthy` em cerca de 10 s e os testes de integração do Qdrant passam.
+- Decisão aplicada: o compose usa a imagem oficial (sobrescrevível por `QDRANT_IMAGE`), o
+  `qdrant-client` foi alinhado à 1.19.1 e o `Dockerfile.qdrant` foi removido.
+- Se uma versão futura voltar a falhar no Pi, o caminho de contingência é compilar com
+  `JEMALLOC_SYS_WITH_LG_PAGE=16` (aceita páginas de 4K a 64K), de preferência fora do Pi.
 - Precedente: o ADR 016 adota a imagem oficial `apache/age` justamente por ter suporte a ARM64.
 
 ### 5. Script de identificação de plataforma e seleção de imagens
@@ -115,7 +129,8 @@ Observados no código durante o levantamento; não são decisões:
   embeddings), contra uma imagem mínima com instalação sob demanda.
 - Imagens do sandbox por perfil de experimento (dados, visão computacional, texto), contra um
   único ambiente com pacotes instalados na hora.
-- Manter o build do Qdrant a partir do código-fonte contra adotar a imagem oficial.
+- ~~Manter o build do Qdrant a partir do código-fonte contra adotar a imagem oficial.~~ Resolvido:
+  imagem oficial adotada (PR #74).
 - Descoberta de plataforma por script de shell contra um utilitário Python (`uv run`), em
   coerência com a regra de que scripts do projeto são Python.
 
@@ -128,7 +143,7 @@ Observados no código durante o levantamento; não são decisões:
   cache.
 - O sandbox ganha rede para instalar pacotes, o que amplia a superfície de risco (o código gerado
   poderia acessar a internet); a mitigação precisa ser definida na revisão de segurança.
-- Menos arquivos a manter: saem os Dockerfiles de agente, o de `slim` e possivelmente o do Qdrant.
+- Menos arquivos a manter: saem os Dockerfiles de agente e o de `slim` (o do Qdrant já saiu no PR #74).
 
 ---
 

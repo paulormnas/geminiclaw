@@ -29,12 +29,37 @@ class PythonSandbox:
         cpu_quota: float = 0.5,
         timeout: int = 60,
     ):
-        self.client = docker.from_env(timeout=300)
+        self._client: Optional["docker.DockerClient"] = None
         self.image = image
         self.memory_limit = memory_limit
         self.cpu_period = 100000
         self.cpu_quota = int(cpu_quota * self.cpu_period)
         self.timeout = timeout
+
+    @property
+    def client(self) -> "docker.DockerClient":
+        """Cliente Docker, conectado sob demanda (lazy).
+
+        Registrar ``CodeSkill`` (e, portanto, expor a ferramenta
+        ``python_interpreter`` ao agente) não deveria exigir um daemon Docker
+        já respondendo — só a execução de fato (``run()``) precisa dele. Antes,
+        ``docker.from_env()`` era chamado em ``__init__``, então qualquer
+        processo sem o daemon acessível (ex.: suíte de testes unitários, ou o
+        orquestrador iniciando antes do Docker subir) fazia
+        ``SkillRegistry._safe_register`` engolir a exceção e nunca registrar a
+        skill — o Developer Agent perdia silenciosamente sua única ferramenta
+        de execução de código. Adiando a conexão para o primeiro uso real, o
+        registro sempre sucede; falhas de conectividade continuam sendo
+        capturadas (e reportadas como ``SandboxResult`` de erro) dentro de
+        ``run()``, como qualquer outro erro de execução.
+
+        Returns:
+            Cliente Docker conectado (``docker.from_env``), memoizado após a
+            primeira chamada.
+        """
+        if self._client is None:
+            self._client = docker.from_env(timeout=300)
+        return self._client
 
     def _create_tar_archive(self, files: Dict[str, str]) -> bytes:
         """Cria um arquivo tar em memória contendo os arquivos especificados.

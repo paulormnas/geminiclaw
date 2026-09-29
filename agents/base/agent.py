@@ -113,7 +113,7 @@ _INSTRUCTION_TEMPLATE = (
     "- Antes de criar um arquivo, verifique os artefatos já disponíveis no [CONTEXTO DO WORKSPACE] injetado no prompt.\n"
     "- Para instalar dependências Python, use EXCLUSIVAMENTE o parâmetro `packages` da ferramenta "
     "`python_interpreter` (a instalação ocorre no sandbox, fora do código gerado). "
-    "Nunca use `subprocess` para instalar pacotes.\n\n"
+    "Nunca instale pacotes chamando o sistema operacional diretamente a partir do código gerado.\n\n"
     "Se não souber responder ou os dados forem insuficientes, declare claramente a limitação."
 )
 AGENT_INSTRUCTION = render_instruction(_INSTRUCTION_TEMPLATE)

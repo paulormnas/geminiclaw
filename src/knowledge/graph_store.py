@@ -489,6 +489,7 @@ class AgeGraphStore(GraphStore):
                 conn.execute("LOAD 'age'")
                 conn.execute('SET search_path = ag_catalog, "$user", public')
                 conn.execute(f"SET statement_timeout = {timeout_ms}")
+                conn.commit()  # o pool exige a conexão fora de transação após configure
 
             self._reader_pool = ConnectionPool(
                 conninfo=self._reader_conninfo,
@@ -753,11 +754,11 @@ class AgeGraphStore(GraphStore):
         rel_pattern = f":{'|'.join(rel_types)}" if rel_types else ""
 
         if direction == "out":
-            pattern = f"(n)-[r{rel_pattern}*1..{int(depth)}]->(m)"
+            pattern = f"-[r{rel_pattern}*1..{int(depth)}]->(m)"
         elif direction == "in":
-            pattern = f"(n)<-[r{rel_pattern}*1..{int(depth)}]-(m)"
+            pattern = f"<-[r{rel_pattern}*1..{int(depth)}]-(m)"
         else:
-            pattern = f"(n)-[r{rel_pattern}*1..{int(depth)}]-(m)"
+            pattern = f"-[r{rel_pattern}*1..{int(depth)}]-(m)"
 
         # Para saltos únicos (depth=1, o caso comum), pedimos o triplo (a relação e os
         # dois vértices adjacentes) em uma única consulta — isso permite resolver o
@@ -771,8 +772,9 @@ class AgeGraphStore(GraphStore):
         nodes_by_domain_id = {node.id: node for node in nodes}
 
         rel_pattern_edges = f":{'|'.join(rel_types)}" if rel_types else ""
+        edge_left, edge_right = {"out": ("-", "->"), "in": ("<-", "-"), "both": ("-", "-")}[direction]
         edge_cypher = (
-            f"MATCH (n {{id: $id}})-[rel{rel_pattern_edges}*1..{int(depth)}]-(x) "
+            f"MATCH (n {{id: $id}}){edge_left}[rel{rel_pattern_edges}*1..{int(depth)}]{edge_right}(x) "
             "UNWIND rel AS one_rel "
             "WITH one_rel, startNode(one_rel) AS a, endNode(one_rel) AS b "
             "RETURN DISTINCT a, one_rel, b"

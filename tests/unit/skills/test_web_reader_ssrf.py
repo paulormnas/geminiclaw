@@ -175,3 +175,44 @@ class TestGuardedGetPinsResolvedIpAgainstRebinding:
             async with httpx.AsyncClient(transport=transport) as client:
                 with pytest.raises(WebReaderBlockedError):
                     await guarded_get(client, "http://public.example.com/start")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+class TestResolveAndCheckHostAllowlist:
+    """O guard é uma lista de permissão (`is_global`), não uma lista de bloqueio.
+
+    Revisão de segurança STRIDE (v16-in-process-agents, 6.1): a faixa CGNAT
+    100.64.0.0/10 — usada pelo Tailscale, inclusive no IP do próprio Raspberry Pi —
+    passava pelo guard antigo.
+    """
+
+    @pytest.mark.parametrize(
+        "address",
+        [
+            "100.64.0.1",  # início da faixa CGNAT
+            "100.110.171.110",  # IP Tailscale típico
+            "100.127.255.254",  # fim da faixa CGNAT
+            "::ffff:127.0.0.1",  # IPv4 loopback embutido em IPv6
+            "::ffff:10.0.0.5",  # IPv4 privado embutido em IPv6
+            "::ffff:100.64.0.1",  # CGNAT embutido em IPv6
+            "192.0.2.10",  # TEST-NET-1 (não roteável globalmente)
+            "fd00::1",  # ULA IPv6
+        ],
+    )
+    async def test_non_global_addresses_are_blocked(self, address: str) -> None:
+        reason = await resolve_and_check_host(address)
+        assert reason is not None, f"{address} deveria ser bloqueado"
+
+    async def test_domain_resolving_to_cgnat_is_blocked(self) -> None:
+        fake_infos = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("100.110.171.110", 0))]
+        with patch("socket.getaddrinfo", return_value=fake_infos):
+            reason = await resolve_and_check_host("meu-pi.tailnet.example")
+        assert reason is not None
+        assert "100.110.171.110" in reason
+
+    async def test_global_ipv6_is_not_blocked(self) -> None:
+        fake_infos = [(socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("2606:4700:4700::1111", 0, 0, 0))]
+        with patch("socket.getaddrinfo", return_value=fake_infos):
+            reason = await resolve_and_check_host("one.one.one.one")
+        assert reason is None

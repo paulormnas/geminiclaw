@@ -50,6 +50,85 @@ class SandboxResult:
     artifacts: List[str] = field(default_factory=list)
     timed_out: bool = False
 
+def _is_safe_tar_member(member: tarfile.TarInfo, dest: pathlib.Path) -> bool:
+    """Indica se um membro do tar do sandbox pode ser extraído com segurança em ``dest``.
+
+    Recusa caminhos absolutos ou que escapam de ``dest``, links (simbólicos ou físicos)
+    cujo alvo escapa de ``dest`` e tipos especiais (dispositivos, FIFOs). Os membros
+    recusados são registrados e ignorados; os demais artefatos seguem sendo extraídos.
+
+    Args:
+        member: Membro do tar retornado pelo ``get_archive`` do container.
+        dest: Diretório de destino da extração.
+
+    Returns:
+        ``True`` se o membro deve ser extraído.
+    """
+    root = os.path.realpath(dest)
+
+    def inside(path: str) -> bool:
+        real = os.path.realpath(path)
+        return real == root or real.startswith(root + os.sep)
+
+    reason = None
+    if not (member.isreg() or member.isdir() or member.issym() or member.islnk()):
+        reason = "tipo de arquivo não permitido"
+    elif os.path.isabs(member.name) or not inside(os.path.join(root, member.name)):
+        reason = "caminho fora do destino"
+    elif member.issym():
+        target = member.linkname if os.path.isabs(member.linkname) else os.path.join(
+            os.path.dirname(os.path.join(root, member.name)), member.linkname
+        )
+        if os.path.isabs(member.linkname) or not inside(target):
+            reason = "link simbólico para fora do destino"
+    elif member.islnk():
+        if os.path.isabs(member.linkname) or not inside(os.path.join(root, member.linkname)):
+            reason = "link físico para fora do destino"
+
+    if reason:
+        logger.warning(
+            "Membro do tar do sandbox ignorado",
+            extra={"member": member.name, "reason": reason},
+        )
+        return False
+    return True
+
+
+def _purge_escaping_symlinks(root: pathlib.Path) -> list[str]:
+    """Remove de ``root`` os links simbólicos cujo alvo resolve para fora dele.
+
+    O ``/outputs`` do container é um bind mount de escrita da pasta da tarefa, então o
+    que o código gerado cria (inclusive symlinks para arquivos do host) aparece no host
+    imediatamente, sem passar pelo tar. Deixar esses links ali faria qualquer leitor do
+    host (manifest, leitor de relatórios, ingestão) seguir o link e ler fora da sessão.
+    Links que permanecem dentro de ``root`` são preservados.
+
+    Args:
+        root: Pasta da tarefa a varrer.
+
+    Returns:
+        Caminhos (relativos a ``root``) dos links removidos.
+    """
+    real_root = os.path.realpath(root)
+    removed: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        for name in [*dirnames, *filenames]:
+            path = os.path.join(dirpath, name)
+            if not os.path.islink(path):
+                continue
+            real = os.path.realpath(path)
+            if real == real_root or real.startswith(real_root + os.sep):
+                continue
+            os.unlink(path)
+            removed.append(os.path.relpath(path, root))
+    if removed:
+        logger.warning(
+            "Symlinks que apontavam para fora da pasta da tarefa foram removidos",
+            extra={"removed": removed},
+        )
+    return removed
+
+
 class PythonSandbox:
     """Implementa um sandbox seguro para execução de código Python via Docker."""
 
@@ -59,6 +138,7 @@ class PythonSandbox:
         memory_limit: str = "256m",
         cpu_quota: float = 0.5,
         timeout: int = 60,
+        setup_timeout: int = 300,
     ):
         self._client: Optional["docker.DockerClient"] = None
         self.image = image
@@ -66,6 +146,7 @@ class PythonSandbox:
         self.cpu_period = 100000
         self.cpu_quota = int(cpu_quota * self.cpu_period)
         self.timeout = timeout
+        self.setup_timeout = setup_timeout
 
     @property
     def client(self) -> "docker.DockerClient":
@@ -120,7 +201,10 @@ class PythonSandbox:
         # get_archive retorna um gerador de chunks de bytes
         full_data = b"".join(tar_data_gen)
         with tarfile.open(fileobj=io.BytesIO(full_data), mode='r') as tar:
-            tar.extractall(path=output_dir)
+            # O conteúdo vem de código gerado por LLM: só extrai membros que ficam dentro
+            # de output_dir (sem caminhos absolutos, '..', links para fora nem dispositivos).
+            safe_members = [m for m in tar.getmembers() if _is_safe_tar_member(m, output_dir)]
+            tar.extractall(path=output_dir, members=safe_members)
 
     def _ensure_image(self):
         """Garante que a imagem base existe localmente."""
@@ -232,12 +316,43 @@ class PythonSandbox:
 
             # Executar comandos de setup (ex: instalação de pacotes)
             if setup_commands:
-                for cmd in setup_commands:
-                    logger.info(f"Executando comando de setup no sandbox: {' '.join(cmd)}")
-                    # Setup costuma ser rápido o suficiente para não precisar de timeout complexo aqui
-                    exit_code, output = container.exec_run(cmd, user='root')
-                    if exit_code != 0:
-                        logger.error(f"Falha no comando de setup: {output.decode()}")
+                # A instalação de pacotes tem rede e pode travar (mirror lento, DNS); sem limite,
+                # a thread do sandbox ficaria presa para sempre. O timer mata o container.
+                setup_timed_out = False
+
+                def kill_on_setup_timeout():
+                    nonlocal setup_timed_out
+                    setup_timed_out = True
+                    try:
+                        container.kill()
+                    except Exception:
+                        pass
+
+                setup_timer = threading.Timer(self.setup_timeout, kill_on_setup_timeout)
+                setup_timer.start()
+                try:
+                    for cmd in setup_commands:
+                        logger.info(f"Executando comando de setup no sandbox: {' '.join(cmd)}")
+                        exit_code, output = container.exec_run(cmd, user='root')
+                        if exit_code != 0:
+                            logger.error(f"Falha no comando de setup: {output.decode()}")
+                except Exception:
+                    if not setup_timed_out:
+                        raise
+                finally:
+                    setup_timer.cancel()
+                if setup_timed_out:
+                    logger.error(
+                        "Timeout na instalação de pacotes do sandbox",
+                        extra={"setup_timeout": self.setup_timeout},
+                    )
+                    return SandboxResult(
+                        stdout="",
+                        stderr=f"Timeout de {self.setup_timeout}s atingido na instalação de pacotes.",
+                        exit_code=-1,
+                        artifacts=[],
+                        timed_out=True,
+                    )
 
             logger.info("Executando script principal no sandbox")
             timed_out = False
@@ -294,7 +409,9 @@ class PythonSandbox:
             if extracted_path.exists() and extracted_path.is_dir():
                 for item in extracted_path.iterdir():
                     dest = abs_output_dir / item.name
-                    if dest.exists():
+                    if dest.is_symlink():
+                        dest.unlink()
+                    elif dest.exists():
                         if dest.is_dir():
                             import shutil, stat
                             def remove_readonly(func, path, _):
@@ -312,6 +429,8 @@ class PythonSandbox:
                     # Garantir que o artefato extraído seja gravável por qualquer usuário
                     # para permitir que o container sobrescreva em execuções futuras.
                     try:
+                        if dest.is_symlink():
+                            continue  # chmod seguiria o link e alteraria o alvo
                         if dest.is_dir():
                             os.chmod(dest, 0o777)
                         else:
@@ -323,6 +442,11 @@ class PythonSandbox:
                     shutil.rmtree(extracted_path)
                 except:
                     extracted_path.rmdir()
+
+            try:
+                _purge_escaping_symlinks(abs_output_dir)
+            except OSError as e:
+                logger.warning(f"Falha ao varrer symlinks da pasta da tarefa: {e}")
 
             return SandboxResult(
                 stdout=stdout,

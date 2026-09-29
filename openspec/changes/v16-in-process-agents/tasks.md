@@ -30,7 +30,7 @@
 - [x] 5.2 `AGENT_RUNTIME` em `src/config.py`.
 
 ### 6. Validação
-- [ ] 6.1 **Revisão do Analista de Segurança** (STRIDE sobre as ferramentas do host). — pendente: requer papel dedicado de Analista de Segurança antes do merge.
+- [x] 6.1 **Revisão do Analista de Segurança** (STRIDE sobre as ferramentas do host): [`security-review.md`](security-review.md). Achados F1 a F4 corrigidos com testes; F5 a F9 registrados como pendências de decisão (F5/F6 seguem o ADR 018).
 - [ ] 6.2 Sessão completa no Pi 5 comparando tempo e RAM com o modo container (registrar no PR). — pendente: requer hardware Pi 5, indisponível neste ambiente de desenvolvimento.
 - [x] 6.3 Ruff, testes, revisão nos 7 eixos, PR da fase 1. — Ruff e testes unitários 100% verdes nesta etapa; revisão nos 7 eixos e PR ficam para o fluxo de `do-pull-request.md`. Testes de integração não executados aqui por espaço em disco insuficiente (`<10GB` livre) — rodar antes do merge.
 

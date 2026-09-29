@@ -251,7 +251,7 @@ networks:
   geminiclaw-net:  # Rede interna isolada
 ```
 
-> **Qdrant no Raspberry Pi 5**: o serviço usa a imagem oficial `qdrant/qdrant` (versão fixada no `docker-compose.yml`; troque com `QDRANT_IMAGE` no `.env`), sem compilar no Pi. O kernel padrão do Pi 5 usa páginas de 16K, que o jemalloc do binário oficial não suporta (`<jemalloc>: Unsupported system page size`). Verifique com `getconf PAGESIZE` (deve ser `4096`) e, se for `16384`, adicione `kernel=kernel8.img` em `/boot/firmware/config.txt` e reinicie.
+> **Qdrant no Raspberry Pi 5**: o serviço usa a imagem oficial `qdrant/qdrant` (versão fixada no compose; troque com `QDRANT_IMAGE` no `.env`), sem compilar no Pi. Use a **v1.19 ou superior**: as anteriores encerram com `<jemalloc>: Unsupported system page size` no kernel padrão do Pi 5 (páginas de 16K).
 
 Os agentes são containers **efêmeros** gerenciados pelo `ContainerRunner` — não fazem parte do Compose porque têm ciclo de vida dinâmico. Cada container de agente recebe:
 - Acesso ao PostgreSQL via rede Docker (`geminiclaw-net`) — sem volumes de banco de dados locais

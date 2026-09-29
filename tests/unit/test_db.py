@@ -137,6 +137,15 @@ class TestConfigureAgeSession:
         mock_conn.execute.assert_any_call('SET search_path = ag_catalog, "$user", public')
         mock_conn.rollback.assert_not_called()
 
+    def test_sucesso_encerra_a_transacao_para_o_pool(self):
+        """O commit é obrigatório: sem ele o pool descarta a conexão (status INTRANS)."""
+        from src.db import _configure_age_session
+
+        mock_conn = MagicMock()
+        _configure_age_session(mock_conn)
+
+        mock_conn.commit.assert_called_once()
+
     def test_extensao_ausente_e_ignorada_silenciosamente(self):
         """UndefinedFile (extensão AGE não instalada) é registrado e engolido."""
         from psycopg.errors import UndefinedFile

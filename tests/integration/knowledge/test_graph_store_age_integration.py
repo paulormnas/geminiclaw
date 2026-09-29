@@ -12,16 +12,21 @@ uma instância de Apache AGE acessível e migrada.
 
 from __future__ import annotations
 
+import json
 import uuid
 
 import pytest
 
+from src import config
 from src.knowledge.graph_store import AgeGraphStore
 from src.knowledge.provenance import Actor
 
 ORQUESTRADOR = Actor(kind="orquestrador")
 PESQUISADOR = Actor(kind="pesquisador")
 CURATOR = Actor(kind="agente", role="curator", model="qwen3:8b")
+
+
+_CREATED_PROJECTS: list[str] = []
 
 
 def _unique(prefix: str) -> str:
@@ -31,7 +36,46 @@ def _unique(prefix: str) -> str:
     próprio ``projeto_id``/``sessao_id`` em vez de limpar o grafo entre
     execuções.
     """
-    return f"{prefix}-{uuid.uuid4().hex[:8]}"
+    value = f"{prefix}-{uuid.uuid4().hex[:8]}"
+    if prefix == "proj":
+        _CREATED_PROJECTS.append(value)
+    return value
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _cleanup_created_data():
+    """Remove do grafo e da auditoria apenas os projetos criados por este módulo.
+
+    O ``GraphStore`` nunca apaga (ADR 015), então a limpeza usa SQL/Cypher
+    direto, restrita aos ``projeto_id`` gerados por ``_unique("proj")``.
+    """
+    yield
+    if not _CREATED_PROJECTS:
+        return
+    import psycopg
+
+    graph = config.KNOWLEDGE_GRAPH_NAME
+    with psycopg.connect(config.DATABASE_URL, autocommit=True) as conn:
+        conn.execute("LOAD 'age'")
+        conn.execute('SET search_path = ag_catalog, "$user", public')
+        for projeto_id in _CREATED_PROJECTS:
+            params = json.dumps({"pid": projeto_id})
+            ids = [
+                row[0].strip('"')
+                for row in conn.execute(
+                    f"SELECT * FROM cypher('{graph}', $$ MATCH (n) WHERE n.projeto_id = $pid "
+                    "RETURN n.id $$, %s::agtype) AS (r agtype)",
+                    (params,),
+                ).fetchall()
+            ]
+            if ids:
+                conn.execute("DELETE FROM knowledge_audit WHERE node_id = ANY(%s)", (ids,))
+            conn.execute(
+                f"SELECT * FROM cypher('{graph}', $$ MATCH (n) WHERE n.projeto_id = $pid "
+                "DETACH DELETE n $$, %s::agtype) AS (r agtype)",
+                (params,),
+            )
+    _CREATED_PROJECTS.clear()
 
 
 @pytest.mark.integration

@@ -20,6 +20,7 @@ preenchimento de proveniência) e é reexportado aqui por conveniência.
 from __future__ import annotations
 
 import json
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
@@ -36,6 +37,8 @@ from src.knowledge.read_guard import reject_unsafe_read_query
 from src.logger import get_logger
 
 logger = get_logger(__name__)
+
+_IDENTIFIER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 __all__ = [
     "Actor",
@@ -483,9 +486,12 @@ class AgeGraphStore(GraphStore):
             timeout_ms = int(self._read_timeout_ms)
 
             def _configure(conn: Any) -> None:
-                conn.execute("LOAD 'age'")
+                # Sem LOAD: o papel somente-leitura não pode carregar bibliotecas
+                # ("access to library age is not allowed"); a extensão já vem
+                # pré-carregada por shared_preload_libraries=age (docker-compose).
                 conn.execute('SET search_path = ag_catalog, "$user", public')
                 conn.execute(f"SET statement_timeout = {timeout_ms}")
+                conn.commit()  # o pool exige a conexão fora de transação após configure
 
             self._reader_pool = ConnectionPool(
                 conninfo=self._reader_conninfo,
@@ -500,6 +506,30 @@ class AgeGraphStore(GraphStore):
                 extra={"extra": {"read_timeout_ms": timeout_ms}},
             )
         return self._reader_pool
+
+    @staticmethod
+    def _property_map(param: str, keys: Any) -> str:
+        """Monta o mapa de propriedades de um ``CREATE`` como acessos ao parâmetro.
+
+        O AGE não aceita ``CREATE (n:L $props)`` (mapa inteiro como parâmetro),
+        mas aceita ``{chave: $props.chave}``: os *valores* continuam trafegando
+        no parâmetro ``agtype`` (nunca no texto da consulta) e só os nomes de
+        propriedade — já validados contra o schema — são interpolados.
+
+        Args:
+            param: Nome do parâmetro que contém o mapa (ex.: ``"props"``).
+            keys: Nomes das propriedades.
+
+        Returns:
+            Texto ``{k1: $param.k1, k2: $param.k2}``.
+
+        Raises:
+            ValueError: Se algum nome não for um identificador simples.
+        """
+        for key in keys:
+            if not _IDENTIFIER_RE.fullmatch(key):
+                raise ValueError(f"Nome de propriedade inválido para Cypher: {key!r}")
+        return "{" + ", ".join(f"{key}: ${param}.{key}" for key in keys) + "}"
 
     @staticmethod
     def _to_agtype_param(value: dict[str, Any]) -> str:
@@ -591,7 +621,7 @@ class AgeGraphStore(GraphStore):
             label, full_props, requires_agent_provenance=actor.requires_provenance_justification
         )
 
-        cypher_body = f"CREATE (n:{label} $props) RETURN n"
+        cypher_body = f"CREATE (n:{label} {self._property_map('props', full_props)}) RETURN n"
         self._run_cypher(cypher_body, {"props": full_props})
 
         logger.info(
@@ -610,6 +640,7 @@ class AgeGraphStore(GraphStore):
 
         # Nomes de propriedade vêm do schema (validados acima) — seguro interpolar
         # como identificador; os VALORES vão sempre pelo parâmetro agtype.
+        self._property_map("changes", full_changes)  # valida os nomes como identificadores
         set_clauses = ", ".join(f"n.{key} = $changes.{key}" for key in full_changes)
         cypher_body = f"MATCH (n:{node.label} {{id: $id}}) SET {set_clauses} RETURN n"
         self._run_cypher(cypher_body, {"id": node_id, "changes": full_changes})
@@ -644,7 +675,7 @@ class AgeGraphStore(GraphStore):
 
         cypher_body = (
             f"MATCH (a:{src.label} {{id: $src_id}}), (b:{dst.label} {{id: $dst_id}}) "
-            f"CREATE (a)-[r:{rel} $props]->(b) RETURN r"
+            f"CREATE (a)-[r:{rel} {self._property_map('props', full_props)}]->(b) RETURN r"
         )
         self._run_cypher(cypher_body, {"src_id": src_id, "dst_id": dst_id, "props": full_props})
 
@@ -725,11 +756,11 @@ class AgeGraphStore(GraphStore):
         rel_pattern = f":{'|'.join(rel_types)}" if rel_types else ""
 
         if direction == "out":
-            pattern = f"(n)-[r{rel_pattern}*1..{int(depth)}]->(m)"
+            pattern = f"-[r{rel_pattern}*1..{int(depth)}]->(m)"
         elif direction == "in":
-            pattern = f"(n)-[r{rel_pattern}*1..{int(depth)}]-(m)"
+            pattern = f"<-[r{rel_pattern}*1..{int(depth)}]-(m)"
         else:
-            pattern = f"(n)-[r{rel_pattern}*1..{int(depth)}]-(m)"
+            pattern = f"-[r{rel_pattern}*1..{int(depth)}]-(m)"
 
         # Para saltos únicos (depth=1, o caso comum), pedimos o triplo (a relação e os
         # dois vértices adjacentes) em uma única consulta — isso permite resolver o
@@ -743,8 +774,9 @@ class AgeGraphStore(GraphStore):
         nodes_by_domain_id = {node.id: node for node in nodes}
 
         rel_pattern_edges = f":{'|'.join(rel_types)}" if rel_types else ""
+        edge_left, edge_right = {"out": ("-", "->"), "in": ("<-", "-"), "both": ("-", "-")}[direction]
         edge_cypher = (
-            f"MATCH (n {{id: $id}})-[rel{rel_pattern_edges}*1..{int(depth)}]-(x) "
+            f"MATCH (n {{id: $id}}){edge_left}[rel{rel_pattern_edges}*1..{int(depth)}]{edge_right}(x) "
             "UNWIND rel AS one_rel "
             "WITH one_rel, startNode(one_rel) AS a, endNode(one_rel) AS b "
             "RETURN DISTINCT a, one_rel, b"
@@ -772,12 +804,14 @@ class AgeGraphStore(GraphStore):
         if labels:
             for label in labels:
                 validation.validate_label(label)
-            label_predicate = " OR ".join(f"n:{lbl}" for lbl in labels)
-            cypher_body = f"MATCH (n) WHERE n.projeto_id = $projeto_id AND ({label_predicate}) RETURN n"
+            # O AGE não aceita predicado de rótulo (``n:A OR n:B``) no WHERE; usa label(n).
+            cypher_body = "MATCH (n) WHERE n.projeto_id = $projeto_id AND label(n) IN $labels RETURN n"
         else:
             cypher_body = "MATCH (n) WHERE n.projeto_id = $projeto_id RETURN n"
 
-        node_rows = self._run_cypher_rows(cypher_body, {"projeto_id": projeto_id}, columns=("result",))
+        node_rows = self._run_cypher_rows(
+            cypher_body, {"projeto_id": projeto_id, "labels": list(labels or [])}, columns=("result",)
+        )
         nodes = [self._node_from_agtype(row["result"]) for row in node_rows]
         node_ids = {n.id for n in nodes}
 

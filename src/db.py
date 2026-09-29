@@ -57,6 +57,9 @@ def _configure_age_session(conn) -> None:
     try:
         conn.execute("LOAD 'age'")
         conn.execute('SET search_path = ag_catalog, "$user", public')
+        # O pool exige a conexão ociosa (fora de transação) após ``configure``;
+        # sem o commit ela fica INTRANS e é descartada, esgotando o pool.
+        conn.commit()
     except UndefinedFile as exc:  # extensão ainda não instalada — grafo é opcional até a migração
         conn.rollback()
         logger.debug(

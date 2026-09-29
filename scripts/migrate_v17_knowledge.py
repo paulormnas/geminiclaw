@@ -31,6 +31,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from psycopg import sql
+
 # Garante que src/ seja importável quando executado como script solto.
 root_path = str(Path(__file__).parent.parent)
 if root_path not in sys.path:
@@ -153,14 +155,21 @@ def create_reader_role(conn, graph_name: str) -> bool:
 
     created = False
     if not _role_exists(conn, role_name):
+        # Comandos utilitários (CREATE/ALTER ROLE) não aceitam parâmetros de
+        # bind no servidor; sql.Literal faz o escape no cliente.
         conn.execute(
-            f"CREATE ROLE {role_name} LOGIN PASSWORD %s",
-            (password,),
+            sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(
+                sql.Identifier(role_name), sql.Literal(password)
+            )
         )
         created = True
         logger.info("Papel knowledge_reader criado.")
     else:
-        conn.execute(f"ALTER ROLE {role_name} PASSWORD %s", (password,))
+        conn.execute(
+            sql.SQL("ALTER ROLE {} PASSWORD {}").format(
+                sql.Identifier(role_name), sql.Literal(password)
+            )
+        )
         logger.info("Papel knowledge_reader já existia; senha sincronizada com KNOWLEDGE_READER_PASSWORD.")
 
     conn.execute(f'GRANT USAGE ON SCHEMA "{graph_name}", ag_catalog TO {role_name}')

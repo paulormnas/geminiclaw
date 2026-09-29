@@ -167,3 +167,28 @@ class TestRunCypherRowsSql:
         sql_arg = mock_pool_conn.execute.call_args[0][0]
         assert "a agtype, b agtype" in sql_arg
         assert "knowledge" in sql_arg
+
+
+@pytest.mark.unit
+class TestPropertyMap:
+    """O AGE não aceita ``CREATE (n:L $props)``; o mapa vira ``{k: $props.k}``."""
+
+    def test_gera_acessos_ao_parametro_por_chave(self):
+        assert AgeGraphStore._property_map("props", ["id", "titulo"]) == "{id: $props.id, titulo: $props.titulo}"  # noqa: SLF001
+
+    @pytest.mark.parametrize("chave", ["a}) DETACH DELETE (n) //", "x y", "a-b", "1a", "", "a.b", "$$"])
+    def test_chave_que_nao_e_identificador_e_rejeitada(self, chave):
+        with pytest.raises(ValueError):
+            AgeGraphStore._property_map("props", ["id", chave])  # noqa: SLF001
+
+    def test_create_node_usa_mapa_de_chaves_e_nao_o_parametro_inteiro(self):
+        store = _make_store()
+        with patch.object(store, "_run_cypher", return_value=[]) as run:
+            store.create_node(
+                "Projeto",
+                {"titulo": "X", "objetivo": "y", "status": "ativo", "projeto_id": "p1", "sessao_id": "s1"},
+                actor=ORQUESTRADOR,
+            )
+        body = run.call_args.args[0]
+        assert "$props.id" in body and "$props.titulo" in body
+        assert "$props)" not in body

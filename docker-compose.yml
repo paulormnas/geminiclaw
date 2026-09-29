@@ -1,9 +1,9 @@
 services:
 
   qdrant:
-    build:
-      context: .
-      dockerfile: containers/Dockerfile.qdrant
+    # Imagem oficial multi-arquitetura (amd64/arm64), versão alinhada ao qdrant-client do uv.lock.
+    # No Raspberry Pi 5 exige kernel com páginas de 4K (kernel=kernel8.img em /boot/firmware/config.txt).
+    image: ${QDRANT_IMAGE:-qdrant/qdrant:v1.17.1}
     container_name: geminiclaw-qdrant
     restart: unless-stopped
     ports:
@@ -16,11 +16,17 @@ services:
     environment:
       QDRANT__TELEMETRY_DISABLED: "true"
       QDRANT__SERVICE__HOST: "0.0.0.0"
+    # A imagem oficial não tem curl nem wget; usa-se o /dev/tcp do bash para consultar /readyz.
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:6333/readyz"]
+      test:
+        - "CMD"
+        - "bash"
+        - "-c"
+        - "exec 3<>/dev/tcp/127.0.0.1/6333 && printf 'GET /readyz HTTP/1.0\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -q ' 200 '"
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 15s
 
   postgres:
     # V17 (ADR 009 §4): PostgreSQL 16 + Apache AGE, substitui postgres:16-alpine.

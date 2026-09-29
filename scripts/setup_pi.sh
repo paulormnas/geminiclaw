@@ -12,6 +12,9 @@ echo -e "${CYAN}==============================================${NC}"
 echo -e "${CYAN}   Setup GeminiClaw (Raspberry Pi 5)          ${NC}"
 echo -e "${CYAN}==============================================${NC}"
 
+# Imagem do Qdrant (mesma variável e padrão do docker-compose.yml)
+QDRANT_IMAGE="${QDRANT_IMAGE:-qdrant/qdrant:v1.19.1}"
+
 # Detectar OS
 OS_NAME=$(uname -s)
 if [ "$OS_NAME" == "Darwin" ]; then
@@ -26,7 +29,7 @@ if [ "$OS_NAME" == "Darwin" ]; then
         
         echo -e "${GREEN}[*] Fazendo pull das imagens base...${NC}"
         docker pull python:3.11-slim
-        docker pull qdrant/qdrant:latest
+        docker pull "$QDRANT_IMAGE"
     else
         echo -e "${RED}[!] Docker não encontrado no macOS. Instale o Docker Desktop.${NC}"
     fi
@@ -124,7 +127,7 @@ fi
 
 echo -e "${GREEN}[*] Preparando containers (Pre-pull)...${NC}"
 docker pull python:3.11-slim || echo -e "${YELLOW}[!] Falha ao fazer pull da imagem python:3.11-slim.${NC}"
-docker pull qdrant/qdrant:latest || echo -e "${YELLOW}[!] Falha ao fazer pull da imagem qdrant:latest.${NC}"
+docker pull "$QDRANT_IMAGE" || echo -e "${YELLOW}[!] Falha ao fazer pull da imagem ${QDRANT_IMAGE}.${NC}"
 
 # Roadmap V16 / ADR 011 §3 — pré-download do modelo de embeddings local
 # (FastEmbed/ONNX) para que o Pi 5 possa rodar com EMBEDDING_OFFLINE=true

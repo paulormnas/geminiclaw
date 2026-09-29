@@ -80,6 +80,14 @@ privadas, link-local e serviços de metadados, e a esquemas diferentes de `http`
 - **WHEN** o `web_reader` é chamado com esse domínio
 - **THEN** a requisição é recusada
 
+#### Scenario: Faixa CGNAT usada pelo Tailscale
+- **WHEN** o `web_reader` recebe `http://100.110.171.110:6333/` ou um domínio que resolve para `100.64.0.0/10`
+- **THEN** a requisição é recusada, pois só endereços globalmente roteáveis são permitidos
+
+#### Scenario: IPv4 interno embutido em IPv6
+- **WHEN** o `web_reader` recebe um host que resolve para `::ffff:127.0.0.1`
+- **THEN** a requisição é recusada
+
 ### Requirement: ask_researcher em processo
 O sistema SHALL encaminhar perguntas ao pesquisador por chamada direta ao orquestrador,
 preservando deduplicação e registro da Spec G5.
@@ -104,6 +112,47 @@ sandbox por `MAX_CONTAINERS_PER_SESSION`.
 #### Scenario: Limite de execuções de agentes
 - **WHEN** a sessão atinge `MAX_AGENT_RUNS_PER_SESSION`
 - **THEN** o circuit breaker interrompe novas execuções de agentes e registra o evento
+
+### Requirement: Sandbox não bloqueia o runtime
+O sistema SHALL executar o sandbox de código fora do event loop do processo e SHALL limitar o tempo
+da instalação de pacotes.
+
+#### Scenario: Event loop livre durante a execução
+- **GIVEN** uma execução de código no sandbox que leva 500 ms
+- **WHEN** outra corrotina do processo agenda tarefas curtas
+- **THEN** essas tarefas continuam sendo executadas durante o sandbox
+
+#### Scenario: Instalação de pacotes travada
+- **GIVEN** um `uv pip install` que não termina
+- **WHEN** `CODE_SANDBOX_SETUP_TIMEOUT_SECONDS` é excedido
+- **THEN** o container é encerrado e o resultado é `timed_out` com mensagem sobre a instalação
+
+### Requirement: Artefatos do sandbox extraídos sem sair da pasta da tarefa
+O sistema SHALL extrair no host apenas os membros do tar do sandbox que permanecem dentro da pasta
+da tarefa, e MUST NOT alterar permissões de arquivos fora dela.
+
+#### Scenario: Symlink para arquivo do host
+- **GIVEN** código no sandbox que cria um link simbólico para um arquivo do host
+- **WHEN** os artefatos são extraídos
+- **THEN** o link não é criado e as permissões do arquivo do host permanecem inalteradas
+
+#### Scenario: Caminho fora da pasta
+- **GIVEN** um membro do tar com caminho absoluto ou `../`
+- **WHEN** os artefatos são extraídos
+- **THEN** o membro é ignorado e os demais artefatos são extraídos
+
+### Requirement: Ingestão de documentos confinada à sessão
+O sistema SHALL permitir que um agente ingira apenas arquivos de `input_snapshot/` ou `artifacts/`
+da própria sessão, resolvendo links simbólicos antes da checagem.
+
+#### Scenario: Arquivo do host
+- **WHEN** um agente chama `ingest` com `/etc/passwd`
+- **THEN** a ingestão é recusada com erro e nenhum extrator é executado
+
+#### Scenario: Symlink para fora da sessão
+- **GIVEN** um link em `input_snapshot/` apontando para um arquivo fora da sessão
+- **WHEN** um agente chama `ingest` com esse link
+- **THEN** a ingestão é recusada
 
 ## REMOVED Requirements
 

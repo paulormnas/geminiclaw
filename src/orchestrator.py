@@ -35,6 +35,7 @@ from src.agents.validator_agent import ValidatorAgent
 from src.agent_runtime.context import AgentContext
 from src.agent_runtime.runtime import AgentRuntime
 from src.context_loader import ContextLoader, ContextBundle
+from src.usage import UsageBudget
 
 logger = get_logger(__name__)
 
@@ -258,6 +259,7 @@ class Orchestrator:
         agent_tasks: list[AgentTask] | None = None,
         mode: str | None = None,
         context_bundle: ContextBundle | None = None,
+        budget: UsageBudget | None = None,
     ) -> OrchestratorResult:
         """Processa a solicitação do usuário, executando o ciclo de vida completo.
 
@@ -268,6 +270,9 @@ class Orchestrator:
                 ``SESSION_DEFAULT_MODE`` (Roadmap V15.6 / Spec G10).
             context_bundle: Contexto pré-carregado de ``input_context/`` (Spec G9).
                 Se omitido, é carregado internamente via ``ContextLoader``.
+            budget: Orçamento de uso da sessão (Roadmap V18 / Spec `usage-limits`).
+                Se omitido, usa os defaults de ``src/config.py`` via
+                ``UsageBudget.from_config()``.
 
         Returns:
             O resultado final da orquestração.
@@ -293,10 +298,19 @@ class Orchestrator:
 
         master_session = self.session_manager.create("orchestrator", session_id=session_slug)
 
+        # V18/usage-limits — orçamento efetivo da sessão (CLI > config), gravado no
+        # payload da sessão para consulta/depuração e exibição no início da sessão.
+        effective_budget = budget or UsageBudget.from_config()
+
         # V15.6/G10 — Persiste o modo de operação no payload da sessão mestra
         self.session_manager.update(
             master_session.id,
-            payload={**master_session.payload, "mode": effective_mode, "prompt": prompt},
+            payload={
+                **master_session.payload,
+                "mode": effective_mode,
+                "prompt": prompt,
+                "budget": effective_budget.to_payload(),
+            },
         )
 
         # V15.5/G9 — Carrega (ou reutiliza) o contexto de input_context/ e o disponibiliza
@@ -344,14 +358,22 @@ class Orchestrator:
         else:
             # Caso contrário, usa o loop autônomo (Etapa S7)
             loop = AutonomousLoop(self)
-            result = await loop.run(prompt, exec_id or master_session.id, mode=effective_mode)
+            result = await loop.run(
+                prompt, exec_id or master_session.id, mode=effective_mode, budget=effective_budget
+            )
 
-        # Atualiza a sessão mestra com o resultado consolidado
+        # Atualiza a sessão mestra com o resultado consolidado.
+        # V18/usage-limits — o payload é mesclado (não substituído) para preservar
+        # campos gravados durante a execução (budget, motivo_parada,
+        # researcher_interactions, divergence_reports).
         final_status = "success" if result.succeeded == result.total and result.total > 0 else "failed"
+        pre_final_session = self.session_manager.get(master_session.id)
+        pre_final_payload = pre_final_session.payload if pre_final_session is not None else {}
         self.session_manager.update(
             master_session.id,
             status=final_status,
             payload={
+                **pre_final_payload,
                 "prompt": prompt,
                 "mode": effective_mode,
                 "summary": {

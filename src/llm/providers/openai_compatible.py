@@ -5,18 +5,16 @@ import time
 import httpx
 
 from src.llm.base import LLMProvider, LLMResponse, ToolCall
+from src.llm.retry import RETRY_BACKOFFS_SECONDS, emit_connection_retry, is_retryable_status
 from src.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Códigos de status considerados transitórios — retentativa é segura.
-_RETRYABLE_MIN_STATUS = 500
-_RETRYABLE_RATE_LIMIT_STATUS = 429
-
 # Backoff entre tentativas extras (após a primeira falha). ~3.5s de espera
 # total no pior caso — evita travar o event loop do orquestrador no Pi 5
-# esperando um servidor externo indisponível.
-_RETRY_BACKOFFS_SECONDS = (0.5, 1.0, 2.0)
+# esperando um servidor externo indisponível. Status transitórios (429/5xx)
+# são avaliados por `is_retryable_status` (src/llm/retry.py).
+_RETRY_BACKOFFS_SECONDS = RETRY_BACKOFFS_SECONDS
 
 
 class OpenAICompatibleProvider(LLMProvider):
@@ -133,6 +131,7 @@ class OpenAICompatibleProvider(LLMProvider):
                     "Retentativa ao provedor openai_compatible",
                     extra={"attempt": attempt, "backoff_seconds": backoff, "model": self._model},
                 )
+                emit_connection_retry("llm_provider:openai_compatible", str(last_exc))
                 await asyncio.sleep(backoff)
             try:
                 response = await self._client.post(path, json=payload)
@@ -140,10 +139,7 @@ class OpenAICompatibleProvider(LLMProvider):
                 last_exc = exc
                 continue
 
-            if (
-                response.status_code == _RETRYABLE_RATE_LIMIT_STATUS
-                or response.status_code >= _RETRYABLE_MIN_STATUS
-            ):
+            if is_retryable_status(response.status_code):
                 last_exc = httpx.HTTPStatusError(
                     f"Status retentável {response.status_code}",
                     request=response.request,

@@ -15,8 +15,9 @@ from src.logger import get_logger
 from src.skills.memory.short_term import ShortTermMemory
 from src.triage import TriageClassifier, TriageDecision
 from src.health import PiHealthMonitor
-from src.config import MAX_PLAN_RETRIES
+from src.config import MAX_PLAN_RETRIES, MAX_SUBTASKS_PER_TASK, SESSION_MAX_TASK_RETRIES, LIMIT_GRACE_SECONDS
 from src.telemetry import get_telemetry
+from src.usage import UsageBudget, UsageTracker, StopReason
 
 if TYPE_CHECKING:
     from src.orchestrator import Orchestrator, AgentTask, AgentResult, OrchestratorResult
@@ -40,8 +41,14 @@ class AutonomousLoop:
             orchestrator: Orquestrador que fornece as capacidades de execução.
         """
         self.orchestrator = orchestrator
-        self.max_retries = int(os.environ.get("MAX_RETRY_PER_SUBTASK", "10"))
-        self.max_subtasks = int(os.environ.get("MAX_SUBTASKS_PER_TASK", "15"))
+        # V18/usage-limits — CORRIGIDO: antes lia MAX_RETRY_PER_SUBTASK/MAX_SUBTASKS_PER_TASK
+        # diretamente de os.environ (defaults 10/15, divergentes de src/config.py). Agora lê
+        # exclusivamente de src/config.py (fonte única de limites — Spec usage-limits,
+        # requisito "Fonte única de limites"). self.max_retries é o valor efetivo do
+        # orçamento da sessão corrente; é reatribuído em `run()` a partir do UsageBudget
+        # (que pode ter sido ajustado via CLI), mas usa o default de config até lá.
+        self.max_retries = SESSION_MAX_TASK_RETRIES
+        self.max_subtasks = MAX_SUBTASKS_PER_TASK
         # Roadmap V3 - Etapa V3: classificador local de triage (sem container)
         self._triage_classifier = TriageClassifier(
             confidence_threshold=float(os.environ.get("TRIAGE_CONFIDENCE_THRESHOLD", "0.7"))
@@ -49,9 +56,19 @@ class AutonomousLoop:
         self._health_monitor = PiHealthMonitor()
         # Roadmap V15.6 / Spec G10 — modo de operação da sessão corrente
         self._session_mode: str = ""
+        # V18/usage-limits — orçamento e contabilização de uso da sessão corrente.
+        # Definidos em `run()`, quando o budget efetivo (defaults de config + overrides
+        # de CLI) é conhecido.
+        self._usage_tracker: "UsageTracker | None" = None
 
 
-    async def run(self, prompt: str, master_session_id: str, mode: str = "") -> "OrchestratorResult":
+    async def run(
+        self,
+        prompt: str,
+        master_session_id: str,
+        mode: str = "",
+        budget: "UsageBudget | None" = None,
+    ) -> "OrchestratorResult":
         """Executa a tarefa utilizando o loop autônomo.
 
         Args:
@@ -59,6 +76,8 @@ class AutonomousLoop:
             master_session_id: ID da sessão mestra para coordenação.
             mode: Nível de autonomia da sessão (SessionMode). Se omitido, usa
                 ``SESSION_DEFAULT_MODE``.
+            budget: Orçamento de uso da sessão (Roadmap V18 / Spec
+                `usage-limits`). Se omitido, usa os defaults de `src/config.py`.
 
         Returns:
             OrchestratorResult consolidado.
@@ -67,6 +86,16 @@ class AutonomousLoop:
         self._session_mode = mode or SESSION_DEFAULT_MODE
         # Roadmap V15.3 / Spec G5 — usado para calcular session_duration_min
         self._session_started_at = time.time()
+
+        # V18/usage-limits — orçamento efetivo da sessão (CLI > config) e tracker de
+        # consumo. execution_id=master_session_id: mesmo ID usado em toda a telemetria
+        # desta sessão (ver src/orchestrator.py — exec_id e master_session.id coincidem).
+        # `self.max_retries`, se ajustado explicitamente pelo chamador (ex: testes)
+        # antes desta chamada, é respeitado como override de `max_task_retries` do
+        # orçamento default — só é ignorado se `budget` for passado explicitamente.
+        effective_budget = budget or UsageBudget.from_config(max_task_retries=self.max_retries)
+        self._usage_tracker = UsageTracker(effective_budget, execution_id=master_session_id)
+        self.max_retries = effective_budget.max_task_retries
 
         logger.info(
             "Iniciando loop autônomo",
@@ -237,7 +266,8 @@ class AutonomousLoop:
         """
         from src.config import (
             OPERATIONAL_THRESHOLDS,
-            MAX_SESSION_TOKENS,
+            SESSION_MAX_TOKENS,
+            SESSION_MAX_MINUTES,
             MAX_CONTAINERS_PER_SESSION,
             OPERATIONAL_THRESHOLD_WAIT_SECONDS,
         )
@@ -248,22 +278,25 @@ class AutonomousLoop:
         total_tokens = sum(r.get("total_tokens") or 0 for r in rows)
         total_cost = sum(r.get("total_cost_usd") or 0 for r in rows)
 
-        token_pct = (total_tokens / MAX_SESSION_TOKENS) if MAX_SESSION_TOKENS else 0.0
+        token_pct = (total_tokens / SESSION_MAX_TOKENS) if SESSION_MAX_TOKENS else 0.0
         container_counts = getattr(self.orchestrator, "_session_container_counts", None)
         container_count = (
             container_counts.get(master_session_id, 0) if isinstance(container_counts, dict) else 0
         )
         container_pct = (container_count / MAX_CONTAINERS_PER_SESSION) if MAX_CONTAINERS_PER_SESSION else 0.0
         duration_min = (time.time() - getattr(self, "_session_started_at", time.time())) / 60
+        # V18/usage-limits — avisos da Spec G5 agora são percentuais dos limites reais
+        # do UsageBudget (SESSION_MAX_MINUTES), não mais minutos absolutos.
+        duration_pct = (duration_min / SESSION_MAX_MINUTES) if SESSION_MAX_MINUTES else 0.0
 
         triggered: list[str] = []
         if token_pct >= OPERATIONAL_THRESHOLDS["token_usage_pct"]:
-            triggered.append(f"Uso de tokens: {token_pct*100:.0f}% do limite ({total_tokens}/{MAX_SESSION_TOKENS})")
+            triggered.append(f"Uso de tokens: {token_pct*100:.0f}% do limite ({total_tokens}/{SESSION_MAX_TOKENS})")
         if total_cost >= OPERATIONAL_THRESHOLDS["cost_usd"]:
             triggered.append(f"Custo estimado: ${total_cost:.2f} (limite ${OPERATIONAL_THRESHOLDS['cost_usd']:.2f})")
-        if duration_min >= OPERATIONAL_THRESHOLDS["session_duration_min"]:
+        if duration_pct >= OPERATIONAL_THRESHOLDS["session_duration_pct"]:
             triggered.append(
-                f"Duração da sessão: {duration_min:.0f}min (limite {OPERATIONAL_THRESHOLDS['session_duration_min']:.0f}min)"
+                f"Duração da sessão: {duration_pct*100:.0f}% do limite ({duration_min:.0f}min/{SESSION_MAX_MINUTES:.0f}min)"
             )
         if container_pct >= OPERATIONAL_THRESHOLDS["container_count_pct"]:
             triggered.append(
@@ -460,7 +493,21 @@ class AutonomousLoop:
         """Executa a tarefa via caminho complexo (Planner -> Loop de Subtarefas em DAG)."""
         from src.orchestrator import AgentTask, OrchestratorResult, AGENT_REGISTRY, AgentResult
         from src.task_scheduler import TaskScheduler
-        
+
+        # V18/usage-limits — rede de segurança: `_run_complex_path` é chamado
+        # normalmente via `run()`, que inicializa `self._usage_tracker` a partir do
+        # orçamento efetivo da sessão. Chamadas diretas (ex: testes que exercitam o
+        # caminho complexo isoladamente) não passam por `run()`; nesse caso, cria um
+        # tracker com os defaults de `src/config.py` para não quebrar com
+        # AttributeError. `self.max_retries`, se tiver sido ajustado explicitamente
+        # pelo chamador (ex: testes) antes desta chamada, é respeitado como override
+        # de `max_task_retries` do orçamento default.
+        if self._usage_tracker is None:
+            self._usage_tracker = UsageTracker(
+                UsageBudget.from_config(max_task_retries=self.max_retries),
+                execution_id=master_session_id,
+            )
+
         max_plan_retries = MAX_PLAN_RETRIES
         execution_feedback = ""
         final_results: List[AgentResult] = []
@@ -472,7 +519,16 @@ class AutonomousLoop:
 
         for plan_attempt in range(max_plan_retries):
             logger.info(f"Iniciando ciclo de planejamento/recuperação {plan_attempt+1}/{max_plan_retries}")
-            
+
+            # V18/usage-limits — não inicia um novo ciclo de planejamento (que despacharia
+            # novas chamadas de exploração) se o orçamento já foi esgotado por um ciclo
+            # anterior (ex: retentativas de conexão atingidas durante o último gather).
+            pre_cycle_status = self._usage_tracker.check()
+            if pre_cycle_status.should_close:
+                return await self._close_session(
+                    pre_cycle_status.stop_reason, master_session_id, prompt, tasks, {}, final_results
+                )
+
             # 1. Planejamento ou Recuperação Incremental
             tasks = await self.orchestrator._run_planning_loop(
                 prompt=prompt, 
@@ -545,6 +601,14 @@ class AutonomousLoop:
                     artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id),
                 )
 
+            # V18/usage-limits — limites reais (não apenas avisos): tokens, tempo e
+            # retentativas de conexão, checados no mesmo ponto do ciclo que os avisos
+            # operacionais acima (uma vez por ciclo de planejamento).
+            plan_usage_status = self._usage_tracker.check()
+            if plan_usage_status.should_close:
+                return await self._close_session(
+                    plan_usage_status.stop_reason, master_session_id, prompt, tasks, {}, final_results
+                )
 
             if len(tasks) > self.max_subtasks:
                 logger.warning(f"Número de subtarefas ({len(tasks)}) excede o limite {self.max_subtasks}")
@@ -570,6 +634,13 @@ class AutonomousLoop:
                     }
 
             async def _execute_task_in_dag(task: AgentTask, index: int):
+                # V18/usage-limits — chave de contabilização de retentativas da MESMA
+                # tarefa (design §2): conta cumulativamente entre ciclos de replanejamento
+                # que preservam o task_name, via UsageTracker (não mais um range() local).
+                # Calculada aqui (antes de aguardar dependências) para poder ser usada
+                # também no guard de tarefa já abandonada, logo abaixo.
+                retry_key = task.task_name or f"_unnamed_{task.subtask_id or index}"
+
                 # Aguarda as dependências
                 for dep in task.depends_on:
                     if dep in dag_state:
@@ -581,6 +652,48 @@ class AutonomousLoop:
                                 dag_state[task.task_name]["status"] = "cancelled"
                                 dag_state[task.task_name]["future"].set_result(None)
                             return
+
+                # V18/usage-limits — não redespacha uma tarefa já ABANDONADA por
+                # esgotamento de retentativas em um ciclo de replanejamento anterior. O
+                # mesmo task_name pode reaparecer em planos incrementais gerados por
+                # `_run_planning_loop`; sem este guard, o retry loop abaixo recomeçaria a
+                # contagem de tentativas locais do zero, mas `record_task_attempt` já
+                # opera cumulativamente por task_name — o risco real é o dispatch em si
+                # (chamada ao agente) ocorrer de novo para uma tarefa cujo orçamento de
+                # retentativas já foi esgotado. Tratada como "abandonada" (não "cancelled")
+                # para manter a mesma semântica de `dag_state` usada linhas abaixo, quando
+                # o esgotamento é detectado dentro do próprio retry loop.
+                if self._usage_tracker.is_task_abandoned(retry_key):
+                    logger.info(
+                        "Despacho suspenso: tarefa já abandonada por esgotamento de "
+                        "retentativas em ciclo de replanejamento anterior",
+                        extra={"task_name": task.task_name, "retry_key": retry_key},
+                    )
+                    if task.task_name:
+                        dag_state[task.task_name]["status"] = "abandonada"
+                        dag_state[task.task_name]["error"] = (
+                            "Tarefa já abandonada em ciclo de replanejamento anterior "
+                            "(retentativas esgotadas)"
+                        )
+                        dag_state[task.task_name]["future"].set_result(None)
+                    return
+
+                # V18/usage-limits — não despacha uma NOVA subtarefa se o orçamento já foi
+                # esgotado (dependências já concluídas antes deste ponto continuam intactas;
+                # apenas o despacho desta subtarefa ainda não iniciada é suspenso).
+                dispatch_status = self._usage_tracker.check()
+                if dispatch_status.should_close:
+                    logger.info(
+                        "Despacho suspenso: limite de orçamento atingido",
+                        extra={
+                            "task_name": task.task_name,
+                            "stop_reason": dispatch_status.stop_reason.value if dispatch_status.stop_reason else None,
+                        },
+                    )
+                    if task.task_name:
+                        dag_state[task.task_name]["status"] = "cancelled"
+                        dag_state[task.task_name]["future"].set_result(None)
+                    return
 
                 logger.info(f"Iniciando subtarefa {index+1}/{len(tasks)}: {task.agent_id} [{task.task_name or 'sem nome'}]")
 
@@ -618,10 +731,19 @@ class AutonomousLoop:
                 success = False
                 last_result = None
                 attempt_errors: List[str] = []  # V15.3/G5 — insumo do DivergenceReport
+                # retry_key já calculada no início da coroutine (usada também pelo guard
+                # de tarefa abandonada, acima).
 
-                # Retry Loop
-                for attempt in range(self.max_retries):
-                    logger.info(f"Executando tentativa {attempt+1}/{self.max_retries} para {task.agent_id} [{task.task_name}]")
+                # Retry Loop — cada iteração conta como uma tentativa GLOBAL da tarefa
+                # (SESSION_MAX_TASK_RETRIES), não apenas local a este dispatch.
+                attempt = 0
+                while True:
+                    attempt_number = self._usage_tracker.record_task_attempt(retry_key)
+                    attempt = attempt_number - 1  # índice 0-based, compatível com os logs abaixo
+                    logger.info(
+                        f"Executando tentativa {attempt_number}/{self._usage_tracker.budget.max_task_retries} "
+                        f"para {task.agent_id} [{task.task_name}]"
+                    )
 
                     # V5.8 — Telemetria: subtask_start (apenas na primeira tentativa)
                     if attempt == 0:
@@ -637,7 +759,7 @@ class AutonomousLoop:
 
                     result = await self.orchestrator._execute_agent(enriched_task, master_session_id)
                     last_result = result
-                    
+
                     if result.status == "success":
                         success = True
                         # V6.3: Executa Reviewer se habilitado e houver critérios
@@ -708,12 +830,20 @@ class AutonomousLoop:
                                 value=json.dumps(memory_context)
                             )
 
+                        # V18/usage-limits — retentativas da MESMA tarefa (task_name) são
+                        # limitadas por SESSION_MAX_TASK_RETRIES, contadas cumulativamente
+                        # pelo UsageTracker (inclusive entre ciclos de replanejamento). Ao
+                        # esgotar, a tarefa é ABANDONADA (não mais recomeça o loop) — o
+                        # restante do DAG e a sessão continuam (design §3).
+                        if self._usage_tracker.task_retries_exhausted(retry_key):
+                            break
+
                         # V12.1.1 — Cache-busting por injeção de contexto de erro.
                         # O bloco abaixo altera o prompt da próxima tentativa, garantindo
                         # que o cache faça MISS e o agente receba um novo contexto.
                         error_context = (
                             f"\n\n[TENTATIVA ANTERIOR FALHOU]\n"
-                            f"Tentativa: {attempt + 1}/{self.max_retries}\n"
+                            f"Tentativa: {attempt_number}/{self._usage_tracker.budget.max_task_retries}\n"
                             f"Erro: {result.error or 'Erro desconhecido'}\n"
                             f"Instrução: Tente uma abordagem diferente para resolver o problema.\n"
                         )
@@ -738,7 +868,7 @@ class AutonomousLoop:
 
                 # Roadmap V15.3 / Spec G5 — DivergenceReport quando a subtarefa esgota
                 # todas as tentativas (padrão de falha recorrente detectado).
-                if not success and len(attempt_errors) >= self.max_retries:
+                if not success and self._usage_tracker.task_retries_exhausted(retry_key):
                     await self._report_divergence(task, attempt_errors, master_session_id)
 
                 # V5.8 — Telemetria: subtask_end
@@ -786,23 +916,69 @@ class AutonomousLoop:
                 if task.task_name:
                     if success:
                         dag_state[task.task_name]["status"] = "success"
+                    elif self._usage_tracker.task_retries_exhausted(retry_key):
+                        # V18/usage-limits — retentativas da MESMA tarefa esgotadas: a
+                        # tarefa é ABANDONADA, não "failed". Isso a exclui de
+                        # `failed_tasks` abaixo — NÃO dispara um novo ciclo de
+                        # replanejamento; apenas esta tarefa (e seus dependentes) fica
+                        # sem conclusão, e o restante do DAG e a sessão continuam
+                        # (design §3 — "Retentativas abandonam a tarefa, não a sessão").
+                        self._usage_tracker.mark_task_abandoned(retry_key)
+                        dag_state[task.task_name]["status"] = "abandonada"
+                        dag_state[task.task_name]["error"] = last_result.error if last_result else "Unknown error"
                     else:
                         dag_state[task.task_name]["status"] = "failed"
                         dag_state[task.task_name]["error"] = last_result.error if last_result else "Unknown error"
-                    
+
                     dag_state[task.task_name]["future"].set_result(None)
 
-            # Executa todas as tarefas simultaneamente (o DAG coordena a ordem real)
+            # Executa todas as tarefas simultaneamente (o DAG coordena a ordem real).
+            # V18/usage-limits — limitado pelo tempo restante do orçamento + carência
+            # (LIMIT_GRACE_SECONDS): subtarefas em andamento têm até esse prazo para
+            # terminar; se estourar, as demais são canceladas e a sessão fecha por
+            # limite de tempo (design §3).
             coroutines = [_execute_task_in_dag(t, i) for i, t in enumerate(tasks)]
-            await asyncio.gather(*coroutines)
+            remaining_seconds = max(
+                0.0, (self._usage_tracker.budget.max_minutes * 60) - (self._usage_tracker.elapsed_minutes() * 60)
+            )
+            gather_timeout = remaining_seconds + LIMIT_GRACE_SECONDS
+            try:
+                await asyncio.wait_for(asyncio.gather(*coroutines), timeout=gather_timeout)
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "Limite de tempo atingido durante a execução do ciclo — cancelando "
+                    "subtarefas restantes após a carência",
+                    extra={"master_session_id": master_session_id, "grace_seconds": LIMIT_GRACE_SECONDS},
+                )
+                for t_name, state in dag_state.items():
+                    if state["status"] == "pending":
+                        state["status"] = "cancelled"
+                        if not state["future"].done():
+                            state["future"].set_result(None)
+                return await self._close_session(
+                    StopReason.TIME, master_session_id, prompt, tasks, dag_state, final_results
+                )
 
             # Verifica se houve alguma falha
             failed_tasks = [t for t, state in dag_state.items() if state["status"] in ("failed", "cancelled")]
+            abandoned_tasks = [t for t, state in dag_state.items() if state["status"] == "abandonada"]
+
             if not failed_tasks:
-                # Sucesso total
+                # Sucesso total (possivelmente com tarefas abandonadas em ramificações
+                # independentes do DAG — design §3, "Tarefa abandonada").
                 succeeded = sum(1 for r in final_results if r.status == "success")
                 failed = len(final_results) - succeeded
-                
+
+                # V18/usage-limits — se TODAS as tarefas do ciclo foram abandonadas por
+                # retentativas (nada teve sucesso), a sessão inteira fecha com
+                # motivo_parada="limite_retentativas" (design §3, "Todas abandonadas").
+                if abandoned_tasks and succeeded == 0 and self._usage_tracker.all_pending_abandoned(
+                    list(dag_state.keys())
+                ):
+                    return await self._close_session(
+                        StopReason.RETRIES, master_session_id, prompt, tasks, dag_state, final_results
+                    )
+
                 if succeeded > 0:
                     await self._promote_findings(prompt, master_session_id)
                     # Etapa V6.7: Síntese final com o Summarizer
@@ -944,6 +1120,149 @@ class AutonomousLoop:
             succeeded=succeeded,
             failed=failed,
             artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id)
+        )
+
+    async def _close_session(
+        self,
+        reason: "StopReason",
+        master_session_id: str,
+        prompt: str,
+        tasks: List["AgentTask"],
+        dag_state: Dict[str, Any],
+        final_results: List["AgentResult"],
+    ) -> "OrchestratorResult":
+        """Executa o fechamento gracioso da sessão (Roadmap V18 / Spec `usage-limits`).
+
+        Grava sempre um checkpoint determinístico (sem LLM — design §3, "Fechamento
+        sempre registra o avanço") no payload da sessão e em ``checkpoint.json``, com
+        o motivo de parada e o estado de cada tarefa. Se ainda houver orçamento na
+        reserva de fechamento, tenta também uma consolidação final via Summarizer.
+
+        Nota de integração (spec ambiguity, ver relatório da mudança): o design
+        (``openspec/changes/v18-usage-limits/design.md`` §3) especifica o fechamento
+        como "checkpoint (v18-research-continuity) + curator.close_session". Nem o
+        checkpoint de ``v18-research-continuity`` nem o agente Curator (ADR 012)
+        existem neste codebase — são mudanças paralelas/futuras que ainda não foram
+        implementadas. Esta implementação usa o Summarizer já existente
+        (`_synthesize_results`) como consolidação final e um checkpoint determinístico
+        próprio como substituto temporário; quando `v18-research-continuity`/Curator
+        forem implementados, este método deve passar a delegar a eles.
+
+        Args:
+            reason: Motivo de parada (`StopReason`).
+            master_session_id: ID da sessão mestra (== execution_id).
+            prompt: Solicitação original do usuário.
+            tasks: Plano ativo no momento do fechamento (pode ser vazio).
+            dag_state: Estado do DAG no momento do fechamento (pode ser vazio).
+            final_results: Resultados já acumulados na sessão.
+
+        Returns:
+            `OrchestratorResult` final da sessão, com o checkpoint e (se possível)
+            a consolidação final incluídos.
+        """
+        from src.orchestrator import OrchestratorResult
+
+        usage_status = self._usage_tracker.check()
+
+        logger.warning(
+            "Sessão em fechamento gracioso",
+            extra={
+                "master_session_id": master_session_id,
+                "motivo_parada": reason.value,
+                "tokens_used": usage_status.tokens_used,
+                "minutes_elapsed": usage_status.minutes_elapsed,
+                "connection_retries": usage_status.connection_retries,
+            },
+        )
+
+        telemetry = get_telemetry()
+        telemetry.record_agent_event(
+            execution_id=master_session_id,
+            session_id=master_session_id,
+            agent_id="autonomous_loop",
+            event_type="session_closing",
+            payload={
+                "motivo_parada": reason.value,
+                "tokens_used": usage_status.tokens_used,
+                "minutes_elapsed": usage_status.minutes_elapsed,
+                "connection_retries": usage_status.connection_retries,
+                "abandoned_tasks": sorted(self._usage_tracker.abandoned_tasks),
+            },
+        )
+
+        completed_tasks = [t for t, s in dag_state.items() if s.get("status") == "success"]
+        abandoned_tasks = [t for t, s in dag_state.items() if s.get("status") == "abandonada"]
+        pending_tasks = [
+            t for t, s in dag_state.items() if s.get("status") not in ("success", "abandonada")
+        ]
+
+        # design §3 — "Reserva esgotada": se não sobrar orçamento nem para a reserva de
+        # fechamento, pula a consolidação via LLM e apenas grava o checkpoint
+        # determinístico; a consolidação fica pendente para a próxima execução.
+        tokens_available_for_closing = not self._usage_tracker.tokens_hard_exhausted()
+        consolidation_pending = not tokens_available_for_closing
+
+        checkpoint = {
+            "motivo_parada": reason.value,
+            "closed_at": datetime.now(timezone.utc).isoformat(),
+            "prompt": prompt,
+            "completed_tasks": completed_tasks,
+            "abandoned_tasks": abandoned_tasks,
+            "pending_tasks": pending_tasks,
+            "tokens_used": usage_status.tokens_used,
+            "minutes_elapsed": usage_status.minutes_elapsed,
+            "connection_retries": usage_status.connection_retries,
+            "consolidation_pending": consolidation_pending,
+        }
+
+        # Checkpoint determinístico — sempre gravado, mesmo se a consolidação abaixo falhar.
+        session = self.orchestrator.session_manager.get(master_session_id)
+        payload = dict(session.payload) if session is not None else {}
+        payload["motivo_parada"] = reason.value
+        payload["checkpoint"] = checkpoint
+        self.orchestrator.session_manager.update(master_session_id, payload=payload)
+
+        try:
+            session_dir = self.orchestrator.output_manager.base_dir / master_session_id
+            session_dir.mkdir(parents=True, exist_ok=True)
+            (session_dir / "checkpoint.json").write_text(
+                json.dumps(checkpoint, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+        except Exception as e:
+            logger.warning("Falha ao gravar checkpoint.json", extra={"error": str(e)})
+
+        # Consolidação final (equivalente ao Curator — ver nota de integração acima),
+        # usando a reserva de tokens quando disponível.
+        if tokens_available_for_closing and (completed_tasks or final_results):
+            try:
+                final_report = await self._synthesize_results(prompt, final_results, master_session_id)
+                if final_report:
+                    final_results.append(final_report)
+            except Exception as e:
+                logger.warning(
+                    "Falha na consolidação final durante o fechamento — checkpoint "
+                    "determinístico preservado",
+                    extra={"error": str(e)},
+                )
+                consolidation_pending = True
+        else:
+            logger.warning(
+                "Reserva de tokens esgotada — consolidação final adiada (consolidation_pending)",
+                extra={"master_session_id": master_session_id},
+            )
+
+        self._short_term_memory.clear(master_session_id)
+
+        succeeded = sum(1 for r in final_results if r.status == "success")
+        failed = len(final_results) - succeeded
+
+        return OrchestratorResult(
+            results=final_results,
+            total=len(tasks) if tasks else len(dag_state),
+            succeeded=succeeded,
+            failed=failed,
+            artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id),
+            plan_json=json.dumps([t.__dict__ for t in tasks]) if tasks else None,
         )
 
     async def _promote_findings(self, prompt: str, master_session_id: str) -> None:

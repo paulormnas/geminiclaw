@@ -15,6 +15,10 @@ class LLMResponse:
     tool_calls: list[ToolCall] = field(default_factory=list)
     finish_reason: str = "stop"  # "stop" | "tool_calls" | "length"
     usage: dict = field(default_factory=dict)
+    # Dados opacos que o próprio provedor precisa receber de volta no histórico (ex.: blocos
+    # de pensamento assinados da Anthropic, que devem ser devolvidos intactos no ciclo de
+    # ferramentas). Os demais provedores ignoram este campo.
+    provider_data: dict | None = None
 
     def to_message(self) -> dict:
         """Converte a resposta para o formato de mensagem do histórico."""
@@ -23,6 +27,8 @@ class LLMResponse:
             msg["content"] = self.text
         if self.thought:
             msg["thought"] = self.thought
+        if self.provider_data:
+            msg["provider_data"] = self.provider_data
         if self.tool_calls:
             msg["tool_calls"] = [
                 {

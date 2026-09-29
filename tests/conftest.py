@@ -50,13 +50,18 @@ def mock_embedding_provider(monkeypatch):
 def mock_db_connection(request):
     """Mock global do banco de dados com estado em memória.
 
-    Ignorado para testes unitários do módulo src.db, e para os testes de
-    integração do grafo de conhecimento (tests/integration/knowledge/), que
-    precisam de uma conexão real com Apache AGE — ver
-    tests/integration/knowledge/conftest.py.
+    Ignorado para testes unitários do módulo src.db, para os testes de pool
+    real (tests/integration/test_db_integration.py, que se auto-pulam sem
+    PostgreSQL) e para os testes de integração do grafo de conhecimento
+    (tests/integration/knowledge/), que precisam de uma conexão real com
+    Apache AGE — ver tests/integration/knowledge/conftest.py.
     """
     path = request.node.fspath.strpath
-    if "test_db.py" in path or f"{os.sep}tests{os.sep}integration{os.sep}knowledge{os.sep}" in path:
+    if (
+        "test_db.py" in path
+        or "test_db_integration.py" in path
+        or f"{os.sep}tests{os.sep}integration{os.sep}knowledge{os.sep}" in path
+    ):
         yield
         return
 

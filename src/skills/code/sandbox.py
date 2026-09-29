@@ -8,7 +8,7 @@ import threading
 import time
 import io
 import tarfile
-from src.llm.retry import RETRY_BACKOFFS_SECONDS, emit_connection_retry
+from src.llm.retry import RETRY_BACKOFFS_SECONDS, emit_connection_retry, is_retryable_status
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -18,11 +18,27 @@ def _is_docker_connection_error(exc: Exception) -> bool:
     """True se `exc` representa uma falha de conexão com o daemon Docker
     (Roadmap V18 / Spec `usage-limits`) — vale a pena retentar.
 
+    V18/usage-limits — code review do PR #68 (apontamento importante 2):
+    `docker.errors.DockerException` é a classe-base de praticamente todas as
+    exceções do SDK docker (`ImageNotFound`, `InvalidVersion`,
+    `ContainerError`, etc.), não apenas falhas de conexão com o daemon. Tratar
+    qualquer `DockerException` como transitória fazia erros PERMANENTES de
+    configuração (ex.: imagem inexistente) serem retentados 3x com backoff e
+    emitirem eventos `connection_retry` espúrios, poluindo a contagem usada
+    por `SESSION_MAX_CONNECTION_RETRIES`.
+
+    Restrito, análogo a `is_retryable_status`/`is_retryable_error` em
+    `src/llm/retry.py`, a: `docker.errors.APIError` com status HTTP
+    transitório (429/5xx — ex.: daemon sobrecarregado), e `ConnectionError`/
+    `OSError` (inclui `requests.exceptions.ConnectionError`/`Timeout`, que o
+    docker-py deixa propagar sem encapsular em `DockerException` e que já são
+    subclasses de `OSError`, cobrindo a indisponibilidade real do daemon).
+
     Args:
         exc: Exceção capturada ao chamar a API do Docker.
     """
-    if isinstance(exc, docker.errors.DockerException):
-        return True
+    if isinstance(exc, docker.errors.APIError):
+        return is_retryable_status(exc.status_code)
     return isinstance(exc, (ConnectionError, OSError))
 
 @dataclass

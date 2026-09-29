@@ -18,6 +18,7 @@ from agents.base.agent import (
     _load_session_context,
     _persist_session_context,
     _setup_skills,
+    _task_state,
 )
 from agents.base.tools import write_artifact
 from src.config import DEFAULT_MODEL
@@ -117,15 +118,21 @@ _RESEARCH_KEYWORDS = [
 
 
 def _build_developer_instruction() -> str:
-    """Gera instrução para o Developer Agent injetando o contexto do WorkspaceManifest."""
+    """Gera instrução para o Developer Agent injetando o contexto do WorkspaceManifest.
+
+    Roadmap V16/ADR 014 — lê o estado por tarefa via ``_task_state()``
+    (``AgentContext``/``contextvars`` no runtime em processo, ``os.environ`` no
+    modo container legado), nunca diretamente de ``os.environ``.
+    """
     base_inst = AGENT_INSTRUCTION
 
-    session_id = os.environ.get("SESSION_ID", "")
+    _state = _task_state()
+    session_id = _state["session_id"]
     manifest_context = ""
     if session_id:
         try:
             # Tenta ler manifest da sessão
-            output_base = os.environ.get("OUTPUT_BASE_DIR", "/outputs")
+            output_base = _state["output_base_dir"] or "/outputs"
             manifest_file = Path(output_base) / session_id / "workspace_manifest.json"
             if not manifest_file.exists():
                 # Tenta path direto

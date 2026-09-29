@@ -28,6 +28,7 @@ class Agent:
         return self._instruction
 
 from agents.base.tools import write_artifact
+from src.agent_runtime.context import get_agent_context_optional
 from src.logger import get_logger, setup_file_logging
 from src.prompts import render_instruction
 from src.session import SessionManager
@@ -36,6 +37,43 @@ from src.skills import registry
 from src.skills.memory.long_term import LongTermMemory
 
 logger = get_logger(__name__)
+
+
+def _task_state() -> Dict[str, str]:
+    """Resolve o estado por tarefa (sessão, papel, modo, diretório de output).
+
+    Roadmap V16/ADR 014 (Design §1) — no runtime em processo, esse estado vem
+    do ``AgentContext`` vinculado à ``Task`` asyncio corrente (``contextvars``);
+    ``os.environ`` é global ao processo e não isola tarefas concorrentes. No
+    modo container legado não há ``AgentContext`` e o estado continua vindo de
+    ``os.environ``, definido pelo orquestrador ao spawnar o container.
+
+    Returns:
+        Dicionário com ``session_id``, ``agent_id``, ``session_mode`` e
+        ``output_base_dir``.
+
+    Note:
+        ``session_id`` aqui é ``ctx.agent_session_id`` (a sessão do
+        ``SessionManager`` que o Orquestrador já cria/atualiza/fecha para esta
+        execução — ``Orchestrator._execute_agent_inprocess``), não
+        ``ctx.session_id`` (a sessão mestra). Os callbacks abaixo persistem
+        payload via ``SessionManager`` e precisam apontar para a mesma linha
+        que o Orquestrador gerencia.
+    """
+    ctx = get_agent_context_optional()
+    if ctx is not None:
+        return {
+            "session_id": ctx.agent_session_id,
+            "agent_id": ctx.agent_id,
+            "session_mode": ctx.mode or "assisted",
+            "output_base_dir": str(ctx.output_dir) if ctx.output_dir else "",
+        }
+    return {
+        "session_id": os.environ.get("SESSION_ID", ""),
+        "agent_id": os.environ.get("AGENT_ID", ""),
+        "session_mode": os.environ.get("SESSION_MODE", "assisted"),
+        "output_base_dir": os.environ.get("OUTPUT_BASE_DIR", "./outputs"),
+    }
 
 # Constantes do agente
 AGENT_NAME = "base"
@@ -73,8 +111,9 @@ _INSTRUCTION_TEMPLATE = (
     "- Para ler arquivos de iterações anteriores, leia de `/outputs/` — eles já estão lá.\n"
     "- NUNCA use paths como `/datasets/`, `/data/`, `/tmp/` para artefatos persistentes.\n"
     "- Antes de criar um arquivo, verifique os artefatos já disponíveis no [CONTEXTO DO WORKSPACE] injetado no prompt.\n"
-    "- Dependências Python declare-as no parâmetro `packages` da ferramenta `python_interpreter` — "
-    "nunca instale pacotes por conta própria fora do sandbox.\n\n"
+    "- Para instalar dependências Python, use EXCLUSIVAMENTE o parâmetro `packages` da ferramenta "
+    "`python_interpreter` (a instalação ocorre no sandbox, fora do código gerado). "
+    "Nunca instale pacotes chamando o sistema operacional diretamente a partir do código gerado.\n\n"
     "Se não souber responder ou os dados forem insuficientes, declare claramente a limitação."
 )
 AGENT_INSTRUCTION = render_instruction(_INSTRUCTION_TEMPLATE)
@@ -89,8 +128,9 @@ async def _load_session_context(callback_context: Any) -> None:
     Args:
         callback_context: Contexto do callback ADK.
     """
-    session_id = os.environ.get("SESSION_ID", "")
-    agent_id = os.environ.get("AGENT_ID", "")
+    _state = _task_state()
+    session_id = _state["session_id"]
+    agent_id = _state["agent_id"]
 
     if not session_id:
         logger.warning(
@@ -141,8 +181,9 @@ async def _persist_session_context(callback_context: Any) -> None:
     Args:
         callback_context: Contexto do callback ADK.
     """
-    session_id = os.environ.get("SESSION_ID", "")
-    agent_id = os.environ.get("AGENT_ID", "")
+    _state = _task_state()
+    session_id = _state["session_id"]
+    agent_id = _state["agent_id"]
 
     if not session_id:
         return
@@ -219,7 +260,7 @@ def _get_agent_instruction(base_instruction: str) -> str:
     context_sections: list[str] = []
 
     # --- Modo de operação da sessão (Roadmap V15.6 / Spec G10) ---
-    session_mode = os.environ.get("SESSION_MODE", "assisted").lower()
+    session_mode = _task_state()["session_mode"].lower()
     _MODE_GUIDANCE: dict[str, str] = {
         "assisted": (
             "Modo ASSISTIDO (padrão). Quando o contexto necessário estiver genuinamente ausente "
@@ -306,7 +347,7 @@ def _get_agent_instruction(base_instruction: str) -> str:
                 hw_lines.append(f"  - Plataforma: {f.read().strip()}")
 
         # Uso de disco (diretório de outputs)
-        outputs_dir = os.environ.get("OUTPUT_BASE_DIR", "./outputs")
+        outputs_dir = _task_state()["output_base_dir"] or "./outputs"
         disk = shutil.disk_usage(outputs_dir if os.path.exists(outputs_dir) else ".")
         hw_lines.append(
             f"  - Disco livre: {disk.free // (1024 ** 3)} GB de {disk.total // (1024 ** 3)} GB"

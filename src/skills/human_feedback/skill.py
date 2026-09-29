@@ -17,6 +17,7 @@ import os
 import struct
 from typing import Any, Optional
 
+from src.agent_runtime.context import get_agent_context_optional
 from src.skills.base import BaseSkill, SkillResult
 from src.ipc import Message, HEADER_SIZE, create_message
 from src.logger import get_logger
@@ -62,7 +63,12 @@ class HumanFeedbackSkill(BaseSkill):
         options: Optional[list[str]] = None,
         **kwargs: Any,
     ) -> SkillResult:
-        mode = os.environ.get("SESSION_MODE", "assisted")
+        # V16 — no runtime em processo o modo vem do AgentContext (por tarefa);
+        # no modo container legado, de SESSION_MODE (variável de ambiente do container).
+        _ctx_for_mode = get_agent_context_optional()
+        mode = (_ctx_for_mode.mode if _ctx_for_mode is not None and _ctx_for_mode.mode else None) or os.environ.get(
+            "SESSION_MODE", "assisted"
+        )
 
         if not why_cant_proceed:
             logger.warning(
@@ -83,7 +89,15 @@ class HumanFeedbackSkill(BaseSkill):
             )
             return SkillResult(success=True, output=assumption, metadata={"mode": mode, "blocked": False})
 
-        # Modo assisted: round-trip IPC bloqueante real com o host.
+        # Modo assisted: round-trip bloqueante real com o host.
+        # Roadmap V16/ADR 014 — no runtime em processo, o round-trip é uma chamada
+        # direta ao callback do AgentContext (sem IPC). O caminho IPC abaixo é
+        # mantido apenas para o modo container legado.
+        ctx = get_agent_context_optional()
+        if ctx is not None and ctx.ask_researcher is not None:
+            answer = await ctx.ask_researcher(question, context, why_cant_proceed, options or [])
+            return SkillResult(success=True, output=answer, metadata={"mode": mode, "blocked": True})
+
         from agents.runner import get_active_ipc_connection
 
         conn = get_active_ipc_connection()

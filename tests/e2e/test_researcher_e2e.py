@@ -1,12 +1,13 @@
 """Smoke test E2E do agente researcher com API real.
 
-⚠️ Este teste consome tokens reais da API Gemini.
+⚠️ Este teste faz buscas reais na web via search_quick (Roadmap V16/ADR 014 —
+``search`` não depende mais do Gemini CLI como subprocesso).
 Execute manualmente com: uv run pytest tests/e2e/test_researcher_e2e.py -m e2e -v -s
 """
 
 import pytest
 
-from agents.researcher.tools import search, reset_search_cache
+from agents.researcher.tools import reset_search_cache, search
 
 
 @pytest.fixture(autouse=True)
@@ -21,11 +22,7 @@ class TestResearcherE2E:
     """Smoke tests E2E do researcher com API real."""
 
     async def test_search_returns_nonempty_result(self) -> None:
-        """search com query real deve retornar resposta não-vazia.
-
-        Este teste requer que o Gemini CLI esteja instalado e
-        configurado com uma API key válida.
-        """
+        """search com query real deve retornar resposta não-vazia."""
         result = await search("O que é o framework GeminiClaw?")
 
         # O resultado deve ser uma string não-vazia

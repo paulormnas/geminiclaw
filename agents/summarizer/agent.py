@@ -103,7 +103,11 @@ root_agent = Agent(
     name=AGENT_NAME,
     model=DEFAULT_MODEL,
     description=AGENT_DESCRIPTION,
-    _instruction=_get_agent_instruction(AGENT_INSTRUCTION),
+    # Roadmap V16/ADR 014: lambda (avaliada por tarefa), não string congelada no
+    # import do módulo — no runtime em processo o módulo é importado uma única
+    # vez para todo o processo (AGENT_DEFINITIONS é cacheado), então uma string
+    # fixa nunca refletiria o SESSION_MODE/contexto de tarefas subsequentes.
+    _instruction=lambda: _get_agent_instruction(AGENT_INSTRUCTION),
     tools=active_tools + [write_artifact],
     before_agent_callback=_load_session_context,
     after_agent_callback=_persist_session_context,

@@ -23,12 +23,17 @@ class ModelRouter:
     """Roteador de modelos e provedores LLM por papel."""
 
     @classmethod
-    def get_provider(cls, role: Optional[str] = None) -> LLMProvider:
+    def get_provider(cls, role: Optional[str] = None, model: Optional[str] = None) -> LLMProvider:
         """Retorna uma instância de LLMProvider configurada para o papel.
 
         Args:
             role: Nome do papel ('researcher', 'validator', 'developer').
                   Se None, retorna o provedor padrão do sistema (compatibilidade retroativa).
+            model: Modelo a usar em vez do padrão do papel (Roadmap V16/ADR 014) —
+                permite que o runtime em processo honre ``AgentTask.preferred_model``
+                (ex.: sugestão do Planner), equivalente ao ``LLM_MODEL`` que o modo
+                container propagava via variável de ambiente. O provedor continua
+                sendo o do papel; apenas o modelo é sobrescrito.
 
         Returns:
             Instância de LLMProvider configurada.
@@ -42,19 +47,20 @@ class ModelRouter:
             return get_provider()
 
         role_cfg: RoleModelConfig = get_role_model_config(role)
-        cache_key = (role_cfg.provider.lower(), role_cfg.model)
+        effective_model = model or role_cfg.model
+        cache_key = (role_cfg.provider.lower(), effective_model)
 
         if cache_key in _provider_cache:
             return _provider_cache[cache_key]
 
-        provider_instance = create_provider(role_cfg.provider, role_cfg.model)
+        provider_instance = create_provider(role_cfg.provider, effective_model)
 
         logger.info(
             "ModelRouter instanciou provedor",
             extra={
                 "role": role_cfg.role,
                 "provider": role_cfg.provider,
-                "model": role_cfg.model,
+                "model": effective_model,
             },
         )
         _provider_cache[cache_key] = provider_instance

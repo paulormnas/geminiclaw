@@ -32,6 +32,21 @@ DEFAULT_ROLE_CONFIGS: Dict[str, Dict[str, str]] = {
         "provider": "google",
         "model": "gemini-2.0-flash",
     },
+    # Roadmap V16 — papéis adicionais executados pelo AgentRuntime em processo
+    # (agents/base, agents/summarizer, agents/reviewer). Mesmo padrão do
+    # Researcher/Developer: customizáveis via {ROLE}_PROVIDER/{ROLE}_MODEL.
+    "base": {
+        "provider": "google",
+        "model": "gemini-2.0-flash",
+    },
+    "summarizer": {
+        "provider": "google",
+        "model": "gemini-2.0-flash",
+    },
+    "reviewer": {
+        "provider": "google",
+        "model": "gemini-2.0-flash",
+    },
 }
 
 

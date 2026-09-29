@@ -211,10 +211,14 @@ async def test_circuit_breaker_aborta_ao_atingir_limite_containers():
     mock_session_manager.update = MagicMock()
     mock_session_manager.close = MagicMock()
 
+    # Roadmap V16/ADR 014: AGENT_RUNTIME agora tem padrão "inprocess" —
+    # este teste cobre especificamente o circuit breaker de containers do
+    # caminho legado (_execute_agent_container), então fixa o modo.
     orchestrator = Orchestrator(
         runner=mock_runner,
         ipc=mock_ipc,
         session_manager=mock_session_manager,
+        agent_runtime_mode="container",
     )
 
     task = AgentTask(
@@ -260,10 +264,13 @@ async def test_execute_agent_incrementa_contador_containers():
     mock_session_manager.update = MagicMock()
     mock_session_manager.close = MagicMock()
 
+    # Roadmap V16/ADR 014: fixa o modo container — este teste cobre
+    # especificamente o contador de containers do caminho legado.
     orchestrator = Orchestrator(
         runner=mock_runner,
         ipc=mock_ipc,
         session_manager=mock_session_manager,
+        agent_runtime_mode="container",
     )
 
     task = AgentTask(

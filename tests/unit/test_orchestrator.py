@@ -36,7 +36,14 @@ def _make_response_message(session_id: str, payload: dict) -> Message:
 
 
 def _create_orchestrator() -> tuple[Orchestrator, MagicMock, MagicMock, MagicMock]:
-    """Cria um Orchestrator com dependências mockadas."""
+    """Cria um Orchestrator com dependências mockadas, fixado no modo container.
+
+    Roadmap V16/ADR 014: ``AGENT_RUNTIME`` agora tem padrão ``inprocess``. Este
+    helper testa especificamente o caminho legado de container/IPC
+    (``_execute_agent_container``), então fixa ``agent_runtime_mode="container"``
+    explicitamente — os testes do runtime em processo ficam em
+    ``TestOrchestratorInProcessRuntime`` mais abaixo.
+    """
     mock_runner = MagicMock()
     mock_runner.spawn = AsyncMock(return_value="container_id_123")
     mock_runner.stop = AsyncMock()
@@ -45,10 +52,10 @@ def _create_orchestrator() -> tuple[Orchestrator, MagicMock, MagicMock, MagicMoc
 
     mock_ipc = MagicMock()
     mock_ipc._connections = {}
-    
+
     async def create_socket_side_effect(ipc_id: str) -> None:
         mock_ipc._connections[ipc_id] = MagicMock()
-    
+
     mock_ipc.create_socket = AsyncMock(side_effect=create_socket_side_effect)
     mock_ipc.wait_for_connection = AsyncMock()
     mock_ipc.send = AsyncMock()
@@ -60,6 +67,7 @@ def _create_orchestrator() -> tuple[Orchestrator, MagicMock, MagicMock, MagicMoc
         runner=mock_runner,
         ipc=mock_ipc,
         session_manager=mock_session_manager,
+        agent_runtime_mode="container",
     )
 
     return orchestrator, mock_runner, mock_ipc, mock_session_manager
@@ -329,3 +337,152 @@ class TestOrchestratorCleanup:
         mock_sm.close.assert_any_call("sess_err")
         mock_ipc.close.assert_called_once()
         mock_runner.stop.assert_called_once()
+
+
+def _make_agent_result(agent_id: str, session_id: str, status: str = "success",
+                        response: dict | None = None, error: str | None = None) -> AgentResult:
+    """Helper para criar um AgentResult mockado (usado pelos testes de runtime em processo)."""
+    return AgentResult(agent_id=agent_id, session_id=session_id, status=status,
+                        response=response or {}, error=error)
+
+
+def _create_inprocess_orchestrator() -> tuple[Orchestrator, MagicMock, MagicMock, MagicMock, MagicMock]:
+    """Cria um Orchestrator fixado no modo em processo (Roadmap V16/ADR 014), com
+    ``AgentRuntime`` mockado para não executar LLM/ferramentas reais.
+    """
+    mock_runner = MagicMock()
+    mock_runner.spawn = AsyncMock(return_value="container_id_123")
+
+    mock_ipc = MagicMock()
+    mock_ipc._connections = {}
+    mock_ipc.create_socket = AsyncMock()
+
+    mock_session_manager = MagicMock()
+
+    mock_agent_runtime = MagicMock()
+    mock_agent_runtime.run = AsyncMock()
+
+    orchestrator = Orchestrator(
+        runner=mock_runner,
+        ipc=mock_ipc,
+        session_manager=mock_session_manager,
+        agent_runtime=mock_agent_runtime,
+        agent_runtime_mode="inprocess",
+    )
+
+    return orchestrator, mock_runner, mock_ipc, mock_session_manager, mock_agent_runtime
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+class TestOrchestratorInProcessRuntime:
+    """Testes do runtime de agentes em processo (Roadmap V16/ADR 014).
+
+    Cobre o Requirement "Agentes executam em processo no host" da spec
+    ``agent-runtime`` (openspec/changes/v16-in-process-agents/).
+    """
+
+    async def test_default_mode_is_inprocess(self) -> None:
+        """Cenário: AGENT_RUNTIME não configurado explicitamente usa 'inprocess' por padrão."""
+        orchestrator = Orchestrator(
+            runner=MagicMock(), ipc=MagicMock(), session_manager=MagicMock()
+        )
+        assert orchestrator.agent_runtime_mode == "inprocess"
+
+    async def test_execute_agent_inprocess_no_container_spawn(self) -> None:
+        """Cenário: Subtarefa sem spawn de container de agente."""
+        orchestrator, mock_runner, mock_ipc, mock_sm, mock_agent_runtime = _create_inprocess_orchestrator()
+
+        master_session = _make_session("orchestrator", "sess_master")
+        agent_session = _make_session("a1", "s1")
+        mock_sm.create.side_effect = [master_session, agent_session]
+        mock_agent_runtime.run.return_value = _make_agent_result("a1", "s1", response={"text": "ok"})
+
+        task = AgentTask(agent_id="a1", image="img", prompt="hello")
+        result = await orchestrator.handle_request("inprocess test", [task])
+
+        assert result.succeeded == 1
+        assert result.results[0].response == {"text": "ok"}
+        mock_runner.spawn.assert_not_called()
+        mock_ipc.create_socket.assert_not_called()
+        mock_agent_runtime.run.assert_called_once()
+
+        called_task, called_ctx = mock_agent_runtime.run.call_args[0]
+        assert called_task is task
+        assert called_ctx.agent_id == "a1"
+        assert called_ctx.session_id == "sess_master"
+        assert called_ctx.agent_session_id == "s1"
+
+    async def test_execute_agent_inprocess_error_status(self) -> None:
+        """Cenário: Exceção — o orquestrador segue mesmo quando o agente falha."""
+        orchestrator, mock_runner, mock_ipc, mock_sm, mock_agent_runtime = _create_inprocess_orchestrator()
+
+        master_session = _make_session("orchestrator", "sess_master")
+        agent_session = _make_session("a1", "s1")
+        mock_sm.create.side_effect = [master_session, agent_session]
+        mock_agent_runtime.run.return_value = _make_agent_result(
+            "a1", "s1", status="error", error="falha simulada"
+        )
+
+        task = AgentTask(agent_id="a1", image="img", prompt="hello")
+        result = await orchestrator.handle_request("inprocess fail", [task])
+
+        assert result.failed == 1
+        assert result.results[0].status == "error"
+        assert result.results[0].error == "falha simulada"
+
+    async def test_execute_agent_inprocess_timeout_status(self) -> None:
+        """Cenário: Timeout — o AgentResult reflete status='timeout'."""
+        orchestrator, mock_runner, mock_ipc, mock_sm, mock_agent_runtime = _create_inprocess_orchestrator()
+
+        master_session = _make_session("orchestrator", "sess_master")
+        agent_session = _make_session("a1", "s1")
+        mock_sm.create.side_effect = [master_session, agent_session]
+        mock_agent_runtime.run.return_value = _make_agent_result("a1", "s1", status="timeout", error="timeout!")
+
+        task = AgentTask(agent_id="a1", image="img", prompt="hello")
+        result = await orchestrator.handle_request("inprocess timeout", [task])
+
+        assert result.results[0].status == "timeout"
+
+    async def test_circuit_breaker_max_agent_runs_per_session(self) -> None:
+        """Cenário: Limite de execuções de agentes interrompe novas execuções."""
+        from src.config import MAX_AGENT_RUNS_PER_SESSION
+
+        orchestrator, mock_runner, mock_ipc, mock_sm, mock_agent_runtime = _create_inprocess_orchestrator()
+        mock_sm.create.return_value = _make_session("a1", "s1")
+        orchestrator._session_agent_run_counts["sess_master"] = MAX_AGENT_RUNS_PER_SESSION
+
+        task = AgentTask(agent_id="a1", image="img", prompt="hello")
+        with pytest.raises(RuntimeError, match="Limite de execuções de agente"):
+            await orchestrator._execute_agent_inprocess(task, master_session_id="sess_master")
+
+        mock_agent_runtime.run.assert_not_called()
+
+    async def test_ask_researcher_callback_delegates_to_core(self) -> None:
+        """Cenário: o callback ask_researcher do AgentContext reutiliza dedup/registro (Spec G5)."""
+        orchestrator, mock_runner, mock_ipc, mock_sm, mock_agent_runtime = _create_inprocess_orchestrator()
+
+        master_session = _make_session("orchestrator", "sess_master")
+        agent_session = _make_session("a1", "s1")
+        mock_sm.create.side_effect = [master_session, agent_session]
+
+        captured_ctx = {}
+
+        async def fake_run(task, ctx):
+            captured_ctx["ctx"] = ctx
+            return _make_agent_result("a1", "s1", response={"text": "ok"})
+
+        mock_agent_runtime.run.side_effect = fake_run
+
+        task = AgentTask(agent_id="a1", image="img", prompt="hello")
+        await orchestrator.handle_request("ask_researcher wiring", [task])
+
+        ctx = captured_ctx["ctx"]
+        assert ctx.ask_researcher is not None
+
+        with patch.object(orchestrator, "_ask_researcher_core", new=AsyncMock(return_value="42")) as mock_core:
+            answer = await ctx.ask_researcher("pergunta?", "contexto", "motivo", ["a", "b"])
+
+        assert answer == "42"
+        mock_core.assert_called_once()

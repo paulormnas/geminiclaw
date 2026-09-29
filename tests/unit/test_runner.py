@@ -98,9 +98,16 @@ async def test_runner_spawn_parameters(mock_docker_client):
                         "SESSION_ID": "session_123",
                         # V13.1.2: TASK_NAME é sempre propagado; sem task_name passa vazio.
                         "TASK_NAME": "",
+                        # Roadmap V16/ADR 014: "base" passou a ter uma entrada própria em
+                        # src.model_config.DEFAULT_ROLE_CONFIGS (necessária para o
+                        # ModelRouter resolver o papel no runtime em processo). Isso também
+                        # afeta o modo container legado (_do_spawn já resolvia por papel
+                        # para researcher/developer/validator antes do V16): "base" agora
+                        # resolve para o modelo padrão do papel em vez do LLM_MODEL/LLM_PROVIDER
+                        # globais patchados acima, que só valem para papéis desconhecidos.
                         "LLM_PROVIDER": "google",
-                        "LLM_MODEL": "gemini-3-flash-preview",
-                        "AGENT_MODEL": "gemini-3-flash-preview",
+                        "LLM_MODEL": "gemini-2.0-flash",
+                        "AGENT_MODEL": "gemini-2.0-flash",
                         "GEMINI_API_KEY": "test_key",
                         "GOOGLE_API_KEY": "test_key",
                         "OLLAMA_BASE_URL": "http://host.docker.internal:11434",

@@ -1,9 +1,10 @@
 """Testes unitários para a skill WebReader."""
 
+import socket
+from unittest.mock import patch
+
 import pytest
 import respx
-import httpx
-from bs4 import BeautifulSoup
 
 from src.skills.web_reader.skill import WebReaderSkill
 
@@ -13,6 +14,25 @@ from src.skills.web_reader.skill import WebReaderSkill
 
 TEST_URL = "http://example.com/page"
 TEST_ROBOTS_URL = "http://example.com/robots.txt"
+
+# V16/ADR 014 — desde a correção do finding #2 (pin de IP contra DNS
+# rebinding), o guard de SSRF resolve o host via socket.getaddrinfo puro
+# *antes* de qualquer requisição httpx, e depois conecta diretamente ao IP
+# resolvido (ver ``resolve_and_pin_host``/``pinned_get`` em
+# ``src/skills/web_reader/skill.py``). Isso não passa pelo respx (que só
+# intercepta o transporte do httpx), então os testes precisam fixar essa
+# resolução para não depender de DNS real, e os mocks do respx precisam
+# registrar a URL já com o IP fixado — é para lá que a requisição de fato vai.
+PINNED_IP = "93.184.216.34"
+PINNED_URL = f"http://{PINNED_IP}/page"
+PINNED_ROBOTS_URL = f"http://{PINNED_IP}/robots.txt"
+
+
+@pytest.fixture(autouse=True)
+def _pin_dns_to_fixed_public_ip():
+    fake_infos = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (PINNED_IP, 0))]
+    with patch("socket.getaddrinfo", return_value=fake_infos):
+        yield
 
 HTML_CONTENT = """
 <html>
@@ -48,9 +68,9 @@ async def test_web_reader_success(web_reader: WebReaderSkill) -> None:
     """Testa a extração correta de texto ignorando scripts, styles, etc."""
     with respx.mock:
         # Mock do robots.txt permitindo tudo
-        respx.get(TEST_ROBOTS_URL).respond(status_code=200, text="User-agent: *\nAllow: /")
+        respx.get(PINNED_ROBOTS_URL).respond(status_code=200, text="User-agent: *\nAllow: /")
         # Mock da página principal
-        respx.get(TEST_URL).respond(status_code=200, text=HTML_CONTENT)
+        respx.get(PINNED_URL).respond(status_code=200, text=HTML_CONTENT)
 
         result = await web_reader.run(TEST_URL)
 
@@ -76,8 +96,8 @@ async def test_web_reader_truncation(web_reader: WebReaderSkill) -> None:
     """Testa se o conteúdo longo é truncado corretamente."""
     long_html = "<html><body><p>" + ("a" * 10000) + "</p></body></html>"
     with respx.mock:
-        respx.get(TEST_ROBOTS_URL).respond(status_code=200, text="User-agent: *\nAllow: /")
-        respx.get(TEST_URL).respond(status_code=200, text=long_html)
+        respx.get(PINNED_ROBOTS_URL).respond(status_code=200, text="User-agent: *\nAllow: /")
+        respx.get(PINNED_URL).respond(status_code=200, text=long_html)
 
         result = await web_reader.run(TEST_URL, max_chars=5000)
 
@@ -91,8 +111,8 @@ async def test_web_reader_truncation(web_reader: WebReaderSkill) -> None:
 async def test_web_reader_cache(web_reader: WebReaderSkill) -> None:
     """Testa se a leitura usa o cache."""
     with respx.mock:
-        respx.get(TEST_ROBOTS_URL).respond(status_code=200, text="User-agent: *\nAllow: /")
-        route = respx.get(TEST_URL).respond(status_code=200, text="<html><body><p>Cache test</p></body></html>")
+        respx.get(PINNED_ROBOTS_URL).respond(status_code=200, text="User-agent: *\nAllow: /")
+        route = respx.get(PINNED_URL).respond(status_code=200, text="<html><body><p>Cache test</p></body></html>")
 
         # Primeira chamada bate na API
         result1 = await web_reader.run(TEST_URL)
@@ -111,7 +131,7 @@ async def test_web_reader_cache(web_reader: WebReaderSkill) -> None:
 async def test_web_reader_robots_disallow(web_reader: WebReaderSkill) -> None:
     """Testa bloqueio pelo robots.txt."""
     with respx.mock:
-        respx.get(TEST_ROBOTS_URL).respond(status_code=200, text="User-agent: *\nDisallow: /page")
+        respx.get(PINNED_ROBOTS_URL).respond(status_code=200, text="User-agent: *\nDisallow: /page")
         
         result = await web_reader.run(TEST_URL)
 
@@ -123,8 +143,8 @@ async def test_web_reader_robots_disallow(web_reader: WebReaderSkill) -> None:
 async def test_web_reader_http_error(web_reader: WebReaderSkill) -> None:
     """Testa tratamento de erro HTTP."""
     with respx.mock:
-        respx.get(TEST_ROBOTS_URL).respond(status_code=200, text="User-agent: *\nAllow: /")
-        respx.get(TEST_URL).respond(status_code=404, text="Not Found")
+        respx.get(PINNED_ROBOTS_URL).respond(status_code=200, text="User-agent: *\nAllow: /")
+        respx.get(PINNED_URL).respond(status_code=404, text="Not Found")
 
         result = await web_reader.run(TEST_URL)
 

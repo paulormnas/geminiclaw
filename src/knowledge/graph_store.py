@@ -486,7 +486,9 @@ class AgeGraphStore(GraphStore):
             timeout_ms = int(self._read_timeout_ms)
 
             def _configure(conn: Any) -> None:
-                conn.execute("LOAD 'age'")
+                # Sem LOAD: o papel somente-leitura não pode carregar bibliotecas
+                # ("access to library age is not allowed"); a extensão já vem
+                # pré-carregada por shared_preload_libraries=age (docker-compose).
                 conn.execute('SET search_path = ag_catalog, "$user", public')
                 conn.execute(f"SET statement_timeout = {timeout_ms}")
                 conn.commit()  # o pool exige a conexão fora de transação após configure

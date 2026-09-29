@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import pathlib
@@ -65,11 +66,13 @@ class CodeSkill(BaseSkill):
         # Carregar configurações do ambiente
         timeout = int(os.getenv("CODE_SANDBOX_TIMEOUT_SECONDS", "60"))
         memory = os.getenv("CODE_SANDBOX_MEMORY_LIMIT", "256m")
+        setup_timeout = int(os.getenv("CODE_SANDBOX_SETUP_TIMEOUT_SECONDS", "300"))
         self.output_dir = os.getenv("OUTPUT_BASE_DIR", "/outputs")
         
         self.sandbox = PythonSandbox(
             timeout=timeout,
-            memory_limit=memory
+            memory_limit=memory,
+            setup_timeout=setup_timeout,
         )
         
         # Expressões regulares para proibição de código malicioso simples
@@ -164,15 +167,19 @@ class CodeSkill(BaseSkill):
 
         # 3. Executar no sandbox
         try:
-            # Nota: PythonSandbox.run não é async pois usa docker-py síncrono.
-            # Em um cenário real, poderíamos usar um wrapper async ou threads.
+            # Nota: PythonSandbox.run é síncrono; a chamada abaixo o executa em thread.
             # Roadmap V15.2 / Spec G2 — injeta scientific_helpers.py quando o código
             # usa bibliotecas científicas/de dados, permitindo save_experiment_artifacts().
             extra_files = None
             if _uses_scientific_libraries(code):
                 extra_files = {"scientific_helpers.py": _load_scientific_helpers_source()}
 
-            result: SandboxResult = self.sandbox.run(
+            # O sandbox usa o SDK síncrono do daemon de containers e pode levar minutos
+            # (instalação de pacotes + execução): rodar direto na corrotina congelaria o
+            # orquestrador e os demais agentes do processo. Vai para uma thread para manter
+            # o event loop livre.
+            result: SandboxResult = await asyncio.to_thread(
+                self.sandbox.run,
                 code=code,
                 session_id=session_id,
                 task_name=task_name,

@@ -58,14 +58,13 @@ async def _resolve_host(hostname: str) -> tuple[str | None, str | None]:
             addr = ipaddress.ip_address(raw_addr.split("%")[0])
         except ValueError:
             continue
-        if (
-            addr.is_loopback
-            or addr.is_private
-            or addr.is_link_local
-            or addr.is_reserved
-            or addr.is_multicast
-            or str(addr) == _CLOUD_METADATA_HOST
-        ):
+        # IPv4 embutido em IPv6 (::ffff:a.b.c.d) é avaliado como o IPv4 de origem.
+        if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+            addr = addr.ipv4_mapped
+        # Lista de permissão: só endereços globalmente roteáveis passam. Uma lista de
+        # bloqueio (is_private, is_loopback...) deixava passar a faixa CGNAT
+        # 100.64.0.0/10, usada pelo Tailscale, e outras faixas reservadas.
+        if not addr.is_global or addr.is_multicast or str(addr) == _CLOUD_METADATA_HOST:
             return None, (
                 f"o host '{hostname}' resolve para o endereço interno/reservado "
                 f"'{addr}', bloqueado para acesso via ferramentas web."

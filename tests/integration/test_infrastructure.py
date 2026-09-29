@@ -4,7 +4,8 @@ import httpx
 import asyncio
 import os
 from pathlib import Path
-from src.config import QDRANT_URL
+# tests/conftest.py força QDRANT_URL=":memory:"; este teste verifica o servidor real do compose.
+QDRANT_HEALTH_URL = "http://localhost:6333/healthz"
 
 def is_docker_available():
     try:
@@ -20,9 +21,9 @@ async def test_qdrant_connectivity():
     """Verifica se o Qdrant está acessível na URL configurada."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(f"{QDRANT_URL}/healthz")
+            response = await client.get(QDRANT_HEALTH_URL)
     except httpx.HTTPError as e:
-        pytest.skip(f"Qdrant não está rodando em {QDRANT_URL}: {e}")
+        pytest.skip(f"Qdrant não está rodando em {QDRANT_HEALTH_URL}: {e}")
 
     # O corpo de /healthz varia entre versões ("all good", "healthz check passed"); só o status é contrato.
     assert response.status_code == 200

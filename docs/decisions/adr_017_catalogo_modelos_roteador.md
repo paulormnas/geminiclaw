@@ -43,6 +43,7 @@ O objetivo é que o `.env` guarde só credenciais e endpoints, que o orquestrado
 
 - `geminiclaw models check <provedor/modelo>` para sondar um modelo novo (prompt sintético, sem dados do projeto, respeitando política e lista de permissão).
 - Orçamento de custo ao lado do de tokens; proveniência de modelo por nó do grafo.
+- **Provedor Anthropic.** O catálogo só pode listar entradas de provedores já registrados (ADR 011 §1); hoje `src/llm/providers/` tem `google`, `ollama` e `openai_compatible`, sem Anthropic. Adicionar Anthropic ao catálogo como alternativa `third_party` para papéis que exigem raciocínio mais forte (ex.: Researcher, Developer) depende primeiro de implementar e registrar o provedor nativo pelo mesmo mecanismo do ADR 011 §1 — não é parte desta ADR, mas é o próximo passo natural para tê-lo disponível no roteador.
 
 ## Revisão
 

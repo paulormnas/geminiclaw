@@ -63,14 +63,16 @@ def _cleanup_created_data():
             ids = [
                 row[0].strip('"')
                 for row in conn.execute(
-                    f"SELECT * FROM cypher('{graph}', $$ MATCH (n) WHERE n.projeto_id = $pid RETURN n.id $$, %s::agtype) AS (r agtype)",
+                    f"SELECT * FROM cypher('{graph}', $$ MATCH (n) WHERE n.projeto_id = $pid "
+                    "RETURN n.id $$, %s::agtype) AS (r agtype)",
                     (params,),
                 ).fetchall()
             ]
             if ids:
                 conn.execute("DELETE FROM knowledge_audit WHERE node_id = ANY(%s)", (ids,))
             conn.execute(
-                f"SELECT * FROM cypher('{graph}', $$ MATCH (n) WHERE n.projeto_id = $pid DETACH DELETE n $$, %s::agtype) AS (r agtype)",
+                f"SELECT * FROM cypher('{graph}', $$ MATCH (n) WHERE n.projeto_id = $pid "
+                "DETACH DELETE n $$, %s::agtype) AS (r agtype)",
                 (params,),
             )
     _CREATED_PROJECTS.clear()

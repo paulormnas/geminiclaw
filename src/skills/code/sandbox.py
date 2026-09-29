@@ -2,13 +2,44 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 import os
 import docker
+import docker.errors
 import pathlib
+import threading
 import time
 import io
 import tarfile
+from src.llm.retry import RETRY_BACKOFFS_SECONDS, emit_connection_retry, is_retryable_status
 from src.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _is_docker_connection_error(exc: Exception) -> bool:
+    """True se `exc` representa uma falha de conexão com o daemon Docker
+    (Roadmap V18 / Spec `usage-limits`) — vale a pena retentar.
+
+    V18/usage-limits — code review do PR #68 (apontamento importante 2):
+    `docker.errors.DockerException` é a classe-base de praticamente todas as
+    exceções do SDK docker (`ImageNotFound`, `InvalidVersion`,
+    `ContainerError`, etc.), não apenas falhas de conexão com o daemon. Tratar
+    qualquer `DockerException` como transitória fazia erros PERMANENTES de
+    configuração (ex.: imagem inexistente) serem retentados 3x com backoff e
+    emitirem eventos `connection_retry` espúrios, poluindo a contagem usada
+    por `SESSION_MAX_CONNECTION_RETRIES`.
+
+    Restrito, análogo a `is_retryable_status`/`is_retryable_error` em
+    `src/llm/retry.py`, a: `docker.errors.APIError` com status HTTP
+    transitório (429/5xx — ex.: daemon sobrecarregado), e `ConnectionError`/
+    `OSError` (inclui `requests.exceptions.ConnectionError`/`Timeout`, que o
+    docker-py deixa propagar sem encapsular em `DockerException` e que já são
+    subclasses de `OSError`, cobrindo a indisponibilidade real do daemon).
+
+    Args:
+        exc: Exceção capturada ao chamar a API do Docker.
+    """
+    if isinstance(exc, docker.errors.APIError):
+        return is_retryable_status(exc.status_code)
+    return isinstance(exc, (ConnectionError, OSError))
 
 @dataclass
 class SandboxResult:
@@ -128,20 +159,45 @@ class PythonSandbox:
                 }
             }
 
-            # Criar o container em modo 'idle' com volume montado
-            container = self.client.containers.run(
-                image=self.image,
-                command=["tail", "-f", "/dev/null"],
-                working_dir="/outputs",
-                mem_limit=self.memory_limit,
-                cpu_period=self.cpu_period,
-                cpu_quota=self.cpu_quota,
-                network_disabled=not bool(setup_commands),
-                environment={"MPLCONFIGDIR": "/tmp", "VIRTUAL_ENV": "/app/.venv"},
-                volumes=volumes,
-                detach=True,
-                remove=False,
-            )
+            # Criar o container em modo 'idle' com volume montado.
+            # V18/usage-limits — retentativa limitada em falha de conexão com o
+            # daemon Docker, emitindo o evento connection_retry na telemetria a
+            # cada retentativa. Método síncrono (executado fora do event loop,
+            # tipicamente via asyncio.to_thread pela skill 'code'): usa
+            # threading.Event().wait em vez de time.sleep para a espera entre
+            # tentativas, conforme AGENTS.md (nunca time.sleep()).
+            last_exc: Exception | None = None
+            for attempt, backoff in enumerate((0.0, *RETRY_BACKOFFS_SECONDS)):
+                if backoff:
+                    logger.warning(
+                        "Retentativa de conexão com o daemon Docker",
+                        extra={"attempt": attempt, "backoff_seconds": backoff},
+                    )
+                    emit_connection_retry("sandbox_docker", str(last_exc))
+                    threading.Event().wait(backoff)
+                try:
+                    container = self.client.containers.run(
+                        image=self.image,
+                        command=["tail", "-f", "/dev/null"],
+                        working_dir="/outputs",
+                        mem_limit=self.memory_limit,
+                        cpu_period=self.cpu_period,
+                        cpu_quota=self.cpu_quota,
+                        network_disabled=not bool(setup_commands),
+                        environment={"MPLCONFIGDIR": "/tmp", "VIRTUAL_ENV": "/app/.venv"},
+                        volumes=volumes,
+                        detach=True,
+                        remove=False,
+                    )
+                    break
+                except Exception as e:
+                    last_exc = e
+                    container = None
+                    if not _is_docker_connection_error(e):
+                        raise
+            if container is None:
+                logger.error("Sandbox: conexão com o daemon Docker esgotou as retentativas")
+                raise last_exc
 
             # Injetar o script e garantir que o diretório /outputs existe
             container.exec_run("mkdir -p /outputs", user='root')
@@ -159,7 +215,6 @@ class PythonSandbox:
                         logger.error(f"Falha no comando de setup: {output.decode()}")
 
             logger.info("Executando script principal no sandbox")
-            import threading
             timed_out = False
 
             def kill_container():

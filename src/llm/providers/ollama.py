@@ -1,6 +1,7 @@
 import asyncio, json, os, time
 import httpx
 from src.llm.base import LLMProvider, LLMResponse, ToolCall
+from src.llm.retry import RETRY_BACKOFFS_SECONDS, emit_connection_retry, is_retryable_status
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -76,11 +77,39 @@ class OllamaProvider(LLMProvider):
 
         try:
             logger.debug("Enviando requisição ao Ollama", extra={"model": self._model, "tools_count": len(tools) if tools else 0})
-            # Log payload apenas em modo debug profundo se necessário, mas aqui vamos logar o básico
-            response = await self._client.post("/api/chat", json=payload)
+            # V18/usage-limits — retentativa limitada em erro de conexão/timeout/5xx,
+            # emitindo o evento connection_retry na telemetria a cada retentativa.
+            response = None
+            last_exc: Exception | None = None
+            for attempt, backoff in enumerate((0.0, *RETRY_BACKOFFS_SECONDS)):
+                if backoff:
+                    logger.warning(
+                        "Retentativa ao provedor Ollama",
+                        extra={"attempt": attempt, "backoff_seconds": backoff, "model": self._model},
+                    )
+                    emit_connection_retry("llm_provider:ollama", str(last_exc))
+                    await asyncio.sleep(backoff)
+                try:
+                    response = await self._client.post("/api/chat", json=payload)
+                except httpx.TransportError as e:
+                    last_exc = e
+                    continue
+                if is_retryable_status(response.status_code):
+                    last_exc = httpx.HTTPStatusError(
+                        f"Status retentável {response.status_code}",
+                        request=response.request,
+                        response=response,
+                    )
+                    response = None
+                    continue
+                break
+            if response is None:
+                logger.error("Provedor Ollama esgotou as retentativas", extra={"model": self._model})
+                raise last_exc
+
             if response.status_code != 200:
                 logger.error(
-                    f"Ollama retornou erro {response.status_code}", 
+                    f"Ollama retornou erro {response.status_code}",
                     extra={"response_body": response.text, "payload_keys": list(payload.keys())}
                 )
             response.raise_for_status()

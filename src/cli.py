@@ -34,6 +34,7 @@ from src.runner import ContainerRunner
 from src.ipc import IPCChannel
 from src.orchestrator import Orchestrator, OrchestratorResult, AgentResult
 from src.context_loader import ContextLoader, ContextBundle
+from src.usage import UsageBudget
 from src.utils.terminal import (
     RESET, BOLD, DIM, GREEN, RED, YELLOW, CYAN, MAGENTA,
     STATUS_ICONS, BANNER, VERSION
@@ -185,7 +186,55 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Formato de saída para 'geminiclaw convert --session <id> --format <fmt>'.",
     )
+    # Roadmap V18 / Spec usage-limits — orçamento de uso da sessão (overrides de config).
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Limite de tokens da sessão, todos os agentes inclusos (padrão: SESSION_MAX_TOKENS).",
+    )
+    parser.add_argument(
+        "--max-minutes",
+        type=float,
+        default=None,
+        metavar="N",
+        help="Limite de tempo de relógio da sessão, em minutos (padrão: SESSION_MAX_MINUTES).",
+    )
+    parser.add_argument(
+        "--max-task-retries",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Limite de retentativas da mesma tarefa (padrão: SESSION_MAX_TASK_RETRIES).",
+    )
+    parser.add_argument(
+        "--max-connection-retries",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Limite de retentativas de conexão da sessão (padrão: SESSION_MAX_CONNECTION_RETRIES).",
+    )
     return parser
+
+
+def build_usage_budget(args: "argparse.Namespace") -> UsageBudget:
+    """Constrói o `UsageBudget` efetivo da sessão a partir dos argumentos da CLI.
+
+    Args:
+        args: Argumentos parseados por `build_parser()`.
+
+    Returns:
+        `UsageBudget` com os defaults de `src/config.py`, sobrescritos pelas
+        opções ``--max-tokens``, ``--max-minutes``, ``--max-task-retries`` e
+        ``--max-connection-retries`` quando fornecidas.
+    """
+    return UsageBudget.from_config(
+        max_tokens=getattr(args, "max_tokens", None),
+        max_minutes=getattr(args, "max_minutes", None),
+        max_task_retries=getattr(args, "max_task_retries", None),
+        max_connection_retries=getattr(args, "max_connection_retries", None),
+    )
 
 
 def format_agent_result(result: AgentResult) -> str:
@@ -677,7 +726,9 @@ def run_embeddings_reindex(collection: str | None, auto_confirm: bool) -> None:
     print()
 
 
-def print_session_banner(mode: str, context_dir: str = "input_context") -> None:
+def print_session_banner(
+    mode: str, context_dir: str = "input_context", budget: UsageBudget | None = None
+) -> None:
     """Exibe o banner de inicialização de sessão (Roadmap V15.6 / Spec G10).
 
     Não bloqueia: apenas informa o pesquisador do estado atual antes de iniciar.
@@ -685,6 +736,9 @@ def print_session_banner(mode: str, context_dir: str = "input_context") -> None:
     Args:
         mode: Modo de operação ativo da sessão (SessionMode).
         context_dir: Diretório de contexto de entrada a inspecionar.
+        budget: Orçamento de uso efetivo da sessão (Roadmap V18 / Spec
+            `usage-limits`). Se omitido, usa os defaults de `src/config.py`
+            apenas para exibição (não altera o orçamento real da sessão).
     """
     mode_label = {
         SessionMode.ASSISTED.value: "assistido",
@@ -711,6 +765,16 @@ def print_session_banner(mode: str, context_dir: str = "input_context") -> None:
         f"{DIM}│{RESET}  {APP_NAME}  │  Modo: {BOLD}{mode_label}{RESET}  │  Contexto: {context_desc}\n"
         f"{DIM}│{RESET}  Pressione Ctrl+C para suspender │  -h para ajuda\n"
         f"{DIM}└──────────────────────────────────────────────────────────────┘{RESET}"
+    )
+
+    # Roadmap V18 / Spec usage-limits — orçamento efetivo exibido no início da sessão.
+    effective_budget = budget or UsageBudget.from_config()
+    print(
+        f"  {DIM}Orçamento: {RESET}{effective_budget.max_tokens:,} tokens "
+        f"({effective_budget.closing_reserve_pct*100:.0f}% reservados p/ fechamento) │ "
+        f"{effective_budget.max_minutes:.0f}min │ "
+        f"{effective_budget.max_task_retries} retentativas/tarefa │ "
+        f"{effective_budget.max_connection_retries} retentativas de conexão"
     )
 
     if mode == SessionMode.AUTO.value:
@@ -880,6 +944,7 @@ async def execute_prompt(
     prompt: str,
     mode: str | None = None,
     context_bundle: ContextBundle | None = None,
+    budget: UsageBudget | None = None,
 ) -> None:
     """Executa um prompt no orquestrador e exibe o resultado.
 
@@ -888,11 +953,15 @@ async def execute_prompt(
         prompt: Prompt do usuário.
         mode: Nível de autonomia da sessão (SessionMode). Se omitido, usa o padrão.
         context_bundle: Contexto pré-carregado de `input_context/` (Spec G9).
+        budget: Orçamento de uso da sessão (Roadmap V18 / Spec `usage-limits`).
+            Se omitido, usa os defaults de `src/config.py`.
     """
     print(f"\n  {STATUS_ICONS['running']} {DIM}Processando...{RESET}\n")
 
     try:
-        result = await orchestrator.handle_request(prompt, mode=mode, context_bundle=context_bundle)
+        result = await orchestrator.handle_request(
+            prompt, mode=mode, context_bundle=context_bundle, budget=budget
+        )
         print(format_result(result))
         if context_bundle and result.session_id:
             print_context_lifecycle_message(result.session_id, context_bundle)
@@ -905,6 +974,7 @@ async def interactive_mode(
     orchestrator: Orchestrator,
     mode: str | None = None,
     context_bundle: ContextBundle | None = None,
+    budget: UsageBudget | None = None,
 ) -> None:
     """Executa a CLI em modo interativo (REPL).
 
@@ -913,10 +983,13 @@ async def interactive_mode(
         mode: Nível de autonomia da sessão (SessionMode). Se omitido, usa o padrão.
         context_bundle: Contexto pré-carregado de `input_context/` (Spec G9), reutilizado
             em todas as interações do REPL.
+        budget: Orçamento de uso da sessão (Roadmap V18 / Spec `usage-limits`),
+            reutilizado em todas as interações do REPL. Se omitido, usa os
+            defaults de `src/config.py`.
     """
     print(BANNER)
     print(f"  {DIM}Modo interativo. Digite 'sair' para encerrar.{RESET}\n")
-    print_session_banner(mode or SESSION_DEFAULT_MODE)
+    print_session_banner(mode or SESSION_DEFAULT_MODE, budget=budget)
 
     while True:
         try:
@@ -955,7 +1028,7 @@ async def interactive_mode(
                 await resume_session(orchestrator, s_id)
             continue
 
-        await execute_prompt(orchestrator, prompt, mode=mode, context_bundle=context_bundle)
+        await execute_prompt(orchestrator, prompt, mode=mode, context_bundle=context_bundle, budget=budget)
 
 
 def _handle_embeddings_command(argv: list[str]) -> None:
@@ -1015,6 +1088,13 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     mode = args.mode or SESSION_DEFAULT_MODE
+    # Roadmap V18 / Spec usage-limits — orçamento efetivo da sessão (config + overrides de CLI).
+    try:
+        budget = build_usage_budget(args)
+    except ValueError as e:
+        print(f"\n  {STATUS_ICONS['error']} {RED}Orçamento de uso inválido: {e}{RESET}\n")
+        logger.error("Orçamento de uso inválido", extra={"error": str(e)})
+        sys.exit(1)
 
     runner: ContainerRunner | None = None
     orchestrator: Orchestrator | None = None
@@ -1130,8 +1210,10 @@ def main() -> None:
 
     if args.prompt:
         # Modo direto: executa o prompt e sai
-        print_session_banner(mode)
-        asyncio.run(execute_prompt(orchestrator, args.prompt, mode=mode, context_bundle=context_bundle))
+        print_session_banner(mode, budget=budget)
+        asyncio.run(
+            execute_prompt(orchestrator, args.prompt, mode=mode, context_bundle=context_bundle, budget=budget)
+        )
         # V11.1.2 — Flush explícito ao encerrar modo não-interativo
         try:
             from src.telemetry import get_telemetry
@@ -1140,7 +1222,7 @@ def main() -> None:
             logger.error("Erro no flush de telemetria final", extra={"error": str(_e)})
     else:
         # Modo interativo (REPL)
-        asyncio.run(interactive_mode(orchestrator, mode=mode, context_bundle=context_bundle))
+        asyncio.run(interactive_mode(orchestrator, mode=mode, context_bundle=context_bundle, budget=budget))
         # V11.1.2 — Flush explícito ao sair do modo interativo
         try:
             from src.telemetry import get_telemetry

@@ -140,6 +140,35 @@ MAX_PLAN_RETRIES = int(get_env("MAX_PLAN_RETRIES", default="5"))
 # V12.5.2 — Limite máximo de containers por sessão (circuit breaker de recursos)
 MAX_CONTAINERS_PER_SESSION = int(get_env("MAX_CONTAINERS_PER_SESSION", default="30"))
 
+# --- Orçamento de Uso da Sessão (V18 / Spec usage-limits) ---
+# UsageBudget/UsageTracker (src/usage.py) transformam estes limites em condições de
+# parada reais (não apenas avisos — ver OPERATIONAL_THRESHOLDS abaixo). Fonte única:
+# o AutonomousLoop lê estes limites exclusivamente daqui, nunca de os.environ direto.
+#
+# SESSION_MAX_TOKENS substitui MAX_SESSION_TOKENS (definida abaixo como alias de
+# retrocompatibilidade — ambos os nomes de variável de ambiente são aceitos).
+SESSION_MAX_TOKENS = int(
+    get_env("SESSION_MAX_TOKENS") or get_env("MAX_SESSION_TOKENS", default="500000")
+)
+# Limite de tempo de relógio (wall-clock) da sessão, em minutos.
+SESSION_MAX_MINUTES = float(get_env("SESSION_MAX_MINUTES", default="120"))
+# SESSION_MAX_TASK_RETRIES substitui MAX_RETRY_PER_SUBTASK (alias de retrocompatibilidade
+# abaixo). MUDANÇA DE COMPORTAMENTO: antes desta spec, o AutonomousLoop lia
+# MAX_RETRY_PER_SUBTASK diretamente de os.environ com default 10 (inconsistente com o
+# default 3 já documentado aqui); agora o loop lê exclusivamente este valor — o default
+# efetivo de retentativas por tarefa passa de 10 para 3.
+SESSION_MAX_TASK_RETRIES = int(
+    get_env("SESSION_MAX_TASK_RETRIES") or get_env("MAX_RETRY_PER_SUBTASK", default="3")
+)
+# Retentativas de conexão acumuladas na sessão inteira (provedores LLM + sandbox Docker).
+SESSION_MAX_CONNECTION_RETRIES = int(get_env("SESSION_MAX_CONNECTION_RETRIES", default="20"))
+# Fração de SESSION_MAX_TOKENS reservada para o fechamento (checkpoint + consolidação
+# final) após o limite de exploração ser atingido.
+SESSION_CLOSING_RESERVE_PCT = float(get_env("SESSION_CLOSING_RESERVE_PCT", default="0.05"))
+# Tempo de carência (segundos) para que subtarefas em andamento terminem após o limite
+# de tempo da sessão ser atingido, antes de serem canceladas.
+LIMIT_GRACE_SECONDS = int(get_env("LIMIT_GRACE_SECONDS", default="120"))
+
 # --- Perfil de Sessão (Roadmap V15.6 / Spec G10) ---
 # Nível de autonomia padrão quando nenhuma flag --mode é fornecida.
 # Ambientes headless (ex: servidores sem pesquisador disponível) podem usar 'semi' ou 'auto'.
@@ -220,15 +249,28 @@ SKILL_MEMORY_ENABLED = get_env_bool("SKILL_MEMORY_ENABLED", default=True)
 SKILL_HUMAN_FEEDBACK_ENABLED = get_env_bool("SKILL_HUMAN_FEEDBACK_ENABLED", default=True)
 # Limites operacionais monitorados a cada ciclo de planejamento (não-bloqueantes por padrão;
 # apenas o modo 'assisted' pausa e pergunta se o pesquisador quer suspender a sessão).
+# V18/usage-limits — os avisos agora são percentuais dos limites reais de UsageBudget
+# (SESSION_MAX_TOKENS, SESSION_MAX_MINUTES), que passam a ser condições de parada
+# (ver src/usage.py). session_duration_min (antigo, em minutos absolutos) vira alias:
+# se definido, é convertido para percentual de SESSION_MAX_MINUTES.
+_session_duration_min_env = get_env("OPERATIONAL_THRESHOLD_SESSION_DURATION_MIN")
+if _session_duration_min_env is not None and SESSION_MAX_MINUTES:
+    _session_duration_pct_default = float(_session_duration_min_env) / SESSION_MAX_MINUTES
+else:
+    _session_duration_pct_default = 0.5
 OPERATIONAL_THRESHOLDS: dict[str, float] = {
     "token_usage_pct": float(get_env("OPERATIONAL_THRESHOLD_TOKEN_USAGE_PCT", default="0.80")),
     "cost_usd": float(get_env("OPERATIONAL_THRESHOLD_COST_USD", default="5.0")),
-    "session_duration_min": float(get_env("OPERATIONAL_THRESHOLD_SESSION_DURATION_MIN", default="60")),
+    "session_duration_pct": float(
+        get_env(
+            "OPERATIONAL_THRESHOLD_SESSION_DURATION_PCT",
+            default=str(_session_duration_pct_default),
+        )
+    ),
     "container_count_pct": float(get_env("OPERATIONAL_THRESHOLD_CONTAINER_COUNT_PCT", default="0.85")),
 }
-# Orçamento de tokens da sessão usado para calcular token_usage_pct (não existia limite
-# de tokens por sessão antes desta spec).
-MAX_SESSION_TOKENS = int(get_env("MAX_SESSION_TOKENS", default="500000"))
+# Alias de retrocompatibilidade: MAX_SESSION_TOKENS é o nome antigo de SESSION_MAX_TOKENS.
+MAX_SESSION_TOKENS = SESSION_MAX_TOKENS
 # Tempo que a CLI aguarda a resposta do pesquisador ao aviso de limite antes de continuar.
 OPERATIONAL_THRESHOLD_WAIT_SECONDS = int(get_env("OPERATIONAL_THRESHOLD_WAIT_SECONDS", default="30"))
 # Similaridade textual mínima (0-1, via difflib) para considerar duas perguntas ao
@@ -240,8 +282,9 @@ LLM_CACHE_ENABLED = get_env_bool("LLM_CACHE_ENABLED", default=True)
 LLM_CACHE_TTL_SECONDS = int(get_env("LLM_CACHE_TTL_SECONDS", default="3600"))
 LLM_CACHE_MAX_ENTRIES = int(get_env("LLM_CACHE_MAX_ENTRIES", default="1000"))
 
-# Autonomous Loop
-MAX_RETRY_PER_SUBTASK = int(get_env("MAX_RETRY_PER_SUBTASK", default="3"))
+# Autonomous Loop — alias de retrocompatibilidade: MAX_RETRY_PER_SUBTASK é o nome antigo
+# de SESSION_MAX_TASK_RETRIES (definida acima, junto ao orçamento de uso da sessão).
+MAX_RETRY_PER_SUBTASK = SESSION_MAX_TASK_RETRIES
 
 # V13.4.2 — Limite de linhas de código do step anterior injetadas no contexto do LLM.
 # Para qwen3:8b com 8192 tokens, 150 linhas de Python cabem com espaço para o restante.

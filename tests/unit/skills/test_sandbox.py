@@ -2,10 +2,11 @@ import os
 os.environ["LLM_PROVIDER"] = "ollama"
 os.environ["GEMINI_API_KEY"] = "dummy"
 
+import docker.errors
 import pytest
 import time
 from unittest.mock import MagicMock, patch
-from src.skills.code.sandbox import PythonSandbox, SandboxResult
+from src.skills.code.sandbox import PythonSandbox, SandboxResult, _is_docker_connection_error
 
 @pytest.fixture
 def mock_docker_client():
@@ -147,3 +148,53 @@ def test_sem_extra_files_apenas_script_no_tar(mock_docker_client, tmp_path):
     with tarfile.open(fileobj=io.BytesIO(tar_bytes), mode="r") as tar:
         names = tar.getnames()
     assert names == ["script.py"]
+
+
+# ---------------------------------------------------------------------------
+# V18/usage-limits — code review do PR #68 (apontamento importante 2):
+# _is_docker_connection_error não pode tratar toda DockerException como
+# transitória, sob pena de retentar (e poluir a contagem de
+# connection_retry usada por SESSION_MAX_CONNECTION_RETRIES) erros
+# PERMANENTES de configuração como imagem inexistente.
+# ---------------------------------------------------------------------------
+
+def test_image_not_found_nao_e_erro_de_conexao():
+    """ImageNotFound (config permanente, sem imagem local nem remota) não deve
+    ser classificado como falha de conexão retentável — é subclasse de
+    DockerException/APIError mas sem status HTTP transitório (response=None
+    aqui, replicando o caso real de client.images.pull falhando)."""
+    exc = docker.errors.ImageNotFound("No such image: geminiclaw-base:latest")
+    assert _is_docker_connection_error(exc) is False
+
+
+def test_api_error_cliente_4xx_nao_e_erro_de_conexao():
+    """APIError com status 4xx (exceto 429) é erro permanente do cliente
+    (ex.: requisição malformada) — não deve ser retentado."""
+    response = MagicMock()
+    response.status_code = 400
+    exc = docker.errors.APIError("bad request", response=response)
+    assert _is_docker_connection_error(exc) is False
+
+
+def test_api_error_5xx_e_erro_de_conexao():
+    """APIError com status 5xx (daemon sobrecarregado/indisponível) é
+    transitório — deve ser retentado, igual a is_retryable_status em
+    src/llm/retry.py."""
+    response = MagicMock()
+    response.status_code = 503
+    exc = docker.errors.APIError("service unavailable", response=response)
+    assert _is_docker_connection_error(exc) is True
+
+
+def test_connection_error_e_erro_de_conexao():
+    """ConnectionError/OSError (ex.: socket do daemon Docker inacessível)
+    continuam classificados como transitórios."""
+    assert _is_docker_connection_error(ConnectionError("no such file or directory")) is True
+    assert _is_docker_connection_error(OSError("socket error")) is True
+
+
+def test_invalid_version_nao_e_erro_de_conexao():
+    """DockerException que não é APIError (ex.: InvalidVersion, erro de
+    negociação de versão da API) não é uma falha de conexão retentável."""
+    exc = docker.errors.InvalidVersion("API version too old")
+    assert _is_docker_connection_error(exc) is False

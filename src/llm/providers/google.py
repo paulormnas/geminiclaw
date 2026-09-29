@@ -1,8 +1,10 @@
+import asyncio
 import os
 import json
 from google import genai
 from google.genai import types as genai_types
 from src.llm.base import LLMProvider, LLMResponse, ToolCall
+from src.llm.retry import RETRY_BACKOFFS_SECONDS, emit_connection_retry, is_retryable_error
 from src.logger import get_logger
 from src.config import GEMINI_API_KEY, DEFAULT_MODEL
 
@@ -102,14 +104,35 @@ class GoogleProvider(LLMProvider):
             config.tools = google_tools
 
         try:
-            # Chamada síncrona embrulhada em executor para ser async-friendly 
-            # ou usar o cliente async se disponível (genai.Client tem async_?)
-            # O google-genai 1.3.0+ tem suporte async
-            response = self._client.models.generate_content(
-                model=self._model,
-                contents=contents,
-                config=config,
-            )
+            # V18/usage-limits — retentativa limitada em erro de conexão/timeout/429/5xx,
+            # emitindo o evento connection_retry na telemetria a cada retentativa.
+            response = None
+            last_exc: Exception | None = None
+            for attempt, backoff in enumerate((0.0, *RETRY_BACKOFFS_SECONDS)):
+                if backoff:
+                    logger.warning(
+                        "Retentativa ao provedor Google GenAI",
+                        extra={"attempt": attempt, "backoff_seconds": backoff, "model": self._model},
+                    )
+                    emit_connection_retry("llm_provider:google", str(last_exc))
+                    await asyncio.sleep(backoff)
+                try:
+                    # Chamada síncrona embrulhada em executor para ser async-friendly
+                    # ou usar o cliente async se disponível (genai.Client tem async_?)
+                    # O google-genai 1.3.0+ tem suporte async
+                    response = self._client.models.generate_content(
+                        model=self._model,
+                        contents=contents,
+                        config=config,
+                    )
+                    break
+                except Exception as e:
+                    last_exc = e
+                    if not is_retryable_error(e):
+                        raise
+            if response is None:
+                logger.error("Provedor Google GenAI esgotou as retentativas", extra={"model": self._model})
+                raise last_exc
 
             # Processar resposta
             text = response.text

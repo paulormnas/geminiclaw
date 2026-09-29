@@ -634,6 +634,13 @@ class AutonomousLoop:
                     }
 
             async def _execute_task_in_dag(task: AgentTask, index: int):
+                # V18/usage-limits — chave de contabilização de retentativas da MESMA
+                # tarefa (design §2): conta cumulativamente entre ciclos de replanejamento
+                # que preservam o task_name, via UsageTracker (não mais um range() local).
+                # Calculada aqui (antes de aguardar dependências) para poder ser usada
+                # também no guard de tarefa já abandonada, logo abaixo.
+                retry_key = task.task_name or f"_unnamed_{task.subtask_id or index}"
+
                 # Aguarda as dependências
                 for dep in task.depends_on:
                     if dep in dag_state:
@@ -645,6 +652,31 @@ class AutonomousLoop:
                                 dag_state[task.task_name]["status"] = "cancelled"
                                 dag_state[task.task_name]["future"].set_result(None)
                             return
+
+                # V18/usage-limits — não redespacha uma tarefa já ABANDONADA por
+                # esgotamento de retentativas em um ciclo de replanejamento anterior. O
+                # mesmo task_name pode reaparecer em planos incrementais gerados por
+                # `_run_planning_loop`; sem este guard, o retry loop abaixo recomeçaria a
+                # contagem de tentativas locais do zero, mas `record_task_attempt` já
+                # opera cumulativamente por task_name — o risco real é o dispatch em si
+                # (chamada ao agente) ocorrer de novo para uma tarefa cujo orçamento de
+                # retentativas já foi esgotado. Tratada como "abandonada" (não "cancelled")
+                # para manter a mesma semântica de `dag_state` usada linhas abaixo, quando
+                # o esgotamento é detectado dentro do próprio retry loop.
+                if self._usage_tracker.is_task_abandoned(retry_key):
+                    logger.info(
+                        "Despacho suspenso: tarefa já abandonada por esgotamento de "
+                        "retentativas em ciclo de replanejamento anterior",
+                        extra={"task_name": task.task_name, "retry_key": retry_key},
+                    )
+                    if task.task_name:
+                        dag_state[task.task_name]["status"] = "abandonada"
+                        dag_state[task.task_name]["error"] = (
+                            "Tarefa já abandonada em ciclo de replanejamento anterior "
+                            "(retentativas esgotadas)"
+                        )
+                        dag_state[task.task_name]["future"].set_result(None)
+                    return
 
                 # V18/usage-limits — não despacha uma NOVA subtarefa se o orçamento já foi
                 # esgotado (dependências já concluídas antes deste ponto continuam intactas;
@@ -699,10 +731,8 @@ class AutonomousLoop:
                 success = False
                 last_result = None
                 attempt_errors: List[str] = []  # V15.3/G5 — insumo do DivergenceReport
-                # V18/usage-limits — chave de contabilização de retentativas da MESMA
-                # tarefa (design §2): conta cumulativamente entre ciclos de replanejamento
-                # que preservam o task_name, via UsageTracker (não mais um range() local).
-                retry_key = task.task_name or f"_unnamed_{task.subtask_id or index}"
+                # retry_key já calculada no início da coroutine (usada também pelo guard
+                # de tarefa abandonada, acima).
 
                 # Retry Loop — cada iteração conta como uma tentativa GLOBAL da tarefa
                 # (SESSION_MAX_TASK_RETRIES), não apenas local a este dispatch.

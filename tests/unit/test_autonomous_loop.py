@@ -399,3 +399,71 @@ async def test_autonomous_loop_all_tasks_abandoned_closes_session_with_retries_r
 
     update_kwargs = orchestrator.session_manager.update.call_args.kwargs
     assert update_kwargs["payload"]["motivo_parada"] == StopReason.RETRIES.value
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_autonomous_loop_does_not_redispatch_task_abandoned_in_earlier_cycle():
+    """V18/usage-limits — code review do PR #68 (apontamento importante 1):
+    `UsageTracker.is_task_abandoned()` precisa ser checado ANTES do despacho em
+    `_execute_task_in_dag`. Sem esse guard, uma tarefa abandonada por
+    esgotamento de retentativas em um ciclo de planejamento poderia ser
+    reintroduzida (mesmo `task_name`) por um ciclo de recuperação incremental
+    subsequente e ser redespachada com tentativas "novas", ultrapassando
+    `SESSION_MAX_TASK_RETRIES` de forma cumulativa.
+
+    Cenário: ciclo 1 tem `t_abandon` (que sempre falha, com
+    `max_task_retries=1` — abandonada já na 1ª tentativa) e `b` (depende de
+    `t_abandon`, portanto cancelada quando a dependência não termina em
+    sucesso). `b` cancelada faz `failed_tasks` não-vazio, disparando um 2º
+    ciclo de planejamento (recuperação incremental) que reintroduz
+    `t_abandon` sozinha. O guard deve impedir um novo despacho: nenhuma
+    chamada adicional a `_execute_agent` deve ocorrer no 2º ciclo."""
+    task_abandon = AgentTask(agent_id="base", image="img", prompt="p1", task_name="t_abandon")
+    task_b = AgentTask(
+        agent_id="base", image="img", prompt="p2", task_name="b", depends_on=["t_abandon"],
+    )
+
+    orchestrator = MagicMock()
+    # Ciclo 1: t_abandon + b (dependente). Ciclo 2: t_abandon reintroduzida sozinha
+    # pela recuperação incremental (mesmo task_name).
+    orchestrator._run_planning_loop = AsyncMock(
+        side_effect=[[task_abandon, task_b], [task_abandon]]
+    )
+    orchestrator._execute_agent = AsyncMock(
+        return_value=AgentResult(
+            agent_id="base", session_id="s1", status="error", response={}, error="erro persistente",
+        )
+    )
+    orchestrator.output_manager = MagicMock()
+    orchestrator.output_manager.list_artifacts.return_value = []
+    orchestrator.session_manager = MagicMock()
+    orchestrator.session_manager.get.return_value = None
+
+    loop = AutonomousLoop(orchestrator)
+    budget = UsageBudget(
+        max_tokens=500_000, max_minutes=120, max_task_retries=1,
+        max_connection_retries=20, closing_reserve_pct=0.05,
+    )
+    loop._usage_tracker = UsageTracker(
+        budget, execution_id="exec_reintro",
+        token_reader=lambda: 0,
+        connection_retry_reader=lambda: 0,
+        clock=lambda: 0.0,
+    )
+
+    with patch("src.autonomous_loop.get_telemetry", return_value=MagicMock()), \
+         patch.object(AutonomousLoop, "_is_complex_triage", AsyncMock(return_value=True)):
+        result = await loop._run_complex_path("tarefa", "exec_reintro")
+
+    # Reproduz o gap do apontamento 1: sem o guard, o 2º ciclo despacharia
+    # `t_abandon` de novo (2ª chamada a _execute_agent). Com o guard, a
+    # tarefa já abandonada nunca é redespachada — apenas a 1 chamada do
+    # ciclo 1 deve existir.
+    assert orchestrator._execute_agent.call_count == 1
+    assert orchestrator._run_planning_loop.call_count == 2
+    assert result.succeeded == 0
+    assert "t_abandon" in loop._usage_tracker.abandoned_tasks
+
+    update_kwargs = orchestrator.session_manager.update.call_args.kwargs
+    assert update_kwargs["payload"]["motivo_parada"] == StopReason.RETRIES.value

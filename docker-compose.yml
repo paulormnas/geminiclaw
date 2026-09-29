@@ -2,7 +2,8 @@ services:
 
   qdrant:
     # Imagem oficial multi-arquitetura (amd64/arm64), versão alinhada ao qdrant-client do uv.lock (1.19.1).
-    # Validada no Raspberry Pi 5 com o kernel padrão (páginas de 16K); versões anteriores à 1.19 falham no jemalloc.
+    # Validada no Raspberry Pi 5 com o kernel padrão (páginas de 16K). Versões antigas tiveram falha de jemalloc
+    # nesse kernel (qdrant/qdrant#5952); não trocar de versão sem testar no Pi.
     image: ${QDRANT_IMAGE:-qdrant/qdrant:v1.19.1}
     container_name: geminiclaw-qdrant
     restart: unless-stopped

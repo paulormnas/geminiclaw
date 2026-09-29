@@ -238,9 +238,10 @@ class TestContextInjectionIntegration:
         loop.max_retries = 1
         result = await loop._run_complex_path("Falha parcial", "master_sess_fail")
 
-        # Tarefa dependente NÃO deve ser executada se a dependência falhou
-        # 2 chamadas (circuit breaker interrompe após 2 tentativas sem progresso)
-        assert loop.orchestrator._execute_agent.call_count == 2
+        # Tarefa dependente NÃO deve ser executada se a dependência falhou.
+        # V18: a tarefa é abandonada ao esgotar max_task_retries (1 tentativa aqui);
+        # o disjuntor de sessão inteira da V12.5 foi substituído por esse limite.
+        assert loop.orchestrator._execute_agent.call_count == 1
         assert result.succeeded == 0
         assert result.total == 2
 

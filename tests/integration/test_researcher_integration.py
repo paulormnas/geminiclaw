@@ -57,6 +57,7 @@ def _create_orchestrator() -> tuple[Orchestrator, MagicMock, MagicMock, MagicMoc
         runner=mock_runner,
         ipc=mock_ipc,
         session_manager=mock_session_manager,
+        agent_runtime_mode="container",
     )
 
     return orchestrator, mock_runner, mock_ipc, mock_session_manager

@@ -1,9 +1,10 @@
 """Ferramentas comuns para todos os agentes GeminiClaw."""
 
-import os
-from typing import Optional
+import errno
 import logging
+import os
 from pathlib import Path
+from typing import Optional
 
 from src.agent_runtime.context import get_agent_context_optional
 
@@ -38,9 +39,10 @@ async def write_artifact(filename: str, content: str) -> str:
     Roadmap V16/ADR 014 (Design §4) — a escrita é sempre confinada a
     ``<output_dir>/artifacts/``: o nome do arquivo é normalizado (apenas o
     componente final do caminho é usado, descartando qualquer tentativa de
-    ``../``), o caminho final resolvido é verificado como descendente do
-    diretório de artefatos, e symlinks existentes com o mesmo nome são
-    recusados (podem apontar para fora do diretório permitido).
+    ``../``) e a abertura do arquivo usa ``O_NOFOLLOW`` — se o destino já for
+    um symlink (inclusive um trocado por um symlink entre uma checagem
+    anterior e esta escrita), o próprio ``open()`` falha atomicamente, sem
+    janela de TOCTOU.
 
     Args:
         filename: Nome do arquivo (ex: 'resumo.md').
@@ -67,30 +69,35 @@ async def write_artifact(filename: str, content: str) -> str:
 
         file_path = task_dir / safe_name
 
-        # Recusa symlinks existentes com este nome — podem apontar para fora
-        # do diretório de artefatos (Design §4 / Spec agent-runtime, cenário Symlink).
-        if file_path.is_symlink():
-            # Nota: a chave de log não pode se chamar "filename" — colide com o
-            # atributo reservado LogRecord.filename e faz logging levantar
-            # ValueError ("Attempt to overwrite 'filename' in LogRecord").
-            logger.warning(
-                "write_artifact: escrita recusada — destino é um symlink",
-                extra={"artifact_filename": filename, "resolved": str(file_path)},
-            )
-            return "Erro: escrita recusada — destino é um link simbólico."
+        # Abertura atômica com O_NOFOLLOW: o antigo padrão era check-then-open
+        # (is_symlink() e só depois open()), com uma janela de TOCTOU — um
+        # atacante com escrita concorrente no diretório de artefatos podia
+        # trocar o destino por um symlink exatamente entre a checagem e a
+        # escrita, escapando do diretório confinado. Com O_NOFOLLOW, se o
+        # componente final já for um symlink, o próprio open() falha com
+        # ELOOP; não há intervalo entre checar e escrever para explorar.
+        # safe_name não contém "/" (é só o componente final do path), então
+        # file_path é sempre filho direto de task_dir — sem travessia possível
+        # via diretórios intermediários.
+        open_flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW
+        try:
+            fd = os.open(file_path, open_flags, 0o644)
+        except OSError as e:
+            if e.errno == errno.ELOOP:
+                # Nota: a chave de log não pode se chamar "filename" — colide com o
+                # atributo reservado LogRecord.filename e faz logging levantar
+                # ValueError ("Attempt to overwrite 'filename' in LogRecord").
+                logger.warning(
+                    "write_artifact: escrita recusada — destino é um symlink",
+                    extra={"artifact_filename": filename, "resolved": str(file_path)},
+                )
+                return "Erro: escrita recusada — destino é um link simbólico."
+            raise
 
-        resolved_path = file_path.resolve()
-        if not resolved_path.is_relative_to(task_dir):
-            logger.warning(
-                "write_artifact: escrita recusada — caminho fora do diretório de artefatos",
-                extra={"artifact_filename": filename, "resolved": str(resolved_path)},
-            )
-            return "Erro: escrita recusada — caminho fora do diretório permitido."
-
-        with open(resolved_path, "w", encoding="utf-8") as f:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(content)
 
-        return f"Artefato salvo com sucesso em {resolved_path}"
+        return f"Artefato salvo com sucesso em {file_path}"
 
     except Exception as e:
         logger.error(f"Erro ao salvar artefato: {e}")

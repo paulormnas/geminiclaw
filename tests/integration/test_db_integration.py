@@ -122,26 +122,35 @@ class TestPoolIntegration:
 
     def test_transacao_com_rollback(self):
         """Uma exceção dentro do bloco with deve causar rollback automático."""
+        import uuid
+
         from src.db import get_connection
 
-        with get_connection() as conn:
-            # Cria uma tabela temporária para o teste
-            conn.execute("CREATE TEMP TABLE test_rollback (val TEXT)")
-            conn.execute("INSERT INTO test_rollback VALUES ('antes')")
-            conn.commit()
-
-        # Tenta inserir e força rollback via exceção
+        # Tabela comum (não TEMP): o pool pode entregar conexões diferentes a
+        # cada bloco with, e uma tabela TEMP só existe na sessão que a criou.
+        table = f"test_rollback_{uuid.uuid4().hex[:8]}"
         try:
             with get_connection() as conn:
-                conn.execute("INSERT INTO test_rollback VALUES ('rollback_test')")
-                raise ValueError("Forçando rollback")
-        except ValueError:
-            pass
+                conn.execute(f"CREATE TABLE {table} (val TEXT)")
+                conn.execute(f"INSERT INTO {table} VALUES ('antes')")
+                conn.commit()
 
-        # A linha 'rollback_test' não deve existir
-        with get_connection() as conn:
-            rows = conn.execute("SELECT val FROM test_rollback").fetchall()
+            # Tenta inserir e força rollback via exceção
+            try:
+                with get_connection() as conn:
+                    conn.execute(f"INSERT INTO {table} VALUES ('rollback_test')")
+                    raise ValueError("Forçando rollback")
+            except ValueError:
+                pass
 
-        vals = [r["val"] for r in rows]
-        assert "rollback_test" not in vals
-        assert "antes" in vals
+            # A linha 'rollback_test' não deve existir
+            with get_connection() as conn:
+                rows = conn.execute(f"SELECT val FROM {table}").fetchall()
+
+            vals = [r["val"] for r in rows]
+            assert "rollback_test" not in vals
+            assert "antes" in vals
+        finally:
+            with get_connection() as conn:
+                conn.execute(f"DROP TABLE IF EXISTS {table}")
+                conn.commit()

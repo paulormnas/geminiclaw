@@ -49,10 +49,14 @@ def mock_embedding_provider(monkeypatch):
 @pytest.fixture(autouse=True)
 def mock_db_connection(request):
     """Mock global do banco de dados com estado em memória.
-    
-    Ignorado para testes unitários do módulo src.db para permitir testar a lógica real.
+
+    Ignorado para testes unitários do módulo src.db, e para os testes de
+    integração do grafo de conhecimento (tests/integration/knowledge/), que
+    precisam de uma conexão real com Apache AGE — ver
+    tests/integration/knowledge/conftest.py.
     """
-    if "test_db.py" in request.node.fspath.strpath:
+    path = request.node.fspath.strpath
+    if "test_db.py" in path or f"{os.sep}tests{os.sep}integration{os.sep}knowledge{os.sep}" in path:
         yield
         return
 

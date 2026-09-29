@@ -23,9 +23,17 @@ services:
       retries: 5
 
   postgres:
-    image: postgres:16-alpine
+    # V17 (ADR 009 §4): PostgreSQL 16 + Apache AGE, substitui postgres:16-alpine.
+    # Ver containers/Dockerfile.postgres para o aviso de risco de colação
+    # (musl -> glibc) sobre o volume postgres_data existente — requer decisão
+    # explícita antes de aplicar em ambiente com dados reais.
+    build:
+      context: .
+      dockerfile: containers/Dockerfile.postgres
     container_name: geminiclaw-postgres
     restart: unless-stopped
+    # Pré-carrega a extensão AGE para todas as conexões (ver nota no Dockerfile).
+    command: ["postgres", "-c", "shared_preload_libraries=age"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-geminiclaw}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-geminiclaw_secret}

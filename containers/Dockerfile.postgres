@@ -1,0 +1,28 @@
+# containers/Dockerfile.postgres
+#
+# PostgreSQL 16 com a extensão Apache AGE pré-instalada (Roadmap V17 / ADR 009 §4).
+# Substitui `postgres:16-alpine` no serviço `postgres` do docker-compose.yml.
+#
+# Base: imagem oficial `apache/age`, publicada pelo próprio projeto Apache AGE
+# com suporte multi-arquitetura (amd64 + arm64) — usada em vez de compilar a
+# extensão a partir do código-fonte (tarefa 1.1 de
+# openspec/changes/v17-graph-store/tasks.md: existe imagem pronta para
+# PG16/ARM64, então o plano B de compilação não foi necessário).
+#
+# `shared_preload_libraries=age` é passado via `command:` no docker-compose.yml
+# (não neste Dockerfile), pois é uma flag de execução do `postgres`, não uma
+# alteração de imagem — mantém a troca de biblioteca revisável em um único
+# lugar e evita editar arquivos de configuração internos da imagem base cujo
+# caminho pode variar entre versões.
+#
+# ATENÇÃO — revisão de infraestrutura necessária antes do merge:
+# `postgres:16-alpine` (imagem atual) usa musl libc; `apache/age` é construída
+# sobre a imagem oficial `postgres:16` (Debian, glibc). A troca de biblioteca C
+# subjacente pode alterar a ordenação de colação de texto (`en_US.utf8`/`C`)
+# em índices B-tree existentes sobre colunas de texto no volume
+# `postgres_data` já em uso — o mesmo problema documentado para `pg_upgrade`
+# entre sistemas operacionais distintos. Antes de aplicar esta imagem sobre um
+# volume com dados reais, um `REINDEX DATABASE` (ou a criação de um volume
+# novo) deve ser avaliado e decidido explicitamente pelo Arquiteto/Analista de
+# Segurança — ver relatório desta mudança (PR) para os detalhes do risco.
+FROM apache/age:release_PG16_1.6.0

@@ -26,6 +26,7 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 | [014](adr_014_agentes_em_processo_sandbox_codigo.md) | Agentes em Processo no Host; Containers Apenas como Sandbox de Código | 🔵 Proposto | 2026-09-28 |
 | [015](adr_015_modelo_dados_grafo_conhecimento.md) | Modelo de Dados do Grafo de Conhecimento e Ligação com Embeddings | 🔵 Proposto | 2026-09-28 |
 | [016](adr_016_imagem_postgres_apache_age_colacao.md) | Imagem do PostgreSQL para Apache AGE (musl → glibc) e Colação de Índices | 🔵 Proposto | 2026-09-29 |
+| [017](adr_017_catalogo_modelos_roteador.md) | Catálogo de Modelos e Roteador de Provedores por Papel | 🔵 Proposto | 2026-09-29 |
 
 ---
 

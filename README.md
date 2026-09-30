@@ -58,7 +58,7 @@ GEMINI_API_KEY=sua_chave_aqui
 
 ## 🏗️ Arquitetura
 
-O sistema utiliza uma abordagem de **Multi-Agent Systems (MAS)** onde um **Orchestrator** central coordena o planejamento e a execução, delegando tarefas para agentes que rodam em containers Docker isolados. Um **loop autônomo** decide se a tarefa é simples (resolvida pelo agente base diretamente) ou complexa (decomposta via Planner → Validator → execução sequencial).
+O sistema utiliza uma abordagem de **Multi-Agent Systems (MAS)** onde um **Orchestrator** central coordena o planejamento e a execução, delegando tarefas para agentes que rodam **no próprio processo do orquestrador** (`AgentRuntime`, ADR 014). O único container de execução é o **sandbox de código**, usado pela skill de código para rodar o que o LLM gera. Um **loop autônomo** decide se a tarefa é simples (resolvida pelo agente base diretamente) ou complexa (decomposta via Planner → Validator → execução sequencial).
 
 ```mermaid
 graph TD
@@ -74,32 +74,29 @@ graph TD
         Validator -- Aprovado --> ExecLoop[Loop de Subtarefas com Retry]
     end
 
-    subgraph "Infraestrutura do Host"
-        ExecLoop --> Runner[ContainerRunner]
-        ExecLoop --> IPC[IPCChannel]
+    subgraph "Processo do orquestrador"
+        ExecLoop --> RT[AgentRuntime + ResourceGuard]
         Orch --> SM[SessionManager]
         Orch --> OM[OutputManager]
         SM --- DB[(PostgreSQL)]
         Orch --> TEL[TelemetryCollector]
         TEL -.-> DB
-    end
-    
-    subgraph "Agente em Container Docker"
-        Agent[Gemini ADK Agent]
+        RT --> Agent[Agente em processo]
         Agent --> Skills[Skills Framework]
         Skills --> QS[Quick Search]
         Skills --> DS[Deep Search]
-        Skills --> CS[Code Sandbox]
+        Skills --> CS[Code Skill]
         Skills --> Mem[Memory]
-        Agent <--> IPC
+    end
+
+    subgraph "Container efêmero"
+        CS -- código gerado --> Sandbox[Sandbox de código]
     end
 
     subgraph "Serviços (docker-compose)"
         Qdrant[(Qdrant — Índice Vetorial)]
         DS -.-> Qdrant
     end
-
-    Runner -- Spawns --> Agent
 ```
 
 ### Componentes Principais
@@ -108,8 +105,9 @@ graph TD
 | --- | --- | --- |
 | **Orchestrator** | `src/orchestrator.py` | Coordena o loop de planejamento e a execução sequencial de agentes. Integra o `AutonomousLoop`. Instrumentado com telemetria V5.6. |
 | **AutonomousLoop** | `src/autonomous_loop.py` | Triage (simples/complexo), decomposição via Planner→Validator, loop de retentativas por subtarefa. Instrumentado com telemetria V5.8. |
-| **ContainerRunner** | `src/runner.py` | Gerencia o ciclo de vida Docker (spawn, stop, limites de 512 MB RAM). Implementa controle de concorrência local via `MAX_LOCAL_LLM_CONCURRENT`. |
-| **IPCChannel** | `src/ipc.py` | Comunicação bidirecional via Unix Domain Sockets (Linux) ou TCP loopback (macOS). Protocolo JSON com length-prefix. |
+| **AgentRuntime** | `src/agent_runtime/runtime.py` | Executa cada agente no processo do orquestrador, com contexto por tarefa (`contextvars`), timeout (`AGENT_TIMEOUT_SECONDS`) e isolamento de falhas: uma exceção vira `AgentResult` de erro e nunca derruba a sessão. |
+| **ResourceGuard** | `src/agent_runtime/resources.py` | Limita quantos agentes rodam ao mesmo tempo (pela RAM livre, teto `MAX_CONCURRENT_AGENTS`), reserva uma vaga extra para inferência local (`MAX_LOCAL_LLM_CONCURRENT`) e espera a temperatura e a memória do Pi voltarem ao normal. |
+| **Infraestrutura** | `src/infrastructure.py` | Na partida, confere se PostgreSQL, Qdrant e o daemon de containers (só para o sandbox) respondem. |
 | **SessionManager** | `src/session.py` | Persistência de histórico e estado em **PostgreSQL**. |
 | **OutputManager** | `src/output_manager.py` | Gerencia artefatos produzidos e compartilhamento de arquivos entre agentes via `outputs/<session_id>/<task>/`. |
 | **TelemetryCollector** | `src/telemetry.py` | Coleta e persiste métricas de execução (agent_events, tool_usage, token_usage, hardware_snapshots) em batch no PostgreSQL. Fornece estatísticas sintetizadas para o Summarizer. |
@@ -198,81 +196,81 @@ Implementado em `src/autonomous_loop.py`, o loop gerencia tarefas complexas de p
 - `MAX_RETRY_PER_SUBTASK=3` — máximo de tentativas por subtarefa
 - `MAX_SUBTASKS_PER_TASK=10` — limite de subtarefas por tarefa
 - `MAX_PLAN_RETRIES=5` — ciclos máximos de replanejamento (V12.1)
-- `MAX_CONTAINERS_PER_SESSION=30` — limite de containers por sessão; interrompe a execução ao atingir (circuit breaker V12.5)
+- `MAX_AGENT_RUNS_PER_SESSION=30` — limite de execuções de agente por sessão; interrompe a execução ao atingir (circuit breaker V12.5)
 
 **Circuit Breakers (V12.5):**
 - **Progresso zero**: Se dois ciclos de replanejamento consecutivos produzirem o mesmo conjunto de subtarefas bem-sucedidas, o loop é interrompido com mensagem diagnóstica.
-- **Limite de containers**: Se o número de containers spawnados em uma sessão atingir `MAX_CONTAINERS_PER_SESSION`, o orquestrador lança `RuntimeError` antes do spawn seguinte.
+- **Limite de execuções**: Se o número de agentes executados em uma sessão atingir `MAX_AGENT_RUNS_PER_SESSION`, o orquestrador lança `RuntimeError` antes da execução seguinte.
 
 ---
 
 ## 🤖 Agentes Especializados
 
-| Agente | Diretório | Imagem Docker | Responsabilidade |
-| --- | --- | --- | --- |
-| **Base** | `agents/base/` | `geminiclaw-base` | Tarefas genéricas. Integra todas as skills habilitadas e memória de longo prazo. |
-| **Researcher** | `agents/researcher/` | `geminiclaw-researcher` | Pesquisa na web via Google Search ADK, extração de conteúdo e síntese. Cache de resultados integrado. |
-| **Planner** | `agents/planner/` | `geminiclaw-planner` | Decomposição de problemas complexos em tarefas atômicas. Triage (simples/complexo). |
-| **Validator** | `agents/validator/` | `geminiclaw-validator` | Verificação de segurança, formato JSON e consistência lógica de planos. |
-| **Reviewer** | `agents/reviewer/` | `geminiclaw-reviewer` | Validação de resultados de subtarefas contra critérios definidos. |
-| **Summarizer** | `agents/summarizer/` | `geminiclaw-summarizer` | Síntese final de resultados com rastreabilidade acadêmica e metadados de autonomia. |
+| Agente | Diretório | Responsabilidade |
+| --- | --- | --- |
+| **Base** | `agents/base/` | Tarefas genéricas. Integra todas as skills habilitadas e memória de longo prazo. |
+| **Researcher** | `agents/researcher/` | Pesquisa na web via busca rápida, extração de conteúdo e síntese. Cache de resultados integrado. |
+| **Planner** | `agents/planner/` | Decomposição de problemas complexos em tarefas atômicas. Triage (simples/complexo). |
+| **Validator** | `agents/validator/` | Verificação de segurança, formato JSON e consistência lógica de planos. |
+| **Reviewer** | `agents/reviewer/` | Validação de resultados de subtarefas contra critérios definidos. |
+| **Summarizer** | `agents/summarizer/` | Síntese final de resultados com rastreabilidade acadêmica e metadados de autonomia. |
 
-Todos os agentes compartilham a mesma imagem Docker base (`containers/Dockerfile`) com variações para agentes especializados (`containers/Dockerfile.planner`, `containers/Dockerfile.researcher`, `containers/Dockerfile.validator`).
+Os agentes rodam no processo do orquestrador. O `AgentRuntime` resolve o provedor e o modelo de cada papel por `{PAPEL}_PROVIDER` e `{PAPEL}_MODEL` (por exemplo, `RESEARCHER_PROVIDER=anthropic`), o que permite misturar provedores na mesma sessão.
 
 ---
 
-## 🔌 Comunicação (IPC)
+## ⚙️ Execução dos Agentes
 
-A comunicação entre host e containers é baseada em **Unix Domain Sockets** (Linux) ou **TCP loopback** (macOS), com detecção automática de plataforma.
+Não há canal de comunicação entre processos: o orquestrador chama o agente diretamente.
 
-- **Protocolo**: Mensagens JSON com prefixo de tamanho (4 bytes big-endian) para integridade.
-- **Reconexão**: Retry com backoff exponencial (até 3 tentativas) em caso de falha.
-- **Segurança**: Containers sem acesso a rede externa (exceto via skills controladas) e rodando como `non-root` (`appuser`).
-- **Limites**: Máximo de 3 agentes simultâneos (`asyncio.Semaphore(3)`) para preservar o Raspberry Pi 5.
-- **Telemetria Cross-Container (V12.3)**: O payload IPC de resposta inclui um campo `_telemetry` com os dados de `token_usage` e `tool_usage` acumulados. O orquestrador os ingere como canal de fallback para containers sem conectividade direta ao PostgreSQL. Idempotente via `ON CONFLICT (id) DO NOTHING`.
+- **Contexto por tarefa**: cada execução recebe um `AgentContext` (sessão, papel, diretório de saída, modelo) via `contextvars`, o que isola tarefas concorrentes sem usar variáveis de ambiente.
+- **Supervisão**: timeout por agente e captura de exceções; falha, timeout e cancelamento têm tratamento distinto.
+- **Recursos**: o `ResourceGuard` limita agentes simultâneos e aguarda o Pi esfriar ou liberar memória antes de iniciar outro.
+- **Perguntas ao pesquisador**: a ferramenta `ask_researcher` chama diretamente o orquestrador (deduplicação e registro na sessão).
+- **Código gerado**: nunca roda no host. A skill de código o envia ao sandbox, um container efêmero que devolve os artefatos ao diretório da sessão.
 
 ---
 
 ## 🐳 Infraestrutura Docker
 
-O projeto utiliza `docker-compose.yml` como ponto de entrada único para a infraestrutura:
+O `docker-compose.yml` sobe apenas os **serviços de apoio**; o orquestrador e os agentes rodam como processo local (`uv run geminiclaw ...`):
 
 ```yaml
 services:
-  postgres:        # Banco relacional centralizado (PostgreSQL 16)
+  postgres:        # Banco relacional e grafo (PostgreSQL 16 + Apache AGE)
   qdrant:          # Banco vetorial para Deep Search
-  geminiclaw:      # Processo principal (orquestrador + CLI)
+  ollama:          # Opcional (perfil local-llm)
 
 volumes:
   postgres_data:   # Persistência do banco relacional
   qdrant_data:     # Persistência do índice vetorial
-
-networks:
-  geminiclaw-net:  # Rede interna isolada
 ```
 
 > **Qdrant no Raspberry Pi 5**: o serviço usa a imagem oficial `qdrant/qdrant` (versão fixada no compose; troque com `QDRANT_IMAGE` no `.env`), sem compilar no Pi. Validada a **v1.19.1** no kernel padrão do Pi 5 (páginas de 16K); versões antigas tiveram falha `<jemalloc>: Unsupported system page size` ([qdrant#5952](https://github.com/qdrant/qdrant/issues/5952)), então teste no Pi antes de trocar a versão.
 
-Os agentes são containers **efêmeros** gerenciados pelo `ContainerRunner` — não fazem parte do Compose porque têm ciclo de vida dinâmico. Cada container de agente recebe:
-- Acesso ao PostgreSQL via rede Docker (`geminiclaw-net`) — sem volumes de banco de dados locais
-- Volume compartilhado para `/outputs` e `/logs`
-- Limite de memória otimizado: **256 MB** para agentes leves (Planner/Validator) e **384 MB** para agentes pesados (Base/Researcher)
-- Acesso à rede `geminiclaw-net` para comunicação com Qdrant e PostgreSQL
-- Socket Docker do host (quando rodando dentro do container principal)
+> **Portas abertas em desenvolvimento**: o Qdrant fica publicado em `0.0.0.0` (sem autenticação) para facilitar o acesso pela rede. Há um `TODO` no `docker-compose.yml` para fechar as portas em `127.0.0.1` antes de sair do ambiente de desenvolvimento.
 
-> **Nota sobre Limites de Memória**: As configurações de `mem_limit` (256m / 384m) foram otimizadas para o Raspberry Pi 5. Caso você possua um hardware mais robusto ou enfrente problemas de OOM (Out Of Memory) durante a execução de skills complexas, você pode alterar essas configurações diretamente no arquivo `src/runner.py`.
+### Sandbox de código
+
+O único container de execução é o **sandbox**, criado sob demanda pela skill de código (`src/skills/code/sandbox.py`) a partir da imagem `geminiclaw-base`. Ele recebe o script, roda com limites de memória e CPU, devolve os artefatos ao diretório da sessão e é removido. A imagem ainda é grande e será enxugada (ADR 018).
+
+```bash
+# Construir a imagem do sandbox (ARM64 / Raspberry Pi 5)
+bash scripts/build_images.sh
+
+# Listar e encerrar sandboxes ativos
+geminiclaw sessions
+geminiclaw stop
+```
 
 ### Comandos
 
 ```bash
-# Subir infraestrutura
+# Subir os serviços de apoio
 docker compose up -d
 
 # Verificar status
 docker compose ps
-
-# Reconstruir após mudanças
-docker compose up -d --build geminiclaw
 
 # Encerrar preservando volumes
 docker compose down
@@ -295,7 +293,7 @@ uv sync --extra google
 # Instalar tudo (Deep Search + Google)
 uv sync --all-extras
 
-# Após clonar o projeto ou modificar Dockerfiles, construa as imagens localmente:
+# Após clonar o projeto ou modificar o Dockerfile do sandbox, construa a imagem localmente:
 ./scripts/build_images.sh
 
 # Rodar todos os testes unitários
@@ -388,8 +386,8 @@ geminiclaw/
 │   ├── cli.py                 # CLI (REPL + --metrics + --export)
 │   ├── orchestrator.py        # Orquestrador principal (instrumentado V5.6)
 │   ├── autonomous_loop.py     # Loop de execução autônoma S7 (instrumentado V5.8)
-│   ├── runner.py              # ContainerRunner (Docker)
-│   ├── ipc.py                 # IPCChannel (Unix Sockets / TCP)
+│   ├── agent_runtime/         # AgentRuntime, ResourceGuard e contexto por tarefa (ADR 014)
+│   ├── infrastructure.py      # Checagens de PostgreSQL, Qdrant e daemon de containers
 │   ├── session.py             # SessionManager (PostgreSQL)
 │   ├── db.py                  # Pool singleton PostgreSQL (psycopg v3)
 │   ├── telemetry.py           # TelemetryCollector V5 (buffer + flush + queries)
@@ -408,7 +406,7 @@ geminiclaw/
 │   ├── planner/               # Agente de planejamento
 │   ├── researcher/            # Agente de pesquisa
 │   └── validator/             # Agente de validação
-├── containers/                # Dockerfiles
+├── containers/                # Dockerfile do sandbox de código e do PostgreSQL (AGE)
 ├── tests/                     # Testes pytest (unit, integration, e2e)
 ├── roadmaps/                  # Roadmaps de desenvolvimento
 ├── outputs/                   # Artefatos dos agentes (runtime)

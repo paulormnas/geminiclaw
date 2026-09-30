@@ -40,6 +40,6 @@
 - [x] 7.3 `ContainerRunner`: remover spawn e imagens de agente; manter infraestrutura — `src/runner.py` removido; as checagens de PostgreSQL, Qdrant e daemon foram para `src/infrastructure.py`.
 - [x] 7.3b Levar para o `AgentRuntime` o que só o `ContainerRunner` fazia: limite de agentes simultâneos por RAM (limitado por `MAX_CONCURRENT_AGENTS`), vaga extra para inferência local (`MAX_LOCAL_LLM_CONCURRENT`) e espera por temperatura/memória — `src/agent_runtime/resources.py` (`ResourceGuard`). Sem isso o `asyncio.gather` do laço autônomo disparava todas as subtarefas prontas ao mesmo tempo.
 - [x] 7.3c Containers do sandbox passam a ter rótulos (`project`, `geminiclaw.role`, `session_id`, `task_name`); `sessions`/`stop` da CLI e o Ctrl+C passam a listar e limpar sandboxes (`cleanup_sandbox_containers`).
-- [ ] 7.4 Ajustar `docker-compose.yml` e `containers/Dockerfile*` (manter imagem do sandbox).
-- [ ] 7.5 Marcar ADR 003 §1/§3 e ADR 004 como Deprecados e ADR 014 como Aceito.
+- [x] 7.4 Ajustar `docker-compose.yml` e `containers/Dockerfile*` (manter imagem do sandbox): removidos o serviço `geminiclaw`, a rede dos agentes e os Dockerfiles `planner`, `researcher`, `reviewer`, `summarizer`, `validator`, `slim` e `developer`; `run.sh`, `scripts/build_images.sh` e `scripts/setup_pi.sh` ajustados. O `containers/Dockerfile` (sandbox) segue igual; enxugá-lo é o ADR 018.
+- [x] 7.5 ADR 003 (§1/§3) e ADR 004 marcados como deprecados e ADR 014 como Aceito; README, AGENTS.md e regras atualizados.
 - [ ] 7.6 Ruff, testes, revisão, PR da fase 2.

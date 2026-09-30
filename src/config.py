@@ -211,8 +211,6 @@ CONTEXT_TOKEN_WARNING_THRESHOLD = int(get_env("CONTEXT_TOKEN_WARNING_THRESHOLD",
 OCR_PROVIDER = get_env("OCR_PROVIDER", default="local")
 
 # Docker settings
-DOCKER_IMAGE_BASE = get_env("DOCKER_IMAGE_BASE", default="geminiclaw-agent-base:latest")
-DOCKER_NETWORK = get_env("DOCKER_NETWORK", default="geminiclaw-net")
 
 # Deep Search Skill (S2)
 SKILL_DEEP_SEARCH_ENABLED = get_env_bool("SKILL_DEEP_SEARCH_ENABLED", default=False)

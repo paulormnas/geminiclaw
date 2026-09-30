@@ -1,4 +1,6 @@
-# Dockerfile base para agentes GeminiClaw
+# Imagem do sandbox de código do GeminiClaw (usada por src/skills/code/sandbox.py).
+# Os agentes rodam como processo local (ADR 014); esta é a única imagem de execução.
+# Ela ainda carrega dependências do projeto que o sandbox não precisa e será enxugada (ADR 018).
 # Stage 1: Builder - Instala dependências usando uv
 FROM --platform=linux/arm64 python:3.11-slim-bookworm AS builder
 LABEL stage=builder component=geminiclaw-base

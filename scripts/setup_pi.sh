@@ -117,16 +117,7 @@ else
     echo -e "${GREEN}[*] docker-compose-plugin já está instalado.${NC}"
 fi
 
-echo -e "${GREEN}[*] Verificando rede Docker...${NC}"
-if ! docker network inspect geminiclaw-net &>/dev/null; then
-    echo -e "${GREEN}[*] Criando rede geminiclaw-net...${NC}"
-    docker network create geminiclaw-net 2>/dev/null || echo -e "${YELLOW}[!] Falha ao criar rede Docker. Verifique se o docker está rodando e se você tem permissões.${NC}"
-else
-    echo -e "${GREEN}[*] Rede geminiclaw-net já existe.${NC}"
-fi
-
 echo -e "${GREEN}[*] Preparando containers (Pre-pull)...${NC}"
-docker pull python:3.11-slim || echo -e "${YELLOW}[!] Falha ao fazer pull da imagem python:3.11-slim.${NC}"
 docker pull "$QDRANT_IMAGE" || echo -e "${YELLOW}[!] Falha ao fazer pull da imagem ${QDRANT_IMAGE}.${NC}"
 
 # Roadmap V16 / ADR 011 §3 — pré-download do modelo de embeddings local

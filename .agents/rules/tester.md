@@ -230,10 +230,9 @@ def reset_env(monkeypatch):
 
 | Módulo | Mínimo |
 |---|---|
-| `src/runner.py` | 80% |
+| `src/agent_runtime/` | 80% |
 | `src/autonomous_loop.py` | 70% |
 | `src/skills/code/sandbox.py` | 80% |
-| `src/ipc.py` | 80% |
 | `agents/*/agent.py` | 70% |
 
 ---

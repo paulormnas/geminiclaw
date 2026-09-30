@@ -17,7 +17,7 @@ uv sync
 # Subir serviços essenciais (PostgreSQL e Qdrant)
 docker compose up -d
 
-# Garantir que as imagens Docker dos agentes estão construídas
+# Garantir que a imagem do sandbox de código está construída
 bash scripts/build_images.sh
 ```
 

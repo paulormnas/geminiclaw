@@ -50,8 +50,8 @@ A análise do PR deve cobrir rigorosamente as 7 dimensões:
 - Escopo delimitado sem alterações alheias ao objetivo do PR.
 
 ### Eixo 2: Arquitetura & Separação de Camadas
-- **Orquestrador (`src/`):** Separação clara entre planejamento (DAG), dispatch de containers (`ContainerRunner`), IPC e persistência de estado.
-- **Agentes (`agents/`):** System instructions isoladas, tools registradas com schemas bem definidos, execução containerizada via loop IPC (`agents/runner.py`), sem acoplamento direto ao host.
+- **Orquestrador (`src/`):** Separação clara entre planejamento (DAG), execução de agentes (`AgentRuntime`, `ResourceGuard`) e persistência de estado.
+- **Agentes (`agents/`):** System instructions isoladas, tools registradas com schemas bem definidos, estado por tarefa via `AgentContext` (nunca `os.environ`) e ferramentas do host confinadas ao diretório da sessão.
 - **Sandboxes (`src/skills/code/`):** Containers efêmeros com rede desabilitada, volumes mínimos, execução non-root.
 - **Containers (`containers/`):** Dockerfiles seguindo boas práticas (multi-stage, imagem slim ARM64, `appuser`, sem `latest`).
 

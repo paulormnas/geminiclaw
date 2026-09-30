@@ -34,7 +34,7 @@ Toda proposta deve avaliar o impacto nos seguintes eixos:
 ### 3. Sandboxes & Containers Docker
 - Volumes montados e isolamento de execução.
 - Limites de memória/CPU para o Raspberry Pi 5.
-- Rede `geminiclaw-net` e containers efêmeros.
+- Containers efêmeros do sandbox de código.
 - Permissões e usuário `appuser` non-root.
 
 ### 4. Persistência de Estado

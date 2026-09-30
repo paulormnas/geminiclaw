@@ -21,7 +21,7 @@ async def test_qdrant_connectivity():
 
 @pytest.mark.integration
 def test_docker_compose_structure():
-    """Verifica se o arquivo docker-compose.yml existe e tem a estrutura básica."""
+    """Verifica que o compose só tem serviços de apoio (o orquestrador e os agentes rodam localmente)."""
     compose_path = Path("docker-compose.yml")
     assert compose_path.exists()
     
@@ -30,7 +30,9 @@ def test_docker_compose_structure():
         config = yaml.safe_load(f)
     
     assert "services" in config
-    assert "qdrant" in config["services"]
-    assert "geminiclaw" in config["services"]
-    assert "networks" in config
-    assert "geminiclaw-net" in config["networks"]
+    assert {"qdrant", "postgres"} <= set(config["services"])
+    # O orquestrador em container foi removido (ADR 014): sem serviço próprio, sem rede dos agentes
+    # e sem o socket do daemon de containers montado.
+    assert "geminiclaw" not in config["services"]
+    assert "networks" not in config
+    assert "docker.sock" not in compose_path.read_text(encoding="utf-8")

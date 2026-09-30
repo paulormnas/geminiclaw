@@ -1,9 +1,9 @@
 """Testes de integração para gerenciamento de sessão via CLI (Roadmap V14.6).
 
 Cobre:
-- Listagem de containers ativos com `geminiclaw sessions`.
-- Encerramento de containers com `geminiclaw stop` e `geminiclaw stop --session <id>`.
-- Encerramento gracioso de containers de sessão ao receber SIGINT.
+- Listagem dos sandboxes de código ativos com `geminiclaw sessions`.
+- Encerramento dos sandboxes com `geminiclaw stop` e `geminiclaw stop --session <id>`.
+- Limpeza dos sandboxes que ficaram para trás ao receber SIGINT (os agentes rodam no processo).
 """
 
 import signal
@@ -66,7 +66,7 @@ class TestCliSessionsListing:
         res = show_sessions(docker_client=mock_client)
         assert res == []
         captured = capsys.readouterr().out
-        assert "Nenhum container de sessão ativo encontrado" in captured
+        assert "Nenhum sandbox de código ativo encontrado" in captured
 
     def test_show_sessions_with_active_containers(self, capsys):
         c1 = _make_mock_container("c111111111111111", "sess_001", "developer", "geminiclaw-developer")
@@ -83,7 +83,7 @@ class TestCliSessionsListing:
         assert res[1]["agent_id"] == "researcher"
 
         captured = capsys.readouterr().out
-        assert "Sessões e Containers Ativos do GeminiClaw" in captured
+        assert "Sandboxes de Código Ativos do GeminiClaw" in captured
         assert "sess_001" in captured
         assert "sess_002" in captured
         assert "geminiclaw-developer" in captured
@@ -124,19 +124,6 @@ class TestCliStopSessions:
         captured = capsys.readouterr().out
         assert "1 container(s) encerrado(s) com sucesso" in captured
 
-    def test_stop_session_with_session_runner(self):
-        mock_runner = MagicMock()
-        mock_runner.stop = AsyncMock()
-        mock_runner.stop_all = AsyncMock()
-
-        # Com session_id
-        stop_sessions(session_id="sess_target", session_runner=mock_runner)
-        mock_runner.stop.assert_awaited_once_with("sess_target")
-
-        # Sem session_id
-        stop_sessions(session_id=None, session_runner=mock_runner)
-        mock_runner.stop_all.assert_awaited_once()
-
 
 @pytest.mark.unit
 class TestCliMainCommands:
@@ -168,22 +155,17 @@ class TestCliMainCommands:
 
 
 @pytest.mark.unit
-class TestCliSigintGracefulShutdown:
-    """Valida que o handler de SIGINT realiza encerramento gracioso via session_runner."""
+class TestCliSigintCleanup:
+    """Valida que o handler de SIGINT remove os sandboxes de código que ficaram para trás."""
 
     @patch("src.cli._create_orchestrator")
     @patch("src.cli.signal.signal")
-    def test_sigint_handler_invokes_session_runner_stop_all(
+    def test_sigint_handler_cleans_up_sandbox_containers(
         self,
         mock_signal: MagicMock,
         mock_create: MagicMock,
     ):
-        mock_orchestrator = MagicMock()
-        mock_orchestrator.session_runner = MagicMock()
-        mock_orchestrator.session_runner.stop_all = AsyncMock()
-
-        mock_runner = MagicMock()
-        mock_create.return_value = (mock_orchestrator, mock_runner)
+        mock_create.return_value = MagicMock()
 
         with patch("src.cli.asyncio.run"):
             with patch("src.cli.execute_prompt", new_callable=MagicMock):
@@ -196,13 +178,11 @@ class TestCliSigintGracefulShutdown:
 
         # Simula o disparo do sinal SIGINT
         with patch("sys.exit") as mock_exit:
-            with patch("src.telemetry.get_telemetry") as mock_tel:
-                mock_tel.return_value.flush = AsyncMock()
-                handler(signal.SIGINT, None)
+            with patch("src.skills.code.sandbox.cleanup_sandbox_containers", return_value=2) as mock_cleanup:
+                with patch("src.telemetry.get_telemetry") as mock_tel:
+                    mock_tel.return_value.flush = AsyncMock()
+                    handler(signal.SIGINT, None)
 
-            # Verifica que session_runner.stop_all foi invocado
-            mock_orchestrator.session_runner.stop_all.assert_awaited_once()
-            # Verifica que runner.cleanup_all foi invocado
-            mock_runner.cleanup_all.assert_called_once()
+            mock_cleanup.assert_called_once()
             # Verifica código de saída 130
             mock_exit.assert_called_once_with(130)

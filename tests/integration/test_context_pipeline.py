@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 import pytest
 
 from src.context_loader import ContextLoader
-from src.orchestrator import Orchestrator, AgentTask
+from src.orchestrator import AgentResult, AgentTask, Orchestrator
 from src.session import Session
 from src.cli import load_context_with_confirmation, clear_context
 
@@ -25,35 +25,11 @@ def _make_session(agent_id: str, session_id: str, payload: dict | None = None) -
 
 
 def _create_orchestrator():
-    mock_runner = MagicMock()
-    mock_runner.spawn = AsyncMock(return_value="container_id_123")
-    mock_runner.stop = AsyncMock()
-    mock_runner.is_running = AsyncMock(return_value=True)
-    mock_runner.get_logs = AsyncMock(return_value="logs")
-
-    mock_ipc = MagicMock()
-    mock_ipc._connections = {}
-
-    async def create_socket_side_effect(ipc_id: str) -> None:
-        mock_ipc._connections[ipc_id] = MagicMock()
-
-    mock_ipc.create_socket = AsyncMock(side_effect=create_socket_side_effect)
-    mock_ipc.wait_for_connection = AsyncMock()
-    mock_ipc.send = AsyncMock()
-    mock_ipc.close = AsyncMock()
-
     mock_session_manager = MagicMock()
-
-    # Roadmap V16/ADR 014: AGENT_RUNTIME tem padrão "inprocess" — este módulo
-    # testa especificamente o caminho legado container/IPC (mocka
-    # mock_ipc.receive para simular a resposta do agente), então fixa o modo.
-    orchestrator = Orchestrator(
-        runner=mock_runner,
-        ipc=mock_ipc,
-        session_manager=mock_session_manager,
-        agent_runtime_mode="container",
-    )
-    return orchestrator, mock_runner, mock_ipc, mock_session_manager
+    mock_runtime = MagicMock()
+    mock_runtime.run = AsyncMock()
+    orchestrator = Orchestrator(session_manager=mock_session_manager, agent_runtime=mock_runtime)
+    return orchestrator, mock_runtime, mock_session_manager
 
 
 @pytest.mark.unit
@@ -100,20 +76,20 @@ class TestOrchestratorContextInjection:
     """O ContextBundle deve ser injetado apenas no plano inicial (nunca em replan)."""
 
     async def test_contexto_injetado_no_prompt_inicial_do_researcher(self, tmp_path: Path) -> None:
-        orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
+        orchestrator, mock_runtime, mock_sm = _create_orchestrator()
 
         master_session = _make_session("orchestrator", "sess_master")
         researcher_session = _make_session("researcher", "s_researcher")
         mock_sm.create.side_effect = [master_session, researcher_session]
 
-        from src.ipc import Message
-        planner_response = Message(
-            type="response",
+        mock_runtime.run.return_value = AgentResult(
+            agent_id="researcher",
             session_id="s_researcher",
-            payload={"text": '[{"agent_id": "developer", "task_name": "t1", "prompt": "p", "validation_criteria": ["ok"]}]'},
-            timestamp="2025-01-01T00:00:00+00:00",
+            status="success",
+            response={
+                "text": '[{"agent_id": "developer", "task_name": "t1", "prompt": "p", "validation_criteria": ["ok"]}]'
+            },
         )
-        mock_ipc.receive = AsyncMock(return_value=planner_response)
         orchestrator.validator.validate_plan = AsyncMock(
             return_value=MagicMock(is_valid=True, issues=[])
         )
@@ -128,22 +104,20 @@ class TestOrchestratorContextInjection:
         )
 
         assert tasks  # plano foi gerado
-        sent_prompt = mock_ipc.send.call_args_list[0].args[1] if mock_ipc.send.call_args_list else None
         # _run_planning_loop não usa self._current_context_block automaticamente sem handle_request;
         # validamos diretamente que o campo é lido corretamente quando setado.
         orchestrator._current_context_block = bundle.to_prompt_context()
         assert "Hipótese: X causa Y." in orchestrator._current_context_block
 
     async def test_handle_request_carrega_contexto_e_expoe_no_orchestrator(self, tmp_path: Path) -> None:
-        orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
+        orchestrator, mock_runtime, mock_sm = _create_orchestrator()
 
         master_session = _make_session("orchestrator", "sess_master")
         agent_session = _make_session("a0", "s0")
         mock_sm.create.side_effect = [master_session, agent_session]
 
-        from src.ipc import Message
-        mock_ipc.receive = AsyncMock(
-            return_value=Message(type="response", session_id="s0", payload={"idx": 0}, timestamp="2025-01-01T00:00:00+00:00")
+        mock_runtime.run.return_value = AgentResult(
+            agent_id="developer", session_id="s0", status="success", response={"idx": 0}
         )
 
         context_dir = tmp_path / "input_context"
@@ -151,7 +125,7 @@ class TestOrchestratorContextInjection:
         (context_dir / "context.md").write_text("Contexto científico pré-curado.", encoding="utf-8")
         bundle = ContextLoader(context_dir).load()
 
-        task = AgentTask(agent_id="developer", image="img", prompt="faz algo")
+        task = AgentTask(agent_id="developer", prompt="faz algo")
         result = await orchestrator.handle_request("tarefa", [task], context_bundle=bundle)
 
         assert "Contexto científico pré-curado." in orchestrator._current_context_block
@@ -164,16 +138,15 @@ class TestInputSnapshot:
     """Cópia imutável de input_context/ em outputs/<session>/input_snapshot/."""
 
     async def test_input_snapshot_criado_com_arquivos_usados(self, tmp_path: Path) -> None:
-        orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
+        orchestrator, mock_runtime, mock_sm = _create_orchestrator()
         orchestrator.output_manager.base_dir = tmp_path / "outputs"
 
         master_session = _make_session("orchestrator", "sess_master")
         agent_session = _make_session("a0", "s0")
         mock_sm.create.side_effect = [master_session, agent_session]
 
-        from src.ipc import Message
-        mock_ipc.receive = AsyncMock(
-            return_value=Message(type="response", session_id="s0", payload={"idx": 0}, timestamp="2025-01-01T00:00:00+00:00")
+        mock_runtime.run.return_value = AgentResult(
+            agent_id="developer", session_id="s0", status="success", response={"idx": 0}
         )
 
         context_dir = tmp_path / "input_context"
@@ -181,7 +154,7 @@ class TestInputSnapshot:
         (context_dir / "context.md").write_text("dados", encoding="utf-8")
         bundle = ContextLoader(context_dir).load()
 
-        task = AgentTask(agent_id="developer", image="img", prompt="faz algo")
+        task = AgentTask(agent_id="developer", prompt="faz algo")
         await orchestrator.handle_request("tarefa", [task], context_bundle=bundle)
 
         snapshot_dir = tmp_path / "outputs" / "sess_master" / "input_snapshot"

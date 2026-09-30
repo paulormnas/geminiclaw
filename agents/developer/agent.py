@@ -22,7 +22,7 @@ from agents.base.agent import (
 )
 from agents.base.tools import write_artifact
 from src.config import DEFAULT_MODEL
-from src.logger import get_logger, setup_file_logging
+from src.logger import get_logger
 from src.prompts import render_instruction
 from src.skills import registry
 from src.skills.code.manifest import WorkspaceManifest
@@ -180,13 +180,3 @@ def handle_request_filter(prompt: str) -> Optional[str]:
     if any(kw in p_lower for kw in _RESEARCH_KEYWORDS):
         return "use researcher_agent para pesquisa"
     return None
-
-
-if __name__ == "__main__":
-    import asyncio
-    from agents.runner import run_ipc_loop
-
-    agent_id = os.environ.get("AGENT_ID", "developer")
-    setup_file_logging(f"/logs/{agent_id}.log")
-
-    asyncio.run(run_ipc_loop(root_agent))

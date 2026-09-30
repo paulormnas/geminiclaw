@@ -1,19 +1,10 @@
 import pytest
-import docker
 import httpx
 import asyncio
 import os
 from pathlib import Path
 # tests/conftest.py força QDRANT_URL=":memory:"; este teste verifica o servidor real do compose.
 QDRANT_HEALTH_URL = "http://localhost:6333/healthz"
-
-def is_docker_available():
-    try:
-        client = docker.from_env()
-        client.ping()
-        return True
-    except Exception:
-        return False
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -43,21 +34,3 @@ def test_docker_compose_structure():
     assert "geminiclaw" in config["services"]
     assert "networks" in config
     assert "geminiclaw-net" in config["networks"]
-
-@pytest.mark.asyncio
-@pytest.mark.integration
-@pytest.mark.skipif(not is_docker_available(), reason="Docker daemon não está rodando")
-async def test_runner_uses_correct_network():
-    """Verifica se o runner está configurado para usar a rede geminiclaw-net."""
-    from src.runner import ContainerRunner
-    
-    runner = ContainerRunner()
-    # Verifica se a rede existe (o runner deve ter criado/verificado)
-    client = docker.from_env()
-    try:
-        network = client.networks.get("geminiclaw-net")
-        assert network is not None
-    except docker.errors.NotFound:
-        pytest.fail("Rede geminiclaw-net não foi encontrada.")
-    finally:
-        client.close()

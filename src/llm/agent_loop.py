@@ -20,12 +20,11 @@ logger = get_logger(__name__)
 def _task_env() -> Dict[str, str]:
     """Resolve o estado por tarefa (sessão, papel, diretório de output, etc.).
 
-    Roadmap V16/ADR 014: no runtime em processo (``AGENT_RUNTIME=inprocess``),
-    esse estado vem do ``AgentContext`` vinculado à ``Task`` asyncio corrente
-    (``contextvars``), nunca de ``os.environ`` (global ao processo e portanto
-    inseguro com múltiplas tarefas concorrentes). No modo container legado,
-    não há ``AgentContext`` e o estado continua vindo de ``os.environ``,
-    definido pelo orquestrador ao spawnar o container.
+    Roadmap V16/ADR 014: dentro do ``AgentRuntime``, esse estado vem do ``AgentContext``
+    vinculado à ``Task`` asyncio corrente (``contextvars``), nunca de ``os.environ`` (global
+    ao processo e portanto inseguro com múltiplas tarefas concorrentes). Fora dele (chamadas
+    diretas ao laço, como os planejamentos do Researcher), não há ``AgentContext`` e o estado
+    vem de ``os.environ``.
 
     Returns:
         Dicionário com as mesmas chaves antes lidas diretamente de
@@ -163,8 +162,7 @@ async def run_agent_loop(
         max_iterations: Limite de chamadas de ferramenta para evitar loops infinitos.
         provider: Provedor LLM a usar (Roadmap V16: resolvido por papel via
             ``ModelRouter`` no runtime em processo). Se omitido, usa o provedor
-            singleton padrão (``get_provider()``) — compatibilidade retroativa
-            com o modo container, que não resolve provedor por papel aqui.
+            singleton padrão (``get_provider()``).
 
     Returns:
         Resposta final do agente como string.
@@ -207,8 +205,8 @@ async def run_agent_loop(
         # V13.4.1/V13.4.2 — Injetar bloco de contexto do workspace antes de cada LLM call.
         # Lê o manifest da sessão atual e inclui artefatos disponíveis, resumo do último
         # step e, quando falhou, o código anterior + erro específico.
-        # V16 — estado por tarefa vem do AgentContext (contextvars) no runtime em
-        # processo, ou de os.environ no modo container legado (ver _task_env()).
+        # V16 — estado por tarefa vem do AgentContext (contextvars) ou, fora do
+        # AgentRuntime, de os.environ (ver _task_env()).
         _task = _task_env()
         _env_session_id = _task["SESSION_ID"]
         _env_task_name = _task["TASK_NAME"]
@@ -298,7 +296,7 @@ async def run_agent_loop(
         # V16 — no runtime em processo, o provedor é explícito (parâmetro `provider`,
         # resolvido por papel via ModelRouter); deriva o nome a partir da própria
         # instância em vez de LLM_PROVIDER (global, não confiável com múltiplos papéis
-        # concorrentes). Mantém fallback em os.environ para o modo container legado.
+        # concorrentes). Mantém fallback em os.environ para chamadas fora do AgentRuntime.
         _provider_name = type(provider).__name__.removesuffix("Provider").lower() or _task["LLM_PROVIDER"] or "unknown"
         _model_name = provider.model_name or _task["LLM_MODEL"] or "unknown"
         _telemetry.record_token_usage(

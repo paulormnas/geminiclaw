@@ -1,33 +1,16 @@
 import pytest
-import asyncio
 import os
-import docker
 from src.orchestrator import Orchestrator, AgentTask, AgentResult
-from src.runner import ContainerRunner
-from src.ipc import IPCChannel
 from src.session import SessionManager
 from src.output_manager import OutputManager
-
-def is_docker_available():
-    try:
-        client = docker.from_env()
-        client.ping()
-        return True
-    except Exception:
-        return False
 
 @pytest.fixture
 def orchestrator():
     # Usa dependências reais para o teste de integração
-    runner = ContainerRunner()
-    ipc = IPCChannel()
-    session_manager = SessionManager()
-    output_manager = OutputManager()
-    return Orchestrator(runner, ipc, session_manager, output_manager)
+    return Orchestrator(session_manager=SessionManager(), output_manager=OutputManager())
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-@pytest.mark.skipif(not is_docker_available(), reason="Docker daemon não está rodando")
 async def test_full_planning_flow_integration(orchestrator):
     """Testa o fluxo completo de planejamento com containers reais.
     

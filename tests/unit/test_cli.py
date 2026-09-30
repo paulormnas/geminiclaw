@@ -249,9 +249,8 @@ class TestSignalHandler:
         mock_create: MagicMock,
     ) -> None:
         """main() registra handler para SIGINT."""
-        mock_runner = MagicMock()
         mock_orchestrator = MagicMock()
-        mock_create.return_value = (mock_orchestrator, mock_runner)
+        mock_create.return_value = mock_orchestrator
 
         with patch("src.cli.asyncio.run"):
             with patch("src.cli.execute_prompt", new_callable=MagicMock):
@@ -268,9 +267,8 @@ class TestSignalHandler:
         mock_create: MagicMock,
     ) -> None:
         """main() com prompt executa asyncio.run com execute_prompt."""
-        mock_runner = MagicMock()
         mock_orchestrator = MagicMock()
-        mock_create.return_value = (mock_orchestrator, mock_runner)
+        mock_create.return_value = mock_orchestrator
 
         with patch("src.cli.asyncio.run") as mock_run:
             with patch("src.cli.execute_prompt", new_callable=MagicMock) as mock_execute:
@@ -286,9 +284,8 @@ class TestSignalHandler:
         mock_create: MagicMock,
     ) -> None:
         """main() sem prompt executa asyncio.run com interactive_mode."""
-        mock_runner = MagicMock()
         mock_orchestrator = MagicMock()
-        mock_create.return_value = (mock_orchestrator, mock_runner)
+        mock_create.return_value = mock_orchestrator
 
         with patch("src.cli.asyncio.run") as mock_run:
             with patch("src.cli.interactive_mode", new_callable=MagicMock) as mock_interactive:

@@ -214,14 +214,13 @@ class AutonomousLoop:
 
     async def _run_simple_path(self, prompt: str, master_session_id: str) -> "OrchestratorResult":
         """Executa a tarefa via caminho simplificado (apenas agente base)."""
-        from src.orchestrator import AgentTask, AGENT_REGISTRY, OrchestratorResult
+        from src.orchestrator import AgentTask, OrchestratorResult
         
         now_iso = datetime.now(timezone.utc).isoformat()
         subtask_id = uuid.uuid4().hex
         
         task = AgentTask(
             agent_id="developer",
-            image=AGENT_REGISTRY.get("developer", "geminiclaw-developer"),
             prompt=prompt,
             task_name="simple_task",
             subtask_id=subtask_id,
@@ -268,7 +267,7 @@ class AutonomousLoop:
             OPERATIONAL_THRESHOLDS,
             SESSION_MAX_TOKENS,
             SESSION_MAX_MINUTES,
-            MAX_CONTAINERS_PER_SESSION,
+            MAX_AGENT_RUNS_PER_SESSION,
             OPERATIONAL_THRESHOLD_WAIT_SECONDS,
         )
 
@@ -279,11 +278,9 @@ class AutonomousLoop:
         total_cost = sum(r.get("total_cost_usd") or 0 for r in rows)
 
         token_pct = (total_tokens / SESSION_MAX_TOKENS) if SESSION_MAX_TOKENS else 0.0
-        container_counts = getattr(self.orchestrator, "_session_container_counts", None)
-        container_count = (
-            container_counts.get(master_session_id, 0) if isinstance(container_counts, dict) else 0
-        )
-        container_pct = (container_count / MAX_CONTAINERS_PER_SESSION) if MAX_CONTAINERS_PER_SESSION else 0.0
+        run_counts = getattr(self.orchestrator, "_session_agent_run_counts", None)
+        agent_runs = run_counts.get(master_session_id, 0) if isinstance(run_counts, dict) else 0
+        agent_runs_pct = (agent_runs / MAX_AGENT_RUNS_PER_SESSION) if MAX_AGENT_RUNS_PER_SESSION else 0.0
         duration_min = (time.time() - getattr(self, "_session_started_at", time.time())) / 60
         # V18/usage-limits — avisos da Spec G5 agora são percentuais dos limites reais
         # do UsageBudget (SESSION_MAX_MINUTES), não mais minutos absolutos.
@@ -298,9 +295,9 @@ class AutonomousLoop:
             triggered.append(
                 f"Duração da sessão: {duration_pct*100:.0f}% do limite ({duration_min:.0f}min/{SESSION_MAX_MINUTES:.0f}min)"
             )
-        if container_pct >= OPERATIONAL_THRESHOLDS["container_count_pct"]:
+        if agent_runs_pct >= OPERATIONAL_THRESHOLDS["agent_runs_pct"]:
             triggered.append(
-                f"Containers usados: {container_pct*100:.0f}% do limite ({container_count}/{MAX_CONTAINERS_PER_SESSION})"
+                f"Execuções de agente: {agent_runs_pct*100:.0f}% do limite ({agent_runs}/{MAX_AGENT_RUNS_PER_SESSION})"
             )
 
         if not triggered:
@@ -452,19 +449,19 @@ class AutonomousLoop:
         return f"Contexto das etapas anteriores:\n{context}\n\n"
 
     def _dispatch_subtask(self, task: "AgentTask") -> "AgentTask":
-        """Roteia a subtarefa para o agente e imagem adequados (Roadmap V14.4).
+        """Roteia a subtarefa para o agente adequado (Roadmap V14.4).
 
         Roteia com base em `task.agent_id`:
-        - 'developer' (ou código/dados) -> geminiclaw-developer
-        - 'researcher' (pesquisa/planejamento) -> geminiclaw-researcher
+        - 'developer' (ou código/dados) -> developer
+        - 'researcher' (pesquisa/planejamento) -> researcher
         - 'base' legado -> redirecionado para 'developer'
-        - outros agentes preservados conforme AGENT_REGISTRY
+        - outros papéis conhecidos (AGENT_IDS) são preservados
         """
-        from src.orchestrator import AGENT_REGISTRY, AgentTask
+        from src.orchestrator import AGENT_IDS, AgentTask
         raw_agent = (task.agent_id or "developer").lower()
         if raw_agent == "base":
             agent_id = "developer"
-        elif raw_agent in AGENT_REGISTRY:
+        elif raw_agent in AGENT_IDS:
             agent_id = raw_agent
         else:
             p_lower = (task.prompt or "").lower()
@@ -473,11 +470,8 @@ class AutonomousLoop:
             else:
                 agent_id = "developer"
 
-        image = AGENT_REGISTRY.get(agent_id, AGENT_REGISTRY.get("developer", "geminiclaw-developer"))
-
         return AgentTask(
             agent_id=agent_id,
-            image=image,
             prompt=task.prompt,
             task_name=task.task_name,
             depends_on=task.depends_on,
@@ -491,7 +485,7 @@ class AutonomousLoop:
 
     async def _run_complex_path(self, prompt: str, master_session_id: str) -> "OrchestratorResult":
         """Executa a tarefa via caminho complexo (Planner -> Loop de Subtarefas em DAG)."""
-        from src.orchestrator import AgentTask, OrchestratorResult, AGENT_REGISTRY, AgentResult
+        from src.orchestrator import AgentTask, OrchestratorResult, AgentResult
         from src.task_scheduler import TaskScheduler
 
         # V18/usage-limits — rede de segurança: `_run_complex_path` é chamado
@@ -713,7 +707,6 @@ class AutonomousLoop:
 
                 enriched_task = AgentTask(
                     agent_id=task.agent_id,
-                    image=task.image,
                     prompt=task_prompt,
                     task_name=task.task_name,
                     depends_on=task.depends_on,
@@ -849,7 +842,6 @@ class AutonomousLoop:
                         )
                         enriched_task = AgentTask(
                             agent_id=enriched_task.agent_id,
-                            image=enriched_task.image,
                             prompt=enriched_task.prompt + artifact_context + error_context,
                             task_name=enriched_task.task_name,
                             depends_on=enriched_task.depends_on,
@@ -1057,7 +1049,6 @@ class AutonomousLoop:
             # que originaram as falhas.
             try:
                 from src.llm_cache import LLMResponseCache
-                from src.orchestrator import AGENT_REGISTRY  # type: ignore[attr-defined]
                 import os as _os
                 _model = _os.environ.get("DEFAULT_MODEL", "unknown")
                 _cache = LLMResponseCache()
@@ -1267,7 +1258,7 @@ class AutonomousLoop:
 
     async def _promote_findings(self, prompt: str, master_session_id: str) -> None:
         """Identifica e promove descobertas importantes para a memória de longo prazo (S7.5.a)."""
-        from src.orchestrator import AgentTask, AGENT_REGISTRY
+        from src.orchestrator import AgentTask
         
         logger.info("Promovendo descobertas importantes para memória de longo prazo")
         
@@ -1282,7 +1273,6 @@ class AutonomousLoop:
         
         task = AgentTask(
             agent_id="planner", # O Planner é ideal para sintetizar e decidir o que é importante
-            image=AGENT_REGISTRY.get("planner", "geminiclaw-planner"),
             prompt=promotion_prompt
         )
         
@@ -1393,10 +1383,9 @@ class AutonomousLoop:
             f"Responda APENAS com o JSON."
         )
 
-        from src.orchestrator import AgentTask, AGENT_REGISTRY
+        from src.orchestrator import AgentTask
         extraction_task = AgentTask(
             agent_id="planner",
-            image=AGENT_REGISTRY.get("planner", "geminiclaw-planner"),
             prompt=extraction_prompt,
             task_name="extract_patterns"
         )
@@ -1435,7 +1424,7 @@ class AutonomousLoop:
         Returns:
             Dicionário com o status da revisão e feedback.
         """
-        from src.orchestrator import AgentTask, AGENT_REGISTRY
+        from src.orchestrator import AgentTask
         from src.utils.json_parser import extract_json
 
         # V14.2: Reviewer executado via corrotina ValidatorAgent (sem container Docker)
@@ -1467,7 +1456,7 @@ class AutonomousLoop:
         Returns:
             AgentResult com o relatório consolidado ou None em caso de falha.
         """
-        from src.orchestrator import AgentTask, AGENT_REGISTRY
+        from src.orchestrator import AgentTask
         from src.telemetry import get_telemetry
 
         logger.info("Iniciando síntese final dos resultados")
@@ -1532,7 +1521,6 @@ class AutonomousLoop:
         
         task = AgentTask(
             agent_id="summarizer",
-            image=AGENT_REGISTRY.get("summarizer", "geminiclaw-summarizer"),
             prompt=synthesis_prompt,
             task_name="final_synthesis"
         )

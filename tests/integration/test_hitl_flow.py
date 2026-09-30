@@ -1,6 +1,6 @@
 """Testes de integração do fluxo Human-in-the-Loop completo (Roadmap V15.3 / Spec G5).
 
-Cobre: round-trip ask_researcher via _execute_agent, deduplicação de perguntas
+Cobre: consulta ao pesquisador via _execute_agent, deduplicação de perguntas
 similares, persistência de interações, monitoramento de limites operacionais e
 geração de DivergenceReport.
 """
@@ -12,7 +12,6 @@ import pytest
 from src.orchestrator import Orchestrator, AgentTask, AgentResult
 from src.autonomous_loop import AutonomousLoop
 from src.session import Session
-from src.ipc import Message, create_message
 from src.cli import resume_session
 
 
@@ -28,48 +27,33 @@ def _make_session(session_id: str, payload: dict | None = None, status: str = "a
 
 
 def _create_orchestrator():
-    mock_runner = MagicMock()
-    mock_runner.spawn = AsyncMock(return_value="container_id")
-    mock_runner.stop = AsyncMock()
-    mock_runner.is_running = AsyncMock(return_value=True)
-
-    mock_ipc = MagicMock()
-    mock_ipc._connections = {"developer_s0": MagicMock()}
-    mock_ipc.create_socket = AsyncMock()
-    mock_ipc.send = AsyncMock()
-
     mock_session_manager = MagicMock()
-
-    # Roadmap V16/ADR 014: AGENT_RUNTIME tem padrão "inprocess" — este módulo
-    # testa especificamente o round-trip ask_researcher via IPC/container
-    # (TestExecuteAgentAskResearcherRoundTrip), então fixa o modo legado.
-    orchestrator = Orchestrator(
-        runner=mock_runner,
-        ipc=mock_ipc,
-        session_manager=mock_session_manager,
-        agent_runtime_mode="container",
-    )
-    return orchestrator, mock_ipc, mock_session_manager
+    mock_runtime = MagicMock()
+    mock_runtime.run = AsyncMock()
+    orchestrator = Orchestrator(session_manager=mock_session_manager, agent_runtime=mock_runtime)
+    return orchestrator, mock_runtime, mock_session_manager
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-class TestHandleAskResearcher:
-    """_handle_ask_researcher: exibição, persistência e deduplicação."""
+class TestAskResearcherCore:
+    """_ask_researcher_core: exibição, persistência e deduplicação."""
 
     async def test_pergunta_nova_bloqueia_e_persiste(self) -> None:
-        orchestrator, mock_ipc, mock_sm = _create_orchestrator()
+        orchestrator, _runtime, mock_sm = _create_orchestrator()
         mock_sm.get.return_value = _make_session("sess_1", payload={})
 
-        task = AgentTask(agent_id="researcher", image="img", prompt="p", task_name="t1")
-        msg = create_message(
-            "ask_researcher",
-            "s0",
-            {"question": "Onde está o dataset?", "context": "ctx", "why_cant_proceed": "motivo", "options": ["A", "B"]},
-        )
+        task = AgentTask(agent_id="researcher", prompt="p", task_name="t1")
 
         with patch("asyncio.to_thread", new=AsyncMock(return_value="Use /outputs/dados.csv")):
-            answer = await orchestrator._handle_ask_researcher(msg, task, "sess_1")
+            answer = await orchestrator._ask_researcher_core(
+                question="Onde está o dataset?",
+                context="ctx",
+                why_cant_proceed="motivo",
+                options=["A", "B"],
+                task=task,
+                master_session_id="sess_1",
+            )
 
         assert answer == "Use /outputs/dados.csv"
         mock_sm.update.assert_called_once()
@@ -81,7 +65,7 @@ class TestHandleAskResearcher:
         assert interactions[0]["subtask_name"] == "t1"
 
     async def test_pergunta_similar_reaproveita_resposta_sem_bloquear(self) -> None:
-        orchestrator, mock_ipc, mock_sm = _create_orchestrator()
+        orchestrator, _runtime, mock_sm = _create_orchestrator()
         mock_sm.get.return_value = _make_session(
             "sess_1",
             payload={
@@ -91,31 +75,39 @@ class TestHandleAskResearcher:
             },
         )
 
-        task = AgentTask(agent_id="researcher", image="img", prompt="p", task_name="t2")
-        msg = create_message(
-            "ask_researcher", "s0", {"question": "Onde está o dataset de treino?", "context": "", "why_cant_proceed": ""}
-        )
+        task = AgentTask(agent_id="researcher", prompt="p", task_name="t2")
 
         with patch("asyncio.to_thread") as mock_to_thread:
-            answer = await orchestrator._handle_ask_researcher(msg, task, "sess_1")
+            answer = await orchestrator._ask_researcher_core(
+                question="Onde está o dataset de treino?",
+                context="",
+                why_cant_proceed="",
+                options=[],
+                task=task,
+                master_session_id="sess_1",
+            )
 
         mock_to_thread.assert_not_called()
         assert answer == "Em /outputs/dados.csv"
 
     async def test_pergunta_diferente_nao_reaproveita(self) -> None:
-        orchestrator, mock_ipc, mock_sm = _create_orchestrator()
+        orchestrator, _runtime, mock_sm = _create_orchestrator()
         mock_sm.get.return_value = _make_session(
             "sess_1",
             payload={"researcher_interactions": [{"question": "Qual formato de imagem usar?", "researcher_response": "PNG"}]},
         )
 
-        task = AgentTask(agent_id="researcher", image="img", prompt="p", task_name="t3")
-        msg = create_message(
-            "ask_researcher", "s0", {"question": "Onde está o dataset de treino?", "context": "", "why_cant_proceed": ""}
-        )
+        task = AgentTask(agent_id="researcher", prompt="p", task_name="t3")
 
         with patch("asyncio.to_thread", new=AsyncMock(return_value="resposta nova")):
-            answer = await orchestrator._handle_ask_researcher(msg, task, "sess_1")
+            answer = await orchestrator._ask_researcher_core(
+                question="Onde está o dataset de treino?",
+                context="",
+                why_cant_proceed="",
+                options=[],
+                task=task,
+                master_session_id="sess_1",
+            )
 
         assert answer == "resposta nova"
 
@@ -123,45 +115,47 @@ class TestHandleAskResearcher:
 @pytest.mark.unit
 @pytest.mark.asyncio
 class TestExecuteAgentAskResearcherRoundTrip:
-    """_execute_agent deve tratar mensagens ask_researcher antes da resposta final."""
+    """O agente em execução consulta o pesquisador pelo callback do AgentContext."""
 
-    async def test_execute_agent_processa_ask_researcher_antes_da_resposta(self) -> None:
-        orchestrator, mock_ipc, mock_sm = _create_orchestrator()
+    async def test_agente_pergunta_ao_pesquisador_durante_a_execucao(self) -> None:
+        orchestrator, runtime, mock_sm = _create_orchestrator()
 
         session = _make_session("agent_sess", payload={})
         mock_sm.create.return_value = session
         mock_sm.get.return_value = session
-        # ipc_id real construído em _execute_agent: f"{task.agent_id}_{session.id}"
-        mock_ipc._connections = {"researcher_agent_sess": MagicMock()}
 
-        ask_msg = create_message("ask_researcher", "agent_sess", {"question": "q", "context": "", "why_cant_proceed": ""})
-        final_msg = create_message("response", "agent_sess", {"text": "concluído"})
-        mock_ipc.receive = AsyncMock(side_effect=[ask_msg, final_msg])
+        answers: list[str] = []
 
-        with patch.object(orchestrator, "_handle_ask_researcher", new=AsyncMock(return_value="resposta")) as mock_handler:
-            task = AgentTask(agent_id="researcher", image="img", prompt="faz algo", task_name="t1")
+        async def fake_run(task, ctx):
+            # O agente pergunta no meio da execução e usa a resposta no resultado.
+            answers.append(await ctx.ask_researcher("q", "ctx", "motivo", ["A", "B"]))
+            return AgentResult(
+                agent_id=task.agent_id, session_id=ctx.agent_session_id, status="success", response={"text": "concluído"}
+            )
+
+        runtime.run.side_effect = fake_run
+
+        with patch.object(orchestrator, "_ask_researcher_core", new=AsyncMock(return_value="resposta")) as mock_core:
+            task = AgentTask(agent_id="researcher", prompt="faz algo", task_name="t1")
             result = await orchestrator._execute_agent(task, "master_sess")
 
-        mock_handler.assert_called_once()
+        mock_core.assert_awaited_once()
+        assert mock_core.await_args.kwargs["question"] == "q"
+        assert mock_core.await_args.kwargs["options"] == ["A", "B"]
+        assert mock_core.await_args.kwargs["master_session_id"] == "master_sess"
+        assert answers == ["resposta"]
         assert result.status == "success"
         assert result.response == {"text": "concluído"}
-
-        # A segunda chamada de ipc.send deve ser a resposta ao ask_researcher.
-        send_calls = mock_ipc.send.call_args_list
-        assert len(send_calls) == 2
-        answer_message = send_calls[1].args[1]
-        assert answer_message.type == "ask_researcher_answer"
-        assert answer_message.payload["answer"] == "resposta"
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 class TestOperationalThresholds:
-    """Monitoramento de limites operacionais (tokens, custo, duração, containers)."""
+    """Monitoramento de limites operacionais (tokens, custo, duração, execuções de agente)."""
 
     async def test_sem_uso_nenhum_limite_disparado(self) -> None:
         mock_orchestrator = MagicMock()
-        mock_orchestrator._session_container_counts = {}
+        mock_orchestrator._session_agent_run_counts = {}
         loop = AutonomousLoop(mock_orchestrator)
         loop._session_mode = "assisted"
 
@@ -173,7 +167,7 @@ class TestOperationalThresholds:
 
     async def test_modo_semi_nunca_bloqueia_mesmo_com_limite_atingido(self) -> None:
         mock_orchestrator = MagicMock()
-        mock_orchestrator._session_container_counts = {}
+        mock_orchestrator._session_agent_run_counts = {}
         loop = AutonomousLoop(mock_orchestrator)
         loop._session_mode = "semi"
 
@@ -189,7 +183,7 @@ class TestOperationalThresholds:
 
     async def test_modo_assisted_suspende_quando_pesquisador_confirma(self) -> None:
         mock_orchestrator = MagicMock()
-        mock_orchestrator._session_container_counts = {}
+        mock_orchestrator._session_agent_run_counts = {}
         loop = AutonomousLoop(mock_orchestrator)
         loop._session_mode = "assisted"
 
@@ -205,7 +199,7 @@ class TestOperationalThresholds:
 
     async def test_modo_assisted_continua_quando_pesquisador_nao_confirma(self) -> None:
         mock_orchestrator = MagicMock()
-        mock_orchestrator._session_container_counts = {}
+        mock_orchestrator._session_agent_run_counts = {}
         loop = AutonomousLoop(mock_orchestrator)
         loop._session_mode = "assisted"
 
@@ -231,7 +225,7 @@ class TestDivergenceReport:
         loop._session_mode = "semi"
 
         task = AgentTask(
-            agent_id="developer", image="img", prompt="p", task_name="treinar_modelo",
+            agent_id="developer", prompt="p", task_name="treinar_modelo",
             hypothesis="Acurácia > 0.85",
         )
         await loop._report_divergence(task, ["erro 1", "erro 2", "erro 3"], "sess_1")
@@ -250,7 +244,7 @@ class TestDivergenceReport:
         loop = AutonomousLoop(mock_orchestrator)
         loop._session_mode = "assisted"
 
-        task = AgentTask(agent_id="developer", image="img", prompt="p", task_name="t1")
+        task = AgentTask(agent_id="developer", prompt="p", task_name="t1")
         await loop._report_divergence(task, ["erro 1"], "sess_1")
 
         out = capsys.readouterr().out

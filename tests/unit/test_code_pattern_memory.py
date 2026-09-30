@@ -63,7 +63,6 @@ async def test_extract_code_patterns(autonomous_loop, tmp_path):
 def test_enrich_task_prompt_with_lessons(autonomous_loop):
     task = AgentTask(
         agent_id="code",
-        image="geminiclaw-code",
         prompt="Faça um EDA com pandas",
         task_name="eda"
     )
@@ -92,7 +91,6 @@ def test_enrich_task_prompt_with_lessons(autonomous_loop):
 def test_enrich_task_prompt_different_domain(autonomous_loop):
     task = AgentTask(
         agent_id="code",
-        image="geminiclaw-code",
         prompt="Plote um gráfico com matplotlib",
         task_name="plot"
     )

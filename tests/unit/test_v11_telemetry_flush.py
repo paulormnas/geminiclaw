@@ -1,13 +1,13 @@
-"""Testes V11.1 — Flush explícito em agents/runner.py e src/cli.py.
+"""Testes V11.1 — Flush explícito da telemetria em src/cli.py.
 
-Verifica que a chamada de flush é garantida ao encerrar o container
-e ao terminar a execução via CLI (modo direto e SIGINT).
+Verifica que a chamada de flush é garantida ao terminar a execução via CLI (modo direto e
+SIGINT). O flush do antigo ``agents/runner.py`` saiu com o modo container (ADR 014).
 """
 
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -30,108 +30,6 @@ def _make_collector_with_data() -> TelemetryCollector:
         event_type="spawn",
     )
     return col
-
-
-# ---------------------------------------------------------------------------
-# V11.1.1 — Flush no encerramento do runner
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-class TestRunnerFlushOnShutdown:
-    def test_flush_chamado_no_finally(self):
-        """O finally do run_ipc_loop deve chamar telemetry.flush()."""
-        flush_calls: list[int] = []
-
-        async def fake_flush() -> None:
-            flush_calls.append(1)
-
-        mock_telemetry = MagicMock()
-        mock_telemetry.flush = AsyncMock(side_effect=fake_flush)
-
-        # Verifica que o runner importa e usa get_telemetry()
-        # O flush é chamado no finally (confirmado pelo log de execução do teste)
-        # Testamos aqui que o comportamento é correto via assinatura do collector
-        import agents.runner as runner_mod
-
-        assert hasattr(runner_mod, "get_telemetry"), (
-            "runners.py deve importar get_telemetry para o flush V11.1.1"
-        )
-
-        # Verifica a integração real: ao executar o loop com reader que encerra imediatamente,
-        # o flush deve ser chamado no finally
-        import asyncio
-        import asyncio.streams
-
-        mock_reader = AsyncMock()
-        mock_reader.readexactly.side_effect = asyncio.IncompleteReadError(b"", 4)
-
-        mock_writer = AsyncMock()
-        mock_writer.close = MagicMock()
-        mock_writer.wait_closed = AsyncMock()
-
-        mock_agent = MagicMock()
-        mock_agent.instruction = ""
-        mock_agent.tools = []
-        mock_agent.model = "test"
-        mock_agent.before_agent_callback = None
-        mock_agent.after_agent_callback = None
-
-        import os
-        os.environ["SESSION_ID"] = "sess1"
-        os.environ["AGENT_ID"] = "agent1"
-
-        with (
-            patch("agents.runner.get_telemetry", return_value=mock_telemetry),
-            patch(
-                "asyncio.open_unix_connection",
-                new=AsyncMock(return_value=(mock_reader, mock_writer)),
-            ),
-        ):
-            asyncio.run(runner_mod.run_ipc_loop(mock_agent))
-
-        mock_telemetry.flush.assert_called_once()
-
-    def test_flush_erro_nao_impede_encerramento(self):
-        """Se o flush falhar, writer.close() ainda deve ser chamado."""
-        mock_telemetry = MagicMock()
-        mock_telemetry.flush = AsyncMock(side_effect=Exception("DB offline"))
-
-        mock_reader = AsyncMock()
-        mock_reader.readexactly.side_effect = asyncio.IncompleteReadError(b"", 4)
-
-        mock_writer = AsyncMock()
-        mock_writer.close = MagicMock()
-        mock_writer.wait_closed = AsyncMock()
-
-        with (
-            patch("agents.runner.get_telemetry", return_value=mock_telemetry),
-            patch(
-                "asyncio.open_unix_connection",
-                new=AsyncMock(return_value=(mock_reader, mock_writer)),
-            ),
-        ):
-            import importlib
-            import agents.runner as runner_mod
-
-            importlib.reload(runner_mod)
-
-            import os
-            os.environ["SESSION_ID"] = "sess1"
-            os.environ["AGENT_ID"] = "agent1"
-
-            mock_agent = MagicMock()
-            mock_agent.instruction = ""
-            mock_agent.tools = []
-            mock_agent.model = "test"
-            mock_agent.before_agent_callback = None
-            mock_agent.after_agent_callback = None
-
-            # Não deve levantar exceção mesmo com flush falhando
-            asyncio.run(runner_mod.run_ipc_loop(mock_agent))
-
-        # writer.close() deve ter sido chamado independentemente
-        mock_writer.close.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

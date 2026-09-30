@@ -9,7 +9,6 @@ import os
 from agents.base.agent import Agent, _load_session_context, _persist_session_context, _setup_skills
 from src.config import DEFAULT_MODEL
 from src.prompts import render_instruction
-from agents.runner import run_ipc_loop
 
 AGENT_NAME = "reviewer"
 AGENT_DESCRIPTION = "Agente revisor especializado em validar a qualidade e completude das subtarefas."
@@ -59,11 +58,3 @@ def create_agent() -> Agent:
         before_agent_callback=_load_session_context,
         after_agent_callback=_persist_session_context,
     )
-
-if __name__ == "__main__":
-    from src.logger import setup_file_logging
-    agent_id = os.environ.get("AGENT_ID", "reviewer")
-    setup_file_logging(f"/logs/{agent_id}.log")
-    
-    agent = create_agent()
-    asyncio.run(run_ipc_loop(agent))

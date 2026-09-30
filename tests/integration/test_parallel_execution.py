@@ -15,9 +15,9 @@ def mock_orchestrator():
     
     # Fazemos mock do _run_planning_loop para retornar um plano com paralelismo
     tasks = [
-        AgentTask(agent_id="base", image="img", prompt="T1", task_name="task_1", depends_on=[]),
-        AgentTask(agent_id="base", image="img", prompt="T2", task_name="task_2", depends_on=[]),
-        AgentTask(agent_id="base", image="img", prompt="T3", task_name="task_3", depends_on=["task_1", "task_2"]),
+        AgentTask(agent_id="base", prompt="T1", task_name="task_1", depends_on=[]),
+        AgentTask(agent_id="base", prompt="T2", task_name="task_2", depends_on=[]),
+        AgentTask(agent_id="base", prompt="T3", task_name="task_3", depends_on=["task_1", "task_2"]),
     ]
     orch._run_planning_loop = AsyncMock(return_value=tasks)
     return orch

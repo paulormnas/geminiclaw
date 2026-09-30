@@ -8,12 +8,11 @@ import asyncio
 import tempfile
 import os
 import shutil
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, patch
 
 from src.orchestrator import Orchestrator, AgentTask, AgentResult
 from src.session import SessionManager
 from src.db import get_connection
-from src.ipc import IPCChannel
 from src.output_manager import OutputManager
 
 
@@ -23,20 +22,17 @@ async def test_autonomous_simple_flow_integration():
     """Testa o fluxo autônomo simples (triage SIMPLE → Base Agent).
 
     Roadmap V3 - Etapa V3: o triage agora usa heurísticas locais,
-    sem spawnar container para o Planner. TRIAGE_MODE=heuristic garante
+    sem acionar o agente Planner. TRIAGE_MODE=heuristic garante
     que o classificador decide diretamente.
     """
-    ipc_dir = tempfile.mkdtemp(prefix="gc_ipc_")
     db_dir = tempfile.mkdtemp(prefix="gc_db_")
     output_dir = tempfile.mkdtemp(prefix="gc_out_")
 
     try:
-        ipc = IPCChannel(socket_dir=ipc_dir)
         session_manager = SessionManager()
         output_manager = OutputManager(base_dir=output_dir)
-        mock_runner = MagicMock()
 
-        orchestrator = Orchestrator(mock_runner, ipc, session_manager, output_manager)
+        orchestrator = Orchestrator(session_manager=session_manager, output_manager=output_manager)
 
         # Prompt curto → heurística classifica como SIMPLE → Base Agent direto
         base_res = AgentResult(
@@ -56,7 +52,6 @@ async def test_autonomous_simple_flow_integration():
         assert orchestrator._execute_agent.call_count == 1
 
     finally:
-        shutil.rmtree(ipc_dir, ignore_errors=True)
         shutil.rmtree(db_dir, ignore_errors=True)
         shutil.rmtree(output_dir, ignore_errors=True)
 
@@ -70,21 +65,18 @@ async def test_autonomous_complex_flow_integration():
     (palavras-chave 'pesquise', 'analise'), sem container. O _run_planning_loop
     é mockado para isolar o planejamento.
     """
-    ipc_dir = tempfile.mkdtemp(prefix="gc_ipc_")
     db_dir = tempfile.mkdtemp(prefix="gc_db_")
     output_dir = tempfile.mkdtemp(prefix="gc_out_")
 
     try:
-        ipc = IPCChannel(socket_dir=ipc_dir)
         session_manager = SessionManager()
         output_manager = OutputManager(base_dir=output_dir)
-        mock_runner = MagicMock()
 
-        orchestrator = Orchestrator(mock_runner, ipc, session_manager, output_manager)
+        orchestrator = Orchestrator(session_manager=session_manager, output_manager=output_manager)
 
         # Planejamento mockado diretamente para isolar o teste do fluxo do loop
         task1 = AgentTask(
-            agent_id="researcher", image="img", prompt="search X", task_name="pesquisa_x"
+            agent_id="researcher", prompt="search X", task_name="pesquisa_x"
         )
         orchestrator._run_planning_loop = AsyncMock(return_value=[task1])
 
@@ -119,6 +111,5 @@ async def test_autonomous_complex_flow_integration():
         assert master_session.status == "closed"
 
     finally:
-        shutil.rmtree(ipc_dir, ignore_errors=True)
         shutil.rmtree(db_dir, ignore_errors=True)
         shutil.rmtree(output_dir, ignore_errors=True)

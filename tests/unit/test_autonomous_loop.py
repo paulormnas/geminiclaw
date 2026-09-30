@@ -51,7 +51,7 @@ async def test_autonomous_loop_complex_path_success(mock_telemetry):
     orchestrator.output_manager.list_artifacts.return_value = []
     
     # planning
-    task1 = AgentTask(agent_id="researcher", image="img", prompt="search")
+    task1 = AgentTask(agent_id="researcher", prompt="search")
     orchestrator._run_planning_loop.return_value = [task1]
     
     # execution success
@@ -84,7 +84,7 @@ async def test_autonomous_loop_complex_path_retry_success(mock_telemetry):
     orchestrator.output_manager.list_artifacts.return_value = []
     
     # planning
-    task1 = AgentTask(agent_id="researcher", image="img", prompt="search")
+    task1 = AgentTask(agent_id="researcher", prompt="search")
     orchestrator._run_planning_loop.return_value = [task1]
     
     # execution: fail, then success
@@ -121,7 +121,7 @@ async def test_autonomous_loop_complex_path_fail_after_retries():
     orchestrator.output_manager.list_artifacts.return_value = []
     
     # planning
-    task1 = AgentTask(agent_id="researcher", image="img", prompt="search")
+    task1 = AgentTask(agent_id="researcher", prompt="search")
     orchestrator._run_planning_loop.return_value = [task1]
     
     # execution: fail twice
@@ -153,7 +153,7 @@ async def test_autonomous_loop_reviewer_fail_then_success(mock_orchestrator, moc
     para evitar mutação cruzada entre chamadas do mock.
     """
     # Task com critérios de validação
-    task1 = AgentTask(agent_id="researcher", image="img", prompt="search", task_name="t1", validation_criteria=["C1"])
+    task1 = AgentTask(agent_id="researcher", prompt="search", task_name="t1", validation_criteria=["C1"])
     mock_orchestrator._run_planning_loop.return_value = [task1]
 
     # 1a tentativa: sucesso técnico, mas reprovada na revisão.
@@ -212,7 +212,7 @@ async def test_autonomous_loop_synthesis(mock_orchestrator, mock_telemetry):
     ]
     
     mock_orchestrator._run_planning_loop.return_value = [
-        AgentTask(agent_id="researcher", image="img", prompt="p1", task_name="t1")
+        AgentTask(agent_id="researcher", prompt="p1", task_name="t1")
     ]
     
     mock_telemetry.get_summarized_stats.return_value = "Stats: 100 tokens"
@@ -259,7 +259,7 @@ async def test_autonomous_loop_closes_session_when_token_budget_exhausted():
     reserva de fechamento), cobre também design §3 "Reserva esgotada": o
     checkpoint determinístico é gravado com `consolidation_pending=True` e a
     consolidação via LLM (Summarizer) NÃO é tentada (5.6)."""
-    task1 = AgentTask(agent_id="researcher", image="img", prompt="p1", task_name="t1")
+    task1 = AgentTask(agent_id="researcher", prompt="p1", task_name="t1")
     orchestrator = _make_closing_test_orchestrator([task1])
 
     loop = AutonomousLoop(orchestrator)
@@ -294,7 +294,7 @@ async def test_autonomous_loop_closes_session_when_connection_retries_exhausted(
     """V18/usage-limits (design §3): retentativas de conexão esgotadas fecham a
     sessão com `motivo_parada='limite_conexao'` (problema de infraestrutura, não
     de uma tarefa específica)."""
-    task1 = AgentTask(agent_id="researcher", image="img", prompt="p1", task_name="t1")
+    task1 = AgentTask(agent_id="researcher", prompt="p1", task_name="t1")
     orchestrator = _make_closing_test_orchestrator([task1])
 
     loop = AutonomousLoop(orchestrator)
@@ -331,7 +331,7 @@ async def test_autonomous_loop_time_limit_cancels_pending_and_closes_session():
     Usa orçamento de tempo e carência muito pequenos (tempo de relógio REAL,
     não um clock injetado) para que o teste seja rápido e, ao mesmo tempo,
     robusto a mudanças no número de verificações internas de `UsageTracker.check()`."""
-    task_lenta = AgentTask(agent_id="base", image="img", prompt="p1", task_name="lenta")
+    task_lenta = AgentTask(agent_id="base", prompt="p1", task_name="lenta")
     orchestrator = _make_closing_test_orchestrator([task_lenta])
 
     async def never_finishes(task, master_session_id=None):
@@ -369,7 +369,7 @@ async def test_autonomous_loop_all_tasks_abandoned_closes_session_with_retries_r
     """V18/usage-limits (design §3): se TODAS as tarefas pendentes de um ciclo
     forem abandonadas por esgotamento de retentativas (nenhum progresso), a
     sessão inteira fecha com `motivo_parada='limite_retentativas'`."""
-    task_falha = AgentTask(agent_id="base", image="img", prompt="p1", task_name="sempre_falha")
+    task_falha = AgentTask(agent_id="base", prompt="p1", task_name="sempre_falha")
     orchestrator = _make_closing_test_orchestrator([task_falha])
 
     orchestrator._execute_agent = AsyncMock(
@@ -419,9 +419,9 @@ async def test_autonomous_loop_does_not_redispatch_task_abandoned_in_earlier_cyc
     ciclo de planejamento (recuperação incremental) que reintroduz
     `t_abandon` sozinha. O guard deve impedir um novo despacho: nenhuma
     chamada adicional a `_execute_agent` deve ocorrer no 2º ciclo."""
-    task_abandon = AgentTask(agent_id="base", image="img", prompt="p1", task_name="t_abandon")
+    task_abandon = AgentTask(agent_id="base", prompt="p1", task_name="t_abandon")
     task_b = AgentTask(
-        agent_id="base", image="img", prompt="p2", task_name="b", depends_on=["t_abandon"],
+        agent_id="base", prompt="p2", task_name="b", depends_on=["t_abandon"],
     )
 
     orchestrator = MagicMock()

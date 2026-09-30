@@ -9,33 +9,20 @@ from datetime import datetime, timezone
 async def test_subtask_metrics_lifecycle():
     """Valida se as métricas de subtarefa são registradas nos estados corretos."""
     from src.orchestrator import Orchestrator
-    from src.runner import ContainerRunner
-    from src.ipc import IPCChannel
     from src.session import SessionManager
-    
+
     # Mocks das dependências do orquestrador
-    mock_runner = MagicMock(spec=ContainerRunner)
-    mock_runner.spawn = AsyncMock(return_value="c1")
-    mock_runner.is_running = AsyncMock(return_value=True)
-    mock_runner.stop = AsyncMock()
-    
-    mock_ipc = MagicMock(spec=IPCChannel)
-    mock_ipc.create_socket = AsyncMock()
-    mock_ipc.send = AsyncMock()
-    mock_ipc.receive = AsyncMock(return_value=MagicMock(type="response", payload={"status": "success", "text": "ok"}))
-    mock_ipc.close = AsyncMock()
-    mock_ipc._connections = {"base_s1": True} # Simula conexão imediata
-    
+    mock_runtime = MagicMock()
+    mock_runtime.run = AsyncMock(
+        return_value=AgentResult(agent_id="developer", session_id="s1", status="success", response={"text": "ok"})
+    )
+
     mock_session_manager = MagicMock(spec=SessionManager)
     mock_session = MagicMock()
     mock_session.id = "s1"
     mock_session_manager.create.return_value = mock_session
-    
-    orchestrator = Orchestrator(
-        runner=mock_runner,
-        ipc=mock_ipc,
-        session_manager=mock_session_manager
-    )
+
+    orchestrator = Orchestrator(session_manager=mock_session_manager, agent_runtime=mock_runtime)
     orchestrator.output_manager = MagicMock()
     
     # Mock do Telemetria
@@ -44,8 +31,7 @@ async def test_subtask_metrics_lifecycle():
         loop = AutonomousLoop(orchestrator)
         
         # Simula o caminho simples
-        with patch.object(AutonomousLoop, "_is_complex_triage", AsyncMock(return_value=False)), \
-             patch("src.orchestrator.AGENT_TIMEOUT_SECONDS", 0.1): # Timeout curto para o wait_for_connection
+        with patch.object(AutonomousLoop, "_is_complex_triage", AsyncMock(return_value=False)):
             await loop.run("Teste", "exec1")
             
         # Verificações
@@ -66,8 +52,8 @@ async def test_complex_path_subtask_id_generation():
     orchestrator.output_manager = MagicMock()
     
     # Mock do plano com 2 tarefas
-    task1 = AgentTask(agent_id="researcher", image="img", prompt="p1", task_name="t1")
-    task2 = AgentTask(agent_id="researcher", image="img", prompt="p2", task_name="t2")
+    task1 = AgentTask(agent_id="researcher", prompt="p1", task_name="t1")
+    task2 = AgentTask(agent_id="researcher", prompt="p2", task_name="t2")
     orchestrator._run_planning_loop.return_value = [task1, task2]
     
     # Mock resultados

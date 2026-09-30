@@ -1,10 +1,10 @@
 """Orquestrador principal do GeminiClaw.
 
-Coordena a execução de múltiplos agentes em containers Docker,
-gerenciando sessões, IPC e tratamento de falhas parciais.
+Coordena a execução de múltiplos agentes no próprio processo (AgentRuntime),
+gerenciando sessões e o tratamento de falhas parciais. O único uso de container é o
+sandbox de código, acionado pela skill de código.
 """
 
-import asyncio
 import os
 import json
 from dataclasses import dataclass, field
@@ -12,20 +12,15 @@ from typing import Any
 
 from src.logger import get_logger
 from src.config import (
-    AGENT_RUNTIME,
-    AGENT_TIMEOUT_SECONDS,
     DEFAULT_MODEL,
     GEMINI_REQUESTS_PER_MINUTE,
     GEMINI_RATE_LIMIT_COOLDOWN_SECONDS,
     MAX_AGENT_RUNS_PER_SESSION,
     OLLAMA_ENABLE_THINKING,
     MAX_PLANNING_ITERATIONS,
-    MAX_CONTAINERS_PER_SESSION,
 )
 from src.model_config import DEFAULT_ROLE_CONFIGS, get_role_model_config
 from src.session import SessionManager
-from src.runner import ContainerRunner
-from src.ipc import IPCChannel, create_message, Message
 from src.output_manager import OutputManager, generate_session_slug
 from src.autonomous_loop import AutonomousLoop
 from src.utils.json_parser import extract_json
@@ -39,16 +34,17 @@ from src.usage import UsageBudget
 
 logger = get_logger(__name__)
 
-# Registro de agentes disponíveis: tipo → imagem Docker
-AGENT_REGISTRY: dict[str, str] = {
-    "developer": "geminiclaw-developer",
-    "base": "geminiclaw-base",
-    "researcher": "geminiclaw-researcher",
-    "planner": "geminiclaw-planner",
-    "validator": "geminiclaw-validator",
-    "summarizer": "geminiclaw-summarizer",
-    "reviewer": "geminiclaw-reviewer",
-}
+# Papéis de agente que uma subtarefa pode pedir. As definições executáveis (instrução,
+# ferramentas) ficam em src/agent_runtime/definitions.py.
+AGENT_IDS: tuple[str, ...] = (
+    "developer",
+    "base",
+    "researcher",
+    "planner",
+    "validator",
+    "summarizer",
+    "reviewer",
+)
 
 @dataclass
 class AgentTask:
@@ -56,7 +52,6 @@ class AgentTask:
 
     Args:
         agent_id: Identificador do agente.
-        image: Nome da imagem Docker a ser usada.
         prompt: Prompt/solicitação a ser enviada ao agente.
         task_name: Identificador único da subtarefa no plano (snake_case).
         depends_on: Lista de task_names que devem concluir antes desta tarefa.
@@ -64,7 +59,6 @@ class AgentTask:
     """
 
     agent_id: str
-    image: str
     prompt: str
     task_name: str = ""
     depends_on: list[str] = field(default_factory=list)
@@ -120,107 +114,27 @@ class OrchestratorResult:
     session_id: str | None = None  # V15.5/G9: id da sessão mestra (usado para input_snapshot/)
 
 
-def _ingest_container_telemetry(
-    payload: dict[str, Any],
-    telemetry: Any,
-) -> None:
-    """Injeta dados de telemetria do container no singleton do orquestrador (V12.3.1).
-
-    Lê o campo ``_telemetry`` do payload IPC recebido do container e chama os
-    métodos de registro correspondentes no singleton local. Caso o container
-    já tenha gravado via ``flush()`` no PostgreSQL (mecanismo primário), as
-    inserções serão idempotentes graças ao ``ON CONFLICT (id) DO NOTHING``.
-
-    Args:
-        payload: Dicionário recebido via IPC (response_msg.payload).
-        telemetry: Instância de TelemetryCollector do orquestrador.
-    """
-    container_tel = payload.get("_telemetry")
-    if not container_tel:
-        return
-
-    for row in container_tel.get("token_usage", []):
-        try:
-            telemetry.record_token_usage(
-                execution_id=row["execution_id"],
-                session_id=row["session_id"],
-                agent_id=row["agent_id"],
-                llm_provider=row["llm_provider"],
-                llm_model=row["llm_model"],
-                prompt_tokens=row["prompt_tokens"],
-                completion_tokens=row["completion_tokens"],
-                latency_ms=row["latency_ms"],
-                task_name=row.get("task_name"),
-                estimated_cost_usd=row.get("estimated_cost_usd"),
-                context_window_used=row.get("context_window_used"),
-                context_window_max=row.get("context_window_max"),
-                was_compressed=row.get("was_compressed", False),
-            )
-        except Exception as _e:
-            logger.warning("Falha ao ingerir token_usage do container", extra={"error": str(_e)})
-
-    for row in container_tel.get("tool_usage", []):
-        try:
-            telemetry.record_tool_usage(
-                execution_id=row["execution_id"],
-                session_id=row["session_id"],
-                agent_id=row["agent_id"],
-                tool_name=row["tool_name"],
-                started_at=row["started_at"],
-                finished_at=row["finished_at"],
-                duration_ms=row["duration_ms"],
-                success=row["success"],
-                arguments=None,
-                result_summary=row.get("result_summary"),
-                error_message=row.get("error_message"),
-                task_name=row.get("task_name"),
-            )
-        except Exception as _e:
-            logger.warning("Falha ao ingerir tool_usage do container", extra={"error": str(_e)})
-
-    ingested_tokens = len(container_tel.get("token_usage", []))
-    ingested_tools = len(container_tel.get("tool_usage", []))
-    if ingested_tokens or ingested_tools:
-        logger.debug(
-            "V12.3.1: Telemetria de container ingerida via IPC",
-            extra={"token_usage": ingested_tokens, "tool_usage": ingested_tools},
-        )
-
-
 class Orchestrator:
-    """Orquestrador principal que coordena agentes em containers.
+    """Orquestrador principal que coordena os agentes em processo.
 
-    Recebe uma solicitação, decide quais agentes spawnar,
-    e coordena o ciclo de vida completo via IPC.
+    Recebe uma solicitação, planeja as subtarefas, executa os agentes pelo
+    ``AgentRuntime`` e consolida os resultados.
     """
 
     def __init__(
         self,
-        runner: ContainerRunner,
-        ipc: IPCChannel,
         session_manager: SessionManager,
         output_manager: OutputManager | None = None,
-        session_runner: Any | None = None,
         agent_runtime: AgentRuntime | None = None,
-        agent_runtime_mode: str | None = None,
     ) -> None:
         """Inicializa o orquestrador com dependências injetadas.
 
         Args:
-            runner: Gerenciador de containers Docker.
-            ipc: Canal de comunicação IPC.
-            session_manager: Gerenciador de sessões SQLite.
+            session_manager: Gerenciador de sessões.
             output_manager: Gerenciador de outputs (opcional).
-            session_runner: Gerenciador de ciclo de vida de containers por sessão (V14.5).
             agent_runtime: Runtime de agentes em processo (Roadmap V16/ADR 014).
                 Se omitido, uma instância padrão é criada.
-            agent_runtime_mode: ``"inprocess"`` ou ``"container"`` — seleciona o
-                caminho de execução usado por ``_execute_agent``. Se omitido, usa
-                ``src.config.AGENT_RUNTIME``. Parâmetro explícito existe
-                principalmente para testes que precisam fixar um dos dois modos.
         """
-        self.runner = runner
-        self.ipc = ipc
         self.session_manager = session_manager
         self.output_manager = output_manager or OutputManager()
         self.rate_limiter = AdaptiveRateLimiter(
@@ -228,30 +142,20 @@ class Orchestrator:
             cooldown_seconds=GEMINI_RATE_LIMIT_COOLDOWN_SECONDS,
         )
         self.validator = ValidatorAgent()
-        # V12.5.2 — Rastreia containers spawnados por master_session_id
-        self._session_container_counts: dict[str, int] = {}
-        # Roadmap V16/ADR 014 — Rastreia execuções de agente em processo por master_session_id
+        # Roadmap V16/ADR 014 — Rastreia execuções de agente por master_session_id
         self._session_agent_run_counts: dict[str, int] = {}
         # V15.5/G9 — Bloco de texto do ContextBundle ativo, injetado no plano inicial do Researcher
         self._current_context_block: str = ""
-        if session_runner is None:
-            from src.runner import SessionContainerRunner
-            self.session_runner = SessionContainerRunner(runner=self.runner, ipc=self.ipc)
-        else:
-            self.session_runner = session_runner
-
         self.agent_runtime = agent_runtime or AgentRuntime()
-        self.agent_runtime_mode = (agent_runtime_mode or AGENT_RUNTIME).lower()
 
     @staticmethod
-    def get_available_agents() -> dict[str, str]:
-        """Retorna os agentes disponíveis e suas imagens Docker.
+    def get_available_agents() -> tuple[str, ...]:
+        """Retorna os papéis de agente que uma subtarefa pode pedir.
 
         Returns:
-            Dicionário mapeando tipo de agente → imagem Docker.
+            Tupla com os identificadores de papel (ex.: ``"researcher"``).
         """
-        return dict(AGENT_REGISTRY)
-
+        return AGENT_IDS
 
     async def handle_request(
         self,
@@ -459,7 +363,7 @@ class Orchestrator:
                 "divergence_reports": final_payload.get("divergence_reports", []),
                 "token_usage": {"total_tokens": total_tokens, "by_provider_model": token_rows},
                 "cost_usd": total_cost,
-                "containers_used": self._session_container_counts.get(master_session.id, 0),
+                "agent_runs": self._session_agent_run_counts.get(master_session.id, 0),
                 "report_path": "relatorio_final.md",
             }
             (session_dir / "session_metadata.json").write_text(
@@ -503,30 +407,6 @@ class Orchestrator:
             extra={"session_id": session_id, "files": len(source_paths)},
         )
 
-    async def _handle_ask_researcher(
-        self, message: Message, task: AgentTask, master_session_id: str | None
-    ) -> str:
-        """Trata uma mensagem ``ask_researcher`` recebida via IPC durante a execução de um
-        agente em container (Roadmap V15.3 / Spec G5).
-
-        Args:
-            message: Mensagem IPC do tipo ``ask_researcher``.
-            task: Tarefa em execução no momento da pergunta.
-            master_session_id: ID da sessão mestra, usado para persistência/dedup.
-
-        Returns:
-            A resposta do pesquisador (ou reaproveitada de uma pergunta similar anterior).
-        """
-        payload = message.payload
-        return await self._ask_researcher_core(
-            question=payload.get("question", ""),
-            context=payload.get("context", ""),
-            why_cant_proceed=payload.get("why_cant_proceed", ""),
-            options=payload.get("options") or [],
-            task=task,
-            master_session_id=master_session_id,
-        )
-
     async def _ask_researcher_core(
         self,
         question: str,
@@ -536,10 +416,9 @@ class Orchestrator:
         task: AgentTask,
         master_session_id: str | None,
     ) -> str:
-        """Núcleo de ``ask_researcher`` compartilhado pelos caminhos IPC (container) e
-        callback direto (runtime em processo, Roadmap V16/ADR 014): reutiliza uma resposta
-        anterior similar se houver, ou exibe a pergunta e bloqueia aguardando a resposta do
-        pesquisador via stdin.
+        """Núcleo de ``ask_researcher``, chamado pelo callback do ``AgentContext`` (Roadmap
+        V16/ADR 014): reutiliza uma resposta anterior similar se houver, ou exibe a pergunta
+        e bloqueia aguardando a resposta do pesquisador via stdin.
 
         Args:
             question: Pergunta objetiva para o pesquisador.
@@ -635,35 +514,13 @@ class Orchestrator:
             extra={"session_id": session_key, "subtask_name": task.task_name},
         )
 
-    async def _execute_agent(self, task: AgentTask, master_session_id: str | None = None) -> AgentResult:
-        """Executa um único agente, delegando ao caminho de execução configurado.
-
-        Roadmap V16/ADR 014: o caminho é escolhido por ``self.agent_runtime_mode``
-        (``"inprocess"`` por padrão, ou ``"container"`` para o modo legado com
-        container Docker efêmero + IPC, mantido durante a Fase 1 para
-        validação/rollback).
-
-        Args:
-            task: Definição da tarefa do agente.
-            master_session_id: ID da sessão mestra para compartilhamento de estado.
-
-        Returns:
-            Resultado da execução do agente.
-        """
-        if self.agent_runtime_mode == "inprocess":
-            return await self._execute_agent_inprocess(task, master_session_id)
-        return await self._execute_agent_container(task, master_session_id)
-
-    async def _execute_agent_inprocess(
+    async def _execute_agent(
         self, task: AgentTask, master_session_id: str | None = None
     ) -> AgentResult:
         """Executa um agente em processo via ``AgentRuntime`` (Roadmap V16/ADR 014).
 
-        Substitui o ciclo spawn-container/IPC por uma chamada direta e
-        supervisionada dentro do processo do orquestrador. Mantém o mesmo
-        contrato de telemetria, circuit breaker e persistência de sessão do
-        caminho container, para que o restante do orquestrador (histórico,
-        replanejamento, ask_researcher) não precise saber qual caminho rodou.
+        Faz uma chamada direta e supervisionada dentro do processo do orquestrador, com
+        telemetria, circuit breaker de execuções por sessão e persistência da sessão do agente.
 
         Args:
             task: Definição da tarefa do agente.
@@ -672,8 +529,7 @@ class Orchestrator:
         Returns:
             Resultado da execução do agente.
         """
-        # Rate limiting adaptativo (Roadmap V3 - Etapa V8) — mesmo limite do LLM
-        # se aplica independentemente do caminho de execução.
+        # Rate limiting adaptativo (Roadmap V3 - Etapa V8)
         await self.rate_limiter.acquire()
 
         # Roadmap V16/ADR 014 — Circuit breaker: limite de execuções de agente por sessão
@@ -799,352 +655,6 @@ class Orchestrator:
 
         return result
 
-    async def _execute_agent_container(
-        self, task: AgentTask, master_session_id: str | None = None
-    ) -> AgentResult:
-        """Executa o ciclo de vida completo de um único agente em container (modo legado).
-
-        Ciclo: cria sessão → cria socket IPC → spawna container →
-        aguarda conexão → envia prompt → recebe resposta → cleanup.
-
-        Roadmap V16/ADR 014: mantido durante a Fase 1 sob
-        ``AGENT_RUNTIME=container`` para validação/rollback do runtime em
-        processo (``_execute_agent_inprocess``, caminho padrão). Removido na
-        Fase 2, sujeita a aprovação explícita.
-
-        Args:
-            task: Definição da tarefa do agente.
-            master_session_id: ID da sessão mestra para compartilhamento de estado.
-
-        Returns:
-            Resultado da execução do agente.
-        """
-        # Rate limiting adaptativo (Roadmap V3 - Etapa V8)
-        await self.rate_limiter.acquire()
-
-        # V12.5.2 — Circuit breaker: limite de containers por sessão
-        if master_session_id:
-            count = self._session_container_counts.get(master_session_id, 0)
-            if count >= MAX_CONTAINERS_PER_SESSION:
-                raise RuntimeError(
-                    f"Limite de containers por sessão atingido "
-                    f"(session={master_session_id}, limite={MAX_CONTAINERS_PER_SESSION}). "
-                    "Execução interrompida pelo circuit breaker."
-                )
-            self._session_container_counts[master_session_id] = count + 1
-
-        # V5.6 — Telemetria: obtém contexto de telemetria
-        telemetry = get_telemetry()
-        # execution_id sem garantia neste ponto — usamos master_session_id como fallback
-        _exec_id = master_session_id or "unknown"
-        
-        # V9: Registra início da execução ativa se houver subtask_id
-        from datetime import datetime, timezone
-        started_at_iso = datetime.now(timezone.utc).isoformat()
-        if task.subtask_id:
-            telemetry.record_subtask_metrics(
-                subtask_id=task.subtask_id,
-                execution_id=_exec_id,
-                task_name=task.task_name or "unnamed",
-                agent_id=task.agent_id,
-                status="running",
-                created_at=task.created_at or started_at_iso,
-                started_at=started_at_iso
-            )
-        
-        session = self.session_manager.create(task.agent_id)
-        container_id: str | None = None
-        ipc_id = f"{task.agent_id}_{session.id}"
-        result: AgentResult | None = None
-
-        try:
-            logger.info(
-                "Executando agente",
-                extra={
-                    "agent_id": task.agent_id,
-                    "session_id": session.id,
-                    "image": task.image,
-                },
-            )
-
-            # V5.6 — Telemetria: agent_spawn
-            telemetry.record_agent_event(
-                execution_id=_exec_id,
-                session_id=session.id,
-                agent_id=task.agent_id,
-                event_type="spawn",
-                task_name=task.task_name or None,
-                payload={"image": task.image},
-            )
-
-            # 0. Inicializa diretório de sessão único (V10.2: Estrutura Plana)
-            effective_session_id = master_session_id or session.id
-            self.output_manager.init_session(effective_session_id)
-
-            # 1. Cria socket IPC
-            await self.ipc.create_socket(ipc_id)
-
-            # 2. Spawna container mapeando diretórios específicos para /outputs e /logs
-            ipc_port = self.ipc.get_port(ipc_id)
-            
-            # Etapa V14: Propaga metadados da tarefa como env vars
-            env_vars = {
-                "TASK_NAME": task.task_name or "default_task"
-            }
-            
-            # Etapa V6.2: Propaga modelo preferido se especificado
-            if task.preferred_model:
-                env_vars["LLM_MODEL"] = task.preferred_model
-            
-            # Etapa V6.6: Configuração de Thinking Mode (Roadmap V4)
-            # Planner e Validator sempre usam thinking para melhor qualidade lógica.
-            if task.agent_id in ("planner", "validator"):
-                env_vars["OLLAMA_ENABLE_THINKING"] = "true"
-            else:
-                # Agentes de execução podem ter o thinking desabilitado para velocidade
-                env_vars["OLLAMA_ENABLE_THINKING"] = str(OLLAMA_ENABLE_THINKING).lower()
-
-            # Roadmap V15.6 / Spec G10 — Propaga o modo de operação da sessão (SessionMode)
-            if task.mode:
-                env_vars["SESSION_MODE"] = task.mode
-
-            container_id = await self.runner.spawn(
-                task.agent_id, 
-                task.image, 
-                session.id, 
-                ipc_port=ipc_port, 
-                output_session_id=effective_session_id,
-                logs_session_id=effective_session_id,
-                env_vars=env_vars
-            )
-
-            # 3. Aguarda conexão do container ao socket monitorando saúde
-            deadline = AGENT_TIMEOUT_SECONDS
-            elapsed = 0.0
-            interval = 0.5
-            while ipc_id not in self.ipc._connections:
-                if deadline is not None and elapsed >= deadline:
-                    raise TimeoutError(
-                        f"Container '{task.agent_id}' não conectou dentro de {deadline}s."
-                    )
-                
-                # Verifica se o container ainda está vivo
-                if not await self.runner.is_running(container_id):
-                    logs = await self.runner.get_logs(container_id)
-                    raise RuntimeError(
-                        f"Container '{task.agent_id}' encerrou inesperadamente antes de conectar.\n"
-                        f"Logs:\n{logs}"
-                    )
-                
-                await asyncio.sleep(interval)
-                elapsed += interval
-
-            # 4. Envia prompt via IPC
-            request_msg = create_message(
-                "request",
-                session.id,
-                {"prompt": task.prompt},
-            )
-            await self.ipc.send(ipc_id, request_msg)
-
-            # V5.6 — Telemetria: ipc_send
-            telemetry.record_agent_event(
-                execution_id=_exec_id,
-                session_id=session.id,
-                agent_id="orchestrator",
-                event_type="ipc_send",
-                target_agent_id=task.agent_id,
-                task_name=task.task_name or None,
-                payload={"prompt_chars": len(task.prompt)},
-            )
-
-            # 5. Aguarda resposta — pode incluir 0+ round-trips de ask_researcher
-            # (Roadmap V15.3 / Spec G5) antes da mensagem final "response".
-            _t_recv_start = asyncio.get_event_loop().time()
-            if AGENT_TIMEOUT_SECONDS is None:
-                 logger.info(f"Aguardando resposta do agente {task.agent_id} sem limite de tempo")
-            while True:
-                response_msg = await self.ipc.receive(
-                    ipc_id, timeout=AGENT_TIMEOUT_SECONDS
-                )
-                if response_msg.type != "ask_researcher":
-                    break
-                answer = await self._handle_ask_researcher(
-                    response_msg, task, master_session_id
-                )
-                await self.ipc.send(
-                    ipc_id,
-                    create_message("ask_researcher_answer", session.id, {"answer": answer}),
-                )
-            _recv_ms = int((asyncio.get_event_loop().time() - _t_recv_start) * 1000)
-
-            # V5.6 — Telemetria: ipc_receive
-            telemetry.record_agent_event(
-                execution_id=_exec_id,
-                session_id=session.id,
-                agent_id="orchestrator",
-                event_type="ipc_receive",
-                target_agent_id=task.agent_id,
-                task_name=task.task_name or None,
-                payload={"response_type": response_msg.type},
-                duration_ms=_recv_ms,
-            )
-
-            # V12.3.1 — Ingere telemetria do container via IPC (canal de fallback)
-            # O flush() no container é o mecanismo primário. Este canal garante
-            # zero-loss em containers sem conectividade direta ao PostgreSQL.
-            _ingest_container_telemetry(response_msg.payload, telemetry)
-
-            self.session_manager.update(
-                session.id, payload=response_msg.payload
-            )
-
-            # Verifica se houve erro 429 na resposta
-            is_429 = False
-            if response_msg.payload.get("status") == "error":
-                error_msg = str(response_msg.payload.get("error", ""))
-                if "429" in error_msg or "Too Many Requests" in error_msg:
-                    is_429 = True
-            
-            if is_429:
-                await self.rate_limiter.report_429()
-            else:
-                await self.rate_limiter.report_success()
-
-            logger.info(
-                "Agente executado",
-                extra={
-                    "agent_id": task.agent_id,
-                    "session_id": session.id,
-                    "response_type": response_msg.type,
-                    "is_429": is_429,
-                },
-            )
-
-            result = AgentResult(
-                agent_id=task.agent_id,
-                session_id=session.id,
-                status="success",
-                response=response_msg.payload,
-            )
-
-            # V5.6 — Telemetria: agent_complete
-            telemetry.record_agent_event(
-                execution_id=_exec_id,
-                session_id=session.id,
-                agent_id=task.agent_id,
-                event_type="complete",
-                task_name=task.task_name or None,
-                payload={"status": "success"},
-            )
-
-        except TimeoutError as e:
-            logger.warning(
-                "Agente excedeu timeout",
-                extra={
-                    "agent_id": task.agent_id,
-                    "session_id": session.id,
-                    "timeout": AGENT_TIMEOUT_SECONDS,
-                    "error": str(e),
-                },
-            )
-            result = AgentResult(
-                agent_id=task.agent_id,
-                session_id=session.id,
-                status="timeout",
-                response={},
-                error=str(e),
-            )
-
-            # V5.6 — Telemetria: agent_error (timeout)
-            telemetry.record_agent_event(
-                execution_id=_exec_id,
-                session_id=session.id,
-                agent_id=task.agent_id,
-                event_type="error",
-                task_name=task.task_name or None,
-                payload={"error": "timeout", "message": str(e)[:200]},
-            )
-
-        except Exception as e:
-            logger.error(
-                "Erro ao executar agente",
-                extra={
-                    "agent_id": task.agent_id,
-                    "session_id": session.id,
-                    "error": str(e),
-                },
-            )
-            result = AgentResult(
-                agent_id=task.agent_id,
-                session_id=session.id,
-                status="error",
-                response={},
-                error=str(e),
-            )
-
-            # V5.6 — Telemetria: agent_error (geral)
-            telemetry.record_agent_event(
-                execution_id=_exec_id,
-                session_id=session.id,
-                agent_id=task.agent_id,
-                event_type="error",
-                task_name=task.task_name or None,
-                payload={"error": type(e).__name__, "message": str(e)[:200]},
-            )
-
-        finally:
-            # Cleanup: fecha sessão, socket IPC e container
-            try:
-                self.session_manager.close(session.id)
-            except Exception as e:
-                logger.error(f"Erro ao fechar sessão {session.id}: {e}")
-
-            try:
-                await self.ipc.close(ipc_id)
-            except Exception as e:
-                logger.error(f"Erro ao fechar socket IPC {ipc_id}: {e}")
-
-            if container_id:
-                try:
-                    await self.runner.stop(container_id)
-                except Exception as e:
-                    logger.error(f"Erro ao parar container {container_id}: {e}")
-
-            # V9: Registra finalização das métricas da subtarefa
-            if task.subtask_id and result:
-                finished_at_iso = datetime.now(timezone.utc).isoformat()
-                duration_ms = int((datetime.now(timezone.utc) - datetime.fromisoformat(started_at_iso)).total_seconds() * 1000)
-                
-                # Agrega tokens e custo desta subtarefa (simplificado: busca o que foi gerado nesta sessão de agente)
-                token_summary = telemetry.get_token_summary(_exec_id)
-                # Nota: get_token_summary retorna por execução id, o que pode misturar se várias subtasks rodarem em paralelo.
-                # O ideal seria filtrar por session.id (que é único por agente spawnado).
-                # Para o V9 inicial, usaremos a duração e status.
-                
-                telemetry.record_subtask_metrics(
-                    subtask_id=task.subtask_id,
-                    execution_id=_exec_id,
-                    task_name=task.task_name or "unnamed",
-                    agent_id=task.agent_id,
-                    status=result.status,
-                    created_at=task.created_at or started_at_iso,
-                    started_at=started_at_iso,
-                    finished_at=finished_at_iso,
-                    duration_total_ms=duration_ms,
-                    duration_active_ms=duration_ms,
-                    retry_count=task.retry_attempt,  # V12.3.3: propaga tentativa atual
-                    error_type=result.error[:100] if result.error else None
-                )
-
-        return result or AgentResult(
-            agent_id=task.agent_id,
-            session_id=session.id,
-            status="error",
-            response={},
-            error="Execução interrompida prematuramente."
-        )
-
     async def _run_planning_loop(
         self, 
         prompt: str, 
@@ -1212,7 +722,6 @@ class Orchestrator:
 
             planner_task = AgentTask(
                 agent_id="researcher",
-                image=AGENT_REGISTRY.get("researcher", "geminiclaw-researcher"),
                 prompt=planner_prompt,
             )
 
@@ -1251,7 +760,6 @@ class Orchestrator:
                 for t in current_plan_data:
                     tasks.append(AgentTask(
                         agent_id=t.get("agent_id", "base"),
-                        image=t.get("image", AGENT_REGISTRY.get(t.get("agent_id", "base"), "geminiclaw-base")),
                         prompt=t.get("prompt", prompt),
                         task_name=t.get("task_name", ""),
                         depends_on=t.get("depends_on", []),

@@ -111,19 +111,16 @@ def test_dispatch_subtask_routing():
     loop = AutonomousLoop(orchestrator=MagicMock())
 
     # 1. Tarefa com base_agent legado -> redirecionada para developer
-    task_base = AgentTask(agent_id="base", image="geminiclaw-base", prompt="Calcular média")
+    task_base = AgentTask(agent_id="base", prompt="Calcular média")
     routed_base = loop._dispatch_subtask(task_base)
     assert routed_base.agent_id == "developer"
-    assert routed_base.image == "geminiclaw-developer"
 
     # 2. Tarefa explícita de developer
-    task_dev = AgentTask(agent_id="developer", image="", prompt="Criar script")
+    task_dev = AgentTask(agent_id="developer", prompt="Criar script")
     routed_dev = loop._dispatch_subtask(task_dev)
     assert routed_dev.agent_id == "developer"
-    assert routed_dev.image == "geminiclaw-developer"
 
     # 3. Tarefa de pesquisa inferida pelo prompt
-    task_res = AgentTask(agent_id="unknown", image="", prompt="Pesquisar documentação da API")
+    task_res = AgentTask(agent_id="unknown", prompt="Pesquisar documentação da API")
     routed_res = loop._dispatch_subtask(task_res)
     assert routed_res.agent_id == "researcher"
-    assert routed_res.image == "geminiclaw-researcher"

@@ -29,7 +29,7 @@ class Agent:
 
 from agents.base.tools import write_artifact
 from src.agent_runtime.context import get_agent_context_optional
-from src.logger import get_logger, setup_file_logging
+from src.logger import get_logger
 from src.prompts import render_instruction
 from src.session import SessionManager
 from src.config import DEFAULT_MODEL
@@ -398,15 +398,3 @@ logger.info(
         "model": base_model,
     },
 )
-
-if __name__ == "__main__":
-    import asyncio
-    from agents.runner import run_ipc_loop
-    
-    # Configura o logger raiz para escrever também no volume compartilhado
-    # O diretório /logs/ já é garantido pelo OutputManager no host
-    agent_id = os.environ.get("AGENT_ID", "agent")
-    setup_file_logging(f"/logs/{agent_id}.log")
-    
-    # Inicia o loop de conexão IPC quando o container roda este módulo
-    asyncio.run(run_ipc_loop(root_agent))

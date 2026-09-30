@@ -53,7 +53,6 @@ async def test_retry_context_enrichment(monkeypatch):
     # Mock do planner para retornar 1 subtarefa
     task = AgentTask(
         agent_id="test_agent",
-        image="test_image",
         prompt="Faça X",
         task_name="task_x"
     )
@@ -101,7 +100,6 @@ async def test_reviewer_receives_artifacts_context(monkeypatch):
 
     task = AgentTask(
         agent_id="test_agent",
-        image="test_image",
         prompt="Gerar csv",
         task_name="task_csv",
         expected_artifacts=["file_on_disk.csv"]

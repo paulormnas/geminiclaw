@@ -4,22 +4,18 @@ Filosofia: o agente investiga por conta própria antes de perguntar; o pesquisad
 interrompido quando o contexto está genuinamente ausente (modo `assisted`). Nos modos
 `semi`/`auto`, a skill nunca bloqueia — documenta a suposição adotada e retorna.
 
-Quando bloqueante (modo `assisted`), a skill executa um round-trip IPC com o host:
-envia uma mensagem tipo ``ask_researcher`` na MESMA conexão usada pelo `agents/runner.py`
-e aguarda uma mensagem de resposta, sem interferir no protocolo request/response normal
-(o container só volta a ler a próxima mensagem de nível superior depois que a chamada
-de tool call retorna).
+Quando bloqueante (modo `assisted`), a skill chama diretamente o callback ``ask_researcher`` do
+``AgentContext`` da tarefa, ligado ao orquestrador (deduplicação, registro e prompt ao
+pesquisador). Não há canal de comunicação separado: o agente roda no processo do orquestrador.
 """
 
 from __future__ import annotations
 
-import os
-import struct
 from typing import Any, Optional
 
 from src.agent_runtime.context import get_agent_context_optional
+from src.config import SESSION_DEFAULT_MODE
 from src.skills.base import BaseSkill, SkillResult
-from src.ipc import Message, HEADER_SIZE, create_message
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -63,12 +59,9 @@ class HumanFeedbackSkill(BaseSkill):
         options: Optional[list[str]] = None,
         **kwargs: Any,
     ) -> SkillResult:
-        # V16 — no runtime em processo o modo vem do AgentContext (por tarefa);
-        # no modo container legado, de SESSION_MODE (variável de ambiente do container).
-        _ctx_for_mode = get_agent_context_optional()
-        mode = (_ctx_for_mode.mode if _ctx_for_mode is not None and _ctx_for_mode.mode else None) or os.environ.get(
-            "SESSION_MODE", "assisted"
-        )
+        # O modo vem do AgentContext (por tarefa); fora dele, do padrão da sessão.
+        ctx = get_agent_context_optional()
+        mode = (ctx.mode if ctx is not None and ctx.mode else None) or SESSION_DEFAULT_MODE
 
         if not why_cant_proceed:
             logger.warning(
@@ -89,43 +82,11 @@ class HumanFeedbackSkill(BaseSkill):
             )
             return SkillResult(success=True, output=assumption, metadata={"mode": mode, "blocked": False})
 
-        # Modo assisted: round-trip bloqueante real com o host.
-        # Roadmap V16/ADR 014 — no runtime em processo, o round-trip é uma chamada
-        # direta ao callback do AgentContext (sem IPC). O caminho IPC abaixo é
-        # mantido apenas para o modo container legado.
-        ctx = get_agent_context_optional()
-        if ctx is not None and ctx.ask_researcher is not None:
-            answer = await ctx.ask_researcher(question, context, why_cant_proceed, options or [])
-            return SkillResult(success=True, output=answer, metadata={"mode": mode, "blocked": True})
-
-        from agents.runner import get_active_ipc_connection
-
-        conn = get_active_ipc_connection()
-        if conn is None:
-            msg = "ask_researcher chamado sem conexão IPC ativa (fora de um container gerenciado)."
+        # Modo assisted: chamada direta e bloqueante ao orquestrador (Roadmap V16/ADR 014).
+        if ctx is None or ctx.ask_researcher is None:
+            msg = "ask_researcher chamado fora de uma execução de agente (sem AgentContext)."
             logger.warning(msg)
             return SkillResult(success=False, output="", error=msg)
 
-        reader, writer = conn
-        session_id = os.environ.get("SESSION_ID", "")
-
-        ask_msg = create_message(
-            "ask_researcher",
-            session_id,
-            {
-                "question": question,
-                "context": context,
-                "why_cant_proceed": why_cant_proceed,
-                "options": options or [],
-            },
-        )
-        writer.write(ask_msg.serialize())
-        await writer.drain()
-
-        header = await reader.readexactly(HEADER_SIZE)
-        length = struct.unpack(">I", header)[0]
-        body = await reader.readexactly(length)
-        answer_msg = Message.deserialize(body)
-
-        answer = answer_msg.payload.get("answer", "")
+        answer = await ctx.ask_researcher(question, context, why_cant_proceed, options or [])
         return SkillResult(success=True, output=answer, metadata={"mode": mode, "blocked": True})

@@ -50,6 +50,32 @@ class SandboxResult:
     artifacts: List[str] = field(default_factory=list)
     timed_out: bool = False
 
+SANDBOX_PROJECT_LABEL = "geminiclaw"
+
+
+def cleanup_sandbox_containers() -> int:
+    """Encerra e remove containers de sandbox que ficaram para trás (ex.: após Ctrl+C).
+
+    O sandbox remove o próprio container ao terminar; isto cobre a interrupção do processo no
+    meio de uma execução. Best-effort: nunca levanta exceção.
+
+    Returns:
+        Quantidade de containers removidos.
+    """
+    removed = 0
+    try:
+        client = docker.from_env(timeout=10)
+        for container in client.containers.list(all=True, filters={"label": f"project={SANDBOX_PROJECT_LABEL}"}):
+            try:
+                container.remove(force=True)
+                removed += 1
+            except Exception as exc:  # noqa: BLE001 — limpeza best-effort
+                logger.warning(f"Falha ao remover container de sandbox {container.short_id}: {exc}")
+    except Exception as exc:  # noqa: BLE001 — sem daemon não há o que limpar
+        logger.warning(f"Cleanup de sandboxes ignorado: {exc}")
+    return removed
+
+
 def _is_safe_tar_member(member: tarfile.TarInfo, dest: pathlib.Path) -> bool:
     """Indica se um membro do tar do sandbox pode ser extraído com segurança em ``dest``.
 
@@ -297,6 +323,13 @@ class PythonSandbox:
                         volumes=volumes,
                         detach=True,
                         remove=False,
+                        # Rótulos usados pela CLI ('sessions', 'stop') e pelo cleanup de Ctrl+C.
+                        labels={
+                            "project": SANDBOX_PROJECT_LABEL,
+                            "geminiclaw.role": "sandbox",
+                            "session_id": session_id,
+                            "task_name": task_name,
+                        },
                     )
                     break
                 except Exception as e:

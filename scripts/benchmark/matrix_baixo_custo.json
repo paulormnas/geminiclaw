@@ -1,0 +1,13 @@
+{
+  "task_file": "~/bench/task.txt",
+  "timeout_seconds": 2400,
+  "combinations": [
+    {"name": "google-3.8-todos", "roles": {"*": "google/gemini-3.8-flash"}},
+    {"name": "google-3.7-todos", "roles": {"*": "google/gemini-3.7-flash"}},
+    {"name": "google-3.8-dev-3.5lite-demais", "roles": {"DEVELOPER": "google/gemini-3.8-flash", "*": "google/gemini-3.5-flash-lite"}},
+    {"name": "google-3.8-dev-3.1lite-demais", "roles": {"DEVELOPER": "google/gemini-3.8-flash", "*": "google/gemini-3.1-flash-lite"}},
+    {"name": "google-3.5lite-todos", "roles": {"*": "google/gemini-3.5-flash-lite"}},
+    {"name": "claude-haiku-todos", "roles": {"*": "anthropic/claude-haiku-4-5"}, "requires": "ANTHROPIC_API_KEY"},
+    {"name": "misto-3.8dev-haiku-demais", "roles": {"DEVELOPER": "google/gemini-3.8-flash", "*": "anthropic/claude-haiku-4-5"}, "requires": "ANTHROPIC_API_KEY"}
+  ]
+}

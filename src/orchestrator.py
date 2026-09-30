@@ -40,8 +40,6 @@ AGENT_IDS: tuple[str, ...] = (
     "developer",
     "base",
     "researcher",
-    "planner",
-    "validator",
     "summarizer",
     "reviewer",
 )

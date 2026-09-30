@@ -1272,7 +1272,7 @@ class AutonomousLoop:
         )
         
         task = AgentTask(
-            agent_id="planner", # O Planner é ideal para sintetizar e decidir o que é importante
+            agent_id="base",  # o papel 'planner' não existe no runtime em processo; 'base' tem a skill de memória
             prompt=promotion_prompt
         )
         
@@ -1385,7 +1385,7 @@ class AutonomousLoop:
 
         from src.orchestrator import AgentTask
         extraction_task = AgentTask(
-            agent_id="planner",
+            agent_id="base",
             prompt=extraction_prompt,
             task_name="extract_patterns"
         )

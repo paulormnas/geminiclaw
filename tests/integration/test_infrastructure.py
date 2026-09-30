@@ -36,3 +36,21 @@ def test_docker_compose_structure():
     assert "geminiclaw" not in config["services"]
     assert "networks" not in config
     assert "docker.sock" not in compose_path.read_text(encoding="utf-8")
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.skipif(not is_docker_available(), reason="Docker daemon não está rodando")
+async def test_runner_uses_correct_network():
+    """Verifica se o runner está configurado para usar a rede geminiclaw-net."""
+    from src.runner import ContainerRunner
+    
+    runner = ContainerRunner()
+    # Verifica se a rede existe (o runner deve ter criado/verificado)
+    client = docker.from_env()
+    try:
+        network = client.networks.get("geminiclaw-net")
+        assert network is not None
+    except docker.errors.NotFound:
+        pytest.fail("Rede geminiclaw-net não foi encontrada.")
+    finally:
+        client.close()

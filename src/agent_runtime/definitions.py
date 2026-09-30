@@ -1,8 +1,6 @@
 """Registro de definições de agente para o runtime em processo (Roadmap V16).
 
-Equivalente, para o modo ``AGENT_RUNTIME=inprocess``, ao ``AGENT_REGISTRY``
-(papel → imagem Docker) usado pelo modo container: mapeia cada papel de
-agente à sua instrução, ferramentas e callbacks — reaproveitando os objetos
+Mapeia cada papel de agente à sua instrução, ferramentas e callbacks — reaproveitando os objetos
 ``Agent`` já definidos em ``agents/*/agent.py`` para não duplicar o conteúdo
 dos prompts (fonte única de verdade continua nos módulos de agente).
 

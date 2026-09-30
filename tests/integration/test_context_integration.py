@@ -89,14 +89,12 @@ class TestContextInjectionIntegration:
         tasks = [
             AgentTask(
                 agent_id="researcher",
-                image="geminiclaw-researcher",
                 prompt="Pesquise sobre o dataset Iris.",
                 task_name="pesquisa_iris",
                 depends_on=[],
             ),
             AgentTask(
                 agent_id="base",
-                image="geminiclaw-base",
                 prompt="Treine um modelo com os dados encontrados.",
                 task_name="treino_modelo",
                 depends_on=["pesquisa_iris"],
@@ -131,7 +129,6 @@ class TestContextInjectionIntegration:
         tasks = [
             AgentTask(
                 agent_id="base",
-                image="geminiclaw-base",
                 prompt="Execute análise simples.",
                 task_name="analise",
                 depends_on=[],
@@ -156,21 +153,18 @@ class TestContextInjectionIntegration:
         tasks = [
             AgentTask(
                 agent_id="researcher",
-                image="img",
                 prompt="Passo A.",
                 task_name="passo_a",
                 depends_on=[],
             ),
             AgentTask(
                 agent_id="base",
-                image="img",
                 prompt="Passo B.",
                 task_name="passo_b",
                 depends_on=["passo_a"],
             ),
             AgentTask(
                 agent_id="base",
-                image="img",
                 prompt="Passo C.",
                 task_name="passo_c",
                 depends_on=["passo_b"],
@@ -207,14 +201,12 @@ class TestContextInjectionIntegration:
         tasks = [
             AgentTask(
                 agent_id="researcher",
-                image="img",
                 prompt="Tarefa que vai falhar.",
                 task_name="tarefa_falha",
                 depends_on=[],
             ),
             AgentTask(
                 agent_id="base",
-                image="img",
                 prompt="Tarefa que depende da anterior.",
                 task_name="tarefa_dependente",
                 depends_on=["tarefa_falha"],
@@ -250,7 +242,6 @@ class TestContextInjectionIntegration:
         tasks = [
             AgentTask(
                 agent_id="researcher",
-                image="img",
                 prompt="Tarefa única.",
                 task_name="unica",
                 depends_on=[],

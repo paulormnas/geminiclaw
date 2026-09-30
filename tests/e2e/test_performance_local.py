@@ -11,8 +11,6 @@ import asyncio
 import os
 import httpx
 from src.orchestrator import Orchestrator
-from src.runner import ContainerRunner
-from src.ipc import IPCChannel
 from src.session import SessionManager
 
 async def _ollama_available():
@@ -36,23 +34,12 @@ async def run_task(prompt: str):
     with pytest.MonkeyPatch().context() as m:
         m.setenv("LLM_PROVIDER", "ollama")
         m.setenv("LLM_MODEL", "qwen3.5:4b")
-        # Container deve usar host.docker.internal para acessar o host
-        m.setenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+        # Os agentes rodam no processo do orquestrador: o Ollama é acessado direto em localhost.
+        m.setenv("OLLAMA_BASE_URL", os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"))
         m.setenv("AGENT_TIMEOUT_SECONDS", "600")
-        
-        # Patch as variáveis no módulo src.runner para que o runner as use no spawn
-        import src.runner
-        import src.orchestrator
-        m.setattr(src.runner, "LLM_PROVIDER", "ollama")
-        m.setattr(src.runner, "LLM_MODEL", "qwen3.5:4b")
-        m.setattr(src.runner, "OLLAMA_BASE_URL", "http://host.docker.internal:11434")
-        m.setattr(src.orchestrator, "AGENT_TIMEOUT_SECONDS", 600)
-        
-        runner = ContainerRunner()
-        ipc = IPCChannel()
-        session_manager = SessionManager()
-        orchestrator = Orchestrator(runner, ipc, session_manager)
-        
+
+        orchestrator = Orchestrator(session_manager=SessionManager())
+
         result = await orchestrator.handle_request(prompt)
         
         # Consolida o texto de todos os agentes que tiveram sucesso

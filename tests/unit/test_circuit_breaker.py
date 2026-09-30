@@ -9,8 +9,9 @@ Cobre:
            contado cumulativamente entre ciclos — ver src/usage.py), e o
            restante do DAG e a sessão continuam, em vez de abortar a sessão
            inteira. Ver `test_persistent_task_failure_is_abandoned_not_session_aborted`.
-  V12.5.2: Limite de containers por sessão — ao atingir MAX_CONTAINERS_PER_SESSION
-           em _execute_agent, a execução é abortada com RuntimeError descritivo.
+  V12.5.2: Limite de execuções de agente por sessão — ao atingir
+           MAX_AGENT_RUNS_PER_SESSION em _execute_agent, a execução é abortada com
+           RuntimeError descritivo (antes era um limite de containers, ADR 014).
 """
 
 import pytest
@@ -30,7 +31,7 @@ async def test_persistent_task_failure_is_abandoned_not_session_aborted():
     breaker de progresso zero (V12.5.1), que abortava a sessão inteira. O
     restante do DAG ('tarefa_ok', independente) e a sessão continuam
     normalmente."""
-    from src.orchestrator import AgentTask, AgentResult, AGENT_REGISTRY
+    from src.orchestrator import AgentTask, AgentResult
     from src.autonomous_loop import AutonomousLoop
     from src.usage import UsageBudget
 
@@ -38,13 +39,11 @@ async def test_persistent_task_failure_is_abandoned_not_session_aborted():
     tarefas = [
         AgentTask(
             agent_id="base",
-            image=AGENT_REGISTRY["base"],
             prompt="tarefa 1",
             task_name="tarefa_ok",
         ),
         AgentTask(
             agent_id="base",
-            image=AGENT_REGISTRY["base"],
             prompt="tarefa 2",
             task_name="tarefa_falha",
         ),
@@ -101,7 +100,7 @@ async def test_persistent_task_failure_is_abandoned_not_session_aborted():
 async def test_circuit_breaker_nao_aborta_com_progresso_real():
     """Se o progresso muda entre ciclos (nova subtarefa bem-sucedida),
     o loop deve continuar normalmente."""
-    from src.orchestrator import AgentTask, AgentResult, AGENT_REGISTRY
+    from src.orchestrator import AgentTask, AgentResult
     from src.autonomous_loop import AutonomousLoop
 
     ciclo = [0]
@@ -112,13 +111,11 @@ async def test_circuit_breaker_nao_aborta_com_progresso_real():
             return [
                 AgentTask(
                     agent_id="base",
-                    image=AGENT_REGISTRY["base"],
                     prompt="etapa 1",
                     task_name="etapa_1",
                 ),
                 AgentTask(
                     agent_id="base",
-                    image=AGENT_REGISTRY["base"],
                     prompt="etapa 2 — vai falhar",
                     task_name="etapa_2",
                 ),
@@ -127,7 +124,6 @@ async def test_circuit_breaker_nao_aborta_com_progresso_real():
         return [
             AgentTask(
                 agent_id="base",
-                image=AGENT_REGISTRY["base"],
                 prompt="etapa 2 — revisada",
                 task_name="etapa_2",
             ),
@@ -180,118 +176,54 @@ async def test_circuit_breaker_nao_aborta_com_progresso_real():
 
 
 # ---------------------------------------------------------------------------
-# V12.5.2 — Limite de containers por sessão
+# V12.5.2 — Limite de execuções de agente por sessão
 # ---------------------------------------------------------------------------
 
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_circuit_breaker_aborta_ao_atingir_limite_containers():
-    """_execute_agent deve levantar RuntimeError ao ultrapassar
-    MAX_CONTAINERS_PER_SESSION containers spawnados na mesma sessão."""
-    from src.orchestrator import Orchestrator, AgentTask, AGENT_REGISTRY
-
-    mock_runner = AsyncMock()
-    mock_runner.spawn = AsyncMock(return_value="container_id")
-    mock_runner.is_running = AsyncMock(return_value=True)
-    mock_runner.stop = AsyncMock()
-
-    mock_ipc = AsyncMock()
-    mock_ipc.create_socket = AsyncMock()
-    mock_ipc.get_port = MagicMock(return_value=9999)
-    mock_ipc._connections = {"base_sess": True}
-    mock_ipc.send = AsyncMock()
-    mock_ipc.receive = AsyncMock(return_value=MagicMock(
-        type="response",
-        payload={"text": "ok"},
-    ))
-    mock_ipc.close = AsyncMock()
-
-    mock_session_manager = MagicMock()
-    mock_session_manager.create = MagicMock(return_value=MagicMock(id="sess"))
-    mock_session_manager.update = MagicMock()
-    mock_session_manager.close = MagicMock()
-
-    # Roadmap V16/ADR 014: AGENT_RUNTIME agora tem padrão "inprocess" —
-    # este teste cobre especificamente o circuit breaker de containers do
-    # caminho legado (_execute_agent_container), então fixa o modo.
-    orchestrator = Orchestrator(
-        runner=mock_runner,
-        ipc=mock_ipc,
-        session_manager=mock_session_manager,
-        agent_runtime_mode="container",
-    )
-
-    task = AgentTask(
-        agent_id="base",
-        image=AGENT_REGISTRY["base"],
-        prompt="teste",
-        task_name="tarefa_x",
-    )
-
-    # Seta o contador já próximo do limite (default=30)
-    # O patch deve ser no ponto de importação do módulo orchestrator
-    with patch("src.orchestrator.MAX_CONTAINERS_PER_SESSION", 3):
-        orchestrator._session_container_counts = {"master_sess": 3}
-        with pytest.raises(RuntimeError, match="[Ll]imite.*[Cc]ontainer"):
-            await orchestrator._execute_agent(task, "master_sess")
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_execute_agent_incrementa_contador_containers():
-    """_execute_agent deve incrementar o contador de containers da sessão."""
-    from src.orchestrator import Orchestrator, AgentTask, AGENT_REGISTRY
-
-    mock_runner = AsyncMock()
-    mock_runner.spawn = AsyncMock(return_value="cid")
-    mock_runner.is_running = AsyncMock(return_value=True)
-    mock_runner.stop = AsyncMock()
-    mock_runner.get_logs = AsyncMock(return_value="")
-
-    mock_ipc = AsyncMock()
-    mock_ipc.create_socket = AsyncMock()
-    mock_ipc.get_port = MagicMock(return_value=9999)
-    mock_ipc._connections = {}
-    mock_ipc.send = AsyncMock()
-    mock_ipc.receive = AsyncMock(return_value=MagicMock(
-        type="response",
-        payload={"text": "resultado"},
-    ))
-    mock_ipc.close = AsyncMock()
+def _orchestrator_with_mocks():
+    from src.orchestrator import Orchestrator
 
     mock_session_manager = MagicMock()
     mock_session_manager.create = MagicMock(return_value=MagicMock(id="sess_abc"))
     mock_session_manager.update = MagicMock()
     mock_session_manager.close = MagicMock()
 
-    # Roadmap V16/ADR 014: fixa o modo container — este teste cobre
-    # especificamente o contador de containers do caminho legado.
-    orchestrator = Orchestrator(
-        runner=mock_runner,
-        ipc=mock_ipc,
-        session_manager=mock_session_manager,
-        agent_runtime_mode="container",
+    mock_runtime = MagicMock()
+    mock_runtime.run = AsyncMock()
+    return Orchestrator(session_manager=mock_session_manager, agent_runtime=mock_runtime), mock_runtime
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_circuit_breaker_aborta_ao_atingir_limite_de_execucoes():
+    """_execute_agent deve levantar RuntimeError ao ultrapassar
+    MAX_AGENT_RUNS_PER_SESSION execuções de agente na mesma sessão."""
+    from src.orchestrator import AgentTask
+
+    orchestrator, mock_runtime = _orchestrator_with_mocks()
+    task = AgentTask(agent_id="base", prompt="teste", task_name="tarefa_x")
+
+    with patch("src.orchestrator.MAX_AGENT_RUNS_PER_SESSION", 3):
+        orchestrator._session_agent_run_counts = {"master_sess": 3}
+        with pytest.raises(RuntimeError, match="[Ll]imite.*[Ee]xecuç"):
+            await orchestrator._execute_agent(task, "master_sess")
+
+    mock_runtime.run.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_execute_agent_incrementa_contador_de_execucoes():
+    """_execute_agent deve incrementar o contador de execuções da sessão."""
+    from src.orchestrator import AgentResult, AgentTask
+
+    orchestrator, mock_runtime = _orchestrator_with_mocks()
+    mock_runtime.run.return_value = AgentResult(
+        agent_id="base", session_id="sess_abc", status="success", response={"text": "resultado"}
     )
+    task = AgentTask(agent_id="base", prompt="teste", task_name="tarefa_y")
 
-    task = AgentTask(
-        agent_id="base",
-        image=AGENT_REGISTRY["base"],
-        prompt="teste",
-        task_name="tarefa_y",
-    )
+    with patch("src.orchestrator.get_telemetry", return_value=MagicMock()):
+        await orchestrator._execute_agent(task, "master_sess_x")
+        await orchestrator._execute_agent(task, "master_sess_x")
 
-    # Simula o IPC conectando imediatamente (coloca o ipc_id no dicionário)
-    original_create = mock_ipc.create_socket.side_effect
-
-    async def mock_create_socket(ipc_id):
-        mock_ipc._connections[ipc_id] = True
-
-    mock_ipc.create_socket.side_effect = mock_create_socket
-
-    with patch("src.config.MAX_CONTAINERS_PER_SESSION", 30):
-        with patch("src.autonomous_loop.get_telemetry", return_value=MagicMock()):
-            with patch("src.orchestrator.get_telemetry", return_value=MagicMock()):
-                await orchestrator._execute_agent(task, "master_sess_x")
-
-    # Contador deve ter sido criado e incrementado
-    assert orchestrator._session_container_counts.get("master_sess_x", 0) >= 1
+    assert orchestrator._session_agent_run_counts.get("master_sess_x", 0) == 2

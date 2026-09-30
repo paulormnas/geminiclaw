@@ -14,7 +14,7 @@ class TestAgentTaskScientificFields:
     """Defaults retrocompatíveis dos novos campos."""
 
     def test_defaults_sao_retrocompativeis(self) -> None:
-        task = AgentTask(agent_id="developer", image="img", prompt="faz algo")
+        task = AgentTask(agent_id="developer", prompt="faz algo")
         assert task.task_type is None
         assert task.hypothesis == ""
         assert task.scientific_rationale == ""
@@ -22,7 +22,6 @@ class TestAgentTaskScientificFields:
     def test_campos_aceitam_valores_explicitos(self) -> None:
         task = AgentTask(
             agent_id="developer",
-            image="img",
             prompt="faz algo",
             task_type="reproduction",
             hypothesis="O modelo atinge acurácia > 0.85",
@@ -40,8 +39,6 @@ class TestPlanningLoopPopulatesScientificFields:
 
     async def test_campos_cientificos_propagados_do_plano_aprovado(self) -> None:
         orchestrator = Orchestrator(
-            runner=MagicMock(),
-            ipc=MagicMock(),
             session_manager=MagicMock(),
             output_manager=MagicMock(),
         )
@@ -71,8 +68,6 @@ class TestPlanningLoopPopulatesScientificFields:
     async def test_plano_sem_campos_cientificos_usa_defaults(self) -> None:
         """Retrocompatibilidade: plano gerado antes desta spec não quebra o parsing."""
         orchestrator = Orchestrator(
-            runner=MagicMock(),
-            ipc=MagicMock(),
             session_manager=MagicMock(),
             output_manager=MagicMock(),
         )

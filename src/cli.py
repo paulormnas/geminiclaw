@@ -30,8 +30,7 @@ from src.config import (
     OUTPUT_BASE_DIR,
 )
 from src.session import SessionManager
-from src.runner import ContainerRunner
-from src.ipc import IPCChannel
+from src.infrastructure import ensure_infrastructure
 from src.orchestrator import Orchestrator, OrchestratorResult, AgentResult
 from src.context_loader import ContextLoader, ContextBundle
 from src.usage import UsageBudget
@@ -783,7 +782,9 @@ def print_session_banner(
 
 
 def show_sessions(docker_client: Any | None = None) -> list[dict[str, Any]]:
-    """Lista containers ativos do GeminiClaw (Roadmap V14.6).
+    """Lista os containers de sandbox de código ativos do GeminiClaw (Roadmap V14.6).
+
+    Os agentes rodam no processo do orquestrador (ADR 014); o único container é o sandbox.
 
     Args:
         docker_client: Cliente Docker opcional (para injeção em testes).
@@ -808,15 +809,18 @@ def show_sessions(docker_client: Any | None = None) -> list[dict[str, Any]]:
         return []
 
     _sep = "─" * 80
-    print(f"\n{BOLD}  📦 Sessões e Containers Ativos do {APP_NAME}{RESET}")
+    print(f"\n{BOLD}  📦 Sandboxes de Código Ativos do {APP_NAME}{RESET}")
     print(f"{BOLD}{_sep}{RESET}")
 
     if not containers:
-        print(f"  {DIM}Nenhum container de sessão ativo encontrado.{RESET}")
+        print(f"  {DIM}Nenhum sandbox de código ativo encontrado.{RESET}")
         print(f"{BOLD}{_sep}{RESET}\n")
         return []
 
-    header = f"  {BOLD}{'SESSION ID':<24} {'CONTAINER ID':<14} {'AGENT':<12} {'MODE':<10} {'IMAGE':<24} {'STATUS'}{RESET}"
+    header = (
+        f"  {BOLD}{'SESSION ID':<24} {'CONTAINER ID':<14} {'TASK':<12} "
+        f"{'MODE':<10} {'IMAGE':<24} {'STATUS'}{RESET}"
+    )
     print(header)
     print(f"  {DIM}{'─' * 88}{RESET}")
 
@@ -824,7 +828,7 @@ def show_sessions(docker_client: Any | None = None) -> list[dict[str, Any]]:
     for c in containers:
         labels = getattr(c, "labels", {}) or {}
         session_id = labels.get("session_id", "unknown")
-        agent_id = labels.get("agent_id", "unknown")
+        agent_id = labels.get("task_name") or labels.get("agent_id", "unknown")
         session_mode = labels.get("session_mode", "—")
         cid = getattr(c, "short_id", getattr(c, "id", "unknown")[:12])
 
@@ -855,27 +859,16 @@ def show_sessions(docker_client: Any | None = None) -> list[dict[str, Any]]:
 def stop_sessions(
     session_id: str | None = None,
     docker_client: Any | None = None,
-    session_runner: Any | None = None,
 ) -> int:
-    """Encerra containers ativos de sessão (graciosamente via SessionContainerRunner se disponível, ou via Docker) (Roadmap V14.6).
+    """Encerra os containers de sandbox de código ativos (Roadmap V14.6).
 
     Args:
         session_id: ID da sessão a encerrar, ou None para encerrar todas as sessões.
         docker_client: Cliente Docker opcional (para injeção em testes).
-        session_runner: Instância opcional de SessionContainerRunner.
 
     Returns:
         Número de containers encerrados.
     """
-    if session_runner is not None:
-        import asyncio
-        if session_id:
-            asyncio.run(session_runner.stop(session_id))
-        else:
-            asyncio.run(session_runner.stop_all())
-        print(f"\n  {GREEN}✅ Containers de sessão encerrados graciosamente.{RESET}\n")
-        return 1
-
     if docker_client is None:
         try:
             import docker
@@ -922,21 +915,14 @@ def stop_sessions(
 
 
 
-def _create_orchestrator() -> tuple[Orchestrator, ContainerRunner]:
-    """Cria as dependências e retorna o orquestrador.
+def _create_orchestrator() -> Orchestrator:
+    """Verifica a infraestrutura de apoio e retorna o orquestrador.
 
     Returns:
-        Tupla com (Orchestrator, ContainerRunner).
+        O ``Orchestrator``, que executa os agentes no próprio processo.
     """
-    session_manager = SessionManager()
-    runner = ContainerRunner()
-    ipc = IPCChannel()
-    orchestrator = Orchestrator(
-        runner=runner,
-        ipc=ipc,
-        session_manager=session_manager,
-    )
-    return orchestrator, runner
+    ensure_infrastructure()
+    return Orchestrator(session_manager=SessionManager())
 
 
 async def execute_prompt(
@@ -1012,7 +998,7 @@ async def interactive_mode(
         if prompt.lower() == "stop" or prompt.lower().startswith("stop "):
             parts = prompt.split()
             s_id = parts[1] if len(parts) > 1 else None
-            stop_sessions(session_id=s_id, session_runner=getattr(orchestrator, "session_runner", None))
+            stop_sessions(session_id=s_id)
             continue
 
         if prompt.lower() == "clear-context":
@@ -1096,28 +1082,16 @@ def main() -> None:
         logger.error("Orçamento de uso inválido", extra={"error": str(e)})
         sys.exit(1)
 
-    runner: ContainerRunner | None = None
     orchestrator: Orchestrator | None = None
 
     def _signal_handler(sig: int, frame: object) -> None:
         """Handler para SIGINT (Ctrl+C)."""
-        print(f"\n\n  {YELLOW}⚠  Interrupção recebida. Encerrando containers...{RESET}")
-        # V14.6 — Encerramento gracioso de containers de sessão via SessionContainerRunner
-        if orchestrator is not None and hasattr(orchestrator, "session_runner"):
-            try:
-                import asyncio as _asyncio
-                _asyncio.run(orchestrator.session_runner.stop_all())
-                print(f"  {GREEN}✅ Encerramento gracioso dos containers de sessão concluído.{RESET}")
-            except Exception as e:
-                logger.error("Erro durante encerramento gracioso de containers de sessão", extra={"error": str(e)})
+        print(f"\n\n  {YELLOW}⚠  Interrupção recebida. Encerrando sandboxes de código...{RESET}")
+        # Os agentes rodam no processo; só o sandbox de código pode ter deixado container para trás.
+        from src.skills.code.sandbox import cleanup_sandbox_containers
 
-        if runner is not None:
-            try:
-                runner.cleanup_all()
-                print(f"  {GREEN}✅ Cleanup concluído.{RESET}\n")
-            except Exception as e:
-                logger.error("Erro durante cleanup", extra={"error": str(e)})
-                print(f"  {RED}❌ Erro no cleanup: {e}{RESET}\n")
+        removed = cleanup_sandbox_containers()
+        print(f"  {GREEN}✅ Cleanup concluído ({removed} sandbox(es) removido(s)).{RESET}\n")
         # V11.1.2 — Flush de telemetria antes de encerrar via SIGINT
         try:
             from src.telemetry import get_telemetry
@@ -1184,7 +1158,7 @@ def main() -> None:
         sys.exit(0)
 
     try:
-        orchestrator, runner = _create_orchestrator()
+        orchestrator = _create_orchestrator()
     except RuntimeError as e:
         print(f"\n  {STATUS_ICONS['error']} {RED}Falha na inicialização: {e}{RESET}\n")
         logger.error("Falha ao inicializar CLI", extra={"error": str(e)})

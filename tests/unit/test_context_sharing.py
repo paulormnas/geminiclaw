@@ -39,7 +39,6 @@ class TestAgentTaskV2Fields:
         """AgentTask deve aceitar task_name."""
         task = AgentTask(
             agent_id="researcher",
-            image="geminiclaw-researcher",
             prompt="Pesquise X",
             task_name="levantamento_fontes",
         )
@@ -47,14 +46,13 @@ class TestAgentTaskV2Fields:
 
     def test_agent_task_task_name_defaults_to_empty_string(self) -> None:
         """task_name deve ter default de string vazia."""
-        task = AgentTask(agent_id="base", image="img", prompt="p")
+        task = AgentTask(agent_id="base", prompt="p")
         assert task.task_name == ""
 
     def test_agent_task_has_depends_on_field(self) -> None:
         """AgentTask deve aceitar depends_on como lista de strings."""
         task = AgentTask(
             agent_id="base",
-            image="img",
             prompt="Analise os dados",
             depends_on=["levantamento_fontes", "coleta_dados"],
         )
@@ -62,14 +60,13 @@ class TestAgentTaskV2Fields:
 
     def test_agent_task_depends_on_defaults_to_empty_list(self) -> None:
         """depends_on deve ter default de lista vazia."""
-        task = AgentTask(agent_id="base", image="img", prompt="p")
+        task = AgentTask(agent_id="base", prompt="p")
         assert task.depends_on == []
 
     def test_agent_task_has_expected_artifacts_field(self) -> None:
         """AgentTask deve aceitar expected_artifacts como lista de strings."""
         task = AgentTask(
             agent_id="researcher",
-            image="img",
             prompt="p",
             expected_artifacts=["relatorio.md", "dados.csv"],
         )
@@ -77,14 +74,13 @@ class TestAgentTaskV2Fields:
 
     def test_agent_task_expected_artifacts_defaults_to_empty_list(self) -> None:
         """expected_artifacts deve ter default de lista vazia."""
-        task = AgentTask(agent_id="base", image="img", prompt="p")
+        task = AgentTask(agent_id="base", prompt="p")
         assert task.expected_artifacts == []
 
     def test_agent_task_full_v2_construction(self) -> None:
         """AgentTask deve aceitar todos os campos V2 juntos."""
         task = AgentTask(
             agent_id="base",
-            image="geminiclaw-base",
             prompt="Analise iris.csv",
             task_name="analise_dados",
             depends_on=["levantamento_fontes"],

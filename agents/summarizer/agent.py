@@ -6,7 +6,7 @@ Recebe contextos parciais e produz relatórios finais coesos e bem estruturados.
 
 from agents.base.agent import Agent, _load_session_context, _persist_session_context, _setup_skills, _get_agent_instruction
 
-from src.logger import get_logger, setup_file_logging
+from src.logger import get_logger
 from src.config import DEFAULT_MODEL
 from src.prompts import render_instruction
 from agents.base.tools import write_artifact
@@ -121,15 +121,3 @@ logger.info(
         "tools": [getattr(t, "__name__", "") for t in active_tools] + ["write_artifact"],
     },
 )
-
-if __name__ == "__main__":
-    import asyncio
-    from agents.runner import run_ipc_loop
-    
-    # Configura o logger raiz para escrever também no volume compartilhado
-    import os
-    agent_id = os.environ.get("AGENT_ID", "agent")
-    setup_file_logging(f"/logs/{agent_id}.log")
-    
-    # Inicia o loop de conexão IPC
-    asyncio.run(run_ipc_loop(root_agent))

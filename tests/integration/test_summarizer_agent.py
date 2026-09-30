@@ -70,20 +70,9 @@ class TestSessionMetadataGeneration:
     """handle_request deve salvar session_metadata.json com o schema esperado."""
 
     async def test_session_metadata_salvo_ao_final(self, tmp_path: Path) -> None:
-        mock_runner = MagicMock()
-        mock_runner.spawn = AsyncMock(return_value="cid")
-        mock_runner.stop = AsyncMock()
-        mock_runner.is_running = AsyncMock(return_value=True)
-
-        mock_ipc = MagicMock()
-        # ipc_id real construído em _execute_agent: f"{task.agent_id}_{session.id}"
-        mock_ipc._connections = {"developer_s0": MagicMock()}
-        mock_ipc.create_socket = AsyncMock()
-        mock_ipc.send = AsyncMock()
-
-        from src.ipc import Message
-        mock_ipc.receive = AsyncMock(
-            return_value=Message(type="response", session_id="s0", payload={"text": "ok"}, timestamp="2025-01-01T00:00:00+00:00")
+        mock_runtime = MagicMock()
+        mock_runtime.run = AsyncMock(
+            return_value=AgentResult(agent_id="developer", session_id="s0", status="success", response={"text": "ok"})
         )
 
         mock_sm = MagicMock()
@@ -97,9 +86,9 @@ class TestSessionMetadataGeneration:
         from src.output_manager import OutputManager
         output_manager = OutputManager(base_dir=str(tmp_path))
 
-        orchestrator = Orchestrator(runner=mock_runner, ipc=mock_ipc, session_manager=mock_sm, output_manager=output_manager)
+        orchestrator = Orchestrator(session_manager=mock_sm, output_manager=output_manager, agent_runtime=mock_runtime)
 
-        task = AgentTask(agent_id="developer", image="img", prompt="faz algo")
+        task = AgentTask(agent_id="developer", prompt="faz algo")
         await orchestrator.handle_request("Reproduza a Tabela 3", [task])
 
         metadata_path = tmp_path / "sess_master" / "session_metadata.json"
@@ -111,7 +100,7 @@ class TestSessionMetadataGeneration:
         assert data["researcher_interactions"] == [{"question": "q", "researcher_response": "a"}]
         assert "token_usage" in data
         assert "cost_usd" in data
-        assert "containers_used" in data
+        assert "agent_runs" in data
 
 
 @pytest.mark.unit

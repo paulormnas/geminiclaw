@@ -6,8 +6,6 @@ from src.orchestrator import Orchestrator, AgentTask, AgentResult
 @pytest.fixture
 def mock_deps():
     return {
-        "runner": MagicMock(),
-        "ipc": MagicMock(),
         "session_manager": MagicMock(),
         "output_manager": MagicMock(),
     }

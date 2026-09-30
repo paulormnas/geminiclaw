@@ -59,8 +59,7 @@ class AgentRuntime:
 - **Supervisão:** `asyncio.wait_for(..., AGENT_TIMEOUT_SECONDS)`; qualquer exceção vira
   `AgentResult(status="error", error=...)`; `asyncio.CancelledError` é propagada somente para
   cancelamento da sessão. Uma falha nunca derruba o orquestrador.
-- Concorrência: o semáforo `MAX_LOCAL_LLM_CONCURRENT` existente continua limitando execuções
-  simultâneas.
+- Concorrência (`src/agent_runtime/resources.py`, `ResourceGuard`): limite de agentes simultâneos calculado pela RAM livre (3, 2 ou 1) e limitado por `MAX_CONCURRENT_AGENTS`; vaga extra de `MAX_LOCAL_LLM_CONCURRENT` para provedores `ollama`; espera por temperatura e memória (`HEALTH_CHECK_ENABLED`) com falha explícita após 60 s. A vaga é reservada antes de o timeout do agente começar a contar.
 - Telemetria: gravada diretamente pelo singleton do host (o canal `_telemetry` do IPC deixa
   de ser necessário).
 

@@ -1,7 +1,12 @@
+"""Testes unitários do Orquestrador com o runtime de agentes em processo (ADR 014).
+
+O ``AgentRuntime`` é simulado: nenhum LLM, ferramenta ou container real é acionado. O runtime
+real nunca levanta exceção (traduz falhas e timeouts em ``AgentResult``), então os cenários de
+falha usam resultados com ``status`` ``error``/``timeout``.
+"""
+
 import pytest
-import asyncio
 from unittest.mock import MagicMock, AsyncMock, patch, ANY
-from dataclasses import dataclass
 
 from src.orchestrator import (
     Orchestrator,
@@ -10,7 +15,6 @@ from src.orchestrator import (
     OrchestratorResult,
 )
 from src.session import Session
-from src.ipc import Message
 
 
 def _make_session(agent_id: str, session_id: str = "sess_123") -> Session:
@@ -25,52 +29,27 @@ def _make_session(agent_id: str, session_id: str = "sess_123") -> Session:
     )
 
 
-def _make_response_message(session_id: str, payload: dict) -> Message:
-    """Helper para criar uma Message de resposta."""
-    return Message(
-        type="response",
-        session_id=session_id,
-        payload=payload,
-        timestamp="2025-01-01T00:00:00+00:00",
+def _make_agent_result(
+    agent_id: str,
+    session_id: str,
+    status: str = "success",
+    response: dict | None = None,
+    error: str | None = None,
+) -> AgentResult:
+    """Helper para criar um AgentResult devolvido pelo runtime simulado."""
+    return AgentResult(
+        agent_id=agent_id, session_id=session_id, status=status, response=response or {}, error=error
     )
 
 
-def _create_orchestrator() -> tuple[Orchestrator, MagicMock, MagicMock, MagicMock]:
-    """Cria um Orchestrator com dependências mockadas, fixado no modo container.
-
-    Roadmap V16/ADR 014: ``AGENT_RUNTIME`` agora tem padrão ``inprocess``. Este
-    helper testa especificamente o caminho legado de container/IPC
-    (``_execute_agent_container``), então fixa ``agent_runtime_mode="container"``
-    explicitamente — os testes do runtime em processo ficam em
-    ``TestOrchestratorInProcessRuntime`` mais abaixo.
-    """
-    mock_runner = MagicMock()
-    mock_runner.spawn = AsyncMock(return_value="container_id_123")
-    mock_runner.stop = AsyncMock()
-    mock_runner.is_running = AsyncMock(return_value=True)
-    mock_runner.get_logs = AsyncMock(return_value="logs")
-
-    mock_ipc = MagicMock()
-    mock_ipc._connections = {}
-
-    async def create_socket_side_effect(ipc_id: str) -> None:
-        mock_ipc._connections[ipc_id] = MagicMock()
-
-    mock_ipc.create_socket = AsyncMock(side_effect=create_socket_side_effect)
-    mock_ipc.wait_for_connection = AsyncMock()
-    mock_ipc.send = AsyncMock()
-    mock_ipc.close = AsyncMock()
-
+def _create_orchestrator() -> tuple[Orchestrator, MagicMock, MagicMock]:
+    """Cria um Orchestrator com o ``AgentRuntime`` e o gerenciador de sessões simulados."""
     mock_session_manager = MagicMock()
+    mock_agent_runtime = MagicMock()
+    mock_agent_runtime.run = AsyncMock()
 
-    orchestrator = Orchestrator(
-        runner=mock_runner,
-        ipc=mock_ipc,
-        session_manager=mock_session_manager,
-        agent_runtime_mode="container",
-    )
-
-    return orchestrator, mock_runner, mock_ipc, mock_session_manager
+    orchestrator = Orchestrator(session_manager=mock_session_manager, agent_runtime=mock_agent_runtime)
+    return orchestrator, mock_agent_runtime, mock_session_manager
 
 
 @pytest.mark.unit
@@ -80,16 +59,11 @@ class TestOrchestratorSingleAgent:
 
     async def test_handle_request_single_agent_success(self) -> None:
         """Fluxo completo com 1 agente retornando sucesso."""
-        orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
+        orchestrator, runtime, mock_sm = _create_orchestrator()
+        mock_sm.create.side_effect = [_make_session("orchestrator", "sess_master"), _make_session("agent_1", "sess_1")]
+        runtime.run.return_value = _make_agent_result("agent_1", "sess_1", response={"answer": "42"})
 
-        session = _make_session("agent_1", "sess_1")
-        mock_sm.create.return_value = session
-
-        response_msg = _make_response_message("sess_1", {"answer": "42"})
-        mock_ipc.receive = AsyncMock(return_value=response_msg)
-
-        task = AgentTask(agent_id="agent_1", image="img:latest", prompt="Olá")
-        result = await orchestrator.handle_request("Olá", [task])
+        result = await orchestrator.handle_request("Olá", [AgentTask(agent_id="agent_1", prompt="Olá")])
 
         assert result.total == 1
         assert result.succeeded == 1
@@ -101,26 +75,15 @@ class TestOrchestratorSingleAgent:
 
     async def test_handle_request_default_agent(self) -> None:
         """handle_request sem agent_tasks deve usar loop autônomo."""
-        orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
+        orchestrator, _runtime, mock_sm = _create_orchestrator()
 
-        # Mock do resultado do loop autônomo
         agent_res = AgentResult(agent_id="base", session_id="sess_1", status="success", response={"text": "ok"})
         loop_result = OrchestratorResult(results=[agent_res], total=1, succeeded=1, failed=0)
-        
-        master_session = _make_session("orchestrator", "sess_master")
-        mock_sm.create.return_value = master_session
+        mock_sm.create.return_value = _make_session("orchestrator", "sess_master")
 
         with patch("src.orchestrator.AutonomousLoop") as MockLoop:
-            mock_loop_instance = MockLoop.return_value
-            mock_loop_instance.run = AsyncMock(return_value=loop_result)
-            
+            MockLoop.return_value.run = AsyncMock(return_value=loop_result)
             result = await orchestrator.handle_request("Teste sem tasks")
-
-        assert result.total == 1
-        assert result.succeeded == 1
-        assert result.results[0].agent_id == "base"
-        mock_sm.create.assert_called_with("orchestrator", session_id=ANY)
-        mock_sm.close.assert_called_with("sess_master")
 
         assert result.total == 1
         assert result.succeeded == 1
@@ -135,25 +98,16 @@ class TestOrchestratorMultipleAgents:
     """Testes com múltiplos agentes."""
 
     async def test_handle_request_multiple_agents(self) -> None:
-        """Execução paralela com 3 agentes, todos com sucesso."""
-        orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
-
-        # Cada chamada a create retorna uma session diferente
-        # Agora a primeira chamada é para a master session
-        master_session = _make_session("orchestrator", "sess_master")
-        agent_sessions = [_make_session(f"a{i}", f"s{i}") for i in range(3)]
-        mock_sm.create.side_effect = [master_session] + agent_sessions
-
-        responses = [
-            _make_response_message(f"s{i}", {"idx": i}) for i in range(3)
+        """Execução de 3 agentes, todos com sucesso."""
+        orchestrator, runtime, mock_sm = _create_orchestrator()
+        mock_sm.create.side_effect = [_make_session("orchestrator", "sess_master")] + [
+            _make_session(f"a{i}", f"s{i}") for i in range(3)
         ]
-        mock_ipc.receive = AsyncMock(side_effect=responses)
-
-        tasks = [
-            AgentTask(agent_id=f"a{i}", image="img", prompt=f"prompt_{i}")
-            for i in range(3)
+        runtime.run.side_effect = [
+            _make_agent_result(f"a{i}", f"s{i}", response={"idx": i}) for i in range(3)
         ]
 
+        tasks = [AgentTask(agent_id=f"a{i}", prompt=f"prompt_{i}") for i in range(3)]
         result = await orchestrator.handle_request("multi", tasks)
 
         assert result.total == 3
@@ -168,63 +122,37 @@ class TestOrchestratorPartialFailure:
     """Testes de falha parcial."""
 
     async def test_partial_failure_one_agent_fails(self) -> None:
-        """1 agente falha, os demais retornam sucesso."""
-        orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
-
-        master_session = _make_session("orchestrator", "sess_master")
-        agent_sessions = [_make_session(f"a{i}", f"s{i}") for i in range(3)]
-        mock_sm.create.side_effect = [master_session] + agent_sessions
-
-        # Segundo agente falha no receive (timeout)
-        ok_msg_0 = _make_response_message("s0", {"ok": True})
-        ok_msg_2 = _make_response_message("s2", {"ok": True})
-
-        call_count = 0
-
-        async def receive_side_effect(ipc_id: str, timeout: float = 30.0) -> Message:
-            nonlocal call_count
-            idx = call_count
-            call_count += 1
-            if idx == 1:
-                raise TimeoutError("Timeout simulado")
-            elif idx == 0:
-                return ok_msg_0
-            else:
-                return ok_msg_2
-
-        mock_ipc.receive = AsyncMock(side_effect=receive_side_effect)
-
-        tasks = [
-            AgentTask(agent_id=f"a{i}", image="img", prompt=f"p{i}")
-            for i in range(3)
+        """1 agente estoura o tempo, os demais retornam sucesso."""
+        orchestrator, runtime, mock_sm = _create_orchestrator()
+        mock_sm.create.side_effect = [_make_session("orchestrator", "sess_master")] + [
+            _make_session(f"a{i}", f"s{i}") for i in range(3)
+        ]
+        runtime.run.side_effect = [
+            _make_agent_result("a0", "s0", response={"ok": True}),
+            _make_agent_result("a1", "s1", status="timeout", error="Timeout simulado"),
+            _make_agent_result("a2", "s2", response={"ok": True}),
         ]
 
+        tasks = [AgentTask(agent_id=f"a{i}", prompt=f"p{i}") for i in range(3)]
         result = await orchestrator.handle_request("partial", tasks)
 
         assert result.total == 3
         assert result.succeeded == 2
         assert result.failed == 1
+        assert {r.agent_id: r.status for r in result.results}["a1"] == "timeout"
 
-        # Verifica que o agente falho tem status correto
-        statuses = {r.agent_id: r.status for r in result.results}
-        assert "timeout" in statuses.values() or "error" in statuses.values()
+    async def test_partial_failure_error_status(self) -> None:
+        """Agente que falha retorna status error com a mensagem preservada."""
+        orchestrator, runtime, mock_sm = _create_orchestrator()
+        mock_sm.create.side_effect = [_make_session("orchestrator", "sess_master"), _make_session("a1", "s1")]
+        runtime.run.return_value = _make_agent_result("a1", "s1", status="error", error="Provider unavailable")
 
-    async def test_partial_failure_spawn_error(self) -> None:
-        """Agente que falha no spawn retorna status error."""
-        orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
-
-        master_session = _make_session("orchestrator", "sess_master")
-        session = _make_session("a1", "s1")
-        mock_sm.create.side_effect = [master_session, session]
-        mock_runner.spawn = AsyncMock(side_effect=RuntimeError("Docker unavailable"))
-
-        task = AgentTask(agent_id="a1", image="img", prompt="test")
-        result = await orchestrator.handle_request("fail", [task])
+        result = await orchestrator.handle_request("fail", [AgentTask(agent_id="a1", prompt="test")])
 
         assert result.total == 1
         assert result.failed == 1
         assert result.results[0].status == "error"
-        assert "Docker unavailable" in (result.results[0].error or "")
+        assert "Provider unavailable" in (result.results[0].error or "")
 
 
 @pytest.mark.unit
@@ -234,35 +162,29 @@ class TestOrchestratorResultCounts:
 
     async def test_all_failed(self) -> None:
         """Quando todos os agentes falham."""
-        orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
-
-        master_session = _make_session("orchestrator", "sess_master")
-        agent_sessions = [_make_session(f"a{i}", f"s{i}") for i in range(2)]
-        mock_sm.create.side_effect = [master_session] + agent_sessions
-        mock_ipc.receive = AsyncMock(side_effect=ConnectionError("IPC down"))
-
-        tasks = [
-            AgentTask(agent_id=f"a{i}", image="img", prompt="p")
-            for i in range(2)
+        orchestrator, runtime, mock_sm = _create_orchestrator()
+        mock_sm.create.side_effect = [_make_session("orchestrator", "sess_master")] + [
+            _make_session(f"a{i}", f"s{i}") for i in range(2)
+        ]
+        runtime.run.side_effect = [
+            _make_agent_result(f"a{i}", f"s{i}", status="error", error="falha") for i in range(2)
         ]
 
-        result = await orchestrator.handle_request("all_fail", tasks)
+        result = await orchestrator.handle_request(
+            "all_fail", [AgentTask(agent_id=f"a{i}", prompt="p") for i in range(2)]
+        )
 
         assert result.total == 2
         assert result.succeeded == 0
         assert result.failed == 2
 
     async def test_agent_timeout_status(self) -> None:
-        """Agente que excede timeout retorna status 'timeout'."""
-        orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
+        """Agente que excede o timeout retorna status 'timeout'."""
+        orchestrator, runtime, mock_sm = _create_orchestrator()
+        mock_sm.create.side_effect = [_make_session("orchestrator", "sess_master"), _make_session("a1", "s1")]
+        runtime.run.return_value = _make_agent_result("a1", "s1", status="timeout", error="Timeout!")
 
-        master_session = _make_session("orchestrator", "sess_master")
-        session = _make_session("a1", "s1")
-        mock_sm.create.side_effect = [master_session, session]
-        mock_ipc.receive = AsyncMock(side_effect=TimeoutError("Timeout!"))
-
-        task = AgentTask(agent_id="a1", image="img", prompt="test")
-        result = await orchestrator.handle_request("timeout", [task])
+        result = await orchestrator.handle_request("timeout", [AgentTask(agent_id="a1", prompt="test")])
 
         assert result.results[0].status == "timeout"
         assert result.results[0].error is not None
@@ -275,102 +197,26 @@ class TestOrchestratorCleanup:
 
     async def test_sessions_closed_after_execution(self) -> None:
         """Todas as sessões devem ser fechadas ao final, mesmo com sucesso."""
-        orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
+        orchestrator, runtime, mock_sm = _create_orchestrator()
+        mock_sm.create.return_value = _make_session("a1", "sess_cleanup")
+        runtime.run.return_value = _make_agent_result("a1", "sess_cleanup", response={"ok": True})
 
-        session = _make_session("a1", "sess_cleanup")
-        mock_sm.create.return_value = session
-
-        response_msg = _make_response_message("sess_cleanup", {"ok": True})
-        mock_ipc.receive = AsyncMock(return_value=response_msg)
-
-        task = AgentTask(agent_id="a1", image="img", prompt="test")
-        await orchestrator.handle_request("cleanup", [task])
+        await orchestrator.handle_request("cleanup", [AgentTask(agent_id="a1", prompt="test")])
 
         # close() é chamado duas vezes: uma para o agente e outra para a master session
         assert mock_sm.close.call_count == 2
         mock_sm.close.assert_any_call("sess_cleanup")
 
-    async def test_ipc_closed_after_execution(self) -> None:
-        """Sockets IPC devem ser fechados ao final."""
-        orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
-
-        session = _make_session("a1", "sess_ipc")
-        mock_sm.create.return_value = session
-
-        response_msg = _make_response_message("sess_ipc", {"ok": True})
-        mock_ipc.receive = AsyncMock(return_value=response_msg)
-
-        task = AgentTask(agent_id="a1", image="img", prompt="test")
-        await orchestrator.handle_request("cleanup_ipc", [task])
-
-        mock_ipc.close.assert_called_once()
-
-    async def test_container_stopped_after_execution(self) -> None:
-        """Containers devem ser parados ao final."""
-        orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
-
-        session = _make_session("a1", "sess_stop")
-        mock_sm.create.return_value = session
-
-        response_msg = _make_response_message("sess_stop", {"ok": True})
-        mock_ipc.receive = AsyncMock(return_value=response_msg)
-
-        task = AgentTask(agent_id="a1", image="img", prompt="test")
-        await orchestrator.handle_request("stop", [task])
-
-        mock_runner.stop.assert_called_once_with("container_id_123")
-
     async def test_cleanup_on_error(self) -> None:
-        """Cleanup deve acontecer mesmo quando o agente falha."""
-        orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
+        """A sessão do agente é fechada mesmo quando o agente falha."""
+        orchestrator, runtime, mock_sm = _create_orchestrator()
+        mock_sm.create.return_value = _make_session("a1", "sess_err")
+        runtime.run.return_value = _make_agent_result("a1", "sess_err", status="error", error="falha")
 
-        session = _make_session("a1", "sess_err")
-        mock_sm.create.return_value = session
-        mock_ipc.receive = AsyncMock(side_effect=ConnectionError("falha"))
+        await orchestrator.handle_request("error_cleanup", [AgentTask(agent_id="a1", prompt="test")])
 
-        task = AgentTask(agent_id="a1", image="img", prompt="test")
-        await orchestrator.handle_request("error_cleanup", [task])
-
-        # Mesmo com erro, sessão, IPC e container devem ser limpos
-        # close() é chamado duas vezes: uma para o agente e outra para a master session
         assert mock_sm.close.call_count == 2
         mock_sm.close.assert_any_call("sess_err")
-        mock_ipc.close.assert_called_once()
-        mock_runner.stop.assert_called_once()
-
-
-def _make_agent_result(agent_id: str, session_id: str, status: str = "success",
-                        response: dict | None = None, error: str | None = None) -> AgentResult:
-    """Helper para criar um AgentResult mockado (usado pelos testes de runtime em processo)."""
-    return AgentResult(agent_id=agent_id, session_id=session_id, status=status,
-                        response=response or {}, error=error)
-
-
-def _create_inprocess_orchestrator() -> tuple[Orchestrator, MagicMock, MagicMock, MagicMock, MagicMock]:
-    """Cria um Orchestrator fixado no modo em processo (Roadmap V16/ADR 014), com
-    ``AgentRuntime`` mockado para não executar LLM/ferramentas reais.
-    """
-    mock_runner = MagicMock()
-    mock_runner.spawn = AsyncMock(return_value="container_id_123")
-
-    mock_ipc = MagicMock()
-    mock_ipc._connections = {}
-    mock_ipc.create_socket = AsyncMock()
-
-    mock_session_manager = MagicMock()
-
-    mock_agent_runtime = MagicMock()
-    mock_agent_runtime.run = AsyncMock()
-
-    orchestrator = Orchestrator(
-        runner=mock_runner,
-        ipc=mock_ipc,
-        session_manager=mock_session_manager,
-        agent_runtime=mock_agent_runtime,
-        agent_runtime_mode="inprocess",
-    )
-
-    return orchestrator, mock_runner, mock_ipc, mock_session_manager, mock_agent_runtime
 
 
 @pytest.mark.unit
@@ -382,90 +228,67 @@ class TestOrchestratorInProcessRuntime:
     ``agent-runtime`` (openspec/changes/v16-in-process-agents/).
     """
 
-    async def test_default_mode_is_inprocess(self) -> None:
-        """Cenário: AGENT_RUNTIME não configurado explicitamente usa 'inprocess' por padrão."""
-        orchestrator = Orchestrator(
-            runner=MagicMock(), ipc=MagicMock(), session_manager=MagicMock()
-        )
-        assert orchestrator.agent_runtime_mode == "inprocess"
+    async def test_available_agents_are_role_ids(self) -> None:
+        """Os papéis disponíveis são identificadores, não imagens de container."""
+        agents = Orchestrator.get_available_agents()
+        assert "researcher" in agents and "developer" in agents
+        assert all(isinstance(agent, str) and not agent.startswith("geminiclaw-") for agent in agents)
 
-    async def test_execute_agent_inprocess_no_container_spawn(self) -> None:
-        """Cenário: Subtarefa sem spawn de container de agente."""
-        orchestrator, mock_runner, mock_ipc, mock_sm, mock_agent_runtime = _create_inprocess_orchestrator()
+    async def test_orchestrator_has_no_container_dependencies(self) -> None:
+        """Cenário: subtarefa sem container de agente — o orquestrador só recebe sessões e runtime."""
+        orchestrator = Orchestrator(session_manager=MagicMock())
+        assert not hasattr(orchestrator, "runner")
+        assert not hasattr(orchestrator, "ipc")
+        assert not hasattr(orchestrator, "session_runner")
 
-        master_session = _make_session("orchestrator", "sess_master")
-        agent_session = _make_session("a1", "s1")
-        mock_sm.create.side_effect = [master_session, agent_session]
-        mock_agent_runtime.run.return_value = _make_agent_result("a1", "s1", response={"text": "ok"})
+    async def test_execute_agent_runs_through_the_runtime(self) -> None:
+        """Cenário: a subtarefa é executada pelo AgentRuntime com o contexto da tarefa."""
+        orchestrator, runtime, mock_sm = _create_orchestrator()
+        mock_sm.create.side_effect = [_make_session("orchestrator", "sess_master"), _make_session("a1", "s1")]
+        runtime.run.return_value = _make_agent_result("a1", "s1", response={"text": "ok"})
 
-        task = AgentTask(agent_id="a1", image="img", prompt="hello")
+        task = AgentTask(agent_id="a1", prompt="hello")
         result = await orchestrator.handle_request("inprocess test", [task])
 
         assert result.succeeded == 1
         assert result.results[0].response == {"text": "ok"}
-        mock_runner.spawn.assert_not_called()
-        mock_ipc.create_socket.assert_not_called()
-        mock_agent_runtime.run.assert_called_once()
+        runtime.run.assert_called_once()
 
-        called_task, called_ctx = mock_agent_runtime.run.call_args[0]
+        called_task, called_ctx = runtime.run.call_args[0]
         assert called_task is task
         assert called_ctx.agent_id == "a1"
         assert called_ctx.session_id == "sess_master"
         assert called_ctx.agent_session_id == "s1"
 
-    async def test_execute_agent_inprocess_error_status(self) -> None:
+    async def test_execute_agent_error_status(self) -> None:
         """Cenário: Exceção — o orquestrador segue mesmo quando o agente falha."""
-        orchestrator, mock_runner, mock_ipc, mock_sm, mock_agent_runtime = _create_inprocess_orchestrator()
+        orchestrator, runtime, mock_sm = _create_orchestrator()
+        mock_sm.create.side_effect = [_make_session("orchestrator", "sess_master"), _make_session("a1", "s1")]
+        runtime.run.return_value = _make_agent_result("a1", "s1", status="error", error="falha simulada")
 
-        master_session = _make_session("orchestrator", "sess_master")
-        agent_session = _make_session("a1", "s1")
-        mock_sm.create.side_effect = [master_session, agent_session]
-        mock_agent_runtime.run.return_value = _make_agent_result(
-            "a1", "s1", status="error", error="falha simulada"
-        )
-
-        task = AgentTask(agent_id="a1", image="img", prompt="hello")
-        result = await orchestrator.handle_request("inprocess fail", [task])
+        result = await orchestrator.handle_request("inprocess fail", [AgentTask(agent_id="a1", prompt="hello")])
 
         assert result.failed == 1
         assert result.results[0].status == "error"
         assert result.results[0].error == "falha simulada"
 
-    async def test_execute_agent_inprocess_timeout_status(self) -> None:
-        """Cenário: Timeout — o AgentResult reflete status='timeout'."""
-        orchestrator, mock_runner, mock_ipc, mock_sm, mock_agent_runtime = _create_inprocess_orchestrator()
-
-        master_session = _make_session("orchestrator", "sess_master")
-        agent_session = _make_session("a1", "s1")
-        mock_sm.create.side_effect = [master_session, agent_session]
-        mock_agent_runtime.run.return_value = _make_agent_result("a1", "s1", status="timeout", error="timeout!")
-
-        task = AgentTask(agent_id="a1", image="img", prompt="hello")
-        result = await orchestrator.handle_request("inprocess timeout", [task])
-
-        assert result.results[0].status == "timeout"
-
     async def test_circuit_breaker_max_agent_runs_per_session(self) -> None:
         """Cenário: Limite de execuções de agentes interrompe novas execuções."""
         from src.config import MAX_AGENT_RUNS_PER_SESSION
 
-        orchestrator, mock_runner, mock_ipc, mock_sm, mock_agent_runtime = _create_inprocess_orchestrator()
+        orchestrator, runtime, mock_sm = _create_orchestrator()
         mock_sm.create.return_value = _make_session("a1", "s1")
         orchestrator._session_agent_run_counts["sess_master"] = MAX_AGENT_RUNS_PER_SESSION
 
-        task = AgentTask(agent_id="a1", image="img", prompt="hello")
         with pytest.raises(RuntimeError, match="Limite de execuções de agente"):
-            await orchestrator._execute_agent_inprocess(task, master_session_id="sess_master")
+            await orchestrator._execute_agent(AgentTask(agent_id="a1", prompt="hello"), master_session_id="sess_master")
 
-        mock_agent_runtime.run.assert_not_called()
+        runtime.run.assert_not_called()
 
     async def test_ask_researcher_callback_delegates_to_core(self) -> None:
         """Cenário: o callback ask_researcher do AgentContext reutiliza dedup/registro (Spec G5)."""
-        orchestrator, mock_runner, mock_ipc, mock_sm, mock_agent_runtime = _create_inprocess_orchestrator()
-
-        master_session = _make_session("orchestrator", "sess_master")
-        agent_session = _make_session("a1", "s1")
-        mock_sm.create.side_effect = [master_session, agent_session]
+        orchestrator, runtime, mock_sm = _create_orchestrator()
+        mock_sm.create.side_effect = [_make_session("orchestrator", "sess_master"), _make_session("a1", "s1")]
 
         captured_ctx = {}
 
@@ -473,10 +296,9 @@ class TestOrchestratorInProcessRuntime:
             captured_ctx["ctx"] = ctx
             return _make_agent_result("a1", "s1", response={"text": "ok"})
 
-        mock_agent_runtime.run.side_effect = fake_run
+        runtime.run.side_effect = fake_run
 
-        task = AgentTask(agent_id="a1", image="img", prompt="hello")
-        await orchestrator.handle_request("ask_researcher wiring", [task])
+        await orchestrator.handle_request("ask_researcher wiring", [AgentTask(agent_id="a1", prompt="hello")])
 
         ctx = captured_ctx["ctx"]
         assert ctx.ask_researcher is not None

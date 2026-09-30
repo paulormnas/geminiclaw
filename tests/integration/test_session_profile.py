@@ -2,7 +2,7 @@
 (Roadmap V15.6 / Spec G10).
 
 Cobre:
-- Propagação de SessionMode do Orchestrator para o env_vars do container spawnado.
+- Propagação de SessionMode do Orchestrator para o AgentContext da tarefa.
 - Estampagem do modo em AgentTask pelo AutonomousLoop (caminho simples).
 - Adaptação do system prompt compartilhado (`_get_agent_instruction`) por modo.
 - Exibição do modo na listagem `geminiclaw sessions`.
@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, AsyncMock
 
 import pytest
 
-from src.orchestrator import Orchestrator, AgentTask
+from src.orchestrator import AgentResult, AgentTask, Orchestrator
 from src.autonomous_loop import AutonomousLoop
 from src.session import Session
 from src.cli import show_sessions
@@ -31,100 +31,51 @@ def _make_session(agent_id: str, session_id: str, payload: dict | None = None) -
 
 
 def _create_orchestrator():
-    mock_runner = MagicMock()
-    mock_runner.spawn = AsyncMock(return_value="container_id_123")
-    mock_runner.stop = AsyncMock()
-    mock_runner.is_running = AsyncMock(return_value=True)
-    mock_runner.get_logs = AsyncMock(return_value="logs")
-
-    mock_ipc = MagicMock()
-    mock_ipc._connections = {}
-
-    async def create_socket_side_effect(ipc_id: str) -> None:
-        mock_ipc._connections[ipc_id] = MagicMock()
-
-    mock_ipc.create_socket = AsyncMock(side_effect=create_socket_side_effect)
-    mock_ipc.wait_for_connection = AsyncMock()
-    mock_ipc.send = AsyncMock()
-    mock_ipc.close = AsyncMock()
-
     mock_session_manager = MagicMock()
+    mock_runtime = MagicMock()
+    captured: dict = {}
 
-    # Roadmap V16/ADR 014: AGENT_RUNTIME tem padrão "inprocess" — este módulo
-    # testa especificamente a propagação de SESSION_MODE para env_vars do
-    # container spawnado (caminho legado), então fixa o modo.
-    orchestrator = Orchestrator(
-        runner=mock_runner,
-        ipc=mock_ipc,
-        session_manager=mock_session_manager,
-        agent_runtime_mode="container",
-    )
-    return orchestrator, mock_runner, mock_ipc, mock_session_manager
+    async def fake_run(task, ctx):
+        captured["ctx"] = ctx
+        return AgentResult(
+            agent_id=task.agent_id, session_id=ctx.agent_session_id, status="success", response={"idx": 0}
+        )
+
+    mock_runtime.run = AsyncMock(side_effect=fake_run)
+    orchestrator = Orchestrator(session_manager=mock_session_manager, agent_runtime=mock_runtime)
+    return orchestrator, captured, mock_session_manager
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 class TestOrchestratorModePropagation:
-    """O modo informado em handle_request deve chegar ao env_vars do container."""
+    """O modo informado em handle_request deve chegar ao AgentContext da tarefa."""
 
-    async def test_mode_explicito_propagado_para_env_vars(self) -> None:
-        orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
+    async def test_mode_explicito_propagado_para_o_contexto(self) -> None:
+        orchestrator, captured, mock_sm = _create_orchestrator()
+        mock_sm.create.side_effect = [_make_session("orchestrator", "sess_master"), _make_session("a0", "s0")]
 
-        master_session = _make_session("orchestrator", "sess_master")
-        agent_session = _make_session("a0", "s0")
-        mock_sm.create.side_effect = [master_session, agent_session]
-
-        from src.ipc import Message
-        mock_ipc.receive = AsyncMock(
-            return_value=Message(
-                type="response", session_id="s0", payload={"idx": 0}, timestamp="2025-01-01T00:00:00+00:00"
-            )
-        )
-
-        task = AgentTask(agent_id="developer", image="img", prompt="faz algo")
-
+        task = AgentTask(agent_id="developer", prompt="faz algo")
         await orchestrator.handle_request("tarefa", [task], mode="auto")
 
-        _, kwargs = mock_runner.spawn.call_args
-        assert kwargs["env_vars"]["SESSION_MODE"] == "auto"
+        assert captured["ctx"].mode == "auto"
 
     async def test_mode_default_quando_omitido(self) -> None:
         from src.config import SESSION_DEFAULT_MODE
 
-        orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
+        orchestrator, captured, mock_sm = _create_orchestrator()
+        mock_sm.create.side_effect = [_make_session("orchestrator", "sess_master"), _make_session("a0", "s0")]
 
-        master_session = _make_session("orchestrator", "sess_master")
-        agent_session = _make_session("a0", "s0")
-        mock_sm.create.side_effect = [master_session, agent_session]
-
-        from src.ipc import Message
-        mock_ipc.receive = AsyncMock(
-            return_value=Message(
-                type="response", session_id="s0", payload={"idx": 0}, timestamp="2025-01-01T00:00:00+00:00"
-            )
-        )
-
-        task = AgentTask(agent_id="developer", image="img", prompt="faz algo")
+        task = AgentTask(agent_id="developer", prompt="faz algo")
         await orchestrator.handle_request("tarefa", [task])
 
-        _, kwargs = mock_runner.spawn.call_args
-        assert kwargs["env_vars"]["SESSION_MODE"] == SESSION_DEFAULT_MODE
+        assert captured["ctx"].mode == SESSION_DEFAULT_MODE
 
     async def test_mode_persistido_no_payload_da_sessao_mestra(self) -> None:
-        orchestrator, mock_runner, mock_ipc, mock_sm = _create_orchestrator()
+        orchestrator, _captured, mock_sm = _create_orchestrator()
+        mock_sm.create.side_effect = [_make_session("orchestrator", "sess_master"), _make_session("a0", "s0")]
 
-        master_session = _make_session("orchestrator", "sess_master")
-        agent_session = _make_session("a0", "s0")
-        mock_sm.create.side_effect = [master_session, agent_session]
-
-        from src.ipc import Message
-        mock_ipc.receive = AsyncMock(
-            return_value=Message(
-                type="response", session_id="s0", payload={"idx": 0}, timestamp="2025-01-01T00:00:00+00:00"
-            )
-        )
-
-        task = AgentTask(agent_id="developer", image="img", prompt="faz algo")
+        task = AgentTask(agent_id="developer", prompt="faz algo")
         await orchestrator.handle_request("tarefa", [task], mode="semi")
 
         update_calls = mock_sm.update.call_args_list
@@ -197,7 +148,7 @@ class TestAgentInstructionByMode:
 
 @pytest.mark.unit
 class TestSessionsListingShowsMode:
-    """`geminiclaw sessions` deve exibir o modo de operação de cada container."""
+    """`geminiclaw sessions` deve exibir o modo de operação de cada container listado."""
 
     def test_show_sessions_exibe_coluna_mode(self, capsys: pytest.CaptureFixture) -> None:
         container = MagicMock()

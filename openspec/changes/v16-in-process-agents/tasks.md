@@ -35,9 +35,11 @@
 - [x] 6.3 Ruff, testes, revisão nos 7 eixos, PR da fase 1. — Ruff e testes unitários 100% verdes nesta etapa; revisão nos 7 eixos e PR ficam para o fluxo de `do-pull-request.md`. Testes de integração não executados aqui por espaço em disco insuficiente (`<10GB` livre) — rodar antes do merge.
 
 ## Fase 2 — Remoção do modo container (após aprovação explícita)
-- [ ] 7.1 **Aprovação do pesquisador** para remover arquivos e alterar Dockerfiles/compose.
-- [ ] 7.2 Remover `src/ipc.py`, `agents/runner.py`, `SessionContainerRunner`, `AGENT_RUNTIME=container`.
-- [ ] 7.3 `ContainerRunner`: remover spawn e imagens de agente; manter infraestrutura.
+- [x] 7.1 **Aprovação do pesquisador** para remover arquivos e alterar Dockerfiles/compose (concedida em 2026-09-29).
+- [x] 7.2 Remover `src/ipc.py`, `agents/runner.py`, `SessionContainerRunner`, `AGENT_RUNTIME=container`.
+- [x] 7.3 `ContainerRunner`: remover spawn e imagens de agente; manter infraestrutura — `src/runner.py` removido; as checagens de PostgreSQL, Qdrant e daemon foram para `src/infrastructure.py`.
+- [x] 7.3b Levar para o `AgentRuntime` o que só o `ContainerRunner` fazia: limite de agentes simultâneos por RAM (limitado por `MAX_CONCURRENT_AGENTS`), vaga extra para inferência local (`MAX_LOCAL_LLM_CONCURRENT`) e espera por temperatura/memória — `src/agent_runtime/resources.py` (`ResourceGuard`). Sem isso o `asyncio.gather` do laço autônomo disparava todas as subtarefas prontas ao mesmo tempo.
+- [x] 7.3c Containers do sandbox passam a ter rótulos (`project`, `geminiclaw.role`, `session_id`, `task_name`); `sessions`/`stop` da CLI e o Ctrl+C passam a listar e limpar sandboxes (`cleanup_sandbox_containers`).
 - [ ] 7.4 Ajustar `docker-compose.yml` e `containers/Dockerfile*` (manter imagem do sandbox).
 - [ ] 7.5 Marcar ADR 003 §1/§3 e ADR 004 como Deprecados e ADR 014 como Aceito.
 - [ ] 7.6 Ruff, testes, revisão, PR da fase 2.

@@ -8,7 +8,7 @@ from agents.base.agent import Agent, _load_session_context, _persist_session_con
 from typing import Any
 import os
 
-from src.logger import get_logger, setup_file_logging
+from src.logger import get_logger
 from src.config import DEFAULT_MODEL
 from src.prompts import render_instruction
 from src.skills import registry
@@ -70,13 +70,3 @@ root_agent = Agent(
     before_agent_callback=_load_session_context,
     after_agent_callback=_persist_session_context,
 )
-
-if __name__ == "__main__":
-    import asyncio
-    from agents.runner import run_ipc_loop
-    
-    # Configura o logger raiz para escrever também no volume compartilhado
-    agent_id = os.environ.get("AGENT_ID", "agent")
-    setup_file_logging(f"/logs/{agent_id}.log")
-    
-    asyncio.run(run_ipc_loop(root_agent))

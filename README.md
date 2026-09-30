@@ -50,7 +50,7 @@ cp .env.example .env
 
 # Configuração .env
 LLM_PROVIDER=google
-LLM_MODEL=gemini-2.0-flash
+LLM_MODEL=gemini-3.8-flash
 GEMINI_API_KEY=sua_chave_aqui
 ```
 

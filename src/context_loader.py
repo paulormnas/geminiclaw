@@ -477,7 +477,7 @@ class ContextLoader:
             client = genai.Client(api_key=GEMINI_API_KEY)
             image_bytes = path.read_bytes()
             response = client.models.generate_content(
-                model="gemini-2.0-flash",
+                model="gemini-3.8-flash",
                 contents=[
                     "Descreva o conteúdo desta imagem em detalhes (gráficos, tabelas, texto visível, "
                     "estruturas de microscopia, etc.) para uso como contexto científico.",

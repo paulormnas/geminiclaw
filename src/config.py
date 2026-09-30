@@ -63,16 +63,16 @@ APP_NAME = get_env("APP_NAME", default="GeminiClaw")
 
 # Provedor e modelo — novos
 LLM_PROVIDER = get_env("LLM_PROVIDER", default="google")
-LLM_MODEL = get_env("LLM_MODEL") or get_env("DEFAULT_MODEL", default="gemini-3.1-pro-preview")
+LLM_MODEL = get_env("LLM_MODEL") or get_env("DEFAULT_MODEL", default="gemini-3.8-flash")
 DEFAULT_MODEL = LLM_MODEL  # Retrocompatibilidade
 
 # Model Router por papel (V14)
 RESEARCHER_PROVIDER = get_env("RESEARCHER_PROVIDER", default="google")
-RESEARCHER_MODEL = get_env("RESEARCHER_MODEL", default="gemini-2.0-flash")
+RESEARCHER_MODEL = get_env("RESEARCHER_MODEL", default="gemini-3.8-flash")
 VALIDATOR_PROVIDER = get_env("VALIDATOR_PROVIDER", default="ollama")
 VALIDATOR_MODEL = get_env("VALIDATOR_MODEL", default="qwen3:8b")
 DEVELOPER_PROVIDER = get_env("DEVELOPER_PROVIDER", default="google")
-DEVELOPER_MODEL = get_env("DEVELOPER_MODEL", default="gemini-2.0-flash")
+DEVELOPER_MODEL = get_env("DEVELOPER_MODEL", default="gemini-3.8-flash")
 
 # Configurações Ollama
 OLLAMA_BASE_URL = get_env("OLLAMA_BASE_URL", default="http://localhost:11434")
@@ -84,6 +84,9 @@ GEMINI_API_KEY = get_env(
     "GEMINI_API_KEY",
     required=(LLM_PROVIDER == "google"),
 )
+
+# Modelo usado quando o principal do Google atinge o limite de requisições (HTTP 429). Vazio desliga o fallback.
+GOOGLE_FALLBACK_MODEL = get_env("GOOGLE_FALLBACK_MODEL", default="gemini-3.7-flash")
 
 # Configurações do provedor openai_compatible (V16) — servidores que falam o
 # protocolo /v1/chat/completions (llama.cpp server, vLLM, LM Studio, serviços

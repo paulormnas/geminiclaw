@@ -23,10 +23,8 @@ AGENT_MODULE_NAMES = [
     "agents.base.agent",
     "agents.developer.agent",
     "agents.researcher.agent",
-    "agents.validator.agent",
     "agents.summarizer.agent",
     "agents.reviewer.agent",
-    "agents.planner.agent",
 ]
 
 FORBIDDEN_LITERAL_SUBSTRINGS = ("ADR 001", "Google ADK", "subprocess", "pip install")

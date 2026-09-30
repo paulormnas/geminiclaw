@@ -4,7 +4,7 @@
 
 | Ponto | Local | Situação |
 |---|---|---|
-| Instrução do agente Validator | `agents/validator/agent.py:24-53` | Só revisão de metodologia (Researcher) e de plano (Planner). |
+| Instrução do agente Validator | `src/agents/validator_agent.py` (`SCHEMA_INSTRUCTION` e prompts de revisão) | O módulo `agents/validator/agent.py` era código morto (o Validator em uso é a corrotina de `src/agents/validator_agent.py`) e foi removido. |
 | Validator em uso | `src/orchestrator.py:34`, `:230`, `:1240` | `ValidatorAgent` (corrotina) valida planos. |
 | Revisão de subtarefa | `src/agents/validator_agent.py:310-420`, chamada em `src/autonomous_loop.py:1427-1457` | Confere artefatos e critérios contra `metrics.json` (`_evaluate_quantitative_criteria`, `:90-135`); status `pass`/`fail`/`divergent_but_documented`. Não olha conclusões. |
 | Relatório | `src/autonomous_loop.py:1459-1535` | O texto do Summarizer vira o relatório; nenhuma conferência das conclusões. |

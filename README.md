@@ -50,7 +50,7 @@ cp .env.example .env
 
 # Configuração .env
 LLM_PROVIDER=google
-LLM_MODEL=gemini-2.0-flash
+LLM_MODEL=gemini-3.8-flash
 GEMINI_API_KEY=sua_chave_aqui
 ```
 
@@ -212,8 +212,6 @@ Implementado em `src/autonomous_loop.py`, o loop gerencia tarefas complexas de p
 | --- | --- | --- | --- |
 | **Base** | `agents/base/` | `geminiclaw-base` | Tarefas genéricas. Integra todas as skills habilitadas e memória de longo prazo. |
 | **Researcher** | `agents/researcher/` | `geminiclaw-researcher` | Pesquisa na web via Google Search ADK, extração de conteúdo e síntese. Cache de resultados integrado. |
-| **Planner** | `agents/planner/` | `geminiclaw-planner` | Decomposição de problemas complexos em tarefas atômicas. Triage (simples/complexo). |
-| **Validator** | `agents/validator/` | `geminiclaw-validator` | Verificação de segurança, formato JSON e consistência lógica de planos. |
 | **Reviewer** | `agents/reviewer/` | `geminiclaw-reviewer` | Validação de resultados de subtarefas contra critérios definidos. |
 | **Summarizer** | `agents/summarizer/` | `geminiclaw-summarizer` | Síntese final de resultados com rastreabilidade acadêmica e metadados de autonomia. |
 

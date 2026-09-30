@@ -22,7 +22,7 @@ class RoleModelConfig:
 DEFAULT_ROLE_CONFIGS: Dict[str, Dict[str, str]] = {
     "researcher": {
         "provider": "google",
-        "model": "gemini-2.0-flash",
+        "model": "gemini-3.8-flash",
     },
     "validator": {
         "provider": "ollama",
@@ -30,22 +30,22 @@ DEFAULT_ROLE_CONFIGS: Dict[str, Dict[str, str]] = {
     },
     "developer": {
         "provider": "google",
-        "model": "gemini-2.0-flash",
+        "model": "gemini-3.8-flash",
     },
     # Roadmap V16 — papéis adicionais executados pelo AgentRuntime em processo
     # (agents/base, agents/summarizer, agents/reviewer). Mesmo padrão do
     # Researcher/Developer: customizáveis via {ROLE}_PROVIDER/{ROLE}_MODEL.
     "base": {
         "provider": "google",
-        "model": "gemini-2.0-flash",
+        "model": "gemini-3.8-flash",
     },
     "summarizer": {
         "provider": "google",
-        "model": "gemini-2.0-flash",
+        "model": "gemini-3.8-flash",
     },
     "reviewer": {
         "provider": "google",
-        "model": "gemini-2.0-flash",
+        "model": "gemini-3.8-flash",
     },
 }
 

@@ -249,6 +249,34 @@ class TestRequest:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+class TestModelCapabilities:
+    """Modelos sem suporte rejeitam `effort` e o fallback do servidor com HTTP 400; o provedor não os envia."""
+
+    async def _sent(self, model: str) -> dict:
+        provider = AnthropicProvider(api_key="sk-ant-teste", model=model)
+        provider._client = MagicMock()
+        provider._client.messages.create = AsyncMock(return_value=_response([_text("ok")]))
+        await provider.generate([{"role": "user", "content": "oi"}])
+        return provider._client.messages.create.call_args.kwargs
+
+    async def test_haiku_gets_neither_effort_nor_fallback(self) -> None:
+        sent = await self._sent("claude-haiku-4-5")
+        assert "output_config" not in sent
+        assert "extra_headers" not in sent and "extra_body" not in sent
+
+    async def test_sonnet_5_5_gets_effort_and_fallback(self) -> None:
+        sent = await self._sent("claude-sonnet-5-5")
+        assert sent["output_config"] == {"effort": "medium"}
+        assert sent["extra_body"] == {"fallbacks": "default"}
+
+    async def test_sonnet_4_6_gets_effort_but_not_the_fallback(self) -> None:
+        sent = await self._sent("claude-sonnet-4-6")
+        assert sent["output_config"] == {"effort": "medium"}
+        assert "extra_body" not in sent
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 class TestResponse:
     async def test_text_and_usage(self) -> None:
         provider = _provider()

@@ -36,7 +36,7 @@ Antes de emitir qualquer parecer de segurança ou revisão de código:
 | **3. Injeção de Prompt & Dados** | Hardening de parsing JSON de respostas LLM, validação estrita de tool call arguments, sanitização de entradas de skills externas (`search_deep`, `document_processor`), prevenção de injeção de instruções via conteúdo de documentos processados. |
 | **4. Contenção de Recursos no Pi 5** | Limites de memória (`mem_limit`), CPU (`nano_cpus`), timeout de execução, prevenção de loops infinitos de agentes, proteção contra exaustão de disco em `/outputs` e proteção térmica. |
 | **5. Isolamento de Banco e Memória** | Garantia de que sessões não colidam no PostgreSQL, coleções no Qdrant sejam isoladas por contexto, e que `manifest.json` de uma sessão não seja acessível por outra sessão. |
-| **6. Rede e Comunicação** | Containers de agentes na rede isolada `geminiclaw-net`. Sandboxes efêmeros com rede completamente desabilitada. Portas expostas apenas em `127.0.0.1`. Prevenção de comunicação não autorizada entre containers. |
+| **6. Rede e Comunicação** | Agentes no processo do orquestrador (ferramentas do host com escrita confinada e leitura web sem rede interna). Sandboxes efêmeros com rede desabilitada durante a execução do script. Portas expostas apenas em `127.0.0.1`. Prevenção de comunicação não autorizada entre containers. |
 | **7. Permissões de Filesystem** | Validação de que diretórios montados como volume (`/outputs`) têm permissões adequadas. Prevenção de escrita em caminhos arbitrários do host. Verificação de `chmod`/`chown` seguros no setup de containers. |
 
 ---

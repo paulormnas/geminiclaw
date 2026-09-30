@@ -36,8 +36,8 @@ Nunca proponha uma solução que contradiga os roadmaps aprovados ou ADRs vigent
 O Arquiteto de Soluções deve avaliar e documentar cada mudança nos seguintes eixos:
 
 - **Orquestrador & Loop Autônomo:** Planejamento de subtarefas, DAG de execução, dispatch, retries, injeção de contexto, manifest de workspace e ciclo ReAct.
-- **Agentes & Prompts:** System instructions, tools registradas, schemas de tool call, modelos atribuídos por papel e contratos IPC entre orquestrador e agentes containerizados.
-- **Sandboxes & Containers Docker:** Volumes montados, isolamento de execução, limites de memória/CPU adequados ao Raspberry Pi 5, rede `geminiclaw-net`, usuário `appuser` non-root.
+- **Agentes & Prompts:** System instructions, tools registradas, schemas de tool call, modelos atribuídos por papel e contexto por tarefa (`AgentContext`) e limites do `AgentRuntime`.
+- **Sandboxes & Containers Docker:** Volumes montados, isolamento de execução, limites de memória/CPU adequados ao Raspberry Pi 5, usuário non-root (só o sandbox de código roda em container).
 - **Persistência de Estado:** PostgreSQL (sessões, eventos, métricas, cache LLM), Qdrant (índices vetoriais, embeddings), SQLite (cache/runtime local), `manifest.json` por sessão.
 - **Segurança & Hardening:** Isolamento de sandbox (rede desabilitada nos efêmeros), controle de permissões em `/outputs`, contenção de privilégios, prevenção de escape.
 - **Testes & Telemetria:** Estratégia de testes unitários/integração, observabilidade, logs estruturados em JSON, monitoramento de temperatura no Pi 5.

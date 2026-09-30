@@ -114,7 +114,7 @@ uv run geminiclaw "Sua tarefa aqui"
 # Executar em modo interativo (REPL)
 uv run geminiclaw
 
-# Construir as imagens Docker dos agentes (ARM64 / Raspberry Pi 5)
+# Construir a imagem do sandbox de código (ARM64 / Raspberry Pi 5)
 bash scripts/build_images.sh
 
 # Rodar todos os testes
@@ -164,7 +164,7 @@ geminiclaw/
 ├── .env / .env.example        # Credenciais (nunca versionar .env)
 ├── src/                       # Orquestrador Python
 ├── agents/                    # Agentes ADK
-├── containers/                # Dockerfiles
+├── containers/                # Dockerfile do sandbox de código e do PostgreSQL (AGE)
 ├── tests/                     # Testes pytest
 ├── roadmaps/                  # Roadmaps de versões (V10–V14+)
 ├── docs/decisions/            # ADRs (Architectural Decision Records)

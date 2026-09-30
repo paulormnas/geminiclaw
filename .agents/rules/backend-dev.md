@@ -147,61 +147,55 @@ Alinhe qualquer solução técnica ou correção de bug com estas fontes antes d
 
 ## Ciclo de Execução e Orquestração dos Agentes
 
-No GeminiClaw, a execução de agentes não utiliza servidores web externos (`adk web`). O ciclo de vida e execução segue o modelo distribuído via containers e IPC:
+No GeminiClaw, a execução de agentes não utiliza servidores web externos (`adk web`). Os agentes rodam no processo do orquestrador (ADR 014); o único container de execução é o sandbox de código:
 
 ```
 [ Usuário / CLI ]
        │
        ▼
-[ Orchestrator & AutonomousLoop (Host) ]
+[ Orchestrator & AutonomousLoop (processo local) ]
        │
        ├──→ Triage: Simples (Base) vs Complexo (Planner ➔ Validator ➔ Loop de Subtarefas)
-       ├──→ ContainerRunner: Spawna container Docker específico do agente
-       └──→ IPCChannel: Comunicação bidirecional via Unix Domain Socket (/tmp/geminiclaw-ipc/)
+       └──→ AgentRuntime (+ ResourceGuard): executa o agente com timeout e isolamento de falhas
                 │
                 ▼
-       [ Agente em Container Docker ]
-          ├── agents/runner.py: run_ipc_loop conecta ao socket do host
-          ├── agents/<tipo>/agent.py: Executa lógica do agente e tool calls
-          ├── Skills Framework: python_interpreter (sandbox), memory, search
-          └── Saída de Artefatos: /outputs/<session_id>/<task>/
+       [ Agente em processo ]
+          ├── agents/<tipo>/agent.py: instrução, tools e callbacks do papel
+          ├── AgentContext (contextvars): sessão, papel, diretório de saída, modelo
+          ├── Skills Framework: code (sandbox), memory, search
+          └── Saída de Artefatos: outputs/<session_id>/artifacts/
 ```
 
-### Regras de Implementação para Agentes e Runners:
-1. **Entrypoint Padrão:** Cada agente expõe `root_agent` e implementa `if __name__ == "__main__": asyncio.run(run_ipc_loop(root_agent))`.
-2. **Protocolo IPC:** Mensagens serializadas em JSON com prefixo de tamanho binário de 4 bytes (`HEADER_SIZE = 4`, `struct.pack('>I', len(data))`).
-3. **Registro de Imagens:** Todo novo agente deve ser registrado no `AGENT_REGISTRY` em `src/orchestrator.py` mapeando `agent_id` para sua respectiva imagem Docker (`geminiclaw-<tipo>`).
-4. **Isolamento e Persistência:** Agentes nunca escrevem diretamente no banco de dados do host se estiverem em container isolado; métricas e telemetria são transportadas via payload IPC (`_telemetry`) e persistidas pelo orquestrador no `SessionManager` e `TelemetryCollector`.
+### Regras de Implementação para Agentes:
+1. **Definição do papel:** cada agente expõe `root_agent` em `agents/<tipo>/agent.py`; o `AgentRuntime` o resolve por `src/agent_runtime/definitions.py`. Não há ponto de entrada por processo nem loop de mensagens.
+2. **Estado por tarefa:** use `get_agent_context()` (`src/agent_runtime/context.py`); nunca `os.environ`, que é global ao processo e inseguro com tarefas concorrentes.
+3. **Novo papel:** registre-o em `src/agent_runtime/definitions.py` e em `DEFAULT_ROLE_CONFIGS` (`src/model_config.py`); o provedor e o modelo vêm de `{PAPEL}_PROVIDER` e `{PAPEL}_MODEL`.
+4. **Ferramentas no host:** nenhuma ferramenta aceita código, comando de shell ou SQL vindo do LLM; código gerado só executa no sandbox. Escrita e leitura de arquivos ficam confinadas ao diretório da sessão.
+5. **Falhas:** o runtime converte exceções e timeouts em `AgentResult`; ferramentas que bloqueiam (docker-py, PDF) devem rodar em `asyncio.to_thread`.
 
 ---
 
-## Docker
+## Docker (sandbox de código)
 
-Regras obrigatórias para execução de containers no GeminiClaw:
+O único container de execução é o sandbox de `src/skills/code/sandbox.py`. Regras obrigatórias:
 
 ```python
 client.containers.run(
-    image="geminiclaw-base:latest",  # ou geminiclaw-planner, geminiclaw-researcher, etc.
-    mem_limit="512m",                # limite estrito para o Raspberry Pi 5
-    nano_cpus=1_000_000_000,         # 1 núcleo de CPU ARM
-    network="geminiclaw-net",
-    volumes={
-        str(ipc_dir): {"bind": "/tmp/geminiclaw-ipc", "mode": "rw"},
-        str(output_dir): {"bind": "/outputs", "mode": "rw"},
-        str(logs_dir): {"bind": "/logs", "mode": "rw"},
-    },
+    image="geminiclaw-base:latest",
+    mem_limit="256m",                # limite estrito para o Raspberry Pi 5
+    cpu_period=100_000,
+    cpu_quota=50_000,                # meia CPU ARM
+    network_disabled=True,           # habilitada apenas na instalação de pacotes
+    volumes={str(output_dir): {"bind": "/outputs", "mode": "rw"}},
+    labels={"project": "geminiclaw", "geminiclaw.role": "sandbox"},
     detach=True,
-    remove=True,
-    user="appuser",
 )
 ```
 
-- Imagem base: `python:3.11-slim-bookworm`.
-- Usuário: estritamente non-root (`appuser`).
-- Rede: interna isolada (`geminiclaw-net`).
-- Portas: expostas apenas em `127.0.0.1` (nunca `0.0.0.0`).
-- Sandboxes efêmeros de execução de código: `network_disabled=True`, volumes de código somente-leitura ou efêmeros.
-- Build de imagens: `bash scripts/build_images.sh` ou `docker build -t geminiclaw-<tipo> -f containers/Dockerfile.<tipo> .`.
+- Imagem: `containers/Dockerfile` (`python:3.11-slim-bookworm`); será enxugada e endurecida (ADR 018).
+- Usuário non-root e rede separada da execução do script: metas do ADR 018 (hoje pendentes).
+- Portas dos serviços: `127.0.0.1` em produção (o `docker-compose.yml` tem um TODO para o Qdrant).
+- Build da imagem: `bash scripts/build_images.sh`.
 
 ---
 

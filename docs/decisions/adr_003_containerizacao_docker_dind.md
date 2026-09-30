@@ -1,6 +1,6 @@
 # ADR 003 — Containerização Docker com Sandbox DinD Resiliente
 
-**Status:** Aceito — em revisão; será substituído (exceto o sandbox de código) por [ADR 014](adr_014_agentes_em_processo_sandbox_codigo.md) quando este for aceito
+**Status:** Parcialmente substituído pelo [ADR 014](adr_014_agentes_em_processo_sandbox_codigo.md) — §1 (container por agente) e §3 deprecados e removidos do código em 2026-09-29; §2 (sandbox de código) segue em vigor
 **Data:** 2026-09-22
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** `roadmaps/roadmap.md` (Etapa 5), `roadmaps/roadmap_V10_stability.md` (V10.1)

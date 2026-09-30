@@ -1,9 +1,9 @@
 # ADR 014 — Agentes em Processo no Host; Containers Apenas como Sandbox de Código
 
-**Status:** Proposto
+**Status:** Aceito (implementado em 2026-09-29: runtime em processo, remoção do modo container e do IPC)
 **Data:** 2026-09-28
 **Autores:** Arquiteto de Soluções (GeminiClaw)
-**Substitui:** ADR 003 §1 e §3 e ADR 004 (quando aceito) — o sandbox de código do ADR 003 §2 permanece
+**Substitui:** ADR 003 §1 e §3 e ADR 004 — o sandbox de código do ADR 003 §2 permanece
 **ADRs relacionados:** ADR 002 (MAS), ADR 010 (propósito), ADR 012 (Curator)
 
 ---

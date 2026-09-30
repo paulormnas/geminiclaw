@@ -12,8 +12,8 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 |---|---|---|---|
 | [001](adr_001_proposito_harness_pesquisa_cientifica.md) | Propósito: Harness de Execução de Pesquisa Científica | ✅ Aceito (em revisão → 010) | 2026-09-22 |
 | [002](adr_002_arquitetura_multi_agent_system.md) | Arquitetura Multi-Agent System com DAG de Execução | ✅ Aceito | 2026-09-22 |
-| [003](adr_003_containerizacao_docker_dind.md) | Containerização Docker com Sandbox DinD Resiliente | ✅ Aceito (em revisão → 014) | 2026-09-22 |
-| [004](adr_004_protocolo_ipc_unix_sockets.md) | Protocolo IPC via Unix Domain Sockets com Length-Prefix | ✅ Aceito (em revisão → 014) | 2026-09-22 |
+| [003](adr_003_containerizacao_docker_dind.md) | Containerização Docker com Sandbox DinD Resiliente | ⚠️ Parcialmente substituído pelo 014 (§1 e §3); §2 (sandbox de código) em vigor | 2026-09-22 |
+| [004](adr_004_protocolo_ipc_unix_sockets.md) | Protocolo IPC via Unix Domain Sockets com Length-Prefix | ⚠️ Deprecado (substituído pelo 014) | 2026-09-22 |
 | [005](adr_005_estrategia_persistencia.md) | Estratégia de Persistência: PostgreSQL + Qdrant + SQLite | ✅ Aceito | 2026-09-22 |
 | [006](adr_006_abstracao_provedores_llm.md) | Abstração de Provedores LLM: Ollama + Google Gemini | ✅ Aceito (em revisão → 011) | 2026-09-22 |
 | [007](adr_007_reestruturacao_papeis_agentes.md) | Reestruturação de Papéis de Agentes: 3 Papéis Claros (V14) | 🔵 Proposto | 2026-09-22 |
@@ -23,7 +23,7 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 | [011](adr_011_provedores_agnosticos.md) | Provedores Agnósticos: Registro de Provedores LLM e de Embeddings (substitui 006) | 🔵 Proposto | 2026-09-28 |
 | [012](adr_012_agente_curator_ciclo_exploracao.md) | Agente Curator e Ciclo de Exploração Contínua | 🔵 Proposto | 2026-09-28 |
 | [013](adr_013_federacao_rede_publica.md) | Federação: Rede Pública de Conhecimento entre Nós (Princípios) | 🔵 Proposto | 2026-09-28 |
-| [014](adr_014_agentes_em_processo_sandbox_codigo.md) | Agentes em Processo no Host; Containers Apenas como Sandbox de Código | 🔵 Proposto | 2026-09-28 |
+| [014](adr_014_agentes_em_processo_sandbox_codigo.md) | Agentes em Processo no Host; Containers Apenas como Sandbox de Código | ✅ Aceito | 2026-09-28 |
 | [015](adr_015_modelo_dados_grafo_conhecimento.md) | Modelo de Dados do Grafo de Conhecimento e Ligação com Embeddings | 🔵 Proposto | 2026-09-28 |
 | [016](adr_016_imagem_postgres_apache_age_colacao.md) | Imagem do PostgreSQL para Apache AGE (musl → glibc) e Colação de Índices | 🔵 Proposto | 2026-09-29 |
 | [017](adr_017_catalogo_modelos_roteador.md) | Catálogo de Modelos e Roteador de Provedores por Papel | 🔵 Proposto | 2026-09-29 |

@@ -2,29 +2,17 @@
 set -e
 
 echo "==============================================="
-echo "  Construindo imagens Docker GeminiClaw (ARM64) "
+echo "  Construindo a imagem do sandbox de código     "
 echo "==============================================="
 
-# Diretório raiz do projeto (um nível acima do script)
+# Os agentes rodam como processo local (ADR 014); a única imagem de execução é a do sandbox
+# de código, usada pela skill de código. A imagem ainda é grande e será enxugada (ADR 018).
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+IMAGE_SANDBOX="geminiclaw-base:latest"
 
-# Define as tags
-IMAGE_FULL="geminiclaw-base:latest"
-IMAGE_SLIM="geminiclaw-base-slim:latest"
-
-echo ""
-echo "[1/2] Construindo imagem SLIM (local-only, sem extras)..."
 docker build \
   --progress=plain \
-  -t "$IMAGE_SLIM" \
-  -f "$PROJECT_ROOT/containers/Dockerfile.slim" \
-  "$PROJECT_ROOT"
-
-echo ""
-echo "[2/2] Construindo imagem FULL (com Google e Deep Search extras)..."
-docker build \
-  --progress=plain \
-  -t "$IMAGE_FULL" \
+  -t "$IMAGE_SANDBOX" \
   -f "$PROJECT_ROOT/containers/Dockerfile" \
   "$PROJECT_ROOT"
 

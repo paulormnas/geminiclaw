@@ -24,7 +24,7 @@ def test_model_router_default_roles():
     """Cenário 1: Verifica o mapeamento padrão para researcher, validator e developer."""
     researcher_cfg = get_role_model_config("researcher")
     assert researcher_cfg.provider == "google"
-    assert researcher_cfg.model == "gemini-2.0-flash"
+    assert researcher_cfg.model == "gemini-3.8-flash"
 
     validator_cfg = get_role_model_config("validator")
     assert validator_cfg.provider == "ollama"
@@ -32,7 +32,7 @@ def test_model_router_default_roles():
 
     developer_cfg = get_role_model_config("developer")
     assert developer_cfg.provider == "google"
-    assert developer_cfg.model == "gemini-2.0-flash"
+    assert developer_cfg.model == "gemini-3.8-flash"
 
     # Provedor 'ollama' (validator) não depende de pacote opcional.
     with patch("src.config.OLLAMA_BASE_URL", "http://test:11434"):
@@ -47,11 +47,11 @@ def test_model_router_default_roles():
     with patch("src.config.GEMINI_API_KEY", "dummy_key"):
         researcher_provider = ModelRouter.get_provider("researcher")
         assert isinstance(researcher_provider, GoogleProvider)
-        assert researcher_provider.model_name == "gemini-2.0-flash"
+        assert researcher_provider.model_name == "gemini-3.8-flash"
 
         developer_provider = ModelRouter.get_provider("developer")
         assert isinstance(developer_provider, GoogleProvider)
-        assert developer_provider.model_name == "gemini-2.0-flash"
+        assert developer_provider.model_name == "gemini-3.8-flash"
 
 
 @pytest.mark.unit

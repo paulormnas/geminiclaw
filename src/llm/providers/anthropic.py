@@ -37,6 +37,12 @@ _REQUEST_TIMEOUT_SECONDS = 300.0
 _VALID_EFFORTS = ("low", "medium", "high", "xhigh", "max")
 _FALLBACK_BETA_HEADER = "server-side-fallback-2026-07-01"
 
+# Recursos que dependem do modelo. Modelos fora destas listas (ex.: Haiku 4.5) rejeitam os parâmetros
+# com HTTP 400, então o provedor simplesmente não os envia.
+_EFFORT_MODEL_PREFIXES = ("claude-fable", "claude-mythos", "claude-opus-5", "claude-opus-4-8", "claude-opus-4-7",
+                          "claude-opus-4-6", "claude-sonnet-5", "claude-sonnet-4-6")
+_FALLBACK_MODEL_PREFIXES = ("claude-fable", "claude-opus-5", "claude-sonnet-5-5")
+
 
 class ProviderRefusalError(RuntimeError):
     """O provedor recusou o pedido por política de segurança (`stop_reason == "refusal"`)."""
@@ -210,9 +216,9 @@ class AnthropicProvider(LLMProvider):
             kwargs["system"] = system_text
         if tools:
             kwargs["tools"] = self._convert_tools(tools)
-        if self._effort:
+        if self._effort and self._model.startswith(_EFFORT_MODEL_PREFIXES):
             kwargs["output_config"] = {"effort": self._effort}
-        if self._refusal_fallback:
+        if self._refusal_fallback and self._model.startswith(_FALLBACK_MODEL_PREFIXES):
             kwargs["extra_headers"] = {"anthropic-beta": _FALLBACK_BETA_HEADER}
             kwargs["extra_body"] = {"fallbacks": "default"}
         return kwargs

@@ -37,6 +37,27 @@ def _create_openai_compatible(settings: ProviderSettings):
     )
 
 
+def _create_anthropic(settings: ProviderSettings):
+    try:
+        from src.llm.providers.anthropic import AnthropicProvider
+    except ImportError as exc:
+        raise ValueError(
+            "Provedor 'anthropic' requer o pacote 'anthropic'. "
+            "Instale com: uv sync --extra anthropic"
+        ) from exc
+
+    from src import config
+
+    return AnthropicProvider(
+        api_key=settings.api_key,
+        model=settings.model,
+        base_url=settings.base_url,
+        effort=config.ANTHROPIC_EFFORT,
+        refusal_fallback=config.ANTHROPIC_REFUSAL_FALLBACK,
+    )
+
+
 register_provider("ollama", _create_ollama, aliases=("local",))
 register_provider("google", _create_google)
 register_provider("openai_compatible", _create_openai_compatible)
+register_provider("anthropic", _create_anthropic)

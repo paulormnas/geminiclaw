@@ -44,6 +44,9 @@ reports = [
     "markdown>=3.11",
     "python-docx>=1.2.0",
 ]
+anthropic = [
+    "anthropic>=1.9.0",
+]
 
 [project.scripts]
 geminiclaw = "src.cli:main"

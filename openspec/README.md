@@ -63,6 +63,7 @@ O sistema SHALL <comportamento obrigatório>.
 | Versão | Mudança | Capacidade | ADRs | Depende de |
 |---|---|---|---|---|
 | V16 | [v16-provider-registry](changes/v16-provider-registry/proposal.md) | `llm-providers` | 011 | — |
+| V16 | [v16-anthropic-provider](changes/v16-anthropic-provider/proposal.md) | `llm-providers` | 011 | v16-provider-registry |
 | V16 | [v16-local-embeddings](changes/v16-local-embeddings/proposal.md) | `embeddings` | 011 | — |
 | V16 | [v16-in-process-agents](changes/v16-in-process-agents/proposal.md) | `agent-runtime` | 014 | v16-provider-registry |
 | V16 | [v16-research-assistant-prompts](changes/v16-research-assistant-prompts/proposal.md) | `agent-prompts` | 010, 011 | v16-in-process-agents |

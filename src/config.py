@@ -92,6 +92,16 @@ GEMINI_API_KEY = get_env(
 OPENAI_BASE_URL = get_env("OPENAI_BASE_URL")
 OPENAI_API_KEY = get_env("OPENAI_API_KEY")
 
+# Configurações do provedor anthropic (ADR 011). A chave é obrigatória apenas quando algum
+# papel usa o provedor (verificado na criação do provedor, não na importação).
+ANTHROPIC_API_KEY = get_env("ANTHROPIC_API_KEY")
+ANTHROPIC_BASE_URL = get_env("ANTHROPIC_BASE_URL")
+# Esforço do raciocínio adaptativo: low | medium | high | xhigh | max. Vazio = não enviar
+# (modelos sem suporte a effort). 'medium' é o ponto de partida para agentes com ferramentas.
+ANTHROPIC_EFFORT = get_env("ANTHROPIC_EFFORT", default="medium").lower()
+# Repete no servidor, em outro modelo, um pedido recusado pelos classificadores de segurança.
+ANTHROPIC_REFUSAL_FALLBACK = get_env_bool("ANTHROPIC_REFUSAL_FALLBACK", default=True)
+
 # Rate limiting — ler nova variável com fallback para a antiga (retrocompatibilidade)
 LLM_REQUESTS_PER_MINUTE = int(
     get_env("LLM_REQUESTS_PER_MINUTE")

@@ -77,6 +77,14 @@ O sistema SHALL <comportamento obrigatório>.
 | V18 | [v18-usage-limits](changes/v18-usage-limits/proposal.md) | `usage-limits` | 010, 012 | V16 |
 | V18 | [v18-research-continuity](changes/v18-research-continuity/proposal.md) | `session-continuity` | 010 | v18-usage-limits, v17-structural-fact-ingestion |
 | V18 | [v18-hypothesis-loop](changes/v18-hypothesis-loop/proposal.md) | `hypothesis-loop` | 010, 012 | V17, v18-usage-limits, v18-research-continuity |
+| V18.5 | [v18.5-model-catalog-locality](changes/v18.5-model-catalog-locality/proposal.md) | `llm-providers` | 019, 017 | V18, catálogo e roteador do ADR 017 |
+| V18.5 | [v18.5-egress-gate](changes/v18.5-egress-gate/proposal.md) | `data-egress` | 019, 014 | v18.5-model-catalog-locality |
+| V18.5 | [v18.5-research-data-ingestion](changes/v18.5-research-data-ingestion/proposal.md) | `research-data` | 019 | v18.5-egress-gate (entregar junto) |
+| V18.5 | [v18.5-sandbox-phases](changes/v18.5-sandbox-phases/proposal.md) | `code-sandbox` | 019, 014, 018 | V18 |
+| V18.5 | [v18.5-execution-provenance](changes/v18.5-execution-provenance/proposal.md) | `execution-provenance` | 019, 015 | v18.5-sandbox-phases, v17-research-project |
+| V18.5 | [v18.5-numeric-references](changes/v18.5-numeric-references/proposal.md) | `numeric-provenance` | 019 | v18.5-execution-provenance |
+| V18.5 | [v18.5-claim-verification](changes/v18.5-claim-verification/proposal.md) | `claim-verification` | 019, 015 | v18.5-numeric-references, v18.5-model-catalog-locality |
+| V18.5 | [v18.5-operation-metrics](changes/v18.5-operation-metrics/proposal.md) | `operation-metrics` | 019 | v18.5-egress-gate, v18.5-execution-provenance, v18.5-claim-verification |
 
 **V19** (controle de equipamentos) usa a spec já existente
 [`roadmaps/specs/G7_equipment_control_mhs.md`](../roadmaps/specs/G7_equipment_control_mhs.md).

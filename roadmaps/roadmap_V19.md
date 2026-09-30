@@ -11,7 +11,8 @@ MHS-compatível, conforme a spec já existente
 
 - V18 concluída (ciclo de hipóteses) — decisão do pesquisador: equipamentos entram depois do
   ciclo de hipóteses e antes da federação.
-- ADR 019 implementado (localidade dos dados e proveniência dos resultados) — decisão do
+- V18.5 concluída (ADR 019 — localidade dos dados e proveniência dos resultados;
+  [`roadmap_V18.5.md`](roadmap_V18.5.md)) — decisão do
   pesquisador: entra depois da V18 e antes da V19. A revisão da G7 incorpora o §10 do ADR 019
   (somente leitura por padrão e confirmação humana para escrita em qualquer `SessionMode`).
 

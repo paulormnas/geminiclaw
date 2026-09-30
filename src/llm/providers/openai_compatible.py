@@ -46,14 +46,14 @@ class OpenAICompatibleProvider(LLMProvider):
             return list(messages)
         return [{"role": "system", "content": system}] + list(messages)
 
-    async def generate(
+    def _build_payload(
         self,
         messages: list[dict],
-        tools: list[dict] | None = None,
-        system: str | None = None,
-        temperature: float = 0.7,
-        max_tokens: int = 4096,
-    ) -> LLMResponse:
+        tools: list[dict] | None,
+        system: str | None,
+        temperature: float,
+        max_tokens: int,
+    ) -> dict:
         payload = {
             "model": self._model,
             "messages": self._build_messages(messages, system),
@@ -62,6 +62,17 @@ class OpenAICompatibleProvider(LLMProvider):
         }
         if tools:
             payload["tools"] = tools
+        return payload
+
+    async def generate(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        system: str | None = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+    ) -> LLMResponse:
+        payload = self._build_payload(messages, tools, system, temperature, max_tokens)
 
         data, retry_count = await self._post_with_retry("/chat/completions", payload)
 
@@ -85,6 +96,10 @@ class OpenAICompatibleProvider(LLMProvider):
                 "prompt_tokens": usage.get("prompt_tokens", 0),
                 "completion_tokens": usage.get("completion_tokens", 0),
                 "total_tokens": usage.get("total_tokens", 0),
+                # Parte do prompt lida do cache do servidor (cobrada a preço menor) e tokens de
+                # raciocínio (já contidos em completion_tokens) — insumo de pricing e relatórios.
+                "cached_tokens": (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0) or 0,
+                "reasoning_tokens": (usage.get("completion_tokens_details") or {}).get("reasoning_tokens", 0) or 0,
                 # Servidores compatíveis não expõem TTFT de forma padronizada.
                 "ttft_ms": None,
                 # Retentativas de conexão/429 desta chamada — insumo para v18-usage-limits.

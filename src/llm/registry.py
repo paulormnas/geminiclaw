@@ -41,10 +41,12 @@ ProviderFactory = Callable[[ProviderSettings], LLMProvider]
 # daquele provedor). Ver `openspec/changes/v16-provider-registry/design.md`.
 _BASE_URL_ENV_OVERRIDES: Dict[str, str] = {
     "openai_compatible": "OPENAI_BASE_URL",
+    "openai": "OPENAI_BASE_URL",
 }
 _API_KEY_ENV_OVERRIDES: Dict[str, str] = {
     "google": "GEMINI_API_KEY",
     "openai_compatible": "OPENAI_API_KEY",
+    "openai": "OPENAI_API_KEY",
 }
 
 _registry: Dict[str, ProviderFactory] = {}

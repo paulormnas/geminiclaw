@@ -309,6 +309,7 @@ class AnthropicProvider(LLMProvider):
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
                 "total_tokens": prompt_tokens + completion_tokens,
+                "cached_tokens": getattr(usage, "cache_read_input_tokens", 0) or 0,
                 "ttft_ms": None,
                 "retry_count": retry_count,
             },

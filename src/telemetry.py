@@ -822,10 +822,43 @@ class TelemetryCollector:
                     """,
                     (execution_id,),
                 ).fetchall()
-            return {"by_provider_model": [dict(r) for r in rows]}
+            return {"by_provider_model": self._merge_buffered_tokens(execution_id, [dict(r) for r in rows])}
         except Exception as e:
             logger.error("Erro ao consultar token summary", extra={"error": str(e)})
             return {}
+
+    def _merge_buffered_tokens(self, execution_id: str, db_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Soma ao resumo do banco as chamadas ainda no buffer (não gravadas).
+
+        O buffer só é descarregado a cada ``_BUFFER_SIZE`` registros; sem esta soma, os limites de
+        tokens e custo da sessão e o ``session_metadata.json`` enxergariam um consumo defasado.
+        """
+        merged = {(r["llm_provider"], r["llm_model"]): dict(r) for r in db_rows}
+        for row in list(self._buffer.token_usage):
+            if row.execution_id != execution_id:
+                continue
+            entry = merged.setdefault(
+                (row.llm_provider, row.llm_model),
+                {
+                    "llm_provider": row.llm_provider,
+                    "llm_model": row.llm_model,
+                    "total_prompt_tokens": 0,
+                    "total_completion_tokens": 0,
+                    "total_tokens": 0,
+                    "total_cost_usd": None,
+                    "avg_latency_ms": 0.0,
+                    "calls": 0,
+                },
+            )
+            calls = entry["calls"]
+            entry["avg_latency_ms"] = ((entry["avg_latency_ms"] or 0) * calls + row.latency_ms) / (calls + 1)
+            entry["calls"] = calls + 1
+            entry["total_prompt_tokens"] = (entry["total_prompt_tokens"] or 0) + row.prompt_tokens
+            entry["total_completion_tokens"] = (entry["total_completion_tokens"] or 0) + row.completion_tokens
+            entry["total_tokens"] = (entry["total_tokens"] or 0) + row.total_tokens
+            if row.estimated_cost_usd is not None:
+                entry["total_cost_usd"] = (entry["total_cost_usd"] or 0) + row.estimated_cost_usd
+        return sorted(merged.values(), key=lambda r: r["total_tokens"] or 0, reverse=True)
 
     def get_tool_summary(self, execution_id: str) -> dict[str, Any]:
         """Retorna um resumo do uso de ferramentas para uma execução.

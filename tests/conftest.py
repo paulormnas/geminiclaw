@@ -182,3 +182,29 @@ def global_container_cleanup_check():
             pytest.fail(f"Vazamento de containers detectado apos os testes: {container_ids}")
     except Exception as e:
         print(f"Aviso na verificacao de containers: {e}")
+
+
+# Hosts dos provedores LLM pagos: nenhum teste pode alcançá-los (créditos só para o benchmark).
+_PAID_LLM_HOSTS = ("api.openai.com", "api.anthropic.com", "googleapis.com")
+
+
+@pytest.fixture(autouse=True)
+def block_paid_llm_network(request, monkeypatch):
+    """Falha qualquer teste que tente abrir conexão com a API de um provedor LLM pago.
+
+    A resolução de DNS é o ponto comum de todos os clientes (httpx, SDKs, requests). Os dublês
+    (``respx``, SDK simulado) não resolvem DNS, então continuam funcionando. Testes ``e2e``
+    marcados explicitamente podem usar a rede.
+    """
+    if request.node.get_closest_marker("e2e"):
+        return
+    import socket
+
+    real_getaddrinfo = socket.getaddrinfo
+
+    def guarded(host, *args, **kwargs):
+        if isinstance(host, str) and host.endswith(_PAID_LLM_HOSTS):
+            raise AssertionError(f"Teste tentou acessar a API paga '{host}'; simule o provedor (gasta créditos).")
+        return real_getaddrinfo(host, *args, **kwargs)
+
+    monkeypatch.setattr(socket, "getaddrinfo", guarded)

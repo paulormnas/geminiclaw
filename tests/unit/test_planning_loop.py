@@ -1,95 +1,87 @@
-import pytest
-import asyncio
+"""Ciclo de planejamento: o Researcher gera o plano e o ValidatorAgent (corrotina em processo) o avalia.
+
+O Validator é substituído por um dublê em todos os testes: o real chamaria o provedor LLM e gastaria
+créditos. Só o Researcher passa por ``_execute_agent`` (também simulado).
+"""
+
 from unittest.mock import AsyncMock, MagicMock, patch
-from src.orchestrator import Orchestrator, AgentTask, AgentResult
+
+import pytest
+
+from src.agents.validator_agent import ValidationResult
+from src.orchestrator import AgentResult, Orchestrator
+
+
+def approved() -> ValidationResult:
+    return ValidationResult(is_valid=True, status="approved", reason="ok")
+
+
+def revision(reason: str = "vazio") -> ValidationResult:
+    return ValidationResult(is_valid=False, status="revision_needed", reason=reason, issues=[reason])
+
+
+def planner_result(text: str) -> AgentResult:
+    return AgentResult(agent_id="researcher", session_id="s", status="success", response={"text": text})
+
 
 @pytest.fixture
-def mock_deps():
-    return {
-        "session_manager": MagicMock(),
-        "output_manager": MagicMock(),
-    }
+def orchestrator():
+    orch = Orchestrator(session_manager=MagicMock(), output_manager=MagicMock())
+    orch.validator = MagicMock()
+    orch.validator.validate_plan = AsyncMock()
+    return orch
+
 
 @pytest.mark.asyncio
-async def test_planning_loop_success(mock_deps):
-    """Testa o ciclo de planejamento com aprovação imediata."""
-    orchestrator = Orchestrator(**mock_deps)
-    
-    # Mock do _execute_agent para o Planner
-    planner_response = {
-        "status": "success",
-        "response": {"text": '[{"agent_id": "researcher", "task_name": "task1", "prompt": "search X"}]'}
-    }
-    
-    # Mock do _execute_agent para o Validator
-    validator_response = {
-        "status": "success",
-        "response": {"text": '{"status": "approved"}'}
-    }
-    
-    with patch.object(orchestrator, "_execute_agent") as mock_exec:
-        mock_exec.side_effect = [
-            AgentResult(agent_id="planner", session_id="s1", **planner_response),
-            AgentResult(agent_id="validator", session_id="s2", **validator_response)
-        ]
-        
+async def test_planning_loop_success(orchestrator):
+    """Plano aprovado de imediato."""
+    orchestrator.validator.validate_plan.return_value = approved()
+    plan = '[{"agent_id": "researcher", "task_name": "task1", "prompt": "search X"}]'
+
+    with patch.object(orchestrator, "_execute_agent", AsyncMock(return_value=planner_result(plan))) as mock_exec:
         tasks = await orchestrator._run_planning_loop("De uma volta no quarteirão", "master_s")
-        
-        assert len(tasks) == 1
-        assert tasks[0].agent_id == "researcher"
-        assert mock_exec.call_count == 2
+
+    assert len(tasks) == 1
+    assert tasks[0].agent_id == "researcher"
+    assert mock_exec.call_count == 1
+    assert orchestrator.validator.validate_plan.await_count == 1
+
 
 @pytest.mark.asyncio
-async def test_planning_loop_revision_needed(mock_deps):
-    """Testa o ciclo de planejamento com uma revisão antes da aprovação."""
-    orchestrator = Orchestrator(**mock_deps)
-    
-    with patch.object(orchestrator, "_execute_agent") as mock_exec:
-        mock_exec.side_effect = [
-            # 1. Planner gera plano 1
-            AgentResult(agent_id="planner", session_id="s1", status="success", response={"text": "[]"}),
-            # 2. Validator pede revisão
-            AgentResult(agent_id="validator", session_id="s2", status="success", response={"text": '{"status": "revision_needed", "reason": "vazio"}'}),
-            # 3. Planner gera plano 2
-            AgentResult(agent_id="planner", session_id="s3", status="success", response={"text": '[{"agent_id": "base", "task_name": "t2"}]'}),
-            # 4. Validator aprova
-            AgentResult(agent_id="validator", session_id="s4", status="success", response={"text": '{"status": "approved"}'})
-        ]
-        
+async def test_planning_loop_revision_needed(orchestrator):
+    """Uma revisão pedida pelo Validator antes da aprovação."""
+    orchestrator.validator.validate_plan.side_effect = [revision(), approved()]
+    plans = [planner_result("[]"), planner_result('[{"agent_id": "base", "task_name": "t2"}]')]
+
+    with patch.object(orchestrator, "_execute_agent", AsyncMock(side_effect=plans)) as mock_exec:
         tasks = await orchestrator._run_planning_loop("Prompt", "master_s")
-        
-        assert len(tasks) == 1
-        assert tasks[0].agent_id == "base"
-        assert mock_exec.call_count == 4
+
+    assert len(tasks) == 1
+    assert tasks[0].agent_id == "base"
+    assert mock_exec.call_count == 2
+    # O replan recebe o problema apontado pelo Validator.
+    second_prompt = mock_exec.call_args_list[1].args[0].prompt
+    assert "vazio" in second_prompt
+
 
 @pytest.mark.asyncio
-async def test_planning_loop_max_iterations(mock_deps):
-    """Testa se o loop para após o limite de iterações."""
-    orchestrator = Orchestrator(**mock_deps)
-    
+async def test_planning_loop_max_iterations(orchestrator):
+    """O ciclo para ao atingir o limite de iterações."""
+    orchestrator.validator.validate_plan.return_value = revision("ainda ruim")
+
     with patch("src.orchestrator.MAX_PLANNING_ITERATIONS", 3):
-        with patch.object(orchestrator, "_execute_agent") as mock_exec:
-            # Alterna entre plano válido do Planner e pedido de revisão do Validator
-            mock_exec.side_effect = [
-                AgentResult(agent_id="p1", session_id="s", status="success", response={"text": "[]"}),
-                AgentResult(agent_id="v1", session_id="s", status="success", response={"text": '{"status": "revision_needed"}'}),
-                AgentResult(agent_id="p2", session_id="s", status="success", response={"text": "[]"}),
-                AgentResult(agent_id="v2", session_id="s", status="success", response={"text": '{"status": "revision_needed"}'}),
-                AgentResult(agent_id="p3", session_id="s", status="success", response={"text": "[]"}),
-                AgentResult(agent_id="v3", session_id="s", status="success", response={"text": '{"status": "revision_needed"}'}),
-            ]
-            
+        with patch.object(orchestrator, "_execute_agent", AsyncMock(return_value=planner_result("[]"))) as mock_exec:
             tasks = await orchestrator._run_planning_loop("Prompt", "master_s")
-            
-            assert tasks == []
-            # Para cada iteração: 1 planner + 1 validator = 2 chamadas. 
-            # Total 3 iterações = 6 chamadas.
-            assert mock_exec.call_count == 6
+
+    assert tasks == []
+    assert mock_exec.call_count == 3
+    assert orchestrator.validator.validate_plan.await_count == 3
+
+
 @pytest.mark.asyncio
-async def test_planning_loop_with_new_fields(mock_deps):
-    """Testa se os novos campos validation_criteria e preferred_model são parseados corretamente."""
-    orchestrator = Orchestrator(**mock_deps)
-    
+async def test_planning_loop_with_new_fields(orchestrator):
+    """validation_criteria e preferred_model são lidos do plano."""
+    orchestrator.validator.validate_plan.return_value = approved()
     plan_json = """
     [
         {
@@ -97,19 +89,14 @@ async def test_planning_loop_with_new_fields(mock_deps):
             "task_name": "task1",
             "prompt": "search X",
             "validation_criteria": ["Criterio 1", "Criterio 2"],
-            "preferred_model": "gemini-1.5-flash"
+            "preferred_model": "gemini-3.8-flash"
         }
     ]
     """
-    
-    with patch.object(orchestrator, "_execute_agent") as mock_exec:
-        mock_exec.side_effect = [
-            AgentResult(agent_id="planner", session_id="s1", status="success", response={"text": plan_json}),
-            AgentResult(agent_id="validator", session_id="s2", status="success", response={"text": '{"status": "approved"}'})
-        ]
-        
+
+    with patch.object(orchestrator, "_execute_agent", AsyncMock(return_value=planner_result(plan_json))):
         tasks = await orchestrator._run_planning_loop("Prompt", "master_s")
-        
-        assert len(tasks) == 1
-        assert tasks[0].validation_criteria == ["Criterio 1", "Criterio 2"]
-        assert tasks[0].preferred_model == "gemini-1.5-flash"
+
+    assert len(tasks) == 1
+    assert tasks[0].validation_criteria == ["Criterio 1", "Criterio 2"]
+    assert tasks[0].preferred_model == "gemini-3.8-flash"

@@ -47,6 +47,7 @@ async def test_subtask_metrics_lifecycle():
 async def test_complex_path_subtask_id_generation():
     """Valida se subtarefas em um plano complexo recebem IDs únicos."""
     orchestrator = MagicMock(spec=Orchestrator)
+    orchestrator.session_manager = MagicMock()  # atributo de instância: fora do spec da classe
     orchestrator._execute_agent = AsyncMock()
     orchestrator._run_planning_loop = AsyncMock()
     orchestrator.output_manager = MagicMock()

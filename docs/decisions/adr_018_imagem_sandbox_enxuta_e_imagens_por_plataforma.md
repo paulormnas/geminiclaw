@@ -1,14 +1,27 @@
 # ADR 018 — Imagem Enxuta do Sandbox de Código e Seleção de Imagens por Plataforma
 
-**Status:** Proposto — registro de ideias para discussão posterior
+**Status:** Aprovado em 2026-10-01 pelo pesquisador responsável — direção aprovada; implementação pendente, exceto o item 4 e a limpeza da infraestrutura de agentes (verificação abaixo). As questões "Em aberto" de cada item serão decididas na spec
 **Data:** 2026-09-29
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Relacionados:** ADR 014 (agentes em processo; sandbox como único uso de container), ADR 003 §2 (sandbox de código), ADR 016 (imagem do PostgreSQL), ADR 005 (persistência)
 **Specs relacionadas:** `openspec/changes/v16-in-process-agents` (fase 2)
 
-> **Este documento apenas registra ideias e observações para retomada futura.** Não define
-> implementação, não tem OpenSpec associado e não deve ser tratado como decisão fechada. A
-> discussão fica para depois que a segunda onda de implementação do ADR 014 for concluída.
+> **Aprovado como direção em 2026-10-01.** A segunda onda do ADR 014 foi concluída (#80 e #81),
+> então a retomada prevista na seção "Revisão" começou. Os itens 1, 2, 3 e 5 ainda precisam de
+> OpenSpec (`v16-sandbox-slim-image` e `v16-platform-images`); as perguntas "Em aberto" são
+> decididas lá.
+
+### Verificação do que está implementado (2026-10-01)
+
+| Item | Estado |
+|---|---|
+| 1. Imagem mínima do sandbox com pacotes sob demanda | **Pendente.** `containers/Dockerfile` ainda instala os extras `deep_search`, `google` e `documents` e copia `src/` e `agents/`; a imagem `geminiclaw-base` tem 10,8 GB |
+| 2. Internet e usuário sem privilégios | **Pendente.** `src/skills/code/sandbox.py` executa a instalação de pacotes como root; a rede fica ligada sempre que há comandos de setup, e o script roda no mesmo container, ainda com rede (a separação por fases é o escopo de `v18.5-sandbox-phases`) |
+| 3. Montagem do `/outputs` | **Pendente** a conciliação com usuário não-root: o código ainda usa `chmod 777` e `chown` por `exec_run` como root, e `HOST_PROJECT_PATH` segue no sandbox |
+| 4. Qdrant em ARM64 | **Feito** (PR #74): imagem oficial `qdrant/qdrant:v1.19.1` |
+| 5. Identificação de plataforma e seleção de imagens | **Pendente.** Não há script; os Dockerfiles fixam `--platform=linux/arm64`; `src/platform_utils.py` só decide TCP/Unix para IPC, que foi removido |
+| Limpeza da infraestrutura de agentes | **Feito** (#80 e #81): sem Dockerfiles de agente e `slim`, sem o serviço `geminiclaw` e a rede do compose, sem `DOCKER_IMAGE_BASE` |
+| Portas em `127.0.0.1` | **Parcial.** Postgres e Ollama já publicam em `127.0.0.1`; o Qdrant segue em `0.0.0.0` por decisão do pesquisador durante o desenvolvimento, com `TODO(segurança)` no compose |
 
 > **Atualização 2026-09-29 (Qdrant):** o item 4 foi resolvido e implementado no PR #74. A imagem
 > oficial `qdrant/qdrant:v1.19.1` roda no Raspberry Pi 5 com o kernel padrão (páginas de 16K), o
@@ -149,7 +162,6 @@ Observados no código durante o levantamento; não são decisões:
 
 ## Revisão
 
-Retomar este ADR **após a conclusão da segunda onda de implementação do ADR 014** (fase 2 do
-`v16-in-process-agents`), quando será feita a revisão de segurança e de tamanho da imagem. Na
-retomada: transformar em decisão, atualizar o ADR 014 §2 (bind mount) e abrir o OpenSpec
-correspondente.
+A retomada ocorreu em 2026-10-01 (segunda onda do ADR 014 concluída). Próximos passos: descrever
+as duas specs acima, fazer a revisão de segurança do sandbox (superfície de rede, usuário
+não-root, bind mount) e, ao implementar, atualizar o ADR 014 §2 (já anotado em 2026-10-01).

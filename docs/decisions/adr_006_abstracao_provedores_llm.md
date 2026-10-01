@@ -1,6 +1,6 @@
 # ADR 006 — Abstração de Provedores LLM: Ollama + Google Gemini
 
-**Status:** Aceito — em revisão; será substituído por [ADR 011](adr_011_provedores_agnosticos.md) quando este for aceito
+**Status:** Deprecado — substituído pelo [ADR 011](adr_011_provedores_agnosticos.md) em 2026-10-01
 **Data:** 2026-09-22
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** `roadmaps/roadmap_V9_advanced_observability.md` (V9 — Abstração LLM)

@@ -1,9 +1,22 @@
 # ADR 017 — Catálogo de Modelos e Roteador de Provedores por Papel
 
-**Status:** Proposto
+**Status:** Aprovado em 2026-10-01 pelo pesquisador responsável — implementação pendente (sem `catalog.yaml` nem `resolve()` ainda; spec a descrever)
 **Data:** 2026-09-29
 **Relacionados:** ADR 007 (papéis e Model Router), ADR 011 (registro de provedores), limites de uso da V18 (PR #68)
 **Revisa:** o Model Router do ADR 007 (mapeamento fixo papel → provedor/modelo por variável de ambiente)
+
+> **Atualização 2026-10-01** (fatos que mudaram desde a redação; a decisão não muda):
+> - O agente Planner foi absorvido pelo Researcher (V14.3) e o código morto foi removido; o papel
+>   `planner` do §2 passa a ser resolvido como `researcher`, e o `preferred_model` do §7 é dica
+>   do plano gerado pelo Researcher.
+> - Os provedores `anthropic` e `openai` já estão registrados (ADR 011 §2), então o item de
+>   trabalho futuro sobre Anthropic deixou de depender de implementação de provedor: basta
+>   listá-los no catálogo.
+> - **Questão a decidir na spec:** o §2 exige `trust: self_hosted` para o Validator (escolha do
+>   ADR 007), mas hoje o Validator roda em modelos de nuvem (Gemini, Claude). Enquanto não houver
+>   um modelo local servindo o papel, a regra bloquearia a sessão com `LLM_DATA_POLICY` padrão.
+>   A spec deve definir a transição (por exemplo, o requisito vira preferência até existir modelo
+>   `self_hosted` elegível, ou o pesquisador declara a exceção explicitamente).
 
 ## Contexto
 

@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 
 from src.agent_runtime.context import get_agent_context_optional
 from src.llm.base import LLMProvider, ToolCall, LLMResponse
+from src.llm.metering import bound_execution_id, record_llm_call
+from src.llm.pricing import estimate_cost
 from src.llm.factory import get_provider
 from src.llm.context_compression import compress_messages
 from src.llm.context_injection import build_workspace_context_block
@@ -53,7 +55,7 @@ def _task_env() -> Dict[str, str]:
         "TASK_NAME": os.environ.get("TASK_NAME", ""),
         "OUTPUT_BASE_DIR": os.environ.get("OUTPUT_BASE_DIR", ""),
         "AGENT_ID": os.environ.get("AGENT_ID", "agent"),
-        "EXECUTION_ID": os.environ.get("EXECUTION_ID", os.environ.get("SESSION_ID", "")),
+        "EXECUTION_ID": os.environ.get("EXECUTION_ID", os.environ.get("SESSION_ID", "")) or bound_execution_id(),
         "LLM_PROVIDER": os.environ.get("LLM_PROVIDER", "unknown"),
         "LLM_MODEL": os.environ.get("LLM_MODEL", "unknown"),
     }
@@ -309,6 +311,10 @@ async def run_agent_loop(
             completion_tokens=_completion_tokens,
             latency_ms=_llm_latency_ms,
             task_name=_task_name,
+            estimated_cost_usd=estimate_cost(
+                _provider_name, _model_name, _prompt_tokens, _completion_tokens,
+                response.usage.get("cached_tokens", 0) or 0,
+            ),
             context_window_used=_prompt_tokens + _completion_tokens,
             context_window_max=max_ctx,
             was_compressed=was_compressed,
@@ -495,11 +501,13 @@ async def run_agent_loop(
             )
             messages.append({"role": "user", "content": recovery_msg})
             try:
+                _t_rec = _time.monotonic()
                 recovery_response = await provider.generate(
                     messages=messages,
                     tools=None,  # sem ferramentas para forçar resposta direta
                     system=instruction,
                 )
+                record_llm_call(provider, recovery_response, int((_time.monotonic() - _t_rec) * 1000), _agent_id, _task_name)
                 if recovery_response.text:
                     final_response = recovery_response.text
                     logger.info(

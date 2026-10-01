@@ -106,9 +106,24 @@ class TestRunner:
             {"total_prompt_tokens": 1, "total_completion_tokens": 1, "total_tokens": 2, "calls": 1,
              "total_cost_usd": None},
         ]}
-        assert run_benchmark.sum_tokens(usage) == {
+        tokens = run_benchmark.sum_tokens(usage)
+        assert {k: tokens[k] for k in ("calls", "prompt_tokens", "completion_tokens", "total_tokens", "cost_usd")} == {
             "calls": 3, "prompt_tokens": 11, "completion_tokens": 6, "total_tokens": 17, "cost_usd": 0.5}
         assert run_benchmark.sum_tokens({})["calls"] == 0
+
+    def test_build_env_extra_wins(self):
+        env = run_benchmark.build_env({}, {"*": "google/a"}, {"ANTHROPIC_EFFORT": "low", "X": 3})
+        assert env["ANTHROPIC_EFFORT"] == "low" and env["X"] == "3"
+
+    def test_cost_by_provider_and_unpriced(self):
+        usage = {"by_provider_model": [
+            {"llm_provider": "google", "llm_model": "a", "total_cost_usd": 0.25, "total_tokens": 1},
+            {"llm_provider": "google", "llm_model": "b", "total_cost_usd": 0.25, "total_tokens": 1},
+            {"llm_provider": "openai", "llm_model": "c", "total_cost_usd": None, "total_tokens": 1},
+        ]}
+        tokens = run_benchmark.sum_tokens(usage)
+        assert tokens["cost_by_provider"] == {"google": 0.5, "openai": 0.0}
+        assert tokens["unpriced_models"] == ["openai/c"]
 
     def test_matrix_file_is_valid(self):
         from pathlib import Path
@@ -116,7 +131,10 @@ class TestRunner:
         names = [c["name"] for c in matrix["combinations"]]
         assert len(names) == len(set(names))
         blob = json.dumps(matrix).lower()
-        assert not any(big in blob for big in ("opus", "pro-preview", "gemini-3.1-pro"))
+        assert not any(big in blob for big in ("opus", "pro-preview", "gemini-3.1-pro", "fable"))
+        anthropic_models = {spec for c in matrix["combinations"] for spec in c["roles"].values() if "anthropic" in spec}
+        assert anthropic_models == {"anthropic/claude-sonnet-5-5"}
+        assert "anthropic" in matrix["budget_usd"]
 
 
 def test_report_renders_ok_and_skipped():
@@ -124,8 +142,8 @@ def test_report_renders_ok_and_skipped():
           "resources": {
               "sys_cpu_pct": {"max": 80}, "mem_used_mb": {"max": 3000}, "temp_c": {"max": 70}, "throttled": [],
           },
-          "tokens": {"prompt_tokens": 100, "completion_tokens": 50},
+          "tokens": {"prompt_tokens": 100, "completion_tokens": 50, "cost_usd": 0.12}, "db": {"connection_retries": 2},
           "outcome": {"subtasks": 3, "subtasks_ok": 3}, "score": {"score": 5, "max_score": 6, "accuracy": 0.95}}
     text = report.render([ok, {"name": "b", "status": "skipped", "reason": "KEY ausente"}])
-    assert "| a | exit 0 | 10.5 | 100 | 50 | 3/3 | 5/6 | 0.950 | 80 | 3000 | 70 | não |" in text
+    assert "| a | exit 0 | 10.5 | 100 | 50 | 3/3 | 5/6 | 0.950 | 80 | 3000 | 70 | não | 0.1200 | 2 |" in text
     assert "pulada (KEY ausente)" in text

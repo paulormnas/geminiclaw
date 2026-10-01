@@ -187,10 +187,15 @@ class AutonomousLoop:
                 "Resposta:"
             )
 
+            import time as _time
+            from src.llm.metering import record_llm_call
+
+            _t0 = _time.monotonic()
             response = await provider.generate(
                 messages=[{"role": "user", "content": triage_prompt}],
                 max_tokens=10
             )
+            record_llm_call(provider, response, int((_time.monotonic() - _t0) * 1000), "triage")
             text = (response.text or "").strip().upper()
 
             logger.info(

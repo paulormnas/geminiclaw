@@ -29,8 +29,11 @@ from scripts.benchmark.scoring import score_session, session_outcome
 ROLES = ("RESEARCHER", "VALIDATOR", "DEVELOPER", "BASE", "SUMMARIZER", "REVIEWER")
 
 
-def build_env(base: dict[str, str], roles: dict[str, str]) -> dict[str, str]:
-    """Aplica ``{"*": "prov/modelo", "DEVELOPER": ...}`` sobre as variáveis de papel."""
+def build_env(base: dict[str, str], roles: dict[str, str], extra: dict[str, str] | None = None) -> dict[str, str]:
+    """Aplica ``{"*": "prov/modelo", "DEVELOPER": ...}`` sobre as variáveis de papel.
+
+    ``extra`` (ex.: ``ANTHROPIC_EFFORT``, teto de custo da combinação) é aplicado por último.
+    """
     env = dict(base)
     default = roles.get("*")
     assignments = {role: roles.get(role, default) for role in ROLES}
@@ -42,6 +45,7 @@ def build_env(base: dict[str, str], roles: dict[str, str]) -> dict[str, str]:
     if default:
         provider, _, model = default.partition("/")
         env["LLM_PROVIDER"], env["LLM_MODEL"], env["DEFAULT_MODEL"] = provider, model, model
+    env.update({k: str(v) for k, v in (extra or {}).items()})
     return env
 
 
@@ -59,12 +63,42 @@ def sum_tokens(token_usage: dict) -> dict:
         "prompt_tokens": sum(r.get("total_prompt_tokens") or 0 for r in rows),
         "completion_tokens": sum(r.get("total_completion_tokens") or 0 for r in rows),
         "total_tokens": sum(r.get("total_tokens") or 0 for r in rows),
-        "cost_usd": sum(r.get("total_cost_usd") or 0 for r in rows),
+        "cost_usd": round(sum(r.get("total_cost_usd") or 0 for r in rows), 6),
+        # Custo por provedor (base do teto de orçamento) e modelos sem preço conhecido (custo n/d).
+        "cost_by_provider": _cost_by_provider(rows),
+        "unpriced_models": sorted(
+            f"{r.get('llm_provider')}/{r.get('llm_model')}" for r in rows if r.get("total_cost_usd") is None
+        ),
     }
 
 
-def run_combination(combo: dict, task: str, env_base: dict[str, str], timeout: int, output_dir: Path) -> dict:
-    env = build_env(env_base, combo["roles"])
+def _cost_by_provider(rows: list[dict]) -> dict[str, float]:
+    costs: dict[str, float] = {}
+    for row in rows:
+        name = row.get("llm_provider", "unknown")
+        costs[name] = round(costs.get(name, 0.0) + (row.get("total_cost_usd") or 0), 6)
+    return costs
+
+
+def db_metrics(session_id: str) -> dict:
+    """Métricas de telemetria do banco: retentativas de conexão/limite e métricas derivadas."""
+    try:
+        from src.telemetry import get_telemetry
+
+        telemetry = get_telemetry()
+        return {
+            "connection_retries": telemetry.get_connection_retry_count(session_id),
+            "derived": telemetry.get_derived_metrics(session_id),
+            "tools": telemetry.get_tool_summary(session_id),
+        }
+    except Exception as exc:  # telemetria indisponível não invalida a medição
+        return {"error": str(exc)}
+
+
+def run_combination(
+    combo: dict, task: str, env_base: dict[str, str], timeout: int, output_dir: Path, extra_env: dict | None = None
+) -> dict:
+    env = build_env(env_base, combo["roles"], {**(extra_env or {}), **combo.get("env", {})})
     started_wall = time.time()
     start = time.monotonic()
     proc = subprocess.Popen(
@@ -92,7 +126,7 @@ def run_combination(combo: dict, task: str, env_base: dict[str, str], timeout: i
     if session is not None:
         outcome = session_outcome(session)
         result.update(session=session.name, outcome=outcome, score=score_session(session),
-                      tokens=sum_tokens(outcome.get("token_usage", {})))
+                      tokens=sum_tokens(outcome.get("token_usage", {})), db=db_metrics(session.name))
     return result
 
 
@@ -109,18 +143,33 @@ def main() -> None:
     output_dir = Path(env_base.get("OUTPUT_BASE_DIR", "outputs"))
     results = json.loads(args.results.read_text()) if args.results.exists() else []
     done = {r["name"] for r in results}
+    budget = matrix.get("budget_usd", {})  # teto de gasto acumulado por provedor
+    spent: dict[str, float] = {}
+    for r in results:
+        for provider, cost in r.get("tokens", {}).get("cost_by_provider", {}).items():
+            spent[provider] = spent.get(provider, 0.0) + cost
 
     for combo in matrix["combinations"]:
         if (args.only and combo["name"] not in args.only) or combo["name"] in done:
             continue
         required = combo.get("requires")
+        providers = {spec.partition("/")[0] for spec in combo["roles"].values()}
+        over = next((p for p in providers if p in budget and spent.get(p, 0.0) >= budget[p]), None)
         if required and not env_base.get(required):
-            results.append(
-                {"name": combo["name"], "roles": combo["roles"], "status": "skipped", "reason": f"{required} ausente"}
-            )
+            skip = f"{required} ausente"
+        elif over:
+            skip = f"orçamento de {over} esgotado (${spent[over]:.2f} de ${budget[over]:.2f})"
+        else:
+            skip = None
+        if skip:
+            results.append({"name": combo["name"], "roles": combo["roles"], "status": "skipped", "reason": skip})
         else:
             print(f"[benchmark] {combo['name']} ...", flush=True)
-            results.append(run_combination(combo, task, env_base, matrix["timeout_seconds"], output_dir))
+            results.append(
+                run_combination(combo, task, env_base, matrix["timeout_seconds"], output_dir, matrix.get("env"))
+            )
+            for provider, cost in results[-1].get("tokens", {}).get("cost_by_provider", {}).items():
+                spent[provider] = spent.get(provider, 0.0) + cost
         args.results.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"[benchmark] {combo['name']}: {results[-1]['status']}", flush=True)
 

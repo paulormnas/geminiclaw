@@ -7,6 +7,7 @@ como corrotina no orquestrador, sem Docker.
 
 import json
 import re
+import time
 import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,6 +17,7 @@ from src.config import APP_NAME
 from src.logger import get_logger
 from src.model_router import ModelRouter
 from src.llm.base import LLMProvider
+from src.llm.metering import record_llm_call
 from src.utils.json_parser import extract_json
 
 logger = get_logger(__name__)
@@ -274,12 +276,14 @@ class ValidatorAgent:
         user_content = f"SOLICITAÇÃO ORIGINAL:\n{prompt}\n\nPLANO PROPOSTO:\n{plan_str}"
 
         try:
+            _t0 = time.monotonic()
             response = await self.provider.generate(
                 messages=[{"role": "user", "content": user_content}],
                 system=system_prompt,
                 temperature=0.1,
                 max_tokens=1000,
             )
+            record_llm_call(self.provider, response, int((time.monotonic() - _t0) * 1000), "validator")
             parsed = extract_json(response.text or "")
             if not isinstance(parsed, dict) or "status" not in parsed:
                 return ValidationResult(
@@ -432,12 +436,14 @@ class ValidatorAgent:
             )
 
             try:
+                _t0 = time.monotonic()
                 response = await self.provider.generate(
                     messages=[{"role": "user", "content": user_content}],
                     system=system_prompt,
                     temperature=0.1,
                     max_tokens=800,
                 )
+                record_llm_call(self.provider, response, int((time.monotonic() - _t0) * 1000), "reviewer")
                 parsed = extract_json(response.text or "")
                 if isinstance(parsed, dict) and "status" in parsed:
                     status = parsed.get("status", "pass").lower()

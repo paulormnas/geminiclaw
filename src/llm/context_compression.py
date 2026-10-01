@@ -146,6 +146,10 @@ async def _summarize_old_context(
     try:
         # Usamos o provider passado para gerar o resumo
         # Nota: Idealmente usar um modelo rápido/barato para isso
+        import time as _time
+        from src.llm.metering import record_llm_call
+
+        _t0 = _time.monotonic()
         summary_resp = await provider.generate(
             messages=[
                 {"role": "system", "content": summary_prompt},
@@ -153,6 +157,7 @@ async def _summarize_old_context(
             ],
             max_tokens=500
         )
+        record_llm_call(provider, summary_resp, int((_time.monotonic() - _t0) * 1000), "context_compression")
         
         summary_text = summary_resp.text or "Histórico anterior processado."
         summary_msg = {

@@ -44,6 +44,8 @@ async def test_generate_simple_text():
             "prompt_tokens": 5,
             "completion_tokens": 3,
             "total_tokens": 8,
+            "cached_tokens": 0,
+            "reasoning_tokens": 0,
             "ttft_ms": None,
             "retry_count": 0,
         }

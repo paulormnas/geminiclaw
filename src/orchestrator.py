@@ -25,6 +25,7 @@ from src.output_manager import OutputManager, generate_session_slug
 from src.autonomous_loop import AutonomousLoop
 from src.utils.json_parser import extract_json
 from src.rate_limiter import AdaptiveRateLimiter
+from src.llm.metering import bind_execution
 from src.telemetry import get_telemetry
 from src.agents.validator_agent import ValidatorAgent
 from src.agent_runtime.context import AgentContext
@@ -233,6 +234,7 @@ class Orchestrator:
         telemetry = get_telemetry()
         history = ExecutionHistory()
         exec_id = history.start(prompt, start_date, exec_id=session_slug)
+        bind_execution(exec_id or master_session.id, master_session.id)
 
         logger.info("Nova requisição registrada", extra={"execution_id": exec_id, "prompt_preview": prompt[:50]})
 

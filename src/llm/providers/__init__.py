@@ -43,6 +43,12 @@ def _create_openai_compatible(settings: ProviderSettings):
     )
 
 
+def _create_openai(settings: ProviderSettings):
+    from src.llm.providers.openai import OpenAIProvider
+
+    return OpenAIProvider(api_key=settings.api_key, model=settings.model, base_url=settings.base_url)
+
+
 def _create_anthropic(settings: ProviderSettings):
     try:
         from src.llm.providers.anthropic import AnthropicProvider
@@ -66,4 +72,5 @@ def _create_anthropic(settings: ProviderSettings):
 register_provider("ollama", _create_ollama, aliases=("local",))
 register_provider("google", _create_google)
 register_provider("openai_compatible", _create_openai_compatible)
+register_provider("openai", _create_openai)
 register_provider("anthropic", _create_anthropic)

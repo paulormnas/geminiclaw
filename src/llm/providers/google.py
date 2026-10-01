@@ -270,6 +270,7 @@ class GoogleProvider(LLMProvider):
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
                 "total_tokens": (usage_metadata.total_token_count or 0) if usage_metadata else 0,
+                "cached_tokens": (getattr(usage_metadata, "cached_content_token_count", 0) or 0) if usage_metadata else 0,
                 # V11.2.3 — Google GenAI não expõe TTFT na API atual; None mantém o schema do Ollama.
                 "ttft_ms": None,
             },

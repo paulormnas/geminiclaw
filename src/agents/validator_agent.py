@@ -164,6 +164,41 @@ class ValidationResult:
     issues: List[str] = field(default_factory=list)
 
 
+_TEXT_EVIDENCE_SUFFIXES = {".json", ".md", ".txt", ".csv", ".log"}
+_EVIDENCE_HEAD_CHARS = 700
+_EVIDENCE_MAX_FILES = 12
+
+
+def build_artifact_evidence(output_dir: Optional[Path | str], expected_artifacts: List[str]) -> str:
+    """Resume os artefatos esperados que existem em disco: caminho relativo, tamanho e começo do conteúdo.
+
+    O revisor só via nomes de arquivo e reprovava subtarefas por "não foi possível confirmar o
+    conteúdo". Com esta evidência ele julga o que está gravado, não só o que o agente afirma.
+    """
+    if not output_dir:
+        return "(sem diretório de sessão)"
+    root = Path(output_dir)
+    if not root.exists():
+        return "(diretório de sessão inexistente)"
+    wanted = {Path(e).name for e in expected_artifacts}
+    lines: List[str] = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.name in ("scientific_helpers.py", "script.py") or path.suffix == ".pyc":
+            continue
+        if wanted and path.name not in wanted:
+            continue
+        if len(lines) >= _EVIDENCE_MAX_FILES:
+            break
+        rel = path.relative_to(root)
+        size = path.stat().st_size
+        if path.suffix.lower() in _TEXT_EVIDENCE_SUFFIXES and size < 2_000_000:
+            head = path.read_text(encoding="utf-8", errors="replace")[:_EVIDENCE_HEAD_CHARS].replace("\n", " ")
+            lines.append(f"- {rel} ({size} bytes): {head}")
+        else:
+            lines.append(f"- {rel} ({size} bytes, binário)")
+    return "\n".join(lines) or "(nenhum dos artefatos esperados encontrado)"
+
+
 @dataclass
 class ReviewResult:
     """Resultado da revisão de uma subtarefa após execução."""
@@ -248,7 +283,9 @@ class ValidatorAgent:
             ):
                 structural_issues.append(
                     f"Subtarefa '{task.get('task_name', idx+1)}' é do tipo '{task_type}' mas não possui "
-                    "nenhum critério quantitativo (com threshold numérico) em 'validation_criteria'."
+                    "nenhum critério quantitativo (com threshold numérico) em 'validation_criteria'. "
+                    "Correção: acrescente um critério como 'acurácia no teste >= 0.80', ou, se a tarefa não é "
+                    "confirmatória, troque o 'task_type' para 'eda', 'model_impl' ou 'synthesis'."
                 )
 
         if structural_issues:
@@ -269,6 +306,12 @@ class ValidatorAgent:
             f"Você é o ValidatorAgent do {APP_NAME}. Sua função é avaliar planos de execução.\n"
             f"{SCHEMA_INSTRUCTION}\n"
             "Avalie se a sequência de subtarefas atende à solicitação original e se as dependências fazem sentido lógico.\n"
+            "Não reprove por causa de limiares numéricos em 'validation_criteria': o framework os exige em tarefas "
+            "'validation' e 'reproduction'. Reprove só por falha lógica, dependência incoerente ou cobertura "
+            "incompleta da solicitação, e liste problemas que o planejador consiga corrigir.\n"
+            "Nomenclatura, estilo, escolha de 'task_type' entre tipos válidos e detalhes opcionais não são motivo "
+            "de reprovação. Liste no máximo 3 problemas, só os que impediriam a execução ou o cumprimento da "
+            "solicitação.\n"
             "Responda EXCLUSIVAMENTE em formato JSON com o seguinte schema:\n"
             '{\n  "status": "approved" | "revision_needed",\n  "reason": "explicação curta",\n  "issues": ["problema 1", ...]\n}'
         )
@@ -425,13 +468,23 @@ class ValidatorAgent:
             system_prompt = (
                 f"Você é o Reviewer do {APP_NAME}. Sua função é avaliar se o resultado de uma subtarefa "
                 "satisfaz os critérios de aceite definidos.\n"
+                "Regras de julgamento:\n"
+                "- A EVIDÊNCIA EM DISCO (caminho relativo, tamanho e começo do conteúdo) é a fonte de verdade; "
+                "a resposta do agente é só um resumo.\n"
+                "- Os caminhos são relativos à pasta da sessão. Não reprove por diferença de prefixo "
+                "(ex.: '/outputs/x.json' no texto do agente e 'subtarefa/x.json' no disco): o que importa é o "
+                "arquivo existir com conteúdo coerente.\n"
+                "- Não reprove por não ver o conteúdo completo de um arquivo cuja existência e tamanho foram "
+                "confirmados; reprove só se a evidência contradiz um critério ou o critério exige algo ausente.\n"
+                "- Cada item em 'issues' deve citar o critério específico não atendido.\n"
                 "Responda estritamente em JSON com o formato:\n"
                 '{\n  "status": "pass" | "fail",\n  "feedback": "explicação do parecer",\n  "issues": []\n}'
             )
+            evidence = build_artifact_evidence(output_dir, expected_artifacts)
             user_content = (
                 f"SUBTAREFA: {task_name}\n"
                 f"CRITÉRIOS DE ACEITE:\n{criteria_str}\n\n"
-                f"ARTEFATOS CONFIRMADOS NO DISCO:\n{list(available_artifacts)}\n\n"
+                f"EVIDÊNCIA EM DISCO:\n{evidence}\n\n"
                 f"RESPOSTA DO AGENTE:\n{response_text[:3000]}"
             )
 

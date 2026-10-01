@@ -80,6 +80,27 @@ class HumanFeedbackSkill(BaseSkill):
                 "ask_researcher: modo não-bloqueante, documentando suposição",
                 extra={"question": question[:200], "mode": mode},
             )
+            # A pergunta nunca chega a um humano nestes modos; registrá-la permite avaliar depois se
+            # a consulta era relevante e se o agente decidiria melhor com ajuda.
+            from src.llm.metering import bound_execution_id
+            from src.telemetry import get_telemetry
+
+            get_telemetry().record_agent_event(
+                execution_id=(ctx.execution_id if ctx is not None and ctx.execution_id else "") or bound_execution_id()
+                or "unknown",
+                session_id=ctx.session_id if ctx is not None else "unknown",
+                agent_id=ctx.agent_id if ctx is not None else "unknown",
+                event_type="ask_researcher",
+                task_name=(ctx.task_name or None) if ctx is not None else None,
+                payload={
+                    "mode": mode,
+                    "blocked": False,
+                    "question": question[:600],
+                    "context": context[:400],
+                    "why_cant_proceed": why_cant_proceed[:400],
+                    "options": [str(o)[:120] for o in (options or [])][:6],
+                },
+            )
             return SkillResult(success=True, output=assumption, metadata={"mode": mode, "blocked": False})
 
         # Modo assisted: chamada direta e bloqueante ao orquestrador (Roadmap V16/ADR 014).

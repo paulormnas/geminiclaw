@@ -459,6 +459,7 @@ async def run_agent_loop(
                             duration_ms=0,
                             success=False,
                             error_message=str(e)[:500],
+                            arguments={k: str(v)[:500] for k, v in tool_call.arguments.items()},
                             task_name=_task_name,
                         )
                     except Exception:

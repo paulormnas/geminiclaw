@@ -54,12 +54,18 @@ pelo agente Curator, com veredito de evidência objetivo e acesso do pesquisador
 - **Critérios de aceite:** [ ] visualização sem LLM · [ ] alteração via Curator com confirmação
 - **Complexidade estimada:** Média
 
+### Tarefa 9: Indexação dos insumos com metadados
+- **Spec:** [`v17-input-document-index`](../openspec/changes/v17-input-document-index/proposal.md)
+- **Critérios de aceite:** [ ] indexação automática e idempotente por projeto · [ ] texto enriquecido com metadados · [ ] datasets e imagens só como descritor · [ ] busca restrita ao projeto
+- **Complexidade estimada:** Média
+
 ## Ordem de implementação
 
 ```
 Tarefa 1 ─► Tarefa 2 ─► Tarefa 4 ─► Tarefa 5 ─┐
        └──► Tarefa 6 (após V16 embeddings) ────┼─► Tarefa 7 ─► Tarefa 8
 Tarefa 3 (independente, a qualquer momento) ───┘
+Tarefa 5 ─► Tarefa 9 (pesquisador decidiu tratá-la depois do ciclo de hipóteses da V18)
 ```
 
 ## Validação da Etapa

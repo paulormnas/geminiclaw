@@ -1,6 +1,6 @@
 # ADR 017 — Catálogo de Modelos e Roteador de Provedores por Papel
 
-**Status:** Aprovado em 2026-10-01 pelo pesquisador responsável — implementação pendente (sem `catalog.yaml` nem `resolve()` ainda; spec a descrever)
+**Status:** Aprovado em 2026-10-01 pelo pesquisador responsável — implementação pendente (sem `catalog.yaml` nem `resolve()` ainda; spec descrita em `openspec/changes/v16-model-catalog-router`, aguardando aprovação)
 **Data:** 2026-09-29
 **Relacionados:** ADR 007 (papéis e Model Router), ADR 011 (registro de provedores), limites de uso da V18 (PR #68)
 **Revisa:** o Model Router do ADR 007 (mapeamento fixo papel → provedor/modelo por variável de ambiente)

@@ -67,6 +67,9 @@ O sistema SHALL <comportamento obrigatório>.
 | V16 | [v16-local-embeddings](changes/v16-local-embeddings/proposal.md) | `embeddings` | 011 | — |
 | V16 | [v16-in-process-agents](changes/v16-in-process-agents/proposal.md) | `agent-runtime` | 014 | v16-provider-registry |
 | V16 | [v16-research-assistant-prompts](changes/v16-research-assistant-prompts/proposal.md) | `agent-prompts` | 010, 011 | v16-in-process-agents |
+| V16 (complemento) | [v16-model-catalog-router](changes/v16-model-catalog-router/proposal.md) | `llm-providers` | 017, 011 | v16-provider-registry |
+| V16 (complemento) | [v16-sandbox-slim-image](changes/v16-sandbox-slim-image/proposal.md) | `code-sandbox` | 018, 014, 003 | v16-in-process-agents |
+| V16 (complemento) | [v16-platform-images](changes/v16-platform-images/proposal.md) | `platform-images` | 018 | v16-sandbox-slim-image |
 | V17 | [v17-graph-store](changes/v17-graph-store/proposal.md) | `knowledge-graph` | 009, 015 | V16 |
 | V17 | [v17-controlled-vocabulary](changes/v17-controlled-vocabulary/proposal.md) | `vocabulary` | 015 | v17-graph-store |
 | V17 | [v17-evidence-verdict](changes/v17-evidence-verdict/proposal.md) | `evidence-scoring` | 015 | — (módulo puro) |
@@ -75,19 +78,29 @@ O sistema SHALL <comportamento obrigatório>.
 | V17 | [v17-knowledge-semantic-index](changes/v17-knowledge-semantic-index/proposal.md) | `knowledge-semantics` | 011, 015 | v16-local-embeddings, v17-graph-store |
 | V17 | [v17-curator-agent](changes/v17-curator-agent/proposal.md) | `curator` | 012, 015 | todas as anteriores de V17 |
 | V17 | [v17-graph-cli](changes/v17-graph-cli/proposal.md) | `graph-cli` | 015 | v17-graph-store, v17-curator-agent |
+| V17 | [v17-input-document-index](changes/v17-input-document-index/proposal.md) | `input-documents` | 015, 011, 019 | v16-local-embeddings, v17-research-project, v17-structural-fact-ingestion |
 | V18 | [v18-usage-limits](changes/v18-usage-limits/proposal.md) | `usage-limits` | 010, 012 | V16 |
 | V18 | [v18-research-continuity](changes/v18-research-continuity/proposal.md) | `session-continuity` | 010 | v18-usage-limits, v17-structural-fact-ingestion |
 | V18 | [v18-hypothesis-loop](changes/v18-hypothesis-loop/proposal.md) | `hypothesis-loop` | 010, 012 | V17, v18-usage-limits, v18-research-continuity |
-| V18.5 | [v18.5-model-catalog-locality](changes/v18.5-model-catalog-locality/proposal.md) | `llm-providers` | 019, 017 | V18, catálogo e roteador do ADR 017 |
+| V18 | [v18-researcher-consult](changes/v18-researcher-consult/proposal.md) | `researcher-consult` | 012, 010, 019 | v18-usage-limits |
+| V18.5 | [v18.5-model-catalog-locality](changes/v18.5-model-catalog-locality/proposal.md) | `llm-providers` | 019, 017 | V18, v16-model-catalog-router |
 | V18.5 | [v18.5-egress-gate](changes/v18.5-egress-gate/proposal.md) | `data-egress` | 019, 014 | v18.5-model-catalog-locality |
 | V18.5 | [v18.5-research-data-ingestion](changes/v18.5-research-data-ingestion/proposal.md) | `research-data` | 019 | v18.5-egress-gate (entregar junto) |
-| V18.5 | [v18.5-sandbox-phases](changes/v18.5-sandbox-phases/proposal.md) | `code-sandbox` | 019, 014, 018 | V18 |
+| V18.5 | [v18.5-sandbox-phases](changes/v18.5-sandbox-phases/proposal.md) | `code-sandbox` | 019, 014, 018 | V18, v16-sandbox-slim-image |
 | V18.5 | [v18.5-execution-provenance](changes/v18.5-execution-provenance/proposal.md) | `execution-provenance` | 019, 015 | v18.5-sandbox-phases, v17-research-project |
 | V18.5 | [v18.5-numeric-references](changes/v18.5-numeric-references/proposal.md) | `numeric-provenance` | 019 | v18.5-execution-provenance |
 | V18.5 | [v18.5-claim-verification](changes/v18.5-claim-verification/proposal.md) | `claim-verification` | 019, 015 | v18.5-numeric-references, v18.5-model-catalog-locality |
 | V18.5 | [v18.5-operation-metrics](changes/v18.5-operation-metrics/proposal.md) | `operation-metrics` | 019 | v18.5-egress-gate, v18.5-execution-provenance, v18.5-claim-verification |
+| V19 | [v19-equipment-control](changes/v19-equipment-control/proposal.md) | `equipment-control` | 019, 014, 015, 010 | V18.5, v18-researcher-consult |
+| V20 | [v20-node-identity](changes/v20-node-identity/proposal.md) | `node-identity` | 013 | V16–V19 validadas |
+| V20 | [v20-federated-records](changes/v20-federated-records/proposal.md) | `federation-records` | 013, 019, 015 | v20-node-identity, V18.5 |
+| V20 | [v20-federation-transport](changes/v20-federation-transport/proposal.md) | `federation-transport` | 013 | v20-node-identity, v20-federated-records |
+| V20 | [v20-remote-knowledge-intake](changes/v20-remote-knowledge-intake/proposal.md) | `remote-knowledge` | 013, 015 | v20-federated-records, v20-federation-transport, v17-knowledge-semantic-index |
+| V20 | [v20-reproduction-validation](changes/v20-reproduction-validation/proposal.md) | `reproduction-validation` | 013, 014, 019 | v20-remote-knowledge-intake, v18.5-sandbox-phases |
 
-**V19** (controle de equipamentos) usa a spec já existente
-[`roadmaps/specs/G7_equipment_control_mhs.md`](../roadmaps/specs/G7_equipment_control_mhs.md).
-**V20** (federação, ADR 013) ainda não tem spec: as questões em aberto do ADR 013 precisam ser
-discutidas antes. Ver os roadmaps `roadmaps/roadmap_V16.md` a `roadmap_V20.md`.
+**V19** (controle de equipamentos): `v19-equipment-control` converte a Spec G7
+([`roadmaps/specs/G7_equipment_control_mhs.md`](../roadmaps/specs/G7_equipment_control_mhs.md))
+para o formato OpenSpec, com o §10 do ADR 019.
+**V20** (federação, ADR 013, aprovado em 2026-10-01): cinco mudanças `v20-*`; as questões em
+aberto do ADR estão como propostas nos `design.md`, para decisão do pesquisador. Ver os roadmaps
+`roadmaps/roadmap_V16.md` a `roadmap_V20.md`.

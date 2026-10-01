@@ -1,6 +1,13 @@
 # ADR 013 — Federação: Rede Pública de Conhecimento entre Nós (Princípios)
 
-**Status:** Proposto — princípios apenas; tecnologia a definir
+**Status:** Aprovado em 2026-10-01 pelo pesquisador responsável — princípios aprovados; implementação pendente (última etapa, V20)
+
+> **Aprovação 2026-10-01:** os princípios §1 a §6 foram aprovados. As "Questões em Aberto" abaixo
+> passam a ser tratadas nas mudanças OpenSpec da V20 (`v20-node-identity`,
+> `v20-federated-records`, `v20-federation-transport`, `v20-remote-knowledge-intake`,
+> `v20-reproduction-validation`): cada `design.md` traz uma proposta do Arquiteto e as decisões
+> que o pesquisador ainda precisa tomar. A escolha de tecnologia (§ Questões, último item) é
+> decidida em `v20-federation-transport`, atrás de uma interface que isola o resto do sistema.
 **Data:** 2026-09-28
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **ADRs relacionados:** ADR 004 (IPC local), ADR 009 (conhecimento), ADR 010 (propósito), ADR 011 (embeddings)

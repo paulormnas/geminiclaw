@@ -27,10 +27,16 @@ nunca perder o avanço entre execuções (ADRs 010 e 012).
 - **Critérios de aceite:** [ ] hipóteses formais e governança por modo · [ ] decisões registradas · [ ] sugestões do Curator respondidas · [ ] oportunidades só com decisão humana · [ ] critérios de parada
 - **Complexidade estimada:** Alta
 
+### Tarefa 4: Researcher como consultor nos modos autônomos
+- **Spec:** [`v18-researcher-consult`](../openspec/changes/v18-researcher-consult/proposal.md)
+- **Critérios de aceite:** [ ] `ask_researcher` respondido pelo Researcher em `semi`/`auto` · [ ] guarda de consulta antes do buscador · [ ] decisões reservadas ao humano · [ ] consultas registradas e dentro do orçamento
+- **Complexidade estimada:** Média
+
 ## Ordem de implementação
 
 ```
 Tarefa 1 ─► Tarefa 2 ─► Tarefa 3
+       └──► Tarefa 4 (junto com a Tarefa 3, decisão do pesquisador de 2026-10-01)
 ```
 
 ## Validação da Etapa

@@ -4,8 +4,8 @@
 **ADRs de origem:** [ADR 019](../../../docs/decisions/adr_019_localidade_dados_proveniencia_resultados.md)
 §1, §6 (campo `familia_modelo` e regra de desempate no roteador), §7;
 [ADR 017](../../../docs/decisions/adr_017_catalogo_modelos_roteador.md) §1, §5, §8, §9, §10
-**Depende de:** V18 (em especial `v18-usage-limits` e `v18-research-continuity`) e da
-implementação do catálogo e do roteador do ADR 017 (`src/llm/catalog.yaml`, `resolve(...)`)
+**Depende de:** V18 (em especial `v18-usage-limits` e `v18-research-continuity`) e
+`v16-model-catalog-router` (catálogo `src/llm/catalog.yaml` e roteador `resolve(...)` do ADR 017)
 
 ## Por quê
 

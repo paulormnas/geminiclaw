@@ -65,3 +65,33 @@ Tarefa 2 ─┘ (independente; pode ser paralela a 1)
 - [ ] Sessão completa no Pi 5 em modo em processo, com tempo e RAM registrados.
 - [ ] ADRs 011 e 014 marcados como Aceitos; 003 §1/§3, 004 e 006 como Deprecados.
 - [ ] PRs merged em `dev`; mudanças arquivadas em `openspec/changes/archive/`.
+
+---
+
+## Complementos (especificados em 2026-10-01)
+
+Mudanças decorrentes dos ADRs 017 e 018, aprovados em 2026-10-01. Entram depois da etapa de
+robustez do pipeline e podem andar em paralelo com a V17.
+
+### Tarefa 5: Catálogo de modelos e roteador por papel
+- **Spec:** [`v16-model-catalog-router`](../openspec/changes/v16-model-catalog-router/proposal.md)
+- **Critérios de aceite:** [ ] catálogo versionado e validado · [ ] política `self_hosted_only` por padrão · [ ] roteador puro resolvido uma vez por sessão · [ ] `LLM_PROVIDER`/`LLM_MODEL`/`DEFAULT_MODEL` removidas
+- **Complexidade estimada:** Alta
+
+### Tarefa 6: Imagem enxuta do sandbox e execução sem root
+- **Spec:** [`v16-sandbox-slim-image`](../openspec/changes/v16-sandbox-slim-image/proposal.md)
+- **Critérios de aceite:** [ ] imagem sem código do projeto e sem extras · [ ] nenhum comando como root · [ ] falha de instalação fatal · [ ] script sem rede
+- **Complexidade estimada:** Média
+
+### Tarefa 7: Identificação de plataforma e seleção de imagens
+- **Spec:** [`v16-platform-images`](../openspec/changes/v16-platform-images/proposal.md)
+- **Critérios de aceite:** [ ] detecção de Pi 5, macOS e x86_64 · [ ] build e pull nativos com arquitetura conferida · [ ] imagem do sandbox conferida no início da sessão
+- **Complexidade estimada:** Média
+
+```
+Tarefa 5 (independente)
+Tarefa 6 ─► Tarefa 7
+```
+
+Validação dos complementos: sessão no Pi 5 com o mapa de modelos no banner e a nova imagem do
+sandbox; ADRs 017 e 018 marcados como Aceitos.

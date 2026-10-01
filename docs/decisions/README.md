@@ -22,7 +22,7 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 | [010](adr_010_proposito_assistente_digital_pesquisa.md) | Propósito: Assistente Digital de Pesquisa Científica (substitui 001) | 🟢 Aprovado (implementação pendente) | 2026-09-28 |
 | [011](adr_011_provedores_agnosticos.md) | Provedores Agnósticos: Registro de Provedores LLM e de Embeddings (substitui 006) | ✅ Aceito (2026-10-01) | 2026-09-28 |
 | [012](adr_012_agente_curator_ciclo_exploracao.md) | Agente Curator e Ciclo de Exploração Contínua | 🟢 Aprovado (implementação pendente) | 2026-09-28 |
-| [013](adr_013_federacao_rede_publica.md) | Federação: Rede Pública de Conhecimento entre Nós (Princípios) | 🔵 Proposto | 2026-09-28 |
+| [013](adr_013_federacao_rede_publica.md) | Federação: Rede Pública de Conhecimento entre Nós (Princípios) | 🟢 Aprovado (princípios; implementação pendente, V20) | 2026-09-28 |
 | [014](adr_014_agentes_em_processo_sandbox_codigo.md) | Agentes em Processo no Host; Containers Apenas como Sandbox de Código | ✅ Aceito | 2026-09-28 |
 | [015](adr_015_modelo_dados_grafo_conhecimento.md) | Modelo de Dados do Grafo de Conhecimento e Ligação com Embeddings | 🟢 Aprovado (implementação pendente) | 2026-09-28 |
 | [016](adr_016_imagem_postgres_apache_age_colacao.md) | Imagem do PostgreSQL para Apache AGE (musl → glibc) e Colação de Índices | 🔵 Proposto | 2026-09-29 |
@@ -114,17 +114,18 @@ memória do projeto e no PR que introduziu esta seção).
 |---|---|---|
 | `v16-pipeline-robustness` | Benchmark de 2026-10-01 | Normalizador determinístico de plano, nomes de artefatos tolerantes, revisão do circuit breaker e dos limites, modelo de relatório do Summarizer. Etapa anterior à V17 |
 | `v16-agent-communication-eval` | Avaliação do projeto | Veredito do revisor contra verdade determinística, taxa de resolução, laços de reprovação, juiz LLM de outro provedor com calibração humana |
-| `v17-input-document-index` | ADR 015 §6 (`Insumo`) | Acionar a indexação dos documentos de `input_context/` e enriquecer o texto com metadados antes do vetor. Hoje a coleção de documentos tem 0 pontos |
-| `v18-researcher-consult` | ADR 012 §8, ADR 010 item 9 | `ask_researcher` respondido pelo Researcher com consultas simples na web nos modos `semi` e `auto`; muda o comportamento da Spec G5 |
-| `v16-model-catalog-router` | ADR 017 (aprovado) | A base do catálogo e do roteador não tem spec; `v18.5-model-catalog-locality` depende dela. Decidir na spec a regra `trust: self_hosted` do Validator |
-| `v16-sandbox-slim-image` | ADR 018 §1 a §3 (aprovado) | Imagem mínima com pacotes sob demanda, usuário não-root e montagem do `/outputs`; `v18.5-sandbox-phases` cobre só as fases de rede |
-| `v16-platform-images` | ADR 018 §5 (aprovado) | Identificação de plataforma e seleção de imagens, em Python (`uv run`) |
-| Revisão da Spec G7 (V19.1) | ADR 019 §10 | Somente leitura por padrão e confirmação humana para escrita em instrumentos; previsto no roadmap V19 |
-| Spec da federação (V20) | ADR 013 | Só princípios; última etapa |
+
+Descritas em 2026-10-01 (aguardando aprovação do pesquisador): `v16-model-catalog-router`
+(ADR 017), `v16-sandbox-slim-image` (ADR 018 §1 a §3), `v16-platform-images` (ADR 018 §5),
+`v17-input-document-index` (ADR 015 §6), `v18-researcher-consult` (ADR 012 §8, ADR 010 item 9)
+e `v19-equipment-control` (conversão da Spec G7 com o ADR 019 §10). Com a aprovação do ADR 013
+(2026-10-01), a V20 ganhou cinco mudanças `v20-*` com propostas para as questões em aberto do
+ADR. O ADR 016 continua Proposto e não tem spec.
 
 Mudanças já descritas, mas que precisam de ajuste de texto quando forem implementadas:
-`v17-curator-agent` (o Curator decide quando registrar, ADR 012 §7), `v18-hypothesis-loop` (usar o
-Researcher consultor), `v18-usage-limits` (contabilizar as consultas) e a Spec G5.
+`v17-curator-agent` (o Curator decide quando registrar, ADR 012 §7). Os ajustes de
+`v18-hypothesis-loop`, `v18-usage-limits` e da Spec G5 decorrentes da consulta ao Researcher
+estão na própria `v18-researcher-consult` e em notas datadas nessas mudanças.
 
 Mudanças implementadas **sem** spec própria, registradas apenas no ADR 011 (§2, §6 e §7): o
 provedor `openai`, a tabela de preços e a contabilidade por chamada, o bloqueio de rede paga nos

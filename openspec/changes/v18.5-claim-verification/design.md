@@ -143,7 +143,8 @@ teste. Nenhuma chamada LLM.
 ## 6. Modelo verificador e diversidade de família
 
 - O modelo é o do papel `validator` resolvido por `v18.5-model-catalog-locality`
-  (`current_allocation("validator")`), com `requisitos: {trust: self_hosted}` (ADR 019 §6).
+  (`current_allocation("validator")`), sem exigir `trust: self_hosted` (ADR 017 §2, revisado em
+  2026-10-01).
   Esta mudança não escolhe modelo; registra em cada afirmação: `provedor_modelo`,
   `familia_modelo`, `versao_efetiva`, `trust`, `familia_autor` e `familia_diferente`.
 - O desempate por família (preferir, **na mesma posição de preferência**, família diferente da

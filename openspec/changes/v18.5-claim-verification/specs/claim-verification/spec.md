@@ -133,8 +133,8 @@ início da sessão retomada, sem efeito sobre as hipóteses.
 - **THEN** as 3 são verificadas antes do primeiro planejamento, o histórico registra a mudança de status com a sessão nova, e o relatório novo as lista na subseção de sessões anteriores
 
 ### Requirement: Modelo verificador registrado
-O sistema SHALL usar o modelo do papel `validator` resolvido pelo roteador (que exige
-`trust: self_hosted` e aplica o desempate por `familia_modelo`) e SHALL registrar em cada
+O sistema SHALL usar o modelo do papel `validator` resolvido pelo roteador (que aplica
+o desempate por `familia_modelo`; o papel não exige `trust: self_hosted`, ADR 017 §2) e SHALL registrar em cada
 afirmação verificada por modelo o provedor/modelo, a família, a `versao_efetiva`, a família do
 autor e se as famílias diferem.
 
@@ -144,7 +144,7 @@ autor e se as famílias diferem.
 - **THEN** cada afirmação registra `familia_autor="gemini"`, `familia_modelo="qwen"` e `familia_diferente=true`
 
 #### Scenario: Sem modelo elegível
-- **WHEN** nenhum modelo `self_hosted` está disponível para o `validator`
+- **WHEN** nenhum modelo elegível está disponível para o `validator`
 - **THEN** as afirmações não determinísticas ficam `pendente` com `motivo_pendencia="sem_modelo_verificador"` e um `WARNING` é emitido
 
 ### Requirement: Revisão humana das contestadas

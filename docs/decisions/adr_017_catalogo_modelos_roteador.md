@@ -5,18 +5,15 @@
 **Relacionados:** ADR 007 (papéis e Model Router), ADR 011 (registro de provedores), limites de uso da V18 (PR #68)
 **Revisa:** o Model Router do ADR 007 (mapeamento fixo papel → provedor/modelo por variável de ambiente)
 
-> **Atualização 2026-10-01** (fatos que mudaram desde a redação; a decisão não muda):
+> **Atualização 2026-10-01** (fatos que mudaram desde a redação e uma decisão do pesquisador):
 > - O agente Planner foi absorvido pelo Researcher (V14.3) e o código morto foi removido; o papel
 >   `planner` do §2 passa a ser resolvido como `researcher`, e o `preferred_model` do §7 é dica
 >   do plano gerado pelo Researcher.
 > - Os provedores `anthropic` e `openai` já estão registrados (ADR 011 §2), então o item de
 >   trabalho futuro sobre Anthropic deixou de depender de implementação de provedor: basta
 >   listá-los no catálogo.
-> - **Questão a decidir na spec:** o §2 exige `trust: self_hosted` para o Validator (escolha do
->   ADR 007), mas hoje o Validator roda em modelos de nuvem (Gemini, Claude). Enquanto não houver
->   um modelo local servindo o papel, a regra bloquearia a sessão com `LLM_DATA_POLICY` padrão.
->   A spec deve definir a transição (por exemplo, o requisito vira preferência até existir modelo
->   `self_hosted` elegível, ou o pesquisador declara a exceção explicitamente).
+> - **Decidido em 2026-10-01:** o Validator deixou de exigir `trust: self_hosted` (§2). Hoje ele
+>   roda em modelos de nuvem (Gemini, Claude); modelos locais continuam elegíveis pela preferência.
 
 ## Contexto
 
@@ -27,7 +24,7 @@ O objetivo é que o `.env` guarde só credenciais e endpoints, que o orquestrado
 ## Decisão
 
 1. **Catálogo versionado** (`src/llm/catalog.yaml`, dados). Cada modelo registra só fatos que algum requisito filtra: provedor, nome, tool calling, saída estruturada, janela de contexto e `trust` (`self_hosted` ou `third_party`). `trust` é declarado na entrada do catálogo, não inferido do host — um endpoint `openai_compatible` continua `self_hosted` mesmo numa máquina de GPU fora da rede local; só entradas de provedores de nuvem (Google, OpenAI, Anthropic etc.) são `third_party`.
-2. **Papéis no catálogo.** Todo chamador de LLM resolve pelo roteador: `planner`, `researcher`, `developer`, `reviewer`, `summarizer`, `validator` e `base`. Cada papel declara requisitos (ex.: Researcher exige tool calling; Validator exige `trust: self_hosted`, mantendo a escolha do ADR 007) e uma ordem de preferência. `get_provider()` sem papel passa a delegar para `planner`. Embeddings ficam fora do escopo (ADR 011 §3).
+2. **Papéis no catálogo.** Todo chamador de LLM resolve pelo roteador: `researcher`, `developer`, `reviewer`, `summarizer`, `validator` e `base` (o antigo `planner` é resolvido como `researcher`). Cada papel declara requisitos (ex.: Researcher exige tool calling) e uma ordem de preferência. **Nenhum papel exige `trust: self_hosted`:** o envio a provedores de nuvem é governado pela política de dados (§3) e, para dados de pesquisa, pela camada de saída do ADR 019; o Validator pode usar modelo local ou de nuvem, conforme a preferência configurada. *(O requisito `trust: self_hosted` do Validator, herdado do ADR 007, foi removido em 2026-10-01 por decisão do pesquisador responsável.)* `get_provider()` sem papel passa a delegar para `researcher`. Embeddings ficam fora do escopo (ADR 011 §3).
 3. **Política de dados explícita.** `LLM_DATA_POLICY=self_hosted_only|third_party_allowed`, padrão `self_hosted_only`. Sob `self_hosted_only`, modelos com `trust: third_party` são descartados antes de qualquer outra regra; ter uma chave de nuvem no `.env` não basta para enviar dados a um provedor externo. A política aparece no banner e no registro da sessão.
 4. **Disponibilidade.** Um provedor está disponível quando tem credencial ou endpoint no `.env`, está em `LLM_PROVIDER_PRIORITY` (que é lista de permissão) e passa num health check com timeout curto. Para provedores locais o check confirma que o modelo está instalado (ex.: `/api/tags` do Ollama), não só o endpoint. Offline, o provedor sai da lista. `DEPLOYMENT_PROFILE=pi5` define a prioridade padrão.
 5. **Roteador puro.** `resolve(papel, catálogo, disponíveis, política, overrides)` filtra por política, requisitos e lista de permissão e escolhe pela preferência. Sem estado e testável por unidade. Se nenhum modelo servir para um papel, a sessão falha com mensagem acionável.

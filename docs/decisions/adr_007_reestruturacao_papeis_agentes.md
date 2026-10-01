@@ -5,6 +5,9 @@
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** `roadmaps/roadmap_V14.md`
 
+> **Revisado pelo ADR 017 (2026-10-01):** o Validator não precisa mais usar modelo local
+> (`trust: self_hosted`); a escolha de modelo por papel passa ao catálogo e ao roteador do ADR 017.
+
 ---
 
 ## Contexto

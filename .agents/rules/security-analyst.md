@@ -18,12 +18,13 @@ Orientações de postura, modelagem de ameaças, identificação de vulnerabilid
 
 Antes de emitir qualquer parecer de segurança ou revisão de código:
 
-1. **Decisões Arquiteturais (`docs/decisions/`):** Verificar premissas de isolamento de sandbox, gestão de segredos, fronteiras de confiança entre orquestrador e agentes.
-2. **Roadmaps (`roadmaps/`):** Entender o contexto das etapas e quais funcionalidades estão sendo implementadas.
-3. **Código de Sandboxing (`src/skills/code/sandbox.py`):** Auditar volumes montados, permissões, limites de recursos, rede e execução como non-root.
-4. **Configurações e Segredos (`src/config.py`, `.env.example`):** Garantir conformidade com o princípio de zero secrets em código.
-5. **Containers e Dockerfiles (`containers/`):** Verificar imagens base, usuários, redes e exposição de portas.
-6. **Testes de Segurança (`tests/`):** Checar cobertura de cenários de segurança em testes unitários e de integração.
+1. **Decisões Arquiteturais (`docs/decisions/`):** Verificar premissas de isolamento de sandbox, gestão de segredos, fronteiras de confiança entre orquestrador e agentes, e de localidade dos dados de pesquisa (ADR 019).
+2. **Mudanças OpenSpec (`openspec/changes/<id>/`):** `proposal.md` (impacto e aprovações necessárias) e `design.md` (contratos, riscos e seção de segurança) das mudanças que tocam sandbox, rede, permissões, segredos, banco ou dados de pesquisa — revisados **antes** da implementação, conforme [`stage-spec.md`](../workflows/stage-spec.md).
+3. **Roadmaps (`roadmaps/`):** Entender o contexto das etapas e quais funcionalidades estão sendo implementadas.
+4. **Código de Sandboxing (`src/skills/code/sandbox.py`):** Auditar volumes montados, permissões, limites de recursos, rede e execução como non-root.
+5. **Configurações e Segredos (`src/config.py`, `.env.example`):** Garantir conformidade com o princípio de zero secrets em código.
+6. **Containers e Dockerfiles (`containers/`):** Verificar imagens base, usuários, redes e exposição de portas.
+7. **Testes de Segurança (`tests/`):** Checar cobertura de cenários de segurança em testes unitários e de integração.
 
 ---
 
@@ -59,7 +60,8 @@ Para cada funcionalidade ou componente novo, aplicar o framework STRIDE adaptado
 1. **Relatório de Modelagem de Ameaças:** Pontos fracos, vetores de ataque, severidade e impacto no contexto do GeminiClaw.
 2. **Matriz de Vetores de Ataque e Mitigações:** Tabela de mapeamento Ameaça ➔ Risco ➔ Mitigação Técnica.
 3. **Checklist de Hardening de Sandbox:** Validações obrigatórias para cada novo container efêmero.
-4. **Parecer de Segurança em PRs:** Revisão focada nos eixos acima para cada Pull Request que altere sandboxes, containers, IPC ou gestão de segredos.
+4. **Parecer sobre specs:** achados e mitigações exigidas registrados na seção "Segurança" do `design.md` da mudança (ou no PR das specs); mitigação obrigatória vira requisito com cenário na spec.
+5. **Parecer de Segurança em PRs:** Revisão focada nos eixos acima para cada Pull Request que altere sandboxes, containers, IPC ou gestão de segredos.
 
 ---
 

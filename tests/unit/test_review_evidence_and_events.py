@@ -98,4 +98,5 @@ async def test_plan_rejection_message_is_actionable_and_llm_is_told_not_to_rejec
              "validation_criteria": ["acurácia >= 0.80"]}]
     with patch("src.agents.validator_agent.record_llm_call"):
         await agent.validate_plan(good, "tarefa")
-    assert "Não reprove por causa de limiares" in provider.generate.call_args.kwargs["system"]
+    system = provider.generate.call_args.kwargs["system"]
+    assert "Não reprove por causa de limiares" in system and "no máximo 3 problemas" in system

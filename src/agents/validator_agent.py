@@ -309,6 +309,9 @@ class ValidatorAgent:
             "Não reprove por causa de limiares numéricos em 'validation_criteria': o framework os exige em tarefas "
             "'validation' e 'reproduction'. Reprove só por falha lógica, dependência incoerente ou cobertura "
             "incompleta da solicitação, e liste problemas que o planejador consiga corrigir.\n"
+            "Nomenclatura, estilo, escolha de 'task_type' entre tipos válidos e detalhes opcionais não são motivo "
+            "de reprovação. Liste no máximo 3 problemas, só os que impediriam a execução ou o cumprimento da "
+            "solicitação.\n"
             "Responda EXCLUSIVAMENTE em formato JSON com o seguinte schema:\n"
             '{\n  "status": "approved" | "revision_needed",\n  "reason": "explicação curta",\n  "issues": ["problema 1", ...]\n}'
         )

@@ -1,6 +1,6 @@
 # ADR 019 — Localidade dos Dados de Pesquisa e Proveniência dos Resultados
 
-**Status:** Proposto
+**Status:** Aprovado em 2026-10-01 pelo pesquisador responsável — implementação pendente (spec por spec, nas mudanças `v18.5-*`)
 **Data:** 2026-09-29
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** implementação depois da V18 (incluindo as mudanças em andamento dos ADRs 017 e 018) e **antes da V19** (`roadmaps/roadmap_V19.md`); é também pré-requisito da federação (V20, ADR 013)
@@ -339,6 +339,22 @@ ajustes abaixo:
 | Spec G7 (V19.1), `roadmap_V19.md` | Somente leitura por padrão e confirmação humana para escrita em qualquer modo (§10), na revisão da G7 já prevista no roadmap. |
 | `v18-usage-limits` | Chamadas de verificação e métricas de custo no orçamento (§6, §8); limite de egresso como condição de parada (§3.7); modo sem limite explícito, já que hoje `UsageBudget` exige todos os limites positivos (§11). |
 | `v18-research-continuity` | Ponta da cadeia e registros de término pendentes no `checkpoint.json` (§4); verificações pendentes retomadas (§6); marca de contaminação preservada no contexto retomado (§3.8); encerramento no checkpoint em modo `strict` (§7). |
+
+---
+
+### Mapa de implementação (2026-10-01)
+
+| Seção do ADR | Mudança OpenSpec |
+|---|---|
+| §1 (alocação das funções), §7 (versão efetiva), `familia_modelo` do §6 | `v18.5-model-catalog-locality` (depende do catálogo do ADR 017, ainda sem spec própria) |
+| §2 (números rastreáveis) | `v18.5-numeric-references` |
+| §3.1 a §3.3 (dados de pesquisa no contexto) | `v18.5-research-data-ingestion` |
+| §3.4 a §3.8 e §9 (saída única, filtro, conteúdo como dado) | `v18.5-egress-gate` |
+| §4 (registro encadeado por hash) | `v18.5-execution-provenance` |
+| §5 (sandbox por fases) | `v18.5-sandbox-phases` |
+| §6 (verificação por afirmações) | `v18.5-claim-verification` |
+| §8 e §11 (métricas e modo sem limite) | `v18.5-operation-metrics` |
+| §10 (atuação sobre instrumentos) | Sem spec: entra na revisão da Spec G7 (V19) |
 
 ---
 

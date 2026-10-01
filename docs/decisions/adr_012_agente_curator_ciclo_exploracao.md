@@ -1,6 +1,6 @@
 # ADR 012 — Agente Curator e Ciclo de Exploração Contínua
 
-**Status:** Proposto
+**Status:** Aprovado em 2026-10-01 pelo pesquisador responsável — implementação pendente (agente ainda não implementado)
 **Data:** 2026-09-28
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **ADRs relacionados:** ADR 007 (papéis), ADR 009 (conhecimento experimental), ADR 010 (propósito), ADR 014 (agentes em processo)
@@ -99,6 +99,23 @@ Ficam para as specs: o formato das mensagens entre agentes, o momento exato em q
 atua no ciclo, qual modelo usa, e
 os critérios para considerar que "uma solução foi encontrada". O modelo de dados do grafo
 continua fora do escopo, conforme o ADR 009.
+
+### 7. O Curator decide quando registrar
+
+O Curator é quem decide **quando** registrar no grafo e **o quê**, aplicando as diretrizes do
+ADR 015 §10. Fatos estruturais continuam sendo gravados pelo orquestrador de forma
+determinística (ADR 015 §1); o Curator entra no fluxo da sessão em pontos definidos na spec
+(fim de experimento, checkpoint e fechamento).
+
+### 8. Consulta ao Researcher nos modos autônomos
+
+Nos modos `semi` e `auto`, quando um agente chama `ask_researcher`, o **Researcher responde no
+lugar do pesquisador humano**, podendo fazer consultas simples na internet para enriquecer o
+contexto e decidir (documentação, definições, valores usuais; não buscas de artigos). A pergunta,
+o motivo, a resposta e as fontes são registrados como mensagem mediada pelo orquestrador, para
+avaliar depois se a consulta foi relevante e se mudou a decisão do agente. Em `assisted`, a
+pergunta continua indo ao pesquisador humano. Valem o limite de uso do §5 e o ADR 019 §3 (sem
+dados brutos de pesquisa nas consultas). *(Decisão do pesquisador responsável, 2026-10-01.)*
 
 ---
 

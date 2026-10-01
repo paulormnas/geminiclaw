@@ -77,7 +77,7 @@ tests/
 │   └── test_smoke.py
 ├── fixtures/
 │   ├── mock_responses.json  # Respostas pré-gravadas do Gemini
-│   └── test_agent/          # Agente ADK mínimo para testes
+│   └── test_agent/          # Agente mínimo para testes
 │       ├── __init__.py
 │       └── agent.py
 └── helpers/

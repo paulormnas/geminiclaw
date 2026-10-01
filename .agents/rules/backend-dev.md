@@ -212,4 +212,4 @@ client.containers.run(
 
 ## Referências
 
-- [uv](https://docs.astral.sh/uv/) · [Google ADK](https://google.github.io/adk-docs/get-started/quickstart/) · [docker-py](https://docker-py.readthedocs.io/)
+- [uv](https://docs.astral.sh/uv/) · [docker-py](https://docker-py.readthedocs.io/)

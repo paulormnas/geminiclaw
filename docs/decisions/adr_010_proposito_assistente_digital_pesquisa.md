@@ -1,9 +1,9 @@
 # ADR 010 — Propósito: Assistente Digital de Pesquisa Científica
 
-**Status:** Proposto
+**Status:** Aprovado em 2026-10-01 pelo pesquisador responsável — implementação pendente (V16 concluída; V17 e V18 pendentes)
 **Data:** 2026-09-28
 **Autores:** Arquiteto de Soluções (GeminiClaw)
-**Substitui:** ADR 001 (quando aceito)
+**Substitui:** ADR 001 (a partir da aprovação, 2026-10-01)
 **ADRs relacionados:** ADR 009 (conhecimento experimental), ADR 011 (provedores), ADR 012 (Curator), ADR 013 (federação)
 
 ---
@@ -44,8 +44,13 @@ experimentos, formular hipóteses, validar suposições e relatar resultados.
    de uso definido pelo pesquisador responsável (ADR 012).
 7. **Nunca perde o avanço da pesquisa** ao parar: ver "Continuidade entre execuções" abaixo.
 8. **Relata resultados** em relatório científico estruturado e rastreável (Spec G8).
-9. **Busca na web apenas para suporte técnico** (documentação de bibliotecas, APIs, erros),
-   como já definido no ADR 001.
+9. **Busca na web para suporte técnico e para enriquecer o contexto das decisões:**
+   documentação de bibliotecas, APIs e erros (como no ADR 001) e consultas simples que ajudem
+   o Researcher a responder perguntas dos outros agentes, sobretudo nos modos `semi` e `auto`
+   (ADR 012 §8). **Não** são buscas bibliográficas nem de artigos (ver "O que o sistema NÃO
+   FAZ"). Toda consulta respeita o ADR 019 §3: o texto enviado a um buscador não contém
+   dados brutos de pesquisa.
+   *(Redação ampliada em 2026-10-01 por decisão do pesquisador responsável.)*
 
 ### O que o sistema NÃO FAZ
 
@@ -94,6 +99,11 @@ investigadas. Essa capacidade é a **última** a ser
 implementada, após todas as funcionalidades de pesquisa estarem completas e validadas.
 
 ### Sequência de implementação
+
+> Estado em 2026-10-01: V16 concluída. V17 parcial (armazenamento do grafo e veredito de
+> evidência). A V18.5 (ADR 019) entra depois da V18 e antes da V19. Antes da V17 completa,
+> uma etapa de robustez do pipeline (revisão e validação menos frágeis, normalização do plano)
+> foi decidida em 2026-10-01 para que todos os modelos completem a tarefa de referência.
 
 ```
 V16  Fundações: provedores agnósticos (ADR 011), agentes em processo (ADR 014), revisão de prompts

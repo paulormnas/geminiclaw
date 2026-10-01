@@ -1,6 +1,6 @@
 # ADR 015 — Modelo de Dados do Grafo de Conhecimento e Ligação com Embeddings
 
-**Status:** Proposto — questões discutidas e decididas com o pesquisador responsável; valores iniciais a calibrar com dados reais
+**Status:** Aprovado em 2026-10-01 pelo pesquisador responsável — questões discutidas e decididas; valores iniciais a calibrar com dados reais; implementação pendente (armazenamento e veredito prontos)
 **Data:** 2026-09-28
 **Autores:** Arquiteto de Soluções (GeminiClaw), com revisão do pesquisador responsável
 **ADRs relacionados:** ADR 009 (camada de conhecimento), ADR 010 (propósito), ADR 011 (embeddings locais), ADR 012 (Curator), ADR 013 (federação), ADR 014 (execução no host)
@@ -216,6 +216,14 @@ dentro do AGE, e não há relação duplicada no Qdrant.
 
 **Payload no Qdrant** (para filtrar antes da busca): `tipo_no`, `projeto_id`, `dominios`,
 `status`, `visibilidade`, `modelo_embedding`, `versao_embedding`, `dimensao`, `hash_texto`.
+
+**Documentos de entrada (`Insumo`):** artigos, relatórios, conjuntos de dados e similares são
+vetorizados em trechos na coleção de documentos. Antes de gerar o vetor, o texto do trecho é
+**enriquecido com metadados** do documento (título, tipo, origem, domínio, contexto do
+projeto), para que a busca semântica encontre o trecho pelo que ele significa no projeto, não
+só pelas palavras. *(Decisão de princípio do pesquisador responsável em 2026-10-01; a escolha
+dos metadados, o formato do texto enriquecido e o momento da indexação ficam para spec e
+discussão posterior.)*
 
 **Texto canônico por tipo:** cada tipo tem um modelo de texto usado para gerar o vetor
 (ex.: `Problema` = título + resumo + classe + características dos dados + critério de sucesso).

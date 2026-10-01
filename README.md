@@ -1,6 +1,6 @@
 # 🔮 GeminiClaw
 
-**GeminiClaw** é um framework de orquestração de agentes de IA projetado para rodar em hardware local de baixo recurso computacional (**Raspberry Pi 5**) utilizando o ecossistema do **Google Gemini (ADK)** e **Docker** para isolamento completo.
+**GeminiClaw** é um framework de orquestração de agentes de IA projetado para rodar em hardware local de baixo recurso computacional (**Raspberry Pi 5**) com provedores LLM agnósticos (**Google Gemini**, **Anthropic Claude**, **OpenAI** e **Ollama** local) e **Docker** apenas para isolar a execução de código.
 
 O projeto permite que múltiplos agentes especializados colaborem em tarefas complexas via um loop de **raciocínio autônomo**, garantindo segurança, persistência de estado e uso eficiente de recursos.
 
@@ -111,14 +111,14 @@ graph TD
 | **SessionManager** | `src/session.py` | Persistência de histórico e estado em **PostgreSQL**. |
 | **OutputManager** | `src/output_manager.py` | Gerencia artefatos produzidos e compartilhamento de arquivos entre agentes via `outputs/<session_id>/<task>/`. |
 | **TelemetryCollector** | `src/telemetry.py` | Coleta e persiste métricas de execução (agent_events, tool_usage, token_usage, hardware_snapshots) em batch no PostgreSQL. Fornece estatísticas sintetizadas para o Summarizer. |
-| **SkillRegistry** | `src/skills/__init__.py` | Registro dinâmico que converte skills Python em ferramentas compatíveis com o Google ADK. |
+| **SkillRegistry** | `src/skills/__init__.py` | Registro dinâmico que converte skills Python em ferramentas compatíveis com o formato de tool calling dos provedores LLM. |
 | **CLI** | `src/cli.py` | Interface de linha de comando com modo direto, REPL interativo e subcomandos `--metrics`, `--export`. |
 
 ---
 
 ## 🛠️ Skills Framework
 
-Localizado em `src/skills/`, este framework permite estender as capacidades dos agentes de forma modular. Cada skill implementa a interface `BaseSkill` e é automaticamente registrada no `SkillRegistry`, que as converte em ferramentas do ADK (`tools`).
+Localizado em `src/skills/`, este framework permite estender as capacidades dos agentes de forma modular. Cada skill implementa a interface `BaseSkill` e é automaticamente registrada no `SkillRegistry`, que as converte em ferramentas (`tools`) no formato de tool calling dos provedores.
 
 ```
 src/skills/
@@ -145,7 +145,7 @@ src/skills/
 
 ### Skills disponíveis
 
-| Skill | Nome ADK | Habilitação | Descrição |
+| Skill | Nome da ferramenta | Habilitação | Descrição |
 | --- | --- | --- | --- |
 | **Quick Search** | `quick_search` | `SKILL_QUICK_SEARCH_ENABLED=true` | Busca rápida na web via scraping do DuckDuckGo. Cache com TTL configurável. |
 | **Deep Search** | `deep_search` | `SKILL_DEEP_SEARCH_ENABLED=false` | Busca profunda em base de conhecimento indexada localmente via Qdrant. Requer crawl prévio. |
@@ -399,13 +399,14 @@ geminiclaw/
 │   ├── llm/                   # Abstração LLM (Ollama + Google)
 │   │   ├── agent_loop.py      # Loop ReAct do agente (instrumentado V5.7)
 │   │   ├── factory.py         # Factory de provedores LLM
-│   │   └── providers/         # Ollama + Google Gemini
+│   │   └── providers/         # Ollama, Google, Anthropic, OpenAI, openai_compatible
 │   └── skills/                # Framework de skills (S0–S5)
-├── agents/                    # Agentes ADK
+├── agents/                    # Agentes (prompts e ferramentas)
 │   ├── base/                  # Agente base (integra skills)
-│   ├── planner/               # Agente de planejamento
-│   ├── researcher/            # Agente de pesquisa
-│   └── validator/             # Agente de validação
+│   ├── developer/             # Agente que escreve e executa código no sandbox
+│   ├── researcher/            # Agente de pesquisa e planejamento
+│   ├── reviewer/              # Instruções do revisor
+│   └── summarizer/            # Agente que redige o relatório final
 ├── containers/                # Dockerfile do sandbox de código e do PostgreSQL (AGE)
 ├── tests/                     # Testes pytest (unit, integration, e2e)
 ├── roadmaps/                  # Roadmaps de desenvolvimento

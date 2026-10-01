@@ -62,7 +62,7 @@ def _task_env() -> Dict[str, str]:
 
 @dataclass
 class AgentState:
-    """Estado interno do agente, compatível com ADK callbacks."""
+    """Estado interno do agente, passado aos callbacks before/after."""
     state: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -175,7 +175,7 @@ async def run_agent_loop(
     # Estado para callbacks
     agent_state = AgentState()
     
-    # 1. Callback 'before' (compatível com ADK)
+    # 1. Callback 'before'
     if before_callback:
         try:
             await before_callback(agent_state)
@@ -473,7 +473,7 @@ async def run_agent_loop(
                 "content": result
             })
 
-    # 6. Callback 'after' (compatível com ADK)
+    # 6. Callback 'after'
     if after_callback:
         try:
             await after_callback(agent_state)

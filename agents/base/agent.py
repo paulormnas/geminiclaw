@@ -126,7 +126,7 @@ async def _load_session_context(callback_context: Any) -> None:
     Carrega o payload da sessão do PostgreSQL e injeta no state do agente.
 
     Args:
-        callback_context: Contexto do callback ADK.
+        callback_context: Contexto do callback.
     """
     _state = _task_state()
     session_id = _state["session_id"]
@@ -179,7 +179,7 @@ async def _persist_session_context(callback_context: Any) -> None:
     Persiste o state do agente de volta na sessão do PostgreSQL.
 
     Args:
-        callback_context: Contexto do callback ADK.
+        callback_context: Contexto do callback.
     """
     _state = _task_state()
     session_id = _state["session_id"]

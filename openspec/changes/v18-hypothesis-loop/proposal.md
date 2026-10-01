@@ -5,6 +5,11 @@
 [ADR 012](../../../docs/decisions/adr_012_agente_curator_ciclo_exploracao.md) §3, §4, §6,
 [ADR 015](../../../docs/decisions/adr_015_modelo_dados_grafo_conhecimento.md) §2, §4, §5
 
+> **Nota de 2026-10-01:** nos modos `semi` e `auto`, as perguntas dos agentes (`ask_researcher`)
+> passam a ser respondidas pelo Researcher consultor (`v18-researcher-consult`, ADR 012 §8). As
+> decisões reservadas ao humano deste ciclo (aprovar `Oportunidade`, confirmar `Problema`) nunca
+> são respondidas pelo consultor; ficam pendentes para o pesquisador.
+
 ## Por quê
 
 É a mudança que transforma o sistema em assistente de pesquisa: ele **formula hipóteses** a

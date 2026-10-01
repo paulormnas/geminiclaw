@@ -26,7 +26,8 @@ posteriores a ela:
 - [ ] **ADR 015:** instrumentos entram no grafo como `Abordagem(tipo="instrumento")`; falhas de
   equipamento são causa `infraestrutura` no veredito (§9.3).
 - [ ] **ADR 010:** limites de uso e continuidade valem também para experimentos físicos.
-- [ ] Converter a G7 para o formato OpenSpec (`openspec/changes/v19-equipment-control/`).
+- [x] Converter a G7 para o formato OpenSpec: [`v19-equipment-control`](../openspec/changes/v19-equipment-control/proposal.md)
+  (2026-10-01, aguardando aprovação), com os itens acima e o §10 do ADR 019.
 
 ## Validação da Etapa
 

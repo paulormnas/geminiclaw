@@ -7,8 +7,9 @@
 **Specs relacionadas:** `openspec/changes/v16-in-process-agents` (fase 2)
 
 > **Aprovado como direção em 2026-10-01.** A segunda onda do ADR 014 foi concluída (#80 e #81),
-> então a retomada prevista na seção "Revisão" começou. Os itens 1, 2, 3 e 5 ainda precisam de
-> OpenSpec (`v16-sandbox-slim-image` e `v16-platform-images`); as perguntas "Em aberto" são
+> então a retomada prevista na seção "Revisão" começou. Os itens 1, 2, 3 e 5 estão descritos nas
+> mudanças OpenSpec `v16-sandbox-slim-image` e `v16-platform-images` (2026-10-01, aguardando
+> aprovação); as perguntas "Em aberto" são
 > decididas lá.
 
 ### Verificação do que está implementado (2026-10-01)

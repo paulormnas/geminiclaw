@@ -1,7 +1,7 @@
 # Tarefas: v18.5-model-catalog-locality
 
 ## 0. Pré-requisitos
-- [ ] 0.1 Confirmar que o catálogo e o roteador do ADR 017 estão implementados em `dev`; se não estiverem, parar e avisar o pesquisador.
+- [ ] 0.1 Confirmar que `v16-model-catalog-router` (catálogo e roteador do ADR 017) está implementada em `dev`; se não estiver, parar e avisar o pesquisador.
 - [ ] 0.2 Obter aprovação explícita do pesquisador para a coluna `token_usage.versao_efetiva`.
 
 ## 1. Catálogo

@@ -1,0 +1,33 @@
+# Tarefas: v16-sandbox-slim-image
+
+## 0. Pré-requisitos
+- [ ] 0.1 Aprovação explícita do pesquisador: novo Dockerfile do sandbox, remoção de `containers/Dockerfile`, ajuste de texto dos ADRs 014 §2 e 003 §2, respostas às questões em aberto do design §8.
+- [ ] 0.2 Liberar espaço em disco antes de construir imagens (o hook local bloqueia comandos de Docker com menos de 10 GB livres).
+
+## 1. Imagem
+- [ ] 1.1 `containers/sandbox/requirements.in` com o conjunto básico aprovado; gerar `requirements.lock` com `uv pip compile --generate-hashes`.
+- [ ] 1.2 `containers/sandbox/Dockerfile` (design §1), com tag fixa do `uv` e sem `--platform`.
+- [ ] 1.3 Remover `containers/Dockerfile`; apontar `scripts/build_images.sh` para a nova imagem e a tag `SANDBOX_IMAGE`.
+- [ ] 1.4 Medir o tamanho da imagem no Pi 5 e registrar no PR.
+
+## 2. Sandbox
+- [ ] 2.1 `SANDBOX_IMAGE` e demais variáveis do design §4 em `src/config.py`; `CodeSkill` lê de `config`.
+- [ ] 2.2 Criação do container com usuário do host, `cap_drop`, `no-new-privileges`, `pids_limit`, `read_only` e `tmpfs`.
+- [ ] 2.3 `packages: list[str]` no lugar de `setup_commands`; validação PEP 508; filtro da stdlib e do conjunto básico.
+- [ ] 2.4 Instalação em `/deps` com comando fixo; falha e timeout encerram a execução (`install_failed`); `packages_installed`.
+- [ ] 2.5 Desconexão de rede verificada antes do script (fail-closed).
+- [ ] 2.6 Remover `chmod 777`, `chown` por root, permissões `0o777`/`0o666`, extração por `get_archive` e `HOST_PROJECT_PATH`.
+- [ ] 2.7 Erro acionável para imagem ausente (sem `pull`).
+- [ ] 2.8 Instrução do Developer (`agents/developer/agent.py`): conjunto básico disponível; o resto em `packages`.
+
+## 3. Testes
+- [ ] 3.1 Unitários com cliente Docker simulado: parâmetros de criação, nenhum `user="root"`, requisito inválido, conjunto básico sem instalação, ordem desconexão → script, falha de desconexão, sem `get_archive`, imagem configurável, imagem ausente.
+- [ ] 3.2 Integração (Mac e Pi 5): conteúdo da imagem; escrita fora das áreas permitidas; pacote inexistente; pacote real instalado e registrado; socket para fora falha no script; dono e modo dos artefatos; symlink que escapa.
+- [ ] 3.3 Ajustar `tests/unit/skills/test_sandbox.py` e `test_sandbox_archive.py` ao novo contrato.
+
+## 4. Fechamento
+- [ ] 4.1 Nota na `openspec/changes/v18.5-sandbox-phases/design.md` sobre o que esta mudança já entregou (feita no PR de specs; conferir ao implementar).
+- [ ] 4.2 `.env.example`: novas variáveis; remover `HOST_PROJECT_PATH`.
+- [ ] 4.3 `uv run ruff check .`; `uv run pytest -m "unit or integration" -v`.
+- [ ] 4.4 Benchmark de referência (`run.sh`) no Pi 5 completo com a nova imagem.
+- [ ] 4.5 Revisão do Analista de Segurança (design §6); revisão nos 7 eixos; PR para `dev`.

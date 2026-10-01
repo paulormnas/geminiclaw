@@ -234,6 +234,18 @@ são lidos por `v18.5-execution-provenance`; esta mudança não grava registro a
 - **UID do host dentro da imagem**: o UID do orquestrador pode não existir em `/etc/passwd` da
   imagem; `HOME=/tmp` evita as falhas conhecidas. Teste de integração cobre.
 
+## Nota de 2026-10-01: divisão com a v16-sandbox-slim-image
+
+A `v16-sandbox-slim-image` antecipa partes que não dependem do ADR 019: imagem mínima
+(`SANDBOX_IMAGE`), usuário do orquestrador sem nenhum `exec_run` como root, instalação em
+`/deps` com `packages` validados e falha de instalação fatal, fim do `chmod 777` e da cópia por
+`get_archive`, remoção de `HOST_PROJECT_PATH` e desconexão da rede antes do script (ainda no
+mesmo container). Ao implementar esta mudança, reaproveitar essas peças e entregar só o que é
+próprio da V18.5: containers separados por fase, `fetch_assets`, `/inputs` somente leitura,
+exceção para entradas compartilháveis e resultado estruturado. O **cache de pacotes entre
+execuções** (ADR 018 §1), que a `v16-sandbox-slim-image` deixou de fora por segurança, cabe no
+container de preparação desta mudança (ver questão 4).
+
 ## Questões em aberto para o pesquisador
 
 1. A exceção de rede (§6) deve exigir pedido explícito (`needs_network`, como proposto) ou ser
@@ -242,3 +254,5 @@ são lidos por `v18.5-execution-provenance`; esta mudança não grava registro a
    hash sempre?
 3. Política de limpeza do cache de ativos (`store/assets/`): manual pelo workflow `clean`,
    limite de tamanho, ou por idade?
+4. Cache de pacotes entre execuções no container de preparação (`UV_CACHE_DIR` persistente
+   montado só na fase `install`): incluir nesta mudança ou deixar para depois?

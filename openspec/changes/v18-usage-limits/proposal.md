@@ -4,6 +4,10 @@
 **ADRs de origem:** [ADR 010](../../../docs/decisions/adr_010_proposito_assistente_digital_pesquisa.md),
 [ADR 012](../../../docs/decisions/adr_012_agente_curator_ciclo_exploracao.md) §5
 
+> **Nota de 2026-10-01:** os tokens do Researcher consultor (`v18-researcher-consult`) são medidos
+> com o `execution_id` do agente que perguntou e entram no total da sessão pelo `UsageTracker`;
+> o limite próprio de consultas por sessão está naquela mudança. Nada muda aqui.
+
 ## Por quê
 
 Com o ciclo de exploração contínua (V18), o sistema continua pesquisando enquanto houver

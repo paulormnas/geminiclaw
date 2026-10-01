@@ -22,6 +22,12 @@ ALGORITHMS = {
     "naive bayes": r"naive\s*bayes|GaussianNB",
 }
 TEXT_SUFFIXES = {".md", ".txt", ".py", ".json", ".csv", ".log"}
+# Arquivos injetados pelo framework em toda subtarefa: trazem exemplos (ex.: {"accuracy": 0.87}) que não
+# são resultado do modelo e contaminariam o checklist.
+FRAMEWORK_FILES = {"scientific_helpers.py"}
+# Acurácia só é lida de saídas (métricas, relatórios), nunca do código gerado.
+ACCURACY_SUFFIXES = {".md", ".txt", ".json", ".csv"}
+TRAIN_RE = re.compile(r"train|treino|cv_|cross", re.I)
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".svg"}
 ACCURACY_RE = re.compile(r"accuracy|acur[aá]cia", re.I)
 NUMBER_RE = re.compile(r"(?<![\d.])(0[.,]\d{2,4}|1[.,]0+|\d{2,3}(?:[.,]\d+)?\s*%)")
@@ -29,25 +35,29 @@ NUMBER_RE = re.compile(r"(?<![\d.])(0[.,]\d{2,4}|1[.,]0+|\d{2,3}(?:[.,]\d+)?\s*%
 CHECKS = ("eda", "preprocessing", "two_algorithms", "comparison", "recommendation", "artifacts")
 
 
-def _texts(session_dir: Path) -> tuple[str, list[Path]]:
-    chunks, files = [], []
+def _texts(session_dir: Path) -> tuple[str, str, list[Path]]:
+    """Texto de todos os arquivos, texto só das saídas (para acurácia) e a lista de arquivos."""
+    chunks, outputs, files = [], [], []
     for path in sorted(session_dir.rglob("*")):
-        if not path.is_file():
+        if not path.is_file() or path.name in FRAMEWORK_FILES:
             continue
         files.append(path)
         if path.suffix.lower() in TEXT_SUFFIXES and path.stat().st_size < 2_000_000:
             try:
-                chunks.append(path.read_text(encoding="utf-8", errors="replace"))
+                content = path.read_text(encoding="utf-8", errors="replace")
             except OSError:
-                pass
-    return "\n".join(chunks), files
+                continue
+            chunks.append(content)
+            if path.suffix.lower() in ACCURACY_SUFFIXES:
+                outputs.append(content)
+    return "\n".join(chunks), "\n".join(outputs), files
 
 
 def reported_accuracies(text: str) -> list[float]:
     """Valores entre 0 e 1 citados perto da palavra acurácia/accuracy."""
     found = []
     for line in text.splitlines():
-        if not ACCURACY_RE.search(line):
+        if not ACCURACY_RE.search(line) or TRAIN_RE.search(line):
             continue
         for match in NUMBER_RE.findall(line):
             raw = match.replace(",", ".").replace("%", "").strip()
@@ -58,9 +68,9 @@ def reported_accuracies(text: str) -> list[float]:
 
 def score_session(session_dir: Path) -> dict:
     """Aplica o checklist e devolve ``{checks, score, max_score, accuracy, algorithms, ...}``."""
-    text, files = _texts(session_dir)
+    text, outputs, files = _texts(session_dir)
     algos = sorted(name for name, pattern in ALGORITHMS.items() if re.search(pattern, text, re.I))
-    accuracies = reported_accuracies(text)
+    accuracies = reported_accuracies(outputs)
     plausible = [a for a in accuracies if 0.85 <= a <= 1.0]
     has_image = any(f.suffix.lower() in IMAGE_SUFFIXES for f in files)
     checks = {

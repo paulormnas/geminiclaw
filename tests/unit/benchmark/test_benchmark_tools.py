@@ -81,6 +81,16 @@ class TestScoring:
         result = scoring.score_session(tmp_path)
         assert result["checks"]["two_algorithms"] and not result["checks"]["comparison"]
 
+    def test_framework_helper_example_does_not_count(self, tmp_path):
+        (tmp_path / "scientific_helpers.py").write_text('metrics: ex: {"accuracy": 0.87}, LogisticRegression, SVM')
+        (tmp_path / "script.py").write_text("print('accuracy 0.99')  # código, não resultado")
+        result = scoring.score_session(tmp_path)
+        assert result["accuracy"] is None and result["algorithms"] == []
+
+    def test_train_accuracy_is_ignored(self, tmp_path):
+        (tmp_path / "metrics.json").write_text('{"train_accuracy": 0.99,\n"test_accuracy": 0.93}')
+        assert scoring.score_session(tmp_path)["accuracy"] == pytest.approx(0.93)
+
     def test_percent_accuracy(self):
         assert scoring.reported_accuracies("Acurácia: 96,7%") == [pytest.approx(0.967)]
 
@@ -153,3 +163,19 @@ def test_report_renders_ok_and_skipped():
     text = report.render([ok, {"name": "b", "status": "skipped", "reason": "KEY ausente"}])
     assert "| a | exit 0 | 10.5 | 100 | 50 | 3/3 | 5/6 | 0.950 | 80 | 3000 | 70 | não | 0.1200 | 2 |" in text
     assert "pulada (KEY ausente)" in text
+
+
+def test_recompute_fills_tokens_from_database(tmp_path, monkeypatch):
+    path = tmp_path / "results.json"
+    path.write_text(json.dumps([
+        {"name": "a", "session": "s1", "tokens": {"calls": 0}},
+        {"name": "b", "session": "s2", "tokens": {"calls": 4, "total_tokens": 9}},
+        {"name": "c", "status": "skipped"},
+    ]))
+    monkeypatch.setattr(run_benchmark, "db_token_usage", lambda session: {"by_provider_model": [
+        {"llm_provider": "openai", "llm_model": "m", "total_prompt_tokens": 7, "total_completion_tokens": 3,
+         "total_tokens": 10, "calls": 2, "total_cost_usd": 0.01}]})
+    run_benchmark.recompute_tokens(path)
+    out = json.loads(path.read_text())
+    assert out[0]["tokens"]["total_tokens"] == 10 and out[0]["tokens"]["cost_by_provider"] == {"openai": 0.01}
+    assert out[1]["tokens"]["total_tokens"] == 9  # já tinha contagem: intacto

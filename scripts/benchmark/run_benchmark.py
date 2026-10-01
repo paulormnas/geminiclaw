@@ -80,6 +80,13 @@ def _cost_by_provider(rows: list[dict]) -> dict[str, float]:
     return costs
 
 
+def db_token_usage(session_id: str) -> dict:
+    """Resumo de tokens do Postgres, para sessões que abortaram sem gravar ``session_metadata.json``."""
+    from src.telemetry import get_telemetry
+
+    return get_telemetry().get_token_summary(session_id)
+
+
 def db_metrics(session_id: str) -> dict:
     """Métricas de telemetria do banco: retentativas de conexão/limite e métricas derivadas."""
     try:
@@ -125,9 +132,20 @@ def run_combination(
     session = newest_session(output_dir, started_wall - 1)
     if session is not None:
         outcome = session_outcome(session)
+        usage = outcome.get("token_usage") or db_token_usage(session.name)  # sessão abortada: sem metadata
         result.update(session=session.name, outcome=outcome, score=score_session(session),
-                      tokens=sum_tokens(outcome.get("token_usage", {})), db=db_metrics(session.name))
+                      tokens=sum_tokens(usage), db=db_metrics(session.name))
     return result
+
+
+def recompute_tokens(results_path: Path) -> None:
+    """Preenche ``tokens`` pelo banco nas combinações que ficaram sem contagem (sessão abortada)."""
+    results = json.loads(results_path.read_text(encoding="utf-8"))
+    for item in results:
+        if item.get("session") and not item.get("tokens", {}).get("calls"):
+            item["tokens"] = sum_tokens(db_token_usage(item["session"]))
+            print(f"[benchmark] tokens recalculados do banco: {item['name']} -> {item['tokens']['total_tokens']}")
+    results_path.write_text(json.dumps(results, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
 
 
 def main() -> None:
@@ -135,7 +153,11 @@ def main() -> None:
     parser.add_argument("matrix", type=Path)
     parser.add_argument("--results", type=Path, required=True)
     parser.add_argument("--only", nargs="*", default=None)
+    parser.add_argument("--recompute", action="store_true", help="refaz os tokens do banco e sai (sem rodar nada)")
     args = parser.parse_args()
+    if args.recompute:
+        recompute_tokens(args.results)
+        return
 
     matrix = json.loads(args.matrix.read_text(encoding="utf-8"))
     task = Path(matrix["task_file"]).expanduser().read_text(encoding="utf-8")

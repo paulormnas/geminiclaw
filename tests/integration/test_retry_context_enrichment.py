@@ -89,7 +89,9 @@ async def test_retry_context_enrichment(monkeypatch):
 async def test_reviewer_receives_artifacts_context(monkeypatch):
     """V13.5.3 / V14.2: Verifica se _review_subtask injeta contexto de artefatos existentes no Validator."""
     orchestrator = MagicMock()
-    orchestrator.output_manager.list_artifacts.return_value = ["file_on_disk.csv"]
+    orchestrator.output_manager.list_artifacts.return_value = [
+        {"name": "file_on_disk.csv", "type": "csv", "size": 1, "path": "/out/sess_123/artifacts/file_on_disk.csv"}
+    ]
 
     mock_validator = AsyncMock()
     mock_review_result = MagicMock(status="pass", issues=[], feedback="")
@@ -118,5 +120,5 @@ async def test_reviewer_receives_artifacts_context(monkeypatch):
 
     call_kwargs = mock_validator.review_result.call_args.kwargs
     assert call_kwargs["task"] == task
-    assert call_kwargs["artifacts_on_disk"] == ["file_on_disk.csv"]
+    assert call_kwargs["artifacts_on_disk"] == ["file_on_disk.csv", "/out/sess_123/artifacts/file_on_disk.csv"]
 

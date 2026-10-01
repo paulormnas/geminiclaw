@@ -162,7 +162,13 @@ class OpenAICompatibleProvider(LLMProvider):
                 )
                 continue
 
-            response.raise_for_status()
+            if response.is_error:
+                # O corpo da resposta diz o que a API recusou; raise_for_status() o descartaria.
+                raise httpx.HTTPStatusError(
+                    f"{response.status_code} em {response.request.url}: {response.text[:800]}",
+                    request=response.request,
+                    response=response,
+                )
             return response.json(), attempt
 
         logger.error(

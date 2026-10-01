@@ -1433,7 +1433,14 @@ class AutonomousLoop:
         from src.utils.json_parser import extract_json
 
         # V14.2: Reviewer executado via corrotina ValidatorAgent (sem container Docker)
-        artifacts_on_disk = self.orchestrator.output_manager.list_artifacts(master_session_id)
+        output_manager = self.orchestrator.output_manager
+        # `list_artifacts` devolve dicts só de `artifacts/`; os scripts gravam em `<subtarefa>/`. O
+        # revisor recebe nomes e caminhos e varre a pasta inteira da sessão (`output_dir`).
+        artifacts_on_disk = [
+            value
+            for a in output_manager.list_artifacts(master_session_id)
+            for value in ((a["name"], a["path"]) if isinstance(a, dict) else (a,))
+        ]
         validator = getattr(self.orchestrator, "validator", None)
         if validator is None:
             from src.agents.validator_agent import ValidatorAgent
@@ -1443,6 +1450,7 @@ class AutonomousLoop:
             task=task,
             response_text=result.response.get("text", ""),
             artifacts_on_disk=artifacts_on_disk,
+            output_dir=output_manager.base_dir / master_session_id,
         )
         return {
             "status": review.status,

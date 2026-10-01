@@ -170,7 +170,7 @@ def main() -> None:
             )
             for provider, cost in results[-1].get("tokens", {}).get("cost_by_provider", {}).items():
                 spent[provider] = spent.get(provider, 0.0) + cost
-        args.results.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
+        args.results.write_text(json.dumps(results, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
         print(f"[benchmark] {combo['name']}: {results[-1]['status']}", flush=True)
 
 

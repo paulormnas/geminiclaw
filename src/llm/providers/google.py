@@ -30,6 +30,9 @@ from src.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Os tokens de pensamento do Gemini 3.x contam em max_output_tokens; um teto baixo (ex.: 10 na triagem)
+# é consumido todo pelo raciocínio e a resposta volta vazia. Piso análogo ao do provedor Anthropic.
+_MIN_MAX_TOKENS = 8192
 _FALLBACK_STICKY_SECONDS = 120.0
 
 
@@ -213,7 +216,7 @@ class GoogleProvider(LLMProvider):
     ) -> LLMResponse:
         config = genai_types.GenerateContentConfig(
             temperature=temperature,
-            max_output_tokens=max_tokens,
+            max_output_tokens=max(max_tokens, _MIN_MAX_TOKENS),
             system_instruction=system,
         )
         if tools:

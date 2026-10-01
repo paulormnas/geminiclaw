@@ -137,6 +137,12 @@ class TestRunner:
         assert "anthropic" in matrix["budget_usd"]
 
 
+def test_results_with_decimal_are_serializable():
+    from decimal import Decimal
+
+    assert json.loads(json.dumps({"x": Decimal("1.5")}, default=str)) == {"x": "1.5"}
+
+
 def test_report_renders_ok_and_skipped():
     ok = {"name": "a", "status": "exit 0", "wall_seconds": 10.5,
           "resources": {

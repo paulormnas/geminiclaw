@@ -92,9 +92,15 @@ O sistema SHALL <comportamento obrigatório>.
 | V18.5 | [v18.5-claim-verification](changes/v18.5-claim-verification/proposal.md) | `claim-verification` | 019, 015 | v18.5-numeric-references, v18.5-model-catalog-locality |
 | V18.5 | [v18.5-operation-metrics](changes/v18.5-operation-metrics/proposal.md) | `operation-metrics` | 019 | v18.5-egress-gate, v18.5-execution-provenance, v18.5-claim-verification |
 | V19 | [v19-equipment-control](changes/v19-equipment-control/proposal.md) | `equipment-control` | 019, 014, 015, 010 | V18.5, v18-researcher-consult |
+| V20 | [v20-node-identity](changes/v20-node-identity/proposal.md) | `node-identity` | 013 | V16–V19 validadas |
+| V20 | [v20-federated-records](changes/v20-federated-records/proposal.md) | `federation-records` | 013, 019, 015 | v20-node-identity, V18.5 |
+| V20 | [v20-federation-transport](changes/v20-federation-transport/proposal.md) | `federation-transport` | 013 | v20-node-identity, v20-federated-records |
+| V20 | [v20-remote-knowledge-intake](changes/v20-remote-knowledge-intake/proposal.md) | `remote-knowledge` | 013, 015 | v20-federated-records, v20-federation-transport, v17-knowledge-semantic-index |
+| V20 | [v20-reproduction-validation](changes/v20-reproduction-validation/proposal.md) | `reproduction-validation` | 013, 014, 019 | v20-remote-knowledge-intake, v18.5-sandbox-phases |
 
 **V19** (controle de equipamentos): `v19-equipment-control` converte a Spec G7
 ([`roadmaps/specs/G7_equipment_control_mhs.md`](../roadmaps/specs/G7_equipment_control_mhs.md))
 para o formato OpenSpec, com o §10 do ADR 019.
-**V20** (federação, ADR 013) ainda não tem spec: as questões em aberto do ADR 013 precisam ser
-discutidas antes. Ver os roadmaps `roadmaps/roadmap_V16.md` a `roadmap_V20.md`.
+**V20** (federação, ADR 013, aprovado em 2026-10-01): cinco mudanças `v20-*`; as questões em
+aberto do ADR estão como propostas nos `design.md`, para decisão do pesquisador. Ver os roadmaps
+`roadmaps/roadmap_V16.md` a `roadmap_V20.md`.

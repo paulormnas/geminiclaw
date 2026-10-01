@@ -94,6 +94,10 @@ GOOGLE_FALLBACK_MODEL = get_env("GOOGLE_FALLBACK_MODEL", default="gemini-3.7-fla
 # (vLLM, LM Studio, litellm), não o prefixo do nome do provedor no registro.
 OPENAI_BASE_URL = get_env("OPENAI_BASE_URL")
 OPENAI_API_KEY = get_env("OPENAI_API_KEY")
+# Esforço de raciocínio do provedor 'openai'. gpt-6-luna recusa ferramentas em /chat/completions com
+# raciocínio ativo ("Function tools with reasoning_effort are not supported"); 'none' as habilita.
+# Vazio = não enviar o parâmetro.
+OPENAI_REASONING_EFFORT = get_env("OPENAI_REASONING_EFFORT", default="none").lower()
 
 # Configurações do provedor anthropic (ADR 011). A chave é obrigatória apenas quando algum
 # papel usa o provedor (verificado na criação do provedor, não na importação).

@@ -46,7 +46,14 @@ def _create_openai_compatible(settings: ProviderSettings):
 def _create_openai(settings: ProviderSettings):
     from src.llm.providers.openai import OpenAIProvider
 
-    return OpenAIProvider(api_key=settings.api_key, model=settings.model, base_url=settings.base_url)
+    from src import config
+
+    return OpenAIProvider(
+        api_key=settings.api_key,
+        model=settings.model,
+        base_url=settings.base_url,
+        reasoning_effort=config.OPENAI_REASONING_EFFORT,
+    )
 
 
 def _create_anthropic(settings: ProviderSettings):

@@ -21,10 +21,17 @@ MIN_COMPLETION_TOKENS = 8192
 
 
 class OpenAIProvider(OpenAICompatibleProvider):
-    def __init__(self, api_key: str | None, model: str, base_url: str | None = None):
+    def __init__(
+        self,
+        api_key: str | None,
+        model: str,
+        base_url: str | None = None,
+        reasoning_effort: str | None = None,
+    ):
         if not api_key:
             raise ValueError("Provedor 'openai' requer OPENAI_API_KEY configurada em .env.")
         super().__init__(base_url=base_url or DEFAULT_BASE_URL, model=model, api_key=api_key)
+        self._reasoning_effort = reasoning_effort or None
 
     def _build_messages(self, messages: list[dict], system: str | None) -> list[dict]:
         """Normaliza o histórico interno para o esquema estrito da API da OpenAI.
@@ -79,6 +86,8 @@ class OpenAIProvider(OpenAICompatibleProvider):
             "messages": self._build_messages(messages, system),
             "max_completion_tokens": max(max_tokens, MIN_COMPLETION_TOKENS),
         }
+        if self._reasoning_effort:
+            payload["reasoning_effort"] = self._reasoning_effort
         if tools:
             payload["tools"] = tools
         return payload

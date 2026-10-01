@@ -31,6 +31,13 @@ class TestOpenAIProvider:
         assert payload["max_completion_tokens"] >= 8192
         assert payload["messages"][0] == {"role": "system", "content": "sys"}
 
+    def test_reasoning_effort_is_sent_when_configured(self):
+        provider = OpenAIProvider(api_key="sk", model="gpt-6-luna", reasoning_effort="none")
+        assert provider._build_payload([{"role": "user", "content": "x"}], [{"type": "function"}], None, 0.7, 10)[
+            "reasoning_effort"
+        ] == "none"
+        assert "reasoning_effort" not in self._provider()._build_payload([], None, None, 0.7, 10)
+
     def test_history_is_normalized_to_strict_schema(self):
         history = [
             {"role": "user", "content": "x"},

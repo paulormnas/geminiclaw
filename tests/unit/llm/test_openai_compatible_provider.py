@@ -208,3 +208,14 @@ async def test_health_check_false_on_error():
 def test_missing_base_url_raises_value_error():
     with pytest.raises(ValueError, match="OPENAI_BASE_URL"):
         OpenAICompatibleProvider(base_url=None, model=MODEL)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_http_error_message_includes_response_body():
+    provider = OpenAICompatibleProvider(base_url="http://x/v1", model="m")
+    respx.post("http://x/v1/chat/completions").mock(
+        return_value=httpx.Response(400, json={"error": {"message": "Unsupported parameter: foo"}})
+    )
+    with pytest.raises(httpx.HTTPStatusError, match="Unsupported parameter: foo"):
+        await provider.generate(messages=[{"role": "user", "content": "oi"}])

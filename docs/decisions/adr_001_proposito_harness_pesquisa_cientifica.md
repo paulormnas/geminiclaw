@@ -1,6 +1,6 @@
 # ADR 001 — Propósito: Harness de Execução de Pesquisa Científica
 
-**Status:** Aceito — em revisão; será substituído por [ADR 010](adr_010_proposito_assistente_digital_pesquisa.md) quando este for aceito
+**Status:** Deprecado — substituído pelo [ADR 010](adr_010_proposito_assistente_digital_pesquisa.md) em 2026-10-01
 **Data:** 2026-09-22
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** `roadmaps/roadmap.md`, `roadmaps/roadmap_V6_research_autonomy.md`, `roadmaps/roadmap_V14.md`

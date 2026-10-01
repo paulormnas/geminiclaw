@@ -2,8 +2,8 @@
 
 Este documento é o **ponto de entrada e fonte primária de governança** para agentes de IA que atuam no repositório **GeminiClaw**. Ele define as regras invioláveis de desenvolvimento, a ordem de atuação por papéis e o índice de manuais especializados.
 
-**Projeto:** Framework leve de orquestração de agentes Gemini para Raspberry Pi 5.
-**Stack:** Python 3.11+, Google ADK, Docker, PostgreSQL 16, Qdrant, pytest, uv.
+**Projeto:** Framework leve de orquestração de agentes de pesquisa (provedores LLM agnósticos: Google, Anthropic, OpenAI, Ollama) para Raspberry Pi 5.
+**Stack:** Python 3.11+, Docker, PostgreSQL 16, Qdrant, pytest, uv.
 
 ---
 
@@ -48,7 +48,7 @@ Ao assumir um papel específico, o agente deve consultar e seguir integralmente 
 |---|---|---|
 | **Arquiteto de Soluções** | [`.agents/rules/architect.md`](.agents/rules/architect.md) | Domínio de orquestração de agentes, separação de camadas, ADRs, trade-offs e análise de impacto. |
 | **Analista de Segurança** | [`.agents/rules/security-analyst.md`](.agents/rules/security-analyst.md) | Escape de sandbox, contenção Docker, vazamento de segredos, STRIDE adaptado para agentes de IA. |
-| **Desenvolvedor Core / Agentes** | [`.agents/rules/backend-dev.md`](.agents/rules/backend-dev.md) | Python 3.11+, Google ADK, Docker, `uv`, Clean Architecture, DDD, pytest. |
+| **Desenvolvedor Core / Agentes** | [`.agents/rules/backend-dev.md`](.agents/rules/backend-dev.md) | Python 3.11+, Docker, `uv`, Clean Architecture, DDD, pytest. |
 | **Tester / QA** | [`.agents/rules/tester.md`](.agents/rules/tester.md) | pytest, pytest-asyncio, fixtures Docker, mocks de LLM, benchmarks no Raspberry Pi 5. |
 | **Revisor de Código / Tech Lead** | [`.agents/rules/reviewer.md`](.agents/rules/reviewer.md) | Code review em 7 eixos, emissão de pareceres via GitHub CLI, homologação de PRs. |
 | **Pentester (Red Team)** | [`.agents/rules/pentester.md`](.agents/rules/pentester.md) | Testes de intrusão, escape de sandbox, contenção de recursos no Pi 5, injeção de prompt e fuzzing. |
@@ -163,7 +163,7 @@ geminiclaw/
 ├── uv.lock                    # Lockfile gerado pelo uv (versionar)
 ├── .env / .env.example        # Credenciais (nunca versionar .env)
 ├── src/                       # Orquestrador Python
-├── agents/                    # Agentes ADK
+├── agents/                    # Agentes (prompts e ferramentas)
 ├── containers/                # Dockerfile do sandbox de código e do PostgreSQL (AGE)
 ├── tests/                     # Testes pytest
 ├── roadmaps/                  # Roadmaps de versões (V10–V14+)

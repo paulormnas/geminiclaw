@@ -26,7 +26,7 @@ Toda proposta deve avaliar o impacto nos seguintes eixos:
 - Injeção de contexto e manifest de workspace.
 - Ciclo ReAct (Reasoning + Acting).
 
-### 2. Agentes ADK & Prompts
+### 2. Agentes & Prompts
 - System instructions e tools registradas.
 - Schemas de tool call e contratos IPC.
 - Modelos atribuídos por papel.
@@ -73,7 +73,7 @@ Toda proposta deve avaliar o impacto nos seguintes eixos:
 | Eixo | Impacto | Detalhes |
 |---|---|---|
 | Orquestrador & Loop | Alto/Médio/Baixo/Nenhum | ... |
-| Agentes ADK & Prompts | Alto/Médio/Baixo/Nenhum | ... |
+| Agentes & Prompts | Alto/Médio/Baixo/Nenhum | ... |
 | Sandboxes & Containers | Alto/Médio/Baixo/Nenhum | ... |
 | Persistência de Estado | Alto/Médio/Baixo/Nenhum | ... |
 | Segurança & Hardening | Alto/Médio/Baixo/Nenhum | ... |

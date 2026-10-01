@@ -1,6 +1,6 @@
 # ADR 009 — Camada de Conhecimento Experimental: Grafo (Apache AGE) + Vetorial (Qdrant)
 
-**Status:** Proposto
+**Status:** Aprovado em 2026-10-01 pelo pesquisador responsável — implementação pendente (armazenamento do grafo e veredito de evidência já implementados; nenhum agente grava no grafo ainda)
 **Data:** 2026-09-28
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** a definir (sequência pós-V15)

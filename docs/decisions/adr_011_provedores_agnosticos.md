@@ -1,9 +1,9 @@
 # ADR 011 — Provedores Agnósticos: Registro de Provedores LLM e de Embeddings
 
-**Status:** Em revisão — atualizado em 2026-10-01 para refletir o que foi implementado; aguardando aprovação do pesquisador responsável
+**Status:** Aceito em 2026-10-01 (aprovado pelo pesquisador responsável; decisão implementada, texto atualizado na mesma data). A seleção de modelos por papel segue pelo catálogo do ADR 017, ainda pendente
 **Data:** 2026-09-28 (revisado em 2026-10-01)
 **Autores:** Arquiteto de Soluções (GeminiClaw)
-**Substitui:** ADR 006 (quando aprovado)
+**Substitui:** ADR 006 (a partir de 2026-10-01)
 **ADRs relacionados:** ADR 007 (Model Router por papel), ADR 009 (conhecimento), ADR 013 (federação), ADR 017 (catálogo e roteador), ADR 019 (localidade dos dados)
 
 ---

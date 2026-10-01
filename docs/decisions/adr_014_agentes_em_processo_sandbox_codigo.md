@@ -43,6 +43,12 @@ Containers são mantidos **exclusivamente para executar o código implementado p
 Developer**. O sandbox do ADR 003 §2 permanece: `put_archive`/`get_archive`, sem bind mounts,
 usuário non-root, rede desabilitada e limites de CPU/RAM.
 
+> **Nota de 2026-10-01 (ADR 018):** o sandbox real diverge deste parágrafo e o ADR 018 aprovou o
+> rumo de corrigi-lo. O diretório `/outputs` **continua montado** (necessário para exportar código,
+> gráficos e artefatos), a rede precisa estar disponível para instalar pacotes e o usuário
+> deve ser não-root. Hoje a implementação ainda roda como root e usa `chmod 777`. O texto acima
+> descreve o alvo anterior e será revisado quando as specs do ADR 018 forem implementadas.
+
 ### 3. Nenhum código gerado roda no computador principal
 
 **Todo código gerado ou modificado por agentes, inclusive durante a exploração de resultados,

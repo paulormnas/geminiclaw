@@ -138,10 +138,12 @@ def run_combination(
     return result
 
 
-def recompute_tokens(results_path: Path) -> None:
-    """Preenche ``tokens`` pelo banco nas combinações que ficaram sem contagem (sessão abortada)."""
+def recompute_tokens(results_path: Path, output_dir: Path | None = None) -> None:
+    """Preenche ``tokens`` pelo banco nas combinações sem contagem (sessão abortada) e repontua o checklist."""
     results = json.loads(results_path.read_text(encoding="utf-8"))
     for item in results:
+        if output_dir and item.get("session") and (output_dir / item["session"]).is_dir():
+            item["score"] = score_session(output_dir / item["session"])
         if item.get("session") and not item.get("tokens", {}).get("calls"):
             item["tokens"] = sum_tokens(db_token_usage(item["session"]))
             print(f"[benchmark] tokens recalculados do banco: {item['name']} -> {item['tokens']['total_tokens']}")
@@ -156,7 +158,7 @@ def main() -> None:
     parser.add_argument("--recompute", action="store_true", help="refaz os tokens do banco e sai (sem rodar nada)")
     args = parser.parse_args()
     if args.recompute:
-        recompute_tokens(args.results)
+        recompute_tokens(args.results, Path(dotenv_values('.env').get('OUTPUT_BASE_DIR') or 'outputs'))
         return
 
     matrix = json.loads(args.matrix.read_text(encoding="utf-8"))

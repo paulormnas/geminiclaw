@@ -81,6 +81,16 @@ class TestScoring:
         result = scoring.score_session(tmp_path)
         assert result["checks"]["two_algorithms"] and not result["checks"]["comparison"]
 
+    def test_framework_helper_example_does_not_count(self, tmp_path):
+        (tmp_path / "scientific_helpers.py").write_text('metrics: ex: {"accuracy": 0.87}, LogisticRegression, SVM')
+        (tmp_path / "script.py").write_text("print('accuracy 0.99')  # código, não resultado")
+        result = scoring.score_session(tmp_path)
+        assert result["accuracy"] is None and result["algorithms"] == []
+
+    def test_train_accuracy_is_ignored(self, tmp_path):
+        (tmp_path / "metrics.json").write_text('{"train_accuracy": 0.99,\n"test_accuracy": 0.93}')
+        assert scoring.score_session(tmp_path)["accuracy"] == pytest.approx(0.93)
+
     def test_percent_accuracy(self):
         assert scoring.reported_accuracies("Acurácia: 96,7%") == [pytest.approx(0.967)]
 

@@ -4,7 +4,7 @@ description: Ciclo completo de desenvolvimento de nova feature no GeminiClaw
 
 # Workflow: Ciclo de Nova Feature
 
-Fluxo ponta a ponta desde a concepção até o merge de uma nova funcionalidade no GeminiClaw — framework de orquestração de agentes Gemini para Raspberry Pi 5.
+Fluxo ponta a ponta desde a concepção até o merge de uma nova funcionalidade no GeminiClaw. A especificação de cada funcionalidade é uma mudança OpenSpec (`openspec/changes/<id>/`); etapas inteiras do roadmap são especificadas antes por [`stage-spec.md`](stage-spec.md).
 
 ---
 
@@ -25,12 +25,11 @@ mais abaixo.
 
 **Regras:** [`architect.md`](../rules/architect.md)
 
-1. Consultar roadmaps (`roadmaps/`) e ADRs (`docs/decisions/`) para contexto.
+1. Consultar roadmaps (`roadmaps/`), ADRs (`docs/decisions/`) e `openspec/` (README, `project.md`, mudanças em aberto e arquivadas). Se a funcionalidade já tem mudança OpenSpec aprovada, ir para a Fase 2.
 2. Avaliar impacto nos 6 eixos conforme [`impact-analysis.md`](impact-analysis.md).
 3. Produzir:
-   - Proposta técnica com trade-offs.
    - ADR em `docs/decisions/adr_<NNN>_<titulo>.md` (se decisão arquitetural relevante).
-   - Plano de implementação com sequência de tarefas.
+   - Mudança OpenSpec em `openspec/changes/<id>/` (`proposal.md`, `design.md`, `tasks.md`, `specs/<capacidade>/spec.md`), no formato de [`stage-spec.md`](stage-spec.md), com a proposta técnica, a análise de impacto e o plano de implementação dentro dela.
 4. Obter aprovação explícita do usuário antes de prosseguir.
 
 ---
@@ -39,9 +38,9 @@ mais abaixo.
 
 **Regras:** [`security-analyst.md`](../rules/security-analyst.md)
 
-1. Aplicar STRIDE adaptado para agentes de IA nos componentes afetados.
+1. Ler `proposal.md` e `design.md` da mudança e aplicar STRIDE adaptado para agentes de IA nos componentes afetados.
 2. Verificar eixos de segurança: sandbox, segredos, contenção de recursos, rede.
-3. Emitir parecer com mitigações necessárias.
+3. Emitir parecer com mitigações necessárias, registrado no `design.md` (mitigação obrigatória vira requisito com cenário na spec).
 4. Hardening obrigatório antes da implementação para features que envolvam containers, IPC ou acesso a dados.
 
 ---
@@ -57,7 +56,7 @@ mais abaixo.
    uv sync
    ```
 
-2. Implementar respeitando:
+2. Implementar a mudança OpenSpec na ordem de `tasks.md`, marcando as caixas à medida que concluir; divergência ou ambiguidade da spec volta ao Arquiteto antes de seguir. Respeitar:
    - Clean Architecture e DDD.
    - Type hints obrigatórios em funções públicas.
    - Docstrings Google Style.
@@ -65,6 +64,7 @@ mais abaixo.
    - `async/await` para I/O, nunca `time.sleep()`.
 
 3. Escrever testes junto com o código:
+   - Ao menos um teste por `#### Scenario` da spec.
    - Unitários para cada módulo/classe nova.
    - De integração para fluxos com containers/banco.
 
@@ -89,7 +89,7 @@ mais abaixo.
    uv run pytest --cov=src --cov=agents --cov-report=term-missing
    ```
 
-3. Verificar regressões em testes existentes.
+3. Verificar regressões em testes existentes e a rastreabilidade cenário → teste da spec.
 4. Reportar NCs (Não Conformidades) se encontradas. O desenvolvedor corrige seguindo [`fix-nc.md`](fix-nc.md).
 
 ---
@@ -100,9 +100,10 @@ mais abaixo.
 
 1. Garantir que todos os testes passam.
 2. Push da branch e criação do PR apontando para `dev`.
-3. Code Review conforme [`review.md`](../rules/review.md).
+3. Code Review conforme [`reviewer.md`](../rules/reviewer.md), incluindo a conformidade com a spec.
 4. Ciclo de melhorias se necessário.
 5. Merge, sincronização local e limpeza da worktree.
+6. Arquivar a mudança: mover `openspec/changes/<id>/` para `openspec/changes/archive/`, consolidar os requisitos em `openspec/specs/<capacidade>/spec.md` e atualizar o status do ADR se a implementação dele estiver completa.
 
 ---
 
@@ -199,6 +200,8 @@ anything without my approval.
 - [ ] Todos os testes unitários e de integração passam
 - [ ] Cobertura mínima atingida nos módulos afetados
 - [ ] ADR criado (se decisão arquitetural relevante)
+- [ ] Mudança OpenSpec aprovada antes da implementação, `tasks.md` marcado e cada cenário coberto por teste
+- [ ] Mudança arquivada em `openspec/changes/archive/` e `openspec/specs/` consolidado
 - [ ] Commits seguem Conventional Commits
 - [ ] PR aprovado e merged em `dev`
 - [ ] Worktree removida e branch local limpa

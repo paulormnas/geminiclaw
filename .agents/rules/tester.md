@@ -50,11 +50,14 @@ Os testes devem ser:
 
 Antes e durante os testes, consulte obrigatoriamente:
 
-1. **Roadmaps (`roadmaps/`):** Etapas, tarefas e critérios de aceite para cada funcionalidade.
-2. **Código fonte (`src/`, `agents/`):** Comportamentos e contratos esperados.
-3. **Testes existentes (`tests/`):** Padrões de fixtures, mocks e organização.
-4. **Configuração (`pyproject.toml`, `src/config.py`):** Parâmetros e variáveis de ambiente.
-5. **Decisões Arquiteturais (`docs/decisions/`):** ADRs contendo decisões técnicas e critérios de qualidade acordados.
+1. **Mudança OpenSpec (`openspec/changes/<id>/specs/*/spec.md`):** cada `#### Scenario` é um caso de teste obrigatório; `tasks.md` mostra o que deveria ter sido entregue. Confira a rastreabilidade cenário → teste e reporte como NC todo cenário sem teste.
+2. **Roadmaps (`roadmaps/`):** Etapas, tarefas e critérios de aceite para cada funcionalidade.
+3. **Código fonte (`src/`, `agents/`):** Comportamentos e contratos esperados.
+4. **Testes existentes (`tests/`):** Padrões de fixtures, mocks e organização.
+5. **Configuração (`pyproject.toml`, `src/config.py`):** Parâmetros e variáveis de ambiente.
+6. **Decisões Arquiteturais (`docs/decisions/`):** ADRs contendo decisões técnicas e critérios de qualidade acordados.
+
+Na revisão de uma spec antes da implementação (`stage-spec.md`, passo 5), confirme que cada cenário é verificável com os recursos de teste do projeto, sem chamada real a provedor LLM pago.
 
 ---
 

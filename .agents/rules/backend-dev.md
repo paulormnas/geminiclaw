@@ -48,13 +48,26 @@ Ao atuar como desenvolvedor sênior, o agente deve:
 
 Antes de implementar ou refatorar qualquer módulo, agente, skill ou componente, consulte obrigatoriamente:
 
-1. **Roadmaps (`roadmaps/`):** Etapas, tarefas, critérios de aceite e ordem de execução.
-2. **Decisões Arquiteturais (`docs/decisions/`):** ADRs com decisões técnicas fundamentadas.
-3. **Código fonte (`src/`, `agents/`, `containers/`):** Padrões e implementações existentes.
-4. **Testes (`tests/`):** Testes unitários e de integração que documentam comportamentos esperados.
-5. **Configuração (`pyproject.toml`, `.env.example`, `src/config.py`):** Dependências e parâmetros do sistema.
+1. **Mudança OpenSpec (`openspec/changes/<id>/`):** é o contrato a implementar — `proposal.md` (escopo e aprovações), `design.md` (contratos e decisões), `tasks.md` (ordem) e `specs/<capacidade>/spec.md` (requisitos e cenários). Leia também `openspec/project.md`.
+2. **Roadmaps (`roadmaps/`):** Etapas, tarefas, critérios de aceite e ordem de execução.
+3. **Decisões Arquiteturais (`docs/decisions/`):** ADRs com decisões técnicas fundamentadas.
+4. **Código fonte (`src/`, `agents/`, `containers/`):** Padrões e implementações existentes.
+5. **Testes (`tests/`):** Testes unitários e de integração que documentam comportamentos esperados.
+6. **Configuração (`pyproject.toml`, `.env.example`, `src/config.py`):** Dependências e parâmetros do sistema.
 
 Alinhe qualquer solução técnica ou correção de bug com estas fontes antes da implementação.
+
+### Implementando a partir de uma mudança OpenSpec
+
+- Implemente o que a spec pede, na ordem de `tasks.md`; não amplie o escopo. Funcionalidade
+  nova fora da spec volta ao Arquiteto.
+- Cada `#### Scenario` vira ao menos um teste, com o nome do cenário reconhecível no teste.
+- Marque as caixas de `tasks.md` no próprio PR à medida que concluir cada tarefa.
+- Spec ambígua, contraditória ou inviável: pare, descreva a divergência e peça a decisão; não
+  resolva por suposição. A correção é feita na spec pelo Arquiteto.
+- "Aprovações necessárias" do `proposal.md` precisam de confirmação explícita do usuário antes
+  da implementação daquela parte.
+- O corpo do PR cita a mudança (`openspec/changes/<id>`) e o ADR de origem.
 
 ---
 

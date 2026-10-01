@@ -27,14 +27,14 @@ Para qualquer nova funcionalidade, refatoração relevante ou correção estrutu
 
 ```
 [1. Arquiteto de Soluções] ──→ [2. Analista de Segurança] ──→ [3. Devs Core/Agentes] ──→ [4. Tester / QA] ──→ [5. Pull Request]
-    (Impacto, ADR & Specs)        (Modelagem & Hardening)       (Worktree & Código)        (pytest & Docker)       (Revisão & Merge)
+  (Impacto, ADR & OpenSpec)       (Modelagem & Hardening)       (Worktree & Código)        (pytest & Docker)       (Revisão & Merge)
 ```
 
-1. **Arquiteto de Soluções:** Entende o domínio de orquestração de agentes, avalia impactos nos 6 eixos, registra o ADR em `docs/decisions/` e gera as specs no padrão do projeto.
-2. **Analista de Segurança:** Avalia a arquitetura contra ameaças de escape de sandbox, vazamento de segredos, injeção de prompt e contenção de recursos no Pi 5.
-3. **Desenvolvedor (Core / Agentes):** Cria a worktree exclusiva, implementa respeitando Clean Code/Architecture e adiciona testes automatizados com pytest.
-4. **Tester / QA:** Valida critérios de aceite com testes unitários, de integração e benchmarks, homologa o fechamento de Não Conformidades.
-5. **Pull Request:** Abre o PR detalhado no GitHub apontando para `dev` via GitHub App.
+1. **Arquiteto de Soluções:** Entende o domínio de orquestração de agentes, avalia impactos nos 6 eixos, registra o ADR em `docs/decisions/` e descreve cada mudança em OpenSpec (`openspec/changes/<id>/`: `proposal.md`, `design.md`, `tasks.md` e `specs/`), conforme [`stage-spec.md`](.agents/workflows/stage-spec.md). Nada é implementado sem a mudança OpenSpec aprovada pelo usuário.
+2. **Analista de Segurança:** Avalia a arquitetura e as mudanças OpenSpec (`proposal.md` e `design.md`) contra ameaças de escape de sandbox, vazamento de segredos, injeção de prompt, saída de dados de pesquisa e contenção de recursos no Pi 5.
+3. **Desenvolvedor (Core / Agentes):** Cria a worktree exclusiva, implementa a mudança OpenSpec na ordem de `tasks.md`, respeitando Clean Code/Architecture, e escreve ao menos um teste por cenário da spec.
+4. **Tester / QA:** Valida os cenários da spec e os critérios de aceite com testes unitários, de integração e benchmarks, homologa o fechamento de Não Conformidades.
+5. **Pull Request:** Abre o PR detalhado no GitHub apontando para `dev` via GitHub App, citando a mudança OpenSpec; após o merge, a mudança é arquivada em `openspec/changes/archive/`.
 
 > **Nota:** Para etapas futuras que incluam frontend (dashboard de monitoramento, UI de controle), os papéis de **Designer de Produto** e **Desenvolvedor Frontend** serão ativados conforme o roadmap do projeto.
 
@@ -46,7 +46,7 @@ Ao assumir um papel específico, o agente deve consultar e seguir integralmente 
 
 | Papel | Arquivo de Regras | Foco Principal |
 |---|---|---|
-| **Arquiteto de Soluções** | [`.agents/rules/architect.md`](.agents/rules/architect.md) | Domínio de orquestração de agentes, separação de camadas, ADRs, trade-offs e análise de impacto. |
+| **Arquiteto de Soluções** | [`.agents/rules/architect.md`](.agents/rules/architect.md) | Domínio de orquestração de agentes, separação de camadas, ADRs, mudanças OpenSpec, trade-offs e análise de impacto. |
 | **Analista de Segurança** | [`.agents/rules/security-analyst.md`](.agents/rules/security-analyst.md) | Escape de sandbox, contenção Docker, vazamento de segredos, STRIDE adaptado para agentes de IA. |
 | **Desenvolvedor Core / Agentes** | [`.agents/rules/backend-dev.md`](.agents/rules/backend-dev.md) | Python 3.11+, Docker, `uv`, Clean Architecture, DDD, pytest. |
 | **Tester / QA** | [`.agents/rules/tester.md`](.agents/rules/tester.md) | pytest, pytest-asyncio, fixtures Docker, mocks de LLM, benchmarks no Raspberry Pi 5. |
@@ -62,7 +62,7 @@ Ao assumir um papel específico, o agente deve consultar e seguir integralmente 
 Procedimentos operacionais padronizados para execução de tarefas complexas:
 
 - 🚀 **Ciclo de Nova Feature:** [`.agents/workflows/new-feature.md`](.agents/workflows/new-feature.md) — Fluxo ponta a ponta desde o design até o merge.
-- 📐 **Especificação de Nova Etapa do Roadmap:** [`.agents/workflows/stage-spec.md`](.agents/workflows/stage-spec.md) — Criação coordenada de specs de etapas completas do roadmap.
+- 📐 **Especificação de Nova Etapa do Roadmap:** [`.agents/workflows/stage-spec.md`](.agents/workflows/stage-spec.md) — ADRs, roadmap e mudanças OpenSpec (`openspec/changes/`) de uma etapa, até a aprovação para implementar.
 - 🧩 **Especificação de Componente:** [`.agents/workflows/component-spec.md`](.agents/workflows/component-spec.md) — Design e estados de componentes visuais *(futuro)*.
 - 🔍 **Análise de Impacto & Proposta Técnica:** [`.agents/workflows/impact-analysis.md`](.agents/workflows/impact-analysis.md) — Avaliação em 6 eixos antes do código.
 - 🛠️ **Ciclo de Correção de NC:** [`.agents/workflows/fix-nc.md`](.agents/workflows/fix-nc.md) — Tratamento de desvios reportados pelo tester.
@@ -166,8 +166,9 @@ geminiclaw/
 ├── agents/                    # Agentes (prompts e ferramentas)
 ├── containers/                # Dockerfile do sandbox de código e do PostgreSQL (AGE)
 ├── tests/                     # Testes pytest
-├── roadmaps/                  # Roadmaps de versões (V10–V14+)
-├── docs/decisions/            # ADRs (Architectural Decision Records)
+├── roadmaps/                  # Roadmaps de versões (V10–V20)
+├── docs/decisions/            # ADRs (Architectural Decision Records) e índice de status
+├── openspec/                  # Specs OpenSpec: README (formato), project.md, changes/ (em aberto e archive/), specs/ (verdade atual)
 ├── store/                     # SQLite (runtime)
 └── logs/                      # Logs (runtime)
 ```

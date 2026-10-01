@@ -30,12 +30,13 @@ Ao atuar como **Revisor de Código (Reviewer / Tech Lead)**, o agente deve:
 
 Antes de iniciar a revisão de qualquer Pull Request, consulte:
 
-1. **Roadmaps (`roadmaps/`):** Etapas, tarefas e critérios de aceite para a funcionalidade sob revisão.
-2. **Decisões Arquiteturais (`docs/decisions/`):** ADRs e trade-offs técnicos acordados.
-3. **Código Fonte (`src/`, `agents/`, `containers/`):** Padrões e implementações existentes.
-4. **Testes (`tests/`):** Testes unitários e de integração que documentam comportamentos esperados.
-5. **Manuais Especializados:** [`backend-dev.md`](backend-dev.md), [`security-analyst.md`](security-analyst.md), [`tester.md`](tester.md).
-6. **Workflow de PR:** [`.agents/workflows/do-pull-request.md`](../workflows/do-pull-request.md).
+1. **Mudança OpenSpec de origem (`openspec/changes/<id>/`):** requisitos, cenários, `tasks.md` e aprovações necessárias da mudança implementada pelo PR.
+2. **Roadmaps (`roadmaps/`):** Etapas, tarefas e critérios de aceite para a funcionalidade sob revisão.
+3. **Decisões Arquiteturais (`docs/decisions/`):** ADRs e trade-offs técnicos acordados.
+4. **Código Fonte (`src/`, `agents/`, `containers/`):** Padrões e implementações existentes.
+5. **Testes (`tests/`):** Testes unitários e de integração que documentam comportamentos esperados.
+6. **Manuais Especializados:** [`backend-dev.md`](backend-dev.md), [`security-analyst.md`](security-analyst.md), [`tester.md`](tester.md).
+7. **Workflow de PR:** [`.agents/workflows/do-pull-request.md`](../workflows/do-pull-request.md).
 
 ---
 
@@ -46,8 +47,12 @@ A análise do PR deve cobrir rigorosamente as 7 dimensões:
 ### Eixo 1: Conformidade com Especificações & Rastreabilidade
 - Branch base apontada exclusivamente para `dev` (nunca para `main`).
 - Commits semânticos no padrão Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`).
-- Descrição do PR preenchida com referências ao roadmap, ADR ou NC de origem.
-- Escopo delimitado sem alterações alheias ao objetivo do PR.
+- Descrição do PR preenchida com referências à mudança OpenSpec, ao roadmap, ao ADR ou à NC de origem.
+- Escopo delimitado sem alterações alheias ao objetivo do PR e sem funcionalidade fora da spec.
+- Todo requisito da spec atendido e todo cenário coberto por teste; caixas de `tasks.md` marcadas no PR.
+- "Aprovações necessárias" da `proposal.md` confirmadas pelo usuário.
+- Divergência entre código e spec só é aceita se a spec foi atualizada no mesmo PR ou antes dele.
+- Após o merge, a mudança é arquivada em `openspec/changes/archive/` e `openspec/specs/` consolidado (no PR final da mudança ou num PR `docs(openspec)` logo depois).
 
 ### Eixo 2: Arquitetura & Separação de Camadas
 - **Orquestrador (`src/`):** Separação clara entre planejamento (DAG), execução de agentes (`AgentRuntime`, `ResourceGuard`) e persistência de estado.

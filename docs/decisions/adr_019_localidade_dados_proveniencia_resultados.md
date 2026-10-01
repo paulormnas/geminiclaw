@@ -249,7 +249,9 @@ cumprimento do contrato do experimento. Efeitos:
 **critério de desempate**: entre modelos de mesma posição de preferência para o Validator,
 escolhe-se o de família diferente da do autor da afirmação, para reduzir erros correlacionados.
 Um modelo de outra família, mas de preferência inferior, não substitui o preferido. A escolha
-é registrada, e o Validator continua exigindo `trust: self_hosted`.
+é registrada. *(Atualização 2026-10-01: o Validator deixou de exigir `trust: self_hosted`, ADR 017
+§2; a família diferente continua como desempate, e o que o verificador recebe passa pela camada
+de saída do §3, como para qualquer destino.)*
 
 ### 7. Versão efetiva do modelo
 

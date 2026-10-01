@@ -71,11 +71,10 @@ uma **lista de `id`s** (mesma posição):
 
 ```yaml
 papeis:
-  validator:
-    requisitos: {trust: self_hosted}
+  validator:                                # sem exigência de trust (ADR 017 §2, 2026-10-01)
     preferencia:
       - [ollama/qwen3:8b, ollama/gemma3:12b]   # mesma posição
-      - ollama/llama3.2:3b
+      - google/gemini-3.8-flash
 ```
 
 `resolve(papel, ...)` continua puro. Algoritmo para cada papel:

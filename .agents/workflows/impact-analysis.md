@@ -58,6 +58,9 @@ Toda proposta deve avaliar o impacto nos seguintes eixos:
 
 ## Template de Proposta Técnica
 
+> Quando a mudança é especificada em OpenSpec, esta análise entra no `design.md` da mudança
+> (`openspec/changes/<id>/design.md`), não em documento separado.
+
 ```markdown
 ## Proposta Técnica: [Título da Mudança]
 

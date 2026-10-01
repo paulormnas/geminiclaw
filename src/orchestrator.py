@@ -25,7 +25,7 @@ from src.output_manager import OutputManager, generate_session_slug
 from src.autonomous_loop import AutonomousLoop
 from src.utils.json_parser import extract_json
 from src.rate_limiter import AdaptiveRateLimiter
-from src.llm.metering import bind_execution
+from src.llm.metering import bind_execution, bound_execution_id
 from src.telemetry import get_telemetry
 from src.agents.validator_agent import ValidatorAgent
 from src.agent_runtime.context import AgentContext
@@ -143,6 +143,9 @@ class Orchestrator:
         self.validator = ValidatorAgent()
         # Roadmap V16/ADR 014 — Rastreia execuções de agente por master_session_id
         self._session_agent_run_counts: dict[str, int] = {}
+        # Modo efetivo por sessão mestra: tarefas criadas sem `mode` (ex.: o planejamento do Researcher)
+        # herdam o modo da sessão em vez do padrão global (que é `assisted` e bloquearia em stdin).
+        self._session_modes: dict[str, str] = {}
         # V15.5/G9 — Bloco de texto do ContextBundle ativo, injetado no plano inicial do Researcher
         self._current_context_block: str = ""
         self.agent_runtime = agent_runtime or AgentRuntime()
@@ -235,6 +238,7 @@ class Orchestrator:
         history = ExecutionHistory()
         exec_id = history.start(prompt, start_date, exec_id=session_slug)
         bind_execution(exec_id or master_session.id, master_session.id)
+        self._session_modes[master_session.id] = effective_mode
 
         logger.info("Nova requisição registrada", extra={"execution_id": exec_id, "prompt_preview": prompt[:50]})
 
@@ -598,7 +602,7 @@ class Orchestrator:
             agent_session_id=session.id,
             agent_id=task.agent_id,
             task_name=task.task_name,
-            mode=task.mode or "",
+            mode=task.mode or self._session_modes.get(effective_session_id, ""),
             output_dir=session_dir,
             model=model,
             enable_thinking=enable_thinking,
@@ -750,6 +754,24 @@ class Orchestrator:
                 plan=current_plan_data,
                 prompt=prompt,
             )
+
+            try:  # observabilidade nunca derruba o planejamento
+                get_telemetry().record_agent_event(
+                    execution_id=bound_execution_id() or master_session_id,
+                    session_id=master_session_id,
+                    agent_id="validator",
+                    event_type="plan_validation",
+                    target_agent_id="researcher",
+                    payload={
+                        "iteration": iteration + 1,
+                        "approved": bool(val_result.is_valid),
+                        "reason": str(val_result.reason or "")[:300],
+                        "issues": [str(i)[:200] for i in (val_result.issues or [])][:8],
+                        "plan_tasks": len(current_plan_data),
+                    },
+                )
+            except Exception as exc:
+                logger.warning("Falha ao registrar plan_validation", extra={"error": str(exc)})
 
             if val_result.is_valid:
                 logger.info("Plano aprovado pelo Validador", extra={"iteration": iteration + 1})

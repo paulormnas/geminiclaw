@@ -41,5 +41,32 @@ def render(results: list[dict]) -> str:
     return "\n".join(rows)
 
 
+def render_interactions(results: list[dict]) -> str:
+    """Tokens por agente, mensagens, vereditos de validação/revisão e perguntas ao pesquisador."""
+    blocks = []
+    for r in results:
+        data = r.get("db", {}).get("interactions") or {}
+        if r.get("status") == "skipped" or not data or "error" in data:
+            continue
+        agents = ", ".join(f"{a['agent']} {a['share_pct']}% ({a['calls']} chamadas)" for a in data["tokens_by_agent"])
+        plans, reviews = data["plan_validations"], data["subtask_reviews"]
+        lines = [
+            f"### {r['name']}",
+            f"- Tokens por agente: {agents or '-'}",
+            f"- Mensagens entre agentes: {data['messages']} (eventos: {data['event_counts']})",
+            f"- Validação de plano: {plans['approved']}/{plans['total']} aprovadas",
+            f"- Revisão de subtarefa: {reviews['approved']}/{reviews['total']} aprovadas",
+        ]
+        for issues in (plans["rejections"] + reviews["rejections"])[:4]:
+            lines.append(f"  - reprovação: {'; '.join(str(i) for i in issues)[:240]}")
+        for q in data["ask_researcher"][:4]:
+            lines.append(f"- Pergunta ao pesquisador: {str(q['question'])[:200]} (motivo: {str(q['why'])[:120]})")
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
+
+
 if __name__ == "__main__":
-    print(render(json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))))
+    loaded = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+    print(render(loaded))
+    print()
+    print(render_interactions(loaded))

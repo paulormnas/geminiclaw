@@ -1452,6 +1452,26 @@ class AutonomousLoop:
             artifacts_on_disk=artifacts_on_disk,
             output_dir=output_manager.base_dir / master_session_id,
         )
+        from src.llm.metering import bound_execution_id
+        from src.telemetry import get_telemetry
+
+        try:  # observabilidade nunca derruba a revisão
+            get_telemetry().record_agent_event(
+                execution_id=bound_execution_id() or master_session_id,
+                session_id=master_session_id,
+                agent_id="reviewer",
+                event_type="subtask_review",
+                target_agent_id=task.agent_id,
+                task_name=task.task_name or None,
+                payload={
+                    "status": review.status,
+                    "approved": review.status in ("pass", "divergent_but_documented"),
+                    "feedback": (review.feedback or "")[:400],
+                    "issues": [str(i)[:200] for i in (review.issues or [])][:8],
+                },
+            )
+        except Exception as exc:
+            logger.warning("Falha ao registrar subtask_review", extra={"error": str(exc)})
         return {
             "status": review.status,
             "issues": review.issues,

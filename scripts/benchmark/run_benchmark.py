@@ -93,13 +93,24 @@ def db_metrics(session_id: str) -> dict:
         from src.telemetry import get_telemetry
 
         telemetry = get_telemetry()
+        from scripts.benchmark.interactions import collect_session
+
         return {
+            "interactions": collect_session(session_id),
             "connection_retries": telemetry.get_connection_retry_count(session_id),
             "derived": telemetry.get_derived_metrics(session_id),
             "tools": telemetry.get_tool_summary(session_id),
         }
     except Exception as exc:  # telemetria indisponível não invalida a medição
         return {"error": str(exc)}
+
+
+def _save_log(name: str, log: str) -> str:
+    """Grava a saída completa da execução (perguntas ao pesquisador, erros) ao lado dos resultados."""
+    path = Path(os.environ.get("BENCHMARK_LOG_DIR", "benchmark_logs")) / f"{name}.log"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(log, encoding="utf-8")
+    return str(path)
 
 
 def run_combination(
@@ -128,6 +139,7 @@ def run_combination(
     result = {
         "name": combo["name"], "roles": combo["roles"], "status": "timeout" if timed_out else f"exit {proc.returncode}",
         "wall_seconds": round(elapsed, 1), "resources": sampler.summary(), "log_tail": (log or "")[-1500:],
+        "log_file": _save_log(combo["name"], log or ""),
     }
     session = newest_session(output_dir, started_wall - 1)
     if session is not None:
@@ -196,6 +208,11 @@ def main() -> None:
                 spent[provider] = spent.get(provider, 0.0) + cost
         args.results.write_text(json.dumps(results, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
         print(f"[benchmark] {combo['name']}: {results[-1]['status']}", flush=True)
+
+    from scripts.benchmark.interactions import knowledge_footprint
+
+    knowledge_path = args.results.with_name(args.results.stem + "-knowledge.json")
+    knowledge_path.write_text(json.dumps(knowledge_footprint(), indent=2, default=str), encoding="utf-8")
 
 
 if __name__ == "__main__":

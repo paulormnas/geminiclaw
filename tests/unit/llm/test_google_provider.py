@@ -118,6 +118,16 @@ class TestToolResultRole:
         assert [c.role for c in _sent_contents(provider)] == ["user"]
         assert provider._client.aio.models.generate_content.call_args.kwargs["config"].system_instruction == "instrução"
 
+    async def test_low_max_tokens_gets_a_floor_for_thinking(self) -> None:
+        provider = _provider()
+        provider._client.aio.models.generate_content.return_value = _response([_text("ok")])
+
+        await provider.generate([{"role": "user", "content": "oi"}], max_tokens=10)
+        assert provider._client.aio.models.generate_content.call_args.kwargs["config"].max_output_tokens == 8192
+
+        await provider.generate([{"role": "user", "content": "oi"}], max_tokens=20000)
+        assert provider._client.aio.models.generate_content.call_args.kwargs["config"].max_output_tokens == 20000
+
 
 @pytest.mark.unit
 @pytest.mark.asyncio

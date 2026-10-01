@@ -283,7 +283,9 @@ class ValidatorAgent:
             ):
                 structural_issues.append(
                     f"Subtarefa '{task.get('task_name', idx+1)}' é do tipo '{task_type}' mas não possui "
-                    "nenhum critério quantitativo (com threshold numérico) em 'validation_criteria'."
+                    "nenhum critério quantitativo (com threshold numérico) em 'validation_criteria'. "
+                    "Correção: acrescente um critério como 'acurácia no teste >= 0.80', ou, se a tarefa não é "
+                    "confirmatória, troque o 'task_type' para 'eda', 'model_impl' ou 'synthesis'."
                 )
 
         if structural_issues:
@@ -304,6 +306,9 @@ class ValidatorAgent:
             f"Você é o ValidatorAgent do {APP_NAME}. Sua função é avaliar planos de execução.\n"
             f"{SCHEMA_INSTRUCTION}\n"
             "Avalie se a sequência de subtarefas atende à solicitação original e se as dependências fazem sentido lógico.\n"
+            "Não reprove por causa de limiares numéricos em 'validation_criteria': o framework os exige em tarefas "
+            "'validation' e 'reproduction'. Reprove só por falha lógica, dependência incoerente ou cobertura "
+            "incompleta da solicitação, e liste problemas que o planejador consiga corrigir.\n"
             "Responda EXCLUSIVAMENTE em formato JSON com o seguinte schema:\n"
             '{\n  "status": "approved" | "revision_needed",\n  "reason": "explicação curta",\n  "issues": ["problema 1", ...]\n}'
         )

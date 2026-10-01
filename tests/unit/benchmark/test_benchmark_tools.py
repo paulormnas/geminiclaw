@@ -91,6 +91,10 @@ class TestScoring:
         (tmp_path / "metrics.json").write_text('{"train_accuracy": 0.99,\n"test_accuracy": 0.93}')
         assert scoring.score_session(tmp_path)["accuracy"] == pytest.approx(0.93)
 
+    def test_tiny_numbers_near_the_word_accuracy_are_not_an_accuracy(self, tmp_path):
+        (tmp_path / "plano.md").write_text("Tolerância de accuracy: 0.05 entre as execuções")
+        assert scoring.score_session(tmp_path)["accuracy"] is None
+
     def test_percent_accuracy(self):
         assert scoring.reported_accuracies("Acurácia: 96,7%") == [pytest.approx(0.967)]
 

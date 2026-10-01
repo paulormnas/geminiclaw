@@ -81,3 +81,21 @@ async def test_ask_researcher_in_auto_mode_records_the_question():
     kwargs = tel.return_value.record_agent_event.call_args.kwargs
     assert kwargs["event_type"] == "ask_researcher" and kwargs["payload"]["question"] == "Qual split?"
     assert kwargs["payload"]["blocked"] is False
+
+
+@pytest.mark.asyncio
+async def test_plan_rejection_message_is_actionable_and_llm_is_told_not_to_reject_thresholds():
+    provider = MagicMock()
+    provider.model_name = "m"
+    provider.generate = AsyncMock(return_value=LLMResponse(text='{"status": "approved"}'))
+    agent = ValidatorAgent(provider=provider)
+    bad = [{"agent_id": "developer", "task_name": "avaliar", "prompt": "p", "task_type": "validation",
+            "validation_criteria": ["modelos comparados"]}]
+    result = await agent.validate_plan(bad, "tarefa")
+    assert not result.is_valid and "Correção" in result.issues[0] and "model_impl" in result.issues[0]
+
+    good = [{"agent_id": "developer", "task_name": "avaliar", "prompt": "p", "task_type": "validation",
+             "validation_criteria": ["acurácia >= 0.80"]}]
+    with patch("src.agents.validator_agent.record_llm_call"):
+        await agent.validate_plan(good, "tarefa")
+    assert "Não reprove por causa de limiares" in provider.generate.call_args.kwargs["system"]

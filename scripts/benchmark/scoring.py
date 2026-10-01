@@ -87,7 +87,8 @@ def score_session(session_dir: Path) -> dict:
         "score": sum(checks.values()),
         "max_score": len(CHECKS),
         "algorithms": algos,
-        "accuracy": max(plausible) if plausible else (max(accuracies) if accuracies else None),
+        # Abaixo de 0,5 em 3 classes é limiar de tolerância ou ruído do texto, não acurácia do modelo.
+        "accuracy": max(plausible) if plausible else max((a for a in accuracies if a >= 0.5), default=None),
         "artifact_files": len(files),
     }
 

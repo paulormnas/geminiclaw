@@ -1,8 +1,7 @@
 # Tarefas: v16-pipeline-robustness
 
 ## 0. Pré-requisitos
-- [ ] 0.1 Respostas do pesquisador às questões em aberto do design §10 (1 e 2 bloqueiam as
-  tarefas 1.5 e 2.3).
+- [x] 0.1 Questões do design §10 respondidas em 2026-10-05 (1 e 2 mantidas como especificadas).
 - [ ] 0.2 Worktree `.worktrees/feat-v16-pipeline-robustness`; um PR por bloco (1, 2, 3, 4, 5)
   ou um PR único, a critério do pesquisador (blocos 1 a 5 são independentes entre si, exceto 5
   depende de 4 para o evento de limite).

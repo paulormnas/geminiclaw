@@ -3,7 +3,7 @@
 ## 0. Pré-requisitos
 - [ ] 0.1 `v16-pipeline-robustness` mergeada (comparador, eventos `plan_normalized`, `sandbox_run`,
   `subtask_review` com `attempt`/`signature`/`resolved_artifacts`).
-- [ ] 0.2 Respostas do pesquisador às questões em aberto do design §9 (1 e 2 bloqueiam o bloco 5).
+- [x] 0.2 Questões do design §9 aceitas em 2026-10-05; modelo e teto do juiz definidos na execução.
 - [ ] 0.3 Worktree `.worktrees/feat-v16-agent-communication-eval`.
 
 ## 1. Leitura de eventos

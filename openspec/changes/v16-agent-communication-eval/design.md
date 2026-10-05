@@ -214,7 +214,12 @@ por combinação com as taxas, o comprimento do maior laço e o selo de calibra�
 | Observabilidade | Esta mudança **é** a observabilidade da comunicação; depende dos eventos de `v16-pipeline-robustness`. |
 | Testabilidade | Verdade e laços são funções puras sobre eventos e `tmp_path`; juiz com provedor simulado; nenhum teste chama provedor pago (a fixture de `tests/conftest.py` falha DNS dos provedores). |
 
-## 9. Questões em aberto (decisão do pesquisador)
+## 9. Decisões do pesquisador e questões em aberto
+
+**Decidido em 2026-10-05:** as questões 1 a 4 abaixo foram aceitas como descritas: a spec não
+fixa modelo do juiz nem teto de gasto (padrões `COMM_EVAL_MAX_USD=0`, juiz sem configuração é
+recusado); provedor, modelo e teto são definidos na execução da avaliação, e a rotulagem de
+calibração é combinada quando houver eventos suficientes.
 
 1. **Provedor e modelo do juiz**, e `COMM_EVAL_MAX_USD` para a primeira rodada. A spec não fixa
    modelo: o juiz tem de ser de provedor diferente do agente que pergunta (o benchmark usou

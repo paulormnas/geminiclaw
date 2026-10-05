@@ -316,7 +316,12 @@ do script. Alimenta a contagem do relatório e a verdade determinística da aval
 - **Risco:** o piso derivado do limite de execuções permitir sessões longas. Mitigação: tokens
   e minutos continuam limitados por `v18-usage-limits`.
 
-## 10. Questões em aberto (decisão do pesquisador)
+## 10. Decisões do pesquisador e questões em aberto
+
+**Decididas em 2026-10-05:** (1) `validation`/`reproduction` sem limiar numérico: apenas
+reprovar e parar com erro explícito, sem rebaixar `task_type`; (2) camada `extension` do
+comparador mantida; (3) `OLLAMA_NUM_CTX` para modelos de nuvem fica fora desta mudança.
+O texto abaixo é o original, mantido para rastreabilidade.
 
 1. **Tarefa `validation`/`reproduction` sem limiar numérico:** apenas reprovar e parar com erro
    explícito (adotado), ou rebaixar o `task_type` para `model_impl` com registro? A segunda

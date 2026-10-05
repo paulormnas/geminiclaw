@@ -376,6 +376,7 @@ class Orchestrator:
                 "token_usage": {"total_tokens": total_tokens, "by_provider_model": token_rows},
                 "cost_usd": total_cost,
                 "agent_runs": self._session_agent_run_counts.get(master_session.id, 0),
+                "planning_runs": self._session_planning_run_counts.get(master_session.id, 0),
                 "report_path": "relatorio_final.md",
             }
             (session_dir / "session_metadata.json").write_text(

@@ -36,7 +36,7 @@ reenviado ao planejador em REPLAN.
 | `derive_task_name` | `task_name` ausente ou vazio | `<agent_id>_<n>` em snake_case |
 | `snake_case_name` | `task_name` fora de snake_case ASCII (`"Carregar Dados"`) | `carregar_dados`, com o mapa antigo → novo aplicado também em `depends_on` |
 | `dedupe_name` | nomes repetidos | sufixo `_2`, `_3`, na ordem do plano |
-| `drop_unknown_dependency` | `depends_on` que cita nome inexistente | a dependência é removida **somente se** o nome citado casar, após normalização, com outra subtarefa (correção de grafia); caso contrário vai para `unrecoverable` |
+| `fix_dependency_name` | `depends_on` com grafia diferente do nome da subtarefa (`Carregar-Dados`) | o nome da subtarefa que casa após normalização; dependência sem nenhuma correspondência vai para `unrecoverable` (nunca é removida em silêncio) |
 | `break_self_dependency` | subtarefa que depende dela mesma | dependência removida |
 | `normalize_task_type` | `EDA`, `Reproduction`, `model_implementation`, sinônimos listados na spec | valor canônico (`eda`, `reproduction`, `model_impl`, `validation`, `synthesis`); valor sem equivalente é removido e registrado |
 | `normalize_agent_id` | `Developer`, `dev`, `desenvolvedor` | `developer`; id sem equivalente vai para `unrecoverable` |
@@ -102,7 +102,7 @@ tem prioridade; `artifacts/` e a raiz da sessão vêm depois. Arquivos de infrae
 | `exact` | caminho relativo ou nome base idêntico | `metrics.json` |
 | `glob` | o esperado contém `*` ou `?` e casa com o nome base | `eda_*.png` ↔ `eda_hist.png` |
 | `normalized` | mesmo nome após minúsculas, sem acento e sem `_`, `-`, espaços; mesma extensão | `ConfusionMatrix.PNG` ↔ `confusion_matrix.png` |
-| `extension` | existem, na pasta da subtarefa, ao menos tantos arquivos com a **extensão** do esperado quanto o número de esperados com essa extensão que ficaram sem outra resolução | `eda_hist.png`, `eda_box.png` esperados; `iris_hist.png`, `iris_box.png` em disco |
+| `extension` | cada arquivo restante da pasta da subtarefa com a **extensão** do esperado resolve um esperado ainda sem resolução (pareamento por sobreposição de palavras do nome); o que sobra fica `missing` | `eda_hist.png`, `eda_box.png` esperados; `iris_hist.png`, `iris_box.png` em disco |
 
 `extension` é a camada que resolve o caso do benchmark (`iris_*.png` no lugar de `eda_*.png`).
 Cada arquivo é usado em **uma** resolução. A camada só vale para extensões de artefato de

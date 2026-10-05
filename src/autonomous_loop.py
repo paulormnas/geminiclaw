@@ -11,7 +11,7 @@ import hashlib
 import asyncio
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any, TYPE_CHECKING, List, Dict, Optional
 from src.logger import get_logger
@@ -344,9 +344,12 @@ class AutonomousLoop:
             triggered.append(
                 f"Duração da sessão: {duration_pct*100:.0f}% do limite ({duration_min:.0f}min/{SESSION_MAX_MINUTES:.0f}min)"
             )
+        planning_counts = getattr(self.orchestrator, "_session_planning_run_counts", None)
+        planning_runs = planning_counts.get(master_session_id, 0) if isinstance(planning_counts, dict) else 0
         if agent_runs_pct >= OPERATIONAL_THRESHOLDS["agent_runs_pct"]:
             triggered.append(
-                f"Execuções de agente: {agent_runs_pct*100:.0f}% do limite ({agent_runs}/{run_limit})"
+                f"Execuções de agente: {agent_runs_pct*100:.0f}% do limite ({agent_runs}/{run_limit}); "
+                f"execuções de planejamento: {planning_runs}"
             )
 
         if not triggered:
@@ -1345,7 +1348,9 @@ class AutonomousLoop:
         # usando a reserva de tokens quando disponível.
         if tokens_available_for_closing and (completed_tasks or final_results):
             try:
-                final_report = await self._synthesize_results(prompt, final_results, master_session_id)
+                final_report = await self._synthesize_results(
+                    prompt, final_results, master_session_id, reason.value
+                )
                 if final_report:
                     final_results.append(final_report)
             except Exception as e:
@@ -1599,85 +1604,156 @@ class AutonomousLoop:
             "resolved_artifacts": review.resolved_artifacts,
         }
 
-    async def _synthesize_results(self, prompt: str, results: List["AgentResult"], master_session_id: str) -> Optional["AgentResult"]:
-        """Consolida os resultados das subtarefas em um relatório final via Summarizer.
-        
+    async def _synthesize_results(
+        self,
+        prompt: str,
+        results: List["AgentResult"],
+        master_session_id: str,
+        stop_reason: Optional[str] = None,
+    ) -> Optional["AgentResult"]:
+        """Consolida os resultados em ``relatorio_final.md`` a partir de dados estruturados.
+
+        O orquestrador monta ``ReportData`` (disco e telemetria, sem LLM) e renderiza o Markdown;
+        o Summarizer só devolve a narrativa em JSON (v16-pipeline-robustness §6).
+
         Args:
             prompt: Prompt original do usuário.
             results: Lista de resultados das subtarefas.
             master_session_id: ID da sessão.
-            
+            stop_reason: ``motivo_parada`` quando a sessão fecha por limite.
+
         Returns:
-            AgentResult com o relatório consolidado ou None em caso de falha.
+            AgentResult do Summarizer com o relatório renderizado em ``response["text"]``.
         """
         from src.orchestrator import AgentTask
-        from src.telemetry import get_telemetry
+        from src.report.artifact_reader import ArtifactReader
+        from src.report.report_model import (
+            NarrativeError,
+            parse_narrative,
+            render_report_markdown,
+            report_data_json,
+            unavailable_narrative,
+        )
+        from src.subtask_output import SubtaskOutput
 
         logger.info("Iniciando síntese final dos resultados")
 
-        # Coleta estatísticas de telemetria
-        telemetry = get_telemetry()
-        await telemetry.flush() # Garante que os dados estão no banco
-        stats = telemetry.get_summarized_stats(master_session_id)
-
-        # Constrói o prompt para o Summarizer
-        # Inclui os resultados das subtarefas estruturados
         context_parts = []
-        from src.subtask_output import SubtaskOutput
-        for task_name in [r.task_name for r in results if hasattr(r, 'task_name') and r.task_name]:
+        for task_name in [r.task_name for r in results if hasattr(r, "task_name") and r.task_name]:
             entry = self._short_term_memory.read(master_session_id, f"result:{task_name}")
             if entry:
                 try:
-                    output = SubtaskOutput.from_json(entry.value)
-                    context_parts.append(output.to_context_string())
+                    context_parts.append(SubtaskOutput.from_json(entry.value).to_context_string())
                 except Exception:
                     pass
-
         if not context_parts:
-            # Fallback para o texto bruto dos resultados se a memória estiver vazia
             for res in results:
                 context_parts.append(f"### Resultado do Agente {res.agent_id}\n{res.response.get('text', '')}")
 
-        # Roadmap V15.4 / Spec G8 — dados REAIS de métricas/interações injetados no
-        # contexto do Summarizer, para que a tabela de resultados e a seção "Decisões
-        # do Pesquisador" sejam construídas a partir de dados de disco, não de texto
-        # solto gerado pelo LLM.
-        from src.report.artifact_reader import ArtifactReader
-
         session_dir = self.orchestrator.output_manager.base_dir / master_session_id
-        artifact_reader = ArtifactReader(session_dir)
-        metrics_block = artifact_reader.build_metrics_context_block()
-        input_snapshot_files = artifact_reader.read_input_snapshot_files()
+        data = await self._build_report_data(
+            prompt, master_session_id, ArtifactReader(session_dir), stop_reason
+        )
+
+        base_prompt = (
+            f"Escreva a narrativa do relatório da tarefa: '{prompt}'\n\n"
+            "RESULTADOS DAS SUBTAREFAS:\n\n" + "\n\n".join(context_parts) + "\n\n"
+            "DADOS DO RELATÓRIO (JSON, medidos pelo orquestrador; copie os números daqui):\n"
+            f"{report_data_json(data)}\n\n"
+            "Responda SOMENTE com o JSON de narrativa descrito nas suas instruções."
+        )
+        summary_result = None
+        narrative = None
+        error = "sem resposta"
+        for attempt in range(2):  # uma tentativa de reparo (design §6.2)
+            suffix = "" if attempt == 0 else (
+                f"\n\nA resposta anterior foi recusada: {error}. Reenvie SOMENTE o JSON válido de narrativa."
+            )
+            task = AgentTask(agent_id="summarizer", prompt=base_prompt + suffix, task_name="final_synthesis")
+            summary_result = await self.orchestrator._execute_agent(task, master_session_id)
+            try:
+                narrative = parse_narrative(summary_result.response.get("text", "") or "")
+                break
+            except NarrativeError as exc:
+                error = str(exc)
+
+        if narrative is None:
+            logger.warning("Narrativa do Summarizer indisponível", extra={"error": error})
+            narrative = unavailable_narrative(error)
+            data = replace(data, narrativa_indisponivel=True)
+
+        markdown = render_report_markdown(data, narrative)
+        try:
+            session_dir.mkdir(parents=True, exist_ok=True)
+            (session_dir / "relatorio_final.md").write_text(markdown, encoding="utf-8")
+            (session_dir / "report_data.json").write_text(report_data_json(data), encoding="utf-8")
+        except OSError as exc:
+            logger.error("Falha ao gravar o relatório final", extra={"error": str(exc)})
+
+        # Falha da chamada ao agente continua sendo falha; narrativa indisponível não é.
+        summary_result.response = {"text": markdown}
+        return summary_result
+
+    async def _build_report_data(
+        self,
+        prompt: str,
+        master_session_id: str,
+        artifact_reader: Any,
+        stop_reason: Optional[str],
+    ) -> Any:
+        """Monta ``ReportData`` com disco e telemetria, sem LLM e sem nunca derrubar a síntese."""
+        from src.model_config import DEFAULT_ROLE_CONFIGS, get_role_model_config
+        from src.report.report_model import ReportMetadata, build_report_data
+
+        telemetry = get_telemetry()
+        tokens_in = tokens_out = 0
+        cost = 0.0
+        replans = 0
+        agent_runs: Dict[str, int] = {}
+        sandbox_runs = 0
+        try:
+            await telemetry.flush()  # garante que os dados estão no banco
+            rows = telemetry.get_token_summary(master_session_id).get("by_provider_model", [])
+            tokens_in = sum(int(r.get("total_prompt_tokens") or 0) for r in rows)
+            tokens_out = sum(int(r.get("total_completion_tokens") or 0) for r in rows)
+            cost = sum(float(r.get("total_cost_usd") or 0) for r in rows)
+            replans = int(telemetry.get_derived_metrics(master_session_id).get("replans") or 0)
+            counts = telemetry.get_event_counts(master_session_id, ("spawn", "sandbox_run"))
+            agent_runs = dict(counts.get("spawn", {}))
+            sandbox_runs = sum(counts.get("sandbox_run", {}).values())
+        except Exception as exc:
+            logger.warning("Falha ao coletar a telemetria do relatório", extra={"error": str(exc)})
+
+        models_by_role: Dict[str, str] = {}
+        for role in DEFAULT_ROLE_CONFIGS:
+            cfg = get_role_model_config(role)
+            models_by_role[role] = f"{cfg.provider}/{cfg.model}"
 
         session = self.orchestrator.session_manager.get(master_session_id)
-        session_payload = getattr(session, "payload", None)
-        if not isinstance(session_payload, dict):
-            session_payload = {}
-        researcher_interactions = session_payload.get("researcher_interactions", [])
-        divergence_reports = session_payload.get("divergence_reports", [])
-
-        scientific_context = (
-            f"DADOS REAIS DE MÉTRICAS (use estes valores exatos na tabela de Resultados):\n{metrics_block}\n\n"
-            f"ARQUIVOS DE REFERÊNCIA USADOS (input_snapshot/): {input_snapshot_files or 'nenhum'}\n\n"
-            f"DECISÕES DO PESQUISADOR (researcher_interactions — use estes dados, não reconstrua):\n"
-            f"{json.dumps(researcher_interactions, ensure_ascii=False, indent=2) if researcher_interactions else 'Nenhuma interação registrada — sessão totalmente autônoma.'}\n\n"
-            f"DIVERGÊNCIAS DETECTADAS (divergence_reports):\n"
-            f"{json.dumps(divergence_reports, ensure_ascii=False, indent=2) if divergence_reports else 'Nenhuma divergência registrada.'}"
+        payload = getattr(session, "payload", None)
+        payload = payload if isinstance(payload, dict) else {}
+        artifacts = [
+            str(a.get("path", a.get("name", ""))) if isinstance(a, dict) else str(a)
+            for a in self.orchestrator.output_manager.list_artifacts(master_session_id)
+        ]
+        metadata = ReportMetadata(
+            duration_s=time.time() - getattr(self, "_session_started_at", time.time()),
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost_usd=cost,
+            agent_runs=agent_runs,
+            sandbox_runs=sandbox_runs,
+            models_by_role=models_by_role,
+            stop_reason=stop_reason,
+            replans=replans,
         )
-
-        synthesis_prompt = (
-            f"Sintetize os resultados da tarefa: '{prompt}'\n\n"
-            f"RESULTADOS DAS SUBTAREFAS:\n\n" + "\n\n".join(context_parts) + "\n\n"
-            f"ESTATÍSTICAS DE EXECUÇÃO:\n{stats}\n\n"
-            f"{scientific_context}\n\n"
-            f"Por favor, gere o relatório final seguindo a ESTRUTURA OBRIGATÓRIA DO RELATÓRIO."
+        first_line = (prompt.strip().splitlines() or [""])[0][:80]
+        return build_report_data(
+            title=f"Relatório: {first_line}" if first_line else "Relatório da Sessão",
+            request=prompt,
+            metrics_by_task=artifact_reader.read_subtask_metrics(),
+            metadata=metadata,
+            interactions=payload.get("researcher_interactions", []),
+            divergence_reports=payload.get("divergence_reports", []),
+            artifacts=artifacts,
         )
-        
-        task = AgentTask(
-            agent_id="summarizer",
-            prompt=synthesis_prompt,
-            task_name="final_synthesis"
-        )
-        
-        summary_result = await self.orchestrator._execute_agent(task, master_session_id)
-        return summary_result

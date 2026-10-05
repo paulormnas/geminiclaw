@@ -3,6 +3,7 @@ import json
 import os
 import pathlib
 import re
+import time
 from typing import List, Optional
 from src.skills.base import BaseSkill, SkillResult
 from src.skills.code.sandbox import PythonSandbox, SandboxResult
@@ -85,6 +86,30 @@ class CodeSkill(BaseSkill):
             r"open\(['\"]/root/",
             r"shutil\.",
         ]
+
+    @staticmethod
+    def _record_sandbox_run(session_id: str, task_name: str, result: SandboxResult, duration_ms: int) -> None:
+        """Emite o evento ``sandbox_run`` (sem o conteúdo do script) para o relatório e a avaliação."""
+        try:
+            from src.agent_runtime.context import get_agent_context_optional
+            from src.telemetry import get_telemetry
+
+            ctx = get_agent_context_optional()
+            get_telemetry().record_agent_event(
+                execution_id=(ctx.execution_id if ctx is not None and ctx.execution_id else session_id),
+                session_id=session_id,
+                agent_id=ctx.agent_id if ctx is not None else "code",
+                event_type="sandbox_run",
+                task_name=task_name or None,
+                payload={
+                    "task_name": task_name,
+                    "exit_code": result.exit_code,
+                    "duration_ms": duration_ms,
+                    "timed_out": bool(result.timed_out),
+                },
+            )
+        except Exception as exc:  # observabilidade nunca derruba a execução
+            logger.warning("Falha ao registrar sandbox_run", extra={"error": str(exc)})
 
     def _validate_code(self, code: str) -> Optional[str]:
         """Valida o código contra padrões proibidos.
@@ -178,6 +203,7 @@ class CodeSkill(BaseSkill):
             # (instalação de pacotes + execução): rodar direto na corrotina congelaria o
             # orquestrador e os demais agentes do processo. Vai para uma thread para manter
             # o event loop livre.
+            _started = time.monotonic()
             result: SandboxResult = await asyncio.to_thread(
                 self.sandbox.run,
                 code=code,
@@ -189,6 +215,7 @@ class CodeSkill(BaseSkill):
             )
 
             success = not result.timed_out and result.exit_code == 0
+            self._record_sandbox_run(session_id, task_name, result, int((time.monotonic() - _started) * 1000))
 
             # V13.3.2 — Detectar novos artefatos e atualizar manifest
             new_artifacts = [

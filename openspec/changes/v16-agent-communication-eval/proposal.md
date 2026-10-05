@@ -44,8 +44,8 @@ GPT-6 Luna fez em modo autônomo.
   resolver.
 - **Novo:** **detecção de laços de reprovação**: sequências de reprovações com a mesma
   assinatura (definida em `v16-pipeline-robustness` §1.3 e §3), com tamanho máximo e por alvo.
-- **Novo:** **juiz LLM das perguntas de `ask_researcher`**, de **outro provedor** que o do agente
-  que perguntou, com rubrica fixa (necessidade, clareza, resposta, efeito) e **calibração
+- **Novo:** **juiz LLM das perguntas de `ask_researcher`**, com modelo **selecionado
+  automaticamente**, diferente dos usados no desenvolvimento do código e no planejamento, com rubrica fixa (necessidade, clareza, resposta, efeito) e **calibração
   humana** de cerca de 20 eventos: concordância medida (kappa de Cohen) e relatada junto a toda
   nota do juiz; sem calibração suficiente, a nota sai marcada como não calibrada.
 - **Novo:** comando de avaliação **pós-execução** (`scripts/benchmark/communication.py` e
@@ -81,7 +81,7 @@ GPT-6 Luna fez em modo autônomo.
 
 - Nenhuma alteração de schema, Dockerfile, `docker-compose.yml`, exclusão de arquivos ou
   `AGENTS.md`.
-- **Decisão do pesquisador** sobre as questões em aberto do `design.md` §9: provedor e modelo do
-  juiz (e o limite de gasto), e quem rotula os 20 eventos de calibração.
+- **Decisão do pesquisador** (2026-10-05): o modelo do juiz não é fixado, é selecionado
+  automaticamente (design §5.3); restam o limite de gasto e quem rotula os 20 eventos.
 - **Saída de texto para provedor externo** (juiz): política de dados do ADR 019 §3; o Analista de
   Segurança revisa a redação (design §6) antes do merge.

@@ -131,25 +131,45 @@ do normalizador e a contagem por tipo de reparo.
 - **WHEN** a avaliação roda
 - **THEN** `plans=3`, `with_repair=2` e `by_kind` traz as contagens de cada tipo
 
-### Requirement: Juiz de perguntas de `ask_researcher` independente
-O sistema SHALL avaliar cada evento `ask_researcher` com um juiz LLM configurado por
-`COMM_EVAL_JUDGE_PROVIDER` e `COMM_EVAL_JUDGE_MODEL`, SHALL recusar a avaliação com erro
-explícito se a configuração estiver ausente, e SHALL recusar o evento cujo agente de origem usa
-o mesmo provedor do juiz.
+### Requirement: Juiz de perguntas de `ask_researcher` selecionado automaticamente
+O sistema SHALL avaliar cada evento `ask_researcher` com um juiz LLM selecionado
+automaticamente, entre os modelos dos demais papéis da sessão e de `COMM_EVAL_JUDGE_CANDIDATES`,
+excluindo os modelos dos papéis `developer` e `researcher` e o do agente que perguntou, e
+SHALL preferir candidato de provedor diferente do `developer` e do `researcher`. SHALL recusar a
+avaliação com erro explícito quando não houver candidato válido.
 
-#### Scenario: Juiz sem configuração
-- **GIVEN** `COMM_EVAL_JUDGE_PROVIDER` ausente
-- **WHEN** a avaliação do juiz é solicitada
-- **THEN** a avaliação do juiz termina com erro que nomeia a variável ausente
+#### Scenario: Seleção entre os demais papéis
+- **GIVEN** `developer` e `researcher` em `google/gemini-3.8-flash` e `reviewer` em
+  `google/gemini-3.1-flash-lite`
+- **WHEN** o juiz é selecionado
+- **THEN** o escolhido é `google/gemini-3.1-flash-lite` e `judge.excluded` lista o modelo do
+  `developer` e do `researcher`
+
+#### Scenario: Preferência por outro provedor
+- **GIVEN** candidatos `google/gemini-3.1-flash-lite` e `anthropic/claude-sonnet-5-5` e
+  `developer`/`researcher` em `google/gemini-3.8-flash`
+- **WHEN** o juiz é selecionado
+- **THEN** o escolhido é o do provedor `anthropic` e o motivo é gravado
+
+#### Scenario: Sem candidato válido
+- **GIVEN** todos os papéis no mesmo modelo e `COMM_EVAL_JUDGE_CANDIDATES` vazia
+- **WHEN** o juiz é solicitado
+- **THEN** a avaliação do juiz termina com erro que lista os modelos excluídos e cita
+  `COMM_EVAL_JUDGE_CANDIDATES`
 - **AND** o restante da avaliação (verdade, laços) continua
 
-#### Scenario: Mesmo provedor
-- **GIVEN** um evento perguntado por um agente do provedor `google` e um juiz do provedor `google`
-- **WHEN** o juiz é chamado
-- **THEN** o evento é marcado `judge_skipped: same_provider` e nenhuma chamada é feita
+#### Scenario: Modelo do agente que perguntou
+- **GIVEN** um evento perguntado por um agente cujo modelo é o único candidato restante
+- **WHEN** o juiz é selecionado para o evento
+- **THEN** o evento é marcado `judge_skipped: same_model` e nenhuma chamada é feita
+
+#### Scenario: Sobrescrita igual a modelo excluído
+- **GIVEN** `COMM_EVAL_JUDGE_PROVIDER`/`COMM_EVAL_JUDGE_MODEL` iguais ao modelo do `developer`
+- **WHEN** o juiz é solicitado
+- **THEN** o juiz é recusado com erro explícito
 
 #### Scenario: Nota válida
-- **GIVEN** um juiz de provedor diferente que devolve `{"necessidade": 3, "clareza": 2,
+- **GIVEN** um juiz selecionado que devolve `{"necessidade": 3, "clareza": 2,
   "justificativa": "..."}`
 - **WHEN** o evento é avaliado
 - **THEN** as notas são gravadas com o modelo e a versão da rubrica

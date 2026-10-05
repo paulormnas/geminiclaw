@@ -29,14 +29,14 @@
 ## 4. Juiz LLM
 - [ ] 4.1 `redact_for_judge` (design §6) e testes (decimais, dígitos longos, nomes de arquivo,
   URL, e-mail, truncamento).
-- [ ] 4.2 Recusa por ausência de configuração, por provedor igual ao do agente e por juiz externo
-  não habilitado (§5.3 e §6).
+- [ ] 4.2 Seleção automática do juiz (pool, exclusões, preferência por outro provedor, menor
+  preço) e recusa sem candidato, com `same_model` e juiz externo não habilitado (§5.3 e §6).
 - [ ] 4.3 Rubrica, prompt do juiz e validação do JSON de saída; uma nova tentativa; `judge_error`
   (§5.2).
 - [ ] 4.4 `efeito` determinístico quando possível (§5.2).
 - [ ] 4.5 Teto de custo `COMM_EVAL_MAX_USD` com o medidor existente (§5.5).
 - [ ] 4.6 Testes com provedor simulado: nota válida; JSON inválido duas vezes → `judge_error`;
-  mesmo provedor → `judge_skipped: same_provider`; orçamento estourado; nenhum teste usa rede.
+  modelo do agente → `judge_skipped: same_model`; seleção e exclusões testadas; orçamento estourado; nenhum teste usa rede.
 
 ## 5. Calibração humana
 - [ ] 5.1 Comando `calibration-sheet`: amostra estratificada com semente fixa; planilha em

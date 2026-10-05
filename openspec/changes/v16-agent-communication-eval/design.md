@@ -6,8 +6,8 @@
    gancho na sessão, e rodar a avaliação nunca altera o resultado da pesquisa.
 2. **Verdade antes do juiz.** O que puder ser decidido por código é decidido por código (§2). O
    juiz LLM só avalia o que não tem verdade determinística: a qualidade das perguntas (§5).
-3. **Independência.** O juiz é de outro provedor que o do agente avaliado (§5.3), para não
-   premiar o próprio estilo.
+3. **Independência.** O juiz é um modelo diferente dos de desenvolvimento e planejamento,
+   escolhido automaticamente (§5.3), para não premiar o próprio estilo.
 4. **Incerteza declarada.** Nota do juiz sem calibração suficiente sai marcada como tal; casos
    sem verdade determinística são contados como `indeterminada`, não forçados a acerto ou erro.
 5. **Sem dado bruto fora do nó** (ADR 019 §3): ver §6.
@@ -129,15 +129,29 @@ código não resolve. A saída do juiz é JSON validado
 resposta inválida tem uma nova tentativa e, falhando, o evento é marcado `judge_error`
 (nunca nota inventada).
 
-### 5.3 Independência do juiz
+### 5.3 Seleção automática e independência do juiz
 
-`COMM_EVAL_JUDGE_PROVIDER` e `COMM_EVAL_JUDGE_MODEL` (sem padrão: ausentes, o juiz é
-recusado com erro explícito, não substituído por outro modelo). Antes de avaliar, o juiz
-verifica o provedor do agente que perguntou (`token_usage.provider` da execução do evento) e
-**recusa** o evento se for igual ao do juiz, registrando `judge_skipped: same_provider`. O
-juiz é instanciado pela fábrica de provedores existente (`src/llm/registry.py`); quando
-`v16-model-catalog-router` existir, o papel `comm_judge` do catálogo o substitui sem mudar o
-contrato desta spec.
+O pesquisador não fixa o modelo do juiz (decisão de 2026-10-05): ele é **selecionado
+automaticamente** por sessão avaliada, como um modelo **diferente** dos usados na implementação
+do código e no desenvolvimento do plano.
+
+1. **Modelos excluídos:** os de `developer` e `researcher` (planejamento) da sessão, lidos de
+   `token_usage` (`provedor/modelo` por papel), e o do agente que fez a pergunta.
+2. **Pool de candidatos:** os modelos que a própria sessão usou nos demais papéis (`reviewer`,
+   `validator`, `summarizer`, `base`) mais a lista opcional `COMM_EVAL_JUDGE_CANDIDATES`
+   (`provedor/modelo`, separados por vírgula; padrão vazio, nenhum modelo fixo no código).
+3. **Escolha:** do pool, descartados os excluídos, prefere-se candidato de **provedor diferente**
+   do `developer` e do `researcher`; persistindo empate, o de menor preço da tabela existente;
+   persistindo, a ordem da lista. A escolha e o motivo são gravados em `communication_eval.json`
+   (`judge.selected`, `judge.excluded`).
+4. **Sem candidato válido** (ex.: sessão com o mesmo modelo em todos os papéis e
+   `COMM_EVAL_JUDGE_CANDIDATES` vazia): o juiz é recusado com erro explícito que lista os
+   modelos excluídos e pede candidatos; nunca se usa modelo excluído como substituto.
+5. `COMM_EVAL_JUDGE_PROVIDER` e `COMM_EVAL_JUDGE_MODEL` ficam como **sobrescrita opcional**; se
+   informadas e iguais a um modelo excluído, o juiz é recusado.
+6. O juiz é instanciado pela fábrica existente (`src/llm/registry.py`); com
+   `v16-model-catalog-router`, o catálogo substitui o pool sem mudar este contrato. Cada
+   escolha continua sujeita à política de dados (§6) e ao teto de custo (§5.5).
 
 ### 5.4 Calibração humana
 
@@ -221,9 +235,8 @@ fixa modelo do juiz nem teto de gasto (padrões `COMM_EVAL_MAX_USD=0`, juiz sem 
 recusado); provedor, modelo e teto são definidos na execução da avaliação, e a rotulagem de
 calibração é combinada quando houver eventos suficientes.
 
-1. **Provedor e modelo do juiz**, e `COMM_EVAL_MAX_USD` para a primeira rodada. A spec não fixa
-   modelo: o juiz tem de ser de provedor diferente do agente que pergunta (o benchmark usou
-   Gemini, GPT e Claude como agentes; o juiz muda conforme o caso).
+1. **Modelo do juiz:** resolvido em 2026-10-05, seleção automática (§5.3). Resta só
+   `COMM_EVAL_MAX_USD` para a primeira rodada.
 2. **Quem rotula** os cerca de 20 eventos de calibração, e se um segundo rotulador deve rotular
    uma parte para medir a concordância humano-humano (teto prático do kappa).
 3. **Fonte dos eventos de calibração:** hoje só há `ask_researcher` do GPT-6 Luna (10 chamadas

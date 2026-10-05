@@ -67,6 +67,8 @@ O sistema SHALL <comportamento obrigatório>.
 | V16 | [v16-local-embeddings](changes/v16-local-embeddings/proposal.md) | `embeddings` | 011 | — |
 | V16 | [v16-in-process-agents](changes/v16-in-process-agents/proposal.md) | `agent-runtime` | 014 | v16-provider-registry |
 | V16 | [v16-research-assistant-prompts](changes/v16-research-assistant-prompts/proposal.md) | `agent-prompts` | 010, 011 | v16-in-process-agents |
+| V16 (robustez) | [v16-pipeline-robustness](changes/v16-pipeline-robustness/proposal.md) | `pipeline-robustness` | 002, 010 | v16-in-process-agents (implementada) |
+| V16 (robustez) | [v16-agent-communication-eval](changes/v16-agent-communication-eval/proposal.md) | `communication-eval` | 012, 002, 019, 011 | v16-pipeline-robustness |
 | V16 (complemento) | [v16-model-catalog-router](changes/v16-model-catalog-router/proposal.md) | `llm-providers` | 017, 011 | v16-provider-registry |
 | V16 (complemento) | [v16-sandbox-slim-image](changes/v16-sandbox-slim-image/proposal.md) | `code-sandbox` | 018, 014, 003 | v16-in-process-agents |
 | V16 (complemento) | [v16-platform-images](changes/v16-platform-images/proposal.md) | `platform-images` | 018 | v16-sandbox-slim-image |

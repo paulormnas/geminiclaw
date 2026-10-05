@@ -106,14 +106,15 @@ ADR 010 (Propósito: Assistente de Pesquisa) ← define o escopo de tudo (substi
 
 ## Lacunas de especificação (2026-10-01)
 
-Verificação dos ADRs aprovados contra `openspec/changes/`. As specs abaixo ainda **não existem**
-e precisam ser descritas antes de implementar o que dependem delas (a ordem de trabalho está na
-memória do projeto e no PR que introduziu esta seção).
+Verificação dos ADRs aprovados contra `openspec/changes/`. Não há mais specs faltando para os
+ADRs aprovados, exceto o ADR 016 (Proposto). A ordem de trabalho está na memória do projeto e no
+PR que introduziu esta seção.
 
-| Spec a descrever (nome sugerido) | Origem | Por que falta |
-|---|---|---|
-| `v16-pipeline-robustness` | Benchmark de 2026-10-01 | Normalizador determinístico de plano, nomes de artefatos tolerantes, revisão do circuit breaker e dos limites, modelo de relatório do Summarizer. Etapa anterior à V17 |
-| `v16-agent-communication-eval` | Avaliação do projeto | Veredito do revisor contra verdade determinística, taxa de resolução, laços de reprovação, juiz LLM de outro provedor com calibração humana |
+Descritas em 2026-10-05 (aguardando aprovação do pesquisador), etapa de robustez do pipeline
+que antecede a V17: `v16-pipeline-robustness` (normalizador de plano, artefatos tolerantes,
+disjuntor e limites, relatório estruturado) e `v16-agent-communication-eval` (veredito do
+revisor contra verdade determinística, taxa de resolução, laços, juiz LLM calibrado). Não
+dependem de ADR novo.
 
 Descritas em 2026-10-01 (aguardando aprovação do pesquisador): `v16-model-catalog-router`
 (ADR 017), `v16-sandbox-slim-image` (ADR 018 §1 a §3), `v16-platform-images` (ADR 018 §5),

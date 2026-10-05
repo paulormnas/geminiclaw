@@ -95,3 +95,38 @@ Tarefa 6 ─► Tarefa 7
 
 Validação dos complementos: sessão no Pi 5 com o mapa de modelos no banner e a nova imagem do
 sandbox; ADRs 017 e 018 marcados como Aceitos.
+
+---
+
+## Etapa de robustez do pipeline (especificada em 2026-10-05)
+
+Antecede a V17. O benchmark de 2026-10-01 mostrou que o pipeline não conclui a tarefa para
+todos os modelos por causa de regras do próprio framework (nomes exatos de artefatos, laços de
+reprovação, disjuntor e limite de execuções, relatório com metadados desatualizados). A etapa
+corrige isso e entrega o instrumento que mede a comunicação entre agentes. **Nenhuma
+avaliação da matriz de modelos é repetida** até o pipeline concluir a tarefa; a validação da
+etapa usa uma execução por mudança.
+
+### Tarefa 8: Robustez do planejamento, da revisão e do relatório
+- **Spec:** [`v16-pipeline-robustness`](../openspec/changes/v16-pipeline-robustness/proposal.md)
+- **Critérios de aceite:** [ ] plano normalizado sem inventar conteúdo · [ ] reprovação repetida
+  termina em erro explícito ou aprovação com avisos · [ ] artefato com outro prefixo aprova com
+  `name_mismatch` · [ ] disjuntor só dispara sem mudança de erro por dois ciclos · [ ] limites
+  de planejamento e de execução separados, com fechamento consolidado · [ ] relatório
+  renderizado a partir de dados estruturados, sem "Containers"
+- **Complexidade estimada:** Alta
+
+### Tarefa 9: Avaliação da comunicação entre agentes
+- **Spec:** [`v16-agent-communication-eval`](../openspec/changes/v16-agent-communication-eval/proposal.md)
+- **Critérios de aceite:** [ ] verdade determinística por subtarefa · [ ] matriz de confusão do
+  revisor · [ ] taxa de resolução e laços · [ ] juiz LLM de outro provedor, com redação e teto
+  de custo · [ ] calibração humana (cerca de 20 eventos) com kappa no relatório
+- **Complexidade estimada:** Média
+
+```
+Tarefa 8 ─► Tarefa 9
+```
+
+Validação da etapa: uma sessão da tarefa Iris no Pi 5 com o mapa de modelos que antes falhou;
+`report_data.json` e `communication_eval.json` anexados ao PR; ordem seguinte da V17 conforme a
+decisão de 2026-10-01 (fatos estruturais no grafo, Curator, ciclo de hipóteses).

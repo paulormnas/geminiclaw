@@ -131,6 +131,7 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
                     "limite_tempo",
                     "limite_retentativas",
                     "limite_conexao",
+                    "limite_execucoes",
                     "erro",
                     "interrompida",
                 )

@@ -29,6 +29,7 @@ class StopReason(str, Enum):
     TIME = "limite_tempo"
     RETRIES = "limite_retentativas"
     CONNECTION = "limite_conexao"
+    RUNS = "limite_execucoes"
 
 
 @dataclass(frozen=True)

@@ -14,6 +14,7 @@ from src.knowledge.similarity_queue import InMemorySimilarityQueue
 from tests.support.controlled_embedding_provider import ControlledEmbeddingProvider
 
 ORQ = Actor(kind="orquestrador")
+PESQUISADOR = Actor(kind="pesquisador")
 DIM = 64
 
 _REQUIRED = {
@@ -52,7 +53,8 @@ class Env:
     def make(self, label: str, projeto_id: str = "proj1", **props) -> str:
         """Cria um nó pelo store com gancho (preenche os campos obrigatórios do rótulo)."""
         data = {**_REQUIRED[label], "projeto_id": projeto_id, "sessao_id": "s1", **props}
-        return self.store.create_node(label, data, actor=ORQ)
+        # Problema "confirmado" só nasce pela mão do pesquisador (validate_human_only).
+        return self.store.create_node(label, data, actor=PESQUISADOR if label == "Problema" else ORQ)
 
     def node(self, node_id: str):
         return self.raw.get_node(node_id)

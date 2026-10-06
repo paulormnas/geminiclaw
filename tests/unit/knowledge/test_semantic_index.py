@@ -7,6 +7,7 @@ com Qdrant em memória e provedor de embedding controlado (sem rede).
 import pytest
 
 from src.knowledge.errors import ImmutableFieldError
+from src.knowledge.provenance import Actor
 from src.knowledge.semantic_index import IndexDimensionError, canonical_text
 from tests.support.controlled_embedding_provider import ControlledEmbeddingProvider, pair_vectors
 from tests.unit.knowledge.conftest import DIM, ORQ
@@ -109,7 +110,7 @@ class TestRevetorizacao:
         node_id = env.make("Problema", titulo="P1", status="rascunho")
         calls = len(env.provider.embedded_texts)
 
-        env.store.update_node(node_id, {"status": "confirmado"}, actor=ORQ)
+        env.store.update_node(node_id, {"status": "confirmado"}, actor=Actor(kind="pesquisador"))
 
         assert len(env.provider.embedded_texts) == calls
         assert env.point(node_id).payload["status"] == "confirmado"

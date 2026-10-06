@@ -163,6 +163,8 @@ class Orchestrator:
         self._session_modes: dict[str, str] = {}
         # V15.5/G9 — Bloco de texto do ContextBundle ativo, injetado no plano inicial do Researcher
         self._current_context_block: str = ""
+        # Bloco do Problema por sessão mestra (evita vazar entre requisições concorrentes).
+        self._project_blocks: dict[str, str] = {}
         self.agent_runtime = agent_runtime or AgentRuntime()
 
     @staticmethod
@@ -182,6 +184,9 @@ class Orchestrator:
         context_bundle: ContextBundle | None = None,
         budget: UsageBudget | None = None,
         llm_routing: SessionRouting | None = None,
+        project_id: str | None = None,
+        project_context: str | None = None,
+        project_mode: str | None = None,
     ) -> OrchestratorResult:
         """Processa a solicitação do usuário, executando o ciclo de vida completo.
 
@@ -199,6 +204,12 @@ class Orchestrator:
                 pela CLI antes do banner. Se omitido, é resolvido aqui, antes de qualquer
                 chamada de LLM; sem modelo elegível, levanta ``RoutingError`` e a sessão
                 não começa.
+            project_id: Projeto de pesquisa da sessão (v17-research-project); gravado em
+                ``payload["project_id"]``.
+            project_context: Bloco com título, resumo e critério do ``Problema`` confirmado,
+                injetado no planejamento do Researcher junto ao contexto de ``input_context/``.
+            project_mode: ``"sem_grafo"`` quando o grafo estava fora do ar e o contorno explícito
+                está ligado; gravado em ``payload["project_mode"]``.
 
         Returns:
             O resultado final da orquestração.
@@ -213,6 +224,10 @@ class Orchestrator:
         start_date = datetime.utcnow().isoformat() + "Z"
 
         effective_mode = mode or SESSION_DEFAULT_MODE
+        if project_id:
+            from src.knowledge.projects import validate_project_id
+
+            project_id = validate_project_id(project_id)  # UUID; falha explícita antes de criar a sessão
 
         # ADR 017 — resolve o modelo de cada papel uma única vez, antes da sessão e de qualquer
         # chamada de LLM; o mapa vale até o fim da sessão (sem troca no meio).
@@ -242,6 +257,8 @@ class Orchestrator:
                 "prompt": prompt,
                 "budget": effective_budget.to_payload(),
                 "llm_routing": routing.payload(),
+                **({"project_id": project_id} if project_id else {}),
+                **({"project_mode": project_mode} if project_mode else {}),
             },
         )
 
@@ -258,6 +275,8 @@ class Orchestrator:
             self._current_context_block = bundle.to_prompt_context()
             self.output_manager.init_session(master_session.id)
             self._snapshot_input_context(bundle, master_session.id)
+        # v17-research-project — o problema do projeto vai em todo planejamento (plano e replans).
+        self._project_blocks[master_session.id] = project_context or ""
 
         # V5.6 — Telemetria: evento de início de execução
         telemetry = get_telemetry()
@@ -972,6 +991,9 @@ class Orchestrator:
         current_plan_data = previous_plan
         last_signature, repeats = "", 0
         
+        _pctx = self._project_blocks.get(master_session_id, "")
+        project_block = f"\n{_pctx}\n\n" if _pctx else ""
+
         for iteration in range(MAX_PLANNING_ITERATIONS):
             # 1. Executa o Researcher (que absorve o Planner na V14.3)
             if current_plan_data:
@@ -980,6 +1002,7 @@ class Orchestrator:
                     f"MODO: REPLAN\n\n"
                     f"Tarefa original: {prompt}\n\n"
                     f"Este é o plano atual:\n{last_plan_str}\n\n"
+                    f"{project_block}"
                     f"PROBLEMAS ENCONTRADOS:\n{feedback}\n\n"
                     "Instrução: Diagnostique a causa raiz de cada falha em uma das três categorias "
                     "(problema de dados, problema de implementação, ou resultado legítimo divergente) "
@@ -998,6 +1021,7 @@ class Orchestrator:
                 planner_prompt = (
                     f"MODO: PLAN\n\n"
                     f"Crie um plano de execução (DAG) para a seguinte tarefa:\n{prompt}\n"
+                    f"{project_block}"
                     f"{context_block}\n"
                     "INSTRUÇÃO OBRIGATÓRIA: Se a tarefa envolver domínio técnico ou bibliotecas, "
                     "execute uma busca com 'quick_search' para verificar contexto antes de formular as subtarefas. "

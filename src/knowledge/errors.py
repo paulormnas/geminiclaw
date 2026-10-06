@@ -107,3 +107,16 @@ class GraphQueryTimeoutError(GraphStoreError):
     def __init__(self, timeout_ms: int) -> None:
         super().__init__(f"Consulta cancelada: excedeu o timeout de {timeout_ms}ms.")
         self.timeout_ms = timeout_ms
+
+
+class HumanConfirmationRequiredError(GraphStoreError):
+    """Escrita que cria ou altera um estado reservado ao pesquisador foi feita por outro ator."""
+
+    def __init__(self, label: str, field: str, actor_kind: str) -> None:
+        super().__init__(
+            f"Somente o pesquisador pode criar, confirmar ou rebaixar '{label}.{field}'; "
+            f"ator '{actor_kind}' recusado (ADR 015, confirmação humana do Problema)."
+        )
+        self.label = label
+        self.field = field
+        self.actor_kind = actor_kind

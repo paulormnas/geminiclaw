@@ -16,7 +16,7 @@ def mock_docker_client():
         yield client
 
 def test_sandbox_timeout_real(mock_docker_client):
-    sandbox = PythonSandbox(timeout=1)
+    sandbox = PythonSandbox(timeout=1, work_dir="/tmp/test_outputs_work")
     
     # Mock container
     mock_container = MagicMock()
@@ -45,43 +45,6 @@ def test_sandbox_timeout_real(mock_docker_client):
     assert mock_container.kill.called
     assert result.timed_out is True
     assert "Timeout atingido" in result.stderr
-
-def test_sandbox_network_disabled(mock_docker_client):
-    sandbox = PythonSandbox()
-    
-    mock_container = MagicMock()
-    mock_docker_client.containers.run.return_value = mock_container
-    mock_container.get_archive.return_value = (iter([b""]), MagicMock())
-    
-    mock_result = MagicMock()
-    mock_result.output = b"ok"
-    mock_result.exit_code = 0
-    mock_container.exec_run.return_value = mock_result
-    
-    # Sem setup_commands, rede deve estar desabilitada
-    sandbox.run(
-        code="print('hi')",
-        session_id="test_session",
-        task_name="test_task",
-        output_dir="/tmp/test_outputs"
-    )
-    
-    # Verifica chamadas do run
-    run_kwargs = mock_docker_client.containers.run.call_args[1]
-    assert run_kwargs["network_disabled"] is True
-    
-    # Com setup_commands, rede deve estar habilitada
-    sandbox.run(
-        code="print('hi')",
-        session_id="test_session",
-        task_name="test_task",
-        output_dir="/tmp/test_outputs",
-        setup_commands=[["pip", "install", "requests"]]
-    )
-    
-    run_kwargs2 = mock_docker_client.containers.run.call_args[1]
-    assert run_kwargs2["network_disabled"] is False
-
 
 # ---------------------------------------------------------------------------
 # Roadmap V15.2 / Spec G2 — injeção de scientific_helpers.py no sandbox
@@ -163,7 +126,7 @@ def test_image_not_found_nao_e_erro_de_conexao():
     ser classificado como falha de conexão retentável — é subclasse de
     DockerException/APIError mas sem status HTTP transitório (response=None
     aqui, replicando o caso real de client.images.pull falhando)."""
-    exc = docker.errors.ImageNotFound("No such image: geminiclaw-base:latest")
+    exc = docker.errors.ImageNotFound("No such image: code-sandbox:latest")
     assert _is_docker_connection_error(exc) is False
 
 

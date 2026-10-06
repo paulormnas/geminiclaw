@@ -1,10 +1,11 @@
 import asyncio
 import json
-import os
 import pathlib
 import re
 import time
 from typing import List, Optional
+from src import config
+from src.config import get_env
 from src.skills.base import BaseSkill, SkillResult
 from src.skills.code.sandbox import PythonSandbox, SandboxResult
 from src.skills.code.manifest import WorkspaceManifest
@@ -57,19 +58,27 @@ class CodeSkill(BaseSkill):
             "packages": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Lista de pacotes pip adicionais para instalar."
+                "description": (
+                    "Pacotes pip adicionais (requisitos PEP 508, ex.: 'tabulate' ou 'tabulate==0.9.0'). "
+                    "Os do conjunto básico da imagem (numpy, pandas, scipy, matplotlib, scikit-learn, "
+                    "seaborn) já estão disponíveis e não precisam ser pedidos."
+                )
             }
         },
         "required": ["code", "session_id", "task_name"]
     }
 
     def __init__(self):
-        # Carregar configurações do ambiente
-        timeout = int(os.getenv("CODE_SANDBOX_TIMEOUT_SECONDS", "60"))
-        memory = os.getenv("CODE_SANDBOX_MEMORY_LIMIT", "256m")
-        setup_timeout = int(os.getenv("CODE_SANDBOX_SETUP_TIMEOUT_SECONDS", "300"))
-        self.output_dir = os.getenv("OUTPUT_BASE_DIR", "/outputs")
-        
+        # Configuração lida via src/config.py (a leitura acontece na criação da skill, para que
+        # o ambiente ajustado antes dela — ex.: nos testes — valha). A imagem (SANDBOX_IMAGE)
+        # e os demais limites SANDBOX_* são resolvidos pelo próprio PythonSandbox.
+        timeout = int(get_env("CODE_SANDBOX_TIMEOUT_SECONDS", default=str(config.CODE_SANDBOX_TIMEOUT_SECONDS)))
+        memory = get_env("CODE_SANDBOX_MEMORY_LIMIT", default=config.CODE_SANDBOX_MEMORY_LIMIT)
+        setup_timeout = int(
+            get_env("CODE_SANDBOX_SETUP_TIMEOUT_SECONDS", default=str(config.CODE_SANDBOX_SETUP_TIMEOUT_SECONDS))
+        )
+        self.output_dir = get_env("OUTPUT_BASE_DIR", default=config.OUTPUT_BASE_DIR)
+
         self.sandbox = PythonSandbox(
             timeout=timeout,
             memory_limit=memory,
@@ -136,7 +145,7 @@ class CodeSkill(BaseSkill):
             code: Script Python.
             session_id: ID da sessão atual.
             task_name: Nome da tarefa atual.
-            packages: Lista de pacotes para instalar via pip.
+            packages: Requisitos (PEP 508) de pacotes fora do conjunto básico da imagem do sandbox.
 
         Returns:
             SkillResult com a saída da execução.
@@ -151,16 +160,9 @@ class CodeSkill(BaseSkill):
                 error=validation_error
             )
 
-        # 2. Preparar comandos de setup
-        setup_commands = []
-        if packages:
-            # Filtrar pacotes built-in ou inválidos (ex: json)
-            builtin_packages = ["json", "os", "sys", "re", "math", "time", "io", "pathlib", "pickle"]
-            filtered_packages = [p for p in packages if p not in builtin_packages]
-            
-            if filtered_packages:
-                # Usando uv para instalação ultra-rápida (requer uv na imagem base)
-                setup_commands.append(["uv", "pip", "install", "--no-cache-dir"] + filtered_packages)
+        # 2. Pacotes sob demanda: a validação (PEP 508), o filtro da stdlib e do conjunto básico
+        # e a instalação (sem root, em /deps) são do sandbox.
+        requested_packages = list(packages or [])
 
         # Garantir que o diretório da sessão existe antes de rodar o sandbox (V13.2.2)
         session_dir = pathlib.Path(self.output_dir).resolve() / session_id
@@ -210,7 +212,7 @@ class CodeSkill(BaseSkill):
                 session_id=session_id,
                 task_name=task_name,
                 output_dir=self.output_dir,
-                setup_commands=setup_commands,
+                packages=requested_packages,
                 extra_files=extra_files,
             )
 
@@ -265,7 +267,14 @@ class CodeSkill(BaseSkill):
                     f"Execução falhou. "
                     f"Erro: {error_info.get('error_type', 'desconhecido')}."
                 )
-                if result.timed_out:
+                if result.install_failed:
+                    summary = "Instalação de pacotes falhou; o script não foi executado."
+                    error_info = {
+                        "error_type": "PackageInstallError",
+                        "error_message": result.stderr[:500],
+                        "error_location": "",
+                    }
+                elif result.timed_out:
                     summary = "Execução cancelada por timeout."
                     error_info = {
                         "error_type": "TimeoutError",
@@ -279,6 +288,18 @@ class CodeSkill(BaseSkill):
                     summary=summary,
                     error=error_info,
                     code_file=code_filename,
+                )
+
+            if result.install_failed:
+                return SkillResult(
+                    success=False,
+                    output=result.stdout,
+                    error=result.stderr,
+                    metadata={
+                        "exit_code": result.exit_code,
+                        "install_failed": True,
+                        "timed_out": result.timed_out,
+                    },
                 )
 
             if result.timed_out:
@@ -297,6 +318,7 @@ class CodeSkill(BaseSkill):
                     "exit_code": result.exit_code,
                     "artifacts": result.artifacts,
                     "manifest_step": step_number,
+                    "packages_installed": result.packages_installed,
                 }
             )
 

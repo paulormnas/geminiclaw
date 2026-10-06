@@ -12,10 +12,12 @@ import json
 import math
 import random
 import re
+import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlparse
 
 from src import config
 from src.llm.pricing import estimate_cost, get_price
@@ -66,28 +68,55 @@ class JudgeSelection:
 # Redação e eventos
 # --------------------------------------------------------------------------------------------
 
-_URL_RE = re.compile(r"https?://\S+")
+_URL_RE = re.compile(r"(?i)\b(?:(?:https?|ftp|file)://|www\.)\S+")
 _EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+_THOUSANDS_RE = re.compile(r"\d{1,3}(?:[.,\s]\d{3})+(?:[.,]\d+)?")
 _DECIMAL_RE = re.compile(r"\d+[.,]\d+")
 _LONG_DIGITS_RE = re.compile(r"\d{6,}")
+_INVISIBLE_RE = re.compile("[\u200b\u200c\u200d\u2060\ufeff\u00ad]")
+
+
+def _fold(text: str) -> str:
+    """NFKC e remoção de caracteres invisíveis, para que a redação não seja contornada por Unicode."""
+    return _INVISIBLE_RE.sub("", unicodedata.normalize("NFKC", text))
 
 
 def redact_for_judge(text: str, protected_names: tuple[str, ...] | list[str] = (), max_chars: int | None = None) -> str:
     """Remove do texto o que não pode sair do nó (ADR 019 §3).
 
-    Decimais e sequências de 6 ou mais dígitos viram ``<num>``; nomes de arquivos de entrada e de
-    artefatos viram ``<arquivo>``; URLs e e-mails viram ``<url>`` e ``<email>``. O resultado é
-    truncado em ``max_chars`` (``COMM_EVAL_JUDGE_CONTEXT_CHARS`` quando omitido).
+    O texto passa por NFKC e perde caracteres invisíveis. Decimais, números com separador de milhar e
+    sequências de 6 ou mais dígitos viram ``<num>``; nomes de arquivos de entrada e de artefatos (sem
+    diferenciar caixa) viram ``<arquivo>``; URLs (``http``, ``https``, ``ftp``, ``file``, ``www.``) e
+    e-mails viram ``<url>`` e ``<email>``. O resultado é truncado em ``max_chars``
+    (``COMM_EVAL_JUDGE_CONTEXT_CHARS`` quando omitido). Números escritos por extenso não são
+    reconhecidos: é uma limitação conhecida, e o juiz externo continua exigindo opt-in.
     """
-    out = text or ""
+    out = _fold(text or "")
     out = _EMAIL_RE.sub("<email>", out)
     out = _URL_RE.sub("<url>", out)
-    for name in sorted({n for n in protected_names if n}, key=len, reverse=True):
-        out = re.sub(re.escape(name), "<arquivo>", out)
+    for name in sorted({_fold(n) for n in protected_names if n}, key=len, reverse=True):
+        out = re.sub(re.escape(name), "<arquivo>", out, flags=re.IGNORECASE)
+    out = _THOUSANDS_RE.sub("<num>", out)
     out = _DECIMAL_RE.sub("<num>", out)
     out = _LONG_DIGITS_RE.sub("<num>", out)
     limit = config.COMM_EVAL_JUDGE_CONTEXT_CHARS if max_chars is None else max_chars
     return out[:limit]
+
+
+def protected_file_names(plan: dict[str, dict[str, Any]] | None, session_dir: Path | None) -> list[str]:
+    """Nomes de arquivo que nunca saem do nó: artefatos esperados no plano e arquivos da sessão."""
+    names: set[str] = set()
+    for task in (plan or {}).values():
+        for expected in task.get("expected_artifacts") or []:
+            if isinstance(expected, str) and expected.strip():
+                names.add(Path(expected).name)
+    if session_dir and Path(session_dir).is_dir():
+        for i, path in enumerate(Path(session_dir).rglob("*")):
+            if i >= 2000:
+                break
+            if path.is_file() and path.name not in ("script.py", "scientific_helpers.py"):
+                names.add(path.name)
+    return sorted(n for n in names if len(n) >= 3)
 
 
 def event_ref(session_id: str, ts: float, question: str) -> str:
@@ -124,6 +153,24 @@ def parse_candidates(raw: str) -> list[str]:
     return items
 
 
+def canon_model(key: str) -> str:
+    """Forma canônica de ``provedor/modelo`` para comparar exclusões (caixa, espaços e prefixo ``models/``)."""
+    provider, _, model = (key or "").strip().partition("/")
+    model = model.strip().lower()
+    for prefix in ("models/", "publishers/google/models/"):
+        if model.startswith(prefix):
+            model = model[len(prefix):]
+    return f"{provider.strip().lower()}/{model}"
+
+
+def is_local_provider(provider: str) -> bool:
+    """``ollama`` só é local quando ``OLLAMA_BASE_URL`` aponta para o próprio computador."""
+    if provider not in LOCAL_PROVIDERS:
+        return False
+    host = (urlparse(config.OLLAMA_BASE_URL).hostname or "").lower()
+    return host in ("localhost", "127.0.0.1", "::1")
+
+
 def _split(key: str) -> tuple[str, str]:
     provider, _, model = key.partition("/")
     return provider.lower(), model
@@ -156,7 +203,8 @@ def select_judge(
         JudgeUnavailable: Se não houver candidato válido (a mensagem lista os excluídos).
     """
     excluded = sorted({models_by_role[r] for r in EXCLUDED_ROLES if r in models_by_role})
-    excluded_providers = {_split(m)[0] for m in excluded}
+    excluded_canon = {canon_model(m) for m in excluded}
+    excluded_providers = {canon_model(m).partition('/')[0] for m in excluded}
     if override:
         pool = [override]
     else:
@@ -164,25 +212,29 @@ def select_judge(
         for key in [models_by_role[r] for r in POOL_ROLES if r in models_by_role] + list(candidates or []):
             if key not in pool:
                 pool.append(key)
-    valid = [m for m in pool if m not in excluded]
+    valid = [m for m in pool if canon_model(m) not in excluded_canon]
     if not valid:
         raise JudgeUnavailable(
             "Nenhum candidato válido para o juiz. Modelos excluídos (developer e researcher): "
             f"{', '.join(excluded) or 'nenhum'}. Informe candidatos em COMM_EVAL_JUDGE_CANDIDATES."
         )
-    allowed = [m for m in valid if m != asking_model]
+    asking = canon_model(asking_model) if asking_model else None
+    allowed = [m for m in valid if canon_model(m) != asking]
     if not allowed:
         return None
     order = {m: i for i, m in enumerate(allowed)}
-    best = min(allowed, key=lambda m: (_split(m)[0] in excluded_providers, _price_rank(m), order[m]))
+    best = min(
+        allowed,
+        key=lambda m: (canon_model(m).partition("/")[0] in excluded_providers, _price_rank(m), order[m]),
+    )
     if override:
         reason = "sobrescrita do pesquisador"
-    elif _split(best)[0] not in excluded_providers:
+    elif canon_model(best).partition('/')[0] not in excluded_providers:
         reason = "provedor diferente do desenvolvimento e do planejamento"
     else:
         reason = "menor preço entre os candidatos válidos"
     provider, model = _split(best)
-    return JudgeSelection(provider, model, reason, excluded)
+    return JudgeSelection(provider.lower(), model, reason, excluded)
 
 
 # --------------------------------------------------------------------------------------------
@@ -268,9 +320,11 @@ def judge_events(
     spent = 0.0
 
     try:
-        select_judge(models_by_role, candidates, None, override)
+        first = select_judge(models_by_role, candidates, None, override)
     except JudgeUnavailable as exc:
         return {"events": [], "error": str(exc), "skipped": {}, "cost_usd": 0.0}
+    selection_info = {"selected": first.key if first else None, "excluded": first.excluded if first else [],
+                      "reason": first.reason if first else None}
 
     for event in events:
         base = {"event_ref": event["ref"], "task_name": event.get("task_name"),
@@ -279,7 +333,7 @@ def judge_events(
         if selection is None:
             results.append({**base, "status": "judge_skipped", "reason": "same_model"})
             continue
-        external = selection.provider not in LOCAL_PROVIDERS
+        external = not is_local_provider(selection.provider)
         if external and not allow_external:
             return {"events": results, "skipped": _count_skips(results), "cost_usd": round(spent, 6),
                     "error": "Juiz externo recusado: COMM_EVAL_ALLOW_EXTERNAL_JUDGE é falso e o modelo "
@@ -301,7 +355,11 @@ def judge_events(
 
         provider = provider_factory(selection.provider, selection.model)
         scores = None
+        budget_stop = False
         for _ in range(2):  # uma nova tentativa
+            if external and spent >= max_usd:  # o teto vale também para a nova tentativa
+                budget_stop = True
+                break
             response = _generate(provider, prompt)
             usage = response.usage or {}
             cost = estimate_cost(selection.provider, selection.model, usage.get("prompt_tokens", 0) or 0,
@@ -311,7 +369,10 @@ def judge_events(
             if scores is not None:
                 break
         if scores is None:
-            results.append({**base, "status": "judge_error", "judge": selection.key})
+            if budget_stop:
+                results.append({**base, "status": "judge_skipped", "reason": "budget"})
+            else:
+                results.append({**base, "status": "judge_error", "judge": selection.key})
             continue
         if effect is not None:
             scores["efeito"] = effect
@@ -319,7 +380,8 @@ def judge_events(
         results.append({**base, "status": "judged", "judge": selection.key, "judge_reason": selection.reason,
                         "rubric_version": RUBRIC_VERSION, "scores": scores})
 
-    return {"events": results, "skipped": _count_skips(results), "cost_usd": round(spent, 6)}
+    return {"events": results, "skipped": _count_skips(results), "cost_usd": round(spent, 6),
+            "selection": selection_info}
 
 
 def _generate(provider: Any, prompt: str) -> Any:
@@ -343,8 +405,16 @@ def _count_skips(results: list[dict[str, Any]]) -> dict[str, int]:
     return dict(counts)
 
 
-def judge_session(session_id: str, data: dict[str, Any], plan: dict[str, dict] | None = None) -> dict[str, Any]:
-    """Juiz de uma sessão com a configuração de ``src/config.py`` e o provedor real."""
+def judge_session(
+    session_id: str,
+    data: dict[str, Any],
+    plan: dict[str, dict] | None = None,
+    session_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Juiz de uma sessão com a configuração de ``src/config.py`` e o provedor real.
+
+    Os nomes de arquivo do plano e da pasta da sessão são protegidos na redação (ADR 019 §3).
+    """
     from src.llm.registry import create_provider
 
     events = ask_events(session_id, data)
@@ -353,13 +423,22 @@ def judge_session(session_id: str, data: dict[str, Any], plan: dict[str, dict] |
     texts = {name: [t.get("prompt", ""), t.get("scientific_rationale", "")] for name, t in (plan or {}).items()}
     result = judge_events(
         events, data.get("models_by_role", {}), provider_factory=create_provider, texts_by_task=texts,
+        protected_names=protected_file_names(plan, session_dir),
         candidates=parse_candidates(config.COMM_EVAL_JUDGE_CANDIDATES), override=override,
     )
     judged = [e for e in result["events"] if e["status"] == "judged"]
-    model = judged[0]["judge"] if judged else None
-    result["calibration"] = calibration_status(CALIBRATION_RESULT_PATH, model, RUBRIC_VERSION)
-    result["scores_label"] = "calibrado" if result["calibration"]["calibrated"] else "não calibrado"
-    result["mean_scores"] = _mean_scores(judged)
+    by_judge: dict[str, dict[str, Any]] = {}
+    for model in sorted({e["judge"] for e in judged}):
+        mine = [e for e in judged if e["judge"] == model]
+        calibration = calibration_status(CALIBRATION_RESULT_PATH, model, RUBRIC_VERSION)
+        by_judge[model] = {"events": len(mine), "mean_scores": _mean_scores(mine), "calibration": calibration,
+                           "scores_label": "calibrado" if calibration["calibrated"] else "não calibrado"}
+    result["by_judge"] = by_judge
+    single = next(iter(by_judge.values())) if len(by_judge) == 1 else None
+    result["calibration"] = single["calibration"] if single else calibration_status(
+        CALIBRATION_RESULT_PATH, None, RUBRIC_VERSION)
+    result["scores_label"] = single["scores_label"] if single else "não calibrado"
+    result["mean_scores"] = single["mean_scores"] if single else {}
     return result
 
 

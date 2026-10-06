@@ -208,3 +208,54 @@ def test_plan_json_ausente_nao_quebra(tmp_path):
     assert comm.load_plan(tmp_path) == {}
     (tmp_path / "plan.json").write_text(json.dumps([{"task_name": "a"}]))
     assert "a" in comm.load_plan(tmp_path)
+
+
+# --- correções da revisão de segurança (PR #98) ------------------------------------------------
+
+def test_nome_de_subtarefa_com_travessia_e_indeterminado(tmp_path):
+    """I4: `task_name` e `depends_on` do plano não saem da pasta da sessão."""
+    outside = tmp_path / "fora"
+    _write(outside, "metrics.json", json.dumps({"metrics": {"accuracy": 0.99}}))
+    session = tmp_path / "sess"
+    session.mkdir()
+    for task in ({"task_name": "../fora", "validation_criteria": ["acurácia >= 0.9"]},
+                 {"task_name": "ok", "depends_on": ["../fora"], "validation_criteria": ["acurácia >= 0.9"]}):
+        truth = comm.compute_truth(task, 1, None, session, [])
+        assert truth.verdict == "indeterminate" and "inválido" in truth.detail
+
+
+def test_metrics_json_por_link_simbolico_para_fora_nao_e_lido(tmp_path):
+    outside = tmp_path / "fora"
+    _write(outside, "metrics.json", json.dumps({"metrics": {"accuracy": 0.99}}))
+    session = tmp_path / "sess"
+    (session / "m").mkdir(parents=True)
+    os.symlink(outside / "metrics.json", session / "m" / "metrics.json")
+    truth = comm.compute_truth({"task_name": "m", "validation_criteria": ["acurácia >= 0.9"]}, 1, None, session, [])
+    assert truth.verdict == "unfulfilled" and truth.checks[0].detail == "metrics.json ausente"
+
+
+@pytest.mark.parametrize("content", ["[1, 2]", '{"metrics": [1]}', '{"metrics": "x"}', "nao é json"])
+def test_metrics_json_malformado_nao_derruba_a_avaliacao(tmp_path, content):
+    """I4: metrics.json com forma inesperada vira não cumprido, sem exceção."""
+    _write(tmp_path, "m/metrics.json", content)
+    truth = comm.compute_truth({"task_name": "m", "validation_criteria": ["acurácia >= 0.9"]}, 1, None, tmp_path, [])
+    assert truth.verdict == "unfulfilled"
+
+
+def test_erro_inesperado_na_verdade_vira_indeterminada(tmp_path, monkeypatch):
+    monkeypatch.setattr(comm, "compute_truth", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
+    out = comm.evaluate_events([_review(1, "t", True)], {"t": {"task_name": "t"}}, tmp_path, {})
+    assert out["reviewer"]["confusion"]["indeterminate"] == 1
+
+
+def test_metrics_json_corrigido_depois_da_revisao_e_indeterminado(tmp_path):
+    """I6: a sobrescrita do metrics.json também vale, não só a dos artefatos."""
+    path = _write(tmp_path, "m/metrics.json", json.dumps({"metrics": {"accuracy": 0.99}}))
+    os.utime(path, (2000, 2000))
+    truth = comm.compute_truth({"task_name": "m", "validation_criteria": ["acurácia >= 0.9"]}, 1, 1000.0, tmp_path, [])
+    assert truth.verdict == "indeterminate" and truth.detail == "artefatos sobrescritos"
+
+
+def test_cli_recusa_session_id_invalido(tmp_path):
+    with pytest.raises(SystemExit):
+        comm.main(["evaluate", "../x", "--output-dir", str(tmp_path), "--out", str(tmp_path / "o.json")])

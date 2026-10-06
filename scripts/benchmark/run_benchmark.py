@@ -182,7 +182,7 @@ def evaluate_communication(results_path: Path, output_dir: Path, with_judge: boo
             data = fetch_session_data(session)
             result = evaluate_session(session, session_dir, data)
             if with_judge:
-                result["ask_researcher"] = comm_judge.judge_session(session, data, load_plan(session_dir))
+                result["ask_researcher"] = comm_judge.judge_session(session, data, load_plan(session_dir), session_dir)
         except Exception as exc:  # uma sessão sem dados não derruba as demais
             r["comm_eval"] = {"error": str(exc)}
             continue

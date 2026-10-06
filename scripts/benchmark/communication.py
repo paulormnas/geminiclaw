@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
@@ -118,6 +119,22 @@ def load_plan(session_dir: Path) -> dict[str, dict[str, Any]]:
 # Verdade determinística
 # --------------------------------------------------------------------------------------------
 
+_SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.\-]*$")
+
+
+def _safe_name(name: Any) -> bool:
+    """Nome de subtarefa que só pode ser um componente de caminho dentro da sessão."""
+    return isinstance(name, str) and bool(_SAFE_NAME.match(name)) and ".." not in name
+
+
+def _inside(session_dir: Path, path: Path) -> bool:
+    try:
+        path.resolve().relative_to(session_dir.resolve())
+    except (ValueError, OSError):
+        return False
+    return True
+
+
 def compute_truth(
     task: dict[str, Any],
     attempt: int,
@@ -142,6 +159,9 @@ def compute_truth(
     name = str(task.get("task_name") or "")
     session_dir = Path(session_dir)
     checks: list[TruthCheck] = []
+    depends = [d for d in (task.get("depends_on") or []) if isinstance(d, str)]
+    if not _safe_name(name) or not all(_safe_name(d) for d in depends):
+        return SubtaskTruth(name, attempt, "indeterminate", checks, "nome de subtarefa inválido no plano")
 
     expected = [e for e in (task.get("expected_artifacts") or []) if isinstance(e, str)]
     mismatched_files: list[Path] = []
@@ -154,13 +174,19 @@ def compute_truth(
     criteria = task.get("validation_criteria") or []
     metric_criteria = _metric_criteria(criteria if isinstance(criteria, list) else [])
     if metric_criteria:
-        metrics_file = _find_metrics_file(session_dir, name, list(task.get("depends_on") or []))
+        metrics_file = _find_metrics_file(session_dir, name, depends)
+        if metrics_file is not None and not _inside(session_dir, metrics_file):
+            metrics_file = None  # link simbólico para fora da sessão não é lido
         if metrics_file is None:
             checks.extend(TruthCheck("metric", c.text, False, "metrics.json ausente") for c in metric_criteria)
         else:
+            mismatched_files.append(metrics_file.relative_to(session_dir))  # sobrescrita também vale para ele
             try:
-                metrics = json.loads(metrics_file.read_text(encoding="utf-8")).get("metrics", {})
-            except (json.JSONDecodeError, OSError):
+                loaded = json.loads(metrics_file.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+                loaded = {}
+            metrics = loaded.get("metrics", {}) if isinstance(loaded, dict) else {}
+            if not isinstance(metrics, dict):
                 metrics = {}
             for crit, (ok, detail) in zip(metric_criteria, _evaluate_metric_criteria(metric_criteria, metrics)):
                 checks.append(TruthCheck("metric", crit.text, ok, detail))
@@ -374,8 +400,12 @@ def evaluate_events(
         name = e.get("task_name") or ""
         p = e["payload"]
         approved = bool(p.get("approved", p.get("status") in APPROVED_REVIEW))
-        truth = compute_truth(plan.get(name, {"task_name": name}), int(p.get("attempt") or 1), e["ts"],
-                              Path(session_dir), sandbox_by_task.get(name, []))
+        try:
+            truth = compute_truth(plan.get(name, {"task_name": name}), int(p.get("attempt") or 1), e["ts"],
+                                  Path(session_dir), sandbox_by_task.get(name, []))
+        except Exception as exc:  # um plano ou arquivo malformado não derruba a avaliação
+            truth = SubtaskTruth(name, int(p.get("attempt") or 1), "indeterminate", [],
+                                 f"erro ao calcular a verdade: {type(exc).__name__}")
         pairs.append((approved, truth.verdict))
         if truth.verdict != "indeterminate" and approved != (truth.verdict == "fulfilled"):
             mismatches.append({
@@ -431,11 +461,15 @@ def main(argv: list[str] | None = None) -> int:
     from scripts.benchmark import comm_judge
 
     if args.command == "evaluate":
+        if not _safe_name(args.session_id):
+            parser.error("session_id inválido: use só letras, números, '_', '-' e '.'")
         session_dir = args.output_dir / args.session_id
         data = fetch_session_data(args.session_id)
         result = evaluate_session(args.session_id, session_dir, data)
         if args.judge:
-            result["ask_researcher"] = comm_judge.judge_session(args.session_id, data, load_plan(session_dir))
+            result["ask_researcher"] = comm_judge.judge_session(
+                args.session_id, data, load_plan(session_dir), session_dir
+            )
         write_result(result, args.out, session_dir)
         print(json.dumps({"out": str(args.out)}))
         return 0

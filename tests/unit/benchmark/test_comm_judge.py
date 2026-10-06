@@ -147,7 +147,8 @@ def test_juiz_externo_nao_habilitado():
     assert "COMM_EVAL_ALLOW_EXTERNAL_JUDGE" in out["error"] and provider.generate.await_count == 0
 
 
-def test_juiz_local_roda_sem_opt_in_nem_teto():
+def test_juiz_local_roda_sem_opt_in_nem_teto(monkeypatch):
+    monkeypatch.setattr(cj.config, "OLLAMA_BASE_URL", "http://localhost:11434")
     provider, fac = factory(GOOD)
     out = cj.judge_events([event()], models(reviewer="ollama/qwen3:8b"), provider_factory=fac,
                           allow_external=False, max_usd=0.0)
@@ -316,3 +317,71 @@ def test_cli_avalia_sessao_sem_juiz(tmp_path, monkeypatch):
     out = tmp_path / "out.json"
     assert comm_main(["evaluate", "s1", "--output-dir", str(tmp_path), "--out", str(out)]) == 0
     assert json.loads(out.read_text())["session_id"] == "s1"
+
+
+# --- correções da revisão de segurança (PR #98) ------------------------------------------------
+
+def test_ollama_em_host_remoto_conta_como_externo(monkeypatch):
+    """I2: `ollama` só é local quando OLLAMA_BASE_URL aponta para o próprio computador."""
+    monkeypatch.setattr(cj.config, "OLLAMA_BASE_URL", "http://100.101.56.43:11434")
+    provider, fac = factory(GOOD)
+    out = cj.judge_events([event()], models(reviewer="ollama/qwen3:8b"), provider_factory=fac,
+                          allow_external=False, max_usd=0.0)
+    assert "COMM_EVAL_ALLOW_EXTERNAL_JUDGE" in out["error"] and provider.generate.await_count == 0
+    monkeypatch.setattr(cj.config, "OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+    assert cj.is_local_provider("ollama") and not cj.is_local_provider("google")
+
+
+@pytest.mark.parametrize(
+    "variant", ["google/Gemini-3.8-Flash", "google/models/gemini-3.8-flash", " GOOGLE/gemini-3.8-flash "]
+)
+def test_exclusao_por_modelo_ignora_caixa_prefixo_e_espacos(variant):
+    """B2: variações do mesmo modelo não contornam a exclusão de developer e researcher."""
+    with pytest.raises(cj.JudgeUnavailable):
+        cj.select_judge({"developer": DEV, "researcher": DEV}, candidates=[variant])
+    with pytest.raises(cj.JudgeUnavailable):
+        cj.select_judge(models(), override=variant)
+
+
+def test_modelo_do_agente_que_perguntou_tambem_e_comparado_na_forma_canonica():
+    assert cj.select_judge(models(), asking_model="Google/Gemini-3.1-Flash-Lite") is None
+
+
+def test_judge_session_passa_os_nomes_de_arquivo_protegidos(tmp_path, monkeypatch):
+    """B1: a redação de nomes de arquivo roda de fato no caminho de produção."""
+    session = tmp_path / "sess"
+    (session / "input_snapshot").mkdir(parents=True)
+    (session / "input_snapshot" / "iris.csv").write_text("x")
+    plan = {"t": {"task_name": "t", "expected_artifacts": ["eda/resultado_final.png"]}}
+    captured = {}
+
+    def fake_judge_events(events, models_by_role, **kwargs):
+        captured.update(kwargs)
+        return {"events": [], "skipped": {}, "cost_usd": 0.0}
+
+    monkeypatch.setattr(cj, "judge_events", fake_judge_events)
+    cj.judge_session("s", {"events": [], "models_by_role": models()}, plan, session)
+    assert "iris.csv" in captured["protected_names"] and "resultado_final.png" in captured["protected_names"]
+
+
+@pytest.mark.parametrize("raw", ["acurácia 1.234.567 em IRIS.CSV", "ver HTTP://x.org/a, www.exemplo.org e ftp://h/f",
+                                 "valor 0．953 e ​iris​.csv", "total 12 345 678"])
+def test_redacao_endurecida(raw):
+    """I1: Unicode, caixa, URL sem esquema e milhares não contornam a redação."""
+    out = cj.redact_for_judge(raw, ["iris.csv"], max_chars=500)
+    for leaked in ("1.234.567", "567", "iris", "IRIS", "x.org", "www.exemplo", "ftp://", "0．953", "953", "12 345"):
+        assert leaked not in out, (leaked, out)
+
+
+def test_teto_vale_tambem_para_a_nova_tentativa():
+    """I3: a nova tentativa não estoura o teto de custo."""
+    usage = {"prompt_tokens": 1_000_000, "completion_tokens": 0}  # US$ 2,00 por chamada (sonnet)
+    out, provider = run([event()], ["lixo", GOOD], provider_models=models(reviewer=SONNET), max_usd=1.0, usage=usage)
+    assert provider.generate.await_count == 1
+    assert out["events"][0]["status"] == "judge_skipped" and out["events"][0]["reason"] == "budget"
+
+
+def test_notas_agregadas_por_juiz_e_selecao_registrada():
+    """I5 e sugestão: nada mistura juízes diferentes; a seleção fica na saída."""
+    out, _ = run([event(1)], [GOOD])
+    assert out["selection"]["selected"] == LITE and out["selection"]["excluded"] == [DEV]

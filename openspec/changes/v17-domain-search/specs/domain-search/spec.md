@@ -118,6 +118,19 @@ específico quando a pontuação está dentro de `DOMAIN_SPECIFICITY_MARGIN` do 
 - **WHEN** a busca é feita
 - **THEN** a consulta usa só os 300 primeiros caracteres e o truncamento é registrado
 
+### Requirement: Termo candidato limitado e saída como dado
+O sistema SHALL recusar termos livres de candidato acima de `VOCAB_TERM_MAX_CHARS` (padrão 120), remover controles e
+quebras de linha, e a ferramenta SHALL devolver termos candidatos encurtados, delimitados e marcados como dado.
+
+#### Scenario: Termo longo recusado
+- **WHEN** `resolve_domain` recebe um termo de 121 caracteres
+- **THEN** ocorre erro explícito e nenhum candidato é criado
+
+#### Scenario: Candidato como dado
+- **GIVEN** um candidato cujo termo contém instruções
+- **WHEN** `buscar_dominio` roda com `incluir_candidatos=true`
+- **THEN** o termo sai em uma linha, com até 80 caracteres, entre `«»`, e a resposta traz a nota de dado não confiável
+
 ### Requirement: Ferramenta `buscar_dominio` somente leitura
 O sistema SHALL oferecer ao Researcher e ao Curator a ferramenta `buscar_dominio`, que devolve até 10 candidatos
 em texto curto com o caminho completo, sem escrever no grafo, em arquivo ou em rede, e SHALL NOT registrá-la para o
@@ -178,7 +191,8 @@ campos de "Payload hierárquico no índice".
 
 ### Requirement: Passo semântico de `resolve_domain`
 (Origem: `v17-controlled-vocabulary` §2, passo 3.) O passo semântico de `resolve_domain` SHALL usar a busca
-hierárquica de domínios, com status `semantico` quando o melhor score atinge `VOCAB_MATCH_THRESHOLD`, devolvendo as
+hierárquica de domínios e respeitar a sua ordem (mais específico dentro de `DOMAIN_SPECIFICITY_MARGIN`), com status
+`semantico` para o primeiro candidato, nessa ordem, cujo score atinge `VOCAB_MATCH_THRESHOLD`, devolvendo as
 demais como alternativas.
 
 #### Scenario: Correspondência semântica
@@ -186,6 +200,11 @@ demais como alternativas.
 - **WHEN** `resolve_domain` é chamado
 - **THEN** o resultado tem status `semantico` e o nó dessa subárea
 - **AND** as alternativas trazem outros nós com seus scores
+
+#### Scenario: Específico dentro da margem
+- **GIVEN** uma área com score 0,92 e uma subárea filha com 0,91 e `VOCAB_MATCH_THRESHOLD=0.90`
+- **WHEN** `resolve_domain` é chamado
+- **THEN** o status é `semantico` e o nó é a subárea
 
 #### Scenario: Abaixo do limiar
 - **GIVEN** que o melhor score fica abaixo de `VOCAB_MATCH_THRESHOLD`

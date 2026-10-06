@@ -46,3 +46,20 @@ def normalize_domain_term(term: str) -> str:
         Forma normalizada (ex.: ``"Química Orgânica"`` -> ``"quimica_organica"``).
     """
     return re.sub(r"[^a-z0-9]+", "_", _strip_accents(term).lower()).strip("_")
+
+
+def clean_free_text(text: str) -> str:
+    """Neutraliza texto livre vindo de agente: sem controles nem quebras de linha.
+
+    Caracteres de controle e de formatação Unicode (``Cc``, ``Cf``) e separadores de linha ou
+    parágrafo (``Zl``, ``Zp``) viram espaço; sequências de espaços colapsam em um só. Evita
+    que o texto forje linhas de campo (``Caminho:``) ou quebre a saída de uma ferramenta.
+
+    Args:
+        text: Texto em formato livre.
+
+    Returns:
+        Texto em uma linha, sem espaços nas pontas.
+    """
+    spaced = "".join(" " if unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp") else c for c in text)
+    return " ".join(spaced.split())

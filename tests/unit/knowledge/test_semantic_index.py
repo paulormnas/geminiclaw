@@ -30,10 +30,11 @@ class TestCanonicalText:
         )
         assert text == "titulo: T\nresumo: R\nclasse: classificacao\ncriterio_sucesso: alvo=0.8, metrica=f1"
 
-    def test_sinonimos_viram_texto(self):
-        assert canonical_text("Dominio", {"termo": "Química", "sinonimos": ["Chemistry", "Quím."]}) == (
-            "termo: Química\nsinonimos: Chemistry, Quím."
-        )
+    def test_dominio_usa_o_texto_hierarquico(self):
+        """Scenario: Reindexação dos domínios existentes (texto novo; v17-domain-search)."""
+        assert canonical_text(
+            "Dominio", {"termo": "Química", "nivel": "area", "sinonimos": ["Chemistry", "Quím."]}
+        ) == "Domínio: Química\nNível: area\nCaminho: Química\nSinônimos: Chemistry; Quím."
 
     @pytest.mark.parametrize("label", ["Sessao", "Insumo", "Experimento", "Resultado"])
     def test_rotulos_nao_vetorizados_devolvem_none(self, label):

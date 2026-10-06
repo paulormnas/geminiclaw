@@ -29,6 +29,7 @@ from qdrant_client.models import (
     Filter,
     MatchAny,
     MatchValue,
+    PayloadSchemaType,
     PointStruct,
     VectorParams,
 )
@@ -36,7 +37,13 @@ from qdrant_client.models import (
 from src import config
 from src.embeddings.base import EmbeddingProvider, embedding_payload, get_embedding_provider, text_hash
 from src.knowledge import schema
-from src.knowledge.domains import node_domains
+from src.knowledge.domains import (
+    DomainHierarchy,
+    descendant_ids,
+    domain_ancestors,
+    load_domain_hierarchy,
+    node_domains,
+)
 from src.knowledge.graph_store import GraphStore, Node
 from src.knowledge.provenance import Actor
 from src.logger import get_logger
@@ -54,9 +61,11 @@ _CANONICAL_FIELDS: dict[str, tuple[str, ...]] = {
     "Descoberta": ("tipo", "enunciado", "condicoes"),
     "Decisao": ("contexto", "justificativa"),
     "Oportunidade": ("enunciado", "justificativa"),
-    "Dominio": ("termo", "sinonimos"),
     "Metrica": ("nome", "sinonimos", "familia"),
 }
+
+# Campos de payload com índice ``keyword`` (filtro por subárvore e por nível do ``Dominio``).
+_KEYWORD_INDEXES = ("caminho_ids", "nivel")
 
 # Limite de nós lidos por rótulo na reconciliação (``find_nodes`` não pagina).
 _RECONCILE_RETRIEVE_BATCH = 64
@@ -94,6 +103,45 @@ def _format_value(value: Any) -> str:
     return str(value).strip()
 
 
+# Níveis que já estão em (ou acima de) ``area`` (espelha ``domains._TOP_LEVELS``).
+_TOP_LEVELS = frozenset({"grande_area", "area"})
+# Rótulo de linha por nível dos ancestrais no texto do ``Dominio`` (a própria linha ``Nível`` cobre o termo).
+_ANCESTOR_LINE_LABEL = {"grande_area": "Grande área", "area": "Área", "subarea": "Subárea"}
+# Níveis do vocabulário, do mais amplo ao mais específico.
+DOMAIN_LEVELS: tuple[str, ...] = ("grande_area", "area", "subarea", "especialidade")
+
+
+def domain_canonical_text(node: Node, ancestors: list[Node]) -> str:
+    """Texto canônico hierárquico de um ``Dominio`` (v17-domain-search §1).
+
+    Função pura: não consulta o banco. Campos nomeados e em ordem fixa, de modo que o
+    mesmo conteúdo gera sempre o mesmo texto (e o mesmo ``text_hash``). Os sinônimos
+    candidatos não entram (ainda não foram aprovados).
+
+    Args:
+        node: Nó ``Dominio``.
+        ancestors: Ancestrais já resolvidos, da raiz (grande área) ao pai imediato.
+
+    Returns:
+        O texto; string vazia se o nó não tem ``termo``.
+    """
+    termo = _format_value(node.properties.get("termo"))
+    if not termo:
+        return ""
+    nivel = _format_value(node.properties.get("nivel"))
+    path = [_format_value(a.properties.get("termo")) for a in ancestors] + [termo]
+    lines = [f"Domínio: {termo}", f"Nível: {nivel}", f"Caminho: {' > '.join(path)}"]
+    for ancestor in ancestors:
+        label = _ANCESTOR_LINE_LABEL.get(str(ancestor.properties.get("nivel")))
+        if label:
+            lines.append(f"{label}: {_format_value(ancestor.properties.get('termo'))}")
+    raw = node.properties.get("sinonimos") or []
+    sinonimos = [t for t in (_format_value(item) for item in raw) if t] if isinstance(raw, (list, tuple)) else []
+    if sinonimos:
+        lines.append(f"Sinônimos: {'; '.join(sinonimos)}")
+    return "\n".join(lines)
+
+
 def canonical_text(label: str, props: dict[str, Any]) -> str | None:
     """Monta o texto canônico de um nó (campos concatenados com rótulos, na ordem).
 
@@ -106,6 +154,10 @@ def canonical_text(label: str, props: dict[str, Any]) -> str | None:
         rótulo não é vetorizado (``Sessao``, ``Insumo``, ``Experimento``,
         ``Resultado``). String vazia se nenhum campo textual está preenchido.
     """
+    if label == "Dominio":
+        # Sem o grafo não há ancestrais: serve à detecção de mudança dos campos do próprio nó.
+        # O texto indexado de verdade usa os ancestrais (``SemanticIndex.text_for``).
+        return domain_canonical_text(Node(id="", label=label, properties=props), [])
     fields = _CANONICAL_FIELDS.get(label)
     if fields is None:
         return None
@@ -212,6 +264,8 @@ class SemanticIndex:
         self.collection = collection or config.KNOWLEDGE_COLLECTION
         self._ready = False
         self._listeners: list[Callable[[Node], None]] = []
+        # Mapa de pais dos domínios, vivo só durante ``reconcile`` (evita N+1 no grafo).
+        self._hierarchy: DomainHierarchy | None = None
 
     # -- Infra ---------------------------------------------------------------
 
@@ -249,6 +303,7 @@ class SemanticIndex:
                 collection_name=self.collection,
                 vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
             )
+            self._ensure_payload_indexes()
             self._ready = True
             return
         current = self._client.get_collection(self.collection).config.params.vectors.size
@@ -268,7 +323,15 @@ class SemanticIndex:
                 collection_name=self.collection,
                 vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
             )
+        self._ensure_payload_indexes()
         self._ready = True
+
+    def _ensure_payload_indexes(self) -> None:
+        """Cria (idempotente) os índices ``keyword`` usados pela busca de domínio (v17-domain-search §2)."""
+        for key in _KEYWORD_INDEXES:
+            self._client.create_payload_index(
+                collection_name=self.collection, field_name=key, field_schema=PayloadSchemaType.KEYWORD
+            )
 
     def _assert_owned_collection(self) -> None:
         """Recusa apagar uma coleção que não seja desta aplicação.
@@ -304,18 +367,55 @@ class SemanticIndex:
         if not self._ready:
             self.ensure_collection()
 
-    def _payload(self, node: Node, text: str) -> dict[str, Any]:
+    def _domain_chain(self, node: Node) -> tuple[list[Node], bool] | None:
+        """Ancestrais e completude da cadeia de um ``Dominio`` (``None`` para outros rótulos)."""
+        return domain_ancestors(self._store, node, self._hierarchy) if node.label == "Dominio" else None
+
+    def text_for(self, node: Node, chain: tuple[list[Node], bool] | None = None) -> str | None:
+        """Texto canônico efetivo de um nó; para o ``Dominio``, o texto hierárquico com ancestrais.
+
+        Args:
+            node: Nó do grafo.
+            chain: Ancestrais já resolvidos (evita reconsultar o grafo).
+        """
+        if node.label != "Dominio":
+            return canonical_text(node.label, node.properties)
+        ancestors, _ = chain if chain is not None else domain_ancestors(self._store, node, self._hierarchy)
+        return domain_canonical_text(node, ancestors)
+
+    def _payload(
+        self, node: Node, text: str, chain: tuple[list[Node], bool] | None = None
+    ) -> dict[str, Any]:
         props = node.properties
+        if node.label == "Dominio" and chain is None:
+            chain = domain_ancestors(self._store, node, self._hierarchy)
+        if chain is not None:
+            # Domínio de um ``Dominio`` = seu ancestral em nível ``area`` (ou o mais alto alcançado);
+            # derivado da cadeia já resolvida, sem novas consultas ao grafo.
+            path = [*chain[0], node]
+            top = next((n for n in reversed(path) if n.properties.get("nivel") in _TOP_LEVELS), path[0])
+            dominios = [top.id]
+        else:
+            dominios = sorted(node_domains(self._store, node))
         payload: dict[str, Any] = {
             "tipo_no": node.label,
             "projeto_id": props.get("projeto_id"),
-            "dominios": sorted(node_domains(self._store, node)),
+            "dominios": dominios,
             "status": props.get("status"),
             "visibilidade": props.get("visibilidade"),
             "criado_em": props.get("criado_em"),
         }
         if props.get("veredito") is not None:
             payload["veredito"] = props["veredito"]
+        if chain is not None:
+            ancestors, complete = chain
+            payload["nivel"] = props.get("nivel")
+            payload["caminho_ids"] = [a.id for a in ancestors] + [node.id]
+            payload["caminho_termos"] = [str(a.properties.get("termo")) for a in ancestors] + [
+                str(props.get("termo"))
+            ]
+            payload["caminho_completo"] = complete
+            payload["codigo_cnpq"] = props.get("codigo_cnpq")
         payload.update(embedding_payload(text, self._provider))
         return payload
 
@@ -343,26 +443,27 @@ class SemanticIndex:
         Returns:
             Quantidade de nós indexados.
         """
-        items: list[tuple[Node, str]] = []
+        items: list[tuple[Node, str, tuple[list[Node], bool] | None]] = []
         for node in nodes:
-            text = canonical_text(node.label, node.properties)
+            chain = self._domain_chain(node)
+            text = self.text_for(node, chain)
             if text:
-                items.append((node, text))
+                items.append((node, text, chain))
         if not items:
             return 0
         self._ensure_ready()
-        vectors = self._provider.embed_documents([text for _, text in items])
+        vectors = self._provider.embed_documents([text for _, text, _ in items])
         points = [
-            PointStruct(id=node.id, vector=vector, payload=self._payload(node, text))
-            for (node, text), vector in zip(items, vectors)
+            PointStruct(id=node.id, vector=vector, payload=self._payload(node, text, chain))
+            for (node, text, chain), vector in zip(items, vectors)
         ]
         self._client.upsert(collection_name=self.collection, points=points)
-        for node, _ in items:
+        for node, _, _ in items:
             if node.properties.get("estado_vetorizacao") != schema.ESTADO_VETORIZACAO_OK:
                 self._store.update_node(
                     node.id, {"estado_vetorizacao": schema.ESTADO_VETORIZACAO_OK}, actor=_SYSTEM_ACTOR
                 )
-        for node, _ in items:
+        for node, _, _ in items:
             self._notify(node)
         return len(items)
 
@@ -383,6 +484,46 @@ class SemanticIndex:
             )
         self._notify(node)
 
+    def mark_descendants_pending(self, node_id: str) -> list[int]:
+        """Marca como ``pendente`` os descendentes de um ``Dominio`` cujo texto depende dele.
+
+        Chamado quando termo ou sinônimos de um ancestral mudam (v17-domain-search §3):
+        o texto hierárquico dos descendentes muda e a reconciliação os revetoriza. A marcação
+        é feita em lotes de ``DOMAIN_REINDEX_BATCH`` e nunca impede a escrita do ancestral:
+        falha de um lote é registrada e o ``text_hash`` divergente ainda faz a reconciliação
+        revetorizar o nó.
+
+        Args:
+            node_id: ID do ancestral que mudou.
+
+        Returns:
+            Tamanho de cada lote marcado (vazio se não há descendentes).
+        """
+        batch_size = max(config.DOMAIN_REINDEX_BATCH, 1)
+        ids = descendant_ids(self._store, node_id)
+        sizes: list[int] = []
+        for start in range(0, len(ids), batch_size):
+            batch = ids[start : start + batch_size]
+            marked = 0
+            for child_id in batch:
+                try:
+                    self._store.update_node(
+                        child_id, {"estado_vetorizacao": schema.ESTADO_VETORIZACAO_PENDENTE}, actor=_SYSTEM_ACTOR
+                    )
+                    marked += 1
+                except Exception as exc:  # noqa: BLE001 - a reconciliação pelo text_hash cobre a falha
+                    logger.warning(
+                        "Falha ao marcar descendente como pendente",
+                        extra={"extra": {"node_id": child_id, "ancestor_id": node_id, "error": str(exc)}},
+                    )
+            sizes.append(marked)
+        if sizes:
+            logger.info(
+                "Descendentes de domínio marcados como pendentes",
+                extra={"extra": {"ancestor_id": node_id, "lotes": sizes}},
+            )
+        return sizes
+
     def _notify(self, node: Node) -> None:
         for listener in self._listeners:
             try:
@@ -398,7 +539,8 @@ class SemanticIndex:
 
         Se o ponto ainda não existe, faz o ``upsert`` completo.
         """
-        text = canonical_text(node.label, node.properties)
+        chain = self._domain_chain(node)
+        text = self.text_for(node, chain)
         if not text:
             return
         self._ensure_ready()
@@ -406,7 +548,7 @@ class SemanticIndex:
             self.upsert(node)
             return
         self._client.set_payload(
-            collection_name=self.collection, payload=self._payload(node, text), points=[node.id]
+            collection_name=self.collection, payload=self._payload(node, text, chain), points=[node.id]
         )
 
     def reconcile(self, *, allow_recreate: bool = False) -> ReconcileReport:
@@ -429,6 +571,27 @@ class SemanticIndex:
         self.ensure_collection(allow_recreate=allow_recreate)
         info = self._provider.info
         page_size = max(config.SIM_RECONCILE_BATCH_SIZE, 1)
+        self._hierarchy = load_domain_hierarchy(self._store)
+        try:
+            self._reconcile_labels(report, info, page_size)
+        finally:
+            self._hierarchy = None
+        report.elapsed_seconds = time.monotonic() - start
+        logger.info(
+            "Reconciliação do índice semântico concluída",
+            extra={
+                "extra": {
+                    "checked": report.checked,
+                    "reindexed": report.reindexed,
+                    "payload_refreshed": report.payload_refreshed,
+                    "failed": report.failed,
+                    "elapsed_seconds": round(report.elapsed_seconds, 3),
+                }
+            },
+        )
+        return report
+
+    def _reconcile_labels(self, report: ReconcileReport, info: Any, page_size: int) -> None:
         for label in sorted(schema.VECTORIZABLE_LABELS):
             after_id: str | None = None
             while True:
@@ -459,21 +622,6 @@ class SemanticIndex:
                         )
                 if len(batch) < page_size:
                     break
-        report.elapsed_seconds = time.monotonic() - start
-        logger.info(
-            "Reconciliação do índice semântico concluída",
-            extra={
-                "extra": {
-                    "checked": report.checked,
-                    "reindexed": report.reindexed,
-                    "payload_refreshed": report.payload_refreshed,
-                    "failed": report.failed,
-                    "elapsed_seconds": round(report.elapsed_seconds, 3),
-                }
-            },
-        )
-        return report
-
     def _stale_nodes(self, batch: list[Node], info: Any) -> tuple[list[Node], list[Node]]:
         """Separa nós a revetorizar (texto/modelo/estado) dos que só têm payload defasado."""
         points = {
@@ -483,7 +631,7 @@ class SemanticIndex:
         stale: list[Node] = []
         payload_stale: list[Node] = []
         for node in batch:
-            text = canonical_text(node.label, node.properties)
+            text = self.text_for(node)
             if not text:
                 continue
             payload = points.get(node.id)
@@ -606,6 +754,56 @@ class SemanticIndex:
         extra = 1 if node_id else 0
         hits = self._query(vector, labels, filters, min_score, limit + extra, 0, visible_to=projeto_id)
         return [h for h in hits if h.node_id != node_id][:limit]
+
+    def search_domains(
+        self,
+        query: str,
+        *,
+        statuses: list[str],
+        levels: list[str],
+        within: str | None = None,
+        limit: int = 15,
+    ) -> list[Hit]:
+        """Busca somente leitura de pontos ``Dominio`` (v17-domain-search §4).
+
+        Os filtros são objetos tipados do Qdrant (nada é interpolado em texto de consulta)
+        e a coleção não é criada nem alterada: se não existe, o erro do Qdrant sobe.
+
+        Args:
+            query: Texto já no molde do texto canônico (``Domínio: ...``).
+            statuses: ``status`` aceitos (``aprovado``, ``candidato``).
+            levels: Níveis aceitos (subconjunto de ``DOMAIN_LEVELS``).
+            within: ID de um ``Dominio``; restringe à sua subárvore (``caminho_ids``).
+            limit: Máximo de pontos.
+
+        Returns:
+            Hits por similaridade decrescente (sem corte de escore mínimo).
+
+        Raises:
+            ValueError: Status ou nível fora do conjunto válido.
+        """
+        if not set(statuses) <= {"aprovado", "candidato"} or not statuses:
+            raise ValueError(f"Status de domínio inválido: {statuses!r}.")
+        if not set(levels) <= set(DOMAIN_LEVELS) or not levels:
+            raise ValueError(f"Nível de domínio inválido: {levels!r}.")
+        must: list[Any] = [
+            FieldCondition(key="tipo_no", match=MatchValue(value="Dominio")),
+            FieldCondition(key="status", match=MatchAny(any=list(statuses))),
+            FieldCondition(key="nivel", match=MatchAny(any=list(levels))),
+        ]
+        if within is not None:
+            must.append(FieldCondition(key="caminho_ids", match=MatchValue(value=within)))
+        response = self._client.query_points(
+            collection_name=self.collection,
+            query=self._provider.embed_query(query),
+            query_filter=Filter(must=must),
+            limit=limit,
+            with_payload=True,
+        )
+        return [
+            Hit(node_id=str(p.id), label="Dominio", score=p.score, payload=p.payload or {})
+            for p in response.points
+        ]
 
     def iter_neighbors(
         self, node_id: str, labels: list[str], min_score: float, page_size: int

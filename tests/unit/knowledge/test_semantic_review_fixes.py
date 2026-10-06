@@ -283,13 +283,13 @@ class TestI5LigacaoNaFactory:
         SemanticIndex(InMemoryGraphStore(), QdrantClient(location=":memory:"))
 
     def test_status_de_dominio_aprovado_chega_ao_payload(self, env):
-        env.provider.vectors["termo: Fis"] = pair_vectors(DIM, 0, 1.0)[0]
+        env.provider.vectors["Domínio: Fis"] = pair_vectors(DIM, 0, 1.0)[0]
         dom = env.make("Dominio", termo="Fis", status="candidato")
         env.store.update_node(dom, {"status": "aprovado"}, actor=ORQ)
         assert env.point(dom).payload["status"] == "aprovado"
 
     def test_reconcile_corrige_payload_defasado_sem_revetorizar(self, env):
-        env.provider.vectors["termo: Fis"] = pair_vectors(DIM, 0, 1.0)[0]
+        env.provider.vectors["Domínio: Fis"] = pair_vectors(DIM, 0, 1.0)[0]
         dom = env.make("Dominio", termo="Fis", status="candidato")
         env.raw.update_node(dom, {"status": "aprovado"}, actor=ORQ)  # escrita sem o gancho
         assert env.point(dom).payload["status"] == "candidato"

@@ -269,3 +269,36 @@ CREATE TABLE IF NOT EXISTS document_chunks (
 );
 
 CREATE INDEX IF NOT EXISTS idx_chunks_doc ON document_chunks (document_id);
+
+-- =============================================================
+-- Fila de similaridade do grafo de conhecimento (V17 / ADR 015 §6,
+-- openspec/changes/v17-knowledge-semantic-index). Pares candidatos fora do
+-- grafo; só pares confirmados viram aresta SEMELHANTE_A (feito pelo Curator).
+-- Idempotente: não apaga nem altera dados existentes.
+-- =============================================================
+CREATE TABLE IF NOT EXISTS similarity_queue (
+    id BIGSERIAL PRIMARY KEY,
+    node_a TEXT NOT NULL,          -- menor ID do par (par não ordenado)
+    node_b TEXT NOT NULL,
+    label_a TEXT NOT NULL,
+    label_b TEXT NOT NULL,
+    tipo TEXT NOT NULL,            -- 'duplicata' | 'relacionado'
+    score REAL NOT NULL,
+    entre_dominios BOOLEAN NOT NULL,
+    entre_projetos BOOLEAN NOT NULL,
+    prioridade REAL NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pendente',  -- 'pendente' | 'confirmado' | 'descartado'
+    text_hash_a TEXT NOT NULL,
+    text_hash_b TEXT NOT NULL,
+    embedding_model TEXT NOT NULL,
+    embedding_version TEXT NOT NULL,
+    criado_em TIMESTAMPTZ NOT NULL DEFAULT now(),
+    revisado_em TIMESTAMPTZ,
+    revisado_por TEXT,
+    motivo TEXT,
+    -- Os hashes de texto entram na chave para que um par cujo texto mudou possa
+    -- voltar à fila como novo registro, mantendo o antigo como histórico.
+    UNIQUE (node_a, node_b, embedding_model, embedding_version, text_hash_a, text_hash_b)
+);
+
+CREATE INDEX IF NOT EXISTS idx_simq_pendente ON similarity_queue (status, prioridade DESC);

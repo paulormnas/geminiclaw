@@ -247,6 +247,22 @@ EMBEDDING_BATCH_SIZE = int(get_env("EMBEDDING_BATCH_SIZE", default="32"))
 # EMBEDDING_CACHE_DIR — ver scripts/setup_pi.sh). Usado em produção no Pi 5.
 EMBEDDING_OFFLINE = get_env_bool("EMBEDDING_OFFLINE", default=False)
 
+# Índice semântico do grafo de conhecimento (Roadmap V17 / ADR 015 §6,
+# openspec/changes/v17-knowledge-semantic-index). Coleção Qdrant com um ponto
+# por nó vetorizável (ID do ponto = ID do nó) e limiares das faixas de
+# similaridade. Os limiares dependem do modelo de embedding e são calibrados
+# pelo pesquisador (`geminiclaw knowledge stats` apenas sugere ajustes).
+KNOWLEDGE_COLLECTION = get_env("KNOWLEDGE_COLLECTION", default="knowledge_nodes")
+SIM_DUPLICATE_MIN = float(get_env("SIM_DUPLICATE_MIN", default="0.90"))
+SIM_RELATED_MIN_SAME_DOMAIN = float(get_env("SIM_RELATED_MIN_SAME_DOMAIN", default="0.70"))
+SIM_RELATED_MIN_CROSS = float(get_env("SIM_RELATED_MIN_CROSS", default="0.60"))
+SIM_CROSS_PROJECT_MIN_CONFIDENCE = float(get_env("SIM_CROSS_PROJECT_MIN_CONFIDENCE", default="0.30"))
+SIM_CROSS_DOMAIN_BOOST = float(get_env("SIM_CROSS_DOMAIN_BOOST", default="1.5"))
+SIM_CANDIDATE_SCAN_LIMIT = int(get_env("SIM_CANDIDATE_SCAN_LIMIT", default="200"))
+SIM_CALIBRATION_WINDOW_DAYS = int(get_env("SIM_CALIBRATION_WINDOW_DAYS", default="30"))
+RECENCY_HALF_LIFE_DAYS = float(get_env("RECENCY_HALF_LIFE_DAYS", default="365"))
+CONFIDENCE_FLOOR = float(get_env("CONFIDENCE_FLOOR", default="0.05"))
+
 # Quick Search Fallback
 QUICK_SEARCH_STRATEGY = get_env("QUICK_SEARCH_STRATEGY", default="ddg,ddg_lite,brave")
 BRAVE_API_KEY = get_env("BRAVE_API_KEY", default="")

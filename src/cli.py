@@ -60,6 +60,7 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
   geminiclaw history
   geminiclaw embeddings reindex [--collection <nome>] [--yes]
   geminiclaw vocab pending|approve <id>|reject <id> [--motivo <texto>]|map <id> --para <id>
+  geminiclaw knowledge stats|reindex [--yes]
   geminiclaw --metrics <execution_id>
 
 {BOLD}MODOS DE OPERAÇÃO (--mode):{RESET}
@@ -1133,6 +1134,19 @@ def main() -> None:
 
     if len(sys.argv) >= 2 and sys.argv[1] == "vocab":
         sys.exit(_handle_vocab_command(sys.argv[2:]))
+
+    # Roadmap V17 — 'geminiclaw knowledge stats|reindex' (índice semântico do grafo).
+    if len(sys.argv) >= 2 and sys.argv[1] == "knowledge":
+        from src.db import get_pool
+        from src.knowledge.semantic_runtime import run_knowledge_command
+
+        pool = get_pool()
+        pool.open()
+        try:
+            code = run_knowledge_command(sys.argv[2:])
+        finally:
+            pool.close()
+        sys.exit(code)
 
     parser = build_parser()
     args = parser.parse_args()

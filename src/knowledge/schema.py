@@ -277,8 +277,10 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
                 required=True, enum=("grande_area", "area", "subarea", "especialidade")
             ),
             "sinonimos": PropertySchema(),
+            "sinonimos_candidatos": PropertySchema(),
             "codigo_cnpq": PropertySchema(),
-            "status": PropertySchema(required=True, enum=("candidato", "aprovado")),
+            "status": PropertySchema(required=True, enum=("candidato", "aprovado", "rejeitado")),
+            "motivo_decisao": PropertySchema(),
         },
     ),
     "Metrica": NodeSchema(
@@ -290,7 +292,9 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             "unidade": PropertySchema(),
             "faixa": PropertySchema(),
             "familia": PropertySchema(),
-            "status": PropertySchema(required=True, enum=("candidato", "aprovado")),
+            "sinonimos_candidatos": PropertySchema(),
+            "status": PropertySchema(required=True, enum=("candidato", "aprovado", "rejeitado")),
+            "motivo_decisao": PropertySchema(),
         },
     ),
 }

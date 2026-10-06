@@ -362,6 +362,9 @@ KNOWLEDGE_GRAPH_NAME = get_env("KNOWLEDGE_GRAPH_NAME", default="knowledge")
 # a leitura tardia em AgeGraphStore levanta erro explícito se ausente.
 KNOWLEDGE_READER_DATABASE_URL = get_env("KNOWLEDGE_READER_DATABASE_URL")
 KNOWLEDGE_READ_TIMEOUT_MS = int(get_env("KNOWLEDGE_READ_TIMEOUT_MS", default="5000"))
+# Similaridade semântica mínima para um termo livre ser resolvido a um termo
+# canônico do vocabulário controlado (faixa de duplicata, v17-controlled-vocabulary).
+VOCAB_MATCH_THRESHOLD = float(get_env("VOCAB_MATCH_THRESHOLD", default="0.90"))
 
 # Identificador estável deste computador (fator de independência, ADR 015 §9).
 # Gerado uma vez e persistido em ~/.config/geminiclaw/node_id (ou $XDG_CONFIG_HOME).

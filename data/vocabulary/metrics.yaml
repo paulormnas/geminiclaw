@@ -1,0 +1,17 @@
+# Catálogo inicial de métricas (v17-controlled-vocabulary, design §1).
+# Ampliável pelo processo de candidatos (geminiclaw vocab ...).
+# Campos: nome, sinonimos, sentido (maior_melhor|menor_melhor), faixa, familia.
+metricas:
+  - {nome: acuracia, sinonimos: [accuracy, acc], sentido: maior_melhor, faixa: "0-1", familia: classificacao}
+  - {nome: f1, sinonimos: [f1_score, f1-score, f_measure], sentido: maior_melhor, faixa: "0-1", familia: classificacao}
+  - {nome: precisao, sinonimos: [precision], sentido: maior_melhor, faixa: "0-1", familia: classificacao}
+  - {nome: revocacao, sinonimos: [recall, sensitivity, sensibilidade], sentido: maior_melhor, faixa: "0-1", familia: classificacao}
+  - {nome: auc_roc, sinonimos: [roc_auc, auc], sentido: maior_melhor, faixa: "0-1", familia: classificacao}
+  - {nome: log_loss, sinonimos: [cross_entropy, logloss], sentido: menor_melhor, faixa: ">=0", familia: classificacao}
+  - {nome: rmse, sinonimos: [root_mean_squared_error], sentido: menor_melhor, faixa: ">=0", familia: erro_regressao}
+  - {nome: mae, sinonimos: [mean_absolute_error], sentido: menor_melhor, faixa: ">=0", familia: erro_regressao}
+  - {nome: mape, sinonimos: [mean_absolute_percentage_error], sentido: menor_melhor, faixa: ">=0", familia: erro_regressao}
+  - {nome: r2, sinonimos: [r_squared, "r²", coeficiente_determinacao], sentido: maior_melhor, faixa: "<=1", familia: ajuste_regressao}
+  - {nome: rendimento, sinonimos: [yield, rendimento_percentual], sentido: maior_melhor, faixa: "0-100", familia: sintese}
+  - {nome: pureza, sinonimos: [purity], sentido: maior_melhor, faixa: "0-100", familia: sintese}
+  - {nome: tempo_execucao, sinonimos: [runtime, execution_time], sentido: menor_melhor, faixa: ">=0", familia: desempenho_computacional}

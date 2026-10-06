@@ -59,6 +59,7 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
   geminiclaw clear-context
   geminiclaw history
   geminiclaw embeddings reindex [--collection <nome>] [--yes]
+  geminiclaw vocab pending|approve <id>|reject <id> [--motivo <texto>]|map <id> --para <id>
   geminiclaw --metrics <execution_id>
 
 {BOLD}MODOS DE OPERAÇÃO (--mode):{RESET}
@@ -1057,6 +1058,65 @@ def _handle_embeddings_command(argv: list[str]) -> None:
         run_embeddings_reindex(collection=sub_args.collection, auto_confirm=sub_args.yes)
 
 
+def _handle_vocab_command(argv: list[str], store: Any | None = None) -> int:
+    """Trata `geminiclaw vocab pending|approve|reject|map` (v17-controlled-vocabulary).
+
+    Operações tipadas e determinísticas do grafo, com autor ``pesquisador`` e sem LLM.
+
+    Args:
+        argv: Argumentos após "vocab".
+        store: ``GraphStore`` a usar (padrão: o grafo de produção); injetável em testes.
+
+    Returns:
+        Código de saída (0 em sucesso).
+    """
+    from src.knowledge import vocabulary
+
+    parser = argparse.ArgumentParser(
+        prog="geminiclaw vocab",
+        description="Decisões do pesquisador sobre candidatos do vocabulário controlado.",
+    )
+    sub = parser.add_subparsers(dest="action", required=True)
+    sub.add_parser("pending", help="Lista candidatos e sinônimos candidatos.")
+    sub.add_parser("approve", help="Aprova um candidato.").add_argument("id")
+    reject_p = sub.add_parser("reject", help="Rejeita um candidato (sem apagar).")
+    reject_p.add_argument("id")
+    reject_p.add_argument("--motivo", default=None, help="Motivo da rejeição.")
+    map_p = sub.add_parser("map", help="Funde um candidato em um termo canônico.")
+    map_p.add_argument("id")
+    map_p.add_argument("--para", required=True, help="ID do termo canônico.")
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as e:
+        return int(e.code or 0)
+
+    try:
+        if store is None:
+            from src.knowledge.factory import open_graph_store
+
+            store = open_graph_store()
+        if args.action == "pending":
+            items = vocabulary.list_pending(store)
+            if not items:
+                print("Nenhum candidato pendente.")
+            for item in items:
+                extra = f" sinônimos candidatos: {item['sinonimos_candidatos']}" if item["tipo"] == "sinonimo" else ""
+                print(f"{item['id']}  {item['label']}  {item['tipo']}  {item['termo']}{extra}")
+        elif args.action == "approve":
+            vocabulary.approve_term(store, args.id)
+            print(f"Aprovado: {args.id}")
+        elif args.action == "reject":
+            vocabulary.reject_term(store, args.id, args.motivo)
+            print(f"Rejeitado: {args.id}")
+        elif args.action == "map":
+            vocabulary.map_term(store, args.id, args.para)
+            print(f"Mapeado: {args.id} -> {args.para}")
+    except (vocabulary.VocabularyError, RuntimeError) as e:
+        print(f"\n  {RED}❌ {e}{RESET}\n")
+        return 1
+    return 0
+
+
 def main() -> None:
     """Ponto de entrada principal da CLI."""
     # Roadmap V15.6 / Spec G10 — help completo customizado, sem passar pelo argparse padrão
@@ -1070,6 +1130,9 @@ def main() -> None:
     if len(sys.argv) >= 2 and sys.argv[1] == "embeddings":
         _handle_embeddings_command(sys.argv[2:])
         sys.exit(0)
+
+    if len(sys.argv) >= 2 and sys.argv[1] == "vocab":
+        sys.exit(_handle_vocab_command(sys.argv[2:]))
 
     parser = build_parser()
     args = parser.parse_args()

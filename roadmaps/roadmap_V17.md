@@ -44,6 +44,11 @@ pelo agente Curator, com veredito de evidência objetivo e acesso do pesquisador
 - **Critérios de aceite:** [ ] mesmo ID no grafo e no Qdrant · [ ] consulta híbrida · [ ] fila fora do grafo sem limite de conexões
 - **Complexidade estimada:** Alta
 
+### Tarefa 6.1: Busca de domínio com embeddings hierárquicos
+- **Spec:** [`v17-domain-search`](../openspec/changes/v17-domain-search/proposal.md)
+- **Critérios de aceite:** [ ] texto e payload do `Dominio` com o caminho da grande área ao termo · [ ] busca com preferência pelo nível mais específico e filtro por subárvore · [ ] ferramenta `buscar_dominio` somente leitura para Researcher e Curator · [ ] avaliação `hit@1`/`hit@3` do modelo de embedding
+- **Complexidade estimada:** Média
+
 ### Tarefa 7: Agente Curator
 - **Spec:** [`v17-curator-agent`](../openspec/changes/v17-curator-agent/proposal.md)
 - **Critérios de aceite:** [ ] diretrizes do ADR 015 §10 aplicadas pelas ferramentas · [ ] veredito recalculado sem LLM · [ ] promoção de configuração

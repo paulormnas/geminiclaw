@@ -9,9 +9,12 @@ Cobre:
            contado cumulativamente entre ciclos — ver src/usage.py), e o
            restante do DAG e a sessão continuam, em vez de abortar a sessão
            inteira. Ver `test_persistent_task_failure_is_abandoned_not_session_aborted`.
-  V12.5.2: Limite de execuções de agente por sessão — ao atingir
-           MAX_AGENT_RUNS_PER_SESSION em _execute_agent, a execução é abortada com
-           RuntimeError descritivo (antes era um limite de containers, ADR 014).
+  V12.5.2: Limite de execuções de agente por sessão — ao atingir o limite efetivo em
+           _execute_agent, levanta AgentRunLimitReached (subclasse de RuntimeError) com mensagem
+           descritiva; o AutonomousLoop a captura e fecha a sessão com consolidação
+           (v16-pipeline-robustness §5; ver tests/unit/test_progress_and_run_limits.py).
+  v16-pipeline-robustness §4: o disjuntor de "zero progresso" só dispara após
+           CIRCUIT_BREAKER_STALL_CYCLES ciclos sem mudança de sucessos nem de erros.
 """
 
 import pytest

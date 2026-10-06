@@ -921,6 +921,34 @@ class TelemetryCollector:
             logger.error("Erro ao consultar picos de hardware", extra={"error": str(e)})
             return {}
 
+    def get_event_counts(self, execution_id: str, event_types: tuple[str, ...]) -> dict[str, dict[str, int]]:
+        """Conta eventos de ``agent_events`` por tipo e agente (ex.: ``spawn`` e ``sandbox_run``).
+
+        Args:
+            execution_id: ID da execução.
+            event_types: Tipos de evento a contar.
+
+        Returns:
+            ``{event_type: {agent_id: contagem}}``; vazio se o banco estiver indisponível.
+        """
+        counts: dict[str, dict[str, int]] = {}
+        try:
+            with get_connection() as conn:
+                rows = conn.execute(
+                    """
+                    SELECT event_type, agent_id, COUNT(*) AS n
+                    FROM agent_events
+                    WHERE execution_id = %s AND event_type = ANY(%s)
+                    GROUP BY event_type, agent_id
+                    """,
+                    (execution_id, list(event_types)),
+                ).fetchall()
+            for row in rows:
+                counts.setdefault(row["event_type"], {})[row["agent_id"]] = int(row["n"])
+        except Exception as e:
+            logger.error("Erro ao contar eventos da execução", extra={"error": str(e)})
+        return counts
+
     def get_derived_metrics(self, execution_id: str) -> dict[str, Any]:
         """Calcula métricas derivadas de eficiência e confiabilidade.
 

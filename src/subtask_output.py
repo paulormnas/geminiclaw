@@ -29,6 +29,7 @@ class SubtaskOutput:
     data_points: List[Dict[str, Any]] = field(default_factory=list)
     confidence: float = 1.0
     validation_results: List[Dict[str, Any]] = field(default_factory=list)
+    artifact_aliases: Dict[str, str] = field(default_factory=dict)  # esperado -> caminho real
 
     def to_json(self) -> str:
         """Serializa o objeto para JSON."""
@@ -60,6 +61,11 @@ class SubtaskOutput:
                 name = art.get("name", "arquivo")
                 path = art.get("path", "")
                 lines.append(f"- `{name}` em `{path}`")
+
+        if self.artifact_aliases:
+            lines.append("**Arquivos produzidos (esperado → real):**")
+            for expected, real in self.artifact_aliases.items():
+                lines.append(f"- {expected} → {real}")
 
         return "\n".join(lines)
 
@@ -101,5 +107,6 @@ class SubtaskOutput:
             sources=sources,
             artifacts=artifacts,
             confidence=confidence,
-            validation_results=validation_results
+            validation_results=validation_results,
+            artifact_aliases=dict((review_data or {}).get("resolved_artifacts") or {}),
         )

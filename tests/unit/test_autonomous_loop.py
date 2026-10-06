@@ -1,10 +1,20 @@
-import pytest
 import asyncio
+import json
+
+import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from src.autonomous_loop import AutonomousLoop
 from src.orchestrator import AgentResult, AgentTask, OrchestratorResult
 from src.telemetry import TelemetryCollector
 from src.usage import StopReason, UsageBudget, UsageTracker
+
+def _narrative(resumo: str = "Summary") -> str:
+    """Narrativa JSON válida do Summarizer (v16-pipeline-robustness §6)."""
+    fields = ("contexto_e_objetivo", "metodologia", "analise_divergencias", "limitacoes", "proximos_passos")
+    data = {f: "texto" for f in fields}
+    data.update(resumo_executivo=resumo, confianca_nivel="alto", confianca_justificativa="dados completos")
+    return json.dumps(data)
+
 
 @pytest.fixture
 def mock_telemetry():
@@ -61,7 +71,7 @@ async def test_autonomous_loop_complex_path_success(mock_telemetry):
     promo_result = AgentResult(agent_id="planner", session_id="s3", status="success", response={})
     
     # synthesis
-    synth_result = AgentResult(agent_id="summarizer", session_id="s4", status="success", response={"text": "Summary"})
+    synth_result = AgentResult(agent_id="summarizer", session_id="s4", status="success", response={"text": _narrative()})
 
     orchestrator._execute_agent.side_effect = [success_result, promo_result, synth_result]
     
@@ -95,7 +105,7 @@ async def test_autonomous_loop_complex_path_retry_success(mock_telemetry):
     promo_result = AgentResult(agent_id="planner", session_id="s3", status="success", response={})
 
     # synthesis
-    synth_result = AgentResult(agent_id="summarizer", session_id="s4", status="success", response={"text": "Summary"})
+    synth_result = AgentResult(agent_id="summarizer", session_id="s4", status="success", response={"text": _narrative()})
 
     orchestrator._execute_agent.side_effect = [fail_result, success_result, promo_result, synth_result]
     
@@ -165,7 +175,7 @@ async def test_autonomous_loop_reviewer_fail_then_success(mock_orchestrator, moc
     promo_result = AgentResult(agent_id="planner", session_id="s5", status="success", response={})
 
     # Síntese
-    synth_result = AgentResult(agent_id="summarizer", session_id="s5", status="success", response={"text": "Summary"})
+    synth_result = AgentResult(agent_id="summarizer", session_id="s5", status="success", response={"text": _narrative()})
 
     mock_orchestrator._execute_agent.side_effect = [
         success_result_1,  # 1a tentativa — review reprova
@@ -208,7 +218,7 @@ async def test_autonomous_loop_synthesis(mock_orchestrator, mock_telemetry):
         # Planner (Promotion)
         AgentResult(agent_id="planner", session_id="s1", status="success", response={}),
         # Summarizer (Síntese)
-        AgentResult(agent_id="summarizer", session_id="s1", status="success", response={"text": "Final Summary"}),
+        AgentResult(agent_id="summarizer", session_id="s1", status="success", response={"text": _narrative("Final Summary")}),
     ]
     
     mock_orchestrator._run_planning_loop.return_value = [

@@ -5,6 +5,7 @@ principal, sem instanciar container próprio (ADR 014) — o Validator sempre ro
 como corrotina no orquestrador, sem Docker.
 """
 
+import hashlib
 import json
 import re
 import time
@@ -13,11 +14,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.config import APP_NAME
-from src.logger import get_logger
-from src.model_router import ModelRouter
+from src.artifact_match import ArtifactResolution, resolve_artifacts
+from src.config import APP_NAME, ARTIFACT_MATCH_MODE
 from src.llm.base import LLMProvider
 from src.llm.metering import record_llm_call
+from src.logger import get_logger
+from src.model_router import ModelRouter
 from src.utils.json_parser import extract_json
 
 logger = get_logger(__name__)
@@ -89,69 +91,107 @@ def _normalize_metric_name(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", stripped.lower())
 
 
-def _evaluate_quantitative_criteria(
-    criteria: List[Any], metrics: Dict[str, Any]
-) -> Optional[Tuple[bool, str]]:
-    """Avalia critérios textuais contra valores reais em ``metrics.json``.
+def _metric_key(raw_name: str) -> Optional[str]:
+    """Mapeia o nome citado em um critério a uma métrica conhecida, ou ``None``.
 
-    Retorna ``(passou, detalhe)`` para o primeiro critério reconhecível e comparável
-    contra uma métrica real, ou ``None`` se nenhum critério pôde ser mapeado
-    (nesse caso o chamador deve recorrer à avaliação genérica via LLM).
+    Tenta o nome inteiro e depois cada palavra ("acurácia no teste" -> ``accuracy``).
     """
-    normalized_metrics = {_normalize_metric_name(k): v for k, v in (metrics or {}).items()}
+    whole = _normalize_metric_name(raw_name)
+    if whole in _METRIC_ALIASES:
+        return _METRIC_ALIASES[whole]
+    for word in re.split(r"\s+", raw_name.strip()):
+        key = _normalize_metric_name(word)
+        if key in _METRIC_ALIASES:
+            return _METRIC_ALIASES[key]
+    return None
 
-    for criterion in criteria:
+
+@dataclass(frozen=True)
+class MetricCriterion:
+    """Critério de aceite que cita uma métrica conhecida, operador e limiar."""
+
+    text: str
+    metric: str
+    operator: str
+    threshold: float
+
+
+def _metric_criteria(criteria: List[Any]) -> List[MetricCriterion]:
+    """Seleciona os critérios que citam uma métrica conhecida com operador e valor.
+
+    Critérios de contagem ("pelo menos 3 gráficos") ou qualitativos não entram: seguem para o
+    revisor LLM (``v16-pipeline-robustness`` §3).
+    """
+    found: List[MetricCriterion] = []
+    for criterion in criteria or []:
         if not isinstance(criterion, str):
             continue
         match = _CRITERION_VALUE_PATTERN.search(criterion)
         if not match:
             continue
-
         raw_name, operator, raw_value = match.groups()
-        key_candidate = _normalize_metric_name(raw_name)
-        metric_key = _METRIC_ALIASES.get(key_candidate, key_candidate)
-        if metric_key not in normalized_metrics:
+        metric = _metric_key(raw_name)
+        if metric is None:
             continue
+        found.append(MetricCriterion(criterion.strip(), metric, operator, float(raw_value.replace(",", "."))))
+    return found
 
+
+def _evaluate_metric_criteria(
+    criteria: List[MetricCriterion], metrics: Dict[str, Any]
+) -> List[Tuple[bool, str]]:
+    """Avalia TODOS os critérios com métrica nomeada contra os valores reais de ``metrics.json``."""
+    normalized: Dict[str, Any] = {}
+    for key, value in (metrics or {}).items():
+        norm = _normalize_metric_name(str(key))
+        normalized[_METRIC_ALIASES.get(norm, norm)] = value
+
+    results: List[Tuple[bool, str]] = []
+    for crit in criteria:
+        if crit.metric not in normalized:
+            results.append((False, f"Critério '{crit.text}': a métrica '{crit.metric}' não está em metrics.json."))
+            continue
         try:
-            actual = float(normalized_metrics[metric_key])
-            threshold = float(raw_value.replace(",", "."))
+            actual = float(normalized[crit.metric])
         except (TypeError, ValueError):
+            results.append((False, f"Critério '{crit.text}': valor de '{crit.metric}' em metrics.json não é numérico."))
             continue
-
         passed = {
-            ">": actual > threshold,
-            ">=": actual >= threshold,
-            "<": actual < threshold,
-            "<=": actual <= threshold,
-            "==": actual == threshold,
-        }[operator]
+            ">": actual > crit.threshold,
+            ">=": actual >= crit.threshold,
+            "<": actual < crit.threshold,
+            "<=": actual <= crit.threshold,
+            "==": actual == crit.threshold,
+        }[crit.operator]
+        results.append((
+            passed,
+            f"Critério '{crit.text}' avaliado contra metrics.json: valor real = {actual}, "
+            f"threshold {crit.operator} {crit.threshold} -> {'atendido' if passed else 'não atendido'}.",
+        ))
+    return results
 
-        detail = (
-            f"Critério '{criterion.strip()}' avaliado contra metrics.json: "
-            f"valor real = {actual}, threshold {operator} {threshold} -> "
-            f"{'atendido' if passed else 'não atendido'}."
-        )
-        return passed, detail
 
+def _find_metrics_file(output_dir: Optional[Path | str], task_name: str, depends_on: List[str]) -> Optional[Path]:
+    """Localiza ``metrics.json`` na pasta da própria subtarefa e, depois, nas de suas dependências."""
+    if not output_dir:
+        return None
+    root = Path(output_dir)
+    for folder in [task_name, *depends_on]:
+        if not folder:
+            continue
+        direct = root / folder / "metrics.json"
+        if direct.is_file():
+            return direct
+        nested = sorted((root / folder).rglob("metrics.json")) if (root / folder).is_dir() else []
+        if nested:
+            return nested[0]
     return None
 
 
-def _resolve_artifact_path(
-    available_artifacts: set, output_dir: Optional[Path | str], filename: str
-) -> Optional[Path]:
-    """Localiza o caminho real de um arquivo (ex: metrics.json) entre os artefatos conhecidos."""
-    if output_dir:
-        out_p = Path(output_dir)
-        if out_p.exists():
-            matches = list(out_p.rglob(filename))
-            if matches:
-                return matches[0]
-    for artifact in available_artifacts:
-        candidate = Path(artifact)
-        if candidate.name == filename and candidate.is_file():
-            return candidate
-    return None
+def issue_signature(issues: List[str]) -> str:
+    """Assinatura estável de um conjunto de problemas (números e caixa não contam)."""
+    normalized = sorted({re.sub(r"\d+", "#", i.lower().strip()) for i in issues if i})
+    return hashlib.sha1("|".join(normalized).encode("utf-8")).hexdigest()[:12]
 
 
 @dataclass
@@ -162,6 +202,9 @@ class ValidationResult:
     status: str  # "approved" | "revision_needed"
     reason: str
     issues: List[str] = field(default_factory=list)
+    signature: str = ""
+    deterministic: bool = False  # reprovação por checagem estrutural (não por LLM)
+    approved_with_warnings: bool = False
 
 
 _TEXT_EVIDENCE_SUFFIXES = {".json", ".md", ".txt", ".csv", ".log"}
@@ -169,33 +212,49 @@ _EVIDENCE_HEAD_CHARS = 700
 _EVIDENCE_MAX_FILES = 12
 
 
-def build_artifact_evidence(output_dir: Optional[Path | str], expected_artifacts: List[str]) -> str:
+def build_artifact_evidence(
+    output_dir: Optional[Path | str],
+    expected_artifacts: List[str],
+    resolutions: Optional[List[ArtifactResolution]] = None,
+) -> str:
     """Resume os artefatos esperados que existem em disco: caminho relativo, tamanho e começo do conteúdo.
 
     O revisor só via nomes de arquivo e reprovava subtarefas por "não foi possível confirmar o
     conteúdo". Com esta evidência ele julga o que está gravado, não só o que o agente afirma.
+    Com ``resolutions`` (comparador tolerante), mostra os arquivos resolvidos mesmo quando o nome
+    difere do esperado, indicando a camada de resolução.
     """
     if not output_dir:
         return "(sem diretório de sessão)"
     root = Path(output_dir)
     if not root.exists():
         return "(diretório de sessão inexistente)"
+    tier_by_file: Dict[Path, str] = {}
+    if resolutions is not None:
+        for res in resolutions:
+            for matched in res.matched:
+                tier_by_file[matched] = res.tier
     wanted = {Path(e).name for e in expected_artifacts}
     lines: List[str] = []
     for path in sorted(root.rglob("*")):
         if not path.is_file() or path.name in ("scientific_helpers.py", "script.py") or path.suffix == ".pyc":
             continue
-        if wanted and path.name not in wanted:
+        rel = path.relative_to(root)
+        if resolutions is not None:
+            if rel not in tier_by_file:
+                continue
+        elif wanted and path.name not in wanted:
             continue
         if len(lines) >= _EVIDENCE_MAX_FILES:
             break
-        rel = path.relative_to(root)
         size = path.stat().st_size
+        tier = tier_by_file.get(rel)
+        note = f" [resolvido por {tier}]" if tier in ("normalized", "extension") else ""
         if path.suffix.lower() in _TEXT_EVIDENCE_SUFFIXES and size < 2_000_000:
             head = path.read_text(encoding="utf-8", errors="replace")[:_EVIDENCE_HEAD_CHARS].replace("\n", " ")
-            lines.append(f"- {rel} ({size} bytes): {head}")
+            lines.append(f"- {rel} ({size} bytes){note}: {head}")
         else:
-            lines.append(f"- {rel} ({size} bytes, binário)")
+            lines.append(f"- {rel} ({size} bytes, binário){note}")
     return "\n".join(lines) or "(nenhum dos artefatos esperados encontrado)"
 
 
@@ -207,6 +266,9 @@ class ReviewResult:
     status: str  # "pass" | "fail"
     feedback: str
     issues: List[str] = field(default_factory=list)
+    resolved_artifacts: Dict[str, str] = field(default_factory=dict)  # esperado -> real
+    name_mismatch: bool = False
+    signature: str = ""
 
 
 class ValidatorAgent:
@@ -298,6 +360,8 @@ class ValidatorAgent:
                 status="revision_needed",
                 reason="Falha na validação de schema: campos obrigatórios ou validation_criteria ausentes.",
                 issues=structural_issues,
+                signature=issue_signature(structural_issues),
+                deterministic=True,
             )
 
         # Validação semântica e lógica via LLM
@@ -338,11 +402,13 @@ class ValidatorAgent:
 
             status = parsed.get("status", "revision_needed").lower()
             is_valid = status == "approved"
+            llm_issues = [str(i) for i in (parsed.get("issues") or [])]
             return ValidationResult(
                 is_valid=is_valid,
                 status="approved" if is_valid else "revision_needed",
                 reason=parsed.get("reason", ""),
                 issues=parsed.get("issues", []),
+                signature="" if is_valid else issue_signature(llm_issues or [str(parsed.get("reason", ""))]),
             )
 
         except Exception as e:
@@ -383,37 +449,33 @@ class ValidatorAgent:
             task.get("validation_criteria", []) if isinstance(task, dict) else []
         )
 
-        available_artifacts = set(artifacts_on_disk or [])
-        if manifest_artifacts:
-            available_artifacts.update(manifest_artifacts)
+        depends_on = getattr(task, "depends_on", None) or (
+            task.get("depends_on", []) if isinstance(task, dict) else []
+        )
+        metric_criteria = _metric_criteria(validation_criteria) if isinstance(validation_criteria, list) else []
+        metric_feedback = ""
 
-        # Se um diretório foi fornecido, adiciona os arquivos existentes nele
-        if output_dir:
-            out_p = Path(output_dir)
-            if out_p.exists():
-                for f in out_p.rglob("*"):
-                    if f.is_file():
-                        available_artifacts.add(f.name)
-                        available_artifacts.add(str(f))
-
-        # 0. Roadmap V15.2 / Spec G2 — validação científica via metrics.json quando o
-        # critério de aceite exige um threshold quantitativo (reprodução/validação).
-        # Avaliada ANTES do response_text, que é frequentemente otimista ou impreciso.
-        if isinstance(validation_criteria, list) and _has_quantitative_criterion(validation_criteria):
-            metrics_file = _resolve_artifact_path(available_artifacts, output_dir, "metrics.json")
+        # 0. Roadmap V15.2 / Spec G2 — validação científica via metrics.json quando algum critério
+        # cita uma métrica conhecida com limiar (v16-pipeline-robustness §3). Avaliada ANTES do
+        # response_text, que é frequentemente otimista ou impreciso.
+        if metric_criteria:
+            metrics_file = _find_metrics_file(output_dir, str(task_name), list(depends_on))
             if metrics_file is None:
-                msg = f"metrics.json não encontrado em /outputs/{task_name}/"
+                existing = self._list_task_files(output_dir, str(task_name))
+                msg = f"metrics.json não encontrado em /outputs/{task_name}/ (existem: {existing})"
                 logger.warning(
                     "Subtarefa reprovada: critério quantitativo sem metrics.json",
                     extra={"task_name": task_name},
                 )
-                return ReviewResult(is_approved=False, status="fail", feedback=msg, issues=[msg])
+                return ReviewResult(is_approved=False, status="fail", feedback=msg, issues=[msg],
+                                    signature=issue_signature(["metrics.json ausente"]))
 
             try:
                 metrics_data = json.loads(metrics_file.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError) as e:
                 msg = f"Falha ao ler metrics.json: {e}"
-                return ReviewResult(is_approved=False, status="fail", feedback=msg, issues=[msg])
+                return ReviewResult(is_approved=False, status="fail", feedback=msg, issues=[msg],
+                                    signature=issue_signature(["metrics.json ilegível"]))
 
             divergence_note = metrics_data.get("divergence_note")
             if divergence_note:
@@ -424,33 +486,37 @@ class ValidatorAgent:
                     issues=[],
                 )
 
-            evaluation = _evaluate_quantitative_criteria(
-                validation_criteria, metrics_data.get("metrics", {})
-            )
-            if evaluation is not None:
-                passed, detail = evaluation
+            evaluations = _evaluate_metric_criteria(metric_criteria, metrics_data.get("metrics", {}))
+            metric_feedback = " ".join(detail for _, detail in evaluations)
+            failed = [detail for ok, detail in evaluations if not ok]
+            if failed:
                 return ReviewResult(
-                    is_approved=passed,
-                    status="pass" if passed else "fail",
-                    feedback=detail,
-                    issues=[] if passed else [detail],
+                    is_approved=False,
+                    status="fail",
+                    feedback=metric_feedback,
+                    issues=failed,
+                    signature=issue_signature([f"critério {c.metric} {c.operator}" for c in metric_criteria]),
                 )
-            # Nenhum critério pôde ser mapeado a uma métrica real em metrics.json —
-            # prossegue para a avaliação genérica abaixo (artefatos + LLM).
 
-        # 1. Verificação estrita de artefatos em disco
-        missing_artifacts = []
-        for expected in expected_artifacts:
-            exp_name = Path(expected).name
-            found = any(
-                expected == a or exp_name == Path(a).name or expected in a
-                for a in available_artifacts
-            )
-            if not found:
-                missing_artifacts.append(expected)
+        # 1. Resolução de artefatos em disco (comparador tolerante, v16-pipeline-robustness §2)
+        resolutions: List[ArtifactResolution] = []
+        if expected_artifacts:
+            if output_dir and Path(output_dir).exists():
+                resolutions = resolve_artifacts(
+                    list(expected_artifacts), output_dir, str(task_name), ARTIFACT_MATCH_MODE
+                )
+            else:
+                resolutions = self._resolve_from_names(
+                    list(expected_artifacts), set(artifacts_on_disk or []) | set(manifest_artifacts or [])
+                )
+        missing_artifacts = [r.expected for r in resolutions if r.tier == "missing"]
 
         if missing_artifacts:
-            msg = f"Artefatos esperados não foram encontrados no disco: {', '.join(missing_artifacts)}"
+            existing = self._list_task_files(output_dir, str(task_name))
+            msg = (
+                f"Artefatos esperados não foram encontrados no disco: {', '.join(missing_artifacts)} "
+                f"(existem em {task_name}/: {existing})"
+            )
             logger.warning(
                 "Subtarefa reprovada por artefatos ausentes no disco",
                 extra={"task_name": task_name, "missing": missing_artifacts},
@@ -460,6 +526,20 @@ class ValidatorAgent:
                 status="fail",
                 feedback=msg,
                 issues=[f"Artefato ausente no disco: {a}" for a in missing_artifacts],
+                signature=issue_signature([f"artefato ausente {a}" for a in missing_artifacts]),
+            )
+        resolved_map = {r.expected: r.matched[0].as_posix() for r in resolutions if r.matched}
+        mismatch = any(r.name_mismatch for r in resolutions)
+
+        # Critérios restantes (qualitativos ou de contagem) vão ao revisor LLM
+        metric_texts = {c.text for c in metric_criteria}
+        validation_criteria = [
+            c for c in (validation_criteria or []) if not (isinstance(c, str) and c.strip() in metric_texts)
+        ]
+        if not validation_criteria and metric_criteria:
+            return ReviewResult(
+                is_approved=True, status="pass", feedback=metric_feedback, issues=[],
+                resolved_artifacts=resolved_map, name_mismatch=mismatch,
             )
 
         # 2. Avaliação de critérios de validação via LLM se houver critérios
@@ -476,11 +556,13 @@ class ValidatorAgent:
                 "arquivo existir com conteúdo coerente.\n"
                 "- Não reprove por não ver o conteúdo completo de um arquivo cuja existência e tamanho foram "
                 "confirmados; reprove só se a evidência contradiz um critério ou o critério exige algo ausente.\n"
+                "- Um artefato com nome diferente do esperado (marcado [resolvido por ...]) NÃO é motivo de "
+                "reprovação: avalie o conteúdo.\n"
                 "- Cada item em 'issues' deve citar o critério específico não atendido.\n"
                 "Responda estritamente em JSON com o formato:\n"
                 '{\n  "status": "pass" | "fail",\n  "feedback": "explicação do parecer",\n  "issues": []\n}'
             )
-            evidence = build_artifact_evidence(output_dir, expected_artifacts)
+            evidence = build_artifact_evidence(output_dir, expected_artifacts, resolutions if resolutions else None)
             user_content = (
                 f"SUBTAREFA: {task_name}\n"
                 f"CRITÉRIOS DE ACEITE:\n{criteria_str}\n\n"
@@ -501,11 +583,17 @@ class ValidatorAgent:
                 if isinstance(parsed, dict) and "status" in parsed:
                     status = parsed.get("status", "pass").lower()
                     is_approved = status == "pass"
+                    llm_issues = [str(i) for i in (parsed.get("issues") or [])]
                     return ReviewResult(
                         is_approved=is_approved,
                         status="pass" if is_approved else "fail",
                         feedback=parsed.get("feedback", ""),
                         issues=parsed.get("issues", []),
+                        resolved_artifacts=resolved_map,
+                        name_mismatch=mismatch,
+                        signature=""
+                        if is_approved
+                        else issue_signature(llm_issues or [str(parsed.get("feedback", ""))]),
                     )
             except Exception as e:
                 logger.warning(f"Erro na revisão semântica via LLM: {e}")
@@ -516,4 +604,28 @@ class ValidatorAgent:
             status="pass",
             feedback="Subtarefa aprovada com artefatos presentes no disco.",
             issues=[],
+            resolved_artifacts=resolved_map,
+            name_mismatch=mismatch,
         )
+
+    @staticmethod
+    def _list_task_files(output_dir: Optional[Path | str], task_name: str) -> List[str]:
+        """Nomes dos arquivos existentes na pasta da subtarefa (para mensagens de reprovação acionáveis)."""
+        if not output_dir:
+            return []
+        folder = Path(output_dir) / task_name
+        if not folder.is_dir():
+            return []
+        ignored = ("script.py", "scientific_helpers.py")
+        return sorted(p.name for p in folder.rglob("*") if p.is_file() and p.name not in ignored)[:12]
+
+    @staticmethod
+    def _resolve_from_names(expected: List[str], available: set) -> List[ArtifactResolution]:
+        """Resolução por nomes quando não há diretório da sessão (revisão sem disco)."""
+        names = {Path(a).name for a in available} | set(available)
+        out: List[ArtifactResolution] = []
+        for exp in expected:
+            found = exp in names or Path(exp).name in names or any(exp in a for a in available)
+            matched = [Path(Path(exp).name)] if found else []
+            out.append(ArtifactResolution(exp, matched, "exact" if found else "missing"))
+        return out

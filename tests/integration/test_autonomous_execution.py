@@ -3,8 +3,10 @@
 Valida o ciclo completo do AutonomousLoop com o triage heurístico (Etapa V3).
 """
 
-import pytest
 import asyncio
+import json
+
+import pytest
 import tempfile
 import os
 import shutil
@@ -14,6 +16,13 @@ from src.orchestrator import Orchestrator, AgentTask, AgentResult
 from src.session import SessionManager
 from src.db import get_connection
 from src.output_manager import OutputManager
+
+# Narrativa JSON válida do Summarizer (v16-pipeline-robustness §6)
+NARRATIVE = json.dumps({
+    "resumo_executivo": "resumo final", "contexto_e_objetivo": "c", "metodologia": "m",
+    "analise_divergencias": "a", "limitacoes": "l", "proximos_passos": "p",
+    "confianca_nivel": "medio", "confianca_justificativa": "j",
+})
 
 
 @pytest.mark.integration
@@ -88,7 +97,7 @@ async def test_autonomous_complex_flow_integration():
             agent_id="planner", session_id="s_promo", status="success", response={}
         )
         summary_res = AgentResult(
-            agent_id="summarizer", session_id="s_sum", status="success", response={"text": "resumo final"}
+            agent_id="summarizer", session_id="s_sum", status="success", response={"text": NARRATIVE}
         )
         orchestrator._execute_agent = AsyncMock(side_effect=[task1_res, promo_res, summary_res])
 

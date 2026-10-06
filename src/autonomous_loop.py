@@ -5,18 +5,28 @@ decomposição de tarefas em subtarefas e loop de retentativas.
 """
 
 import os
+import re
 import json
+import hashlib
 import asyncio
 import time
 import uuid
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any, TYPE_CHECKING, List, Dict, Optional
 from src.logger import get_logger
 from src.skills.memory.short_term import ShortTermMemory
 from src.triage import TriageClassifier, TriageDecision
 from src.health import PiHealthMonitor
-from src.config import MAX_PLAN_RETRIES, MAX_SUBTASKS_PER_TASK, SESSION_MAX_TASK_RETRIES, LIMIT_GRACE_SECONDS
+from src.config import (
+    CIRCUIT_BREAKER_STALL_CYCLES,
+    LIMIT_GRACE_SECONDS,
+    MAX_PLAN_RETRIES,
+    MAX_SUBTASKS_PER_TASK,
+    SESSION_MAX_TASK_RETRIES,
+)
 from src.telemetry import get_telemetry
+from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
 from src.usage import UsageBudget, UsageTracker, StopReason
 
 if TYPE_CHECKING:
@@ -26,6 +36,35 @@ logger = get_logger(__name__)
 
 # Roadmap V3 - Etapa V3: limite de chars para injeção de contexto (~2000 tokens)
 _CONTEXT_MAX_CHARS = 8_000
+
+
+@dataclass(frozen=True)
+class CycleProgress:
+    """Progresso de um ciclo de planejamento/execução, para o disjuntor de "zero progresso"."""
+
+    succeeded: frozenset
+    failure_signatures: frozenset
+
+    def advanced_from(self, previous: "CycleProgress") -> bool:
+        """Há progresso se surgiram sucessos novos ou a assinatura dos erros mudou."""
+        return not self.succeeded <= previous.succeeded or self.failure_signatures != previous.failure_signatures
+
+
+_PATH_RE = re.compile(r"[\w.\-]*[/\\][\w./\\\-]*")
+
+
+def error_signature(task_name: str, error: Any) -> str:
+    """Assinatura do erro de uma subtarefa: tipo normalizado, sem números nem caminhos.
+
+    Reprovações do revisor viram ``review:<texto>``; demais falhas, ``agent:<texto>``.
+    """
+    text = str(error or "desconhecido").lower()
+    kind = "review" if text.startswith("falha na revisão") else "agent"
+    text = _PATH_RE.sub("<path>", text)
+    text = re.sub(r"\d+(?:[.,]\d+)?", "#", text)
+    text = re.sub(r"\s+", " ", text).strip()[:200]
+    digest = hashlib.sha1(f"{kind}:{text}".encode("utf-8")).hexdigest()[:10]
+    return f"{task_name}:{kind}:{digest}"
 
 
 class AutonomousLoop:
@@ -285,7 +324,12 @@ class AutonomousLoop:
         token_pct = (total_tokens / SESSION_MAX_TOKENS) if SESSION_MAX_TOKENS else 0.0
         run_counts = getattr(self.orchestrator, "_session_agent_run_counts", None)
         agent_runs = run_counts.get(master_session_id, 0) if isinstance(run_counts, dict) else 0
-        agent_runs_pct = (agent_runs / MAX_AGENT_RUNS_PER_SESSION) if MAX_AGENT_RUNS_PER_SESSION else 0.0
+        run_limit = MAX_AGENT_RUNS_PER_SESSION
+        limit_fn = getattr(self.orchestrator, "effective_run_limit", None)
+        if callable(limit_fn):
+            effective = limit_fn(master_session_id)
+            run_limit = effective if isinstance(effective, int) else run_limit
+        agent_runs_pct = (agent_runs / run_limit) if run_limit else 0.0
         duration_min = (time.time() - getattr(self, "_session_started_at", time.time())) / 60
         # V18/usage-limits — avisos da Spec G5 agora são percentuais dos limites reais
         # do UsageBudget (SESSION_MAX_MINUTES), não mais minutos absolutos.
@@ -300,9 +344,12 @@ class AutonomousLoop:
             triggered.append(
                 f"Duração da sessão: {duration_pct*100:.0f}% do limite ({duration_min:.0f}min/{SESSION_MAX_MINUTES:.0f}min)"
             )
+        planning_counts = getattr(self.orchestrator, "_session_planning_run_counts", None)
+        planning_runs = planning_counts.get(master_session_id, 0) if isinstance(planning_counts, dict) else 0
         if agent_runs_pct >= OPERATIONAL_THRESHOLDS["agent_runs_pct"]:
             triggered.append(
-                f"Execuções de agente: {agent_runs_pct*100:.0f}% do limite ({agent_runs}/{MAX_AGENT_RUNS_PER_SESSION})"
+                f"Execuções de agente: {agent_runs_pct*100:.0f}% do limite ({agent_runs}/{run_limit}); "
+                f"execuções de planejamento: {planning_runs}"
             )
 
         if not triggered:
@@ -512,8 +559,9 @@ class AutonomousLoop:
         final_results: List[AgentResult] = []
         tasks: List[AgentTask] = []
         current_plan_dicts: List[Dict[str, Any]] = []
-        # V12.5.1 — Circuit breaker: hash do progresso do ciclo anterior
-        _previous_progress_hash: int | None = None
+        # V12.5.1 — Circuit breaker: progresso do ciclo anterior (v16-pipeline-robustness §4)
+        _previous_progress: CycleProgress | None = None
+        _stalled_cycles = 0
         
 
         for plan_attempt in range(max_plan_retries):
@@ -529,12 +577,32 @@ class AutonomousLoop:
                 )
 
             # 1. Planejamento ou Recuperação Incremental
-            tasks = await self.orchestrator._run_planning_loop(
-                prompt=prompt, 
-                master_session_id=master_session_id,
-                previous_plan=current_plan_dicts if current_plan_dicts else None,
-                execution_feedback=execution_feedback
-            )
+            try:
+                tasks = await self.orchestrator._run_planning_loop(
+                    prompt=prompt,
+                    master_session_id=master_session_id,
+                    previous_plan=current_plan_dicts if current_plan_dicts else None,
+                    execution_feedback=execution_feedback
+                )
+            except AgentRunLimitReached as limit_exc:
+                self._record_run_limit(master_session_id, limit_exc)
+                return await self._close_session(
+                    StopReason.RUNS, master_session_id, prompt, tasks, {}, final_results
+                )
+            except PlanningStalled as stalled:
+                logger.error("Planejamento encerrado por reprovação repetida", extra={"issues": stalled.issues})
+                self._short_term_memory.clear(master_session_id)
+                final_results.append(AgentResult(
+                    agent_id="orchestrator",
+                    session_id=master_session_id,
+                    status="error",
+                    response={"text": str(stalled)},
+                    error="Planejamento encerrado: reprovação determinística repetida.",
+                ))
+                return OrchestratorResult(
+                    results=final_results, total=0, succeeded=0, failed=len(final_results),
+                    artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id),
+                )
             
             if not tasks:
                 logger.error(f"Falha na tentativa {plan_attempt+1} de gerar/recuperar plano")
@@ -631,6 +699,8 @@ class AutonomousLoop:
                         "status": "pending",
                         "error": None
                     }
+
+            limit_hits: List[AgentRunLimitReached] = []
 
             async def _execute_task_in_dag(task: AgentTask, index: int):
                 # V18/usage-limits — chave de contabilização de retentativas da MESMA
@@ -755,7 +825,14 @@ class AutonomousLoop:
                             payload={"depends_on": task.depends_on},
                         )
 
-                    result = await self.orchestrator._execute_agent(enriched_task, master_session_id)
+                    try:
+                        result = await self.orchestrator._execute_agent(enriched_task, master_session_id)
+                    except AgentRunLimitReached as limit_exc:
+                        limit_hits.append(limit_exc)
+                        if task.task_name:
+                            dag_state[task.task_name]["status"] = "cancelled"
+                            dag_state[task.task_name]["future"].set_result(None)
+                        return
                     last_result = result
 
                     if result.status == "success":
@@ -765,7 +842,7 @@ class AutonomousLoop:
                         from src.config import REVIEW_ENABLED, REVIEW_MODE
                         if REVIEW_ENABLED and REVIEW_MODE == "per_subtask" and task.validation_criteria:
                             logger.info(f"Iniciando revisão da subtarefa {task.task_name}")
-                            review = await self._review_subtask(task, result, master_session_id)
+                            review = await self._review_subtask(task, result, master_session_id, attempt_number)
                             if review.get("status") == "fail":
                                 success = False
                                 result.status = "error"
@@ -956,6 +1033,12 @@ class AutonomousLoop:
                     StopReason.TIME, master_session_id, prompt, tasks, dag_state, final_results
                 )
 
+            if limit_hits:
+                self._record_run_limit(master_session_id, limit_hits[0])
+                return await self._close_session(
+                    StopReason.RUNS, master_session_id, prompt, tasks, dag_state, final_results
+                )
+
             # Verifica se houve alguma falha
             failed_tasks = [t for t, state in dag_state.items() if state["status"] in ("failed", "cancelled")]
             abandoned_tasks = [t for t, state in dag_state.items() if state["status"] == "abandonada"]
@@ -979,7 +1062,11 @@ class AutonomousLoop:
                 if succeeded > 0:
                     await self._promote_findings(prompt, master_session_id)
                     # Etapa V6.7: Síntese final com o Summarizer
-                    final_report = await self._synthesize_results(prompt, final_results, master_session_id)
+                    try:
+                        final_report = await self._synthesize_results(prompt, final_results, master_session_id)
+                    except AgentRunLimitReached as limit_exc:
+                        self._record_run_limit(master_session_id, limit_exc)
+                        final_report = None
                     if final_report:
                         # Adiciona o relatório final aos resultados
                         final_results.append(final_report)
@@ -1000,8 +1087,19 @@ class AutonomousLoop:
             logger.warning(f"O plano falhou nas tarefas: {failed_tasks}. Iniciando recuperação incremental...")
 
             # V12.5.1 — Circuit breaker: detecta progresso zero entre ciclos consecutivos
-            _current_progress_hash = hash(frozenset(succeeded_tasks))
-            if _current_progress_hash == _previous_progress_hash:
+            # v16-pipeline-robustness §4 — progresso = mais sucessos OU mudança na assinatura dos
+            # erros; dispara só após CIRCUIT_BREAKER_STALL_CYCLES ciclos consecutivos sem progresso.
+            current_progress = CycleProgress(
+                succeeded=frozenset(succeeded_tasks),
+                failure_signatures=frozenset(
+                    error_signature(t, dag_state[t].get("error")) for t in failed_tasks
+                ),
+            )
+            if _previous_progress is not None and not current_progress.advanced_from(_previous_progress):
+                _stalled_cycles += 1
+            else:
+                _stalled_cycles = 0
+            if _stalled_cycles >= CIRCUIT_BREAKER_STALL_CYCLES:
                 cb_msg = (
                     "Execução interrompida: nenhum progresso detectado entre ciclos consecutivos.\n"
                     f"Subtarefas falhas: {failed_tasks}.\n"
@@ -1022,6 +1120,8 @@ class AutonomousLoop:
                         "reason": "zero_progress",
                         "succeeded_tasks": succeeded_tasks,
                         "failed_tasks": failed_tasks,
+                        "stalled_cycles": _stalled_cycles,
+                        "failure_signatures": sorted(current_progress.failure_signatures),
                     },
                 )
                 cb_result = AgentResult(
@@ -1042,7 +1142,7 @@ class AutonomousLoop:
                     failed=failed_count,
                     artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id),
                 )
-            _previous_progress_hash = _current_progress_hash
+            _previous_progress = current_progress
 
             errors = []
             for t in failed_tasks:
@@ -1117,6 +1217,23 @@ class AutonomousLoop:
             failed=failed,
             artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id)
         )
+
+    def _record_run_limit(self, master_session_id: str, exc: AgentRunLimitReached) -> None:
+        """Registra o evento ``limit_reached`` do limite de execuções (observabilidade segura)."""
+        logger.warning(
+            "Limite de execuções de agente atingido",
+            extra={"kind": exc.kind, "count": exc.count, "limit": exc.limit},
+        )
+        try:
+            get_telemetry().record_agent_event(
+                execution_id=master_session_id,
+                session_id=master_session_id,
+                agent_id="autonomous_loop",
+                event_type="limit_reached",
+                payload={"limit": "agent_runs", "kind": exc.kind, "count": exc.count, "max": exc.limit},
+            )
+        except Exception as err:
+            logger.warning("Falha ao registrar limit_reached", extra={"error": str(err)})
 
     async def _close_session(
         self,
@@ -1231,7 +1348,9 @@ class AutonomousLoop:
         # usando a reserva de tokens quando disponível.
         if tokens_available_for_closing and (completed_tasks or final_results):
             try:
-                final_report = await self._synthesize_results(prompt, final_results, master_session_id)
+                final_report = await self._synthesize_results(
+                    prompt, final_results, master_session_id, reason.value
+                )
                 if final_report:
                     final_results.append(final_report)
             except Exception as e:
@@ -1418,7 +1537,9 @@ class AutonomousLoop:
                     )
                     logger.info("Padrão de código extraído e salvo na memória", extra={"key": key})
 
-    async def _review_subtask(self, task: "AgentTask", result: "AgentResult", master_session_id: str) -> Dict[str, Any]:
+    async def _review_subtask(
+        self, task: "AgentTask", result: "AgentResult", master_session_id: str, attempt: int = 1
+    ) -> Dict[str, Any]:
         """Invoca o Agente Revisor para avaliar o resultado de uma subtarefa.
 
         Args:
@@ -1468,6 +1589,10 @@ class AutonomousLoop:
                     "approved": review.status in ("pass", "divergent_but_documented"),
                     "feedback": (review.feedback or "")[:400],
                     "issues": [str(i)[:200] for i in (review.issues or [])][:8],
+                    "attempt": attempt,
+                    "signature": review.signature,
+                    "resolved_artifacts": dict(list((review.resolved_artifacts or {}).items())[:12]),
+                    "name_mismatch": bool(review.name_mismatch),
                 },
             )
         except Exception as exc:
@@ -1476,87 +1601,159 @@ class AutonomousLoop:
             "status": review.status,
             "issues": review.issues,
             "feedback": review.feedback,
+            "resolved_artifacts": review.resolved_artifacts,
         }
 
-    async def _synthesize_results(self, prompt: str, results: List["AgentResult"], master_session_id: str) -> Optional["AgentResult"]:
-        """Consolida os resultados das subtarefas em um relatório final via Summarizer.
-        
+    async def _synthesize_results(
+        self,
+        prompt: str,
+        results: List["AgentResult"],
+        master_session_id: str,
+        stop_reason: Optional[str] = None,
+    ) -> Optional["AgentResult"]:
+        """Consolida os resultados em ``relatorio_final.md`` a partir de dados estruturados.
+
+        O orquestrador monta ``ReportData`` (disco e telemetria, sem LLM) e renderiza o Markdown;
+        o Summarizer só devolve a narrativa em JSON (v16-pipeline-robustness §6).
+
         Args:
             prompt: Prompt original do usuário.
             results: Lista de resultados das subtarefas.
             master_session_id: ID da sessão.
-            
+            stop_reason: ``motivo_parada`` quando a sessão fecha por limite.
+
         Returns:
-            AgentResult com o relatório consolidado ou None em caso de falha.
+            AgentResult do Summarizer com o relatório renderizado em ``response["text"]``.
         """
         from src.orchestrator import AgentTask
-        from src.telemetry import get_telemetry
+        from src.report.artifact_reader import ArtifactReader
+        from src.report.report_model import (
+            NarrativeError,
+            parse_narrative,
+            render_report_markdown,
+            report_data_json,
+            unavailable_narrative,
+        )
+        from src.subtask_output import SubtaskOutput
 
         logger.info("Iniciando síntese final dos resultados")
 
-        # Coleta estatísticas de telemetria
-        telemetry = get_telemetry()
-        await telemetry.flush() # Garante que os dados estão no banco
-        stats = telemetry.get_summarized_stats(master_session_id)
-
-        # Constrói o prompt para o Summarizer
-        # Inclui os resultados das subtarefas estruturados
         context_parts = []
-        from src.subtask_output import SubtaskOutput
-        for task_name in [r.task_name for r in results if hasattr(r, 'task_name') and r.task_name]:
+        for task_name in [r.task_name for r in results if hasattr(r, "task_name") and r.task_name]:
             entry = self._short_term_memory.read(master_session_id, f"result:{task_name}")
             if entry:
                 try:
-                    output = SubtaskOutput.from_json(entry.value)
-                    context_parts.append(output.to_context_string())
+                    context_parts.append(SubtaskOutput.from_json(entry.value).to_context_string())
                 except Exception:
                     pass
-
         if not context_parts:
-            # Fallback para o texto bruto dos resultados se a memória estiver vazia
             for res in results:
                 context_parts.append(f"### Resultado do Agente {res.agent_id}\n{res.response.get('text', '')}")
 
-        # Roadmap V15.4 / Spec G8 — dados REAIS de métricas/interações injetados no
-        # contexto do Summarizer, para que a tabela de resultados e a seção "Decisões
-        # do Pesquisador" sejam construídas a partir de dados de disco, não de texto
-        # solto gerado pelo LLM.
-        from src.report.artifact_reader import ArtifactReader
-
         session_dir = self.orchestrator.output_manager.base_dir / master_session_id
-        artifact_reader = ArtifactReader(session_dir)
-        metrics_block = artifact_reader.build_metrics_context_block()
-        input_snapshot_files = artifact_reader.read_input_snapshot_files()
+        data = await self._build_report_data(
+            prompt, master_session_id, ArtifactReader(session_dir), stop_reason
+        )
+
+        base_prompt = (
+            f"Escreva a narrativa do relatório da tarefa: '{prompt}'\n\n"
+            "RESULTADOS DAS SUBTAREFAS:\n\n" + "\n\n".join(context_parts) + "\n\n"
+            "DADOS DO RELATÓRIO (JSON, medidos pelo orquestrador; copie os números daqui):\n"
+            f"{report_data_json(data)}\n\n"
+            "Responda SOMENTE com o JSON de narrativa descrito nas suas instruções."
+        )
+        summary_result = None
+        narrative = None
+        error = "sem resposta"
+        for attempt in range(2):  # uma tentativa de reparo (design §6.2)
+            suffix = "" if attempt == 0 else (
+                f"\n\nA resposta anterior foi recusada: {error}. Reenvie SOMENTE o JSON válido de narrativa."
+            )
+            task = AgentTask(agent_id="summarizer", prompt=base_prompt + suffix, task_name="final_synthesis")
+            summary_result = await self.orchestrator._execute_agent(task, master_session_id)
+            try:
+                narrative = parse_narrative(summary_result.response.get("text", "") or "")
+                break
+            except NarrativeError as exc:
+                error = str(exc)
+
+        if narrative is None:
+            logger.warning("Narrativa do Summarizer indisponível", extra={"error": error})
+            narrative = unavailable_narrative(error)
+            data = replace(data, narrativa_indisponivel=True)
+
+        markdown = render_report_markdown(data, narrative)
+        try:
+            session_dir.mkdir(parents=True, exist_ok=True)
+            (session_dir / "relatorio_final.md").write_text(markdown, encoding="utf-8")
+            (session_dir / "report_data.json").write_text(report_data_json(data), encoding="utf-8")
+        except OSError as exc:
+            logger.error("Falha ao gravar o relatório final", extra={"error": str(exc)})
+
+        # Falha da chamada ao agente continua sendo falha; narrativa indisponível não é.
+        summary_result.response = {"text": markdown}
+        return summary_result
+
+    async def _build_report_data(
+        self,
+        prompt: str,
+        master_session_id: str,
+        artifact_reader: Any,
+        stop_reason: Optional[str],
+    ) -> Any:
+        """Monta ``ReportData`` com disco e telemetria, sem LLM e sem nunca derrubar a síntese."""
+        from src.model_config import DEFAULT_ROLE_CONFIGS, get_role_model_config
+        from src.report.report_model import ReportMetadata, build_report_data
+
+        telemetry = get_telemetry()
+        tokens_in = tokens_out = 0
+        cost = 0.0
+        replans = 0
+        agent_runs: Dict[str, int] = {}
+        sandbox_runs = 0
+        try:
+            await telemetry.flush()  # garante que os dados estão no banco
+            rows = telemetry.get_token_summary(master_session_id).get("by_provider_model", [])
+            tokens_in = sum(int(r.get("total_prompt_tokens") or 0) for r in rows)
+            tokens_out = sum(int(r.get("total_completion_tokens") or 0) for r in rows)
+            cost = sum(float(r.get("total_cost_usd") or 0) for r in rows)
+            replans = int(telemetry.get_derived_metrics(master_session_id).get("replans") or 0)
+            counts = telemetry.get_event_counts(master_session_id, ("spawn", "sandbox_run"))
+            agent_runs = dict(counts.get("spawn", {}))
+            sandbox_runs = sum(counts.get("sandbox_run", {}).values())
+        except Exception as exc:
+            logger.warning("Falha ao coletar a telemetria do relatório", extra={"error": str(exc)})
+
+        models_by_role: Dict[str, str] = {}
+        for role in DEFAULT_ROLE_CONFIGS:
+            cfg = get_role_model_config(role)
+            models_by_role[role] = f"{cfg.provider}/{cfg.model}"
 
         session = self.orchestrator.session_manager.get(master_session_id)
-        session_payload = getattr(session, "payload", None)
-        if not isinstance(session_payload, dict):
-            session_payload = {}
-        researcher_interactions = session_payload.get("researcher_interactions", [])
-        divergence_reports = session_payload.get("divergence_reports", [])
-
-        scientific_context = (
-            f"DADOS REAIS DE MÉTRICAS (use estes valores exatos na tabela de Resultados):\n{metrics_block}\n\n"
-            f"ARQUIVOS DE REFERÊNCIA USADOS (input_snapshot/): {input_snapshot_files or 'nenhum'}\n\n"
-            f"DECISÕES DO PESQUISADOR (researcher_interactions — use estes dados, não reconstrua):\n"
-            f"{json.dumps(researcher_interactions, ensure_ascii=False, indent=2) if researcher_interactions else 'Nenhuma interação registrada — sessão totalmente autônoma.'}\n\n"
-            f"DIVERGÊNCIAS DETECTADAS (divergence_reports):\n"
-            f"{json.dumps(divergence_reports, ensure_ascii=False, indent=2) if divergence_reports else 'Nenhuma divergência registrada.'}"
+        payload = getattr(session, "payload", None)
+        payload = payload if isinstance(payload, dict) else {}
+        artifacts = [
+            str(a.get("path", a.get("name", ""))) if isinstance(a, dict) else str(a)
+            for a in self.orchestrator.output_manager.list_artifacts(master_session_id)
+        ]
+        metadata = ReportMetadata(
+            duration_s=time.time() - getattr(self, "_session_started_at", time.time()),
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost_usd=cost,
+            agent_runs=agent_runs,
+            sandbox_runs=sandbox_runs,
+            models_by_role=models_by_role,
+            stop_reason=stop_reason,
+            replans=replans,
         )
-
-        synthesis_prompt = (
-            f"Sintetize os resultados da tarefa: '{prompt}'\n\n"
-            f"RESULTADOS DAS SUBTAREFAS:\n\n" + "\n\n".join(context_parts) + "\n\n"
-            f"ESTATÍSTICAS DE EXECUÇÃO:\n{stats}\n\n"
-            f"{scientific_context}\n\n"
-            f"Por favor, gere o relatório final seguindo a ESTRUTURA OBRIGATÓRIA DO RELATÓRIO."
+        first_line = (prompt.strip().splitlines() or [""])[0][:80]
+        return build_report_data(
+            title=f"Relatório: {first_line}" if first_line else "Relatório da Sessão",
+            request=prompt,
+            metrics_by_task=artifact_reader.read_subtask_metrics(),
+            metadata=metadata,
+            interactions=payload.get("researcher_interactions", []),
+            divergence_reports=payload.get("divergence_reports", []),
+            artifacts=artifacts,
         )
-        
-        task = AgentTask(
-            agent_id="summarizer",
-            prompt=synthesis_prompt,
-            task_name="final_synthesis"
-        )
-        
-        summary_result = await self.orchestrator._execute_agent(task, master_session_id)
-        return summary_result

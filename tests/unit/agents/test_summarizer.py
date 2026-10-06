@@ -6,13 +6,12 @@ def test_summarizer_agent_initialization():
     assert root_agent.name == AGENT_NAME
     assert "síntese" in root_agent.description.lower()
     
-    # Verifica se as ferramentas adequadas estão presentes (write_artifact)
-    tool_names = [getattr(t, "__name__", "") for t in root_agent.tools]
-    assert "write_artifact" in tool_names
+    # v16-pipeline-robustness §6: o Summarizer só produz a narrativa e não tem ferramentas
+    assert list(root_agent.tools) == []
 
 def test_summarizer_instruction():
     """Testa se a instrução do agente contém as regras essenciais."""
     instruction = root_agent.instruction
     assert "redator científico especializado em síntese" in instruction
-    assert "write_artifact" in instruction
-    assert "relatorio_final.md" in instruction
+    assert "JSON" in instruction and "confianca_nivel" in instruction
+    assert "Containers" not in instruction

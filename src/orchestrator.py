@@ -18,7 +18,13 @@ from src.config import (
     MAX_AGENT_RUNS_PER_SESSION,
     OLLAMA_ENABLE_THINKING,
     MAX_PLANNING_ITERATIONS,
+    MAX_PLANNING_RUNS_PER_SESSION,
+    PLAN_NORMALIZER_ENABLED,
+    PLAN_REJECTION_STALL_LIMIT,
+    SESSION_MAX_TASK_RETRIES,
 )
+from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
+from src.plan_normalizer import normalize_plan
 from src.model_config import DEFAULT_ROLE_CONFIGS, get_role_model_config
 from src.session import SessionManager
 from src.output_manager import OutputManager, generate_session_slug
@@ -143,6 +149,8 @@ class Orchestrator:
         self.validator = ValidatorAgent()
         # Roadmap V16/ADR 014 — Rastreia execuções de agente por master_session_id
         self._session_agent_run_counts: dict[str, int] = {}
+        self._session_planning_run_counts: dict[str, int] = {}
+        self._session_plan_size: dict[str, int] = {}
         # Modo efetivo por sessão mestra: tarefas criadas sem `mode` (ex.: o planejamento do Researcher)
         # herdam o modo da sessão em vez do padrão global (que é `assisted` e bloquearia em stdin).
         self._session_modes: dict[str, str] = {}
@@ -368,6 +376,7 @@ class Orchestrator:
                 "token_usage": {"total_tokens": total_tokens, "by_provider_model": token_rows},
                 "cost_usd": total_cost,
                 "agent_runs": self._session_agent_run_counts.get(master_session.id, 0),
+                "planning_runs": self._session_planning_run_counts.get(master_session.id, 0),
                 "report_path": "relatorio_final.md",
             }
             (session_dir / "session_metadata.json").write_text(
@@ -518,8 +527,19 @@ class Orchestrator:
             extra={"session_id": session_key, "subtask_name": task.task_name},
         )
 
+    def effective_run_limit(self, master_session_id: str, kind: str = "execution") -> int:
+        """Limite efetivo de execuções de agente da sessão (v16-pipeline-robustness §5.1).
+
+        O de subtarefas tem como piso ``MAX_AGENT_RUNS_PER_SESSION`` e cresce com o plano
+        aprovado: ``n * (1 + SESSION_MAX_TASK_RETRIES) + 2``.
+        """
+        if kind == "planning":
+            return MAX_PLANNING_RUNS_PER_SESSION
+        n = self._session_plan_size.get(master_session_id, 0)
+        return max(MAX_AGENT_RUNS_PER_SESSION, n * (1 + SESSION_MAX_TASK_RETRIES) + 2 if n else 0)
+
     async def _execute_agent(
-        self, task: AgentTask, master_session_id: str | None = None
+        self, task: AgentTask, master_session_id: str | None = None, run_kind: str = "execution"
     ) -> AgentResult:
         """Executa um agente em processo via ``AgentRuntime`` (Roadmap V16/ADR 014).
 
@@ -536,16 +556,15 @@ class Orchestrator:
         # Rate limiting adaptativo (Roadmap V3 - Etapa V8)
         await self.rate_limiter.acquire()
 
-        # Roadmap V16/ADR 014 — Circuit breaker: limite de execuções de agente por sessão
+        # Roadmap V16/ADR 014 — Circuit breaker: limite de execuções de agente por sessão,
+        # com contadores separados para planejamento e execução (v16-pipeline-robustness §5).
         if master_session_id:
-            count = self._session_agent_run_counts.get(master_session_id, 0)
-            if count >= MAX_AGENT_RUNS_PER_SESSION:
-                raise RuntimeError(
-                    f"Limite de execuções de agente por sessão atingido "
-                    f"(session={master_session_id}, limite={MAX_AGENT_RUNS_PER_SESSION}). "
-                    "Execução interrompida pelo circuit breaker."
-                )
-            self._session_agent_run_counts[master_session_id] = count + 1
+            counts = self._session_planning_run_counts if run_kind == "planning" else self._session_agent_run_counts
+            count = counts.get(master_session_id, 0)
+            limit = self.effective_run_limit(master_session_id, run_kind)
+            if count >= limit:
+                raise AgentRunLimitReached(run_kind, count, limit, master_session_id)
+            counts[master_session_id] = count + 1
 
         telemetry = get_telemetry()
         _exec_id = master_session_id or "unknown"
@@ -659,6 +678,23 @@ class Orchestrator:
 
         return result
 
+    def _record_plan_normalized(self, master_session_id: str, iteration: int, normalized: Any) -> None:
+        """Registra os reparos do normalizador (observabilidade nunca derruba o planejamento)."""
+        try:
+            get_telemetry().record_agent_event(
+                execution_id=bound_execution_id() or master_session_id,
+                session_id=master_session_id,
+                agent_id="planner",
+                event_type="plan_normalized",
+                payload={
+                    "iteration": iteration,
+                    "repairs": [{"kind": r.kind, "task_name": r.task_name} for r in normalized.repairs][:20],
+                    "unrecoverable": len(normalized.unrecoverable),
+                },
+            )
+        except Exception as exc:
+            logger.warning("Falha ao registrar plan_normalized", extra={"error": str(exc)})
+
     async def _run_planning_loop(
         self, 
         prompt: str, 
@@ -688,6 +724,7 @@ class Orchestrator:
         
         feedback = execution_feedback or ""
         current_plan_data = previous_plan
+        last_signature, repeats = "", 0
         
         for iteration in range(MAX_PLANNING_ITERATIONS):
             # 1. Executa o Researcher (que absorve o Planner na V14.3)
@@ -729,7 +766,7 @@ class Orchestrator:
                 prompt=planner_prompt,
             )
 
-            planner_result = await self._execute_agent(planner_task, master_session_id)
+            planner_result = await self._execute_agent(planner_task, master_session_id, run_kind="planning")
             if planner_result.status != "success" or "error" in planner_result.response:
                 err = planner_result.error or planner_result.response.get("error", "Erro desconhecido")
                 logger.error(f"Falha no Agente Researcher (Planner): {err}", extra={"error": err})
@@ -738,6 +775,12 @@ class Orchestrator:
             # Tenta extrair JSON da resposta
             raw_plan = planner_result.response.get("text", "")
             plan_data = extract_json(raw_plan)
+            if PLAN_NORMALIZER_ENABLED and plan_data is not None:
+                normalized = normalize_plan(plan_data)
+                if normalized.repairs:
+                    self._record_plan_normalized(master_session_id, iteration + 1, normalized)
+                if normalized.tasks:
+                    plan_data = normalized.tasks
             if plan_data is None or not isinstance(plan_data, list):
                 logger.error(
                     "Erro ao parsear plano do Planner",
@@ -755,6 +798,18 @@ class Orchestrator:
                 prompt=prompt,
             )
 
+            # v16-pipeline-robustness §1.3 — reprovação repetida: a determinística encerra o
+            # planejamento; a do Validator LLM vira consultiva (aprova com avisos).
+            if val_result.is_valid or not val_result.signature:
+                last_signature, repeats = "", 0
+            else:
+                repeats = repeats + 1 if val_result.signature == last_signature else 1
+                last_signature = val_result.signature
+                if repeats >= PLAN_REJECTION_STALL_LIMIT and not val_result.deterministic:
+                    val_result.is_valid = True
+                    val_result.status = "approved"
+                    val_result.approved_with_warnings = True
+
             try:  # observabilidade nunca derruba o planejamento
                 get_telemetry().record_agent_event(
                     execution_id=bound_execution_id() or master_session_id,
@@ -765,6 +820,9 @@ class Orchestrator:
                     payload={
                         "iteration": iteration + 1,
                         "approved": bool(val_result.is_valid),
+                        "approved_with_warnings": bool(val_result.approved_with_warnings),
+                        "deterministic": bool(val_result.deterministic),
+                        "signature": val_result.signature,
                         "reason": str(val_result.reason or "")[:300],
                         "issues": [str(i)[:200] for i in (val_result.issues or [])][:8],
                         "plan_tasks": len(current_plan_data),
@@ -773,8 +831,16 @@ class Orchestrator:
             except Exception as exc:
                 logger.warning("Falha ao registrar plan_validation", extra={"error": str(exc)})
 
+            if not val_result.is_valid and val_result.deterministic and repeats >= PLAN_REJECTION_STALL_LIMIT:
+                raise PlanningStalled(
+                    f"Planejamento encerrado: a mesma reprovação determinística se repetiu {repeats} vezes. "
+                    + "; ".join(val_result.issues),
+                    val_result.issues,
+                )
+
             if val_result.is_valid:
                 logger.info("Plano aprovado pelo Validador", extra={"iteration": iteration + 1})
+                self._session_plan_size[master_session_id] = len(current_plan_data)
                 tasks = []
                 from datetime import datetime, timezone
                 import uuid

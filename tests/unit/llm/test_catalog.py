@@ -13,7 +13,7 @@ pytestmark = pytest.mark.unit
 
 def test_catalogo_versionado_valido(tmp_path):
     """Cenário: Catálogo versionado válido."""
-    catalog = load_catalog(local_path=tmp_path / "inexistente.yaml", openai_compatible_base_url=None)
+    catalog = load_catalog(local_path=tmp_path / "inexistente.yaml", base_urls={})
 
     for role in REQUIRED_ROLES:
         assert catalog.papeis[role].preferencia, role
@@ -143,7 +143,7 @@ def test_http_para_host_publico(tmp_path, monkeypatch):
     local = {"modelos": [model("openai_compatible/llama-3.3-70b", "self_hosted")]}
 
     with pytest.raises(CatalogError) as exc:
-        load(tmp_path, local=local, openai_compatible_base_url="http://gpu.exemplo.org/v1")
+        load(tmp_path, local=local, base_urls={"openai_compatible": "http://gpu.exemplo.org/v1"})
 
     assert "https" in str(exc.value)
 
@@ -152,7 +152,7 @@ def test_http_em_rede_privada(tmp_path):
     """Cenário: http em rede privada."""
     local = {"modelos": [model("openai_compatible/llama-3.3-70b", "self_hosted")]}
 
-    catalog = load(tmp_path, local=local, openai_compatible_base_url="http://192.168.0.20:8080/v1")
+    catalog = load(tmp_path, local=local, base_urls={"openai_compatible": "http://192.168.0.20:8080/v1"})
 
     assert "openai_compatible/llama-3.3-70b" in catalog.modelos
 
@@ -161,20 +161,135 @@ def test_http_em_rede_privada(tmp_path):
 def test_loopback_e_https_sao_aceitos(tmp_path, url):
     local = {"modelos": [model("openai_compatible/llama-3.3-70b", "self_hosted")]}
 
-    load(tmp_path, local=local, openai_compatible_base_url=url)
+    load(tmp_path, local=local, base_urls={"openai_compatible": url})
 
 
-def test_https_so_vale_para_openai_compatible(tmp_path):
-    """Sem entrada openai_compatible no catálogo, um OPENAI_BASE_URL http público não bloqueia (o
-    provedor 'openai' usa o mesmo nome de variável)."""
-    load(tmp_path, openai_compatible_base_url="http://gpu.exemplo.org/v1")
+def test_provedor_openai_com_endpoint_http_publico(tmp_path):
+    """Cenário: Provedor openai com endpoint http público (sem nenhuma entrada openai_compatible)."""
+    with pytest.raises(CatalogError) as exc:
+        load(tmp_path, base_urls={"openai": "http://gpu.exemplo.org/v1"}, document=_com_openai())
+
+    assert "https" in str(exc.value) and "openai" in str(exc.value)
+
+
+def _com_openai():
+    doc = base_document()
+    doc["modelos"].append(model("openai/gpt-6-luna", "third_party"))
+    return doc
+
+
+def test_ollama_remoto_sem_https(tmp_path):
+    """Cenário: Ollama remoto sem https."""
+    with pytest.raises(CatalogError, match="https"):
+        load(tmp_path, base_urls={"ollama": "http://gpu.exemplo.org:11434"})
+
+
+@pytest.mark.parametrize("url", ["http://169.254.169.254/", "http://[fe80::1]:11434"])
+def test_endpoint_link_local(tmp_path, url):
+    """Cenário: Endpoint link-local (não conta como rede privada)."""
+    with pytest.raises(CatalogError, match="https"):
+        load(tmp_path, base_urls={"ollama": url})
+
+
+def test_endpoint_so_e_validado_para_provedor_presente_no_catalogo(tmp_path):
+    load(tmp_path, base_urls={"anthropic_inexistente": "http://gpu.exemplo.org"})
+
+
+def test_ollama_em_loopback_e_rede_privada_com_http(tmp_path):
+    load(tmp_path, base_urls={"ollama": "http://localhost:11434"})
+    load(tmp_path, base_urls={"ollama": "http://192.168.0.20:11434"})
+
+
+def test_criacao_do_provedor_tambem_valida_o_endpoint(monkeypatch):
+    from src.llm import registry
+    from src.llm.endpoints import EndpointError
+
+    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://gpu.exemplo.org:11434")
+
+    with pytest.raises(EndpointError, match="https"):
+        registry.create_provider("ollama", "qwen3:8b")
+
+
+def test_variaveis_do_openai_compatible_separadas_das_do_openai(monkeypatch):
+    """Cenário: Variáveis do openai_compatible separadas (a chave do openai não vai ao compatível)."""
+    from src.llm import registry
+    from src.llm.providers.openai_compatible import OpenAICompatibleProvider
+
+    monkeypatch.setattr("src.config.OPENAI_API_KEY", "sk-real-da-openai")
+    monkeypatch.setattr("src.config.OPENAI_BASE_URL", "https://api.openai.com/v1")
+    monkeypatch.setattr("src.config.OPENAI_COMPATIBLE_BASE_URL", "http://localhost:8000/v1")
+    monkeypatch.setattr("src.config.OPENAI_COMPATIBLE_API_KEY", None)
+
+    provider = registry.create_provider("openai_compatible", "llama")
+
+    assert isinstance(provider, OpenAICompatibleProvider)
+    assert provider._api_key is None
+    assert provider._base_url == "http://localhost:8000/v1"
+    assert registry.has_api_key("openai_compatible") is False
+    assert registry.resolve_base_url("openai_compatible") == "http://localhost:8000/v1"
 
 
 def test_erro_de_endpoint_nao_vaza_credenciais(tmp_path):
     local = {"modelos": [model("openai_compatible/llama-3.3-70b", "self_hosted")]}
 
     with pytest.raises(CatalogError) as exc:
-        load(tmp_path, local=local, openai_compatible_base_url="http://usuario:segredo@gpu.exemplo.org/v1")
+        load(tmp_path, local=local, base_urls={"openai_compatible": "http://usuario:segredo@gpu.exemplo.org/v1"})
 
     assert "segredo" not in str(exc.value)
     assert "usuario" not in str(exc.value)
+
+
+def test_modelo_de_nuvem_rotulado_self_hosted(tmp_path):
+    """Cenário: Modelo de nuvem rotulado self_hosted (catálogo local)."""
+    local = {"modelos": [model("google/gemini-9", "self_hosted")]}
+
+    with pytest.raises(CatalogError) as exc:
+        load(tmp_path, local=local)
+
+    message = str(exc.value)
+    assert "catalog.local.yaml" in message and "trust" in message and "google/gemini-9" in message
+
+
+@pytest.mark.parametrize("model_id", ["google/x", "anthropic/x", "openai/x"])
+def test_trust_self_hosted_recusado_tambem_no_catalogo_versionado(tmp_path, model_id):
+    doc = base_document()
+    doc["modelos"].append(model(model_id, "self_hosted"))
+
+    with pytest.raises(CatalogError, match="nuvem"):
+        load(tmp_path, doc)
+
+
+def test_ollama_e_openai_compatible_podem_ser_self_hosted(tmp_path):
+    load(tmp_path, local={"modelos": [model("openai_compatible/x", "self_hosted")]})
+
+
+def test_chave_duplicada(tmp_path):
+    """Cenário: Chave duplicada (a última não vence em silêncio)."""
+    path = tmp_path / "catalog.yaml"
+    base = yaml_dump(base_document())
+    duplicated = base.replace("trust: third_party", "trust: third_party\n    trust: self_hosted", 1)
+    path.write_text(duplicated, encoding="utf-8")
+
+    with pytest.raises(CatalogError, match="duplicada"):
+        load_catalog(path, tmp_path / "x.yaml", registered_providers=REGISTERED, base_urls={})
+
+
+def yaml_dump(doc):
+    import yaml
+
+    return yaml.safe_dump(doc, allow_unicode=True, sort_keys=False)
+
+
+def test_yaml_malformado(tmp_path):
+    path = tmp_path / "catalog.yaml"
+    path.write_text("versao: [1,", encoding="utf-8")
+
+    with pytest.raises(CatalogError, match="inválido"):
+        load_catalog(path, tmp_path / "x.yaml", registered_providers=REGISTERED, base_urls={})
+
+
+def test_rede_sobreposta_do_tailscale_conta_como_privada(tmp_path):
+    """100.64.0.0/10 (Tailscale) é privada; 100.128.x já é internet pública."""
+    load(tmp_path, base_urls={"ollama": "http://100.101.56.43:11434"})
+    with pytest.raises(CatalogError, match="https"):
+        load(tmp_path, base_urls={"ollama": "http://100.128.0.1:11434"})

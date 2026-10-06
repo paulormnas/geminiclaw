@@ -59,7 +59,7 @@ def load(tmp_path: Path, document: dict | None = None, local: dict | None = None
     if local is not None:
         write_yaml(local_path, local)
     kwargs.setdefault("registered_providers", REGISTERED)
-    kwargs.setdefault("openai_compatible_base_url", None)
+    kwargs.setdefault("base_urls", {})
     return load_catalog(main, local_path, **kwargs)
 
 

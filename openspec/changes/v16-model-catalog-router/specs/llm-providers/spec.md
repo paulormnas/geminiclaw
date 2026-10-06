@@ -24,6 +24,11 @@ registrado, `id` duplicado, valor fora do enum ou papel sem modelo na preferênc
 - **WHEN** o catálogo é carregado
 - **THEN** a inicialização para com erro que lista os provedores registrados
 
+#### Scenario: Chave duplicada
+- **GIVEN** uma entrada de modelo com a chave `trust` repetida
+- **WHEN** o catálogo é carregado
+- **THEN** a inicialização para com erro de chave duplicada (a última não vence em silêncio)
+
 ### Requirement: Catálogo local só acrescenta modelos
 O sistema SHALL aceitar um `catalog.local.yaml` opcional contendo apenas a chave `modelos`,
 SHALL recusar entradas cujo `id` já exista e qualquer chave `papeis`, e SHALL registrar um
@@ -41,19 +46,55 @@ SHALL recusar entradas cujo `id` já exista e qualquer chave `papeis`, e SHALL r
 - **THEN** a inicialização para com erro de `id` duplicado
 
 ### Requirement: Endpoint remoto exige https
-O sistema SHALL recusar na inicialização uma entrada `openai_compatible` cujo endpoint
-esteja fora de loopback e de faixas privadas e não use `https`, independentemente de `trust`
+O sistema SHALL recusar, na inicialização do catálogo e na criação do provedor, o `base_url` de
+**todo** provedor que tenha endpoint configurado e ao menos um modelo no catálogo efetivo
+(`openai`, `openai_compatible`, `ollama`, `anthropic` e os que vierem) quando o host estiver
+fora de loopback e de faixas privadas e o esquema não for `https`, independentemente de `trust`.
+Endereços link-local (`169.254.0.0/16`, `fe80::/10`) MUST NOT contar como rede privada. O provedor
+`openai_compatible` SHALL usar variáveis próprias (`OPENAI_COMPATIBLE_BASE_URL`,
+`OPENAI_COMPATIBLE_API_KEY`), sem compartilhar `OPENAI_BASE_URL`/`OPENAI_API_KEY` com o provedor
+`openai`, para que a chave real da OpenAI nunca seja enviada a um servidor compatível
 (ADR 017 §8).
 
 #### Scenario: http para host público
-- **GIVEN** `OPENAI_BASE_URL=http://gpu.exemplo.org/v1` e uma entrada `openai_compatible` elegível
+- **GIVEN** `OPENAI_COMPATIBLE_BASE_URL=http://gpu.exemplo.org/v1` e uma entrada `openai_compatible` no catálogo
 - **WHEN** a sessão inicia
 - **THEN** a inicialização para com erro que pede `https`
 
 #### Scenario: http em rede privada
-- **GIVEN** `OPENAI_BASE_URL=http://192.168.0.20:8080/v1`
+- **GIVEN** `OPENAI_COMPATIBLE_BASE_URL=http://192.168.0.20:8080/v1`
 - **WHEN** a sessão inicia
 - **THEN** o endpoint é aceito
+
+#### Scenario: Provedor openai com endpoint http público
+- **GIVEN** `OPENAI_BASE_URL=http://gpu.exemplo.org/v1` e o catálogo versionado (que tem modelos `openai`)
+- **WHEN** o catálogo é carregado ou o provedor `openai` é criado
+- **THEN** a inicialização para com erro que pede `https`, mesmo sem nenhuma entrada `openai_compatible`
+
+#### Scenario: Ollama remoto sem https
+- **GIVEN** `OLLAMA_BASE_URL=http://gpu.exemplo.org:11434`
+- **WHEN** o catálogo é carregado
+- **THEN** a inicialização para com erro que pede `https`
+
+#### Scenario: Endpoint link-local
+- **GIVEN** `OLLAMA_BASE_URL=http://169.254.169.254/`
+- **WHEN** o catálogo é carregado
+- **THEN** a inicialização para com erro que pede `https`
+
+#### Scenario: Variáveis do openai_compatible separadas
+- **GIVEN** `OPENAI_API_KEY` e `OPENAI_BASE_URL` definidas e `OPENAI_COMPATIBLE_*` ausentes
+- **WHEN** o provedor `openai_compatible` é criado
+- **THEN** ele não recebe a chave nem o endpoint do provedor `openai`
+
+### Requirement: Trust de nuvem não pode ser self_hosted
+O sistema SHALL recusar, no catálogo versionado e no local, `trust: self_hosted` para provedores
+que só existem em nuvem (`google`, `anthropic`, `openai`), com erro que cita arquivo, campo e `id`,
+porque o rótulo autodeclarado contornaria `LLM_DATA_POLICY=self_hosted_only` (ADR 017 §3, §8).
+
+#### Scenario: Modelo de nuvem rotulado self_hosted
+- **GIVEN** um catálogo local com `id: google/gemini-9`, `provedor: google`, `trust: self_hosted`
+- **WHEN** o catálogo é carregado
+- **THEN** a inicialização para com erro que cita o arquivo, `trust` e o `id`
 
 ### Requirement: Política de dados explícita
 O sistema SHALL ler `LLM_DATA_POLICY` (`self_hosted_only` ou `third_party_allowed`, padrão
@@ -76,7 +117,8 @@ banner e no payload da sessão (ADR 017 §3).
 ### Requirement: Disponibilidade sem geração de texto
 O sistema SHALL considerar um `(provedor, modelo)` disponível somente quando houver
 credencial ou endpoint, o provedor estiver em `LLM_PROVIDER_PRIORITY` e o health check passar
-dentro de `LLM_HEALTH_CHECK_TIMEOUT_SECONDS`. O health check MUST NOT gerar texto e, para
+dentro de `LLM_HEALTH_CHECK_TIMEOUT_SECONDS`. O health check MUST NOT gerar texto, SHALL usar
+`LLM_HEALTH_CHECK_TIMEOUT_SECONDS` também dentro dos provedores (sem timeouts fixos) e, para
 provedores locais, SHALL confirmar que o modelo está instalado. O resultado SHALL ser
 reutilizado durante a sessão (ADR 017 §4).
 
@@ -131,6 +173,11 @@ catálogo em `payload["llm_routing"]`, e MUST NOT trocar o modelo de um papel du
 - **THEN** `payload["llm_routing"]["papeis"]` tem uma entrada por papel com `id`, `trust` e `origem`
 - **AND** `payload["llm_routing"]["catalogo"]["hash"]` é o sha256 do catálogo efetivo
 
+#### Scenario: Início de sessão na telemetria
+- **WHEN** uma sessão inicia
+- **THEN** um evento `session_start` registra `catalog_hash`, `catalog_version`, `llm_data_policy` e `llm_routing`
+- **AND** nenhuma chave, cabeçalho ou URL com credenciais aparece no evento
+
 #### Scenario: 429 não troca o modelo resolvido
 - **GIVEN** o provedor do Researcher responde 429 duas vezes
 - **WHEN** a chamada é repetida
@@ -163,12 +210,18 @@ gerar `WARNING` e seguir a preferência (ADR 017 §7).
 O sistema SHALL tratar `preferred_model` de uma subtarefa como dica no formato
 `provedor/modelo`, aceita somente se o modelo existir no catálogo, atender aos requisitos e à
 política e estiver disponível; caso contrário SHALL ignorá-la com `WARNING`. Em
-`LLM_ROUTING=strict`, a dica SHALL ser sempre ignorada (ADR 017 §7).
+`LLM_ROUTING=strict`, a dica SHALL ser sempre ignorada, e a dica MUST NOT sobrepor um pin do
+pesquisador (a dica é texto gerado pelo LLM do planejamento) (ADR 017 §7).
 
 #### Scenario: Dica sem provedor
 - **GIVEN** uma subtarefa do Developer com `preferred_model="qwen3:8b"`
 - **WHEN** a subtarefa é despachada
 - **THEN** o Developer usa o modelo resolvido da sessão e um `WARNING` cita a dica ignorada
+
+#### Scenario: Dica não sobrepõe pin
+- **GIVEN** `RESEARCHER_MODEL=ollama/qwen3:8b` (pin) e uma subtarefa do Researcher com `preferred_model="ollama/qwen3.5:4b"` válida
+- **WHEN** a subtarefa é despachada
+- **THEN** o Researcher usa o pin `ollama/qwen3:8b` e um `WARNING` cita a dica ignorada
 
 #### Scenario: Dica válida
 - **GIVEN** `preferred_model="ollama/qwen3:8b"`, disponível e com `ferramentas: true`

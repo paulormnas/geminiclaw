@@ -13,6 +13,7 @@ from typing import Callable, Dict
 
 from src import config
 from src.llm.base import LLMProvider
+from src.llm.endpoints import validate_remote_endpoint
 
 
 @dataclass(frozen=True)
@@ -41,13 +42,15 @@ ProviderFactory = Callable[[ProviderSettings], LLMProvider]
 # Nome canônico -> variável de ambiente, apenas quando diverge da convenção
 # <PROVIDER>_BASE_URL / <PROVIDER>_API_KEY (nome já consagrado no ecossistema
 # daquele provedor). Ver `openspec/changes/v16-provider-registry/design.md`.
+#
+# ADR 017 §8: `openai` e `openai_compatible` NÃO compartilham variáveis (a chave real da OpenAI nunca
+# pode ir a um servidor compatível): `openai` usa OPENAI_API_KEY/OPENAI_BASE_URL (convenção do
+# ecossistema OpenAI) e `openai_compatible` usa OPENAI_COMPATIBLE_API_KEY/OPENAI_COMPATIBLE_BASE_URL.
 _BASE_URL_ENV_OVERRIDES: Dict[str, str] = {
-    "openai_compatible": "OPENAI_BASE_URL",
     "openai": "OPENAI_BASE_URL",
 }
 _API_KEY_ENV_OVERRIDES: Dict[str, str] = {
     "google": "GEMINI_API_KEY",
-    "openai_compatible": "OPENAI_API_KEY",
     "openai": "OPENAI_API_KEY",
 }
 
@@ -98,6 +101,12 @@ def _resolve_base_url(canonical_name: str) -> str | None:
     return getattr(config, env_name, None)
 
 
+def base_url_env_name(name: str) -> str:
+    """Nome da variável de ambiente do endpoint do provedor."""
+    canonical = _resolve_canonical_name(name)
+    return _BASE_URL_ENV_OVERRIDES.get(canonical, f"{canonical.upper()}_BASE_URL")
+
+
 def _resolve_api_key(canonical_name: str) -> str | None:
     env_name = _API_KEY_ENV_OVERRIDES.get(canonical_name, f"{canonical_name.upper()}_API_KEY")
     return getattr(config, env_name, None)
@@ -131,6 +140,7 @@ def create_provider(name: str, model: str, fallback_model: str | None = None) ->
 
     Raises:
         ValueError: Se `name` (após resolução de alias) não estiver registrado.
+        EndpointError: Se o endpoint configurado é remoto e não usa https.
     """
     canonical = _resolve_canonical_name(name)
     factory = _registry.get(canonical)
@@ -138,10 +148,15 @@ def create_provider(name: str, model: str, fallback_model: str | None = None) ->
         available = ", ".join(available_providers())
         raise ValueError(f"Provedor '{name}' desconhecido. Provedores disponíveis: {available}.")
 
+    base_url = _resolve_base_url(canonical)
+    if base_url:
+        # Defesa em profundidade: a chave só vai a endpoint local, privado ou https.
+        validate_remote_endpoint(canonical, base_url, base_url_env_name(canonical))
+
     settings = ProviderSettings(
         name=canonical,
         model=model,
-        base_url=_resolve_base_url(canonical),
+        base_url=base_url,
         api_key=_resolve_api_key(canonical),
         fallback_model=fallback_model,
     )

@@ -32,7 +32,7 @@ def nuvem_liberada(monkeypatch):
 @pytest.mark.unit
 def test_model_router_default_roles_sob_a_politica_padrao(monkeypatch):
     """Sem política explícita (self_hosted_only) todos os papéis caem no Ollama do catálogo."""
-    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://test:11434")
+    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://localhost:11434")
 
     for role in ("researcher", "validator", "developer", "base", "summarizer", "reviewer"):
         cfg = get_role_model_config(role)
@@ -63,7 +63,7 @@ def test_model_router_com_nuvem_liberada(nuvem_liberada):
 def test_model_router_pin_por_variavel_de_ambiente(monkeypatch):
     """`{PAPEL}_MODEL=provedor/modelo` sobrescreve a preferência do catálogo."""
     monkeypatch.setenv("VALIDATOR_MODEL", "ollama/qwen3.5:4b")
-    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://test:11434")
+    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://localhost:11434")
 
     cfg = get_role_model_config("validator")
     assert (cfg.provider, cfg.model) == ("ollama", "qwen3.5:4b")
@@ -98,7 +98,7 @@ def test_planner_e_alias_de_researcher():
 async def test_sem_papel_delega_para_o_researcher_do_mapa_da_sessao(monkeypatch):
     """Cenário: Sem papel (get_provider() dentro da sessão devolve a instância do researcher)."""
     monkeypatch.setenv("RESEARCHER_MODEL", "ollama/qwen3.5:4b")
-    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://test:11434")
+    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://localhost:11434")
     bind_session_routing(await build_session_routing())
 
     sem_papel = ModelRouter.get_provider()
@@ -151,7 +151,7 @@ def test_model_router_usa_provedor_registrado_sem_editar_o_roteador(monkeypatch,
 
 @pytest.mark.unit
 def test_model_router_dica_invalida_usa_o_modelo_resolvido(monkeypatch):
-    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://test:11434")
+    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://localhost:11434")
 
     with patch("src.llm.routing.logger.warning") as warn:
         provider = ModelRouter.get_provider("developer", model="qwen3:8b")
@@ -162,7 +162,7 @@ def test_model_router_dica_invalida_usa_o_modelo_resolvido(monkeypatch):
 
 @pytest.mark.unit
 def test_model_router_dica_valida_troca_o_modelo(monkeypatch):
-    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://test:11434")
+    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://localhost:11434")
 
     provider = ModelRouter.get_provider("developer", model="ollama/qwen3.5:4b")
 

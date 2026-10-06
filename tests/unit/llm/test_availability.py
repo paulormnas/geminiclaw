@@ -46,7 +46,7 @@ class _FakeProvider(LLMProvider):
 def credentials(monkeypatch):
     monkeypatch.setattr("src.config.GEMINI_API_KEY", CHAVE)
     monkeypatch.setattr("src.config.ANTHROPIC_API_KEY", CHAVE)
-    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://ollama.local:11434")
+    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://localhost:11434")
 
 
 async def test_modelo_ollama_nao_instalado(tmp_path, credentials):
@@ -54,7 +54,7 @@ async def test_modelo_ollama_nao_instalado(tmp_path, credentials):
     from src.llm.providers.ollama import OllamaProvider
 
     catalog = load(tmp_path)
-    provider = OllamaProvider(base_url="http://ollama.local:11434", model="qwen3:8b")
+    provider = OllamaProvider(base_url="http://localhost:11434", model="qwen3:8b")
     provider._client = SimpleNamespace(
         get=AsyncMock(
             return_value=httpx.Response(
@@ -78,7 +78,7 @@ async def test_modelo_ollama_instalado(tmp_path, credentials):
     from src.llm.providers.ollama import OllamaProvider
 
     catalog = load(tmp_path)
-    provider = OllamaProvider(base_url="http://ollama.local:11434", model="qwen3:8b")
+    provider = OllamaProvider(base_url="http://localhost:11434", model="qwen3:8b")
     provider._client = SimpleNamespace(
         get=AsyncMock(
             return_value=httpx.Response(

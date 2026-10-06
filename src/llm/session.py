@@ -56,9 +56,19 @@ class SessionRouting:
         return self.papeis[self.catalogo.normalize_role(papel)]
 
     def apply_hint(self, papel: str, hint: str | None) -> str:
-        """``id`` efetivo do papel: a dica ``provedor/modelo`` do plano, se válida; senão o resolvido."""
+        """``id`` efetivo do papel: a dica ``provedor/modelo`` do plano, se válida; senão o resolvido.
+
+        A dica é texto gerado pelo LLM do planejamento (superfície de injeção de prompt): ela
+        **nunca** sobrepõe um pin do pesquisador (``origem`` ``pin`` ou ``pin_legado``).
+        """
         resolved = self.resolution(papel)
         if not hint or hint == resolved.id:
+            return resolved.id
+        if resolved.origem != "preferencia":
+            logger.warning(
+                "Dica de modelo do plano ignorada: o papel tem pin do pesquisador",
+                extra={"hint": hint, "role": resolved.papel, "pin": resolved.id},
+            )
             return resolved.id
         accepted = validate_hint(papel, hint, self.catalogo, self.disponiveis, self.politica, self.modo)
         return accepted or resolved.id

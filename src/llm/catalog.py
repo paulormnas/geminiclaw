@@ -12,14 +12,13 @@ houver), usado no banner, no payload da sessão e na telemetria.
 from __future__ import annotations
 
 import hashlib
-import ipaddress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
-from urllib.parse import urlparse
 
 import yaml
 
+from src.llm.endpoints import EndpointError, is_private_host, validate_remote_endpoint  # noqa: F401
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -29,6 +28,9 @@ DEFAULT_LOCAL_PATH = Path(__file__).with_name("catalog.local.yaml")
 
 REQUIRED_ROLES: tuple[str, ...] = ("researcher", "developer", "reviewer", "summarizer", "validator", "base")
 TRUST_VALUES: tuple[str, ...] = ("self_hosted", "third_party")
+# Provedores que só existem em nuvem: `trust: self_hosted` seria um rótulo falso que contornaria
+# `LLM_DATA_POLICY=self_hosted_only` (ADR 017 §3, §8). `ollama` e `openai_compatible` podem ser locais.
+CLOUD_ONLY_PROVIDERS: frozenset[str] = frozenset({"google", "anthropic", "openai"})
 
 _TOP_KEYS = {"versao", "modelos", "papeis", "aliases_papel"}
 _LOCAL_KEYS = {"modelos"}
@@ -111,12 +113,29 @@ def _check_keys(
             raise _fail(source, f"{path}.{key}" if path else str(key), f"chave desconhecida '{key}'", model_id)
 
 
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """``safe_load`` que recusa chave repetida no mesmo mapeamento (a última venceria em silêncio)."""
+
+    def construct_mapping(self, node, deep=False):  # noqa: ANN001
+        seen: set[Any] = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=True)
+            if key in seen:
+                raise yaml.constructor.ConstructorError(
+                    None, None, f"chave duplicada '{key}'", key_node.start_mark
+                )
+            seen.add(key)
+        return super().construct_mapping(node, deep)
+
+
 def _load_yaml(path: Path) -> tuple[dict[str, Any], bytes]:
     raw = path.read_bytes()
     try:
-        data = yaml.safe_load(raw)
+        data = yaml.load(raw, Loader=_UniqueKeyLoader)  # noqa: S506 — subclasse de SafeLoader
     except yaml.YAMLError as exc:
-        raise _fail(str(path), "", f"YAML malformado ({type(exc).__name__})") from exc
+        detail = f": {exc.problem}" if isinstance(exc, yaml.MarkedYAMLError) and exc.problem else ""
+        line = f" (linha {exc.problem_mark.line + 1})" if getattr(exc, "problem_mark", None) else ""
+        raise _fail(str(path), "", f"YAML inválido ({type(exc).__name__}{detail}){line}") from exc
     if data is None:
         data = {}
     if not isinstance(data, dict):
@@ -168,6 +187,13 @@ def _parse_models(
             raise _fail(source, f"{path}.janela_contexto", "precisa ser inteiro positivo", model_id)
         if model_id in seen:
             raise _fail(source, f"{path}.id", f"id duplicado (já declarado em {seen[model_id]})", model_id)
+        if item["trust"] == "self_hosted" and provider in CLOUD_ONLY_PROVIDERS:
+            raise _fail(
+                source,
+                f"{path}.trust",
+                f"provedor de nuvem '{provider}' não pode ser 'self_hosted' (use 'third_party')",
+                model_id,
+            )
         seen[model_id] = source
         parsed[model_id] = ModelEntry(
             id=model_id,
@@ -231,7 +257,7 @@ def load_catalog(
     local_path: Path | str | None = None,
     *,
     registered_providers: set[str] | None = None,
-    openai_compatible_base_url: str | None = None,
+    base_urls: Mapping[str, str | None] | None = None,
 ) -> Catalog:
     """Carrega e valida o catálogo efetivo.
 
@@ -240,8 +266,9 @@ def load_catalog(
         local_path: Catálogo local opcional (padrão: ``LLM_CATALOG_LOCAL_PATH`` ou
             ``src/llm/catalog.local.yaml``); ignorado se o arquivo não existir.
         registered_providers: Provedores registrados (padrão: ``registry.available_providers()``).
-        openai_compatible_base_url: Endpoint de ``openai_compatible`` a validar (padrão: o
-            configurado em ``OPENAI_BASE_URL``).
+        base_urls: Endpoints por provedor a validar (padrão: os configurados no ambiente). Todo
+            provedor com ``base_url`` e ao menos um modelo no catálogo efetivo é validado: fora de
+            loopback/rede privada, só ``https``.
 
     Raises:
         CatalogError: Qualquer violação do esquema, com arquivo, campo e ``id``.
@@ -285,11 +312,13 @@ def load_catalog(
     roles = _parse_roles(data.get("papeis"), source, models)
     aliases = _parse_aliases(data.get("aliases_papel"), source, roles)
 
-    base_url = openai_compatible_base_url
-    if base_url is None:
-        base_url = registry.resolve_base_url("openai_compatible")
-    if base_url and any(entry.provedor == "openai_compatible" for entry in models.values()):
-        validate_remote_endpoint(base_url)
+    for provider in sorted({entry.provedor for entry in models.values()}):
+        base_url = base_urls.get(provider) if base_urls is not None else registry.resolve_base_url(provider)
+        if base_url:
+            try:
+                validate_remote_endpoint(provider, base_url, registry.base_url_env_name(provider))
+            except EndpointError as exc:
+                raise CatalogError(str(exc)) from exc
 
     return Catalog(
         versao=version,
@@ -299,31 +328,4 @@ def load_catalog(
         hash=hashlib.sha256(digest_input).hexdigest(),
         local=local_used is not None,
         local_path=local_used,
-    )
-
-
-def is_private_host(host: str) -> bool:
-    """Loopback ou faixa privada, sem resolver DNS (um nome só vale se for ``localhost``)."""
-    if host.lower() in ("localhost", "localhost.localdomain"):
-        return True
-    try:
-        address = ipaddress.ip_address(host.strip("[]"))
-    except ValueError:
-        return False
-    return address.is_loopback or address.is_private or address.is_link_local
-
-
-def validate_remote_endpoint(base_url: str) -> None:
-    """Recusa endpoint ``openai_compatible`` fora de loopback/rede privada sem ``https`` (ADR 017 §8).
-
-    Raises:
-        CatalogError: Pede ``https`` para um host que não é local nem privado.
-    """
-    parsed = urlparse(base_url)
-    host = parsed.hostname or ""
-    if parsed.scheme == "https" or is_private_host(host):
-        return
-    raise CatalogError(
-        f"Endpoint openai_compatible '{parsed.scheme}://{host}' está fora de loopback e de redes privadas "
-        "e não usa https: configure OPENAI_BASE_URL com https:// (a chave de API não pode trafegar em claro)."
     )

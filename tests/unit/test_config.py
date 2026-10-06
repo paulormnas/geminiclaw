@@ -94,3 +94,15 @@ def test_config_custom_database_url():
     with patch.dict(os.environ, custom_env):
         importlib.reload(src.config)
         assert src.config.DATABASE_URL == custom_url
+
+
+@pytest.mark.unit
+def test_config_strict_validation_removida():
+    """STRICT_VALIDATION não tinha leitor em lugar nenhum (código morto) e foi removida."""
+    with patch.dict(os.environ, {"STRICT_VALIDATION": "true"}, clear=True):
+        importlib.reload(src.config)
+        assert not hasattr(src.config, "STRICT_VALIDATION")
+        for profile in ("pi5", "default"):
+            with patch.dict(os.environ, {"DEPLOYMENT_PROFILE": profile}):
+                importlib.reload(src.config)
+                assert not hasattr(src.config, "STRICT_VALIDATION")

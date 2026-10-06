@@ -17,7 +17,7 @@ def clean_router_cache():
 @pytest.mark.unit
 def test_get_provider_delega_ao_researcher(monkeypatch):
     """Valida a criação do OllamaProvider pelo roteador (política padrão self_hosted_only)."""
-    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://test:11434")
+    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://localhost:11434")
 
     provider = get_provider()
 
@@ -36,7 +36,7 @@ def test_get_provider_sem_singleton_de_modulo():
 @pytest.mark.unit
 def test_get_provider_respeita_o_pin_do_researcher(monkeypatch):
     monkeypatch.setenv("RESEARCHER_MODEL", "ollama/qwen3.5:4b")
-    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://test:11434")
+    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://localhost:11434")
 
     assert get_provider().model_name == "qwen3.5:4b"
 

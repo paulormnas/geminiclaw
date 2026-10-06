@@ -223,7 +223,7 @@ load_dotenv(".env.test", override=True)
 
 @pytest.fixture(autouse=True)
 def reset_env(monkeypatch):
-    monkeypatch.setenv("DEFAULT_MODEL", "gemini-2.5-pro")
+    monkeypatch.setenv("LLM_DATA_POLICY", "self_hosted_only")  # modelos por papel: ver ADR 017
     monkeypatch.setenv("AGENT_TIMEOUT_SECONDS", "30")
 ```
 

@@ -91,10 +91,13 @@ GEMINI_API_KEY = get_env("GEMINI_API_KEY")
 # LLM_ROUTING=strict.
 GOOGLE_FALLBACK_MODEL = get_env("GOOGLE_FALLBACK_MODEL", default="gemini-3.7-flash")
 
-# Configurações do provedor openai_compatible (V16) — servidores que falam o
-# protocolo /v1/chat/completions (llama.cpp server, vLLM, LM Studio, serviços
-# hospedados compatíveis). Nomes seguem o padrão já consagrado no ecossistema
-# (vLLM, LM Studio, litellm), não o prefixo do nome do provedor no registro.
+# Provedor openai_compatible (V16) — servidores que falam o protocolo /v1/chat/completions
+# (llama.cpp server, vLLM, LM Studio, serviços hospedados compatíveis). ADR 017 §8: variáveis
+# PRÓPRIAS, separadas das do provedor 'openai', para que a chave real da OpenAI nunca seja enviada
+# a um servidor compatível. Endpoint fora de loopback/rede privada exige https.
+OPENAI_COMPATIBLE_BASE_URL = get_env("OPENAI_COMPATIBLE_BASE_URL")
+OPENAI_COMPATIBLE_API_KEY = get_env("OPENAI_COMPATIBLE_API_KEY")
+# Provedor openai (API da OpenAI): OPENAI_BASE_URL só deve ser definida para um proxy https.
 OPENAI_BASE_URL = get_env("OPENAI_BASE_URL")
 OPENAI_API_KEY = get_env("OPENAI_API_KEY")
 # Esforço de raciocínio do provedor 'openai'. gpt-6-luna recusa ferramentas em /chat/completions com
@@ -126,11 +129,6 @@ GEMINI_RATE_LIMIT_COOLDOWN_SECONDS = LLM_RATE_LIMIT_COOLDOWN_SECONDS  # Retrocom
 
 # --- Perfil de Deployment (V18.1) ---
 DEPLOYMENT_PROFILE = get_env("DEPLOYMENT_PROFILE", default="default")
-
-# Validação e rigor (Etapa V22)
-STRICT_VALIDATION = get_env_bool("STRICT_VALIDATION", default=True)
-if DEPLOYMENT_PROFILE == "pi5":
-    STRICT_VALIDATION = get_env_bool("STRICT_VALIDATION", default=False)
 
 if DEPLOYMENT_PROFILE == "pi5":
     MAX_SUBTASKS_PER_TASK = int(get_env("MAX_SUBTASKS_PER_TASK", default="5"))

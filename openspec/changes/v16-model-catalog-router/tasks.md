@@ -41,6 +41,16 @@
 - [x] 5.9 Teste de política: nenhuma leitura direta de `AGENT_MODEL`/`LLM_MODEL`/`DEFAULT_MODEL`.
 - [x] 5.10 Ajustar os testes existentes que patcham `LLM_PROVIDER`/`{PAPEL}_PROVIDER` (`tests/unit/test_model_router.py`, `test_llm_factory.py`, `test_config.py`, `test_v11_agent_loop.py`, `test_agent_runtime_*.py`) para usar catálogo e disponibilidade de teste.
 
+## 5.b Correções da revisão de segurança do PR #102
+- [x] 5.b.1 (S1) Validar `https` de todo provedor com `base_url`; separar `OPENAI_COMPATIBLE_*` de `OPENAI_*`; comentar `OPENAI_BASE_URL` no `.env.example`.
+- [x] 5.b.2 (S2) Recusar `trust: self_hosted` em provedor só de nuvem.
+- [x] 5.b.3 (S3) A dica `preferred_model` nunca sobrepõe um pin.
+- [x] 5.b.4 (S4) Timeouts dos provedores via `LLM_HEALTH_CHECK_TIMEOUT_SECONDS`.
+- [x] 5.b.5 (S5, S6) Chave YAML duplicada é erro; link-local não é rede privada.
+- [x] 5.b.6 (S7) Benchmark confere `origem` do pin no payload e avisa divergência.
+- [x] 5.b.7 Teste e cenário do evento `session_start` com `catalog_hash`.
+- [x] 5.b.8 Remoção de `STRICT_VALIDATION` (código morto), com teste.
+
 ## 6. Fechamento
 - [x] 6.1 `.env.example`: novas variáveis, bloco de transição comentado, exemplo de `third_party_allowed`.
 - [x] 6.2 Atualizar `openspec/changes/v18.5-model-catalog-locality` se algum nome de campo mudar na implementação.

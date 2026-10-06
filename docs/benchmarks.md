@@ -22,6 +22,6 @@ Este documento registra a performance comparativa entre provedores Cloud (Google
 | Tokens/s Pi 5 | N/A | ~12 t/s |
 
 ## Observações
-1. **Confiabilidade**: O modelo local `qwen3.5:4b` exige `STRICT_VALIDATION=false` para evitar re-planejamentos desnecessários por pequenas falhas de formatação JSON.
+1. **Confiabilidade**: a variável `STRICT_VALIDATION` foi removida por não ter efeito (nenhum código a lia); não é preciso configurá-la para o modelo local `qwen3.5:4b`.
 2. **Temperatura**: Durante a inferência local prolongada, a temperatura do Pi 5 sobe cerca de 10-15°C. Recomenda-se uso de Active Cooler.
 3. **Vantagem Local**: 100% offline, latência zero de rede, privacidade total dos dados.

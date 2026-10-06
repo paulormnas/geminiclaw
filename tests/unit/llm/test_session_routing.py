@@ -245,8 +245,65 @@ async def test_dica_valida_na_subtarefa_despachada(nuvem):
 
 def test_resolucao_fora_de_sessao_nao_faz_health_check(monkeypatch):
     """Fora de sessão a resolução é síncrona e não consulta a rede (só credencial e lista de permissão)."""
-    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://test:11434")
+    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://localhost:11434")
 
     routing = build_offline_routing()
 
     assert routing.resolution("researcher").id == "ollama/qwen3:8b"
+
+
+@pytest.mark.asyncio
+async def test_session_start_registra_catalog_hash_na_telemetria(nuvem):
+    """Cenário: Início de sessão na telemetria (catalog_hash, sem segredos)."""
+    from src.orchestrator import AgentTask, Orchestrator
+    from src.session import Session
+
+    session_manager = MagicMock()
+    session_manager.create.return_value = Session(
+        id="sess_master", agent_id="orchestrator", status="active", created_at="", updated_at="", payload={}
+    )
+    orchestrator = Orchestrator(session_manager=session_manager, agent_runtime=MagicMock())
+    telemetry = MagicMock()
+
+    with patch("src.orchestrator.get_telemetry", return_value=telemetry), \
+         patch.object(orchestrator, "_execute_agent", AsyncMock(side_effect=RuntimeError("parou"))):
+        with pytest.raises(RuntimeError, match="parou"):
+            await orchestrator.handle_request("teste", [AgentTask(agent_id="developer", prompt="p")])
+
+    calls = telemetry.record_agent_event.call_args_list
+    events = [c.kwargs for c in calls if c.kwargs.get("event_type") == "session_start"]
+    assert len(events) == 1
+    payload = events[0]["payload"]
+    assert payload["catalog_hash"] == get_catalog().hash
+    assert payload["catalog_version"] == get_catalog().versao
+    assert payload["llm_data_policy"] == "third_party_allowed"
+    assert payload["llm_routing"] == "flexible"
+    assert CHAVE_GEMINI not in str(events[0]) and CHAVE_CLAUDE not in str(events[0])
+
+
+@pytest.mark.asyncio
+async def test_dica_nao_sobrepoe_pin(nuvem, monkeypatch, caplog):
+    """Cenário: Dica não sobrepõe pin (o pin do pesquisador vence a dica gerada pelo LLM)."""
+    import logging
+
+    monkeypatch.setenv("RESEARCHER_MODEL", "ollama/qwen3:8b")
+    routing = await build_session_routing()
+
+    with caplog.at_level(logging.WARNING, logger="src.llm.session"):
+        effective = routing.apply_hint("researcher", "ollama/qwen3.5:4b")
+
+    assert routing.resolution("researcher").origem == "pin"
+    assert effective == "ollama/qwen3:8b"
+    assert any(getattr(r, "hint", None) == "ollama/qwen3.5:4b" for r in caplog.records)
+    # Sem pin, a mesma dica válida vale.
+    assert routing.apply_hint("developer", "ollama/qwen3.5:4b") == "ollama/qwen3.5:4b"
+
+
+@pytest.mark.asyncio
+async def test_dica_nao_sobrepoe_pin_legado(nuvem, monkeypatch):
+    monkeypatch.setenv("DEVELOPER_PROVIDER", "ollama")
+    monkeypatch.setenv("DEVELOPER_MODEL", "qwen3:8b")
+    routing = await build_session_routing()
+
+    assert routing.resolution("developer").origem == "pin_legado"
+    assert routing.apply_hint("developer", "ollama/qwen3.5:4b") == "ollama/qwen3:8b"

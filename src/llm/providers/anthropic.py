@@ -44,6 +44,13 @@ _EFFORT_MODEL_PREFIXES = ("claude-fable", "claude-mythos", "claude-opus-5", "cla
 _FALLBACK_MODEL_PREFIXES = ("claude-fable", "claude-opus-5", "claude-sonnet-5-5")
 
 
+def _health_timeout() -> float:
+    """Timeout do health check (``LLM_HEALTH_CHECK_TIMEOUT_SECONDS``), lido no uso."""
+    from src import config
+
+    return config.LLM_HEALTH_CHECK_TIMEOUT_SECONDS
+
+
 class ProviderRefusalError(RuntimeError):
     """O provedor recusou o pedido por política de segurança (`stop_reason == "refusal"`)."""
 
@@ -324,13 +331,13 @@ class AnthropicProvider(LLMProvider):
 
     async def health_check(self) -> bool:
         try:
-            await self._client.with_options(timeout=5.0).models.retrieve(self._model)
+            await self._client.with_options(timeout=_health_timeout()).models.retrieve(self._model)
             return True
         except Exception:
             return False
 
     async def check_availability(self) -> str | None:
-        await self._client.with_options(timeout=5.0).models.retrieve(self._model)
+        await self._client.with_options(timeout=_health_timeout()).models.retrieve(self._model)
         return None
 
     @property

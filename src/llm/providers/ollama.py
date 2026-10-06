@@ -6,6 +6,14 @@ from src.logger import get_logger
 
 logger = get_logger(__name__)
 
+
+def _health_timeout() -> float:
+    """Timeout do health check (``LLM_HEALTH_CHECK_TIMEOUT_SECONDS``), lido no uso."""
+    from src import config
+
+    return config.LLM_HEALTH_CHECK_TIMEOUT_SECONDS
+
+
 class OllamaProvider(LLMProvider):
     def __init__(self, base_url: str, model: str):
         self._base_url = base_url.rstrip("/")
@@ -164,14 +172,14 @@ class OllamaProvider(LLMProvider):
 
     async def health_check(self) -> bool:
         try:
-            r = await self._client.get("/api/tags", timeout=5.0)
+            r = await self._client.get("/api/tags", timeout=_health_timeout())
             return r.status_code == 200
         except Exception:
             return False
 
     async def check_availability(self) -> str | None:
         """Confere que o **modelo** está instalado em ``/api/tags`` (não basta o servidor responder)."""
-        r = await self._client.get("/api/tags", timeout=5.0)
+        r = await self._client.get("/api/tags", timeout=_health_timeout())
         r.raise_for_status()
         installed = {m.get("name") or m.get("model") for m in r.json().get("models", [])}
         wanted = {self._model, self._model if ":" in self._model else f"{self._model}:latest"}

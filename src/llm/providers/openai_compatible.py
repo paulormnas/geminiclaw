@@ -17,6 +17,13 @@ logger = get_logger(__name__)
 _RETRY_BACKOFFS_SECONDS = RETRY_BACKOFFS_SECONDS
 
 
+def _health_timeout() -> float:
+    """Timeout do health check (``LLM_HEALTH_CHECK_TIMEOUT_SECONDS``), lido no uso."""
+    from src import config
+
+    return config.LLM_HEALTH_CHECK_TIMEOUT_SECONDS
+
+
 class OpenAICompatibleProvider(LLMProvider):
     """Provedor para qualquer servidor que implemente `/chat/completions` com
     Tool Calling no formato da API da OpenAI — cobre llama.cpp server, vLLM,
@@ -28,7 +35,7 @@ class OpenAICompatibleProvider(LLMProvider):
     def __init__(self, base_url: str | None, model: str, api_key: str | None = None):
         if not base_url:
             raise ValueError(
-                "Provedor 'openai_compatible' requer OPENAI_BASE_URL configurada em .env."
+                "Provedor 'openai_compatible' requer OPENAI_COMPATIBLE_BASE_URL configurada em .env."
             )
         self._base_url = base_url.rstrip("/")
         self._model = model
@@ -202,14 +209,14 @@ class OpenAICompatibleProvider(LLMProvider):
 
     async def health_check(self) -> bool:
         try:
-            response = await self._client.get("/models", timeout=5.0)
+            response = await self._client.get("/models", timeout=_health_timeout())
             return response.status_code == 200
         except Exception:
             return False
 
     async def check_availability(self) -> str | None:
         """Confere que o modelo está em ``/models`` quando o servidor lista modelos."""
-        response = await self._client.get("/models", timeout=5.0)
+        response = await self._client.get("/models", timeout=_health_timeout())
         response.raise_for_status()
         try:
             listed = {item.get("id") for item in response.json().get("data", []) if isinstance(item, dict)}

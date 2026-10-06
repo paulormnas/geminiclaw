@@ -65,7 +65,7 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
   geminiclaw project new --titulo <t> --objetivo <o> [--dominio <termo>]|list [--status <s>]|show <id>|use <id>
   geminiclaw --project <id> "<tarefa>"
   geminiclaw vocab pending|approve <id>|reject <id> [--motivo <texto>]|map <id> --para <id>
-  geminiclaw knowledge stats|reindex [--yes]
+  geminiclaw knowledge stats|reindex [--yes]|sync [--session <id>]
   geminiclaw --metrics <execution_id>
 
 {BOLD}MODOS DE OPERAÇÃO (--mode):{RESET}

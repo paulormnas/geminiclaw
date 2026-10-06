@@ -121,6 +121,31 @@ def _coerce_list(task: dict[str, Any], name: str, repairs: list[PlanRepair]) -> 
             repairs.append(PlanRepair(name, "coerce_list", f"{key}: texto virou lista"))
 
 
+_APPROACH_KEYS = ("nome", "tipo", "descricao")
+
+
+def _coerce_approach(task: dict[str, Any], name: str, repairs: list[PlanRepair]) -> None:
+    """Normaliza o campo opcional ``approach`` (v17-structural-fact-ingestion).
+
+    Aceita ``{"nome", "tipo", "descricao"}``; texto solto vira ``{"nome": texto}``. Valores que
+    não são texto, chaves desconhecidas e abordagens sem ``nome`` são descartados (o campo é opcional).
+    """
+    value = task.get("approach")
+    if isinstance(value, str) and value.strip():
+        task["approach"] = {"nome": value.strip()}
+        repairs.append(PlanRepair(name or None, "coerce_approach", "approach: texto virou objeto"))
+        return
+    if isinstance(value, dict):
+        clean = {k: v.strip() for k, v in value.items() if k in _APPROACH_KEYS and isinstance(v, str) and v.strip()}
+        if "nome" in clean:
+            if clean != value:
+                repairs.append(PlanRepair(name or None, "coerce_approach", "approach: campos inválidos removidos"))
+            task["approach"] = clean
+            return
+    del task["approach"]
+    repairs.append(PlanRepair(name or None, "coerce_approach", "approach removido (sem 'nome' textual)"))
+
+
 def normalize_plan(raw: Any) -> NormalizedPlan:
     """Normaliza o plano devolvido pelo planejador, sem I/O e sem LLM.
 
@@ -172,6 +197,11 @@ def normalize_plan(raw: Any) -> NormalizedPlan:
             if key in task and task[key] is not None and not isinstance(task[key], str):
                 task[key] = str(task[key])
                 repairs.append(PlanRepair(label or None, "coerce_text", f"{key} convertido para texto"))
+
+    # approach (opcional): texto vira {"nome": ...}; só chaves textuais conhecidas sobrevivem
+    for task in tasks:
+        if isinstance(task, dict) and "approach" in task:
+            _coerce_approach(task, str(task.get("task_name") or ""), repairs)
 
     # nomes: derivar, snake_case e desduplicar (mapa antigo -> novo para depends_on)
     rename: dict[str, str] = {}

@@ -168,6 +168,21 @@ def _evaluate_metric_criteria(
     return results
 
 
+def evaluated_metric_names(criteria: List[Any], metrics: Optional[Dict[str, Any]]) -> List[str]:
+    """Nomes (como escritos em ``metrics.json``) das métricas citadas por critérios quantitativos.
+
+    Usada pela ingestão de fatos para marcar ``Resultado.status_validacao="validado"`` nas
+    métricas que o Validator avaliou contra um limiar (``v17-structural-fact-ingestion``).
+    """
+    wanted = {c.metric for c in _metric_criteria(criteria if isinstance(criteria, list) else [])}
+    names: List[str] = []
+    for key in (metrics or {}):
+        norm = _normalize_metric_name(str(key))
+        if _METRIC_ALIASES.get(norm, norm) in wanted:
+            names.append(str(key))
+    return names
+
+
 def _find_metrics_file(output_dir: Optional[Path | str], task_name: str, depends_on: List[str]) -> Optional[Path]:
     """Localiza ``metrics.json`` na pasta da própria subtarefa e, depois, nas de suas dependências."""
     if not output_dir:
@@ -266,6 +281,9 @@ class ReviewResult:
     resolved_artifacts: Dict[str, str] = field(default_factory=dict)  # esperado -> real
     name_mismatch: bool = False
     signature: str = ""
+    # False quando nada foi de fato verificado: a revisão por LLM falhou, veio ilegível ou não rodou
+    # (o ``pass`` é só "seguir adiante"). A ingestão de fatos nunca grava ``validado`` nesse caso.
+    verified: bool = True
 
 
 class ValidatorAgent:
@@ -616,6 +634,7 @@ class ValidatorAgent:
             issues=[],
             resolved_artifacts=resolved_map,
             name_mismatch=mismatch,
+            verified=False,
         )
 
     @staticmethod

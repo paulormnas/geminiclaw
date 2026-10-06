@@ -62,6 +62,14 @@ class SandboxResult:
     install_failed: bool = False
     # Pacotes instalados sob demanda, no formato "nome==versão" (vazio sem instalação).
     packages_installed: List[str] = field(default_factory=list)
+    # Saída estruturada (v17-structural-fact-ingestion): a classificação da causa da falha não
+    # depende de heurística sobre mensagens. ``oom_killed``: exit 137 sem timeout (SIGKILL por
+    # memória); ``exception_type``: tipo da exceção do traceback do script (``None`` sem traceback);
+    # ``infra_error``: categoria quando o sandbox não chegou a rodar o script (daemon, imagem, início).
+    oom_killed: bool = False
+    exception_type: Optional[str] = None
+    infra_error: Optional[str] = None
+    image: str = ""
 
 SANDBOX_PROJECT_LABEL = "geminiclaw"
 
@@ -90,6 +98,38 @@ _LIST_DEPS_CODE = (
     "print(json.dumps([{'name': d.metadata['Name'], 'version': d.version} "
     f"for d in m.distributions(path=['{SANDBOX_DEPS_DIR}'])]))"
 )
+
+
+_TRACEBACK_MARKER = "Traceback (most recent call last):"
+_EXCEPTION_LINE_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_.]*)(?::|$)")
+OOM_EXIT_CODE = 137  # 128 + SIGKILL: sandbox encerrado por falta de memória (mem_limit)
+MAX_EXCEPTION_TYPE_LENGTH = 100
+
+
+def extract_exception_type(stderr: str) -> Optional[str]:
+    """Extrai o tipo da exceção da última linha de um traceback do Python.
+
+    O stderr vem do código gerado (não confiável): só um identificador simples, curto e
+    precedido de ``Traceback`` é aceito; qualquer outra coisa devolve ``None``.
+
+    Args:
+        stderr: Saída de erro do script no sandbox.
+
+    Returns:
+        Nome da classe da exceção sem o módulo (ex.: ``"MemoryError"``), ou ``None``.
+    """
+    if not stderr or _TRACEBACK_MARKER not in stderr:
+        return None
+    lines = [ln for ln in stderr.rstrip().splitlines() if ln.strip()]
+    if not lines:
+        return None
+    match = _EXCEPTION_LINE_RE.match(lines[-1].strip())
+    if match is None:
+        return None
+    name = match.group(1).rsplit(".", 1)[-1]
+    if not name or len(name) > MAX_EXCEPTION_TYPE_LENGTH:
+        return None
+    return name
 
 
 class SandboxImageNotFoundError(RuntimeError):
@@ -653,15 +693,26 @@ class PythonSandbox:
                 ],
                 timed_out=timed_out,
                 packages_installed=packages_installed,
+                oom_killed=(exit_code == OOM_EXIT_CODE and not timed_out),
+                exception_type=extract_exception_type(stderr) if not timed_out else None,
+                image=self.image,
             )
 
         except Exception as e:
             logger.error(f"Erro ao executar sandbox: {str(e)}")
+            if isinstance(e, SandboxImageNotFoundError):
+                infra_error = "sandbox_image_missing"
+            elif _is_docker_connection_error(e):
+                infra_error = "docker_unavailable"
+            else:
+                infra_error = "sandbox_start_failed"
             return SandboxResult(
                 stdout="",
                 stderr=f"Exception during sandbox execution: {str(e)}",
                 exit_code=-1,
-                artifacts=[]
+                artifacts=[],
+                infra_error=infra_error,
+                image=self.image,
             )
         finally:
             if container:

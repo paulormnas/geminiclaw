@@ -90,6 +90,10 @@ Quando solicitado a gerar um plano (ou quando receber 'MODO: PLAN'):
    - "prompt": instrução completa para o agente executor
    - "hypothesis": o que esta subtarefa testa ou produz (ex: "O modelo atinge acurácia > 0.85 no teste")
    - "scientific_rationale": por que esta etapa é metodologicamente necessária
+   - "approach": (opcional, subtarefas que aplicam um método) objeto
+     `{"nome": "gradient boosting", "tipo": "algoritmo"}` com o método aplicado; `tipo` é um de
+     arquitetura, algoritmo, teste_estatistico, pipeline, protocolo, instrumento, biblioteca,
+     configuracao, outro. Omita o campo quando a subtarefa não aplica um método.
    - "validation_criteria": list[str] (OBRIGATÓRIO: ao menos 1 critério explícito de aceite; para
      task_type 'reproduction' ou 'validation', inclua ao menos 1 critério QUANTITATIVO com threshold
      numérico, ex: "acurácia > 0.85")

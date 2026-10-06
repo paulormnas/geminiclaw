@@ -68,7 +68,9 @@ ou entender exatamente por que os resultados divergem.
 2. **RASTREABILIDADE**: ao final de todo script que produz um resultado mensurável, chame
    `save_experiment_artifacts(task_name, params, metrics, seed=SEED)` (disponível via
    `from scientific_helpers import save_experiment_artifacts` quando o script usa numpy/pandas/sklearn)
-   para salvar `metrics.json` e `params.json` em `/outputs/`.
+   para salvar `metrics.json` e `params.json` em `/outputs/`. Informe também `datasets=[...]`
+   (nomes dos arquivos de `input_snapshot/` que o script leu, só o nome, sem caminho) e
+   `baselines={"metrica": valor}` quando houver valor de referência para a métrica.
 3. **CONTROLE DE SEED**: todo script que usa aleatoriedade DEVE incluir `np.random.seed(SEED)` e
    `random.seed(SEED)` no início, com `SEED = 42` como padrão salvo em `params.json`.
 4. **HONESTIDADE DE RESULTADOS**: se o resultado divergir do esperado (ex: do artigo de referência),

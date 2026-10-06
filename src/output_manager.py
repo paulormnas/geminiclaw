@@ -76,18 +76,18 @@ class OutputManager:
         """
         session_dir = self.base_dir / session_id
         session_dir.mkdir(parents=True, exist_ok=True)
-        session_dir.chmod(0o777)
+        session_dir.chmod(0o700)  # privada: contém a fila de ingestão e os artefatos da sessão
         
         # Cria pasta de artefatos plana
         artifacts_dir = session_dir / "artifacts"
         artifacts_dir.mkdir(exist_ok=True)
-        artifacts_dir.chmod(0o777)
+        artifacts_dir.chmod(0o700)
         
         # Cria pasta de logs
         # Note: No V10.2, unificamos os logs dentro da pasta da sessão para facilitar a portabilidade
         logs_dir = session_dir / "logs"
         logs_dir.mkdir(exist_ok=True)
-        logs_dir.chmod(0o777)
+        logs_dir.chmod(0o700)
         
         logger.info("Diretórios de sessão inicializados", extra={
             "session_id": session_id, 

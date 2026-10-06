@@ -22,6 +22,8 @@ def save_experiment_artifacts(
     output_dir: str = "/outputs",
     seed: Optional[int] = None,
     divergence_note: Optional[str] = None,
+    datasets: Optional[list[str]] = None,
+    baselines: Optional[dict[str, float]] = None,
 ) -> None:
     """Salva ``params.json`` e ``metrics.json`` com schema padronizado de rastreabilidade.
 
@@ -34,6 +36,9 @@ def save_experiment_artifacts(
         seed: Seed de aleatoriedade usada. Se omitido, tenta ler de ``params["seed"]``.
         divergence_note: Nota explicando divergência do resultado em relação ao esperado
             (ex: valor de um artigo de referência). ``None`` quando não há divergência.
+        datasets: Nomes dos arquivos de ``input_snapshot/`` usados pela execução (opcional,
+            v17-structural-fact-ingestion). Só nomes, nunca caminhos.
+        baselines: Valor de referência (baseline) por métrica, quando houver (opcional).
     """
     resolved_seed = seed if seed is not None else params.get("seed")
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -48,6 +53,7 @@ def save_experiment_artifacts(
         "timestamp": timestamp,
         "seed": resolved_seed,
         "parameters": params,
+        "datasets": list(datasets) if datasets else [],
     }
     metrics_payload = {
         "task_name": task_name,
@@ -57,6 +63,8 @@ def save_experiment_artifacts(
         "parameters": params,
         "metrics": metrics,
         "divergence_note": divergence_note,
+        "datasets": list(datasets) if datasets else [],
+        "baselines": dict(baselines) if baselines else {},
     }
 
     (out_dir / "params.json").write_text(

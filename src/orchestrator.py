@@ -5,10 +5,11 @@ gerenciando sessões e o tratamento de falhas parciais. O único uso de containe
 sandbox de código, acionado pela skill de código.
 """
 
+import asyncio
 import os
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any, Callable
 
 from src.logger import get_logger
 from src.config import (
@@ -37,6 +38,10 @@ from src.agent_runtime.context import AgentContext
 from src.agent_runtime.runtime import AgentRuntime
 from src.context_loader import ContextLoader, ContextBundle
 from src.usage import UsageBudget, UsageTracker
+
+if TYPE_CHECKING:
+    from src.knowledge.graph_store import GraphStore
+    from src.knowledge.ingestion import FactIngestor
 
 logger = get_logger(__name__)
 
@@ -77,6 +82,8 @@ class AgentTask:
     task_type: str | None = None  # "reproduction" | "eda" | "model_impl" | "validation" | "synthesis"
     hypothesis: str = ""  # o que esta subtarefa testa ou produz
     scientific_rationale: str = ""  # por que esta etapa é metodologicamente necessária
+    # v17-structural-fact-ingestion: abordagem declarada pelo Researcher ({"nome", "tipo", "descricao"?}).
+    approach: dict[str, str] | None = None
 
 
 @dataclass
@@ -89,6 +96,7 @@ class AgentResult:
         status: Status da execução ("success", "error", "timeout").
         response: Payload da resposta do agente.
         error: Mensagem de erro, se houver.
+        error_category: Categoria estruturada da falha de infraestrutura, se conhecida.
     """
 
     agent_id: str
@@ -96,6 +104,9 @@ class AgentResult:
     status: str
     response: dict[str, Any]
     error: str | None = None
+    # Categoria estruturada de falha de infraestrutura (``llm_connection``); ``None`` quando
+    # desconhecida. Usada pela ingestão de fatos (v17-structural-fact-ingestion), sem heurística de texto.
+    error_category: str | None = None
 
 
 @dataclass
@@ -130,6 +141,7 @@ class Orchestrator:
         session_manager: SessionManager,
         output_manager: OutputManager | None = None,
         agent_runtime: AgentRuntime | None = None,
+        knowledge_store_factory: "Callable[[], GraphStore] | None" = None,
     ) -> None:
         """Inicializa o orquestrador com dependências injetadas.
 
@@ -138,6 +150,9 @@ class Orchestrator:
             output_manager: Gerenciador de outputs (opcional).
             agent_runtime: Runtime de agentes em processo (Roadmap V16/ADR 014).
                 Se omitido, uma instância padrão é criada.
+            knowledge_store_factory: Abre o grafo de conhecimento para a ingestão de fatos
+                (v17-structural-fact-ingestion). Se omitido, usa ``open_graph_store``; o grafo só
+                é aberto em sessões com projeto.
         """
         self.session_manager = session_manager
         self.output_manager = output_manager or OutputManager()
@@ -166,6 +181,116 @@ class Orchestrator:
         # Bloco do Problema por sessão mestra (evita vazar entre requisições concorrentes).
         self._project_blocks: dict[str, str] = {}
         self.agent_runtime = agent_runtime or AgentRuntime()
+        # v17-structural-fact-ingestion — ingestor de fatos por sessão mestra e grafo compartilhado.
+        self._knowledge_store_factory = knowledge_store_factory
+        self._knowledge_store: GraphStore | None = None
+        self._ingestors: dict[str, FactIngestor] = {}
+
+    def _open_knowledge_store(self) -> "GraphStore":
+        """Abre (uma vez) o grafo para a ingestão; falhas propagam e o ``FactIngestor`` as enfileira."""
+        if self._knowledge_store is None:
+            factory = self._knowledge_store_factory
+            if factory is None:
+                from src.knowledge.factory import open_graph_store as factory
+            self._knowledge_store = factory()
+        return self._knowledge_store
+
+    @staticmethod
+    async def _safe_ingest(fn: "Callable[[], Any]") -> None:
+        """Roda uma etapa de ingestão fora do event loop; nenhuma falha de conhecimento derruba a sessão."""
+        try:
+            await asyncio.to_thread(fn)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Ingestão de fatos falhou", extra={"error": type(exc).__name__})
+
+    def get_ingestor(self, session_id: str) -> "FactIngestor | None":
+        """Ingestor de fatos da sessão mestra (``None`` em sessões sem projeto)."""
+        return self._ingestors.get(session_id)
+
+    def _start_ingestor(
+        self, session_id: str, project_id: str | None, mode: str, start_date: str, continues: object
+    ) -> "FactIngestor | None":
+        """Cria o ingestor de fatos da sessão; sem projeto (``sem_grafo``/bypass) não há ingestão."""
+        if not project_id:
+            return None
+        from src.config import NODE_ID
+        from src.knowledge.ingestion import FactIngestor, SessionContext
+
+        ctx = SessionContext(
+            project_id=project_id,
+            session_id=session_id,
+            modo=mode,
+            inicio=start_date,
+            no_execucao=NODE_ID,
+            continues_session_id=continues if isinstance(continues, str) else None,
+        )
+
+        def _telemetry(kind: str, info: dict[str, Any], duration_ms: int) -> None:
+            get_telemetry().record_agent_event(
+                execution_id=session_id,
+                session_id=session_id,
+                agent_id="orchestrator",
+                event_type="knowledge_ingestion",
+                payload={"kind": kind, **info},
+                duration_ms=duration_ms,
+            )
+
+        self.output_manager.init_session(session_id)
+        ingestor = FactIngestor(
+            self._open_knowledge_store, ctx, self.output_manager.base_dir / session_id, telemetry=_telemetry
+        )
+        self._ingestors[session_id] = ingestor
+        return ingestor
+
+    def _end_ingestion(
+        self, ingestor: "FactIngestor | None", session_id: str, status: str, exc: BaseException | None
+    ) -> None:
+        """Fim da sessão no grafo: ``fim``, ``motivo_parada`` e ``consumo`` (síncrono, sem LLM).
+
+        Com ``exc`` (caminho de exceção/Ctrl+C) o evento só é enfileirado, sem acessar o grafo. Nunca
+        levanta: a sessão não para por falha de conhecimento.
+        """
+        if ingestor is None:
+            return
+        try:
+            self._end_ingestion_unsafe(ingestor, session_id, status, exc)
+        except Exception as err:  # noqa: BLE001
+            logger.warning("Fim da sessão não registrado no grafo", extra={"error": type(err).__name__})
+        finally:
+            self._ingestors.pop(session_id, None)
+
+    def _end_ingestion_unsafe(
+        self, ingestor: "FactIngestor", session_id: str, status: str, exc: BaseException | None
+    ) -> None:
+        from datetime import datetime, timezone
+
+        from src.knowledge.ingestion import MOTIVOS_PARADA
+
+        session = self.session_manager.get(session_id)
+        payload = session.payload if session is not None else {}
+        reason = payload.get("motivo_parada")
+        if exc is not None:
+            reason = "interrompida" if isinstance(exc, (KeyboardInterrupt, asyncio.CancelledError)) else "erro"
+        elif reason not in MOTIVOS_PARADA:
+            reason = "solucao_encontrada" if status == "success" else "erro"
+        consumo: dict[str, Any] = {}
+        tracker = self._usage_trackers.get(session_id)
+        if tracker is not None:
+            try:
+                usage = tracker.check()
+                consumo = {
+                    "tokens": usage.tokens_used,
+                    "minutos": round(usage.minutes_elapsed, 2),
+                    "retentativas_conexao": usage.connection_retries,
+                }
+            except Exception as err:  # noqa: BLE001 - o consumo é complementar; nunca derruba o fim da sessão
+                logger.warning("Consumo da sessão indisponível para a ingestão", extra={"error": type(err).__name__})
+        ingestor.session_end(
+            fim=datetime.now(timezone.utc).isoformat(),
+            motivo_parada=reason,
+            consumo=consumo,
+            offline=exc is not None,
+        )
 
     @staticmethod
     def get_available_agents() -> tuple[str, ...]:
@@ -262,6 +387,17 @@ class Orchestrator:
             },
         )
 
+        # v17-structural-fact-ingestion — fatos da sessão no grafo (só com projeto), sem LLM.
+        ingestor = self._start_ingestor(
+            master_session.id,
+            project_id,
+            effective_mode,
+            start_date,
+            master_session.payload.get("continues_session_id"),
+        )
+        if ingestor is not None:
+            await self._safe_ingest(ingestor.session_start)
+
         # V15.5/G9 — Carrega (ou reutiliza) o contexto de input_context/ e o disponibiliza
         # para o Researcher no primeiro ciclo de planejamento; salva snapshot imutável.
         # O carregamento automático só ocorre no caminho real de uso (loop autônomo):
@@ -275,6 +411,8 @@ class Orchestrator:
             self._current_context_block = bundle.to_prompt_context()
             self.output_manager.init_session(master_session.id)
             self._snapshot_input_context(bundle, master_session.id)
+            if ingestor is not None:
+                await self._safe_ingest(ingestor.inputs)
         # v17-research-project — o problema do projeto vai em todo planejamento (plano e replans).
         self._project_blocks[master_session.id] = project_context or ""
 
@@ -299,33 +437,37 @@ class Orchestrator:
 
         logger.info("Nova requisição registrada", extra={"execution_id": exec_id, "prompt_preview": prompt[:50]})
 
-        # Se tarefas explícitas forem fornecidas, executa sequencialmente (compatibilidade)
-        if agent_tasks:
-            logger.info("Executando tarefas explícitas fornecidas (bypass autonomous loop)")
-            results = []
-            for task in agent_tasks:
-                task.mode = task.mode or effective_mode
-                result = await self._execute_agent(task, master_session.id)
-                results.append(result)
+        try:
+            # Se tarefas explícitas forem fornecidas, executa sequencialmente (compatibilidade)
+            if agent_tasks:
+                logger.info("Executando tarefas explícitas fornecidas (bypass autonomous loop)")
+                results = []
+                for task in agent_tasks:
+                    task.mode = task.mode or effective_mode
+                    result = await self._execute_agent(task, master_session.id)
+                    results.append(result)
 
-            succeeded = sum(1 for r in results if r.status == "success")
-            failed = len(results) - succeeded
-            all_artifacts = self.output_manager.list_artifacts(master_session.id)
+                succeeded = sum(1 for r in results if r.status == "success")
+                failed = len(results) - succeeded
+                all_artifacts = self.output_manager.list_artifacts(master_session.id)
 
-            result = OrchestratorResult(
-                results=results,
-                total=len(results),
-                succeeded=succeeded,
-                failed=failed,
-                artifacts=all_artifacts,
-                plan_json=json.dumps([t.__dict__ for t in agent_tasks])
-            )
-        else:
-            # Caso contrário, usa o loop autônomo (Etapa S7)
-            loop = AutonomousLoop(self)
-            result = await loop.run(
-                prompt, exec_id or master_session.id, mode=effective_mode, budget=effective_budget
-            )
+                result = OrchestratorResult(
+                    results=results,
+                    total=len(results),
+                    succeeded=succeeded,
+                    failed=failed,
+                    artifacts=all_artifacts,
+                    plan_json=json.dumps([t.__dict__ for t in agent_tasks])
+                )
+            else:
+                # Caso contrário, usa o loop autônomo (Etapa S7)
+                loop = AutonomousLoop(self)
+                result = await loop.run(
+                    prompt, exec_id or master_session.id, mode=effective_mode, budget=effective_budget
+                )
+        except BaseException as run_exc:  # noqa: BLE001 - registra o fim da sessão no grafo e repropaga
+            self._end_ingestion(ingestor, master_session.id, "failed", run_exc)
+            raise
 
         # Atualiza a sessão mestra com o resultado consolidado.
         # V18/usage-limits — o payload é mesclado (não substituído) para preservar
@@ -349,6 +491,8 @@ class Orchestrator:
                 }
             }
         )
+        if ingestor is not None:
+            await asyncio.to_thread(self._end_ingestion, ingestor, master_session.id, final_status, None)
         self.session_manager.close(master_session.id)
         
         # Etapa V14: Salva no histórico de execuções
@@ -1134,6 +1278,7 @@ class Orchestrator:
                         task_type=t.get("task_type"),
                         hypothesis=t.get("hypothesis", ""),
                         scientific_rationale=t.get("scientific_rationale", ""),
+                        approach=t.get("approach") if isinstance(t.get("approach"), dict) else None,
                     ))
                 return tasks
             else:

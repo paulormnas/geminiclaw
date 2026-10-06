@@ -429,6 +429,12 @@ KNOWLEDGE_GRAPH_NAME = get_env("KNOWLEDGE_GRAPH_NAME", default="knowledge")
 # a leitura tardia em AgeGraphStore levanta erro explícito se ausente.
 KNOWLEDGE_READER_DATABASE_URL = get_env("KNOWLEDGE_READER_DATABASE_URL")
 KNOWLEDGE_READ_TIMEOUT_MS = int(get_env("KNOWLEDGE_READ_TIMEOUT_MS", default="5000"))
+# v17-structural-fact-ingestion — limites de I/O da ingestão de insumos (contenção no Pi 5):
+# maior arquivo que será hasheado e total de bytes hasheados por chamada de ingestão (subtarefa/insumos).
+INGESTION_MAX_FILE_BYTES = int(get_env("INGESTION_MAX_FILE_BYTES", default=str(256 * 1024 * 1024)))
+INGESTION_MAX_HASH_BYTES_PER_CALL = int(
+    get_env("INGESTION_MAX_HASH_BYTES_PER_CALL", default=str(1024 * 1024 * 1024))
+)
 # Similaridade semântica mínima para um termo livre ser resolvido a um termo
 # canônico do vocabulário controlado (faixa de duplicata, v17-controlled-vocabulary).
 VOCAB_MATCH_THRESHOLD = float(get_env("VOCAB_MATCH_THRESHOLD", default="0.90"))

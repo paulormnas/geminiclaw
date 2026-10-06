@@ -78,6 +78,7 @@ O sistema SHALL <comportamento obrigatório>.
 | V17 | [v17-research-project](changes/v17-research-project/proposal.md) | `research-project` | 015 | v17-graph-store, v17-controlled-vocabulary |
 | V17 | [v17-structural-fact-ingestion](changes/v17-structural-fact-ingestion/proposal.md) | `knowledge-ingestion` | 009, 015 | v17-research-project |
 | V17 | [v17-knowledge-semantic-index](changes/v17-knowledge-semantic-index/proposal.md) | `knowledge-semantics` | 011, 015 | v16-local-embeddings, v17-graph-store |
+| V17 | [v17-domain-search](changes/v17-domain-search/proposal.md) | `domain-search` | 015, 011, 012 | v17-controlled-vocabulary, v17-knowledge-semantic-index |
 | V17 | [v17-curator-agent](changes/v17-curator-agent/proposal.md) | `curator` | 012, 015 | todas as anteriores de V17 |
 | V17 | [v17-graph-cli](changes/v17-graph-cli/proposal.md) | `graph-cli` | 015 | v17-graph-store, v17-curator-agent |
 | V17 | [v17-input-document-index](changes/v17-input-document-index/proposal.md) | `input-documents` | 015, 011, 019 | v16-local-embeddings, v17-research-project, v17-structural-fact-ingestion |

@@ -210,6 +210,22 @@ class GraphStore(ABC):
         """
 
     @abstractmethod
+    def list_nodes(self, label: str, *, after_id: str | None = None, limit: int = 200) -> list[Node]:
+        """Lista nós de um rótulo em ordem estável de ``id``, por páginas (cursor).
+
+        Permite varrer rótulos grandes sem carregar tudo na memória (usado pela
+        reconciliação do índice semântico).
+
+        Args:
+            label: Rótulo a listar.
+            after_id: Cursor: devolve só nós com ``id`` maior que este (``None`` = do começo).
+            limit: Tamanho máximo da página.
+
+        Returns:
+            Até ``limit`` nós, ordenados por ``id`` crescente (vazio = fim).
+        """
+
+    @abstractmethod
     def neighbors(
         self,
         node_id: str,
@@ -368,6 +384,11 @@ class InMemoryGraphStore(GraphStore):
             if len(results) >= limit:
                 break
         return results
+
+    def list_nodes(self, label: str, *, after_id: str | None = None, limit: int = 200) -> list[Node]:
+        validation.validate_label(label)
+        ids = sorted(n.id for n in self._nodes.values() if n.label == label and (after_id is None or n.id > after_id))
+        return [self._nodes[i] for i in ids[:limit]]
 
     def neighbors(
         self,
@@ -734,6 +755,13 @@ class AgeGraphStore(GraphStore):
             cypher_body = f"MATCH (n:{label}) RETURN n LIMIT $limit"
 
         results = self._run_cypher(cypher_body, {"filters": filters, "limit": limit})
+        return [self._node_from_agtype(r) for r in results]
+
+    def list_nodes(self, label: str, *, after_id: str | None = None, limit: int = 200) -> list[Node]:
+        validation.validate_label(label)
+        where = "WHERE n.id > $after_id " if after_id is not None else ""
+        cypher_body = f"MATCH (n:{label}) {where}RETURN n ORDER BY n.id LIMIT $limit"
+        results = self._run_cypher(cypher_body, {"after_id": after_id, "limit": limit})
         return [self._node_from_agtype(r) for r in results]
 
     def neighbors(

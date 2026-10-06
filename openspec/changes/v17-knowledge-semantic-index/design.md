@@ -30,6 +30,15 @@ Payload: `tipo_no`, `projeto_id`, `dominios` (IDs em nível `area`, ver §4), `s
 `schema.py` ganha a propriedade de sistema `estado_vetorizacao` (`pendente` | `ok`) nos
 rótulos vetorizados.
 
+Implementação: o gancho é o decorator `IndexedGraphStore` (`src/knowledge/indexed_store.py`), que
+envolve o `GraphStore` sem alterá-lo; `factory.open_graph_store()` devolve o store indexado
+(`KNOWLEDGE_SEMANTIC_INDEX_ENABLED`, padrão ligado), de modo que toda escrita de produção —
+inclusive as do vocabulário controlado — passa pelo gancho. `estado_vetorizacao` é de sistema:
+o chamador não pode gravá-lo. `reconcile` varre o grafo em páginas por cursor de `id`
+(`GraphStore.list_nodes`, `SIM_RECONCILE_BATCH_SIZE`), também atualiza o payload (`status`,
+`visibilidade`, `projeto_id`) quando diverge do nó, e só recria a coleção (mudança de dimensão) com
+confirmação explícita e se ela for `KNOWLEDGE_COLLECTION` e só tiver pontos de nós do grafo.
+
 1. `GraphStore.create_node`/`update_node` grava o nó com `estado_vetorizacao="pendente"`
    quando o texto canônico mudou (comparando `text_hash`).
 2. Gancho pós-escrita chama `SemanticIndex.upsert(node)` → embedding local → upsert no Qdrant
@@ -46,8 +55,15 @@ def similar(self, *, text: str | None = None, node_id: str | None = None,
             labels: list[str], filters: dict | None = None,
             min_score: float = 0.0, limit: int = 20) -> list[Hit]    # Hit(node_id, label, score)
 
-def related_experience(self, problema_id: str, limit: int = 10) -> list[ExperienceItem]
+def related_experience(self, problema_id: str, limit: int = 10, *,
+                       restrict_to_visible: bool = False) -> list[ExperienceItem]
 ```
+
+`similar` e `related_experience` **nunca** devolvem nós com `status` `substituida`, `rejeitado` ou
+`rejeitada`. `similar(projeto_id=...)` e `related_experience(restrict_to_visible=True)` restringem a
+nós do próprio projeto ou `compartilhavel` (nada de outro projeto privado — usado por consumidores
+que não são o pesquisador local, ex.: registros remotos, ADR 013); o padrão é a visão local, em
+que todos os projetos são do mesmo pesquisador. `filters` só aceita chaves do payload.
 
 `related_experience` — consulta híbrida para a pergunta "o que já funcionou ou falhou em
 problemas parecidos?":
@@ -66,7 +82,10 @@ problemas parecidos?":
 - Cada domínio é levado ao seu ancestral de nível `area` (ou mantido, se já for
   `grande_area`/`area`) — assim "Química Orgânica" e "Química Inorgânica" contam como o
   mesmo domínio `Química`.
-- **Par entre domínios** = conjuntos de domínios (nível `area`) disjuntos.
+- **Par entre domínios** = conjuntos de domínios (nível `area`) disjuntos. Se um dos lados **não tem
+  domínio atribuído**, o par **não** é "entre domínios" (conservador). Como o domínio costuma ser
+  atribuído depois da criação do nó, criar `NO_DOMINIO` reavalia os pares do nó e atualiza
+  `entre_dominios`/`prioridade` dos pares ainda pendentes.
 - **Par entre projetos** = `projeto_id` diferentes.
 
 ## 5. Geração de candidatos
@@ -78,6 +97,8 @@ Após `upsert` de nó de rótulo elegível, buscar vizinhos (sem limite de quant
 |---|---|
 | Mesmo rótulo ∈ {`Projeto`, `Problema`, `Abordagem`, `Descoberta`, `Oportunidade`} | `score ≥ 0,90` → tipo `duplicata`; `0,70 ≤ score < 0,90` → `relacionado`; `0,60 ≤ score < 0,70` → `relacionado` **somente se** o par é entre domínios |
 | `Descoberta` → `Problema` de **outro projeto** | `score ≥ 0,60` (mesmas regras de domínio) **e** `|veredito| ≥ 0,3` na descoberta |
+
+`Descoberta`↔`Problema` com score ≥ 0,90 é `relacionado` (`duplicata` só vale para o mesmo rótulo).
 
 Pares envolvendo nós com `status` `substituida`, `rejeitado` ou `rejeitada` são ignorados.
 
@@ -115,7 +136,7 @@ CREATE TABLE IF NOT EXISTS similarity_queue (
     revisado_em     TIMESTAMPTZ,
     revisado_por    TEXT,
     motivo          TEXT,
-    UNIQUE (node_a, node_b, embedding_model, embedding_version)
+    UNIQUE (node_a, node_b, embedding_model, embedding_version, text_hash_a, text_hash_b)
 );
 CREATE INDEX IF NOT EXISTS idx_simq_pendente ON similarity_queue (status, prioridade DESC);
 ```
@@ -124,7 +145,10 @@ CREATE INDEX IF NOT EXISTS idx_simq_pendente ON similarity_queue (status, priori
   `peso_evidencia` = maior `confianca` entre os dois nós, ou 0,5 se nenhum tem veredito.
 - **Par já avaliado** (`confirmado`/`descartado`) não volta à fila enquanto `text_hash_a` e
   `text_hash_b` forem os mesmos; se um texto mudar, o par pode ser reinserido como novo
-  registro (o antigo permanece como histórico).
+  registro (o antigo permanece como histórico; por isso os hashes de texto fazem parte da chave
+  única). Ao inserir o registro novo, os registros **pendentes** antigos do mesmo par/modelo viram
+  `descartado` com `revisado_por="sistema"` e motivo "texto alterado": o Curator nunca revisa par
+  obsoleto, e essas revisões automáticas não entram na taxa de confirmação.
 - API (`src/knowledge/similarity_queue.py`): `enqueue`, `next_batch(limit)` (ordenado por
   prioridade), `mark_confirmed(id, by, motivo)`, `mark_discarded(id, by, motivo)`,
   `confirmation_rate(window_days)`.
@@ -132,6 +156,8 @@ CREATE INDEX IF NOT EXISTS idx_simq_pendente ON similarity_queue (status, priori
   `GraphStore.create_edge`, com `score`, `modelo`, `versao`).
 
 ## 7. Calibração pelo uso
+
+Só há sugestão com ao menos `SIM_CALIBRATION_MIN_SAMPLES` (10) pares revisados na faixa.
 
 `geminiclaw knowledge stats` mostra a taxa de confirmação dos últimos
 `SIM_CALIBRATION_WINDOW_DAYS` (30) dias por tipo e faixa, e **sugere** ajuste: taxa < 10% na

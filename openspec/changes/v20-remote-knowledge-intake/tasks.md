@@ -19,6 +19,8 @@
 - [ ] 3.1 `ContentOrigin.REMOTO`, delimitadores, limpeza e limite; teste de política: nenhuma ferramenta de agente importa ou aprova.
 - [ ] 3.2 Descobertas externas excluídas do cálculo de veredito.
 
+- [ ] 3.x Filtrar visibilidade/projeto no índice semântico para registros remotos: usar `SemanticIndex.similar(projeto_id=...)` e `related_experience(restrict_to_visible=True)` (já implementados em `v17-knowledge-semantic-index`) e garantir que nada `privado` de outro projeto/nó chegue a quem consome registros remotos (ADR 013).
+
 ## 4. Testes
 - [ ] 4.1 Assinatura forjada; registro válido fora do grafo; chave revogada.
 - [ ] 4.2 Sem chamada de LLM; entre domínios; pouco relevante.

@@ -78,6 +78,7 @@ O sistema SHALL guardar os pares candidatos na tabela `similarity_queue`, e SHAL
 - **WHEN** a varredura o encontra de novo com os mesmos textos
 - **THEN** ele não é reinserido
 - **AND** se o texto de um dos nós mudar, o par pode voltar à fila
+- **AND** o registro pendente antigo do mesmo par vira `descartado` ("texto alterado") e deixa de ser revisável
 
 ### Requirement: Oportunidades entre projetos exigem evidência
 O sistema SHALL enfileirar pares `Descoberta→Problema` de projetos diferentes somente quando a
@@ -95,3 +96,24 @@ alterar limiares automaticamente.
 - **GIVEN** 5% de confirmação na faixa 0,60–0,70 nos últimos 30 dias
 - **WHEN** `geminiclaw knowledge stats` é executado
 - **THEN** o relatório sugere subir o limite inferior e nenhuma configuração é alterada
+
+### Requirement: Busca ignora nós inativos e respeita visibilidade
+O sistema SHALL excluir de `similar` e `related_experience` os nós com `status` `substituida`,
+`rejeitado` ou `rejeitada`, e SHALL permitir restringir a busca a nós do próprio projeto ou
+`compartilhavel`.
+
+#### Scenario: Nó rejeitado
+- **WHEN** uma `Oportunidade` rejeitada é semanticamente próxima da consulta
+- **THEN** ela não aparece em `similar`
+
+#### Scenario: Privado de outro projeto
+- **WHEN** a busca é restrita ao projeto A e há um nó privado do projeto B muito similar
+- **THEN** o nó do projeto B não é devolvido
+
+### Requirement: Coleção própria
+O sistema MUST NOT apagar uma coleção do Qdrant que não seja `KNOWLEDGE_COLLECTION` ou que contenha
+pontos que não sejam nós do grafo, e SHALL exigir confirmação explícita para recriá-la.
+
+#### Scenario: Coleção estrangeira
+- **WHEN** a dimensão do modelo mudou e a coleção contém pontos sem `tipo_no` de um nó do grafo
+- **THEN** a recriação é recusada e nada é apagado

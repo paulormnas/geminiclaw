@@ -118,6 +118,9 @@ class IndexedGraphStore(GraphStore):
     def find_nodes(self, label: str, filters: dict[str, Any], limit: int = 50) -> list[Node]:
         return self._inner.find_nodes(label, filters, limit)
 
+    def list_nodes(self, label: str, *, after_id: str | None = None, limit: int = 200) -> list[Node]:
+        return self._inner.list_nodes(label, after_id=after_id, limit=limit)
+
     def neighbors(
         self, node_id: str, rels: list[str] | None, direction: str = "both", depth: int = 1
     ) -> Subgraph:

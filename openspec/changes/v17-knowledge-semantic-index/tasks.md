@@ -3,8 +3,8 @@
 ## 1. Índice
 - [x] 1.1 `estado_vetorizacao` em `schema.py` para os rótulos vetorizados.
 - [x] 1.2 `src/knowledge/semantic_index.py`: `canonical_text`, `upsert`, `reconcile`, `similar`.
-- [x] 1.3 Gancho pós-escrita no `GraphStore` (falha não desfaz o nó).
-- [x] 1.4 Reconciliação no início da sessão e `geminiclaw knowledge reindex`. (Entregue: `reconcile_on_session_start` em `semantic_runtime.py` e o comando; ligar o helper ao início de sessão do orquestrador depende da integração do grafo à sessão — nenhum código de sessão usa o grafo ainda.)
+- [x] 1.3 Gancho pós-escrita no `GraphStore` (falha não desfaz o nó): `IndexedGraphStore`, devolvido por `factory.open_graph_store()` (inclui as escritas do vocabulário).
+- [ ] 1.4 Reconciliação no início da sessão e `geminiclaw knowledge reindex`. Entregue: `reconcile_on_session_start` (`semantic_runtime.py`) e o comando `knowledge reindex`. **Pendente:** chamar o helper no início da sessão — nenhum código de sessão usa o grafo ainda; tarefa 5.4 em `v17-curator-agent/tasks.md`.
 
 ## 2. Domínios
 - [x] 2.1 Função de domínios de um nó em nível `area` e predicados "entre domínios"/"entre projetos".
@@ -32,5 +32,10 @@
 - [x] 6.8 Nenhum limite de quantidade: 50 vizinhos acima do limiar geram 50 candidatos.
 - [x] 6.9 `related_experience` ordena pelo rank definido.
 
-## 7. Fechamento
-- [x] 7.1 Ruff, testes, revisão nos 7 eixos, PR.
+## 7. Revisão do PR #100
+- [x] 7.0 I1 pendente obsoleto vira histórico; I2 reconciliação paginada (`list_nodes`); I3 só recria coleção própria; I4 filtros de status/visibilidade; I5 factory indexada e payload de status; S1–S3.
+- [ ] 7.0a Adiado: S4 lote/cache na varredura (`enqueue_many`, N+1) e S5 auditoria agregada de `estado_vetorizacao` em `upsert_many` (exige API de atualização em lote de campos de sistema no `GraphStore`).
+- [ ] 7.0b Pendente no Pi 5: validação com AGE, PostgreSQL e Qdrant reais (incl. `list_nodes` Cypher e o teste de integração da fila).
+
+## 8. Fechamento
+- [x] 8.1 Ruff, testes, revisão nos 7 eixos, PR.

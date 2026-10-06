@@ -20,7 +20,7 @@ from typing import Any
 from src import config
 from src.knowledge.calibration import suggest_adjustments
 from src.knowledge.candidates import CandidateGenerator
-from src.knowledge.graph_store import AgeGraphStore, GraphStore
+from src.knowledge.graph_store import GraphStore
 from src.knowledge.indexed_store import IndexedGraphStore
 from src.knowledge.semantic_index import IndexDimensionError, ReconcileReport, SemanticIndex
 from src.knowledge.similarity_queue import PostgresSimilarityQueue, SimilarityQueue
@@ -69,21 +69,14 @@ def build_runtime(
 
 
 def open_runtime() -> SemanticRuntime:
-    """Abre o ``AgeGraphStore`` com as variáveis de ``src.config`` e monta o runtime.
+    """Abre o grafo cru (``factory.open_raw_graph_store``) e monta o runtime do índice.
 
     Raises:
         RuntimeError: Se ``KNOWLEDGE_READER_DATABASE_URL`` não está configurada.
     """
-    if not config.KNOWLEDGE_READER_DATABASE_URL:
-        raise RuntimeError(
-            "KNOWLEDGE_READER_DATABASE_URL não configurada; defina-a no .env (ver .env.example)."
-        )
-    raw = AgeGraphStore(
-        config.KNOWLEDGE_GRAPH_NAME,
-        reader_conninfo=config.KNOWLEDGE_READER_DATABASE_URL,
-        read_timeout_ms=config.KNOWLEDGE_READ_TIMEOUT_MS,
-    )
-    return build_runtime(raw)
+    from src.knowledge.factory import open_raw_graph_store
+
+    return build_runtime(open_raw_graph_store())
 
 
 def reconcile_on_session_start(runtime: SemanticRuntime) -> ReconcileReport | None:
@@ -113,9 +106,10 @@ def format_stats(queue: SimilarityQueue, window_days: int) -> str:
         lines.append("  nenhum par revisado na janela.")
     for rate in rates:
         taxa = "n/d" if rate.taxa is None else f"{rate.taxa:.0%}"
+        nota = " [amostra insuficiente]" if rate.avaliados < config.SIM_CALIBRATION_MIN_SAMPLES else ""
         lines.append(
             f"  {rate.tipo:<11} faixa {rate.faixa:<11} {taxa:>5} "
-            f"({rate.confirmados} confirmado(s), {rate.descartados} descartado(s))"
+            f"({rate.confirmados} confirmado(s), {rate.descartados} descartado(s)){nota}"
         )
     suggestions = suggest_adjustments(rates)
     if suggestions:
@@ -158,13 +152,22 @@ def run_knowledge_command(argv: list[str], runtime: SemanticRuntime | None = Non
             report = runtime.index.reconcile()
         except IndexDimensionError as e:
             if not args.yes:
-                answer = input(f"{e}\nRecriar a coleção a partir do grafo? [s/N] ").strip().lower()
-                if answer not in ("s", "sim", "y", "yes"):
+                name = runtime.index.collection
+                try:
+                    answer = input(
+                        f"{e}\nIsto APAGA e recria a coleção '{name}' a partir do grafo. "
+                        f"Digite o nome da coleção para confirmar: "
+                    ).strip()
+                except EOFError:
+                    print("Sem terminal para confirmar; rode `geminiclaw knowledge reindex --yes` para confirmar.")
+                    return 1
+                if answer != name:
                     print("Operação cancelada.")
                     return 1
             report = runtime.index.reconcile(allow_recreate=True)
         print(
             f"Índice semântico: {report.checked} nó(s) examinado(s), {report.reindexed} revetorizado(s), "
+            f"{report.payload_refreshed} payload(s) atualizado(s), "
             f"{report.failed} falha(s) ({report.elapsed_seconds:.1f}s)."
         )
         return 1 if report.failed else 0

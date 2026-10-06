@@ -59,8 +59,19 @@ _CANONICAL_FIELDS: dict[str, tuple[str, ...]] = {
 }
 
 # Limite de nós lidos por rótulo na reconciliação (``find_nodes`` não pagina).
-_RECONCILE_NODE_LIMIT = 1_000_000
-_RECONCILE_BATCH = 64
+_RECONCILE_RETRIEVE_BATCH = 64
+
+# Pares/itens com estes ``status`` não participam de buscas nem de candidatos.
+IGNORED_STATUSES = frozenset({"substituida", "rejeitado", "rejeitada"})
+# Chaves de payload aceitas em ``filters`` (falha cedo em vez de devolver vazio).
+FILTERABLE_PAYLOAD_KEYS = frozenset(
+    {"tipo_no", "projeto_id", "dominios", "status", "visibilidade", "veredito", "criado_em",
+     "embedding_model", "embedding_version"}
+)
+
+
+class ForeignCollectionError(RuntimeError):
+    """A coleção alvo não pertence a esta aplicação; recusa explícita de apagá-la/recriá-la."""
 
 
 class IndexDimensionError(RuntimeError):
@@ -153,12 +164,14 @@ class ReconcileReport:
     Attributes:
         checked: Nós vetorizáveis examinados.
         reindexed: Nós (re)vetorizados com sucesso.
+        payload_refreshed: Nós cujo payload (status, visibilidade, projeto) divergia e foi atualizado.
         failed: Nós cuja vetorização falhou (continuam ``pendente``).
         elapsed_seconds: Duração.
     """
 
     checked: int = 0
     reindexed: int = 0
+    payload_refreshed: int = 0
     failed: int = 0
     elapsed_seconds: float = 0.0
 
@@ -195,12 +208,16 @@ class SemanticIndex:
         """
         self._store = store
         self._client = client
-        self._provider = provider or get_embedding_provider()
+        self._provider_arg = provider  # resolvido sob demanda (não carrega o modelo ao montar o índice)
         self.collection = collection or config.KNOWLEDGE_COLLECTION
         self._ready = False
         self._listeners: list[Callable[[Node], None]] = []
 
     # -- Infra ---------------------------------------------------------------
+
+    @property
+    def _provider(self) -> EmbeddingProvider:
+        return self._provider_arg or get_embedding_provider()
 
     @property
     def embedding_info(self) -> Any:
@@ -236,6 +253,7 @@ class SemanticIndex:
             return
         current = self._client.get_collection(self.collection).config.params.vectors.size
         if current != dim:
+            self._assert_owned_collection()
             if not allow_recreate:
                 raise IndexDimensionError(
                     f"A coleção '{self.collection}' tem dimensão {current}, mas o modelo atual produz {dim}. "
@@ -251,6 +269,36 @@ class SemanticIndex:
                 vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
             )
         self._ready = True
+
+    def _assert_owned_collection(self) -> None:
+        """Recusa apagar uma coleção que não seja desta aplicação.
+
+        Só a coleção ``config.KNOWLEDGE_COLLECTION`` pode ser recriada, e apenas se
+        todos os seus pontos têm ``tipo_no`` de um rótulo vetorizável (nenhum ponto
+        "estrangeiro", como os de uma coleção de documentos).
+
+        Raises:
+            ForeignCollectionError: Nome diferente de ``KNOWLEDGE_COLLECTION`` ou ponto estrangeiro.
+        """
+        if self.collection != config.KNOWLEDGE_COLLECTION:
+            raise ForeignCollectionError(
+                f"Recusado: '{self.collection}' não é a coleção do índice semântico "
+                f"('{config.KNOWLEDGE_COLLECTION}'); nada foi apagado."
+            )
+        foreign, _ = self._client.scroll(
+            collection_name=self.collection,
+            scroll_filter=Filter(
+                must_not=[FieldCondition(key="tipo_no", match=MatchAny(any=sorted(schema.VECTORIZABLE_LABELS)))]
+            ),
+            limit=1,
+            with_payload=False,
+        )
+        if foreign:
+            raise ForeignCollectionError(
+                f"Recusado: a coleção '{self.collection}' contém pontos que não são nós do grafo "
+                "(sem `tipo_no` de rótulo vetorizável); nada foi apagado. Aponte KNOWLEDGE_COLLECTION "
+                "para uma coleção própria."
+            )
 
     def _ensure_ready(self) -> None:
         if not self._ready:
@@ -380,22 +428,37 @@ class SemanticIndex:
         report = ReconcileReport()
         self.ensure_collection(allow_recreate=allow_recreate)
         info = self._provider.info
+        page_size = max(config.SIM_RECONCILE_BATCH_SIZE, 1)
         for label in sorted(schema.VECTORIZABLE_LABELS):
-            nodes = self._store.find_nodes(label, {}, limit=_RECONCILE_NODE_LIMIT)
-            for i in range(0, len(nodes), _RECONCILE_BATCH):
-                batch = nodes[i : i + _RECONCILE_BATCH]
-                stale = self._stale_nodes(batch, info)
+            after_id: str | None = None
+            while True:
+                # Páginas limitadas por cursor: memória constante, mesmo com milhares de nós.
+                batch = self._store.list_nodes(label, after_id=after_id, limit=page_size)
+                if not batch:
+                    break
+                after_id = batch[-1].id
+                stale, payload_stale = self._stale_nodes(batch, info)
                 report.checked += len(batch)
-                if not stale:
-                    continue
-                try:
-                    report.reindexed += self.upsert_many(stale)
-                except Exception as exc:  # noqa: BLE001 - lote falho fica pendente
-                    report.failed += len(stale)
-                    logger.warning(
-                        "Falha ao revetorizar lote na reconciliação; nós permanecem pendentes",
-                        extra={"extra": {"label": label, "size": len(stale), "error": str(exc)}},
-                    )
+                for node in payload_stale:
+                    try:
+                        self.refresh_payload(node)
+                        report.payload_refreshed += 1
+                    except Exception as exc:  # noqa: BLE001 - payload velho não invalida o grafo
+                        logger.warning(
+                            "Falha ao atualizar payload na reconciliação",
+                            extra={"extra": {"node_id": node.id, "error": str(exc)}},
+                        )
+                if stale:
+                    try:
+                        report.reindexed += self.upsert_many(stale)
+                    except Exception as exc:  # noqa: BLE001 - lote falho fica pendente
+                        report.failed += len(stale)
+                        logger.warning(
+                            "Falha ao revetorizar lote na reconciliação; nós permanecem pendentes",
+                            extra={"extra": {"label": label, "size": len(stale), "error": str(exc)}},
+                        )
+                if len(batch) < page_size:
+                    break
         report.elapsed_seconds = time.monotonic() - start
         logger.info(
             "Reconciliação do índice semântico concluída",
@@ -403,6 +466,7 @@ class SemanticIndex:
                 "extra": {
                     "checked": report.checked,
                     "reindexed": report.reindexed,
+                    "payload_refreshed": report.payload_refreshed,
                     "failed": report.failed,
                     "elapsed_seconds": round(report.elapsed_seconds, 3),
                 }
@@ -410,12 +474,14 @@ class SemanticIndex:
         )
         return report
 
-    def _stale_nodes(self, batch: list[Node], info: Any) -> list[Node]:
+    def _stale_nodes(self, batch: list[Node], info: Any) -> tuple[list[Node], list[Node]]:
+        """Separa nós a revetorizar (texto/modelo/estado) dos que só têm payload defasado."""
         points = {
             str(p.id): (p.payload or {})
             for p in self._client.retrieve(self.collection, ids=[n.id for n in batch], with_payload=True)
         }
-        stale = []
+        stale: list[Node] = []
+        payload_stale: list[Node] = []
         for node in batch:
             text = canonical_text(node.label, node.properties)
             if not text:
@@ -429,7 +495,11 @@ class SemanticIndex:
                 or payload.get("embedding_version") != info.version
             ):
                 stale.append(node)
-        return stale
+            elif any(
+                payload.get(key) != node.properties.get(key) for key in ("status", "visibilidade", "projeto_id")
+            ):
+                payload_stale.append(node)
+        return stale, payload_stale
 
     # -- Busca ---------------------------------------------------------------
 
@@ -447,22 +517,47 @@ class SemanticIndex:
         return list(vector)  # type: ignore[arg-type]
 
     @staticmethod
-    def _filter(labels: list[str], filters: dict[str, Any] | None) -> Filter:
-        must = [FieldCondition(key="tipo_no", match=MatchAny(any=list(labels)))]
+    def _filter(
+        labels: list[str], filters: dict[str, Any] | None, *, visible_to: str | None = None
+    ) -> Filter:
+        """Monta o filtro de payload.
+
+        Sempre exclui nós com ``status`` em ``IGNORED_STATUSES``. Com ``visible_to``
+        (``projeto_id`` do solicitante), só devolve nós do próprio projeto ou com
+        ``visibilidade="compartilhavel"`` (nada de outro projeto privado).
+
+        Raises:
+            ValueError: Chave de ``filters`` fora de ``FILTERABLE_PAYLOAD_KEYS``.
+        """
+        must: list[Any] = [FieldCondition(key="tipo_no", match=MatchAny(any=list(labels)))]
         for key, value in (filters or {}).items():
+            if key not in FILTERABLE_PAYLOAD_KEYS:
+                raise ValueError(
+                    f"Chave de filtro desconhecida: '{key}'. Válidas: {', '.join(sorted(FILTERABLE_PAYLOAD_KEYS))}."
+                )
             match = MatchAny(any=list(value)) if isinstance(value, (list, tuple, set)) else MatchValue(value=value)
             must.append(FieldCondition(key=key, match=match))
-        return Filter(must=must)
+        if visible_to is not None:
+            must.append(
+                Filter(
+                    should=[
+                        FieldCondition(key="projeto_id", match=MatchValue(value=visible_to)),
+                        FieldCondition(key="visibilidade", match=MatchValue(value="compartilhavel")),
+                    ]
+                )
+            )
+        must_not = [FieldCondition(key="status", match=MatchAny(any=sorted(IGNORED_STATUSES)))]
+        return Filter(must=must, must_not=must_not)
 
     def _query(
         self, vector: list[float], labels: list[str], filters: dict[str, Any] | None, min_score: float,
-        limit: int, offset: int,
+        limit: int, offset: int, visible_to: str | None = None,
     ) -> list[Hit]:
         self._ensure_ready()
         response = self._client.query_points(
             collection_name=self.collection,
             query=vector,
-            query_filter=self._filter(labels, filters),
+            query_filter=self._filter(labels, filters, visible_to=visible_to),
             score_threshold=min_score if min_score > 0 else None,
             limit=limit,
             offset=offset,
@@ -482,23 +577,34 @@ class SemanticIndex:
         filters: dict | None = None,
         min_score: float = 0.0,
         limit: int = 20,
+        projeto_id: str | None = None,
     ) -> list[Hit]:
         """Busca nós semanticamente próximos (buscar não grava nada).
+
+        Nós com ``status`` ``substituida``/``rejeitado``/``rejeitada`` nunca são devolvidos.
 
         Args:
             text: Texto de consulta (exclusivo com ``node_id``).
             node_id: Nó já indexado cujo vetor serve de consulta (o próprio nó é excluído).
             labels: Rótulos a considerar.
-            filters: Filtros de payload (igualdade; listas viram "qualquer de").
+            filters: Filtros de payload (igualdade; listas viram "qualquer de"); chaves
+                restritas a ``FILTERABLE_PAYLOAD_KEYS``.
             min_score: Similaridade mínima.
             limit: Máximo de resultados.
+            projeto_id: Se informado, restringe aos nós desse projeto ou
+                ``compartilhavel`` (visão de um solicitante sem acesso aos privados de
+                outros projetos). Se omitido, é a visão local do pesquisador.
 
         Returns:
             Hits ordenados por similaridade decrescente.
+
+        Raises:
+            ValueError: Chave de ``filters`` desconhecida.
         """
+        self._filter(labels, filters)  # valida as chaves antes de gastar embedding
         vector = self._vector_for(text, node_id)
         extra = 1 if node_id else 0
-        hits = self._query(vector, labels, filters, min_score, limit + extra, 0)
+        hits = self._query(vector, labels, filters, min_score, limit + extra, 0, visible_to=projeto_id)
         return [h for h in hits if h.node_id != node_id][:limit]
 
     def iter_neighbors(
@@ -522,7 +628,12 @@ class SemanticIndex:
     # -- Consulta híbrida ----------------------------------------------------
 
     def related_experience(
-        self, problema_id: str, limit: int = 10, *, now: datetime | None = None
+        self,
+        problema_id: str,
+        limit: int = 10,
+        *,
+        now: datetime | None = None,
+        restrict_to_visible: bool = False,
     ) -> list[ExperienceItem]:
         """"O que já funcionou ou falhou em problemas parecidos?" (Qdrant -> grafo -> ranking).
 
@@ -537,14 +648,36 @@ class SemanticIndex:
             problema_id: ``Problema`` de referência (deve estar indexado).
             limit: Máximo de itens devolvidos.
             now: Instante de referência (injetável em testes).
+            restrict_to_visible: Se True, só considera nós do projeto de ``problema_id`` ou
+                ``compartilhavel`` (nada de outro projeto privado) — usar quando o
+                consumidor não é o pesquisador local (ex.: registros remotos, ADR 013).
+                O padrão (False) é a visão local, em que todos os projetos são do mesmo
+                pesquisador.
+
+        Nós com ``status`` ``substituida``/``rejeitado``/``rejeitada`` são sempre ignorados.
 
         Returns:
             Itens ordenados por ``rank`` decrescente; um item por nó (o de maior rank).
         """
         now = now or datetime.now(timezone.utc)
+        origin = self._store.get_node(problema_id)
+        requester = origin.properties.get("projeto_id") if (origin and restrict_to_visible) else None
+        if restrict_to_visible and requester is None:
+            raise ValueError(f"Problema '{problema_id}' sem projeto: não é possível restringir a visibilidade.")
         similar = self.similar(
-            node_id=problema_id, labels=["Problema"], min_score=config.SIM_RELATED_MIN_CROSS, limit=50
+            node_id=problema_id, labels=["Problema"], min_score=config.SIM_RELATED_MIN_CROSS, limit=50,
+            projeto_id=requester,
         )
+
+        def _allowed(node: Node) -> bool:
+            if node.properties.get("status") in IGNORED_STATUSES:
+                return False
+            if requester is None:
+                return True
+            return (
+                node.properties.get("projeto_id") == requester
+                or node.properties.get("visibilidade") == "compartilhavel"
+            )
         best: dict[str, ExperienceItem] = {}
 
         def _consider(item: ExperienceItem) -> None:
@@ -564,6 +697,8 @@ class SemanticIndex:
                 if edge.dst_id != hit.node_id or edge.src_id not in nodes:
                     continue
                 other = nodes[edge.src_id]
+                if not _allowed(other):
+                    continue
                 if edge.rel_type in ("FUNCIONOU_PARA", "FALHOU_PARA") and other.label == "Abordagem":
                     kind = "funcionou" if edge.rel_type == "FUNCIONOU_PARA" else "falhou"
                     confidence = self._edge_confidence(edge.properties.get("descoberta_id"))
@@ -577,9 +712,11 @@ class SemanticIndex:
                 else:
                     continue
                 _consider(self._item(other, kind, hit, confidence, stamp, now))
-            projeto_id = problema.properties.get("projeto_id")
-            if projeto_id:
-                for decisao in self._store.find_nodes("Decisao", {"projeto_id": projeto_id}, limit=limit):
+            hit_projeto = problema.properties.get("projeto_id")
+            if hit_projeto:
+                for decisao in self._store.find_nodes("Decisao", {"projeto_id": hit_projeto}, limit=limit):
+                    if not _allowed(decisao):
+                        continue
                     _consider(
                         self._item(decisao, "decisao", hit, None, decisao.properties.get("criado_em"), now)
                     )

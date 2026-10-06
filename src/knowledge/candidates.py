@@ -15,7 +15,7 @@ from src import config
 from src.embeddings.base import text_hash
 from src.knowledge import domains
 from src.knowledge.graph_store import GraphStore, Node
-from src.knowledge.semantic_index import SemanticIndex, canonical_text
+from src.knowledge.semantic_index import IGNORED_STATUSES, SemanticIndex, canonical_text
 from src.knowledge.similarity_queue import (
     TIPO_DUPLICATA,
     TIPO_RELACIONADO,
@@ -28,8 +28,7 @@ logger = get_logger(__name__)
 
 # Rótulos cujos pares do mesmo rótulo geram candidatos.
 SAME_LABEL_CANDIDATE_LABELS = frozenset({"Projeto", "Problema", "Abordagem", "Descoberta", "Oportunidade"})
-# Pares envolvendo nós com estes ``status`` são ignorados.
-IGNORED_STATUSES = frozenset({"substituida", "rejeitado", "rejeitada"})
+# ``IGNORED_STATUSES`` (importado de ``semantic_index``): pares com estes ``status`` são ignorados.
 # Peso de evidência quando nenhum dos nós tem veredito.
 NO_EVIDENCE_WEIGHT = 0.5
 

@@ -22,6 +22,7 @@
 - [ ] 5.1 `agents/curator/agent.py` com a instrução do design (diretrizes do ADR 015 §10 literais).
 - [ ] 5.2 Papel `curator` no `ModelRouter` e em `AGENT_DEFINITIONS`; configs em `src/config.py`.
 - [ ] 5.3 `consolidate` e `close_session` chamados pelo `AutonomousLoop`; orçamento por execução.
+- [ ] 5.4 Chamar `reconcile_on_session_start` (`src/knowledge/semantic_runtime.py`, mudança `v17-knowledge-semantic-index`) no início da sessão, antes de qualquer consulta ao grafo, e abrir o grafo por `factory.open_graph_store()` (store indexado).
 
 ## 6. Testes
 - [ ] 6.1 `create_discovery` com duplicata ≥ 0,90 é recusada e devolve o ID existente.

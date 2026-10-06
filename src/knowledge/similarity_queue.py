@@ -30,6 +30,10 @@ STATUS_PENDENTE = "pendente"
 STATUS_CONFIRMADO = "confirmado"
 STATUS_DESCARTADO = "descartado"
 
+# Revisão automática: pares pendentes cujo texto mudou viram histórico (não entram na calibração).
+SYSTEM_REVIEWER = "sistema"
+MOTIVO_TEXTO_ALTERADO = "texto alterado"
+
 FAIXA_DUPLICATA = "duplicata"
 FAIXA_RELACIONADO = "relacionado"
 FAIXA_BAIXA = "baixa"
@@ -141,6 +145,10 @@ class SimilarityQueue(ABC):
         como histórico. Se o par ainda está **pendente** e a nova varredura
         traz ``entre_dominios``/``prioridade`` diferentes (ex.: o domínio foi
         atribuído depois da criação do nó), o registro pendente é atualizado.
+        Ao inserir um registro novo para um par cujo texto mudou, os registros
+        **pendentes** antigos do mesmo par/modelo viram ``descartado`` com
+        ``revisado_por="sistema"`` e motivo "texto alterado" (histórico, fora da
+        calibração): o Curator nunca revisa um par obsoleto.
 
         Returns:
             True se inseriu um novo registro; False se o par já estava registrado.
@@ -203,6 +211,17 @@ class InMemorySimilarityQueue(SimilarityQueue):
                 return False
             item = QueueItem(id=self._next_id, candidate=candidate, criado_em=self._clock())
             self._keys[key] = item.id
+            for old_id, old in list(self._items.items()):
+                oc = old.candidate
+                if (
+                    old.status == STATUS_PENDENTE
+                    and (oc.node_a, oc.node_b, oc.embedding_model, oc.embedding_version)
+                    == (candidate.node_a, candidate.node_b, candidate.embedding_model, candidate.embedding_version)
+                ):
+                    self._items[old_id] = replace(
+                        old, status=STATUS_DESCARTADO, revisado_em=self._clock(),
+                        revisado_por=SYSTEM_REVIEWER, motivo=MOTIVO_TEXTO_ALTERADO,
+                    )
             self._items[item.id] = item
             self._next_id += 1
             return True
@@ -230,7 +249,12 @@ class InMemorySimilarityQueue(SimilarityQueue):
         since = self._clock() - timedelta(days=window_days)
         counts: dict[tuple[str, str], list[int]] = {}
         for item in self._items.values():
-            if item.status == STATUS_PENDENTE or item.revisado_em is None or item.revisado_em < since:
+            if (
+                item.status == STATUS_PENDENTE
+                or item.revisado_em is None
+                or item.revisado_em < since
+                or item.revisado_por == SYSTEM_REVIEWER
+            ):
                 continue
             c = item.candidate
             slot = counts.setdefault((c.tipo, classify_band(c.tipo, c.score)), [0, 0])
@@ -289,7 +313,21 @@ class PostgresSimilarityQueue(SimilarityQueue):
                     c.embedding_model, c.embedding_version,
                 ),
             ).fetchone()
-        return row is not None and bool(row["inserido"])
+        inserted = row is not None and bool(row["inserido"])
+        if inserted:
+            with self._connection() as conn:
+                conn.execute(
+                    """
+                    UPDATE similarity_queue
+                    SET status = 'descartado', revisado_em = now(), revisado_por = %s, motivo = %s
+                    WHERE node_a = %s AND node_b = %s AND embedding_model = %s AND embedding_version = %s
+                      AND status = 'pendente'
+                      AND (text_hash_a, text_hash_b) <> (%s, %s)
+                    """,
+                    (SYSTEM_REVIEWER, MOTIVO_TEXTO_ALTERADO, c.node_a, c.node_b, c.embedding_model,
+                     c.embedding_version, c.text_hash_a, c.text_hash_b),
+                )
+        return inserted
 
     def next_batch(self, limit: int) -> list[QueueItem]:
         with self._connection() as conn:
@@ -352,6 +390,7 @@ class PostgresSimilarityQueue(SimilarityQueue):
                 FROM similarity_queue
                 WHERE status IN ('confirmado', 'descartado')
                   AND revisado_em >= now() - make_interval(days => %s)
+                  AND revisado_por IS DISTINCT FROM 'sistema'
                 GROUP BY 1, 2
                 ORDER BY 1, 2
                 """,

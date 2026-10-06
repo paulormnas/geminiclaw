@@ -40,7 +40,7 @@ class Env:
         self.raw = InMemoryGraphStore()
         self.provider = ControlledEmbeddingProvider(dimension=DIM)
         self.client = QdrantClient(location=":memory:")
-        self.index = SemanticIndex(self.raw, self.client, provider=self.provider, collection="knowledge_nodes_test")
+        self.index = SemanticIndex(self.raw, self.client, provider=self.provider)
         self.queue = InMemorySimilarityQueue()
         self.generator = CandidateGenerator(self.raw, self.index, self.queue, thresholds=SimilarityThresholds(
             duplicate_min=0.90, related_same_domain=0.70, related_cross=0.60,

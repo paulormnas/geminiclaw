@@ -262,6 +262,12 @@ SIM_CANDIDATE_SCAN_LIMIT = int(get_env("SIM_CANDIDATE_SCAN_LIMIT", default="200"
 SIM_CALIBRATION_WINDOW_DAYS = int(get_env("SIM_CALIBRATION_WINDOW_DAYS", default="30"))
 RECENCY_HALF_LIFE_DAYS = float(get_env("RECENCY_HALF_LIFE_DAYS", default="365"))
 CONFIDENCE_FLOOR = float(get_env("CONFIDENCE_FLOOR", default="0.05"))
+# Nós lidos do grafo por página na reconciliação (limita a memória no Pi 5).
+SIM_RECONCILE_BATCH_SIZE = int(get_env("SIM_RECONCILE_BATCH_SIZE", default="200"))
+# Amostra mínima (pares revisados na faixa) para sugerir ajuste de limiar.
+SIM_CALIBRATION_MIN_SAMPLES = int(get_env("SIM_CALIBRATION_MIN_SAMPLES", default="10"))
+# Liga o índice semântico ao GraphStore de produção (factory.open_graph_store).
+KNOWLEDGE_SEMANTIC_INDEX_ENABLED = get_env_bool("KNOWLEDGE_SEMANTIC_INDEX_ENABLED", default=True)
 
 # Quick Search Fallback
 QUICK_SEARCH_STRATEGY = get_env("QUICK_SEARCH_STRATEGY", default="ddg,ddg_lite,brave")

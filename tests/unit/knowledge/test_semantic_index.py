@@ -174,7 +174,7 @@ class TestGrafoFonteDaVerdade:
     def test_dimensao_diferente_exige_confirmacao_para_recriar(self, env):
         _vec(env, "titulo: P1")
         node_id = env.make("Problema", titulo="P1")
-        env.index._provider = ControlledEmbeddingProvider(  # noqa: SLF001
+        env.index._provider_arg = ControlledEmbeddingProvider(  # noqa: SLF001
             {"titulo: P1": [1.0] * 4}, dimension=4, model="controlled/outro"
         )
         env.index._ready = False  # noqa: SLF001

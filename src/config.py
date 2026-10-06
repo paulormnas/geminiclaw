@@ -167,6 +167,18 @@ PLAN_REJECTION_STALL_LIMIT = int(get_env("PLAN_REJECTION_STALL_LIMIT", default="
 ARTIFACT_MATCH_MODE = get_env("ARTIFACT_MATCH_MODE", default="tolerant").lower()  # tolerant | strict
 CIRCUIT_BREAKER_STALL_CYCLES = int(get_env("CIRCUIT_BREAKER_STALL_CYCLES", default="2"))
 
+# v16-agent-communication-eval — avaliação pós-execução da comunicação entre agentes.
+# O modelo do juiz é selecionado automaticamente (design §5.3); PROVIDER/MODEL são sobrescrita opcional.
+COMM_EVAL_JUDGE_PROVIDER = get_env("COMM_EVAL_JUDGE_PROVIDER", default="").lower()
+COMM_EVAL_JUDGE_MODEL = get_env("COMM_EVAL_JUDGE_MODEL", default="")
+COMM_EVAL_JUDGE_CANDIDATES = get_env("COMM_EVAL_JUDGE_CANDIDATES", default="")  # "provedor/modelo,..."
+COMM_EVAL_ALLOW_EXTERNAL_JUDGE = get_env_bool("COMM_EVAL_ALLOW_EXTERNAL_JUDGE", default=False)
+COMM_EVAL_MAX_USD = float(get_env("COMM_EVAL_MAX_USD", default="0"))
+COMM_EVAL_JUDGE_CONTEXT_CHARS = int(get_env("COMM_EVAL_JUDGE_CONTEXT_CHARS", default="400"))
+COMM_EVAL_CALIBRATION_SIZE = int(get_env("COMM_EVAL_CALIBRATION_SIZE", default="20"))
+COMM_EVAL_MIN_KAPPA = float(get_env("COMM_EVAL_MIN_KAPPA", default="0.6"))
+COMM_EVAL_LOOP_MIN_LENGTH = int(get_env("COMM_EVAL_LOOP_MIN_LENGTH", default="3"))
+
 # --- Orçamento de Uso da Sessão (V18 / Spec usage-limits) ---
 # UsageBudget/UsageTracker (src/usage.py) transformam estes limites em condições de
 # parada reais (não apenas avisos — ver OPERATIONAL_THRESHOLDS abaixo). Fonte única:
@@ -245,6 +257,28 @@ EMBEDDING_BATCH_SIZE = int(get_env("EMBEDDING_BATCH_SIZE", default="32"))
 # EMBEDDING_CACHE_DIR — ver scripts/setup_pi.sh). Usado em produção no Pi 5.
 EMBEDDING_OFFLINE = get_env_bool("EMBEDDING_OFFLINE", default=False)
 
+# Índice semântico do grafo de conhecimento (Roadmap V17 / ADR 015 §6,
+# openspec/changes/v17-knowledge-semantic-index). Coleção Qdrant com um ponto
+# por nó vetorizável (ID do ponto = ID do nó) e limiares das faixas de
+# similaridade. Os limiares dependem do modelo de embedding e são calibrados
+# pelo pesquisador (`geminiclaw knowledge stats` apenas sugere ajustes).
+KNOWLEDGE_COLLECTION = get_env("KNOWLEDGE_COLLECTION", default="knowledge_nodes")
+SIM_DUPLICATE_MIN = float(get_env("SIM_DUPLICATE_MIN", default="0.90"))
+SIM_RELATED_MIN_SAME_DOMAIN = float(get_env("SIM_RELATED_MIN_SAME_DOMAIN", default="0.70"))
+SIM_RELATED_MIN_CROSS = float(get_env("SIM_RELATED_MIN_CROSS", default="0.60"))
+SIM_CROSS_PROJECT_MIN_CONFIDENCE = float(get_env("SIM_CROSS_PROJECT_MIN_CONFIDENCE", default="0.30"))
+SIM_CROSS_DOMAIN_BOOST = float(get_env("SIM_CROSS_DOMAIN_BOOST", default="1.5"))
+SIM_CANDIDATE_SCAN_LIMIT = int(get_env("SIM_CANDIDATE_SCAN_LIMIT", default="200"))
+SIM_CALIBRATION_WINDOW_DAYS = int(get_env("SIM_CALIBRATION_WINDOW_DAYS", default="30"))
+RECENCY_HALF_LIFE_DAYS = float(get_env("RECENCY_HALF_LIFE_DAYS", default="365"))
+CONFIDENCE_FLOOR = float(get_env("CONFIDENCE_FLOOR", default="0.05"))
+# Nós lidos do grafo por página na reconciliação (limita a memória no Pi 5).
+SIM_RECONCILE_BATCH_SIZE = int(get_env("SIM_RECONCILE_BATCH_SIZE", default="200"))
+# Amostra mínima (pares revisados na faixa) para sugerir ajuste de limiar.
+SIM_CALIBRATION_MIN_SAMPLES = int(get_env("SIM_CALIBRATION_MIN_SAMPLES", default="10"))
+# Liga o índice semântico ao GraphStore de produção (factory.open_graph_store).
+KNOWLEDGE_SEMANTIC_INDEX_ENABLED = get_env_bool("KNOWLEDGE_SEMANTIC_INDEX_ENABLED", default=True)
+
 # Quick Search Fallback
 QUICK_SEARCH_STRATEGY = get_env("QUICK_SEARCH_STRATEGY", default="ddg,ddg_lite,brave")
 BRAVE_API_KEY = get_env("BRAVE_API_KEY", default="")
@@ -260,6 +294,16 @@ SKILL_DOCUMENT_PROCESSOR_ENABLED = get_env_bool("SKILL_DOCUMENT_PROCESSOR_ENABLE
 SKILL_CODE_ENABLED = get_env_bool("SKILL_CODE_ENABLED", default=True)
 CODE_SANDBOX_TIMEOUT_SECONDS = int(get_env("CODE_SANDBOX_TIMEOUT_SECONDS", default="60"))
 CODE_SANDBOX_MEMORY_LIMIT = get_env("CODE_SANDBOX_MEMORY_LIMIT", default="256m")
+# Limite da instalação de pacotes sob demanda no sandbox; ao estourar, a execução falha.
+CODE_SANDBOX_SETUP_TIMEOUT_SECONDS = int(get_env("CODE_SANDBOX_SETUP_TIMEOUT_SECONDS", default="300"))
+
+# Sandbox de código (v16-sandbox-slim-image / ADR 018)
+SANDBOX_IMAGE = get_env("SANDBOX_IMAGE", default="code-sandbox:latest")
+# Diretórios temporários por execução (ex.: /deps dos pacotes instalados sob demanda).
+SANDBOX_WORK_DIR = get_env("SANDBOX_WORK_DIR", default="store/sandbox_work")
+SANDBOX_PIDS_LIMIT = int(get_env("SANDBOX_PIDS_LIMIT", default="256"))
+SANDBOX_TMPFS_SIZE = get_env("SANDBOX_TMPFS_SIZE", default="256m")
+SANDBOX_INSTALL_LOG_TAIL_LINES = int(get_env("SANDBOX_INSTALL_LOG_TAIL_LINES", default="40"))
 
 # Health Monitoring (S7)
 HEALTH_CHECK_ENABLED = get_env_bool("HEALTH_CHECK_ENABLED", default=True)
@@ -305,6 +349,26 @@ OPERATIONAL_THRESHOLD_WAIT_SECONDS = int(get_env("OPERATIONAL_THRESHOLD_WAIT_SEC
 # Similaridade textual mínima (0-1, via difflib) para considerar duas perguntas ao
 # pesquisador "a mesma dúvida" e reutilizar a resposta anterior sem perguntar de novo.
 ASK_RESEARCHER_DEDUP_SIMILARITY = float(get_env("ASK_RESEARCHER_DEDUP_SIMILARITY", default="0.85"))
+
+# V18/researcher-consult — Researcher consultor nos modos `semi`/`auto` (ADR 012 §8).
+# Desligado, `ask_researcher` volta a devolver a suposição documentada.
+RESEARCHER_CONSULT_ENABLED = get_env_bool("RESEARCHER_CONSULT_ENABLED", default=True)
+# Desliga só as ferramentas web do consultor (ele responde com o que sabe).
+RESEARCHER_CONSULT_WEB_ENABLED = get_env_bool("RESEARCHER_CONSULT_WEB_ENABLED", default=True)
+RESEARCHER_CONSULT_MAX_PER_SESSION = int(get_env("RESEARCHER_CONSULT_MAX_PER_SESSION", default="10"))
+RESEARCHER_CONSULT_MAX_SEARCHES = int(get_env("RESEARCHER_CONSULT_MAX_SEARCHES", default="3"))
+RESEARCHER_CONSULT_MAX_READS = int(get_env("RESEARCHER_CONSULT_MAX_READS", default="2"))
+RESEARCHER_CONSULT_TIMEOUT_SECONDS = float(get_env("RESEARCHER_CONSULT_TIMEOUT_SECONDS", default="120"))
+# Tamanho máximo do texto enviado a um buscador público (guarda de consulta).
+RESEARCHER_CONSULT_QUERY_MAX_CHARS = int(get_env("RESEARCHER_CONSULT_QUERY_MAX_CHARS", default="120"))
+# Hosts (sufixos de domínio, separados por vírgula) que `web_reader` pode ler nas consultas.
+# Vazio = sem lista (padrão); a allowlist ligada por padrão depende da `v18.5-egress-gate`.
+RESEARCHER_CONSULT_ALLOWED_HOSTS = tuple(
+    h.strip().lower() for h in (get_env("RESEARCHER_CONSULT_ALLOWED_HOSTS", default="") or "").split(",") if h.strip()
+)
+# Se verdadeiro, `web_reader` só lê hosts que apareceram em resultado de `quick_search` da mesma
+# consulta (fecha o canal de saída por URL pós-injeção). Padrão desligado.
+RESEARCHER_CONSULT_READ_ONLY_SEARCHED_HOSTS = get_env_bool("RESEARCHER_CONSULT_READ_ONLY_SEARCHED_HOSTS", default=False)
 
 # LLM Response Cache
 LLM_CACHE_ENABLED = get_env_bool("LLM_CACHE_ENABLED", default=True)
@@ -360,6 +424,9 @@ KNOWLEDGE_GRAPH_NAME = get_env("KNOWLEDGE_GRAPH_NAME", default="knowledge")
 # a leitura tardia em AgeGraphStore levanta erro explícito se ausente.
 KNOWLEDGE_READER_DATABASE_URL = get_env("KNOWLEDGE_READER_DATABASE_URL")
 KNOWLEDGE_READ_TIMEOUT_MS = int(get_env("KNOWLEDGE_READ_TIMEOUT_MS", default="5000"))
+# Similaridade semântica mínima para um termo livre ser resolvido a um termo
+# canônico do vocabulário controlado (faixa de duplicata, v17-controlled-vocabulary).
+VOCAB_MATCH_THRESHOLD = float(get_env("VOCAB_MATCH_THRESHOLD", default="0.90"))
 
 # Identificador estável deste computador (fator de independência, ADR 015 §9).
 # Gerado uma vez e persistido em ~/.config/geminiclaw/node_id (ou $XDG_CONFIG_HOME).

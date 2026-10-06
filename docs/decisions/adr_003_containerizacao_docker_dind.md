@@ -38,14 +38,19 @@ client.containers.run(
 
 Limites de recursos são calibrados para o Raspberry Pi 5 (8GB RAM, ARM Cortex-A76).
 
-### 2. Sandbox de Código via `put_archive`/`get_archive` (Sem Bind Mounts)
+### 2. Sandbox de Código via `put_archive` e Bind Mount Restrito de `/outputs`
 
-O `PythonSandbox` (`src/skills/code/sandbox.py`) executa código Python em containers isolados usando transferência de arquivos por stream (tar archive):
+> **Texto ajustado em 2026-10-06 (ADR 018 §1 a §3, mudança `v16-sandbox-slim-image`, aprovado pelo
+> pesquisador).** A versão original deste item (`get_archive`, sem bind mounts, sem volumes) está
+> preservada na seção "Causa Raiz" abaixo como contexto histórico.
 
-- **`put_archive`:** Injeta o script Python dentro do container antes da execução, sem bind mounts.
-- **`get_archive`:** Extrai os artefatos gerados após a execução.
-- **Sem rede:** `network_disabled=True` — o container de código não tem acesso à rede.
-- **Sem volumes persistentes:** O filesystem do container é efêmero; apenas os artefatos extraídos via `get_archive` são preservados no `output_dir` da sessão.
+O `PythonSandbox` (`src/skills/code/sandbox.py`) executa código Python em containers isolados:
+
+- **`put_archive`:** Injeta o script Python (e os arquivos auxiliares) em `/outputs` antes da execução.
+- **Bind mount de `/outputs`:** Somente a pasta da subtarefa (`outputs/<sessão>/<tarefa>/`) é montada, com leitura e escrita, e é a **única via de retorno** dos artefatos (não há mais `get_archive`). O container roda com o UID/GID do orquestrador, então os arquivos pertencem ao usuário do host, sem `chmod 777` nem `chown` por root. Links simbólicos que apontam para fora da pasta são removidos ao fim de cada execução.
+- **Sem privilégios:** `cap_drop=ALL`, `no-new-privileges`, limite de processos, sistema de arquivos raiz somente leitura e `/tmp` em `tmpfs`; nenhum comando roda como root.
+- **Rede:** desligada por padrão (`network_disabled=True`). Quando há pacotes sob demanda, a rede fica ligada só durante a instalação (em `/deps`, sem root); depois, o container é desconectado de todas as redes e a desconexão é confirmada antes de o script rodar (fail-closed).
+- **Efêmero:** O filesystem do container é descartado; ficam apenas os artefatos da pasta montada.
 
 ### 3. Rede Isolada
 

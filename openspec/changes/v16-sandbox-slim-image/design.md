@@ -94,6 +94,19 @@ client.containers.run(
    `container.attrs["NetworkSettings"]["Networks"]`), recarrega o estado e confirma que a lista
    ficou vazia. Qualquer falha → execução abortada com erro (fail-closed). Só então o script roda.
 
+**Decisões da revisão de segurança (2026-10-06, PR #99).** (a) A instalação usa
+`--only-binary :all:`: nenhum `setup.py` ou backend de build roda com rede; um pacote que só tem
+código-fonte falha de forma explícita (`install_failed`, mensagem acionável). Decisão de adotar,
+com o custo de recusar pacotes sem wheel. (b) A instalação roda com `--no-config`,
+`UV_NO_CONFIG=1` e workdir `/tmp`, para o código gerado não controlar o índice via `uv.toml`.
+(c) A desconexão de rede ocorre antes de qualquer código no container além do `uv`; a listagem
+de pacotes usa `python -I` com workdir `/tmp`. (d) `script.py` é injetado só depois da
+desconexão. (e) O sandbox recusa UID 0. (f) O container é encerrado antes da varredura de links
+simbólicos e arquivos especiais. (g) `session_id` e `task_name` seguem `^[A-Za-z0-9._-]+$`, sem
+`..`, e o caminho resolvido precisa ficar sob o diretório de saída. (h) `/tmp` em `tmpfs` com
+`noexec,nosuid,nodev` (o `uv` só grava arquivos; wheels não são executados de lá),
+`memswap_limit` igual a `mem_limit`, no máximo 20 pacotes de 200 caracteres.
+
 Limite conhecido: o código de instalação (ex.: `setup.py` de pacote sem wheel) roda com rede e
 enxerga `/outputs` da subtarefa. A separação em containers por fase, que fecha esse caso, é da
 `v18.5-sandbox-phases`.

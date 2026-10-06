@@ -277,8 +277,10 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
                 required=True, enum=("grande_area", "area", "subarea", "especialidade")
             ),
             "sinonimos": PropertySchema(),
+            "sinonimos_candidatos": PropertySchema(),
             "codigo_cnpq": PropertySchema(),
-            "status": PropertySchema(required=True, enum=("candidato", "aprovado")),
+            "status": PropertySchema(required=True, enum=("candidato", "aprovado", "rejeitado")),
+            "motivo_decisao": PropertySchema(),
         },
     ),
     "Metrica": NodeSchema(
@@ -290,7 +292,9 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             "unidade": PropertySchema(),
             "faixa": PropertySchema(),
             "familia": PropertySchema(),
-            "status": PropertySchema(required=True, enum=("candidato", "aprovado")),
+            "sinonimos_candidatos": PropertySchema(),
+            "status": PropertySchema(required=True, enum=("candidato", "aprovado", "rejeitado")),
+            "motivo_decisao": PropertySchema(),
         },
     ),
 }
@@ -392,3 +396,31 @@ def find_relation_schema(src_label: str, rel_type: str, dst_label: str) -> Relat
 
 
 RELATION_TYPES: frozenset[str] = frozenset(r.rel_type for r in RELATION_SCHEMAS)
+
+
+# ---------------------------------------------------------------------------
+# Vetorização (v17-knowledge-semantic-index / ADR 015 §6)
+# ---------------------------------------------------------------------------
+
+# Rótulos com ponto no Qdrant (``Sessao``, ``Insumo``, ``Experimento`` e
+# ``Resultado`` não são vetorizados).
+VECTORIZABLE_LABELS: frozenset[str] = frozenset(
+    {"Projeto", "Problema", "Hipotese", "Abordagem", "Descoberta", "Decisao", "Oportunidade", "Dominio", "Metrica"}
+)
+ESTADO_VETORIZACAO_PENDENTE = "pendente"
+ESTADO_VETORIZACAO_OK = "ok"
+
+# Propriedade de sistema ``estado_vetorizacao``: gravada apenas pela camada do
+# índice semântico (``src.knowledge.indexed_store``), nunca pelo chamador.
+for _label in VECTORIZABLE_LABELS:
+    NODE_SCHEMAS[_label] = NodeSchema(
+        _label,
+        {
+            **NODE_SCHEMAS[_label].properties,
+            "estado_vetorizacao": PropertySchema(
+                enum=(ESTADO_VETORIZACAO_PENDENTE, ESTADO_VETORIZACAO_OK)
+            ),
+        },
+    )
+
+del _label

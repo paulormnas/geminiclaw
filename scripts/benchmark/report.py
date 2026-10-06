@@ -65,8 +65,50 @@ def render_interactions(results: list[dict]) -> str:
     return "\n\n".join(blocks)
 
 
+def _pct(value: float | None) -> str:
+    return "n/d" if value is None else f"{value * 100:.0f}%"
+
+
+def render_communication(results: list[dict]) -> str:
+    """Tabela de comunicação por combinação: revisor contra a verdade, resolução, laços e juiz."""
+    header = (
+        "| Combinação | Revisões | Falso reprovado | Falso aprovado | Indeterminadas | Resolução (c/ cauda) | "
+        "Maior laço (Validator/revisor) | Planos reparados | Juiz (selo) |\n"
+        "|---|---|---|---|---|---|---|---|---|"
+    )
+    rows = [header]
+    for r in results:
+        ev = r.get("comm_eval")
+        if not ev or "error" in ev:
+            continue
+        conf = ev["reviewer"]["confusion"]
+        res, loops = ev["resolution"], ev["resolution"]["loops"]
+        repairs = ev["planner_repairs"]
+        judge = ev.get("ask_researcher")
+        if judge is None:
+            judge_cell = "-"
+        elif "error" in judge:
+            judge_cell = f"erro: {judge['error'][:60]}"
+        else:
+            judge_cell = f"{judge.get('mean_scores', {})} ({judge.get('scores_label', 'não calibrado')})"
+        kappa = (judge or {}).get("calibration", {}).get("kappa")
+        if kappa:
+            judge_cell += f" kappa={kappa}"
+        rows.append(
+            f"| {r['name']} | {ev['reviewer']['reviews']} | {_pct(conf['false_reject_rate'])} | "
+            f"{_pct(conf['false_accept_rate'])} | {_pct(conf['indeterminate_share'])} | "
+            f"{_pct(res['subtask']['resolution_rate_with_tail'])} | "
+            f"{loops['validator']['max_length']}/{loops['reviewer']['max_length']} | "
+            f"{repairs['with_repair']}/{repairs['plans']} | {judge_cell} |"
+        )
+    return "\n".join(rows)
+
+
 if __name__ == "__main__":
     loaded = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     print(render(loaded))
     print()
     print(render_interactions(loaded))
+    if any(r.get("comm_eval") for r in loaded):
+        print()
+        print(render_communication(loaded))

@@ -110,7 +110,14 @@ QUANDO USAR `ask_researcher` (Roadmap V15.3 / Spec G5):
   bloqueante, sem padrão razoável para adotar)
 - USO INVÁLIDO: "Devo usar 80/20 ou 70/30 para o split treino/teste?" (existe padrão estabelecido —
   adote 80/20, documente em `scientific_rationale`, não pergunte)
-- Nos modos `semi`/`auto`, `ask_researcher` nunca bloqueia — documenta a suposição automaticamente.
+- Nos modos `semi`/`auto`, `ask_researcher` nunca bloqueia: o Researcher consultor responde no lugar do
+  pesquisador (pode consultar documentação na web) e a resposta chega com confiança, fontes e
+  suposições. Você continua livre para decidir: registre em `scientific_rationale` que usou a consulta.
+  Se a resposta disser que a decisão é reservada ao pesquisador, siga com a suposição documentada e
+  não execute essa decisão. Aprovar Oportunidade, confirmar Problema, aprovar termo de vocabulário,
+  autorizar escrita em instrumento e ativar o modo sem limite são sempre do pesquisador: ao perguntar
+  sobre elas, preencha `decisao_reservada`. Nunca coloque valores, nomes de arquivos ou trechos dos
+  dados do projeto na pergunta além do necessário.
 
 DIRETRIZES DE REPLANEJAMENTO (quando receber 'MODO: REPLAN'):
 1. Subtarefas já marcadas como concluídas com sucesso NUNCA devem ser repetidas ou redefinidas.

@@ -40,14 +40,16 @@ e filas em memória, mantendo o orquestrador como mediador e o registro de todas
 ### 2. Container apenas para executar código
 
 Containers são mantidos **exclusivamente para executar o código implementado pelo
-Developer**. O sandbox do ADR 003 §2 permanece: `put_archive`/`get_archive`, sem bind mounts,
-usuário non-root, rede desabilitada e limites de CPU/RAM.
+Developer**. O sandbox do ADR 003 §2 permanece, na forma ajustada em 2026-10-06 (ADR 018;
+`v16-sandbox-slim-image`): script injetado por `put_archive`, **somente** a pasta da subtarefa
+montada em `/outputs` (bind mount de leitura e escrita, única via de retorno dos artefatos),
+usuário não-root (UID/GID do orquestrador), sem capacidades, raiz somente leitura, rede
+desabilitada (ligada só durante a instalação de pacotes e desconectada antes do script) e
+limites de CPU/RAM/processos.
 
-> **Nota de 2026-10-01 (ADR 018):** o sandbox real diverge deste parágrafo e o ADR 018 aprovou o
-> rumo de corrigi-lo. O diretório `/outputs` **continua montado** (necessário para exportar código,
-> gráficos e artefatos), a rede precisa estar disponível para instalar pacotes e o usuário
-> deve ser não-root. Hoje a implementação ainda roda como root e usa `chmod 777`. O texto acima
-> descreve o alvo anterior e será revisado quando as specs do ADR 018 forem implementadas.
+> **Nota de 2026-10-01 (ADR 018), resolvida em 2026-10-06:** o texto anterior ("`put_archive`/
+> `get_archive`, sem bind mounts") divergia do sandbox real e foi substituído pelo parágrafo acima,
+> que reflete a decisão do ADR 018 §1 a §3 implementada pela `v16-sandbox-slim-image`.
 
 ### 3. Nenhum código gerado roda no computador principal
 

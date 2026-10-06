@@ -270,10 +270,12 @@ def _get_agent_instruction(base_instruction: str) -> str:
         ),
         "semi": (
             "Modo SEMI-AUTÔNOMO. NUNCA bloqueie aguardando resposta do pesquisador. Quando "
-            "faltar contexto, documente a suposição adotada (e por quê) e continue a execução."
+            "faltar contexto, `ask_researcher` (quando disponível) aciona o Researcher consultor, "
+            "que responde sem bloquear; documente a decisão e o uso da consulta e continue."
         ),
         "auto": (
-            "Modo TOTALMENTE AUTÔNOMO. Não há pesquisador disponível para consulta. Resolva "
+            "Modo TOTALMENTE AUTÔNOMO. Não há pesquisador disponível; `ask_researcher` (quando "
+            "disponível) aciona o Researcher consultor, que responde no lugar dele. Resolva "
             "incertezas autonomamente, usando busca web técnica quando necessário, e documente "
             "todas as decisões tomadas sem confirmação humana."
         ),

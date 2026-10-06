@@ -1,0 +1,5 @@
+codigo_cnpq,termo,nivel,codigo_pai
+9.00.00.00-0,FIXTURE Grande Area Ficticia,grande_area,
+9.01.00.00-1,FIXTURE Area Ficticia,area,9.00.00.00-0
+9.01.01.00-2,Química Orgânica,subarea,9.01.00.00-1
+9.01.01.01-3,FIXTURE Especialidade Ficticia,especialidade,9.01.01.00-2

@@ -36,7 +36,7 @@ from src.agents.validator_agent import ValidatorAgent
 from src.agent_runtime.context import AgentContext
 from src.agent_runtime.runtime import AgentRuntime
 from src.context_loader import ContextLoader, ContextBundle
-from src.usage import UsageBudget
+from src.usage import UsageBudget, UsageTracker
 
 logger = get_logger(__name__)
 
@@ -150,6 +150,14 @@ class Orchestrator:
         self._session_agent_run_counts: dict[str, int] = {}
         self._session_planning_run_counts: dict[str, int] = {}
         self._session_plan_size: dict[str, int] = {}
+        # V18/researcher-consult — resumo do plano aprovado, rastreadores de uso e contagem de
+        # consultas por sessão mestra; provedor e skills do consultor são injetáveis (testes).
+        self._session_plan_summary: dict[str, str] = {}
+        self._usage_trackers: dict[str, UsageTracker] = {}
+        self._session_consult_counts: dict[str, int] = {}
+        self.consult_provider: Any = None
+        self.consult_search_skill: Any = None
+        self.consult_reader_skill: Any = None
         # Modo efetivo por sessão mestra: tarefas criadas sem `mode` (ex.: o planejamento do Researcher)
         # herdam o modo da sessão em vez do padrão global (que é `assisted` e bloquearia em stdin).
         self._session_modes: dict[str, str] = {}
@@ -501,16 +509,24 @@ class Orchestrator:
 
         Usa ``difflib.SequenceMatcher`` como heurística de similaridade textual (sem
         dependência de embeddings/Qdrant, suficiente para o caso de uso: perguntas quase
-        idênticas repetidas na mesma sessão).
+        idênticas repetidas na mesma sessão). Só interações que tiveram resposta real
+        (do pesquisador ou do consultor) são reaproveitadas; suposições e pendências não.
         """
         import difflib
         from src.config import ASK_RESEARCHER_DEDUP_SIMILARITY
+        from src.research_consult import RESPONDIDO_PESQUISADOR, RESPONDIDO_RESEARCHER
 
         session = self.session_manager.get(session_key)
         if session is None:
             return None
         interactions = session.payload.get("researcher_interactions", []) or []
         for interaction in interactions:
+            # Registros anteriores à V18 não têm `respondido_por`: eram respostas do pesquisador.
+            if interaction.get("respondido_por", RESPONDIDO_PESQUISADOR) not in (
+                RESPONDIDO_PESQUISADOR,
+                RESPONDIDO_RESEARCHER,
+            ):
+                continue
             prior_question = interaction.get("question", "")
             ratio = difflib.SequenceMatcher(None, question.lower(), prior_question.lower()).ratio()
             if ratio >= ASK_RESEARCHER_DEDUP_SIMILARITY:
@@ -525,29 +541,215 @@ class Orchestrator:
         options: list[str],
         answer: str,
         task: AgentTask,
-    ) -> None:
-        """Persiste uma interação ask_researcher no payload da sessão (Roadmap V15.3 / Spec G5)."""
+        *,
+        respondido_por: str = "pesquisador",
+        context: str = "",
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Persiste uma interação ask_researcher no payload da sessão (Roadmap V15.3 / Spec G5;
+        campos de auditoria da V18, design §6).
+
+        Returns:
+            O registro gravado.
+        """
         from datetime import datetime, timezone
 
         session = self.session_manager.get(session_key)
         payload = dict(session.payload) if session is not None else {}
         interactions = list(payload.get("researcher_interactions", []))
-        interactions.append(
-            {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "question": question,
-                "why_cant_proceed": why_cant_proceed,
-                "options": options,
-                "researcher_response": answer,
-                "subtask_name": task.task_name,
-            }
-        )
+        record = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "respondido_por": respondido_por,
+            "agente": task.agent_id,
+            "subtask_name": task.task_name,
+            "execution_id": session_key,
+            "question": question,
+            "context": context,
+            "why_cant_proceed": why_cant_proceed,
+            "options": options,
+            "researcher_response": answer,
+            **(extra or {}),
+        }
+        interactions.append(record)
         payload["researcher_interactions"] = interactions
         self.session_manager.update(session_key, payload=payload)
         logger.info(
             "Interação ask_researcher persistida",
-            extra={"session_id": session_key, "subtask_name": task.task_name},
+            extra={"session_id": session_key, "subtask_name": task.task_name, "respondido_por": respondido_por},
         )
+        return record
+
+    def register_usage_tracker(self, master_session_id: str, tracker: UsageTracker) -> None:
+        """Registra o ``UsageTracker`` da sessão (criado pelo ``AutonomousLoop``), para que o
+        consultor respeite o orçamento de tokens/tempo (V18 / Spec `researcher-consult`)."""
+        self._usage_trackers[master_session_id] = tracker
+
+    def _consult_provider(self) -> Any:
+        if self.consult_provider is not None:
+            return self.consult_provider
+        from src.model_router import ModelRouter
+
+        return ModelRouter.get_provider("researcher")
+
+    async def _consult_researcher_core(
+        self,
+        question: str,
+        context: str,
+        why_cant_proceed: str,
+        options: list[str],
+        decisao_reservada: str | None,
+        task: AgentTask,
+        master_session_id: str | None,
+    ) -> str:
+        """Núcleo de ``ask_researcher`` nos modos ``semi``/``auto`` (V18 / Spec
+        `researcher-consult`, design §1): decisão reservada, deduplicação, limites, Researcher
+        consultor, registro e telemetria. Nunca lê o terminal e nunca propaga falha do consultor:
+        qualquer impedimento vira a suposição documentada, com ``motivo_fallback`` registrado.
+
+        Returns:
+            O texto devolvido ao agente que perguntou.
+        """
+        import asyncio as _asyncio
+
+        from agents.researcher.consult import format_answer, run_consult
+        from src import config as cfg
+        from src.research_consult import (
+            PENDENTE_PESQUISADOR,
+            RESERVED_MESSAGE,
+            RESPONDIDO_RESEARCHER,
+            RESPONDIDO_SUPOSICAO,
+            assumption_text,
+            classify_reserved,
+        )
+        from src.research_consult.query_guard import protected_file_names
+
+        session_key = master_session_id or task.task_name or "unknown"
+        mode = task.mode or self._session_modes.get(session_key, "") or "auto"
+
+        def _finish(
+            respondido_por: str,
+            answer: str,
+            motivo: str | None,
+            consulta: dict[str, Any] | None = None,
+            reutilizada: bool = False,
+        ) -> str:
+            extra: dict[str, Any] = {"motivo_fallback": motivo}
+            if reutilizada:
+                extra["reutilizada"] = True
+            if consulta:
+                extra["consulta"] = consulta
+            record = self._record_researcher_interaction(
+                session_key, question, why_cant_proceed, options, answer, task,
+                respondido_por=respondido_por, context=context, extra=extra,
+            )
+            try:
+                get_telemetry().record_agent_event(
+                    execution_id=session_key,
+                    session_id=session_key,
+                    agent_id=task.agent_id,
+                    event_type="researcher_consult",
+                    task_name=task.task_name or None,
+                    payload={
+                        k: record[k]
+                        for k in ("respondido_por", "agente", "subtask_name", "question", "motivo_fallback")
+                    }
+                    | ({"consulta": consulta} if consulta else {}),
+                )
+            except Exception as exc:  # telemetria nunca derruba a pergunta do agente
+                logger.warning("Falha ao gravar evento researcher_consult", extra={"error": str(exc)})
+            return answer
+
+        # 1. Decisão reservada ao humano: nunca responder (valor desconhecido também é reservado).
+        # Além da autodeclaração do agente, classifica a pergunta por palavras-chave (fail-closed).
+        decisao_reservada = decisao_reservada or classify_reserved(question)
+        if decisao_reservada:
+            return _finish(PENDENTE_PESQUISADOR, RESERVED_MESSAGE, None, {"decisao_reservada": decisao_reservada})
+
+        # 2. Consultor desligado.
+        if not cfg.RESEARCHER_CONSULT_ENABLED:
+            return _finish(RESPONDIDO_SUPOSICAO, assumption_text(mode, question), "desligado")
+
+        # 3. Pergunta similar já respondida.
+        cached_answer = self._find_similar_researcher_answer(session_key, question)
+        if cached_answer is not None:
+            logger.info(
+                "ask_researcher: pergunta similar já respondida nesta sessão — reutilizando resposta",
+                extra={"question": question[:100], "session_id": session_key},
+            )
+            return _finish(RESPONDIDO_RESEARCHER, cached_answer, None, reutilizada=True)
+
+        # 4. Limite de consultas e orçamento.
+        if self._session_consult_counts.get(session_key, 0) >= cfg.RESEARCHER_CONSULT_MAX_PER_SESSION:
+            return _finish(
+                RESPONDIDO_SUPOSICAO, assumption_text(mode, question, "limite_consultas"), "limite_consultas"
+            )
+        tracker = self._usage_trackers.get(session_key)
+        if tracker is None:
+            logger.warning(
+                "Consulta ao Researcher sem UsageTracker: orçamento de tokens/tempo não é verificado",
+                extra={"session_id": session_key},
+            )
+        elif tracker.check().should_close:
+            return _finish(RESPONDIDO_SUPOSICAO, assumption_text(mode, question, "orcamento"), "orcamento")
+        # A vaga é reservada antes do await: consultas concorrentes não furam o limite.
+        self._session_consult_counts[session_key] = self._session_consult_counts.get(session_key, 0) + 1
+
+        # 5. Consultor, com timeout.
+        web = cfg.RESEARCHER_CONSULT_WEB_ENABLED
+        try:
+            if web:
+                if self.consult_search_skill is None:
+                    from src.skills.search_quick.skill import QuickSearchSkill
+
+                    self.consult_search_skill = QuickSearchSkill()
+                if self.consult_reader_skill is None:
+                    from src.skills.web_reader.skill import WebReaderSkill
+
+                    self.consult_reader_skill = WebReaderSkill()
+            outcome = await _asyncio.wait_for(
+                run_consult(
+                    self._consult_provider(),
+                    question=question,
+                    context=context,
+                    why_cant_proceed=why_cant_proceed,
+                    options=options,
+                    agent_role=task.agent_id,
+                    subtask_name=task.task_name,
+                    plan_summary=self._session_plan_summary.get(session_key, ""),
+                    protected_names=protected_file_names(self.output_manager.base_dir / session_key),
+                    web_enabled=web,
+                    search_skill=self.consult_search_skill,
+                    reader_skill=self.consult_reader_skill,
+                    max_searches=cfg.RESEARCHER_CONSULT_MAX_SEARCHES,
+                    max_reads=cfg.RESEARCHER_CONSULT_MAX_READS,
+                    query_max_chars=cfg.RESEARCHER_CONSULT_QUERY_MAX_CHARS,
+                    allowed_hosts=cfg.RESEARCHER_CONSULT_ALLOWED_HOSTS,
+                    restrict_reads_to_searched_hosts=cfg.RESEARCHER_CONSULT_READ_ONLY_SEARCHED_HOSTS,
+                ),
+                timeout=cfg.RESEARCHER_CONSULT_TIMEOUT_SECONDS,
+            )
+        except _asyncio.TimeoutError:
+            logger.warning("Consulta ao Researcher excedeu o timeout", extra={"session_id": session_key})
+            return _finish(RESPONDIDO_SUPOSICAO, assumption_text(mode, question, "timeout"), "timeout")
+        except Exception as exc:
+            logger.warning("Consulta ao Researcher falhou", extra={"session_id": session_key, "error": str(exc)})
+            return _finish(
+                RESPONDIDO_SUPOSICAO, assumption_text(mode, question, "erro"), "erro", {"erro": str(exc)[:100]}
+            )
+
+        consulta = {
+            "resposta": outcome.resposta,
+            "buscas_realizadas": outcome.buscas_realizadas,
+            "leituras": outcome.leituras,
+            "recusas": outcome.recusas,
+            "modelo": outcome.modelo,
+            "tokens": outcome.tokens,
+            "duracao_s": outcome.duracao_s,
+        }
+        # 6. Classificação pelo próprio consultor: decisão reservada.
+        if outcome.reservada:
+            return _finish(PENDENTE_PESQUISADOR, RESERVED_MESSAGE, None, consulta | {"reservada": True})
+        return _finish(RESPONDIDO_RESEARCHER, format_answer(outcome.resposta), None, consulta)
 
     def effective_run_limit(self, master_session_id: str, kind: str = "execution") -> int:
         """Limite efetivo de execuções de agente da sessão (v16-pipeline-robustness §5.1).
@@ -642,6 +844,23 @@ class Orchestrator:
                 master_session_id=master_session_id,
             )
 
+        async def _consult_researcher_callback(
+            question: str,
+            context: str,
+            why_cant_proceed: str,
+            options: list[str],
+            decisao_reservada: str | None = None,
+        ) -> str:
+            return await self._consult_researcher_core(
+                question=question,
+                context=context,
+                why_cant_proceed=why_cant_proceed,
+                options=options,
+                decisao_reservada=decisao_reservada,
+                task=task,
+                master_session_id=master_session_id,
+            )
+
         ctx = AgentContext(
             session_id=effective_session_id,
             agent_session_id=session.id,
@@ -653,6 +872,7 @@ class Orchestrator:
             enable_thinking=enable_thinking,
             execution_id=_exec_id,
             ask_researcher=_ask_researcher_callback,
+            consult_researcher=_consult_researcher_callback,
         )
 
         result = await self.agent_runtime.run(task, ctx)
@@ -867,6 +1087,11 @@ class Orchestrator:
             if val_result.is_valid:
                 logger.info("Plano aprovado pelo Validador", extra={"iteration": iteration + 1})
                 self._session_plan_size[master_session_id] = len(current_plan_data)
+                self._session_plan_summary[master_session_id] = "\n".join(
+                    f"- {t.get('task_name', '?')} ({t.get('agent_id', 'base')}): "
+                    f"{str(t.get('description') or t.get('prompt') or '')[:160]}"
+                    for t in current_plan_data
+                )[:3000]
                 tasks = []
                 from datetime import datetime, timezone
                 import uuid

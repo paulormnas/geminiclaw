@@ -47,6 +47,8 @@
 - [ ] 7.4 Corpus de saídas reais (tracebacks do pandas, `print(df)`, `describe()`, logs de treino) com resultado esperado.
 - [ ] 7.5 Medir no Pi 5 o custo do filtro em prompt de 16 000 caracteres.
 
+- [ ] 7.6 Integrar `check_query` (`src/research_consult/query_guard.py`) e as buscas/leituras do consultor (`v18-researcher-consult`) à egress gate, com allowlist de hosts por consulta ligada por padrão (hoje opcional e desligada: `RESEARCHER_CONSULT_ALLOWED_HOSTS`, `RESEARCHER_CONSULT_READ_ONLY_SEARCHED_HOSTS`).
+
 ## 8. Fechamento
 - [ ] 8.1 `uv run ruff check .`; `uv run pytest -m "unit or integration" -v`.
 - [ ] 8.2 Revisão nos 7 eixos; PR para `dev`.

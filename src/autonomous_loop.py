@@ -134,6 +134,7 @@ class AutonomousLoop:
         # orçamento default — só é ignorado se `budget` for passado explicitamente.
         effective_budget = budget or UsageBudget.from_config(max_task_retries=self.max_retries)
         self._usage_tracker = UsageTracker(effective_budget, execution_id=master_session_id)
+        self.orchestrator.register_usage_tracker(master_session_id, self._usage_tracker)
         self.max_retries = effective_budget.max_task_retries
 
         logger.info(
@@ -553,6 +554,7 @@ class AutonomousLoop:
                 UsageBudget.from_config(max_task_retries=self.max_retries),
                 execution_id=master_session_id,
             )
+            self.orchestrator.register_usage_tracker(master_session_id, self._usage_tracker)
 
         max_plan_retries = MAX_PLAN_RETRIES
         execution_feedback = ""

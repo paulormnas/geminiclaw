@@ -251,7 +251,7 @@ volumes:
 
 ### Sandbox de código
 
-O único container de execução é o **sandbox**, criado sob demanda pela skill de código (`src/skills/code/sandbox.py`) a partir da imagem `geminiclaw-base`. Ele recebe o script, roda com limites de memória e CPU, devolve os artefatos ao diretório da sessão e é removido. A imagem ainda é grande e será enxugada (ADR 018).
+O único container de execução é o **sandbox**, criado sob demanda pela skill de código (`src/skills/code/sandbox.py`) a partir da imagem `SANDBOX_IMAGE` (padrão `code-sandbox:latest`, construída por `bash scripts/build_images.sh` a partir de `containers/sandbox/Dockerfile`). A imagem é mínima (Python, `uv` e o conjunto científico básico); pacotes extras pedidos em `packages` são instalados sem root em `/deps` e o script roda sem rede (ADR 018). O container roda sem privilégios (UID do orquestrador, sem capacidades, raiz somente leitura), com limites de memória, CPU e processos; os artefatos voltam pela pasta da subtarefa montada em `/outputs`, e o container é removido ao fim.
 
 ```bash
 # Construir a imagem do sandbox (ARM64 / Raspberry Pi 5)

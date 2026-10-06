@@ -21,6 +21,8 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
 
 AskResearcherCallback = Callable[[str, str, str, list[str]], Awaitable[str]]
+# (pergunta, contexto, why_cant_proceed, opções, decisao_reservada) -> texto para o agente.
+ConsultResearcherCallback = Callable[[str, str, str, list[str], Optional[str]], Awaitable[str]]
 
 
 @dataclass(frozen=True)
@@ -51,6 +53,10 @@ class AgentContext:
             humano (Spec G5), ligado a ``Orchestrator._handle_ask_researcher``
             sem passar por IPC. ``None`` quando a skill deve usar o caminho
             IPC (modo container) ou quando não há researcher disponível.
+        consult_researcher: Callback opcional do Researcher consultor (V18 / Spec
+            `researcher-consult`), usado por ``ask_researcher`` nos modos ``semi``/``auto``,
+            ligado a ``Orchestrator._consult_researcher_core``. ``None`` mantém a suposição
+            documentada.
         extra: Metadados adicionais não cobertos pelos campos acima.
     """
 
@@ -64,6 +70,7 @@ class AgentContext:
     enable_thinking: bool = False
     execution_id: str = ""
     ask_researcher: Optional[AskResearcherCallback] = None
+    consult_researcher: Optional[ConsultResearcherCallback] = None
     extra: dict[str, Any] = field(default_factory=dict)
 
 

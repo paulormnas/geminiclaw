@@ -34,5 +34,7 @@
 - [ ] 6.8 Hipótese quase idêntica (≥ 0,90) a uma existente reutiliza o nó.
 - [ ] 6.9 Plano no formato antigo continua funcionando.
 
+- [ ] 6.99 Gate humano não pode aceitar resposta do consultor: aprovação de Oportunidade, confirmação de Problema, aprovação de termo de vocabulário, autorização de escrita em instrumento e ativação do modo sem limite exigem ação explícita do pesquisador (terminal/CLI); a resposta de `ask_researcher` (inclusive do Researcher consultor, `v18-researcher-consult`) nunca conta como autorização. Teste: gate com resposta do consultor continua pendente.
+
 ## 7. Fechamento
 - [ ] 7.1 Ruff, testes, revisão nos 7 eixos, PR.

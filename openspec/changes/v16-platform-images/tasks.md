@@ -24,6 +24,10 @@
 - [ ] 5.1 Remover `scripts/build_images.sh` e `src/platform_utils.py` (com aprovação).
 - [ ] 5.2 Atualizar `AGENTS.md` §6, `.agents/workflows/run_project.md` e `README.md` onde citam `build_images.sh`.
 
+## 5.5 Pendências herdadas da revisão de segurança do PR #99 (v16-sandbox-slim-image)
+- [ ] 5.5.1 Gerar `containers/sandbox/requirements.lock` multi-arquitetura (hoje só `aarch64-unknown-linux-gnu`; em `amd64` o `--require-hashes` falha). Motivo: precisa de decisão sobre uma lock por plataforma ou universal e de rede para compilar/validar em cada arquitetura.
+- [ ] 5.5.2 Fixar por digest (`@sha256`) as imagens base `python:3.11-slim-bookworm` e `ghcr.io/astral-sh/uv:0.8.9` no `containers/sandbox/Dockerfile`. Motivo: exige rede para o registro e política de atualização dos digests (por plataforma).
+
 ## 6. Testes
 - [ ] 6.1 Detecção: Pi 5, macOS com Docker Desktop, Linux x86_64.
 - [ ] 6.2 Manifesto do repositório válido; chave desconhecida.

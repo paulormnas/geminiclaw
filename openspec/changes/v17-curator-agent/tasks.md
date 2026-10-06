@@ -22,6 +22,7 @@
 - [ ] 5.1 `agents/curator/agent.py` com a instrução do design (diretrizes do ADR 015 §10 literais).
 - [ ] 5.2 Papel `curator` no `ModelRouter` e em `AGENT_DEFINITIONS`; configs em `src/config.py`.
 - [ ] 5.3 `consolidate` e `close_session` chamados pelo `AutonomousLoop`; orçamento por execução.
+- [ ] 5.4 Chamar `reconcile_on_session_start` (`src/knowledge/semantic_runtime.py`, mudança `v17-knowledge-semantic-index`) no início da sessão, antes de qualquer consulta ao grafo, e abrir o grafo por `factory.open_graph_store()` (store indexado).
 
 ## 6. Testes
 - [ ] 6.1 `create_discovery` com duplicata ≥ 0,90 é recusada e devolve o ID existente.
@@ -35,6 +36,8 @@
 - [ ] 6.9 `merge_approaches` não apaga; veredito da canônica passa a incluir as tentativas da fundida.
 - [ ] 6.10 Orçamento: com 50 pares na fila e lote 20, restam 30 pendentes.
 - [ ] 6.11 Falha do LLM do Curator não interrompe a sessão.
+
+- [ ] 6.99 Gate humano não pode aceitar resposta do consultor: aprovação de Oportunidade, confirmação de Problema, aprovação de termo de vocabulário, autorização de escrita em instrumento e ativação do modo sem limite exigem ação explícita do pesquisador (terminal/CLI); a resposta de `ask_researcher` (inclusive do Researcher consultor, `v18-researcher-consult`) nunca conta como autorização. Teste: gate com resposta do consultor continua pendente.
 
 ## 7. Fechamento
 - [ ] 7.1 Ruff, testes, revisão nos 7 eixos, PR.

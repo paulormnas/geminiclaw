@@ -9,13 +9,13 @@ import hashlib
 import json
 import re
 import time
-import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.artifact_match import ArtifactResolution, resolve_artifacts
 from src.config import APP_NAME, ARTIFACT_MATCH_MODE
+from src.knowledge.normalization import normalize_metric_name
 from src.llm.base import LLMProvider
 from src.llm.metering import record_llm_call
 from src.logger import get_logger
@@ -85,10 +85,7 @@ _METRIC_ALIASES = {
 _CRITERION_VALUE_PATTERN = re.compile(r"([^<>=]+?)\s*(>=|<=|==|>|<)\s*(\d+(?:[.,]\d+)?)\s*%?")
 
 
-def _normalize_metric_name(name: str) -> str:
-    """Normaliza um nome de métrica para comparação (remove acentos, minúsculas, sem espaços)."""
-    stripped = "".join(c for c in unicodedata.normalize("NFD", name) if unicodedata.category(c) != "Mn")
-    return re.sub(r"[^a-z0-9]+", "", stripped.lower())
+_normalize_metric_name = normalize_metric_name
 
 
 def _metric_key(raw_name: str) -> Optional[str]:

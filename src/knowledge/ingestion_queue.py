@@ -16,11 +16,13 @@ Segurança do arquivo (a pasta da sessão é gravável pelo sandbox):
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import stat
 import tempfile
 import threading
+import uuid
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -38,11 +40,21 @@ DEAD_FILENAME = "knowledge_pending.dead.jsonl"
 LOCK_FILENAME = ".knowledge_pending.lock"
 MAX_EVENT_BYTES = 64 * 1024
 MAX_EVENTS = 2000
+MAX_DEAD_EVENTS = 500
 MAX_FILE_BYTES = 8 * 1024 * 1024
 MAX_SYNC_ATTEMPTS = 5
 
 _THREAD_LOCKS: dict[str, threading.Lock] = {}
 _THREAD_LOCKS_GUARD = threading.Lock()
+
+
+def event_key(event: dict[str, Any]) -> str:
+    """Identificador estável do evento: ``event_id`` ou, em eventos sem ele, o hash do conteúdo."""
+    value = event.get("event_id")
+    if isinstance(value, str) and value:
+        return value
+    canonical = json.dumps(event, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
+    return "h-" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:32]
 
 
 def _thread_lock(key: str) -> threading.Lock:
@@ -53,9 +65,12 @@ def _thread_lock(key: str) -> threading.Lock:
 class PendingQueue:
     """Fila de eventos pendentes de uma sessão (``session_dir/knowledge_pending.jsonl``)."""
 
-    def __init__(self, session_dir: Path, *, filename: str = PENDING_FILENAME) -> None:
+    def __init__(
+        self, session_dir: Path, *, filename: str = PENDING_FILENAME, max_events: int = MAX_EVENTS
+    ) -> None:
         self._dir = Path(session_dir)
         self._path = self._dir / filename
+        self._max_events = max_events
 
     @property
     def path(self) -> Path:
@@ -125,11 +140,17 @@ class PendingQueue:
         return events, ignored
 
     def append(self, event: dict[str, Any]) -> bool:
-        """Acrescenta um evento (escrita atômica do arquivo inteiro).
+        """Acrescenta um evento (escrita atômica do arquivo inteiro, sob trava).
+
+        Nunca levanta: trava ou arquivo inutilizável (diretório, link, permissão, disco cheio)
+        devolvem ``False`` com aviso, para que a sessão siga.
 
         Returns:
-            ``True`` se gravado; ``False`` (com aviso) se o evento ou a fila excedem os limites.
+            ``True`` se gravado; ``False`` (com aviso) se o evento ou a fila excedem os limites
+            ou o sistema de arquivos recusou.
         """
+        event = dict(event)
+        event.setdefault("event_id", uuid.uuid4().hex)
         try:
             line = json.dumps(event, ensure_ascii=False, separators=(",", ":"), default=str)
         except (TypeError, ValueError):
@@ -138,17 +159,41 @@ class PendingQueue:
         if len(line.encode("utf-8")) > MAX_EVENT_BYTES:
             logger.warning("Evento de ingestão acima do limite; descartado", extra={"extra": {"max": MAX_EVENT_BYTES}})
             return False
-        with self._locked():
-            try:
+        try:
+            with self._locked():
                 events, _ = self._read_unlocked()
-            except OSError as exc:
-                logger.warning("Fila de pendências ilegível; evento não gravado", extra={"extra": {"error": str(exc)}})
-                return False
-            if len(events) >= MAX_EVENTS:
-                logger.warning("Fila de pendências cheia; evento descartado", extra={"extra": {"limit": MAX_EVENTS}})
-                return False
-            events.append(json.loads(line))
-            return self._write_unlocked(events)
+                if len(events) >= self._max_events:
+                    logger.warning("Fila cheia; evento não gravado", extra={"extra": {"limit": self._max_events}})
+                    return False
+                events.append(json.loads(line))
+                return self._write_unlocked(events)
+        except OSError as exc:
+            logger.warning(
+                "Fila de pendências inutilizável; evento não gravado",
+                extra={"extra": {"error": type(exc).__name__, "arquivo": self._path.name}},
+            )
+            return False
+
+    def apply_changes(self, remove: set[str], updates: dict[str, dict[str, Any]]) -> bool:
+        """Remove eventos processados (por ``event_key``) e atualiza outros, sem perder os novos.
+
+        Relê o arquivo sob trava: eventos acrescentados enquanto o reenvio processava continuam.
+
+        Returns:
+            ``True`` se o arquivo foi regravado (ou removido); ``False`` se o sistema de arquivos recusou.
+        """
+        try:
+            with self._locked():
+                events, _ = self._read_unlocked()
+                kept = [updates.get(event_key(e), e) for e in events if event_key(e) not in remove]
+                if not kept:
+                    with contextlib.suppress(FileNotFoundError):
+                        self._path.unlink()
+                    return True
+                return self._write_unlocked(kept)
+        except OSError as exc:
+            logger.warning("Fila de pendências inutilizável", extra={"extra": {"error": type(exc).__name__}})
+            return False
 
     def rewrite(self, events: list[dict[str, Any]]) -> bool:
         """Substitui o conteúdo da fila (remove o arquivo se ``events`` estiver vazio)."""

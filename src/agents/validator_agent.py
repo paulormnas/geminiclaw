@@ -281,6 +281,9 @@ class ReviewResult:
     resolved_artifacts: Dict[str, str] = field(default_factory=dict)  # esperado -> real
     name_mismatch: bool = False
     signature: str = ""
+    # False quando nada foi de fato verificado: a revisão por LLM falhou, veio ilegível ou não rodou
+    # (o ``pass`` é só "seguir adiante"). A ingestão de fatos nunca grava ``validado`` nesse caso.
+    verified: bool = True
 
 
 class ValidatorAgent:
@@ -631,6 +634,7 @@ class ValidatorAgent:
             issues=[],
             resolved_artifacts=resolved_map,
             name_mismatch=mismatch,
+            verified=False,
         )
 
     @staticmethod

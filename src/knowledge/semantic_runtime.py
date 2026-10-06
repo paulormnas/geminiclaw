@@ -120,21 +120,53 @@ def format_stats(queue: SimilarityQueue, window_days: int) -> str:
     return "\n".join(lines)
 
 
-def _run_sync(store: GraphStore, session_id: str | None) -> int:
-    """``geminiclaw knowledge sync``: reaplica os eventos de ``knowledge_pending.jsonl`` (idempotente)."""
+def _run_sync(store: GraphStore, session_id: str | None, *, yes: bool = False, retry_dead: bool = False) -> int:
+    """``geminiclaw knowledge sync``: reaplica os eventos de ``knowledge_pending.jsonl`` (idempotente).
+
+    Mostra sessão, projeto e contagem de eventos antes de escrever; pede confirmação (ou ``--yes``).
+    """
+    import sys
     from pathlib import Path
 
     from src.knowledge.ingestion import IngestionDataError, sync_pending
 
+    def _confirm(plan) -> bool:  # noqa: ANN001
+        print("Fatos pendentes a aplicar no grafo:")
+        for item in plan:
+            titulo = f" ({item.project_title})" if item.project_title else ""
+            print(
+                f"  sessão {item.session_id} -> projeto {item.project_id}{titulo}: "
+                f"{item.events} evento(s), {item.dead_events} na fila morta"
+            )
+        if yes:
+            return True
+        try:
+            interactive = sys.stdin.isatty()
+        except (AttributeError, ValueError):
+            interactive = False
+        if not interactive:
+            print("Sem terminal para confirmar; rode `geminiclaw knowledge sync --yes` para aplicar.")
+            return False
+        try:
+            return input("Aplicar? [s/N] ").strip().lower() in ("s", "sim", "y", "yes")
+        except EOFError:
+            return False
+
     try:
-        report = sync_pending(store, Path(config.OUTPUT_BASE_DIR), session_id)
+        report = sync_pending(
+            store, Path(config.OUTPUT_BASE_DIR), session_id, confirm=_confirm, retry_dead=retry_dead
+        )
     except IngestionDataError as exc:
         print(f"\n  ❌ {exc}\n")
         return 1
+    if report.cancelled:
+        print("Operação cancelada; nada foi escrito.")
+        return 1
     print(
         f"Fatos pendentes: {report.applied} aplicado(s), {report.pending} ainda pendente(s), "
-        f"{report.dead} movido(s) para knowledge_pending.dead.jsonl, {report.ignored_lines} linha(s) ignorada(s) "
-        f"em {report.sessions} sessão(ões)."
+        f"{report.dead} movido(s) para knowledge_pending.dead.jsonl, {report.retried} recolocado(s) da fila morta, "
+        f"{report.ignored_lines} linha(s) ignorada(s) em {report.sessions} sessão(ões)."
+        + (" Grafo indisponível: o reenvio parou." if report.unavailable else "")
     )
     return 1 if report.pending or report.dead else 0
 
@@ -158,6 +190,10 @@ def run_knowledge_command(argv: list[str], runtime: SemanticRuntime | None = Non
     reindex_p.add_argument("--yes", action="store_true", help="Confirma a recriação da coleção se a dimensão mudou.")
     sync_p = sub.add_parser("sync", help="Reaplica os fatos pendentes (knowledge_pending.jsonl) ao grafo.")
     sync_p.add_argument("--session", default=None, help="Id da sessão; sem ele, todas as sessões com pendências.")
+    sync_p.add_argument("--yes", action="store_true", help="Aplica sem perguntar (mostra projeto e sessão antes).")
+    sync_p.add_argument(
+        "--retry-dead", action="store_true", help="Recoloca na fila os eventos de knowledge_pending.dead.jsonl."
+    )
     try:
         args = parser.parse_args(argv)
     except SystemExit as e:
@@ -167,7 +203,7 @@ def run_knowledge_command(argv: list[str], runtime: SemanticRuntime | None = Non
         if runtime is None:
             runtime = open_runtime()
         if args.action == "sync":
-            return _run_sync(runtime.store, args.session)
+            return _run_sync(runtime.store, args.session, yes=args.yes, retry_dead=args.retry_dead)
         if args.action == "stats":
             print(format_stats(runtime.queue, config.SIM_CALIBRATION_WINDOW_DAYS))
             return 0

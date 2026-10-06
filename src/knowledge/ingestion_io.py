@@ -128,6 +128,19 @@ def read_json_object(path: Path, root: Path) -> dict[str, Any]:
     return data
 
 
+def stat_regular(path: Path, root: Path) -> os.stat_result:
+    """``fstat`` de um arquivo comum confinado em ``root`` (sem ler o conteúdo).
+
+    Raises:
+        IngestionFileError: Arquivo inseguro ou inacessível.
+    """
+    fd = _open_regular(path, root)
+    try:
+        return os.fstat(fd)
+    finally:
+        os.close(fd)
+
+
 def sha256_file(path: Path, root: Path, *, max_bytes: int = MAX_HASH_BYTES) -> str:
     """SHA-256 em streaming de um arquivo comum confinado em ``root``.
 

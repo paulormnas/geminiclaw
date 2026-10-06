@@ -29,6 +29,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from src import config
 from src.knowledge import schema
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.failure_cause import classify_failure
@@ -42,12 +43,15 @@ from src.knowledge.ingestion_io import (
     finite_number,
     list_regular_files,
     sha256_file,
+    stat_regular,
 )
 from src.knowledge.ingestion_queue import (
     DEAD_FILENAME,
+    MAX_DEAD_EVENTS,
     MAX_SYNC_ATTEMPTS,
     PENDING_FILENAME,
     PendingQueue,
+    event_key,
 )
 from src.knowledge.normalization import clean_free_text, normalize_domain_term
 from src.knowledge.projects import validate_project_id
@@ -88,11 +92,48 @@ EVENT_SESSION_START = "session_start"
 EVENT_INPUTS = "inputs"
 EVENT_SUBTASK = "subtask"
 EVENT_SESSION_END = "session_end"
+# Marcador estável da hipótese provisória (V17): a V18 a distingue das hipóteses formais por ele.
+PROVISIONAL_MARKER = "hipotese_provisoria_v17"
+
+_UNAVAILABLE_MODULES = frozenset(
+    {"psycopg", "psycopg_pool", "qdrant_client", "httpx", "httpcore", "urllib3", "requests"}
+)
+
 EVENT_KINDS = (EVENT_SESSION_START, EVENT_INPUTS, EVENT_SUBTASK, EVENT_SESSION_END)
 
 
 class IngestionDataError(ValueError):
     """Dado determinístico inválido (reenviar não adianta): o evento é descartado com aviso."""
+
+
+def is_unavailable(exc: BaseException) -> bool:
+    """True para indisponibilidade do grafo (conexão, timeout, driver, configuração ausente).
+
+    Erros de validação do store (``GraphStoreError``) e dados inválidos são **rejeição do dado**,
+    não indisponibilidade: só a indisponibilidade marca o grafo como fora do ar e fica fora da
+    contagem de tentativas do ``sync``.
+    """
+    if isinstance(exc, (IngestionDataError, GraphStoreError)):
+        return False
+    if isinstance(exc, (ConnectionError, TimeoutError, OSError, RuntimeError)):
+        return True
+    return type(exc).__module__.split(".")[0] in _UNAVAILABLE_MODULES
+
+
+class HashCache:
+    """Cache de digests por ``(caminho, tamanho, mtime_ns)``, compartilhado pela sessão."""
+
+    def __init__(self) -> None:
+        self._digests: dict[tuple[str, int, int], str] = {}
+        self._lock = threading.Lock()
+
+    def get(self, key: tuple[str, int, int]) -> str | None:
+        with self._lock:
+            return self._digests.get(key)
+
+    def put(self, key: tuple[str, int, int], digest: str) -> None:
+        with self._lock:
+            self._digests[key] = digest
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +196,8 @@ class SubtaskInput:
         agent_status: ``success``, ``error`` ou ``timeout`` (resultado final da subtarefa).
         agent_error_category: Categoria estruturada da falha de infraestrutura, quando houver.
         review_status: Parecer do Validator (``pass``, ``fail``, ``divergent_but_documented``) ou ``None``.
+        review_verified: ``False`` quando o ``pass`` não verificou nada (revisão por LLM falhou, ilegível ou
+            não rodou). Ausente em eventos antigos: tratado como não verificado.
         validation_criteria: Critérios de aceite da subtarefa (os quantitativos indicam quais
             métricas o Validator avaliou contra um limiar).
     """
@@ -169,6 +212,7 @@ class SubtaskInput:
     agent_status: str = "success"
     agent_error_category: str | None = None
     review_status: str | None = None
+    review_verified: bool = False
     validation_criteria: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -201,6 +245,7 @@ class SubtaskInput:
             agent_status=_text_field(data, "agent_status", 32, required=False) or "error",
             agent_error_category=_opt_text(data.get("agent_error_category"), 100),
             review_status=_opt_text(data.get("review_status"), 64),
+            review_verified=data.get("review_verified") is True,
             validation_criteria=[
                 c[:_MAX_CRITERION] for c in (criteria if isinstance(criteria, list) else []) if isinstance(c, str)
             ][:_MAX_CRITERIA],
@@ -303,10 +348,12 @@ def hash_params(parameters: object) -> str | None:
 class _Writer:
     """Operações idempotentes (obter ou criar) sobre um ``GraphStore``, para uma sessão."""
 
-    def __init__(self, store: GraphStore, ctx: SessionContext) -> None:
+    def __init__(self, store: GraphStore, ctx: SessionContext, cache: HashCache | None = None) -> None:
         self.store = store
         self.ctx = ctx
         self.created = 0
+        self._cache = cache if cache is not None else HashCache()
+        self._hash_budget = int(config.INGESTION_MAX_HASH_BYTES_PER_CALL)
 
     # -- primitivas -------------------------------------------------------
 
@@ -345,6 +392,10 @@ class _Writer:
         ctx = self.ctx
         if ctx.modo not in MODOS:
             raise IngestionDataError(f"modo de sessão inválido: {ctx.modo!r}")
+        # A Sessao do grafo manda: o mesmo sessao_id em outro projeto recusa o evento (a fila é arquivo).
+        for other in self.store.find_nodes("Sessao", {"sessao_id": ctx.session_id}, limit=5):
+            if other.properties.get("projeto_id") != ctx.project_id:
+                raise IngestionDataError("a sessão já pertence a outro projeto no grafo")
         node = self._find("Sessao", {"sessao_id": ctx.session_id})
         if node is None:
             session_node = self._create(
@@ -382,10 +433,33 @@ class _Writer:
     def insumo(self, session_dir: Path, path: Path, project_node: str) -> str | None:
         """Obtém ou cria um ``Insumo`` (deduplicado por hash no projeto) e liga ao projeto."""
         try:
-            digest = sha256_file(path, session_dir)
+            info = stat_regular(path, session_dir)
         except IngestionFileError as exc:
             logger.warning("Insumo ignorado", extra={"extra": {"motivo": str(exc)}})
             return None
+        max_file = int(config.INGESTION_MAX_FILE_BYTES)
+        if info.st_size > max_file:
+            logger.warning(
+                "Insumo grande demais para a ingestão; não registrado no grafo",
+                extra={"extra": {"arquivo": _clean(path.name, 100), "bytes": info.st_size, "limite": max_file}},
+            )
+            return None
+        key = (str(path.resolve()), info.st_size, info.st_mtime_ns)
+        digest = self._cache.get(key)
+        if digest is None:
+            if info.st_size > self._hash_budget:
+                logger.warning(
+                    "Orçamento de bytes hasheados da ingestão esgotado; insumo não registrado nesta chamada",
+                    extra={"extra": {"arquivo": _clean(path.name, 100), "bytes": info.st_size}},
+                )
+                return None
+            try:
+                digest = sha256_file(path, session_dir, max_bytes=max_file)
+            except IngestionFileError as exc:
+                logger.warning("Insumo ignorado", extra={"extra": {"motivo": str(exc)}})
+                return None
+            self._hash_budget -= info.st_size
+            self._cache.put(key, digest)
         node = self._find("Insumo", {"hash_conteudo": digest})
         if node is None:
             insumo_id = self._create(
@@ -420,6 +494,9 @@ class _Writer:
         key = normalize_domain_term(nome)
         if not nome or not key:
             return None
+        exact = self.store.find_nodes("Abordagem", {"projeto_id": self.ctx.project_id, "nome": nome}, limit=1)
+        if exact:
+            return exact[0].id
         candidates = self.store.find_nodes("Abordagem", {"projeto_id": self.ctx.project_id}, limit=1000)
         for node in candidates:
             if normalize_domain_term(str(node.properties.get("nome", ""))) == key:
@@ -456,7 +533,9 @@ class _Writer:
                 or "Sem justificativa científica declarada no plano da subtarefa.",
                 "status": "em_teste",
                 "origem": "researcher",
-                "justificativa_criacao": f"declarada no plano da subtarefa {_clean(sub.task_name, MAX_NAME_CHARS)}",
+                "justificativa_criacao": (
+                    f"{PROVISIONAL_MARKER}: declarada no plano da subtarefa {_clean(sub.task_name, MAX_NAME_CHARS)}"
+                ),
                 "nos_consultados": [],
             },
             ACTOR_RESEARCHER,
@@ -609,6 +688,8 @@ class _Writer:
     def _status_validacao(sub: SubtaskInput, raw_name: str, evaluated: set[str]) -> str:
         if sub.review_status == "divergent_but_documented":
             return "divergente_documentado"
+        if not sub.review_verified:
+            return "nao_validado"  # o pass não verificou nada (LLM falhou/ilegível/não rodou)
         if sub.review_status == "pass" or (sub.review_status is not None and raw_name in evaluated):
             return "validado"
         return "nao_validado"
@@ -630,14 +711,17 @@ class _Writer:
         if not isinstance(names, list):
             return
         ids: list[str] = []
+        valid: list[str] = []
         for name in names[:MAX_DATASETS]:
-            if not (isinstance(name, str) and _is_plain_filename(name)):
+            if isinstance(name, str) and _is_plain_filename(name):
+                valid.append(name)
+            else:
                 logger.warning("Nome de dataset inválido ignorado na ingestão")
-                continue
+        for name in dict.fromkeys(valid):  # sem repetição: o mesmo nome nunca é lido duas vezes
             insumo_id = self.insumo(session_dir, session_dir / "input_snapshot" / name, project_node)
             if insumo_id is None:
                 continue
-            self._edge(exp_id, "USOU", insumo_id)
+            self._edge(exp_id, "USOU", insumo_id, fato=False)  # autodeclarado em params.json pelo código gerado
             if insumo_id not in ids:
                 ids.append(insumo_id)
         if ids:
@@ -668,14 +752,22 @@ def ingest_session_start(store: GraphStore, ctx: SessionContext) -> str:
     return _Writer(store, ctx).session()
 
 
-def ingest_inputs(store: GraphStore, ctx: SessionContext, session_dir: Path) -> int:
+def ingest_inputs(
+    store: GraphStore, ctx: SessionContext, session_dir: Path, cache: HashCache | None = None
+) -> int:
     """Ingere ``input_snapshot/``: um ``Insumo`` por arquivo e ``Projeto-RECEBEU->Insumo``."""
-    return _Writer(store, ctx).inputs(session_dir)
+    return _Writer(store, ctx, cache).inputs(session_dir)
 
 
-def ingest_subtask(store: GraphStore, ctx: SessionContext, session_dir: Path, sub: SubtaskInput) -> str | None:
+def ingest_subtask(
+    store: GraphStore,
+    ctx: SessionContext,
+    session_dir: Path,
+    sub: SubtaskInput,
+    cache: HashCache | None = None,
+) -> str | None:
     """Ingere uma subtarefa concluída (Experimento, Resultados, Abordagem, hipótese provisória)."""
-    return _Writer(store, ctx).subtask(session_dir, sub)
+    return _Writer(store, ctx, cache).subtask(session_dir, sub)
 
 
 def ingest_session_end(
@@ -695,7 +787,9 @@ def ingest_session_end(
 # ---------------------------------------------------------------------------
 
 
-def replay_event(store: GraphStore, session_dir: Path, event: dict[str, Any]) -> None:
+def replay_event(
+    store: GraphStore, session_dir: Path, event: dict[str, Any], cache: HashCache | None = None
+) -> None:
     """Reaplica um evento da fila (idempotente).
 
     O ``session_id`` vem do nome da pasta, não do evento; o contexto e os dados são revalidados.
@@ -713,9 +807,9 @@ def replay_event(store: GraphStore, session_dir: Path, event: dict[str, Any]) ->
     if kind == EVENT_SESSION_START:
         ingest_session_start(store, ctx)
     elif kind == EVENT_INPUTS:
-        ingest_inputs(store, ctx, session_dir)
+        ingest_inputs(store, ctx, session_dir, cache)
     elif kind == EVENT_SUBTASK:
-        ingest_subtask(store, ctx, session_dir, SubtaskInput.from_dict(data))
+        ingest_subtask(store, ctx, session_dir, SubtaskInput.from_dict(data), cache)
     else:
         consumo = data.get("consumo")
         ingest_session_end(
@@ -736,53 +830,154 @@ class SyncReport:
     dead: int = 0
     ignored_lines: int = 0
     sessions: int = 0
+    retried: int = 0
+    unavailable: bool = False
+    cancelled: bool = False
 
 
-def sync_session(store: GraphStore, session_dir: Path) -> SyncReport:
+@dataclass(frozen=True)
+class SyncPlanItem:
+    """O que o ``sync`` vai aplicar numa sessão (mostrado ao usuário antes de escrever)."""
+
+    session_id: str
+    project_id: str
+    events: int
+    dead_events: int = 0
+    project_title: str = ""
+
+
+def _dead_queue(session_dir: Path) -> PendingQueue:
+    return PendingQueue(session_dir, filename=DEAD_FILENAME, max_events=MAX_DEAD_EVENTS)
+
+
+def requeue_dead(session_dir: Path) -> int:
+    """Recoloca na fila os eventos de ``knowledge_pending.dead.jsonl`` (``attempts`` zerado).
+
+    Só remove da fila morta o que foi regravado na fila pendente (nunca perde evento).
+
+    Returns:
+        Quantidade de eventos recolocados.
+    """
+    dead = _dead_queue(session_dir)
+    try:
+        events, _ = dead.read()
+    except OSError as exc:
+        logger.warning("Fila morta ilegível", extra={"extra": {"error": type(exc).__name__}})
+        return 0
+    pending = PendingQueue(session_dir)
+    moved: set[str] = set()
+    for event in events:
+        revived = {**event, "attempts": 0}
+        if pending.append(revived):
+            moved.add(event_key(event))
+    if moved:
+        dead.apply_changes(moved, {})
+    return len(moved)
+
+
+def sync_session(store: GraphStore, session_dir: Path, cache: HashCache | None = None) -> SyncReport:
     """Reprocessa ``knowledge_pending.jsonl`` de uma sessão.
 
-    Eventos aplicados saem da fila; os que falham ficam com ``attempts`` incrementado; ao atingir
-    ``MAX_SYNC_ATTEMPTS`` (ou se forem malformados) vão para ``knowledge_pending.dead.jsonl``.
+    - Aplicado: sai da fila (só os ids processados; eventos acrescentados durante o reenvio ficam).
+    - Grafo indisponível: o evento e os seguintes ficam como estão (``attempts`` não muda) e o
+      reenvio para na primeira indisponibilidade, sem insistir.
+    - Dado rejeitado: ``attempts`` incrementa; ao atingir ``MAX_SYNC_ATTEMPTS`` (ou se malformado)
+      vai para ``knowledge_pending.dead.jsonl`` e só sai da fila se a gravação na fila morta der certo.
     """
     report = SyncReport(sessions=1)
     queue = PendingQueue(session_dir)
     try:
         events, report.ignored_lines = queue.read()
     except OSError as exc:
-        logger.warning("Fila de pendências ilegível; sessão ignorada", extra={"extra": {"error": str(exc)}})
+        logger.warning("Fila de pendências ilegível; sessão ignorada", extra={"extra": {"error": type(exc).__name__}})
         return report
-    remaining: list[dict[str, Any]] = []
-    dead: list[dict[str, Any]] = []
+    cache = cache if cache is not None else HashCache()
+    dead = _dead_queue(session_dir)
+    remove: set[str] = set()
+    updates: dict[str, dict[str, Any]] = {}
     for event in events:
+        key = event_key(event)
         try:
-            replay_event(store, session_dir, event)
+            replay_event(store, session_dir, event, cache)
+            remove.add(key)
             report.applied += 1
             continue
         except IngestionDataError as exc:
-            logger.warning("Evento pendente malformado; movido para a fila morta", extra={"extra": {"error": str(exc)}})
-            dead.append(event)
-            continue
-        except Exception as exc:  # noqa: BLE001 - grafo fora do ar ou erro de escrita: segue pendente
-            logger.warning("Evento pendente não aplicado", extra={"extra": {"error": type(exc).__name__}})
-        attempts = event.get("attempts")
-        attempts = (attempts if isinstance(attempts, int) and not isinstance(attempts, bool) else 0) + 1
-        event["attempts"] = attempts
-        (dead if attempts >= MAX_SYNC_ATTEMPTS else remaining).append(event)
-    for event in dead:
-        PendingQueue(session_dir, filename=DEAD_FILENAME).append(event)
-    queue.rewrite(remaining)
-    report.pending = len(remaining)
-    report.dead = len(dead)
+            logger.warning("Evento pendente malformado", extra={"extra": {"error": str(exc)}})
+            to_dead = True
+            attempts = event.get("attempts", 0)
+        except Exception as exc:  # noqa: BLE001
+            if is_unavailable(exc):
+                logger.warning(
+                    "Grafo indisponível; reenvio interrompido", extra={"extra": {"error": type(exc).__name__}}
+                )
+                report.unavailable = True
+                break
+            logger.warning("Evento pendente rejeitado pelo grafo", extra={"extra": {"error": type(exc).__name__}})
+            attempts = event.get("attempts", 0)
+            attempts = (attempts if isinstance(attempts, int) and not isinstance(attempts, bool) else 0) + 1
+            to_dead = attempts >= MAX_SYNC_ATTEMPTS
+            event = {**event, "attempts": attempts}
+            updates[key] = event
+        if to_dead:
+            if dead.append(event):
+                remove.add(key)
+                updates.pop(key, None)
+                report.dead += 1
+            else:
+                logger.warning("Fila morta inutilizável; o evento continua pendente")
+    if remove or updates:
+        queue.apply_changes(remove, updates)
+    report.pending = len(events) - len(remove)
     return report
 
 
-def sync_pending(store: GraphStore, output_base: Path, session_id: str | None = None) -> SyncReport:
+def _read_plan(session_dir: Path, store: GraphStore | None) -> SyncPlanItem | None:
+    queue = PendingQueue(session_dir)
+    try:
+        events, _ = queue.read()
+        dead_events, _ = _dead_queue(session_dir).read()
+    except OSError:
+        return None
+    projects: list[str] = []
+    for event in [*events, *dead_events]:
+        ctx = event.get("ctx") if isinstance(event.get("ctx"), dict) else {}
+        pid = ctx.get("project_id")
+        if isinstance(pid, str) and pid not in projects:
+            projects.append(pid)
+    title = ""
+    if store is not None and len(projects) == 1:
+        try:
+            nodes = store.find_nodes("Projeto", {"projeto_id": projects[0]}, limit=1)
+            title = _clean(nodes[0].properties.get("titulo", ""), 120) if nodes else "(projeto não encontrado)"
+        except Exception:  # noqa: BLE001 - o título é só informativo
+            title = ""
+    return SyncPlanItem(
+        session_id=session_dir.name,
+        project_id=", ".join(projects) or "(sem projeto)",
+        events=len(events),
+        dead_events=len(dead_events),
+        project_title=title,
+    )
+
+
+def sync_pending(
+    store: GraphStore,
+    output_base: Path,
+    session_id: str | None = None,
+    *,
+    confirm: Callable[[list[SyncPlanItem]], bool] | None = None,
+    retry_dead: bool = False,
+) -> SyncReport:
     """``geminiclaw knowledge sync``: reprocessa as filas de uma sessão ou de todas.
 
     Args:
         store: Grafo de conhecimento.
         output_base: Diretório raiz dos outputs (``OUTPUT_BASE_DIR``).
         session_id: Sessão específica; ``None`` varre todas as pastas com fila.
+        confirm: Recebe o plano (sessão, projeto, contagem) **antes de qualquer escrita**; devolve
+            ``False`` para cancelar.
+        retry_dead: Recoloca antes os eventos da fila morta na fila pendente.
 
     Raises:
         IngestionDataError: ``session_id`` inválido.
@@ -797,15 +992,28 @@ def sync_pending(store: GraphStore, output_base: Path, session_id: str | None = 
             candidates = sorted(p for p in base.iterdir() if _SESSION_ID_RE.fullmatch(p.name))
         except OSError:
             candidates = []
+    names = [PENDING_FILENAME] + ([DEAD_FILENAME] if retry_dead else [])
+    directories = [
+        d
+        for d in candidates
+        if not d.is_symlink() and d.is_dir() and any((d / n).exists() for n in names)
+    ]
     total = SyncReport(sessions=0)
-    for directory in candidates:
-        if directory.is_symlink() or not directory.is_dir() or not (directory / PENDING_FILENAME).exists():
-            continue
-        part = sync_session(store, directory)
+    if confirm is not None and directories:
+        plan = [item for item in (_read_plan(d, store) for d in directories) if item is not None]
+        if plan and not confirm(plan):
+            total.cancelled = True
+            return total
+    cache = HashCache()
+    for directory in directories:
+        if retry_dead:
+            total.retried += requeue_dead(directory)
+        part = sync_session(store, directory, cache)
         total.applied += part.applied
         total.pending += part.pending
         total.dead += part.dead
         total.ignored_lines += part.ignored_lines
+        total.unavailable = total.unavailable or part.unavailable
         total.sessions += 1
     return total
 
@@ -818,9 +1026,10 @@ def sync_pending(store: GraphStore, output_base: Path, session_id: str | None = 
 class FactIngestor:
     """Ingere os fatos de uma sessão e guarda na fila local o que o grafo não aceitar.
 
-    Todo método público é seguro: erros do grafo são capturados, viram um aviso e um evento em
-    ``knowledge_pending.jsonl``. Depois da primeira falha, os eventos seguintes vão direto para a fila
-    (sem esperar timeouts); no fim da sessão há uma tentativa de recuperação.
+    Todo método público é seguro: erros do grafo ou da fila viram aviso e (quando possível) um
+    evento em ``knowledge_pending.jsonl``. Depois de uma **indisponibilidade** do grafo, os eventos
+    seguintes vão direto para a fila (sem esperar timeouts); a rejeição de um dado não marca o grafo
+    como fora do ar. No fim da sessão há uma tentativa de recuperação.
     """
 
     def __init__(
@@ -839,6 +1048,7 @@ class FactIngestor:
         self._store: GraphStore | None = None
         self._down = False
         self._lock = threading.Lock()
+        self._hash_cache = HashCache()
 
     def _get_store(self) -> GraphStore:
         if self._store is None:
@@ -860,34 +1070,43 @@ class FactIngestor:
             "attempts": 0,
         }
 
+    def _report(self, kind: str, applied: bool, queued: bool, started: float) -> None:
+        if self._telemetry is None:  # só tipo, duração e resultado: nada de dados de pesquisa
+            return
+        try:
+            self._telemetry(kind, {"ok": applied, "queued": queued}, int((time.monotonic() - started) * 1000))
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Falha ao registrar telemetria de ingestão", extra={"extra": {"error": str(exc)}})
+
     def _run(self, kind: str, data: dict[str, Any], op: Callable[[GraphStore], None]) -> bool:
-        """Executa ``op``; em falha do grafo, enfileira o evento. Devolve ``True`` se aplicou."""
+        """Executa ``op``; em falha, enfileira o evento. Nunca levanta. Devolve ``True`` se aplicou."""
         started = time.monotonic()
         applied = queued = False
-        with self._lock:
-            try:
-                if self._down:
-                    raise ConnectionError("grafo indisponível nesta sessão")
-                op(self._get_store())
-                applied = True
-            except IngestionDataError as exc:
-                logger.warning(
-                    "Evento de ingestão descartado (dado inválido)", extra={"extra": {"kind": kind, "error": str(exc)}}
-                )
-            except Exception as exc:  # noqa: BLE001 - a pesquisa nunca para por falha do grafo
-                self._down = True
-                self._store = None
-                queued = self._queue.append(self._envelope(kind, data))
-                logger.warning(
-                    "Grafo indisponível: evento de ingestão guardado em knowledge_pending.jsonl "
-                    "(reaplique com `geminiclaw knowledge sync`)",
-                    extra={"extra": {"kind": kind, "error": type(exc).__name__, "queued": queued}},
-                )
-        if self._telemetry is not None:  # só tipo de evento, duração e resultado: nada de dados de pesquisa
-            try:
-                self._telemetry(kind, {"ok": applied, "queued": queued}, int((time.monotonic() - started) * 1000))
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("Falha ao registrar telemetria de ingestão", extra={"extra": {"error": str(exc)}})
+        try:
+            with self._lock:
+                try:
+                    if self._down:
+                        raise ConnectionError("grafo indisponível nesta sessão")
+                    op(self._get_store())
+                    applied = True
+                except IngestionDataError as exc:
+                    logger.warning(
+                        "Evento de ingestão descartado (dado inválido)",
+                        extra={"extra": {"kind": kind, "error": str(exc)}},
+                    )
+                except Exception as exc:  # noqa: BLE001 - a pesquisa nunca para por falha do grafo
+                    if is_unavailable(exc):
+                        self._down = True
+                        self._store = None
+                    queued = self._queue.append(self._envelope(kind, data))
+                    logger.warning(
+                        "Falha ao gravar fatos no grafo: evento guardado em knowledge_pending.jsonl "
+                        "(reaplique com `geminiclaw knowledge sync`)",
+                        extra={"extra": {"kind": kind, "error": type(exc).__name__, "queued": queued}},
+                    )
+        except Exception as exc:  # noqa: BLE001 - nem a fila nem a trava derrubam a sessão
+            logger.warning("Ingestão de fatos falhou", extra={"extra": {"kind": kind, "error": type(exc).__name__}})
+        self._report(kind, applied, queued, started)
         return applied
 
     def session_start(self) -> bool:
@@ -896,19 +1115,43 @@ class FactIngestor:
 
     def inputs(self) -> bool:
         """Snapshot de insumos: um ``Insumo`` por arquivo + ``RECEBEU``."""
-        return self._run(EVENT_INPUTS, {}, lambda s: ingest_inputs(s, self.ctx, self._session_dir))
+        return self._run(
+            EVENT_INPUTS, {}, lambda s: ingest_inputs(s, self.ctx, self._session_dir, self._hash_cache)
+        )
 
     def subtask(self, sub: SubtaskInput) -> bool:
         """Subtarefa concluída (e revisada): Experimento, Resultados, Abordagem."""
         return self._run(
-            EVENT_SUBTASK, sub.to_dict(), lambda s: ingest_subtask(s, self.ctx, self._session_dir, sub)
+            EVENT_SUBTASK,
+            sub.to_dict(),
+            lambda s: ingest_subtask(s, self.ctx, self._session_dir, sub, self._hash_cache),
         )
 
-    def session_end(self, *, fim: str, motivo_parada: str | None, consumo: dict[str, Any] | None = None) -> bool:
-        """Fim da sessão; antes, tenta recuperar o grafo e reenviar os pendentes desta sessão."""
+    def session_end(
+        self,
+        *,
+        fim: str,
+        motivo_parada: str | None,
+        consumo: dict[str, Any] | None = None,
+        offline: bool = False,
+    ) -> bool:
+        """Fim da sessão; antes, tenta recuperar o grafo e reenviar os pendentes desta sessão.
+
+        Args:
+            fim: Instante de fim (ISO-8601).
+            motivo_parada: Um de ``MOTIVOS_PARADA``.
+            consumo: Tokens, minutos e retentativas de conexão.
+            offline: Só enfileira o evento, sem acessar o grafo (caminho de exceção/Ctrl+C: nenhum
+                I/O de banco pode travar o encerramento).
+        """
+        data = {"fim": fim, "motivo_parada": motivo_parada, "consumo": consumo or {}}
+        if offline:
+            started = time.monotonic()
+            queued = self._queue.append(self._envelope(EVENT_SESSION_END, data))
+            self._report(EVENT_SESSION_END, False, queued, started)
+            return False
         if self._down:
             self._recover()
-        data = {"fim": fim, "motivo_parada": motivo_parada, "consumo": consumo or {}}
         return self._run(
             EVENT_SESSION_END,
             data,
@@ -917,17 +1160,21 @@ class FactIngestor:
 
     def _recover(self) -> None:
         """Uma tentativa de reabrir o grafo e esvaziar a fila desta sessão."""
-        with self._lock:
-            try:
-                store = self._factory()
-                store.list_nodes("Projeto", limit=1)  # sonda: abrir o pool é preguiçoso
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "Grafo continua indisponível no fim da sessão", extra={"extra": {"error": type(exc).__name__}}
-                )
-                return
-            self._store = store
-            self._down = False
-            report = sync_session(store, self._session_dir)
-            if report.pending:
-                self._down = True
+        try:
+            with self._lock:
+                try:
+                    store = self._factory()
+                    store.list_nodes("Projeto", limit=1)  # sonda: abrir o pool é preguiçoso
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Grafo continua indisponível no fim da sessão",
+                        extra={"extra": {"error": type(exc).__name__}},
+                    )
+                    return
+                self._store = store
+                self._down = False
+                report = sync_session(store, self._session_dir, self._hash_cache)
+                if report.unavailable:
+                    self._down = True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Recuperação do grafo falhou", extra={"extra": {"error": type(exc).__name__}})

@@ -247,7 +247,7 @@ async def test_laco_ingere_subtarefa_revisada(tmp_path):
                      validation_criteria=["r2 >= 0.75"], approach={"nome": "boosting", "tipo": "algoritmo"},
                      hypothesis="H", scientific_rationale="R")
     result = AgentResult(agent_id="developer", session_id="x", status="success", response={})
-    await loop._ingest_subtask(task, result, {"status": "pass"}, "s1")
+    await loop._ingest_subtask(task, result, {"status": "pass", "verified": True}, "s1")
 
     (exp,) = store.find_nodes("Experimento", {})
     assert exp.properties["subtarefa_id"] == "sub-9" and exp.properties["status"] == "sucesso"
@@ -289,7 +289,7 @@ def test_cli_knowledge_sync_aplica_pendentes(tmp_path, capsys):
 
     runtime = MagicMock(store=store)
     with patch.object(config, "OUTPUT_BASE_DIR", str(tmp_path)):
-        assert run_knowledge_command(["sync", "--session", "sessao-x"], runtime=runtime) == 0
+        assert run_knowledge_command(["sync", "--session", "sessao-x", "--yes"], runtime=runtime) == 0
         assert run_knowledge_command(["sync", "--session", "../x"], runtime=runtime) == 1
     assert "1 aplicado" in capsys.readouterr().out
     assert len(store.find_nodes("Sessao", {})) == 1

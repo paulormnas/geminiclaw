@@ -195,6 +195,14 @@ class Orchestrator:
             self._knowledge_store = factory()
         return self._knowledge_store
 
+    @staticmethod
+    async def _safe_ingest(fn: "Callable[[], Any]") -> None:
+        """Roda uma etapa de ingestão fora do event loop; nenhuma falha de conhecimento derruba a sessão."""
+        try:
+            await asyncio.to_thread(fn)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Ingestão de fatos falhou", extra={"error": type(exc).__name__})
+
     def get_ingestor(self, session_id: str) -> "FactIngestor | None":
         """Ingestor de fatos da sessão mestra (``None`` em sessões sem projeto)."""
         return self._ingestors.get(session_id)
@@ -237,9 +245,23 @@ class Orchestrator:
     def _end_ingestion(
         self, ingestor: "FactIngestor | None", session_id: str, status: str, exc: BaseException | None
     ) -> None:
-        """Fim da sessão no grafo: ``fim``, ``motivo_parada`` e ``consumo`` (síncrono, sem LLM)."""
+        """Fim da sessão no grafo: ``fim``, ``motivo_parada`` e ``consumo`` (síncrono, sem LLM).
+
+        Com ``exc`` (caminho de exceção/Ctrl+C) o evento só é enfileirado, sem acessar o grafo. Nunca
+        levanta: a sessão não para por falha de conhecimento.
+        """
         if ingestor is None:
             return
+        try:
+            self._end_ingestion_unsafe(ingestor, session_id, status, exc)
+        except Exception as err:  # noqa: BLE001
+            logger.warning("Fim da sessão não registrado no grafo", extra={"error": type(err).__name__})
+        finally:
+            self._ingestors.pop(session_id, None)
+
+    def _end_ingestion_unsafe(
+        self, ingestor: "FactIngestor", session_id: str, status: str, exc: BaseException | None
+    ) -> None:
         from datetime import datetime, timezone
 
         from src.knowledge.ingestion import MOTIVOS_PARADA
@@ -263,10 +285,12 @@ class Orchestrator:
                 }
             except Exception as err:  # noqa: BLE001 - o consumo é complementar; nunca derruba o fim da sessão
                 logger.warning("Consumo da sessão indisponível para a ingestão", extra={"error": type(err).__name__})
-        try:
-            ingestor.session_end(fim=datetime.now(timezone.utc).isoformat(), motivo_parada=reason, consumo=consumo)
-        finally:
-            self._ingestors.pop(session_id, None)
+        ingestor.session_end(
+            fim=datetime.now(timezone.utc).isoformat(),
+            motivo_parada=reason,
+            consumo=consumo,
+            offline=exc is not None,
+        )
 
     @staticmethod
     def get_available_agents() -> tuple[str, ...]:
@@ -372,7 +396,7 @@ class Orchestrator:
             master_session.payload.get("continues_session_id"),
         )
         if ingestor is not None:
-            await asyncio.to_thread(ingestor.session_start)
+            await self._safe_ingest(ingestor.session_start)
 
         # V15.5/G9 — Carrega (ou reutiliza) o contexto de input_context/ e o disponibiliza
         # para o Researcher no primeiro ciclo de planejamento; salva snapshot imutável.
@@ -388,7 +412,7 @@ class Orchestrator:
             self.output_manager.init_session(master_session.id)
             self._snapshot_input_context(bundle, master_session.id)
             if ingestor is not None:
-                await asyncio.to_thread(ingestor.inputs)
+                await self._safe_ingest(ingestor.inputs)
         # v17-research-project — o problema do projeto vai em todo planejamento (plano e replans).
         self._project_blocks[master_session.id] = project_context or ""
 

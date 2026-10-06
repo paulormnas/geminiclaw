@@ -118,7 +118,8 @@ def _rels(store, rel):
 
 
 def _sub(**kw) -> SubtaskInput:
-    base = {"task_name": "treinar", "subtask_id": "sub-1", "agent_id": "developer", "review_status": "pass"}
+    base = {"task_name": "treinar", "subtask_id": "sub-1", "agent_id": "developer", "review_status": "pass",
+            "review_verified": True}
     base.update(kw)
     return SubtaskInput(**base)
 
@@ -493,7 +494,7 @@ def test_sync_atinge_limite_de_tentativas(store, ctx, session_dir):
 
     class _Broken(InMemoryGraphStore):
         def find_nodes(self, *a, **k):
-            raise ConnectionError("fora")
+            raise GraphStoreError("rejeitado")
 
     reports = [sync_session(_Broken(), session_dir) for _ in range(5)]
     assert reports[0].pending == 1 and reports[-1].dead == 1

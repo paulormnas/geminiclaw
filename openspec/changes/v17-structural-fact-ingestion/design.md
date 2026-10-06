@@ -31,7 +31,7 @@ arquivo; `hash_conteudo` = sha256; `caminho` = caminho relativo em `input_snapsh
 | `hash_params` | sha256 do JSON canônico (chaves ordenadas) de `params.json["parameters"]` |
 | `seed` | `params.json["seed"]` |
 | `hash_codigo` | sha256 dos scripts executados, pelo `WorkspaceManifest` |
-| `ambiente` | `{"python": ..., "imagem_sandbox": ..., "pacotes": [...]}` da execução do sandbox |
+| `ambiente` | `{"imagem_sandbox": ..., "pacotes": [...]}` da execução do sandbox (a versão do `python` não é medida no host; tarefa 5.3) |
 | `caminho_artefatos` | diretório da subtarefa em `outputs/<sessão>/` |
 | `no_execucao` | `config.NODE_ID` |
 | `dataset_ids` | `Insumo`s cujos nomes aparecem em `params.json["datasets"]` |
@@ -99,6 +99,33 @@ sem esses campos continuam válidos. A instrução do Developer passa a pedir es
 - Qualquer erro de escrita no grafo **não interrompe a sessão**: o evento é gravado em
   `outputs/<sessão>/knowledge_pending.jsonl` e um aviso é registrado.
 - `geminiclaw knowledge sync [--session ID]` reprocessa os pendentes (idempotente).
+
+## 8. Honestidade da validação e endurecimento da fila (pós-revisão do PR #105)
+
+- **Revisão não verificada.** `ReviewResult.verified` é falso quando a revisão por LLM falhou, veio
+  ilegível ou não rodou (o `pass` só significa "seguir adiante"). O laço repassa `verified` (e o evento
+  `subtask_review` o registra); a ingestão grava `Resultado.status_validacao="nao_validado"` nesses
+  casos e em subtarefas sem Validator. `Experimento.status="sucesso"` significa "executou sem erro e
+  não foi reprovado"; a verificação vive em `Resultado.status_validacao` (o enum de `Experimento` não
+  tem um valor "não verificado" e mudar o schema exige aprovação própria).
+- **`fail` com critério quantitativo.** Uma métrica citada em critério quantitativo fica `validado`
+  mesmo se a subtarefa foi reprovada por outro motivo: "validado" significa que o Validator a avaliou
+  contra um limiar, não que o limiar foi atendido. O Curator deve ler o `status` do `Experimento`.
+- **Hipótese provisória.** `Hipotese.justificativa_criacao` começa com o marcador
+  `hipotese_provisoria_v17`; a V18 a distingue das formais por ele.
+- **Origem das arestas.** `USOU` é `afirmado` (vem de `params.json`, escrito pelo código gerado);
+  as demais arestas de fato (`EXECUTADO_EM`, `PRODUZIU`, `MEDE`, `RECEBEU`, `PERTENCE_A`, `CONTINUA`) são `fato`.
+- **Fila.** Cada evento tem `event_id`; o `sync` remove só os ids processados, relendo a fila sob trava
+  (eventos acrescentados durante o reenvio ficam). Indisponibilidade do grafo (conexão, timeout, driver)
+  não conta tentativa e interrompe o reenvio; rejeição do dado incrementa `attempts` e, após 5, o evento
+  vai para `knowledge_pending.dead.jsonl` (teto de 500 eventos), só saindo da fila se a gravação der certo.
+  `knowledge sync --retry-dead` recoloca a fila morta. A fila inutilizável (trava, link, permissão) só
+  gera aviso. O `sync` deriva o projeto da `Sessao` do grafo e recusa evento de outro projeto, mostra
+  sessão e projeto antes de escrever e pede confirmação (`--yes`). A pasta da sessão é `0700`.
+- **I/O.** Nomes de `datasets` são deduplicados; digests em cache por `(caminho, tamanho, mtime_ns)`;
+  `INGESTION_MAX_FILE_BYTES` (256 MiB) e `INGESTION_MAX_HASH_BYTES_PER_CALL` (1 GiB) limitam o hash.
+  Insumo acima do teto não é registrado (aviso no log).
+- **Fim por exceção.** No caminho de exceção/Ctrl+C o evento de fim só é enfileirado (sem I/O de banco).
 
 ## Análise de impacto (6 eixos)
 

@@ -1256,6 +1256,7 @@ class AutonomousLoop:
                 agent_status=result.status,
                 agent_error_category=getattr(result, "error_category", None),
                 review_status=(review or {}).get("status"),
+                review_verified=bool((review or {}).get("verified", False)),
                 validation_criteria=[c for c in (task.validation_criteria or []) if isinstance(c, str)],
             )
             await asyncio.to_thread(ingestor.subtask, sub)
@@ -1637,6 +1638,7 @@ class AutonomousLoop:
                     "signature": review.signature,
                     "resolved_artifacts": dict(list((review.resolved_artifacts or {}).items())[:12]),
                     "name_mismatch": bool(review.name_mismatch),
+                    "verified": bool(getattr(review, "verified", True)),
                 },
             )
         except Exception as exc:
@@ -1646,6 +1648,7 @@ class AutonomousLoop:
             "issues": review.issues,
             "feedback": review.feedback,
             "resolved_artifacts": review.resolved_artifacts,
+            "verified": bool(getattr(review, "verified", True)),
         }
 
     async def _synthesize_results(

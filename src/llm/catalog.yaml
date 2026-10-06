@@ -39,13 +39,13 @@ modelos:
     trust: third_party
     ferramentas: true
     saida_estruturada: true
-    janela_contexto: 200000
+    janela_contexto: 1048576
   - id: openai/gpt-6-luna
     provedor: openai
     trust: third_party
     ferramentas: true
     saida_estruturada: true
-    janela_contexto: 128000
+    janela_contexto: 1048576
   - id: ollama/qwen3:8b
     provedor: ollama
     trust: self_hosted

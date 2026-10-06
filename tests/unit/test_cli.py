@@ -97,11 +97,15 @@ class TestBuildParser:
         assert args.timeout == AGENT_TIMEOUT_SECONDS
 
     def test_model_padrao(self) -> None:
-        """Model padrão é o valor de DEFAULT_MODEL."""
+        """Sem --model não há pin: o catálogo decide o modelo do researcher (ADR 017)."""
         parser = build_parser()
         args = parser.parse_args([])
-        from src.config import DEFAULT_MODEL
-        assert args.model == DEFAULT_MODEL
+        assert args.model is None
+
+    def test_model_e_pin_provedor_modelo(self) -> None:
+        """--model recebe o pin provedor/modelo do researcher."""
+        args = build_parser().parse_args(["--model", "ollama/qwen3:8b"])
+        assert args.model == "ollama/qwen3:8b"
 
     def test_version_flag(self) -> None:
         """Flag --version exibe a versão e sai."""
@@ -252,7 +256,8 @@ class TestSignalHandler:
         mock_orchestrator = MagicMock()
         mock_create.return_value = mock_orchestrator
 
-        with patch("src.cli.asyncio.run"):
+        with patch("src.llm.session.build_session_routing"), patch("src.cli.print_session_banner"), \
+             patch("src.cli.asyncio.run"):
             with patch("src.cli.execute_prompt", new_callable=MagicMock):
                 with patch("sys.argv", ["geminiclaw", "teste"]):
                     from src.cli import main
@@ -270,7 +275,8 @@ class TestSignalHandler:
         mock_orchestrator = MagicMock()
         mock_create.return_value = mock_orchestrator
 
-        with patch("src.cli.asyncio.run") as mock_run:
+        with patch("src.llm.session.build_session_routing"), patch("src.cli.print_session_banner"), \
+             patch("src.cli.asyncio.run") as mock_run:
             with patch("src.cli.execute_prompt", new_callable=MagicMock) as mock_execute:
                 with patch("sys.argv", ["geminiclaw", "meu prompt"]):
                     from src.cli import main

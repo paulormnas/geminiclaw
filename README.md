@@ -33,9 +33,9 @@ Usa **Ollama** para inferência local e não requer internet para o LLM.
 uv sync
 cp .env.example .env
 
-# Configuração .env
-LLM_PROVIDER=ollama
-LLM_MODEL=qwen3.5:4b
+# Configuração .env (política padrão: self_hosted_only; o catálogo escolhe o modelo Ollama)
+LLM_DATA_POLICY=self_hosted_only
+RESEARCHER_MODEL=ollama/qwen3.5:4b   # opcional: pin provedor/modelo
 DEPLOYMENT_PROFILE=pi5
 ```
 
@@ -48,9 +48,8 @@ Usa **Google Gemini API** para maior inteligência.
 uv sync --extra google
 cp .env.example .env
 
-# Configuração .env
-LLM_PROVIDER=google
-LLM_MODEL=gemini-3.8-flash
+# Configuração .env (prompts com dados do projeto saem do host: declare a política explicitamente)
+LLM_DATA_POLICY=third_party_allowed
 GEMINI_API_KEY=sua_chave_aqui
 ```
 
@@ -215,7 +214,7 @@ Implementado em `src/autonomous_loop.py`, o loop gerencia tarefas complexas de p
 | **Reviewer** | `agents/reviewer/` | Validação de resultados de subtarefas contra critérios definidos. |
 | **Summarizer** | `agents/summarizer/` | Síntese final de resultados com rastreabilidade acadêmica e metadados de autonomia. |
 
-Os agentes rodam no processo do orquestrador. O `AgentRuntime` resolve o provedor e o modelo de cada papel por `{PAPEL}_PROVIDER` e `{PAPEL}_MODEL` (por exemplo, `RESEARCHER_PROVIDER=anthropic`), o que permite misturar provedores na mesma sessão.
+Os agentes rodam no processo do orquestrador. O roteador de modelos (ADR 017) resolve o provedor e o modelo de cada papel uma vez por sessão, a partir do catálogo `src/llm/catalog.yaml`, da política `LLM_DATA_POLICY` e da disponibilidade dos provedores; `{PAPEL}_MODEL=provedor/modelo` (por exemplo, `RESEARCHER_MODEL=anthropic/claude-sonnet-5-5`) fixa o modelo de um papel, o que permite misturar provedores na mesma sessão.
 
 ---
 

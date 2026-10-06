@@ -329,6 +329,10 @@ class AnthropicProvider(LLMProvider):
         except Exception:
             return False
 
+    async def check_availability(self) -> str | None:
+        await self._client.with_options(timeout=5.0).models.retrieve(self._model)
+        return None
+
     @property
     def model_name(self) -> str:
         return self._model

@@ -4,7 +4,6 @@ import pytest
 # Define variáveis de ambiente necessárias para a importação do src.config nos testes unitários
 os.environ["GENAI_API_KEY"] = "dummy_key_for_testing"
 os.environ["GEMINI_API_KEY"] = "dummy_key_for_testing"
-os.environ["DEFAULT_MODEL"] = "gemini-3-flash-preview"
 os.environ["AGENT_TIMEOUT_SECONDS"] = "120"
 # DATABASE_URL: valor fictício para testes unitários (sem banco real)
 # Testes de integração sobrescrevem com uma URL real
@@ -12,6 +11,10 @@ os.environ.setdefault(
     "DATABASE_URL",
     "postgresql://test:test@localhost:5432/test_geminiclaw"
 )
+# Roteamento de modelos (ADR 017): política padrão restritiva e determinística nos testes.
+os.environ["LLM_DATA_POLICY"] = "self_hosted_only"
+os.environ["LLM_ROUTING"] = "flexible"
+os.environ.pop("LLM_PROVIDER_PRIORITY", None)
 os.environ["SEARCH_CACHE_TTL_SECONDS"] = "3600"
 
 # Sinaliza para pular testes de integração que consomem cota de API durante a suíte completa
@@ -208,3 +211,39 @@ def block_paid_llm_network(request, monkeypatch):
         return real_getaddrinfo(host, *args, **kwargs)
 
     monkeypatch.setattr(socket, "getaddrinfo", guarded)
+
+
+_ROUTING_ENV_PREFIXES = ("RESEARCHER", "DEVELOPER", "REVIEWER", "SUMMARIZER", "VALIDATOR", "BASE", "PLANNER")
+_REMOVED_LLM_VARS = ("LLM_PROVIDER", "LLM_MODEL", "DEFAULT_MODEL", "AGENT_MODEL")
+
+
+class _AlwaysHealthyProvider:
+    """Dublê do provedor no health check: nunca toca a rede."""
+
+    async def check_availability(self):
+        return None
+
+
+@pytest.fixture(autouse=True)
+def isolate_model_routing(monkeypatch):
+    """Isola o roteador de modelos (ADR 017) do ambiente e da rede.
+
+    - remove do ambiente os pins ``{PAPEL}_MODEL``/``{PAPEL}_PROVIDER`` e as variáveis removidas
+      (um ``.env`` real não pode alterar a resolução nos testes);
+    - troca o provedor real do health check por um dublê sempre saudável (nenhum teste faz
+      chamada de rede a provedor);
+    - limpa o catálogo em cache e o aviso único de variáveis removidas.
+    """
+    for prefix in _ROUTING_ENV_PREFIXES:
+        monkeypatch.delenv(f"{prefix}_MODEL", raising=False)
+        monkeypatch.delenv(f"{prefix}_PROVIDER", raising=False)
+    for name in _REMOVED_LLM_VARS:
+        monkeypatch.delenv(name, raising=False)
+
+    from src.llm import availability, routing, session
+
+    monkeypatch.setattr(availability, "default_provider_factory", lambda provider, model: _AlwaysHealthyProvider())
+    session.clear_catalog_cache()
+    routing.reset_removed_variables_warning()
+    yield
+    session.clear_catalog_cache()

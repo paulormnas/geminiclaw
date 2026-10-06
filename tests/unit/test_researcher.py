@@ -7,7 +7,6 @@ from agents.researcher.agent import (
     AGENT_NAME,
     root_agent,
 )
-from src.config import DEFAULT_MODEL
 
 
 @pytest.mark.unit
@@ -24,8 +23,8 @@ class TestResearcherAttributes:
         assert root_agent.name == "researcher"
 
     def test_agent_has_model(self) -> None:
-        """root_agent deve usar o DEFAULT_MODEL."""
-        assert root_agent.model == DEFAULT_MODEL
+        """root_agent guarda só o rótulo do papel; o modelo vem do ModelRouter (ADR 017)."""
+        assert root_agent.model == "router:researcher"
 
     def test_agent_has_description(self) -> None:
         """root_agent deve ter description não-vazia."""

@@ -68,6 +68,16 @@ class LLMProvider(ABC):
         """Retorna True se o backend está acessível e operacional."""
         ...
 
+    async def check_availability(self) -> str | None:
+        """Confere se o modelo configurado está utilizável, **sem gerar texto** (ADR 017 §4).
+
+        Returns:
+            ``None`` se o modelo está disponível; um código de motivo curto (ex.:
+            ``modelo_nao_instalado``) se o backend responde mas o modelo não serve. Falhas de
+            comunicação podem levantar exceção: quem chama reduz o erro a classe + código HTTP.
+        """
+        return None if await self.health_check() else "health_check_falhou"
+
     @property
     @abstractmethod
     def model_name(self) -> str:

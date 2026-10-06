@@ -59,33 +59,36 @@ def get_env_bool(key: str, default: bool = False) -> bool:
 # no futuro — ADR 011) não fique repetido literalmente em cada módulo.
 APP_NAME = get_env("APP_NAME", default="GeminiClaw")
 
-# --- Configuração LLM (V18) ---
+# --- Configuração LLM (ADR 017: catálogo de modelos e roteador por papel) ---
+# O modelo de cada papel NÃO é mais configurado por LLM_PROVIDER/LLM_MODEL/DEFAULT_MODEL: o roteador
+# (src/llm/routing.py) resolve cada papel a partir do catálogo (src/llm/catalog.yaml), da política
+# de dados e da disponibilidade dos provedores. `{PAPEL}_MODEL=provedor/modelo` é um pin opcional.
 
-# Provedor e modelo — novos
-LLM_PROVIDER = get_env("LLM_PROVIDER", default="google")
-LLM_MODEL = get_env("LLM_MODEL") or get_env("DEFAULT_MODEL", default="gemini-3.8-flash")
-DEFAULT_MODEL = LLM_MODEL  # Retrocompatibilidade
-
-# Model Router por papel (V14)
-RESEARCHER_PROVIDER = get_env("RESEARCHER_PROVIDER", default="google")
-RESEARCHER_MODEL = get_env("RESEARCHER_MODEL", default="gemini-3.8-flash")
-VALIDATOR_PROVIDER = get_env("VALIDATOR_PROVIDER", default="ollama")
-VALIDATOR_MODEL = get_env("VALIDATOR_MODEL", default="qwen3:8b")
-DEVELOPER_PROVIDER = get_env("DEVELOPER_PROVIDER", default="google")
-DEVELOPER_MODEL = get_env("DEVELOPER_MODEL", default="gemini-3.8-flash")
+# Política de dados: 'self_hosted_only' descarta todo modelo de terceiros (mesmo com chave presente);
+# 'third_party_allowed' permite enviar prompts a provedores de nuvem.
+LLM_DATA_POLICY = get_env("LLM_DATA_POLICY", default="self_hosted_only").strip().lower()
+# 'flexible' registra WARNING e segue a preferência quando um pin/dica não vale; 'strict' torna
+# pins e conflitos fatais e ignora a dica de modelo do plano.
+LLM_ROUTING = get_env("LLM_ROUTING", default="flexible").strip().lower()
+# Lista de permissão de provedores (separados por vírgula). Vazio = padrão do perfil de deployment.
+LLM_PROVIDER_PRIORITY = get_env("LLM_PROVIDER_PRIORITY", default="")
+# Timeout (s) do health check de cada (provedor, modelo) no início da sessão.
+LLM_HEALTH_CHECK_TIMEOUT_SECONDS = float(get_env("LLM_HEALTH_CHECK_TIMEOUT_SECONDS", default="5"))
+# Catálogo local opcional (só acrescenta modelos). Vazio = src/llm/catalog.local.yaml.
+LLM_CATALOG_LOCAL_PATH = get_env("LLM_CATALOG_LOCAL_PATH", default="")
 
 # Configurações Ollama
 OLLAMA_BASE_URL = get_env("OLLAMA_BASE_URL", default="http://localhost:11434")
 OLLAMA_NUM_CTX = int(get_env("OLLAMA_NUM_CTX", default="4096"))
 OLLAMA_ENABLE_THINKING = get_env("OLLAMA_ENABLE_THINKING", default="false").lower() == "true"
 
-# Google API key: obrigatória APENAS quando provider for google
-GEMINI_API_KEY = get_env(
-    "GEMINI_API_KEY",
-    required=(LLM_PROVIDER == "google"),
-)
+# Google API key: só é exigida se algum papel do mapa resolvido usa o Google; sem a chave o provedor
+# simplesmente não fica disponível para o roteador.
+GEMINI_API_KEY = get_env("GEMINI_API_KEY")
 
 # Modelo usado quando o principal do Google atinge o limite de requisições (HTTP 429). Vazio desliga o fallback.
+# Só é aceito se estiver no catálogo com o mesmo `trust` e atender aos requisitos do papel; desligado em
+# LLM_ROUTING=strict.
 GOOGLE_FALLBACK_MODEL = get_env("GOOGLE_FALLBACK_MODEL", default="gemini-3.7-flash")
 
 # Configurações do provedor openai_compatible (V16) — servidores que falam o
@@ -126,15 +129,12 @@ DEPLOYMENT_PROFILE = get_env("DEPLOYMENT_PROFILE", default="default")
 
 # Validação e rigor (Etapa V22)
 STRICT_VALIDATION = get_env_bool("STRICT_VALIDATION", default=True)
-if DEPLOYMENT_PROFILE == "pi5" or LLM_PROVIDER == "ollama":
+if DEPLOYMENT_PROFILE == "pi5":
     STRICT_VALIDATION = get_env_bool("STRICT_VALIDATION", default=False)
 
 if DEPLOYMENT_PROFILE == "pi5":
     MAX_SUBTASKS_PER_TASK = int(get_env("MAX_SUBTASKS_PER_TASK", default="5"))
     MAX_CONCURRENT_AGENTS = int(get_env("MAX_CONCURRENT_AGENTS", default="2"))
-    # No Pi 5, o Ollama local é o padrão se não especificado
-    if not os.environ.get("LLM_PROVIDER"):
-        LLM_PROVIDER = "ollama"
 else:
     MAX_SUBTASKS_PER_TASK = int(get_env("MAX_SUBTASKS_PER_TASK", default="10"))
     MAX_CONCURRENT_AGENTS = int(get_env("MAX_CONCURRENT_AGENTS", default="3"))

@@ -24,12 +24,10 @@ def _create_google(settings: ProviderSettings):
             "Instale com: uv sync --extra google"
         ) from exc
 
-    from src import config
-
     return GoogleProvider(
         api_key=settings.api_key,
         model=settings.model,
-        fallback_model=config.GOOGLE_FALLBACK_MODEL,
+        fallback_model=settings.fallback_model,
     )
 
 

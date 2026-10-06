@@ -8,14 +8,7 @@ Verifica:
 
 from __future__ import annotations
 
-import json
-import os
 
-# Define LLM_PROVIDER antes de qualquer import que carregue src.config,
-# pois GEMINI_API_KEY é obrigatória apenas quando provider=google.
-os.environ.setdefault("LLM_PROVIDER", "ollama")
-
-from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

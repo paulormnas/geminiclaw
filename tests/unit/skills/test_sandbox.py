@@ -1,5 +1,4 @@
 import os
-os.environ["LLM_PROVIDER"] = "ollama"
 os.environ["GEMINI_API_KEY"] = "dummy"
 
 import docker.errors

@@ -169,6 +169,14 @@ class OllamaProvider(LLMProvider):
         except Exception:
             return False
 
+    async def check_availability(self) -> str | None:
+        """Confere que o **modelo** está instalado em ``/api/tags`` (não basta o servidor responder)."""
+        r = await self._client.get("/api/tags", timeout=5.0)
+        r.raise_for_status()
+        installed = {m.get("name") or m.get("model") for m in r.json().get("models", [])}
+        wanted = {self._model, self._model if ":" in self._model else f"{self._model}:latest"}
+        return None if wanted & installed else "modelo_nao_instalado"
+
     @property
     def model_name(self) -> str:
         return self._model

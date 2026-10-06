@@ -275,7 +275,20 @@ class ValidatorAgent:
     """Agente validador executado como corrotina no processo principal (sem Docker)."""
 
     def __init__(self, provider: Optional[LLMProvider] = None):
-        self.provider = provider or ModelRouter.get_provider("validator")
+        self._provider = provider
+
+    @property
+    def provider(self) -> LLMProvider:
+        """Provedor do papel ``validator``, resolvido pelo roteador no uso (mapa da sessão corrente).
+
+        A resolução é tardia para que o agente, construído junto com o orquestrador, use o mapa
+        resolvido da sessão (ADR 017) e não um palpite anterior a ela.
+        """
+        return self._provider or ModelRouter.get_provider("validator")
+
+    @provider.setter
+    def provider(self, value: Optional[LLMProvider]) -> None:
+        self._provider = value
 
     async def validate_plan(
         self,

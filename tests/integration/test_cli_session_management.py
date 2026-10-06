@@ -167,7 +167,8 @@ class TestCliSigintCleanup:
     ):
         mock_create.return_value = MagicMock()
 
-        with patch("src.cli.asyncio.run"):
+        with patch("src.llm.session.build_session_routing"), patch("src.cli.print_session_banner"), \
+             patch("src.cli.asyncio.run"):
             with patch("src.cli.execute_prompt", new_callable=MagicMock):
                 with patch("sys.argv", ["geminiclaw", "teste"]):
                     main()

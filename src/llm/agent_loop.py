@@ -31,7 +31,7 @@ def _task_env() -> Dict[str, str]:
     Returns:
         Dicionário com as mesmas chaves antes lidas diretamente de
         ``os.environ`` (``SESSION_ID``, ``TASK_NAME``, ``OUTPUT_BASE_DIR``,
-        ``AGENT_ID``, ``EXECUTION_ID``, ``LLM_PROVIDER``, ``LLM_MODEL``).
+        ``AGENT_ID``, ``EXECUTION_ID``, ``PROVIDER_NAME``, ``MODEL_ID``).
     """
     ctx = get_agent_context_optional()
     if ctx is not None:
@@ -41,8 +41,8 @@ def _task_env() -> Dict[str, str]:
             "OUTPUT_BASE_DIR": str(ctx.output_dir.parent) if ctx.output_dir else "",
             "AGENT_ID": ctx.agent_id,
             "EXECUTION_ID": ctx.execution_id or ctx.session_id,
-            "LLM_PROVIDER": "",  # resolvido pelo ModelRouter; provider já é explícito aqui
-            "LLM_MODEL": ctx.model,
+            "PROVIDER_NAME": "",  # resolvido pelo ModelRouter; provider já é explícito aqui
+            "MODEL_ID": ctx.model,
         }
     return {
         # SESSION_ID sem default "truthy": código a jusante (override de
@@ -56,8 +56,8 @@ def _task_env() -> Dict[str, str]:
         "OUTPUT_BASE_DIR": os.environ.get("OUTPUT_BASE_DIR", ""),
         "AGENT_ID": os.environ.get("AGENT_ID", "agent"),
         "EXECUTION_ID": os.environ.get("EXECUTION_ID", os.environ.get("SESSION_ID", "")) or bound_execution_id(),
-        "LLM_PROVIDER": os.environ.get("LLM_PROVIDER", "unknown"),
-        "LLM_MODEL": os.environ.get("LLM_MODEL", "unknown"),
+        "PROVIDER_NAME": "unknown",
+        "MODEL_ID": "unknown",
     }
 
 @dataclass
@@ -164,7 +164,7 @@ async def run_agent_loop(
         max_iterations: Limite de chamadas de ferramenta para evitar loops infinitos.
         provider: Provedor LLM a usar (Roadmap V16: resolvido por papel via
             ``ModelRouter`` no runtime em processo). Se omitido, usa o provedor
-            singleton padrão (``get_provider()``).
+            do papel ``researcher`` (``get_provider()``, via ``ModelRouter``).
 
     Returns:
         Resposta final do agente como string.
@@ -297,10 +297,10 @@ async def run_agent_loop(
         _completion_tokens = response.usage.get("completion_tokens", 0) or len(response.text or "") // 4
         # V16 — no runtime em processo, o provedor é explícito (parâmetro `provider`,
         # resolvido por papel via ModelRouter); deriva o nome a partir da própria
-        # instância em vez de LLM_PROVIDER (global, não confiável com múltiplos papéis
+        # instância em vez de uma variável global (não confiável com múltiplos papéis
         # concorrentes). Mantém fallback em os.environ para chamadas fora do AgentRuntime.
-        _provider_name = type(provider).__name__.removesuffix("Provider").lower() or _task["LLM_PROVIDER"] or "unknown"
-        _model_name = provider.model_name or _task["LLM_MODEL"] or "unknown"
+        _provider_name = type(provider).__name__.removesuffix("Provider").lower() or _task["PROVIDER_NAME"] or "unknown"
+        _model_name = provider.model_name or _task["MODEL_ID"] or "unknown"
         _telemetry.record_token_usage(
             execution_id=_exec_id,
             session_id=_session_id,

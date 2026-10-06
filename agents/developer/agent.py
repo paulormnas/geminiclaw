@@ -7,7 +7,6 @@ nunca executa nada diretamente no host.
 Integrado ao WorkspaceManifest para reutilização de artefatos entre etapas.
 """
 
-import os
 import json
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -21,7 +20,6 @@ from agents.base.agent import (
     _task_state,
 )
 from agents.base.tools import write_artifact
-from src.config import DEFAULT_MODEL
 from src.logger import get_logger
 from src.prompts import render_instruction
 from src.skills import registry
@@ -101,11 +99,8 @@ for tool in registry.as_tools():
     if tool_name in ["python_interpreter", "memory", "ask_researcher"]:
         active_tools.append(tool)
 
-agent_model = (
-    os.environ.get("AGENT_MODEL")
-    or os.environ.get("DEVELOPER_MODEL")
-    or DEFAULT_MODEL
-)
+# O modelo do papel é resolvido pelo ModelRouter (ADR 017); o Agent guarda só um rótulo.
+agent_model = "router:developer"
 
 _RESEARCH_KEYWORDS = [
     "pesquisa bibliográfica",

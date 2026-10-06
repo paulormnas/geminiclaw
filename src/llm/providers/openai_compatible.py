@@ -207,6 +207,16 @@ class OpenAICompatibleProvider(LLMProvider):
         except Exception:
             return False
 
+    async def check_availability(self) -> str | None:
+        """Confere que o modelo está em ``/models`` quando o servidor lista modelos."""
+        response = await self._client.get("/models", timeout=5.0)
+        response.raise_for_status()
+        try:
+            listed = {item.get("id") for item in response.json().get("data", []) if isinstance(item, dict)}
+        except ValueError:
+            return None
+        return None if not listed or self._model in listed else "modelo_nao_instalado"
+
     @property
     def model_name(self) -> str:
         return self._model

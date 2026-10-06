@@ -9,7 +9,6 @@ O Researcher é responsável por:
 """
 
 import json
-import os
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
@@ -21,7 +20,6 @@ from agents.base.agent import (
     _setup_skills,
 )
 from agents.base.tools import write_artifact
-from src.config import DEFAULT_MODEL
 from src.logger import get_logger
 from src.prompts import render_instruction
 from src.skills import registry
@@ -141,11 +139,8 @@ class ExecutionPlan:
 # Configura as skills antes de inicializar o agente
 _setup_skills()
 
-agent_model = (
-    os.environ.get("AGENT_MODEL")
-    or os.environ.get("RESEARCHER_MODEL")
-    or DEFAULT_MODEL
-)
+# O modelo do papel é resolvido pelo ModelRouter (ADR 017); o Agent guarda só um rótulo.
+agent_model = "router:researcher"
 
 root_agent = Agent(
     name=AGENT_NAME,

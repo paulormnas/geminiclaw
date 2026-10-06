@@ -32,7 +32,6 @@ from src.agent_runtime.context import get_agent_context_optional
 from src.logger import get_logger
 from src.prompts import render_instruction
 from src.session import SessionManager
-from src.config import DEFAULT_MODEL
 from src.skills import registry
 from src.skills.memory.long_term import LongTermMemory
 
@@ -378,7 +377,8 @@ def _get_agent_instruction(base_instruction: str) -> str:
 # Configura as skills antes de inicializar o agente
 _setup_skills()
 
-base_model = os.environ.get("AGENT_MODEL") or DEFAULT_MODEL
+# O modelo do papel é resolvido pelo ModelRouter (ADR 017); o Agent guarda só um rótulo.
+base_model = "router:base"
 
 # Define o root_agent
 root_agent = Agent(

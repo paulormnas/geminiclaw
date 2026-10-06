@@ -428,6 +428,21 @@ KNOWLEDGE_READ_TIMEOUT_MS = int(get_env("KNOWLEDGE_READ_TIMEOUT_MS", default="50
 # canônico do vocabulário controlado (faixa de duplicata, v17-controlled-vocabulary).
 VOCAB_MATCH_THRESHOLD = float(get_env("VOCAB_MATCH_THRESHOLD", default="0.90"))
 
+# Busca de domínio com embeddings hierárquicos (v17-domain-search §7).
+# Resultados devolvidos por padrão (teto fixo de 10 aplicado pela busca).
+DOMAIN_SEARCH_LIMIT = int(get_env("DOMAIN_SEARCH_LIMIT", default="5"))
+# Escore mínimo de um domínio para ser devolvido (depende do modelo de embedding).
+DOMAIN_SEARCH_MIN_SCORE = float(get_env("DOMAIN_SEARCH_MIN_SCORE", default="0.35"))
+# Margem de escore em que o nível mais específico passa à frente do mais amplo.
+DOMAIN_SPECIFICITY_MARGIN = float(get_env("DOMAIN_SPECIFICITY_MARGIN", default="0.03"))
+# Tamanho máximo (caracteres) da consulta e do contexto da busca de domínio.
+DOMAIN_SEARCH_MAX_QUERY_CHARS = int(get_env("DOMAIN_SEARCH_MAX_QUERY_CHARS", default="300"))
+# Descendentes marcados como pendentes por lote quando um ancestral muda.
+DOMAIN_REINDEX_BATCH = int(get_env("DOMAIN_REINDEX_BATCH", default="200"))
+# Tamanho máximo (caracteres) de um termo livre de vocabulário que vira candidato. Termos
+# maiores são recusados: texto de agente não deve voltar ao prompt de outro sem limite.
+VOCAB_TERM_MAX_CHARS = int(get_env("VOCAB_TERM_MAX_CHARS", default="120"))
+
 # Identificador estável deste computador (fator de independência, ADR 015 §9).
 # Gerado uma vez e persistido em ~/.config/geminiclaw/node_id (ou $XDG_CONFIG_HOME).
 _node_id_env = get_env("NODE_ID")

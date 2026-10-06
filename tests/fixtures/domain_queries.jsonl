@@ -1,0 +1,41 @@
+{"consulta": "teoria dos conjuntos", "esperados": ["10101012", "10101004"], "idioma": "pt"}
+{"consulta": "inferência estatística", "esperados": ["10202005", "10200002"], "idioma": "pt"}
+{"consulta": "algoritmos e complexidade computacional", "esperados": ["10301003", "10300007"], "idioma": "pt"}
+{"consulta": "sistemas operacionais e redes de computadores", "esperados": ["10304002", "10300007"], "idioma": "pt"}
+{"consulta": "aprendizado de máquina", "esperados": ["10303006", "10300007"], "idioma": "pt"}
+{"consulta": "reações orgânicas e síntese de compostos", "esperados": ["10601007", "10600000"], "idioma": "pt"}
+{"consulta": "cromatografia e espectrometria", "esperados": ["10604006", "10600000"], "idioma": "pt"}
+{"consulta": "genética de populações humanas", "esperados": ["20205007", "20200005"], "idioma": "pt"}
+{"consulta": "biologia molecular do DNA", "esperados": ["20804008", "20800002"], "idioma": "pt"}
+{"consulta": "ecossistemas aquáticos e florestais", "esperados": ["20502001", "20500009"], "idioma": "pt"}
+{"consulta": "resistência dos materiais e cálculo de estruturas", "esperados": ["30102006", "30503000", "30100003"], "idioma": "pt"}
+{"consulta": "redes de distribuição de energia elétrica", "esperados": ["30404002", "30400007"], "idioma": "pt"}
+{"consulta": "energia solar e eólica", "esperados": ["31402003", "31400000"], "idioma": "pt"}
+{"consulta": "tratamento de esgoto", "esperados": ["30702003", "30700000"], "idioma": "pt"}
+{"consulta": "otimização e programação linear", "esperados": ["30802008", "30800005", "10104003"], "idioma": "pt"}
+{"consulta": "doenças infecciosas e epidemiologia", "esperados": ["40601005", "40600009"], "idioma": "pt"}
+{"consulta": "cirurgia cardíaca", "esperados": ["40102009", "40100006"], "idioma": "pt"}
+{"consulta": "nutrição clínica e dietoterapia", "esperados": ["40509001", "40500004"], "idioma": "pt"}
+{"consulta": "melhoramento genético de plantas", "esperados": ["20203004", "20200005"], "idioma": "pt"}
+{"consulta": "política monetária e inflação", "esperados": ["60303000", "60300000"], "idioma": "pt"}
+{"consulta": "ética e filosofia moral", "esperados": ["70104000", "70100004"], "idioma": "pt"}
+{"consulta": "set theory", "esperados": ["10101012", "10101004"], "idioma": "en"}
+{"consulta": "statistical inference", "esperados": ["10202005", "10200002"], "idioma": "en"}
+{"consulta": "computational complexity", "esperados": ["10301003", "10300007"], "idioma": "en"}
+{"consulta": "computer networks and operating systems", "esperados": ["10304002", "10300007"], "idioma": "en"}
+{"consulta": "machine learning", "esperados": ["10303006", "10300007"], "idioma": "en"}
+{"consulta": "organic synthesis", "esperados": ["10601007", "10600000"], "idioma": "en"}
+{"consulta": "analytical chemistry", "esperados": ["10604006", "10600000"], "idioma": "en"}
+{"consulta": "molecular biology", "esperados": ["20804008", "20800002"], "idioma": "en"}
+{"consulta": "animal behavior", "esperados": ["20404000", "20400004"], "idioma": "en"}
+{"consulta": "soil science", "esperados": ["50101005", "50100009"], "idioma": "en"}
+{"consulta": "structural engineering", "esperados": ["30102006", "30100003"], "idioma": "en"}
+{"consulta": "renewable energy", "esperados": ["31402003", "31400000"], "idioma": "en"}
+{"consulta": "wastewater treatment", "esperados": ["30702003", "30700000"], "idioma": "en"}
+{"consulta": "operations research", "esperados": ["30802008", "30800005"], "idioma": "en"}
+{"consulta": "epidemiology", "esperados": ["40601005", "40600009"], "idioma": "en"}
+{"consulta": "monetary economics", "esperados": ["60303000", "60300000"], "idioma": "en"}
+{"consulta": "epistemology", "esperados": ["70105006", "70100004"], "idioma": "en"}
+{"consulta": "astrophysics of stars", "esperados": ["10402004", "10400001"], "idioma": "en"}
+{"consulta": "plant physiology", "esperados": ["20303009", "20300000"], "idioma": "en"}
+{"consulta": "aquaculture", "esperados": ["50603000", "50600001"], "idioma": "en"}

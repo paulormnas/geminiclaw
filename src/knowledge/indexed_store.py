@@ -80,6 +80,8 @@ class IndexedGraphStore(GraphStore):
             return
         if text_changed or was_pending:
             self._index_node(new)
+            if text_changed and old.label == "Dominio":
+                self._mark_descendants(node_id)
         else:
             try:
                 self._index.refresh_payload(new)
@@ -88,6 +90,16 @@ class IndexedGraphStore(GraphStore):
                     "Falha ao atualizar o payload do índice semântico",
                     extra={"extra": {"node_id": node_id, "error": str(exc)}},
                 )
+
+    def _mark_descendants(self, node_id: str) -> None:
+        """Termo ou sinônimos de um ancestral mudaram: descendentes ficam pendentes (v17-domain-search §3)."""
+        try:
+            self._index.mark_descendants_pending(node_id)
+        except Exception as exc:  # noqa: BLE001 - a reconciliação pelo text_hash cobre a falha
+            logger.warning(
+                "Falha ao marcar os descendentes do domínio como pendentes",
+                extra={"extra": {"node_id": node_id, "error": str(exc)}},
+            )
 
     def _index_node(self, node: Node) -> None:
         """Gancho pós-escrita: falha deixa o nó ``pendente`` (reconciliação corrige)."""

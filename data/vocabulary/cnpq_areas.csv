@@ -1,0 +1,1336 @@
+codigo_cnpq,termo,nivel,codigo_pai
+10000003,Ciências Exatas e da Terra,grande_area,
+10100008,Matemática,area,10000003
+10101004,Álgebra,subarea,10100008
+10101012,Conjuntos,especialidade,10101004
+10101020,Lógica Matemática,especialidade,10101004
+10101039,Teoria dos Números,especialidade,10101004
+10101047,Grupos de Álgebra Não-Comutativa,especialidade,10101004
+10101055,Álgebra Comutativa,especialidade,10101004
+10101063,Geometria Algébrica,especialidade,10101004
+10102000,Análise,subarea,10100008
+10102019,Análise Complexa,especialidade,10102000
+10102027,Análise Funcional,especialidade,10102000
+10102035,Análise Funcional Não-Linear,especialidade,10102000
+10102043,Equações Diferenciais Ordinárias,especialidade,10102000
+10102051,Equações Diferenciais Parciais,especialidade,10102000
+10102060,Equações Diferenciais Funcionais,especialidade,10102000
+10103007,Geometria e Topologia,subarea,10100008
+10103015,Geometria Diferencial,especialidade,10103007
+10103023,Topologia Algébrica,especialidade,10103007
+10103031,Topologia das Variedades,especialidade,10103007
+10103040,Sistemas Dinâmicos,especialidade,10103007
+10103058,Teoria das Singularidades e Teoria das Catástrofes,especialidade,10103007
+10103066,Teoria das Folheações,especialidade,10103007
+10104003,Matemática Aplicada,subarea,10100008
+10104011,Física Matemática,especialidade,10104003
+10104020,Análise Numérica,especialidade,10104003
+10104038,Matemática Discreta e Combinatória,especialidade,10104003
+10104046,Biomatemática,especialidade,10104003
+10200002,Probabilidade e Estatística,area,10000003
+10201009,Probabilidade,subarea,10200002
+10201017,Teoria Geral e Fundamentos da Probabilidade,especialidade,10201009
+10201025,Teoria Geral e Processos Estocásticos,especialidade,10201009
+10201033,Teoremas de Limite,especialidade,10201009
+10201041,Processos Markovianos,especialidade,10201009
+10201050,Análise Estocástica,especialidade,10201009
+10201068,Processos Estocásticos Especiais,especialidade,10201009
+10202005,Estatística,subarea,10200002
+10202013,Fundamentos da Estatística,especialidade,10202005
+10202021,Inferência Paramétrica,especialidade,10202005
+10202030,Inferência Não-Paramétrica,especialidade,10202005
+10202048,Inferência em Processos Estocásticos,especialidade,10202005
+10202056,Análise Multivariada,especialidade,10202005
+10202064,Regressão e Correlação,especialidade,10202005
+10202072,Planejamento de Experimentos,especialidade,10202005
+10202080,Análise de Dados,especialidade,10202005
+10203001,Probabilidade e Estatística Aplicadas,subarea,10200002
+10300007,Ciência da Computação,area,10000003
+10301003,Teoria da Computação,subarea,10300007
+10301011,Computabilidade e Modelos de Computação,especialidade,10301003
+10301020,Linguagem Formais e Autômatos,especialidade,10301003
+10301038,Análise de Algoritmos e Complexidade de Computação,especialidade,10301003
+10301046,Lógicas e Semântica de Programas,especialidade,10301003
+10302000,Matemática da Computação,subarea,10300007
+10302018,Matemática Simbólica,especialidade,10302000
+10302026,Modelos Analíticos e de Simulação,especialidade,10302000
+10303006,Metodologia e Técnicas da Computação,subarea,10300007
+10303014,Linguagens de Programação,especialidade,10303006
+10303022,Engenharia de Software,especialidade,10303006
+10303030,Banco de Dados,especialidade,10303006
+10303049,Sistemas de Informação,especialidade,10303006
+10303057,Processamento Gráfico (Graphics),especialidade,10303006
+10304002,Sistemas de Computação,subarea,10300007
+10304010,Hardware,especialidade,10304002
+10304029,Arquitetura de Sistemas de Computação,especialidade,10304002
+10304037,Software Básico,especialidade,10304002
+10304045,Teleinformática,especialidade,10304002
+10400001,Astronomia,area,10000003
+10401008,Astronomia de Posição e Mecânica Celeste,subarea,10400001
+10401016,Astronomia Fundamental,especialidade,10401008
+10401024,Astronomia Dinâmica,especialidade,10401008
+10402004,Astrofísica Estelar,subarea,10400001
+10403000,Astrofísica do Meio Interestelar,subarea,10400001
+10403019,Meio Interestelar,especialidade,10403000
+10403027,Nebulosa,especialidade,10403000
+10404007,Astrofísica Extragalactica,subarea,10400001
+10404015,Galáxias,especialidade,10404007
+10404023,Aglomerados de Galáxias,especialidade,10404007
+10404031,Quasares,especialidade,10404007
+10404040,Cosmologia,especialidade,10404007
+10405003,Astrofísica do Sistema Solar,subarea,10400001
+10405011,Física Solar,especialidade,10405003
+10405020,Movimento da Terra,especialidade,10405003
+10405038,Sistema Planetário,especialidade,10405003
+10406000,Instrumentação Astronômica,subarea,10400001
+10406018,Astronomia Ótica,especialidade,10406000
+10406026,Radioastronomia,especialidade,10406000
+10406034,Astronomia Espacial,especialidade,10406000
+10406042,Processamento de Dados Astronômicos,especialidade,10406000
+10500006,Física,area,10000003
+10501002,Física Geral,subarea,10500006
+10501010,Métodos Matemáticos da Física,especialidade,10501002
+10501029,Física Clássica e Física Quântica; Mecânica e Campos,especialidade,10501002
+10501037,Relatividade e Gravitação,especialidade,10501002
+10501045,Física Estatística e Termodinâmica,especialidade,10501002
+10501053,"Metrologia, Técnicas Gerais de Laboratório, Sistema de Instrumentação",especialidade,10501002
+10501061,Instrumentação Específica de Uso Geral em Física,especialidade,10501002
+10502009,Áreas Clássicas de Fenomenologia e suas Aplicações,subarea,10500006
+10502017,Eletricidade e Magnetismo; Campos e Partículas Carregadas,especialidade,10502009
+10502025,Ótica,especialidade,10502009
+10502033,Acústica,especialidade,10502009
+10502041,Transferência de Calor; Processos Térmicos e Termodinâmicos,especialidade,10502009
+10502050,"Mecânica, Elasticidade e Reologia",especialidade,10502009
+10502068,Dinâmica dos Fluídos,especialidade,10502009
+10503005,Física das Partículas Elementares e Campos,subarea,10500006
+10503013,Teoria Geral de Partículas e Campos,especialidade,10503005
+10503021,Teorias Específicas e Modelos de Interação; Sistemática de Partículas; Raios Cósmicos,especialidade,10503005
+10503030,Reações Específicas e Fenomiologia de Partículas,especialidade,10503005
+10503048,Propriedades de Partículas Específicas e Ressonâncias,especialidade,10503005
+10504001,Física Nuclear,subarea,10500006
+10504010,Estrutura Nuclear,especialidade,10504001
+10504028,Desintegração Nuclear e Radioatividade,especialidade,10504001
+10504036,Reações Nucleares e Espalhamento Geral,especialidade,10504001
+10504044,Reações Nucleares e Espalhamento (Reações Específicas),especialidade,10504001
+10504052,Propriedades de Núcleos Específicos,especialidade,10504001
+10504060,Métodos Experimentais e Instrumentação para Partículas Elementares e Física Nuclear,especialidade,10504001
+10505008,Física Atômica e Molecular,subarea,10500006
+10505016,Estrutura Eletrônica de Átomos e Moléculas; Teoria,especialidade,10505008
+10505024,Espectros Atômicos e Integração de Fótons,especialidade,10505008
+10505032,Espectros Moleculares e Interações de Fótons com Moléculas,especialidade,10505008
+10505040,Processos de Colisão e Interações de Átomos e Moléculas,especialidade,10505008
+10505059,Inf. sobre Átomos e Moléculas Obtidos Experimentalmente; Instrumentação e Técnicas,especialidade,10505008
+10505067,Estudos de Átomos e Moléculas Especiais,especialidade,10505008
+10506004,"Física dos Fluídos, Física de Plasmas e Descargas Elétricas",subarea,10500006
+10506012,Cinética e Teoria de Transporte de Fluídos; Propriedades Físicas de Gases,especialidade,10506004
+10506020,Física de Plasmas e Descargas Elétricas,especialidade,10506004
+10507000,Física da Matéria Condensada,subarea,10500006
+10507019,Estrutura de Líquidos e Sólidos; Cristalografia,especialidade,10507000
+10507027,Propriedades Mecânicas e Acústicas da Matéria Condensada,especialidade,10507000
+10507035,Dinâmica da Rede e Estatística de Cristais,especialidade,10507000
+10507043,"Equação de Estado, Equilíbrio de Fases e Transições de Fase",especialidade,10507000
+10507051,Propriedades Térmicas da Matéria Condensada,especialidade,10507000
+10507060,Propriedades de Transportes de Matéria Condensada (Não Eletrônica),especialidade,10507000
+10507078,"Campos Quânticos e Sólidos, Hélio, Líquido, Sólido",especialidade,10507000
+10507086,Superfícies e Interfaces; Películas e Filamentos,especialidade,10507000
+10507094,Estados Eletrônicos,especialidade,10507000
+10507108,Transp. Eletrônicos e Prop. Elétricas de Superfícies; Interfaces e Películas,especialidade,10507000
+10507116,Estruturas Eletrônicas e Propriedades Elétricas de Superfícies; Interf. e Partículas,especialidade,10507000
+10507124,Supercondutividade,especialidade,10507000
+10507132,Materiais Magnéticos e Propriedades Magnéticas,especialidade,10507000
+10507140,Ressonância Mag. e Relax. na Mat. Condens; Efeitos Mosbauer; Corr. Ang. Pertubada,especialidade,10507000
+10507159,Materiais Dielétricos e Propriedades Dielétricas,especialidade,10507000
+10507167,Prop. Óticas e Espectrosc. da Mat. Condens; Outras Inter. da Mat. com Rad. e Part.,especialidade,10507000
+10507175,Emissão Eletrônica e Iônica por Líquidos e Sólidos; Fenômenos de Impacto,especialidade,10507000
+10600000,Química,area,10000003
+10601007,Química Orgânica,subarea,10600000
+10601015,"Estrutura, Conformação e Estereoquímica",especialidade,10601007
+10601023,Síntese Orgânica,especialidade,10601007
+10601031,Físico-Química Orgânica,especialidade,10601007
+10601040,Fotoquímica Orgânica,especialidade,10601007
+10601058,Química dos Produtos Naturais,especialidade,10601007
+10601066,"Evolução, Sistemática e Ecologia Química",especialidade,10601007
+10601074,Polímeros e Colóides,especialidade,10601007
+10602003,Química Inorgânica,subarea,10600000
+10602011,Campos de Coordenação,especialidade,10602003
+10602020,Não-Metais e Seus Compostos,especialidade,10602003
+10602038,Compostos Organo-Metálicos,especialidade,10602003
+10602046,Determinação de Estrutura de Compostos Inorgânicos,especialidade,10602003
+10602054,Foto-Química Inorgânica,especialidade,10602003
+10602062,Físico Química Inorgânica,especialidade,10602003
+10602070,Química Bio-Inorgânica,especialidade,10602003
+10603000,Físico-Química,subarea,10600000
+10603018,Cinética Química e Catálise,especialidade,10603000
+10603026,Eletroquímica,especialidade,10603000
+10603034,Espectroscopia,especialidade,10603000
+10603042,Química de Interfaces,especialidade,10603000
+10603050,Química do Estado Condensado,especialidade,10603000
+10603069,Química Nuclear e Radioquímica,especialidade,10603000
+10603077,Química Teórica,especialidade,10603000
+10603085,Termodinâmica Química,especialidade,10603000
+10604006,Química Analítica,subarea,10600000
+10604014,Separação,especialidade,10604006
+10604022,Métodos Óticos de Análise,especialidade,10604006
+10604030,Eletroanalítica,especialidade,10604006
+10604049,Gravimetria,especialidade,10604006
+10604057,Titimetria,especialidade,10604006
+10604065,Instrumentação Analítica,especialidade,10604006
+10604073,Análise de Traços e Química Ambiental,especialidade,10604006
+10700005,Geociências,area,10000003
+10701001,Geologia,subarea,10700005
+10701010,Mineralogia,especialidade,10701001
+10701028,Petrologia,especialidade,10701001
+10701036,Geoquímica,especialidade,10701001
+10701044,Geologia Regional,especialidade,10701001
+10701052,Geotectônica,especialidade,10701001
+10701060,Geocronologia,especialidade,10701001
+10701079,Cartografia Geológica,especialidade,10701001
+10701087,Metalogenia,especialidade,10701001
+10701095,Hidrogeologia,especialidade,10701001
+10701109,Prospecção Mineral,especialidade,10701001
+10701117,Sedimentologia,especialidade,10701001
+10701125,Paleontologia Estratigráfica,especialidade,10701001
+10701133,Estratigrafia,especialidade,10701001
+10701141,Geologia Ambiental,especialidade,10701001
+10702008,Geofísica,subarea,10700005
+10702016,Geomagnetismo,especialidade,10702008
+10702024,Sismologia,especialidade,10702008
+10702032,Geotermia e Fluxo Térmico,especialidade,10702008
+10702040,Propriedades Físicas das Rochas,especialidade,10702008
+10702059,Geofísica Nuclear,especialidade,10702008
+10702067,Sensoriamento Remoto,especialidade,10702008
+10702075,Aeronomia,especialidade,10702008
+10702083,Desenvolvimento de Instrumentação Geofísica,especialidade,10702008
+10702091,Geofísica Aplicada,especialidade,10702008
+10702105,Gravimetria,especialidade,10702008
+10703004,Meteorologia,subarea,10700005
+10703012,Meteorologia Dinâmica,especialidade,10703004
+10703020,Meteorologia Sinótica,especialidade,10703004
+10703039,Meteorologia Física,especialidade,10703004
+10703047,Química da Atmosfera,especialidade,10703004
+10703055,Instrumentação Meteorológica,especialidade,10703004
+10703063,Climatologia,especialidade,10703004
+10703071,Micrometeorologia,especialidade,10703004
+10703080,Sensoriamento Remoto da Atmosfera,especialidade,10703004
+10703098,Meteorologia Aplicada,especialidade,10703004
+10704000,Geodésia,subarea,10700005
+10704019,Geodésia Física,especialidade,10704000
+10704027,Geodésia Geométrica,especialidade,10704000
+10704035,Geodésia Celeste,especialidade,10704000
+10704043,Fotogrametria,especialidade,10704000
+10704051,Cartografia Básica,especialidade,10704000
+10705007,Geografia Física,subarea,10700005
+10705015,Geomorfologia,especialidade,10705007
+10705023,Climatologia Geográfica,especialidade,10705007
+10705031,Pedologia,especialidade,10705007
+10705040,Hidrogeografia,especialidade,10705007
+10705058,Geoecologia,especialidade,10705007
+10705066,Fotogeografia (Físico-Ecológica),especialidade,10705007
+10705074,Geocartografia,especialidade,10705007
+10800000,Oceanografia,area,10000003
+10801006,Oceanografia Biológica,subarea,10800000
+10801014,Interação entre os Organismos Marinhos e os Parâmetros Ambientais,especialidade,10801006
+10802002,Oceanografia Física,subarea,10800000
+10802010,Variáveis Físicas da Água do Mar,especialidade,10802002
+10802029,Movimento da Água do Mar,especialidade,10802002
+10802037,Origem das Massas de Água,especialidade,10802002
+10802045,Interação do Oceano com o Leito do Mar,especialidade,10802002
+10802053,Interação do Oceano com a Atmosfera,especialidade,10802002
+10803009,Oceanografia Química,subarea,10800000
+10803017,Propriedades Químicas da Água do Mar,especialidade,10803009
+10803025,Interações Químico-Biológicas/Geológicas das Substâncias Químicas da Água do Mar,especialidade,10803009
+10804005,Oceanografia Geológica,subarea,10800000
+10804013,Geomorfologia Submarina,especialidade,10804005
+10804021,Sedimentologia Marinha,especialidade,10804005
+10804030,Geofísica Marinha,especialidade,10804005
+10804048,Geoquímica Marinha,especialidade,10804005
+20000006,Ciências Biológicas,grande_area,
+20100000,Biologia Geral,area,20000006
+20200005,Genética,area,20000006
+20201001,Genética Quantitativa,subarea,20200005
+20202008,Genética Molecular e de Microorganismos,subarea,20200005
+20203004,Genética Vegetal,subarea,20200005
+20204000,Genética Animal,subarea,20200005
+20205007,Genética Humana e Médica,subarea,20200005
+20206003,Mutagênese,subarea,20200005
+20300000,Botânica,area,20000006
+20301006,Paleobotânica,subarea,20300000
+20302002,Morfologia Vegetal,subarea,20300000
+20302010,Morfologia Externa,especialidade,20302002
+20302029,Citologia Vegetal,especialidade,20302002
+20302037,Anatomia Vegetal,especialidade,20302002
+20302045,Palinologia,especialidade,20302002
+20303009,Fisiologia Vegetal,subarea,20300000
+20303017,Nutrição e Crescimento Vegetal,especialidade,20303009
+20303025,Reprodução Vegetal,especialidade,20303009
+20303033,Ecofisiologia Vegetal,especialidade,20303009
+20304005,Taxonomia Vegetal,subarea,20300000
+20304013,Taxonomia de Criptógamos,especialidade,20304005
+20304021,Taxonomia de Fanerógamos,especialidade,20304005
+20305001,Fitogeografia,subarea,20300000
+20306008,Botânica Aplicada,subarea,20300000
+20400004,Zoologia,area,20000006
+20401000,Paleozoologia,subarea,20400004
+20402007,Morfologia dos Grupos Recentes,subarea,20400004
+20403003,Fisiologia dos Grupos Recentes,subarea,20400004
+20404000,Comportamento Animal,subarea,20400004
+20405006,Taxonomia dos Grupos Recentes,subarea,20400004
+20406002,Zoologia Aplicada,subarea,20400004
+20406010,Conservação das Espécies Animais,especialidade,20406002
+20406029,Utilização dos Animais,especialidade,20406002
+20406037,Controle Populacional de Animais,especialidade,20406002
+20500009,Ecologia,area,20000006
+20501005,Ecologia Teórica,subarea,20500009
+20502001,Ecologia de Ecossistemas,subarea,20500009
+20503008,Ecologia Aplicada,subarea,20500009
+20600003,Morfologia,area,20000006
+20601000,Citologia e Biologia Celular,subarea,20600003
+20602006,Embriologia,subarea,20600003
+20603002,Histologia,subarea,20600003
+20604009,Anatomia,subarea,20600003
+20604017,Anatomia Humana,especialidade,20604009
+20604025,Anatomia Animal,especialidade,20604009
+20700008,Fisiologia,area,20000006
+20701004,Fisiologia Geral,subarea,20700008
+20702000,Fisiologia de Órgãos e Sistemas,subarea,20700008
+20702019,Neurofisiologia,especialidade,20702000
+20702027,Fisiologia Cardiovascular,especialidade,20702000
+20702035,Fisiologia da Respiração,especialidade,20702000
+20702043,Fisiologia Renal,especialidade,20702000
+20702051,Fisiologia Endócrina,especialidade,20702000
+20702060,Fisiologia da Digestão,especialidade,20702000
+20702078,Cinesiologia,especialidade,20702000
+20703007,Fisiologia do Esforço,subarea,20700008
+20704003,Fisiologia Comparada,subarea,20700008
+20800002,Bioquímica,area,20000006
+20801009,Química de Macromoléculas,subarea,20800002
+20801017,Proteínas,especialidade,20801009
+20801025,Lipídeos,especialidade,20801009
+20801033,Glicídeos,especialidade,20801009
+20802005,Bioquímica dos Microorganismos,subarea,20800002
+20803001,Metabolismo e Bioenergética,subarea,20800002
+20804008,Biologia Molecular,subarea,20800002
+20805004,Enzimologia,subarea,20800002
+20900007,Biofísica,area,20000006
+20901003,Biofísica Molecular,subarea,20900007
+20902000,Biofísica Celular,subarea,20900007
+20903006,Biofísica de Processos e Sistemas,subarea,20900007
+20904002,Radiologia e Fotobiologia,subarea,20900007
+21000000,Farmacologia,area,20000006
+21001006,Farmacologia Geral,subarea,21000000
+21001014,Farmacocinética,especialidade,21001006
+21001022,Biodisponibilidade,especialidade,21001006
+21002002,Farmacologia Autonômica,subarea,21000000
+21003009,Neuropsicofarmacologia,subarea,21000000
+21004005,Farmacologia Cardiorenal,subarea,21000000
+21005001,Farmacologia Bioquímica e Molecular,subarea,21000000
+21006008,Etnofarmacologia,subarea,21000000
+21007004,Toxicologia,subarea,21000000
+21008000,Farmacologia Clínica,subarea,21000000
+21100004,Imunologia,area,20000006
+21101000,Imunoquímica,subarea,21100004
+21102007,Imunologia Celular,subarea,21100004
+21103003,Imunogenética,subarea,21100004
+21104000,Imunologia Aplicada,subarea,21100004
+21200009,Microbiologia,area,20000006
+21201005,Biologia e Fisiologia dos Microorganismos,subarea,21200009
+21201013,Virologia,especialidade,21201005
+21201021,Bacteriologia,especialidade,21201005
+21201030,Micologia,especialidade,21201005
+21202001,Microbiologia Aplicada,subarea,21200009
+21202010,Microbiologia Médica,especialidade,21202001
+21202028,Microbiologia Industrial e de Fermentação,especialidade,21202001
+21300003,Parasitologia,area,20000006
+21301000,Protozoologia de Parasitos,subarea,21300003
+21301018,Protozoologia Parasitária Humana,especialidade,21301000
+21301026,Protozoologia Parasitária Animal,especialidade,21301000
+21302006,Helmintologia de Parasitos,subarea,21300003
+21302014,Helmintologia Humana,especialidade,21302006
+21302022,Helmintologia Animal,especialidade,21302006
+21303002,Entomologia e Malacologia de Parasitos e Vetores,subarea,21300003
+21400008,Biotecnologia,area,20000006
+21401004,Biotecnologia em Saúde Humana e Animal,subarea,21400008
+21401012,Novas Drogas Terapêuticas,especialidade,21401004
+21401020,Vacinas e Kits para Diagnósticos,especialidade,21401004
+21401039,Técnicas de Reprodução,especialidade,21401004
+21401047,Engenharia de Tecidos,especialidade,21401004
+21401055,Ciências de Animais de Laboratórios,especialidade,21401004
+21401063,Metodologias Alternativas ao Uso de Animais,especialidade,21401004
+21402000,Biotecnologia Industrial,subarea,21400008
+21402019,Bioprocessos,especialidade,21402000
+21402027,Biocombustíveis,especialidade,21402000
+21403007,Biotecnologia Vegetal,subarea,21400008
+21403015,Melhoramento de Plantas,especialidade,21403007
+21403023,Tecnologia de Processos e Produtos,especialidade,21403007
+21403031,Plantas Transgênicas,especialidade,21403007
+21403040,Conservação e Multiplicação de Germoplasma,especialidade,21403007
+21404003,Biotecnologia Ambiental e Recursos Naturais,subarea,21400008
+21404011,Bioprospecção,especialidade,21404003
+21404020,Biodiversidade,especialidade,21404003
+21404038,Tratamento Biológico de Residuos,especialidade,21404003
+30000009,Engenharias,grande_area,
+30100003,Engenharia Civil,area,30000009
+30101000,Construção Civil,subarea,30100003
+30101018,Materiais e Componentes de Construção,especialidade,30101000
+30101026,Processos Construtivos,especialidade,30101000
+30101034,Instalações Prediais,especialidade,30101000
+30102006,Estruturas,subarea,30100003
+30102014,Estruturas de Concreto,especialidade,30102006
+30102022,Estruturas de Madeiras,especialidade,30102006
+30102030,Estruturas Metálicas,especialidade,30102006
+30102049,Mecânica das Estruturas,especialidade,30102006
+30103002,Geotécnica,subarea,30100003
+30103010,Fundações e Escavações,especialidade,30103002
+30103029,Mecânicas das Rochas,especialidade,30103002
+30103037,Mecânicas dos Solos,especialidade,30103002
+30103045,Obras de Terra e Enrocamento,especialidade,30103002
+30103053,Pavimentos,especialidade,30103002
+30104009,Engenharia Hidráulica,subarea,30100003
+30104017,Hidráulica,especialidade,30104009
+30104025,Hidrologia,especialidade,30104009
+30105005,Infra-Estrutura de Transportes,subarea,30100003
+30105013,Aeroportos; Projeto e Construção,especialidade,30105005
+30105021,Ferrovias; Projetos e Construção,especialidade,30105005
+30105030,Portos e Vias Navegáveis; Projeto e Construção,especialidade,30105005
+30105048,Rodovias; Projeto e Construção,especialidade,30105005
+30200008,Engenharia de Minas,area,30000009
+30201004,Pesquisa Mineral,subarea,30200008
+30201012,Caracterização do Minério,especialidade,30201004
+30201020,Dimensionamento de Jazidas,especialidade,30201004
+30202000,Lavra,subarea,30200008
+30202019,Lavra a Céu Aberto,especialidade,30202000
+30202027,Lavra de Mina Subterrânea,especialidade,30202000
+30202035,Equipamentos de Lavra,especialidade,30202000
+30203007,Tratamento de Minérios,subarea,30200008
+30203015,Métodos de Concentração e Enriquecimento de Minérios,especialidade,30203007
+30203023,Equipamentos de Beneficiamento de Minérios,especialidade,30203007
+30300002,Engenharia de Materiais e Metalúrgica,area,30000009
+30301009,Instalações e Equipamentos Metalúrgicos,subarea,30300002
+30301017,Instalações Metalúrgicas,especialidade,30301009
+30301025,Equipamentos Metalúrgicos,especialidade,30301009
+30302005,Metalurgia Extrativa,subarea,30300002
+30302013,Aglomeração,especialidade,30302005
+30302021,Eletrometalurgia,especialidade,30302005
+30302030,Hidrometalurgia,especialidade,30302005
+30302048,Pirometalurgia,especialidade,30302005
+30302056,Tratamento de Minérios,especialidade,30302005
+30303001,Metalurgia de Transformação,subarea,30300002
+30303010,Conformação Mecânica,especialidade,30303001
+30303028,Fundição,especialidade,30303001
+30303036,Metalurgia de Pó,especialidade,30303001
+30303044,Recobrimentos,especialidade,30303001
+30303052,Soldagem,especialidade,30303001
+30303060,"Tratamentos Térmicos, Mecânicos e Químicos",especialidade,30303001
+30303079,Usinagem,especialidade,30303001
+30304008,Metalurgia Física,subarea,30300002
+30304016,Estrutura dos Metais e Ligas,especialidade,30304008
+30304024,Propriedades Físicas dos Metais e Ligas,especialidade,30304008
+30304032,Propriedades Mecânicas dos Metais e Ligas,especialidade,30304008
+30304040,Transformação de Fases,especialidade,30304008
+30304059,Corrosão,especialidade,30304008
+30305004,Materiais Não-Metálicos,subarea,30300002
+30305012,Extração e Transformação de Materiais,especialidade,30305004
+30305020,Cerâmicos,especialidade,30305004
+30305039,Materiais Conjugados Não-Metálicos,especialidade,30305004
+30305047,"Polímeros, Aplicações",especialidade,30305004
+30400007,Engenharia Elétrica,area,30000009
+30401003,Materiais Elétricos,subarea,30400007
+30401011,Materiais Condutores,especialidade,30401003
+30401020,Materiais e Componentes Semicondutores,especialidade,30401003
+30401038,Materiais e Dispositivos Supercondutores,especialidade,30401003
+30401046,"Materiais Dielétricos, Piezoelétricos e Ferroelétricos",especialidade,30401003
+30401054,"Materiais e Componentes Eletroóticos e Magnetoóticos, Materiais Fotoelétricos",especialidade,30401003
+30401062,Materiais e Dispositivos Magnéticos,especialidade,30401003
+30402000,"Medidas Elétricas, Magnéticas e Eletrônicas; Instrumentação",subarea,30400007
+30402018,Medidas Elétricas,especialidade,30402000
+30402026,Medidas Magnéticas,especialidade,30402000
+30402034,Instrumentação Eletromecânica,especialidade,30402000
+30402042,Instrumentação Eletrônica,especialidade,30402000
+30402050,Sistemas Eletrônicos de Medida e de Controle,especialidade,30402000
+30403006,"Circuitos Elétricos, Magnéticos e Eletrônicos",subarea,30400007
+30403014,Teoria Geral dos Circuitos Elétricos,especialidade,30403006
+30403022,Circuitos Lineares e Não-Lineares,especialidade,30403006
+30403030,Circuitos Eletrônicos,especialidade,30403006
+30403049,"Circuitos Magnéticos , Magnetismos e Eletromagnetismos",especialidade,30403006
+30404002,Sistemas Elétricos de Potência,subarea,30400007
+30404010,Geração da Energia Elétrica,especialidade,30404002
+30404029,"Transmissão da Energia Elétrica, Distribuição da Energia Elétrica",especialidade,30404002
+30404037,Conversão e Retificação da Energia Elétrica,especialidade,30404002
+30404045,"Medição, Controle, Correção e Proteção de Sistemas Elétricos de Potência",especialidade,30404002
+30404053,Máquinas Elétricas e Dispositivos de Potência,especialidade,30404002
+30404061,Instalações Elétricas e Industriais,especialidade,30404002
+30405009,"Eletrônica Industrial, Sistemas e Controles Eletrônicos",subarea,30400007
+30405017,Eletrônica Industrial,especialidade,30405009
+30405025,Automação Eletrônica de Processos Elétricos e Industriais,especialidade,30405009
+30405033,"Controle de Processos Eletrônicos, Retroalimentação",especialidade,30405009
+30406005,Telecomunicações,subarea,30400007
+30406013,"Teoria Eletromagnetica, Microondas, Propagação de Ondas, Antenas",especialidade,30406005
+30406021,Radionavegação e Radioastronomia,especialidade,30406005
+30406030,Sistemas de Telecomunicações,especialidade,30406005
+30500001,Engenharia Mecânica,area,30000009
+30501008,Fenômenos de Transporte,subarea,30500001
+30501016,Transferência de Calor,especialidade,30501008
+30501024,Mecânica dos Fluídos,especialidade,30501008
+30501032,Dinâmica dos Gases,especialidade,30501008
+30501040,Princípios Variacionais e Métodos Numéricos,especialidade,30501008
+30502004,Engenharia Térmica,subarea,30500001
+30502012,Termodinâmica,especialidade,30502004
+30502020,Controle Ambiental,especialidade,30502004
+30502039,Aproveitamento da Energia,especialidade,30502004
+30503000,Mecânica dos Sólidos,subarea,30500001
+30503019,"Mecânica dos Corpos Sólidos, Elásticos e Plásticos",especialidade,30503000
+30503027,"Dinâmica dos Corpos Rígidos, Elásticos e Plásticos",especialidade,30503000
+30503035,Análise de Tensões,especialidade,30503000
+30503043,Termoelasticidade,especialidade,30503000
+30504007,Projetos de Máquinas,subarea,30500001
+30504015,Teoria dos Mecanismos,especialidade,30504007
+30504023,Estática e Dinâmica Aplicada,especialidade,30504007
+30504031,Elementos de Máquinas,especialidade,30504007
+30504040,Fundamentos Gerais de Projetos das Máquinas,especialidade,30504007
+30504058,"Máquinas, Motores e Equipamentos",especialidade,30504007
+30504066,Métodos de Síntese e Otimização Aplicados ao Projeto Mecânico,especialidade,30504007
+30504074,Controle de Sistemas Mecânicos,especialidade,30504007
+30504082,Aproveitamento de Energia,especialidade,30504007
+30505003,Processos de Fabricação,subarea,30500001
+30505011,Matrizes e Ferramentas,especialidade,30505003
+30505020,Maquinas de Usinagem e Conformação,especialidade,30505003
+30505038,Controle Numérico,especialidade,30505003
+30505046,Robotização,especialidade,30505003
+30505054,"Processos de Fabricação, Seleção Econômica",especialidade,30505003
+30600006,Engenharia Química,area,30000009
+30604001,Engenharia de Reações Químicas e Catálise,subarea,30600006
+30605008,Engenharia de Separações e Termodinâmica,subarea,30600006
+30606004,"Fenômenos de Transporte, Materiais e Particulados",subarea,30600006
+30607000,"Modelagem, Simulação, Síntese, Otimização e Controle de Processos",subarea,30600006
+30608007,Processos Ambientais e Tecnologias Limpas,subarea,30600006
+30609003,Processos Biotecnológicos e Alimentos,subarea,30600006
+30700000,Engenharia Sanitária,area,30000009
+30701007,Recursos Hídricos,subarea,30700000
+30701015,Planejamento Integrado dos Recursos Hídricos,especialidade,30701007
+30701023,Tecnologia e Problemas Sanitários de Irrigação,especialidade,30701007
+30701031,Águas Subterráneas e Poços Profundos,especialidade,30701007
+30701040,Controle de Enchentes e de Barragens,especialidade,30701007
+30701058,Sedimentologia,especialidade,30701007
+30702003,Tratamento de Águas de Abastecimento e Residuárias,subarea,30700000
+30702011,Química Sanitária,especialidade,30702003
+30702020,Processos Simplificados de Tratamento de Águas,especialidade,30702003
+30702038,Técnicas Convencionais de Tratamento de Águas,especialidade,30702003
+30702046,Técnicas Avançadas de Tratamento de Águas,especialidade,30702003
+30702054,Estudos e Caracterização de Efluentes Industriais,especialidade,30702003
+30702062,Layout de Processos Industriais,especialidade,30702003
+30702070,Resíduos Radioativos,especialidade,30702003
+30703000,Saneamento Básico,subarea,30700000
+30703018,Técnicas de Abastecimento da Água,especialidade,30703000
+30703026,Drenagem de Águas Residuárias,especialidade,30703000
+30703034,Drenagem Urbana de Águas Pluviais,especialidade,30703000
+30703042,"Resíduos Sólidos, Domésticos e Industriais",especialidade,30703000
+30703050,Limpeza Pública,especialidade,30703000
+30703069,Instalações Hidráulico-Sanitárias,especialidade,30703000
+30704006,Saneamento Ambiental,subarea,30700000
+30704014,Ecologia Aplicada a Engenharia Sanitária,especialidade,30704006
+30704022,Microbiologia Aplicada e Engenharia Sanitária,especialidade,30704006
+30704030,Parasitologia Aplicada a Engenharia Sanitária,especialidade,30704006
+30704049,"Qualidade do Ar, das Águas e do Solo",especialidade,30704006
+30704057,Controle da Poluição,especialidade,30704006
+30704065,Legislação Ambiental,especialidade,30704006
+30800005,Engenharia de Produção,area,30000009
+30801001,Gerência de Produção,subarea,30800005
+30801010,Planejamento de Instalações Industriais,especialidade,30801001
+30801028,"Planejamento, Projeto e Controle de Sistemas de Produção",especialidade,30801001
+30801036,Higiene e Segurança do Trabalho,especialidade,30801001
+30801044,Suprimentos,especialidade,30801001
+30801052,Garantia de Controle de Qualidade,especialidade,30801001
+30802008,Pesquisa Operacional,subarea,30800005
+30802016,Processos Estocásticos e Teoria das Filas,especialidade,30802008
+30802024,"Programação Linear, Não-Linear, Mista e Dinâmica",especialidade,30802008
+30802032,Séries Temporais,especialidade,30802008
+30802040,Teoria dos Grafos,especialidade,30802008
+30802059,Teoria dos Jogos,especialidade,30802008
+30803004,Engenharia do Produto,subarea,30800005
+30803012,Ergonomia,especialidade,30803004
+30803020,Metodologia de Projeto do Produto,especialidade,30803004
+30803039,Processos de Trabalho,especialidade,30803004
+30803047,Gerência do Projeto e do Produto,especialidade,30803004
+30803055,Desenvolvimento de Produto,especialidade,30803004
+30804000,Engenharia Econômica,subarea,30800005
+30804019,Estudo de Mercado,especialidade,30804000
+30804027,Localização Industrial,especialidade,30804000
+30804035,Análise de Custos,especialidade,30804000
+30804043,Economia de Tecnologia,especialidade,30804000
+30804051,Vida Econômica dos Equipamentos,especialidade,30804000
+30804060,Avaliação de Projetos,especialidade,30804000
+30900000,Engenharia Nuclear,area,30000009
+30901006,Aplicações de Radioisótopos,subarea,30900000
+30901014,Produção de Radioisótopos,especialidade,30901006
+30901022,Aplicações Industriais de Radioisótopos,especialidade,30901006
+30901030,Instrumentação para Medida e Controle de Radiação,especialidade,30901006
+30902002,Fusão Controlada,subarea,30900000
+30902010,Processos Industriais da Fusão Controlada,especialidade,30902002
+30902029,Problemas Tecnológicos da Fusão Controlada,especialidade,30902002
+30903009,Combustível Nuclear,subarea,30900000
+30903017,Extração de Combustível Nuclear,especialidade,30903009
+30903025,"Conversão, Enriquecimento e Fabricação de Combustível Nuclear",especialidade,30903009
+30903033,Reprocessamento de Combustível Nuclear,especialidade,30903009
+30903041,Rejeitos de Combustível Nuclear,especialidade,30903009
+30904005,Tecnologia dos Reatores,subarea,30900000
+30904013,Núcleo do Reator,especialidade,30904005
+30904021,Materiais Nucleares e Blindagem de Reatores,especialidade,30904005
+30904030,Transferência de Calor em Reatores,especialidade,30904005
+30904048,Geração e Integração com Sistemas Elétricos em Reatores,especialidade,30904005
+30904056,Instrumentação para Operação e Controle de Reatores,especialidade,30904005
+30904064,"Segurança, Localização e Licenciamento de Reatores",especialidade,30904005
+30904072,Aspectos Econômicos de Reatores,especialidade,30904005
+31000002,Engenharia de Transportes,area,30000009
+31001009,Planejamento de Transportes,subarea,31000002
+31001017,Planejamento e Organização do Sistema de Transporte,especialidade,31001009
+31001025,Economia dos Transportes,especialidade,31001009
+31002005,Veículos e Equipamentos de Controle,subarea,31000002
+31002013,Vias de Transporte,especialidade,31002005
+31002021,Veículos de Transportes,especialidade,31002005
+31002030,Estação de Transporte,especialidade,31002005
+31002048,Equipamentos Auxiliares e Controles,especialidade,31002005
+31003001,Operações de Transportes,subarea,31000002
+31003010,Engenharia de Tráfego,especialidade,31003001
+31003028,Capacidade de Vias de Transporte,especialidade,31003001
+31003036,Operação de Sistemas de Transporte,especialidade,31003001
+31100007,Engenharia Naval e Oceânica,area,30000009
+31101003,Hidrodinâmica de Navios e Sistemas Oceânicos,subarea,31100007
+31101011,Resistência Hidrodinâmica,especialidade,31101003
+31101020,Propulsão de Navios,especialidade,31101003
+31102000,Estruturas Navais e Oceânicas,subarea,31100007
+31102018,Análise Teórica e Experimental de Estrutura,especialidade,31102000
+31102026,Dinâmica Estrutural Naval e Oceânica,especialidade,31102000
+31102034,Síntese Estrutural Naval e Oceânica,especialidade,31102000
+31103006,Máquinas Marítimas,subarea,31100007
+31103014,Análise de Sistemas Propulsores,especialidade,31103006
+31103022,Controle e Automação de Sistemas Propulsores,especialidade,31103006
+31103030,Equipamentos Auxiliares do Sistema Propulsivo,especialidade,31103006
+31103049,Motor de Propulsão,especialidade,31103006
+31104002,Projeto de Navios e de Sistemas Oceânicos,subarea,31100007
+31104010,Projetos de Navios,especialidade,31104002
+31104029,Projetos de Sistemas Oceânicos Fixos e Semi-Fixos,especialidade,31104002
+31104037,Projetos de Embarcações Não-Convencionais,especialidade,31104002
+31105009,Tecnologia de Construção Naval e de Sistemas Oceânicos,subarea,31100007
+31105017,Métodos de Fabricação de Navios e Sistemas Oceânicos,especialidade,31105009
+31105025,Soldagem de Estruturas Navais e Oceânicos,especialidade,31105009
+31105033,Custos de Construção Naval,especialidade,31105009
+31105041,Normatização e Certificação de Qualidade de Navios,especialidade,31105009
+31200001,Engenharia Aeroespacial,area,30000009
+31201008,Aerodinâmica,subarea,31200001
+31201016,Aerodinâmica de Aeronaves Espaciais,especialidade,31201008
+31201024,Aerodinâmica dos Processos Geofísicos e Interplanetários,especialidade,31201008
+31202004,Dinâmica de Voo,subarea,31200001
+31202012,Trajetórias e Órbitas,especialidade,31202004
+31202020,Estabilidade e Controle,especialidade,31202004
+31203000,Estruturas Aeroespaciais,subarea,31200001
+31203019,Aeroelasticicidade,especialidade,31203000
+31203027,Fadiga,especialidade,31203000
+31203035,Projeto de Estruturas Aeroespaciais,especialidade,31203000
+31204007,Materiais e Processos para Engenharia Aeronáutica e Aeroespacial,subarea,31200001
+31205003,Propulsão Aeroespacial,subarea,31200001
+31205011,Combustão e Escoamento com Reações Químicas,especialidade,31205003
+31205020,Propulsão de Foguetes,especialidade,31205003
+31205038,Máquinas de Fluxo,especialidade,31205003
+31205046,Motores Alternativos,especialidade,31205003
+31206000,Sistemas Aeroespaciais,subarea,31200001
+31206018,Aviões,especialidade,31206000
+31206026,Foguetes,especialidade,31206000
+31206034,Helicópteros,especialidade,31206000
+31206042,Hovercraft,especialidade,31206000
+31206050,Satélites e Outros Dispositivos Aeroespaciais,especialidade,31206000
+31206069,Normatização e Certificação de Qualidade de Aeronaves e Componentes,especialidade,31206000
+31206077,Manutenção de Sistemas Aeroespaciais,especialidade,31206000
+31300006,Engenharia Biomédica,area,30000009
+31301002,Bioengenharia,subarea,31300006
+31301010,Processamento de Sinais Biológicos,especialidade,31301002
+31301029,Modelagem de Fenômenos Biológicos,especialidade,31301002
+31301037,Modelagem de Sistemas Biológicos,especialidade,31301002
+31302009,Engenharia Médica,subarea,31300006
+31302017,Biomateriais e Materiais Biocompatíveis,especialidade,31302009
+31302025,Transdutores para Aplicações Biomédicas,especialidade,31302009
+31302033,Instrumentação Odontológica e Médico-Hospitalar,especialidade,31302009
+31302041,Tecnologia de Próteses,especialidade,31302009
+31400000,Engenharia de Energia,area,30000009
+31401007,Planejamento Energético,subarea,31400000
+31401015,Sistemas Energéticos,especialidade,31401007
+31401023,Política Energética Regional e Nacional,especialidade,31401007
+31401031,Uso Eficiente de Energia,especialidade,31401007
+31401040,Análise de Impactos Produzidos por Sistemas Energéticos,especialidade,31401007
+31402003,Fontes Renováveis de Energia,subarea,31400000
+31402011,Energia Solar Térmica,especialidade,31402003
+31402020,Energia Solar Fotovoltáica,especialidade,31402003
+31402038,Energia Eólica,especialidade,31402003
+31402046,Micro-centrais Hidrelétricas,especialidade,31402003
+31402054,Energia das Ondas e Marés,especialidade,31402003
+31402062,Energia de Biomassa,especialidade,31402003
+31402070,Sistemas Híbridos e Sistemas Não-convencionais de Armazenagem de Energia,especialidade,31402003
+40000001,Ciências da Saúde,grande_area,
+40100006,Medicina,area,40000001
+40101002,Clínica Médica,subarea,40100006
+40101010,Angiologia,especialidade,40101002
+40101029,Dermatologia,especialidade,40101002
+40101037,Alergologia e Imunologia Clínica,especialidade,40101002
+40101045,Cancerologia,especialidade,40101002
+40101053,Hematologia,especialidade,40101002
+40101061,Endocrinologia,especialidade,40101002
+40101070,Neurologia,especialidade,40101002
+40101088,Pediatria,especialidade,40101002
+40101096,Doenças Infecciosas e Parasitárias,especialidade,40101002
+40101100,Cardiologia,especialidade,40101002
+40101118,Gastroenterologia,especialidade,40101002
+40101126,Pneumologia,especialidade,40101002
+40101134,Nefrologia,especialidade,40101002
+40101142,Reumatologia,especialidade,40101002
+40101150,Ginecologia e Obstetrícia,especialidade,40101002
+40101169,Fisiatria,especialidade,40101002
+40101177,Oftalmologia,especialidade,40101002
+40101186,Ortopedia,especialidade,40101002
+40102009,Cirurgia,subarea,40100006
+40102017,Cirurgia Plástica e Restauradora,especialidade,40102009
+40102025,Cirurgia Otorrinolaringológica,especialidade,40102009
+40102033,Cirurgia Oftalmológica,especialidade,40102009
+40102041,Cirurgia Cardiovascular,especialidade,40102009
+40102050,Cirurgia Toráxica,especialidade,40102009
+40102068,Cirurgia Gastroenterologia,especialidade,40102009
+40102076,Cirurgia Pediátrica,especialidade,40102009
+40102084,Neurocirurgia,especialidade,40102009
+40102092,Cirurgia Urológica,especialidade,40102009
+40102106,Cirurgia Proctológica,especialidade,40102009
+40102114,Cirurgia Ortopédica,especialidade,40102009
+40102122,Cirurgia Traumatológica,especialidade,40102009
+40102130,Anestesiologia,especialidade,40102009
+40102149,Cirurgia Experimental,especialidade,40102009
+40103005,Saúde Materno-Infantil,subarea,40100006
+40104001,Psiquiatria,subarea,40100006
+40105008,Anatomia Patológica e Patologia Clínica,subarea,40100006
+40106004,Radiologia Médica,subarea,40100006
+40107000,Medicina Legal e Deontologia,subarea,40100006
+40200000,Odontologia,area,40000001
+40201007,Clínica Odontológica,subarea,40200000
+40202003,Cirurgia Buco-Maxilo-Facial,subarea,40200000
+40203000,Ortodontia,subarea,40200000
+40204006,Odontopediatria,subarea,40200000
+40205002,Periodontia,subarea,40200000
+40206009,Endodontia,subarea,40200000
+40207005,Radiologia Odontológica,subarea,40200000
+40208001,Odontologia Social e Preventiva,subarea,40200000
+40209008,Materiais Odontológicos,subarea,40200000
+40300005,Farmácia,area,40000001
+40301001,Farmacotécnica e tecnologia farmacêutica,subarea,40300005
+40302008,Farmacognosia,subarea,40300005
+40303004,Avaliação e analises toxicológicas,subarea,40300005
+40304000,Garantia e controle de qualidade farmacêuticos,subarea,40300005
+40306003,Fisiopatologia e diagnóstico laboratorial,subarea,40300005
+40307000,"Farmácia clínica, assistência e atenção farmacêuticas",subarea,40300005
+40308006,Química Farmacêutica Medicinal,subarea,40300005
+40400000,Enfermagem,area,40000001
+40401006,Enfermagem em Saúde do Adulto e do Idoso,subarea,40400000
+40402002,Enfermagem em Saúde da Mulher,subarea,40400000
+40403009,Enfermagem em Saúde da Criança e do Adolescente,subarea,40400000
+40404005,Enfermagem em Saúde Mental,subarea,40400000
+40405001,"Enfermagem em Doenças Emergentes, Reemergentes e Negligenciadas",subarea,40400000
+40406008,Enfermagem em Saúde Coletiva,subarea,40400000
+40407004,Enfermagem Fundamental,subarea,40400000
+40408000,Enfermagem na Gestão e Gerenciamento,subarea,40400000
+40500004,Nutrição,area,40000001
+40505006,Alimentos e alimentação coletiva,subarea,40500004
+40506002,Ciências humanas e sociais em alimentação e nutrição,subarea,40500004
+40507009,Epidemiologia e políticas de alimentação e nutrição,subarea,40500004
+40508005,Nutrição básica e experimental,subarea,40500004
+40509001,Nutrição clínica,subarea,40500004
+40600009,Saúde Coletiva,area,40000001
+40601005,Epidemiologia,subarea,40600009
+40604004,Ciências Sociais e Humanidades em Saúde,subarea,40600009
+40605000,"Política, Planejamento, Gestão e Avaliação",subarea,40600009
+40700003,Fonoaudiologia,area,40000001
+40800008,Fisioterapia e Terapia Ocupacional,area,40000001
+40900002,Educação Física,area,40000001
+50000004,Ciências Agrárias,grande_area,
+50100009,Agronomia,area,50000004
+50101005,Ciência do Solo,subarea,50100009
+50101013,"Gênese, Morfologia e Classificação dos Solos",especialidade,50101005
+50101021,Física do Solo,especialidade,50101005
+50101030,Química do Solo,especialidade,50101005
+50101048,Microbiologia e Bioquímica do Solo,especialidade,50101005
+50101056,Fertilidade do Solo e Adubação,especialidade,50101005
+50101064,Manejo e Conservação do Solo,especialidade,50101005
+50102001,Fitossanidade,subarea,50100009
+50102010,Fitopatologia,especialidade,50102001
+50102028,Entomologia Agrícola,especialidade,50102001
+50102036,Parasitologia Agrícola,especialidade,50102001
+50102044,Microbiologia Agrícola,especialidade,50102001
+50102052,Defesa Fitossanitária,especialidade,50102001
+50103008,Fitotecnia,subarea,50100009
+50103016,Manejo e Tratos Culturais,especialidade,50103008
+50103024,Mecanização Agrícola,especialidade,50103008
+50103032,Produção e Beneficiamento de Sementes,especialidade,50103008
+50103040,Produção de Mudas,especialidade,50103008
+50103059,Melhoramento Vegetal,especialidade,50103008
+50103067,Fisiologia de Plantas Cultivadas,especialidade,50103008
+50103075,Matologia,especialidade,50103008
+50104004,"Floricultura, Parques e Jardins",subarea,50100009
+50104012,Floricultura,especialidade,50104004
+50104020,Parques e Jardins,especialidade,50104004
+50104039,Arborização de Vias Públicas,especialidade,50104004
+50105000,Agrometeorologia,subarea,50100009
+50106007,Extensão Rural,subarea,50100009
+50200003,Recursos Florestais e Engenharia Florestal,area,50000004
+50201000,Silvicultura,subarea,50200003
+50201018,Dendrologia,especialidade,50201000
+50201026,Florestamento e Reflorestamento,especialidade,50201000
+50201034,Genética e Melhoramento Florestal,especialidade,50201000
+50201042,Sementes Florestais,especialidade,50201000
+50201050,Nutrição Florestal,especialidade,50201000
+50201069,Fisiologia Florestal,especialidade,50201000
+50201077,Solos Florestais,especialidade,50201000
+50201085,Proteção Florestal,especialidade,50201000
+50202006,Manejo Florestal,subarea,50200003
+50202014,Economia Florestal,especialidade,50202006
+50202022,Política e Legislação Florestal,especialidade,50202006
+50202030,Administração Florestal,especialidade,50202006
+50202049,Dendrometria e Inventário Florestal,especialidade,50202006
+50202057,Fotointerpretação Florestal,especialidade,50202006
+50202065,Ordenamento Florestal,especialidade,50202006
+50203002,Técnicas e Operações Florestais,subarea,50200003
+50203010,Exploração Florestal,especialidade,50203002
+50203029,Mecanização Florestal,especialidade,50203002
+50204009,Tecnologia e Utilização de Produtos Florestais,subarea,50200003
+50204017,Anatomia e Identificação de Produtos Florestais,especialidade,50204009
+50204025,Propriedades Fisico-Mecânicas da Madeira,especialidade,50204009
+50204033,Relações Água-Madeira e Secagem,especialidade,50204009
+50204041,Tratamento da Madeira,especialidade,50204009
+50204050,Processamento Mecânico da Madeira,especialidade,50204009
+50204068,Química da Madeira,especialidade,50204009
+50204076,Resinas de Madeiras,especialidade,50204009
+50204084,Tecnologia de Celulose e Papel,especialidade,50204009
+50204092,Tecnologia de Chapas,especialidade,50204009
+50205005,Conservação da Natureza,subarea,50200003
+50205013,Hidrologia Florestal,especialidade,50205005
+50205021,Conservação de Áreas Silvestres,especialidade,50205005
+50205030,Conservação de Bacias Hidrográficas,especialidade,50205005
+50205048,Recuperação de Areas Degradadas,especialidade,50205005
+50206001,Energia de Biomassa Florestal,subarea,50200003
+50300008,Engenharia Agrícola,area,50000004
+50301004,Máquinas e Implementos Agrícolas,subarea,50300008
+50302000,Engenharia de Água e Solo,subarea,50300008
+50302019,Irrigação e Drenagem,especialidade,50302000
+50302027,Conservação de Solo e Água,especialidade,50302000
+50303007,Engenharia de Processamento de Produtos Agrícolas,subarea,50300008
+50303015,Pré-Processamento de Produtos Agrícolas,especialidade,50303007
+50303023,Armazenamento de Produtos Agrícolas,especialidade,50303007
+50303031,Transferência de Produtos Agrícolas,especialidade,50303007
+50304003,Construções Rurais e Ambiência,subarea,50300008
+50304011,Assentamento Rural,especialidade,50304003
+50304020,Engenharia de Construções Rurais,especialidade,50304003
+50304038,Saneamento Rural,especialidade,50304003
+50305000,Energização Rural,subarea,50300008
+50400002,Zootecnia,area,50000004
+50401009,Ecologia dos Animais Domésticos e Etologia,subarea,50400002
+50402005,Genética e Melhoramento dos Animais Domésticos,subarea,50400002
+50403001,Nutrição e Alimentação Animal,subarea,50400002
+50403010,Exigências Nutricionais dos Animais,especialidade,50403001
+50403028,Avaliação de Alimentos para Animais,especialidade,50403001
+50403036,Conservação de Alimentos para Animais,especialidade,50403001
+50404008,Pastagem e Forragicultura,subarea,50400002
+50404016,"Avaliação, Produção e Conservação de Forragens",especialidade,50404008
+50404024,Manejo e Conservação de Pastagens,especialidade,50404008
+50404032,Fisiologia de Plantas Forrageiras,especialidade,50404008
+50404040,Melhoramento de Plantas Forrageiras e Produção de Sementes,especialidade,50404008
+50404059,Toxicologia e Plantas Tóxicas,especialidade,50404008
+50405004,Produção Animal,subarea,50400002
+50405012,Criação de Animais,especialidade,50405004
+50405020,Manejo de Animais,especialidade,50405004
+50405039,Instalações para Produção Animal,especialidade,50405004
+50500007,Medicina Veterinária,area,50000004
+50501003,Clínica e Cirurgia Animal,subarea,50500007
+50501011,Anestesiologia Animal,especialidade,50501003
+50501020,Técnica Cirúrgica Animal,especialidade,50501003
+50501038,Radiologia de Animais,especialidade,50501003
+50501046,Farmacologia e Terapêutica Animal,especialidade,50501003
+50501054,Obstetrícia Animal,especialidade,50501003
+50501062,Clínica Veterinária,especialidade,50501003
+50501070,Clínica Cirúrgica Animal,especialidade,50501003
+50501089,Toxicologia Animal,especialidade,50501003
+50502000,Medicina Veterinária Preventiva,subarea,50500007
+50502018,Epidemiologia Animal,especialidade,50502000
+50502026,Saneamento Aplicado a Saúde do Homem,especialidade,50502000
+50502034,Doenças Infecciosas de Animais,especialidade,50502000
+50502042,Doenças Parasitárias de Animais,especialidade,50502000
+50502050,Saúde Animal (Programas Sanitários),especialidade,50502000
+50503006,Patologia Animal,subarea,50500007
+50503014,Patologia Aviária,especialidade,50503006
+50503022,Anatomia Patologia Animal,especialidade,50503006
+50503030,Patologia Clínica Animal,especialidade,50503006
+50504002,Reprodução Animal,subarea,50500007
+50504010,Ginecologia e Andrologia Animal,especialidade,50504002
+50504029,Inseminação Artificial Animal,especialidade,50504002
+50504037,Fisiopatologia da Reprodução Animal,especialidade,50504002
+50505009,Inspeção de Produtos de Origem Animal,subarea,50500007
+50600001,Recursos Pesqueiros e Engenharia de Pesca,area,50000004
+50601008,Recursos Pesqueiros Marinhos,subarea,50600001
+50601016,Fatores Abióticos do Mar,especialidade,50601008
+50601024,Avaliação de Estoques Pesqueiros Marinhos,especialidade,50601008
+50601032,Exploração Pesqueira Marinha,especialidade,50601008
+50601040,Manejo e Conservação de Recursos Pesqueiros Marinhos,especialidade,50601008
+50602004,Recursos Pesqueiros de Águas Interiores,subarea,50600001
+50602012,Fatores Abióticos de Águas Interiores,especialidade,50602004
+50602020,Avaliação de Estoques Pesqueiros de Águas Interiores,especialidade,50602004
+50602039,Explotação Pesqueira de Águas Interiores,especialidade,50602004
+50602047,Manejo e Conservação de Recursos Pesqueiros de Águas Interiores,especialidade,50602004
+50603000,Aqüicultura,subarea,50600001
+50603019,Maricultura,especialidade,50603000
+50603027,Carcinocultura,especialidade,50603000
+50603035,Ostreicultura,especialidade,50603000
+50603043,Piscicultura,especialidade,50603000
+50604007,Engenharia de Pesca,subarea,50600001
+50700006,Ciência e Tecnologia de Alimentos,area,50000004
+50701002,Ciência de Alimentos,subarea,50700006
+50701010,Valor Nutritivo de Alimentos,especialidade,50701002
+50701029,"Química, Física, Fisico-Química e Bioquímica dos Alim. e das Mat-Primas Alimentares",especialidade,50701002
+50701037,Microbiologia de Alimentos,especialidade,50701002
+50701045,Fisiologia Pós-Colheita,especialidade,50701002
+50701053,Toxicidade e Resíduos de Pesticidas em Alimentos,especialidade,50701002
+50701061,Avaliação e Controle de Qualidade de Alimentos,especialidade,50701002
+50701070,"Padrões, Legislação e Fiscalização de Alimentos",especialidade,50701002
+50702009,Tecnologia de Alimentos,subarea,50700006
+50702017,Tecnologia de Produtos de Origem Animal,especialidade,50702009
+50702025,Tecnologia de Produtos de Origem Vegetal,especialidade,50702009
+50702033,Tecnologia das Bebidas,especialidade,50702009
+50702041,Tecnologia de Alimentos Dietéticos e Nutricionais,especialidade,50702009
+50702050,Aproveitamento de Subprodutos,especialidade,50702009
+50702068,Embalagens de Produtos Alimentares,especialidade,50702009
+50703005,Engenharia de Alimentos,subarea,50700006
+50703013,Instalações Industriais de Produção de Alimentos,especialidade,50703005
+50703021,Armazenamento de Alimentos,especialidade,50703005
+60000007,Ciências Sociais Aplicadas,grande_area,
+60100001,Direito,area,60000007
+60101008,Teoria do Direito,subarea,60100001
+60101016,Teoria Geral do Direito,especialidade,60101008
+60101024,Teoria Geral do Processo,especialidade,60101008
+60101032,Teoria do Estado,especialidade,60101008
+60101040,História do Direito,especialidade,60101008
+60101059,Filosofia do Direito,especialidade,60101008
+60101067,Lógica Jurídica,especialidade,60101008
+60101075,Sociologia Jurídica,especialidade,60101008
+60101083,Antropologia Jurídica,especialidade,60101008
+60102004,Direito Público,subarea,60100001
+60102012,Direito Tributário,especialidade,60102004
+60102020,Direito Penal,especialidade,60102004
+60102039,Direito Processual Penal,especialidade,60102004
+60102047,Direito Processual Civil,especialidade,60102004
+60102055,Direito Constitucional,especialidade,60102004
+60102063,Direito Administrativo,especialidade,60102004
+60102071,Direito Internacional Público,especialidade,60102004
+60103000,Direito Privado,subarea,60100001
+60103019,Direito Civil,especialidade,60103000
+60103027,Direito Comercial,especialidade,60103000
+60103035,Direito do Trabalho,especialidade,60103000
+60103043,Direito Internacional Privado,especialidade,60103000
+60104007,Direitos Especiais,subarea,60100001
+60200006,Administração,area,60000007
+60201002,Administração de Empresas,subarea,60200006
+60201010,Administração da Produção,especialidade,60201002
+60201029,Administração Financeira,especialidade,60201002
+60201037,Mercadologia,especialidade,60201002
+60201045,Negócios Internacionais,especialidade,60201002
+60201053,Administração de Recursos Humanos,especialidade,60201002
+60202009,Administração Pública,subarea,60200006
+60202017,Contabilidade e Finanças Públicas,especialidade,60202009
+60202025,Organizações Públicas,especialidade,60202009
+60202033,Política e Planejamento Governamentais,especialidade,60202009
+60202041,Administração de Pessoal,especialidade,60202009
+60202051,Planejamento em Ciência e Tecnologia,especialidade,60202009
+60203005,Administração de Setores Específicos,subarea,60200006
+60204001,Ciências Contábeis,subarea,60200006
+60300000,Economia,area,60000007
+60301007,Teoria Econômica,subarea,60300000
+60301015,Economia Geral,especialidade,60301007
+60301023,Teoria Geral da Economia,especialidade,60301007
+60301031,História do Pensamento Econômico,especialidade,60301007
+60301040,História Econômica,especialidade,60301007
+60301058,Sistemas Econômicos,especialidade,60301007
+60302003,Métodos Quantitativos em Economia,subarea,60300000
+60302011,"Métodos e Modelos Matemáticos, Econométricos e Estatísticos",especialidade,60302003
+60302020,Estatística Sócio-Econômica,especialidade,60302003
+60302038,Contabilidade Nacional,especialidade,60302003
+60302046,Economia Matemática,especialidade,60302003
+60303000,Economia Monetária e Fiscal,subarea,60300000
+60303018,Teoria Monetária e Financeira,especialidade,60303000
+60303026,Instituições Monetárias e Financeiras do Brasil,especialidade,60303000
+60303034,Finanças Públicas Internas,especialidade,60303000
+60303042,Política Fiscal do Brasil,especialidade,60303000
+60304006,"Crescimento, Flutuações e Planejamento Econômico",subarea,60300000
+60304014,Crescimento e Desenvolvimento Econômico,especialidade,60304006
+60304022,Teoria e Política de Planejamento Econômico,especialidade,60304006
+60304030,Flutuações Cíclicas e Projeções Econômicas,especialidade,60304006
+60304049,Inflação,especialidade,60304006
+60305002,Economia Internacional,subarea,60300000
+60305010,Teoria do Comércio Internacional,especialidade,60305002
+60305029,Relações do Comércio; Política Comercial; Integração Econômica,especialidade,60305002
+60305037,Balanço de Pagamentos; Finanças Internacionais,especialidade,60305002
+60305045,Investimentos Internacionais e Ajuda Externa,especialidade,60305002
+60306009,Economia dos Recursos Humanos,subarea,60300000
+60306017,Treinamento e Alocação de Mão-de-Obra; Oferta de Mão-de-Obra e Força de Trabalho,especialidade,60306009
+60306025,Mercado de Trabalho; Política do Governo,especialidade,60306009
+60306033,"Sindicatos, Dissídios Coletivos, Relações de Emprego (Empregador/Empregado)",especialidade,60306009
+60306041,Capital Humano,especialidade,60306009
+60306050,Demografia Econômica,especialidade,60306009
+60307005,Economia Industrial,subarea,60300000
+60307013,Organização Industrial e Estudos Industriais,especialidade,60307005
+60307021,Mudança Tecnológica,especialidade,60307005
+60308001,Economia do Bem-Estar Social,subarea,60300000
+60308010,Economia dos Programas de Bem-Estar Social,especialidade,60308001
+60308028,Economia do Consumidor,especialidade,60308001
+60309008,Economia Regional e Urbana,subarea,60300000
+60309016,Economia Regional,especialidade,60309008
+60309024,Economia Urbana,especialidade,60309008
+60309032,Renda e Tributação,especialidade,60309008
+60310006,Economias Agrária e dos Recursos Naturais,subarea,60300000
+60310014,Economia Agrária,especialidade,60310006
+60310022,Economia dos Recursos Naturais,especialidade,60310006
+60400005,Arquitetura e Urbanismo,area,60000007
+60401001,Fundamentos de Arquitetura e Urbanismo,subarea,60400005
+60401010,História da Arquitetura e Urbanismo,especialidade,60401001
+60401028,Teoria da Arquitetura,especialidade,60401001
+60401036,História do Urbanismo,especialidade,60401001
+60401044,Teoria do Urbanismo,especialidade,60401001
+60402008,Projeto de Arquitetura e Urbanismo,subarea,60400005
+60402016,Planejamento e Projetos da Edificação,especialidade,60402008
+60402024,Planejamento e Projeto do Espaço Urbano,especialidade,60402008
+60402032,Planejamento e Projeto do Equipamento,especialidade,60402008
+60403004,Tecnologia de Arquitetura e Urbanismo,subarea,60400005
+60403012,Adequação Ambiental,especialidade,60403004
+60404000,Paisagismo,subarea,60400005
+60404019,Desenvolvimento Histórico do Paisagismo,especialidade,60404000
+60404027,Conceituação de Paisagismo e Metodologia do Paisagismo,especialidade,60404000
+60404035,Estudos de Organização do Espaço Exterior,especialidade,60404000
+60404043,Projetos de Espaços Livres Urbanos,especialidade,60404000
+60500000,Planejamento Urbano e Regional,area,60000007
+60501006,Fundamentos do Planejamento Urbano e Regional,subarea,60500000
+60501014,Teoria do Planejamento Urbano e Regional,especialidade,60501006
+60501022,Teoria da Urbanização,especialidade,60501006
+60501030,Política Urbana,especialidade,60501006
+60501049,História Urbana,especialidade,60501006
+60502002,Métodos e Técnicas do Planejamento Urbano e Regional,subarea,60500000
+60502010,"Informação, Cadastro e Mapeamento",especialidade,60502002
+60502029,Técnica de Previsão Urbana e Regional,especialidade,60502002
+60502037,Técnicas de Análise e Avaliação Urbana e Regional,especialidade,60502002
+60502045,Técnicas de Planejamento e Projeto Urbanos e Regionais,especialidade,60502002
+60503009,Serviços Urbanos e Regionais,subarea,60500000
+60503017,Administração Municipal e Urbana,especialidade,60503009
+60503025,Estudos da Habitação,especialidade,60503009
+60503033,Aspectos Sociais do Planejamento Urbano e Regional,especialidade,60503009
+60503041,Aspectos Econômicos do Planejamento Urbano e Regional,especialidade,60503009
+60503050,Aspectos Físico-Ambientais do Planejamento Urbano e Regional,especialidade,60503009
+60503068,Serviços Comunitários,especialidade,60503009
+60503076,Infra-Estruturas Urbanas e Regionais,especialidade,60503009
+60503084,Transporte e Tráfego Urbano e Regional,especialidade,60503009
+60503092,Legislação Urbana e Regional,especialidade,60503009
+60600004,Demografia,area,60000007
+60601000,Distribuição Espacial,subarea,60600004
+60601019,Distribuição Espacial Geral,especialidade,60601000
+60601027,Distribuição Espacial Urbana,especialidade,60601000
+60601035,Distribuição Espacial Rural,especialidade,60601000
+60602007,Tendência Populacional,subarea,60600004
+60602015,Tendências Passadas,especialidade,60602007
+60602023,Taxas e Estimativas Correntes,especialidade,60602007
+60602031,Projeções,especialidade,60602007
+60603003,Componentes da Dinâmica Demográfica,subarea,60600004
+60603011,Fecundidade,especialidade,60603003
+60603020,Mortalidade,especialidade,60603003
+60603038,Migração,especialidade,60603003
+60604000,Nupcialidade e Família,subarea,60600004
+60604018,Casamento e Divórcio,especialidade,60604000
+60604026,Família e Reprodução,especialidade,60604000
+60605006,Demografia Histórica,subarea,60600004
+60605014,Distribuição Espacial,especialidade,60605006
+60605022,"Natalidade, Mortalidade, Migração",especialidade,60605006
+60605030,Nupcialidade e Família,especialidade,60605006
+60605049,Métodos e Técnicas de Demografia Histórica,especialidade,60605006
+60606002,Política Pública e População,subarea,60600004
+60606010,Política Populacional,especialidade,60606002
+60606029,Políticas de Redistribuição de População,especialidade,60606002
+60606037,Políticas de Planejamento Familiar,especialidade,60606002
+60607009,Fontes de Dados Demográficos,subarea,60600004
+60700009,Ciência da Informação,area,60000007
+60701005,Teoria da Informação,subarea,60700009
+60701013,Teoria Geral da Informação,especialidade,60701005
+60701021,Processos da Comunicação,especialidade,60701005
+60701030,Representação da Informação,especialidade,60701005
+60702001,Biblioteconomia,subarea,60700009
+60702010,Teoria da Classificação,especialidade,60702001
+60702028,Métodos Quantitativos. Bibliometria,especialidade,60702001
+60702036,Técnicas de Recuperação de Informação,especialidade,60702001
+60702044,Processos de Disseminação da Informação,especialidade,60702001
+60703008,Arquivologia,subarea,60700009
+60703016,Organização de Arquivos,especialidade,60703008
+60800003,Museologia,area,60000007
+60900008,Comunicação,area,60000007
+60901004,Teoria da Comunicação,subarea,60900008
+60902000,Jornalismo e Editoração,subarea,60900008
+60902019,Teoria e Ética do Jornalismo,especialidade,60902000
+60902027,Organização Editorial de Jornais,especialidade,60902000
+60902035,Organização Comercial de Jornais,especialidade,60902000
+60902043,"Jornalismo Especializado (Comunitário, Rural, Empresarial, Científico)",especialidade,60902000
+60903007,Rádio e Televisão,subarea,60900008
+60903015,Radiodifusão,especialidade,60903007
+60903023,Videodifusão,especialidade,60903007
+60904003,Relações Públicas e Propaganda,subarea,60900008
+60905000,Comunicação Visual e Cinema,subarea,60900008
+61000000,Serviço Social,area,60000007
+61001007,Fundamentos do Serviço Social,subarea,61000000
+61002003,Serviço Social Aplicado,subarea,61000000
+61002011,Serviço Social do Trabalho,especialidade,61002003
+61002020,Serviço Social da Educação,especialidade,61002003
+61002038,Serviço Social do Menor,especialidade,61002003
+61002046,Serviço Social da Saúde,especialidade,61002003
+61002054,Serviço Social da Habitação,especialidade,61002003
+61100005,Economia Doméstica,area,60000007
+61200000,Desenho Industrial,area,60000007
+61201006,Programação Visual,subarea,61200000
+61202002,Desenho de Produto,subarea,61200000
+61300004,Turismo,area,60000007
+70000000,Ciências Humanas,grande_area,
+70100004,Filosofia,area,70000000
+70101000,História da Filosofia,subarea,70100004
+70102007,Metafísica,subarea,70100004
+70103003,Lógica,subarea,70100004
+70104000,Ética,subarea,70100004
+70105006,Epistemologia,subarea,70100004
+70106002,Filosofia Brasileira,subarea,70100004
+70107009,Estética e Filosofia da Arte,subarea,70100004
+70200009,Sociologia,area,70000000
+70201005,Fundamentos da Sociologia,subarea,70200009
+70201013,Teoria Sociológica,especialidade,70201005
+70201021,História da Sociologia,especialidade,70201005
+70202001,Sociologia do Conhecimento,subarea,70200009
+70203008,Sociologia do Desenvolvimento,subarea,70200009
+70204004,Sociologia Urbana,subarea,70200009
+70205000,Sociologia Rural,subarea,70200009
+70206007,Sociologia da Saúde,subarea,70200009
+70207003,Outras Sociologias Específicas,subarea,70200009
+70300003,Antropologia,area,70000000
+70301000,Teoria Antropológica,subarea,70300003
+70302006,Etnologia Indígena,subarea,70300003
+70303002,Antropologia Urbana,subarea,70300003
+70304009,Antropologia Rural,subarea,70300003
+70305005,Antropologia das Populações Afro-Brasileiras,subarea,70300003
+70400008,Arqueologia,area,70000000
+70401004,Teoria e Método em Arqueologia,subarea,70400008
+70402000,Arqueologia Pré-Histórica,subarea,70400008
+70403007,Arqueologia Histórica,subarea,70400008
+70500002,História,area,70000000
+70501009,Teoria e Filosofia da História,subarea,70500002
+70502005,História Antiga e Medieval,subarea,70500002
+70503001,História Moderna e Contemporânea,subarea,70500002
+70504008,História da América,subarea,70500002
+70504016,História dos Estados Unidos,especialidade,70504008
+70504024,História Latino-Americana,especialidade,70504008
+70505004,História do Brasil,subarea,70500002
+70505012,História do Brasil Colônia,especialidade,70505004
+70505020,História do Brasil Império,especialidade,70505004
+70505039,História do Brasil República,especialidade,70505004
+70505047,História Regional do Brasil,especialidade,70505004
+70506000,História das Ciências,subarea,70500002
+70600007,Geografia,area,70000000
+70601003,Geografia Humana,subarea,70600007
+70601011,Geografia da População,especialidade,70601003
+70601020,Geografia Agrária,especialidade,70601003
+70601038,Geografia Urbana,especialidade,70601003
+70601046,Geografia Econômica,especialidade,70601003
+70601054,Geografia Política,especialidade,70601003
+70602000,Geografia Regional,subarea,70600007
+70602018,Teoria do Desenvolvimento Regional,especialidade,70602000
+70602026,Regionalização,especialidade,70602000
+70602034,Análise Regional,especialidade,70602000
+70700001,Psicologia,area,70000000
+70701008,Fundamentos e Medidas da Psicologia,subarea,70700001
+70701016,"História, Teorias e Sistemas em Psicologia",especialidade,70701008
+70701024,"Metodologia, Instrumentação e Equipamento em Psicologia",especialidade,70701008
+70701032,"Construção e Validade de Testes, Escalas e Outras Medidas Psicológicas",especialidade,70701008
+70701040,"Técnicas de Processamento Estatístico, Matemático e Computacional em Psicologia",especialidade,70701008
+70702004,Psicologia Experimental,subarea,70700001
+70702012,Processos Perceptuais e Motores,especialidade,70702004
+70702020,"Processos de Aprendizagem, Memória e Motivação",especialidade,70702004
+70702039,Processos Cognitivos e Atencionais,especialidade,70702004
+70702047,Estados Subjetivos e Emoção,especialidade,70702004
+70703000,Psicologia Fisiológica,subarea,70700001
+70703019,"Neurologia, Eletrofisiologia e Comportamento",especialidade,70703000
+70703027,Processos Psico-Fisiológicos,especialidade,70703000
+70703035,Estimulação Elétrica e com Drogas; Comportamento,especialidade,70703000
+70703043,Psicobiologia,especialidade,70703000
+70704007,Psicologia Comparativa,subarea,70700001
+70704015,Estudos Naturalísticos do Comportamento Animal,especialidade,70704007
+70704023,Mecanismos Instintivos e Processos Sociais em Animais,especialidade,70704007
+70705003,Psicologia Social,subarea,70700001
+70705011,Relações Interpessoais,especialidade,70705003
+70705020,Processos Grupais e de Comunicação,especialidade,70705003
+70705038,Papeis e Estruturas Sociais; Indivíduo,especialidade,70705003
+70706000,Psicologia Cognitiva,subarea,70700001
+70707006,Psicologia do Desenvolvimento Humano,subarea,70700001
+70707014,Processos Perceptuais e Cognitivos; Desenvolvimento,especialidade,70707006
+70707022,Desenvolvimento Social e da Personalidade,especialidade,70707006
+70708002,Psicologia do Ensino e da Aprendizagem,subarea,70700001
+70708010,Planejamento Institucional,especialidade,70708002
+70708029,Programação de Condições de Ensino,especialidade,70708002
+70708037,Treinamento de Pessoal,especialidade,70708002
+70708045,Aprendizagem e Desempenho Acadêmicos,especialidade,70708002
+70708053,Ensino e Aprendizagem na Sala de Aula,especialidade,70708002
+70709009,Psicologia do Trabalho e Organizacional,subarea,70700001
+70709017,Análise Institucional,especialidade,70709009
+70709025,Recrutamento e Seleção de Pessoal,especialidade,70709009
+70709033,Treinamento e Avaliação,especialidade,70709009
+70709041,Fatores Humanos no Trabalho,especialidade,70709009
+70709050,Planejamento Ambiental e Comportamento Humano,especialidade,70709009
+70710007,Tratamento e Prevenção Psicológica,subarea,70700001
+70710015,Intervenção Terapêutica,especialidade,70710007
+70710023,Programas de Atendimento Comunitário,especialidade,70710007
+70710031,Treinamento e Reabilitação,especialidade,70710007
+70710040,Desvios da Conduta,especialidade,70710007
+70710058,Distúrbios da Linguagem,especialidade,70710007
+70710066,Distúrbios Psicossomáticos,especialidade,70710007
+70800006,Educação,area,70000000
+70801002,Fundamentos da Educação,subarea,70800006
+70801010,Filosofia da Educação,especialidade,70801002
+70801029,História da Educação,especialidade,70801002
+70801037,Sociologia da Educação,especialidade,70801002
+70801045,Antropologia Educacional,especialidade,70801002
+70801053,Economia da Educação,especialidade,70801002
+70801061,Psicologia Educacional,especialidade,70801002
+70802009,Administração Educacional,subarea,70800006
+70802017,Administração de Sistemas Educacionais,especialidade,70802009
+70802025,Administração de Unidades Educativas,especialidade,70802009
+70803005,"Política, Planejamento e Avaliação Educacional",subarea,70800006
+70803013,Política Educacional,especialidade,70803005
+70803021,Planejamento Educacional,especialidade,70803005
+70803030,"Avaliação de Sistemas, Instituições, Planos e Programas Educacionais",especialidade,70803005
+70804001,Ensino-Aprendizagem,subarea,70800006
+70804010,Teorias da Instrução,especialidade,70804001
+70804028,Métodos e Técnicas de Ensino,especialidade,70804001
+70804036,Tecnologia Educacional,especialidade,70804001
+70804044,Avaliação da Aprendizagem,especialidade,70804001
+70805008,Currículo,subarea,70800006
+70805016,Teoria Geral de Planejamento e Desenvolvimento Curricular,especialidade,70805008
+70805024,Currículos Específicos para Níveis e Tipos de Educação,especialidade,70805008
+70806004,Orientação e Aconselhamento,subarea,70800006
+70806012,Orientação Educacional,especialidade,70806004
+70806020,Orientação Vocacional,especialidade,70806004
+70807000,Tópicos Específicos de Educação,subarea,70800006
+70807019,Educação de Adultos,especialidade,70807000
+70807027,Educação Permanente,especialidade,70807000
+70807035,Educação Rural,especialidade,70807000
+70807043,Educação em Periferias Urbanas,especialidade,70807000
+70807051,Educação Especial,especialidade,70807000
+70807060,Educação Pré-Escolar,especialidade,70807000
+70807078,Ensino Profissionalizante,especialidade,70807000
+70808007,Educação e Diversidade,subarea,70800006
+70808015,Educação e Relações Étnico-Raciais,especialidade,70808007
+70808023,"Educação, Gênero e Diversidade Sexual",especialidade,70808007
+70808031,Educação Escolar Indígena,especialidade,70808007
+70808040,Educação Inclusiva,especialidade,70808007
+70900000,Ciência Política,area,70000000
+70901007,Teoria Política,subarea,70900000
+70901015,Teoria Política Clássica,especialidade,70901007
+70901023,Teoria Política Medieval,especialidade,70901007
+70901031,Teoria Política Moderna,especialidade,70901007
+70901040,Teoria Política Contemporânea,especialidade,70901007
+70902003,Estado e Governo,subarea,70900000
+70902011,Estrutura e Transformação do Estado,especialidade,70902003
+70902020,Sistemas Governamentais Comparados,especialidade,70902003
+70902038,Relações Intergovernamentais,especialidade,70902003
+70902046,Estudos do Poder Local,especialidade,70902003
+70902054,Instituições Governamentais Específicas,especialidade,70902003
+70903000,Comportamento Político,subarea,70900000
+70903018,Estudos Eleitorais e Partidos Políticos,especialidade,70903000
+70903026,Atitude e Ideologias Políticas,especialidade,70903000
+70903034,Conflitos e Coalizões Políticas,especialidade,70903000
+70903042,Comportamento Legislativo,especialidade,70903000
+70903050,Classes Sociais e Grupos de Interesse,especialidade,70903000
+70904006,Políticas Públicas,subarea,70900000
+70904014,Análise do Processo Decisório,especialidade,70904006
+70904022,Análise Institucional,especialidade,70904006
+70904030,Técnicas de Antecipação,especialidade,70904006
+70905002,Política Internacional,subarea,70900000
+70905010,Política Externa do Brasil,especialidade,70905002
+70905029,Organizações Internacionais,especialidade,70905002
+70905037,"Integração Internacional, Conflito, Guerra e Paz",especialidade,70905002
+70905045,"Relações Internacionais, Bilaterais e Multilaterais",especialidade,70905002
+71000003,Teologia,area,70000000
+71001000,História das Teologias e Religiões,subarea,71000003
+71004009,Teologia Prática,subarea,71000003
+71005005,Teologia Fundamental Sistemática,subarea,71000003
+71006001,Ciências da Religião Aplicada,subarea,71000003
+71007008,Ciências da Linguagem Religiosa,subarea,71000003
+71008004,Ciências Empíricas da Religião,subarea,71000003
+71009000,Epistemologia das Ciências da Religião,subarea,71000003
+71010009,Tradições e Escrituras Sagradas,subarea,71000003
+80000002,"Linguística, Letras e Artes",grande_area,
+80100007,Linguística,area,80000002
+80101003,Teoria e Análise Linguística,subarea,80100007
+80102000,Filosofia da Linguagem,subarea,80100007
+80103006,Linguística Histórica,subarea,80100007
+80104002,Sociolinguística e Dialetologia,subarea,80100007
+80105009,Psicolinguística,subarea,80100007
+80106005,Linguística Aplicada,subarea,80100007
+80200001,Letras,area,80000002
+80201008,Língua Portuguesa,subarea,80200001
+80202004,Línguas Estrangeiras Modernas,subarea,80200001
+80203000,Línguas Clássicas,subarea,80200001
+80204007,Línguas Indígenas,subarea,80200001
+80205003,Teoria Literária,subarea,80200001
+80206000,Literatura Brasileira,subarea,80200001
+80207006,Outras Literaturas Vernáculas,subarea,80200001
+80208002,Literaturas Estrangeiras Modernas,subarea,80200001
+80209009,Literaturas Clássicas,subarea,80200001
+80210007,Literatura Comparada,subarea,80200001
+80300006,Artes,area,80000002
+80301002,Fundamentos e Crítica das Artes,subarea,80300006
+80301010,Teoria da Arte,especialidade,80301002
+80301029,História da Arte,especialidade,80301002
+80301037,Crítica da Arte,especialidade,80301002
+80302009,Artes Plásticas,subarea,80300006
+80302017,Pintura,especialidade,80302009
+80302025,Desenho,especialidade,80302009
+80302033,Gravura,especialidade,80302009
+80302041,Escultura,especialidade,80302009
+80302050,Cerâmica,especialidade,80302009
+80302068,Tecelagem,especialidade,80302009
+80303005,Música,subarea,80300006
+80303013,Regência,especialidade,80303005
+80303021,Instrumentação Musical,especialidade,80303005
+80303030,Composição Musical,especialidade,80303005
+80303048,Canto,especialidade,80303005
+80304001,Dança,subarea,80300006
+80304010,Execução da Dança,especialidade,80304001
+80304028,Coreografia,especialidade,80304001
+80305008,Teatro,subarea,80300006
+80305016,Dramaturgia,especialidade,80305008
+80305024,Direção Teatral,especialidade,80305008
+80305032,Cenografia,especialidade,80305008
+80305040,Interpretação Teatral,especialidade,80305008
+80306004,Ópera,subarea,80300006
+80307000,Fotografia,subarea,80300006
+80308007,Cinema,subarea,80300006
+80308015,Administração e Produção de Filmes,especialidade,80308007
+80308023,Roteiro e Direção Cinematográficos,especialidade,80308007
+80308031,Técnicas de Registro e Processamento de Filmes,especialidade,80308007
+80308040,Interpretação Cinematográfica,especialidade,80308007
+80309003,Artes do Vídeo,subarea,80300006
+80310001,Educação Artística,subarea,80300006
+90000005,Outra,grande_area,
+99900009,Multidisciplinar,area,90000005
+90200000,Ensino,area,90000005
+90201000,Ensino de Ciências e Matemática,subarea,90200000
+92300006,Secretariado Executivo,area,90000005
+92400000,Defesa,area,90000005
+92600000,Bioética,area,90000005
+92700004,Ciências Ambientais,area,90000005
+92800009,Divulgação Científica,area,90000005
+93200005,"Robótica, Mecatrônica e Automação",area,90000005
+93300000,Microeletrônica,area,90000005
+93301006,Processos de Fabricação,subarea,93300000
+93302002,Dispositivos,subarea,93300000
+93303009,Teste e Tolerância a Falhas,subarea,93300000
+93304005,Projeto,subarea,93300000
+93305001,EDA,subarea,93300000
+93400004,Segurança Contra Incêndio,area,90000005

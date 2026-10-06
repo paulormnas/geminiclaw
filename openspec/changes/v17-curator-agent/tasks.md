@@ -36,5 +36,7 @@
 - [ ] 6.10 Orçamento: com 50 pares na fila e lote 20, restam 30 pendentes.
 - [ ] 6.11 Falha do LLM do Curator não interrompe a sessão.
 
+- [ ] 6.99 Gate humano não pode aceitar resposta do consultor: aprovação de Oportunidade, confirmação de Problema, aprovação de termo de vocabulário, autorização de escrita em instrumento e ativação do modo sem limite exigem ação explícita do pesquisador (terminal/CLI); a resposta de `ask_researcher` (inclusive do Researcher consultor, `v18-researcher-consult`) nunca conta como autorização. Teste: gate com resposta do consultor continua pendente.
+
 ## 7. Fechamento
 - [ ] 7.1 Ruff, testes, revisão nos 7 eixos, PR.

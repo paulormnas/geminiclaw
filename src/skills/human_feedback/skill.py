@@ -2,7 +2,9 @@
 
 Filosofia: o agente investiga por conta própria antes de perguntar; o pesquisador só é
 interrompido quando o contexto está genuinamente ausente (modo `assisted`). Nos modos
-`semi`/`auto`, a skill nunca bloqueia — documenta a suposição adotada e retorna.
+`semi`/`auto`, a skill nunca bloqueia: chama o Researcher consultor (V18 / Spec
+`researcher-consult`) pelo callback ``consult_researcher`` do ``AgentContext`` e devolve a resposta
+dele; sem consultor (callback ausente ou fallback), documenta a suposição adotada e retorna.
 
 Quando bloqueante (modo `assisted`), a skill chama diretamente o callback ``ask_researcher`` do
 ``AgentContext`` da tarefa, ligado ao orquestrador (deduplicação, registro e prompt ao
@@ -17,6 +19,7 @@ from src.agent_runtime.context import get_agent_context_optional
 from src.config import SESSION_DEFAULT_MODE
 from src.skills.base import BaseSkill, SkillResult
 from src.logger import get_logger
+from src.research_consult import DECISOES_RESERVADAS, assumption_text
 
 logger = get_logger(__name__)
 
@@ -47,6 +50,16 @@ class HumanFeedbackSkill(BaseSkill):
                 "items": {"type": "string"},
                 "description": "Opções numeradas para o pesquisador escolher, se aplicável.",
             },
+            "decisao_reservada": {
+                "type": "string",
+                "enum": list(DECISOES_RESERVADAS),
+                "description": (
+                    "Preencha SOMENTE se a pergunta pede uma decisão que cabe ao pesquisador "
+                    "(aprovar oportunidade, confirmar problema, aprovar termo de vocabulário, "
+                    "autorizar escrita em instrumento, ativar modo sem limite). Nos modos "
+                    "semi/auto ela fica pendente para o pesquisador."
+                ),
+            },
         },
         "required": ["question"],
     }
@@ -57,6 +70,7 @@ class HumanFeedbackSkill(BaseSkill):
         context: str = "",
         why_cant_proceed: str = "",
         options: Optional[list[str]] = None,
+        decisao_reservada: Optional[str] = None,
         **kwargs: Any,
     ) -> SkillResult:
         # O modo vem do AgentContext (por tarefa); fora dele, do padrão da sessão.
@@ -71,11 +85,15 @@ class HumanFeedbackSkill(BaseSkill):
             )
 
         if mode in ("semi", "auto"):
-            assumption = (
-                f"[Modo {mode} — suposição documentada, sem consulta ao pesquisador] "
-                f"Pergunta: {question} | Prosseguindo com a melhor suposição razoável a "
-                "partir do contexto disponível; documente esta decisão em 'scientific_rationale'."
-            )
+            if ctx is not None and ctx.consult_researcher is not None:
+                # V18: o Researcher consultor responde no lugar do humano (ou o núcleo do
+                # orquestrador devolve a suposição documentada, com o motivo registrado).
+                answer = await ctx.consult_researcher(
+                    question, context, why_cant_proceed, options or [], decisao_reservada
+                )
+                return SkillResult(success=True, output=answer, metadata={"mode": mode, "blocked": False})
+
+            assumption = assumption_text(mode, question)
             logger.info(
                 "ask_researcher: modo não-bloqueante, documentando suposição",
                 extra={"question": question[:200], "mode": mode},

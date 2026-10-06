@@ -330,6 +330,26 @@ OPERATIONAL_THRESHOLD_WAIT_SECONDS = int(get_env("OPERATIONAL_THRESHOLD_WAIT_SEC
 # pesquisador "a mesma dúvida" e reutilizar a resposta anterior sem perguntar de novo.
 ASK_RESEARCHER_DEDUP_SIMILARITY = float(get_env("ASK_RESEARCHER_DEDUP_SIMILARITY", default="0.85"))
 
+# V18/researcher-consult — Researcher consultor nos modos `semi`/`auto` (ADR 012 §8).
+# Desligado, `ask_researcher` volta a devolver a suposição documentada.
+RESEARCHER_CONSULT_ENABLED = get_env_bool("RESEARCHER_CONSULT_ENABLED", default=True)
+# Desliga só as ferramentas web do consultor (ele responde com o que sabe).
+RESEARCHER_CONSULT_WEB_ENABLED = get_env_bool("RESEARCHER_CONSULT_WEB_ENABLED", default=True)
+RESEARCHER_CONSULT_MAX_PER_SESSION = int(get_env("RESEARCHER_CONSULT_MAX_PER_SESSION", default="10"))
+RESEARCHER_CONSULT_MAX_SEARCHES = int(get_env("RESEARCHER_CONSULT_MAX_SEARCHES", default="3"))
+RESEARCHER_CONSULT_MAX_READS = int(get_env("RESEARCHER_CONSULT_MAX_READS", default="2"))
+RESEARCHER_CONSULT_TIMEOUT_SECONDS = float(get_env("RESEARCHER_CONSULT_TIMEOUT_SECONDS", default="120"))
+# Tamanho máximo do texto enviado a um buscador público (guarda de consulta).
+RESEARCHER_CONSULT_QUERY_MAX_CHARS = int(get_env("RESEARCHER_CONSULT_QUERY_MAX_CHARS", default="120"))
+# Hosts (sufixos de domínio, separados por vírgula) que `web_reader` pode ler nas consultas.
+# Vazio = sem lista (padrão); a allowlist ligada por padrão depende da `v18.5-egress-gate`.
+RESEARCHER_CONSULT_ALLOWED_HOSTS = tuple(
+    h.strip().lower() for h in (get_env("RESEARCHER_CONSULT_ALLOWED_HOSTS", default="") or "").split(",") if h.strip()
+)
+# Se verdadeiro, `web_reader` só lê hosts que apareceram em resultado de `quick_search` da mesma
+# consulta (fecha o canal de saída por URL pós-injeção). Padrão desligado.
+RESEARCHER_CONSULT_READ_ONLY_SEARCHED_HOSTS = get_env_bool("RESEARCHER_CONSULT_READ_ONLY_SEARCHED_HOSTS", default=False)
+
 # LLM Response Cache
 LLM_CACHE_ENABLED = get_env_bool("LLM_CACHE_ENABLED", default=True)
 LLM_CACHE_TTL_SECONDS = int(get_env("LLM_CACHE_TTL_SECONDS", default="3600"))

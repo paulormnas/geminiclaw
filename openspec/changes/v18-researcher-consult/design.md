@@ -88,6 +88,22 @@ A guarda é deliberadamente conservadora: ela bloqueia a forma mais comum de vaz
 e nomes copiados para a busca), não prova ausência de dados. Isso fica explícito na revisão de
 segurança.
 
+
+### 4.1 Endurecimento após a revisão de segurança (PR #97)
+
+- A consulta é decodificada (percent-decode repetido, teto de 5 rodadas; excesso vira `codificacao`),
+  normalizada em NFKC e limpa de caracteres invisíveis antes das regras. Dígitos separados por
+  espaço, hífen ou ponto contam como sequência; nomes de arquivo comparam `_`, `-`, `.` e espaço como
+  equivalentes e casam por substring (stems normalizados com 6 ou mais caracteres).
+- Conteúdo de busca e de página chega ao modelo dentro de `<conteudo_externo>` como dado não
+  confiável; `max_results` e `max_chars` têm teto; `recusas` guarda só 40 caracteres do texto.
+- Opcionais, desligados por padrão: `RESEARCHER_CONSULT_ALLOWED_HOSTS` e
+  `RESEARCHER_CONSULT_READ_ONLY_SEARCHED_HOSTS` (a allowlist ligada depende da `v18.5-egress-gate`).
+- Resposta ao agente: aviso de dado externo não verificado, tetos de tamanho, só fontes http/https.
+- Decisão reservada: classificação por palavras-chave na pergunta (`classify_reserved`), além da
+  autodeclaração e da classificação do consultor. Respostas reaproveitadas pela deduplicação também
+  são registradas (`reutilizada`).
+
 ## 5. Decisões reservadas ao humano
 
 O consultor não responde quando a pergunta pede uma destas decisões, identificadas por um

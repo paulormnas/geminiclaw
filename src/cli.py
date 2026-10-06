@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, NoReturn, Any
 
 if TYPE_CHECKING:
     from src.llm.session import SessionRouting
+    from src.project_session import ProjectBinder
 
 # Adiciona a raiz do projeto ao sys.path para permitir imports de 'src'
 # quando o script é executado diretamente (ex: python3 src/cli.py)
@@ -61,6 +62,8 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
   geminiclaw clear-context
   geminiclaw history
   geminiclaw embeddings reindex [--collection <nome>] [--yes]
+  geminiclaw project new --titulo <t> --objetivo <o> [--dominio <termo>]|list [--status <s>]|show <id>|use <id>
+  geminiclaw --project <id> "<tarefa>"
   geminiclaw vocab pending|approve <id>|reject <id> [--motivo <texto>]|map <id> --para <id>
   geminiclaw knowledge stats|reindex [--yes]
   geminiclaw --metrics <execution_id>
@@ -184,6 +187,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Nível de autonomia da sessão: assisted (padrão), semi ou auto "
             f"(padrão configurável via SESSION_DEFAULT_MODE, atualmente '{SESSION_DEFAULT_MODE}')."
+        ),
+    )
+    parser.add_argument(
+        "--project",
+        type=str,
+        metavar="PROJETO_ID",
+        default=None,
+        help=(
+            "Projeto de pesquisa da sessão (ver `geminiclaw project list`). Sem ele, usa o projeto "
+            "padrão (`project use`) ou cria um projeto a partir do prompt."
         ),
     )
     parser.add_argument(
@@ -952,7 +965,8 @@ async def execute_prompt(
     context_bundle: ContextBundle | None = None,
     budget: UsageBudget | None = None,
     llm_routing: "SessionRouting | None" = None,
-) -> None:
+    project_binder: "ProjectBinder | None" = None,
+) -> bool:
     """Executa um prompt no orquestrador e exibe o resultado.
 
     Args:
@@ -964,12 +978,32 @@ async def execute_prompt(
             Se omitido, usa os defaults de `src/config.py`.
         llm_routing: Mapa resolvido de modelos por papel (ADR 017); se omitido, o
             orquestrador o resolve antes de qualquer chamada de LLM.
+        project_binder: Resolve o projeto da sessão e garante o Problema confirmado pelo
+            pesquisador antes de qualquer planejamento (v17-research-project).
+
+    Returns:
+        False se a sessão foi recusada antes de começar (projeto/problema); True caso contrário.
     """
+    project_kwargs: dict[str, Any] = {}
+    if project_binder is not None:
+        from src.llm.session import bind_session_routing
+        from src.project_session import ProjectFlowError
+
+        try:
+            if llm_routing is not None:
+                bind_session_routing(llm_routing)  # o rascunho do Problema usa o modelo do papel researcher
+            binding = await project_binder.bind(prompt, context_bundle)
+        except ProjectFlowError as e:
+            print(f"\n  {STATUS_ICONS['error']} {RED}{e}{RESET}\n")
+            return False
+        project_kwargs = {"project_id": binding.project_id, "project_context": binding.context_block}
+
     print(f"\n  {STATUS_ICONS['running']} {DIM}Processando...{RESET}\n")
 
     try:
         result = await orchestrator.handle_request(
-            prompt, mode=mode, context_bundle=context_bundle, budget=budget, llm_routing=llm_routing
+            prompt, mode=mode, context_bundle=context_bundle, budget=budget, llm_routing=llm_routing,
+            **project_kwargs,
         )
         print(format_result(result))
         if context_bundle and result.session_id:
@@ -977,6 +1011,7 @@ async def execute_prompt(
     except Exception as e:
         logger.error("Erro ao processar prompt", extra={"error": str(e)})
         print(f"\n  {STATUS_ICONS['error']} {RED}Erro: {e}{RESET}\n")
+    return True
 
 
 async def interactive_mode(
@@ -985,6 +1020,7 @@ async def interactive_mode(
     context_bundle: ContextBundle | None = None,
     budget: UsageBudget | None = None,
     llm_routing: "SessionRouting | None" = None,
+    project_binder: "ProjectBinder | None" = None,
 ) -> None:
     """Executa a CLI em modo interativo (REPL).
 
@@ -998,6 +1034,7 @@ async def interactive_mode(
             defaults de `src/config.py`.
         llm_routing: Mapa resolvido de modelos por papel (ADR 017), resolvido uma vez para
             todo o REPL.
+        project_binder: Vínculo de projeto, resolvido no primeiro prompt e reutilizado.
     """
     print(BANNER)
     print(f"  {DIM}Modo interativo. Digite 'sair' para encerrar.{RESET}\n")
@@ -1041,7 +1078,8 @@ async def interactive_mode(
             continue
 
         await execute_prompt(
-            orchestrator, prompt, mode=mode, context_bundle=context_bundle, budget=budget, llm_routing=llm_routing
+            orchestrator, prompt, mode=mode, context_bundle=context_bundle, budget=budget,
+            llm_routing=llm_routing, project_binder=project_binder,
         )
 
 
@@ -1157,6 +1195,11 @@ def main() -> None:
     if len(sys.argv) >= 2 and sys.argv[1] == "embeddings":
         _handle_embeddings_command(sys.argv[2:])
         sys.exit(0)
+
+    if len(sys.argv) >= 2 and sys.argv[1] == "project":
+        from src.cli_project import handle_project_command
+
+        sys.exit(handle_project_command(sys.argv[2:]))
 
     if len(sys.argv) >= 2 and sys.argv[1] == "vocab":
         sys.exit(_handle_vocab_command(sys.argv[2:]))
@@ -1300,10 +1343,20 @@ def main() -> None:
         logger.error("Falha ao resolver modelos por papel", extra={"error": str(e)})
         sys.exit(1)
 
+    # v17-research-project — projeto da sessão e Problema confirmado (todos os modos).
+    from src.project_session import ProjectBinder
+
+    def _open_store() -> Any:
+        from src.knowledge.factory import open_graph_store
+
+        return open_graph_store()
+
+    project_binder = ProjectBinder(_open_store, project_arg=args.project)
+
     if args.prompt:
         # Modo direto: executa o prompt e sai
         print_session_banner(mode, budget=budget, llm_routing=llm_routing)
-        asyncio.run(
+        accepted = asyncio.run(
             execute_prompt(
                 orchestrator,
                 args.prompt,
@@ -1311,8 +1364,11 @@ def main() -> None:
                 context_bundle=context_bundle,
                 budget=budget,
                 llm_routing=llm_routing,
+                project_binder=project_binder,
             )
         )
+        if accepted is False:
+            sys.exit(1)
         # V11.1.2 — Flush explícito ao encerrar modo não-interativo
         try:
             from src.telemetry import get_telemetry
@@ -1323,7 +1379,8 @@ def main() -> None:
         # Modo interativo (REPL)
         asyncio.run(
             interactive_mode(
-                orchestrator, mode=mode, context_bundle=context_bundle, budget=budget, llm_routing=llm_routing
+                orchestrator, mode=mode, context_bundle=context_bundle, budget=budget,
+                llm_routing=llm_routing, project_binder=project_binder,
             )
         )
         # V11.1.2 — Flush explícito ao sair do modo interativo

@@ -22,6 +22,7 @@ from src.agent_runtime.definitions import get_agent_definition
 from src.agent_runtime.resources import ResourceGuard
 from src.config import AGENT_TIMEOUT_SECONDS
 from src.llm.agent_loop import run_agent_loop
+from src.llm.retry import is_retryable_error
 from src.logger import get_logger
 from src.model_config import get_role_model_config
 from src.model_router import ModelRouter
@@ -111,6 +112,7 @@ class AgentRuntime:
                 status="error",
                 response={},
                 error=str(exc),
+                error_category="llm_connection" if is_retryable_error(exc) else None,
             )
 
         return AgentResult(

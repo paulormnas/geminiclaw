@@ -800,6 +800,7 @@ class AutonomousLoop:
 
                 success = False
                 last_result = None
+                last_review: Dict[str, Any] | None = None  # parecer do Validator da última tentativa
                 attempt_errors: List[str] = []  # V15.3/G5 — insumo do DivergenceReport
                 # retry_key já calculada no início da coroutine (usada também pelo guard
                 # de tarefa abandonada, acima).
@@ -836,6 +837,7 @@ class AutonomousLoop:
                             dag_state[task.task_name]["future"].set_result(None)
                         return
                     last_result = result
+                    last_review = None
 
                     if result.status == "success":
                         success = True
@@ -845,6 +847,7 @@ class AutonomousLoop:
                         if REVIEW_ENABLED and REVIEW_MODE == "per_subtask" and task.validation_criteria:
                             logger.info(f"Iniciando revisão da subtarefa {task.task_name}")
                             review = await self._review_subtask(task, result, master_session_id, attempt_number)
+                            last_review = review
                             if review.get("status") == "fail":
                                 success = False
                                 result.status = "error"
@@ -941,6 +944,9 @@ class AutonomousLoop:
 
                 if last_result:
                     final_results.append(last_result)
+
+                # v17-structural-fact-ingestion — fatos da subtarefa (revisada) no grafo, sem LLM.
+                await self._ingest_subtask(task, last_result, last_review, master_session_id)
 
                 # Roadmap V15.3 / Spec G5 — DivergenceReport quando a subtarefa esgota
                 # todas as tentativas (padrão de falha recorrente detectado).
@@ -1219,6 +1225,42 @@ class AutonomousLoop:
             failed=failed,
             artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id)
         )
+
+    async def _ingest_subtask(
+        self,
+        task: "AgentTask",
+        result: Optional["AgentResult"],
+        review: Optional[Dict[str, Any]],
+        master_session_id: str,
+    ) -> None:
+        """Ingere os fatos estruturais de uma subtarefa concluída (v17-structural-fact-ingestion).
+
+        Nunca interrompe a sessão: sem projeto/grafo a ingestão é omitida; falhas do grafo viram
+        eventos em ``knowledge_pending.jsonl`` (tratados pelo ``FactIngestor``).
+        """
+        from src.knowledge.ingestion import FactIngestor, SubtaskInput
+
+        ingestor = self.orchestrator.get_ingestor(master_session_id)
+        if not isinstance(ingestor, FactIngestor) or result is None or not task.task_name:
+            return
+        try:
+
+            sub = SubtaskInput(
+                task_name=task.task_name,
+                subtask_id=task.subtask_id,
+                agent_id=task.agent_id,
+                task_type=task.task_type,
+                hypothesis=task.hypothesis or "",
+                scientific_rationale=task.scientific_rationale or "",
+                approach=task.approach if isinstance(task.approach, dict) else None,
+                agent_status=result.status,
+                agent_error_category=getattr(result, "error_category", None),
+                review_status=(review or {}).get("status"),
+                validation_criteria=[c for c in (task.validation_criteria or []) if isinstance(c, str)],
+            )
+            await asyncio.to_thread(ingestor.subtask, sub)
+        except Exception as exc:  # noqa: BLE001 - a ingestão nunca derruba a subtarefa
+            logger.warning("Falha ao ingerir fatos da subtarefa", extra={"error": type(exc).__name__})
 
     def _record_run_limit(self, master_session_id: str, exc: AgentRunLimitReached) -> None:
         """Registra o evento ``limit_reached`` do limite de execuções (observabilidade segura)."""

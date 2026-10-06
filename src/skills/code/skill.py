@@ -120,6 +120,20 @@ class CodeSkill(BaseSkill):
         except Exception as exc:  # observabilidade nunca derruba a execução
             logger.warning("Falha ao registrar sandbox_run", extra={"error": str(exc)})
 
+    @staticmethod
+    def _run_info(result: SandboxResult) -> dict:
+        """Saída estruturada do sandbox gravada no manifest (sem stdout/stderr nem código)."""
+        return {
+            "exit_code": result.exit_code,
+            "oom_killed": bool(result.oom_killed),
+            "exception_type": result.exception_type,
+            "timed_out": bool(result.timed_out),
+            "install_failed": bool(result.install_failed),
+            "infra_error": result.infra_error,
+            "imagem_sandbox": result.image or None,
+            "pacotes": list(result.packages_installed)[:100],
+        }
+
     def _validate_code(self, code: str) -> Optional[str]:
         """Valida o código contra padrões proibidos.
         
@@ -226,6 +240,7 @@ class CodeSkill(BaseSkill):
             )
 
             success = not result.timed_out and result.exit_code == 0
+            run_info = self._run_info(result)
             self._record_sandbox_run(session_id, task_name, result, int((time.monotonic() - _started) * 1000))
 
             # V13.3.2 — Detectar novos artefatos e atualizar manifest
@@ -269,6 +284,8 @@ class CodeSkill(BaseSkill):
                     metrics_path=metrics_path,
                     seed_used=seed_used,
                     divergence_detected=divergence_detected,
+                    task_name=task_name,
+                    run_info=run_info,
                 )
             else:
                 error_info = _extract_error_info(result.stderr)
@@ -297,6 +314,8 @@ class CodeSkill(BaseSkill):
                     summary=summary,
                     error=error_info,
                     code_file=code_filename,
+                    task_name=task_name,
+                    run_info=run_info,
                 )
 
             if result.install_failed:

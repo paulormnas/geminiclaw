@@ -73,6 +73,8 @@ class WorkspaceManifest:
         metrics_path: Optional[str] = None,
         seed_used: Optional[int] = None,
         divergence_detected: Optional[bool] = None,
+        task_name: Optional[str] = None,
+        run_info: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Registra o resultado de um step de execução.
 
@@ -91,6 +93,10 @@ class WorkspaceManifest:
             seed_used: Seed de aleatoriedade usada, lida de ``metrics.json`` (Spec G2).
             divergence_detected: ``True`` quando ``metrics.json["divergence_note"]``
                 não é nulo (Spec G2). ``None`` quando não aplicável (sem metrics.json).
+            task_name: Subtarefa que executou o step (permite à ingestão de fatos atribuir o
+                step ao experimento; v17-structural-fact-ingestion).
+            run_info: Saída estruturada do sandbox (``exit_code``, ``oom_killed``,
+                ``exception_type``, ``timed_out``, ``infra_error``, ``imagem_sandbox``, ``pacotes``).
 
         Raises:
             ValueError: Se ``status`` não for ``"success"`` ou ``"failed"``.
@@ -114,6 +120,10 @@ class WorkspaceManifest:
         }
         if code_file:
             step_entry["code_file"] = code_file
+        if task_name:
+            step_entry["task_name"] = task_name
+        if run_info:
+            step_entry["run"] = run_info
         if status == "failed" and error:
             step_entry["error_type"] = error.get("error_type", "")
             step_entry["error_message"] = error.get("error_message", "")

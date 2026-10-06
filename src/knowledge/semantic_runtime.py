@@ -120,8 +120,27 @@ def format_stats(queue: SimilarityQueue, window_days: int) -> str:
     return "\n".join(lines)
 
 
+def _run_sync(store: GraphStore, session_id: str | None) -> int:
+    """``geminiclaw knowledge sync``: reaplica os eventos de ``knowledge_pending.jsonl`` (idempotente)."""
+    from pathlib import Path
+
+    from src.knowledge.ingestion import IngestionDataError, sync_pending
+
+    try:
+        report = sync_pending(store, Path(config.OUTPUT_BASE_DIR), session_id)
+    except IngestionDataError as exc:
+        print(f"\n  ❌ {exc}\n")
+        return 1
+    print(
+        f"Fatos pendentes: {report.applied} aplicado(s), {report.pending} ainda pendente(s), "
+        f"{report.dead} movido(s) para knowledge_pending.dead.jsonl, {report.ignored_lines} linha(s) ignorada(s) "
+        f"em {report.sessions} sessão(ões)."
+    )
+    return 1 if report.pending or report.dead else 0
+
+
 def run_knowledge_command(argv: list[str], runtime: SemanticRuntime | None = None) -> int:
-    """Trata ``geminiclaw knowledge stats|reindex``.
+    """Trata ``geminiclaw knowledge stats|reindex|sync``.
 
     Args:
         argv: Argumentos após ``knowledge``.
@@ -137,6 +156,8 @@ def run_knowledge_command(argv: list[str], runtime: SemanticRuntime | None = Non
     sub.add_parser("stats", help="Taxa de confirmação da fila e sugestões de limiar.")
     reindex_p = sub.add_parser("reindex", help="Reconcilia o índice semântico com o grafo.")
     reindex_p.add_argument("--yes", action="store_true", help="Confirma a recriação da coleção se a dimensão mudou.")
+    sync_p = sub.add_parser("sync", help="Reaplica os fatos pendentes (knowledge_pending.jsonl) ao grafo.")
+    sync_p.add_argument("--session", default=None, help="Id da sessão; sem ele, todas as sessões com pendências.")
     try:
         args = parser.parse_args(argv)
     except SystemExit as e:
@@ -145,6 +166,8 @@ def run_knowledge_command(argv: list[str], runtime: SemanticRuntime | None = Non
     try:
         if runtime is None:
             runtime = open_runtime()
+        if args.action == "sync":
+            return _run_sync(runtime.store, args.session)
         if args.action == "stats":
             print(format_stats(runtime.queue, config.SIM_CALIBRATION_WINDOW_DAYS))
             return 0

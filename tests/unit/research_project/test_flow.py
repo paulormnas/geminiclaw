@@ -225,7 +225,7 @@ class TestCliProjeto:
 @pytest.mark.unit
 @pytest.mark.asyncio
 class TestOrquestrador:
-    async def test_sessao_em_projeto_existente(self) -> None:
+    async def test_sessao_em_projeto_existente(self, tmp_path) -> None:
         """Scenario: Sessão em projeto existente — payload da sessão com project_id."""
         from src.session import Session
 
@@ -236,7 +236,14 @@ class TestOrquestrador:
         runtime = MagicMock()
         runtime.run = AsyncMock(return_value=AgentResult(
             agent_id="a", session_id="s1", status="success", response={}, error=None))
-        orch = Orchestrator(session_manager=sm, agent_runtime=runtime)
+        # O grafo da ingestão de fatos é injetado: nenhum teste abre o banco real nem grava em outputs/.
+        from src.output_manager import OutputManager
+
+        orch = Orchestrator(
+            session_manager=sm, agent_runtime=runtime,
+            output_manager=OutputManager(str(tmp_path / "out"), str(tmp_path / "logs")),
+            knowledge_store_factory=InMemoryGraphStore,
+        )
         await orch.handle_request("p", [AgentTask(agent_id="a", prompt="p")],
                                   project_id="01890000-0000-7000-8000-000000000001", project_context="CTX")
         payloads = [c.kwargs.get("payload", {}) for c in sm.update.call_args_list]

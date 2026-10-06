@@ -163,7 +163,8 @@ class Orchestrator:
         self._session_modes: dict[str, str] = {}
         # V15.5/G9 — Bloco de texto do ContextBundle ativo, injetado no plano inicial do Researcher
         self._current_context_block: str = ""
-        self._project_context_block: str = ""
+        # Bloco do Problema por sessão mestra (evita vazar entre requisições concorrentes).
+        self._project_blocks: dict[str, str] = {}
         self.agent_runtime = agent_runtime or AgentRuntime()
 
     @staticmethod
@@ -185,6 +186,7 @@ class Orchestrator:
         llm_routing: SessionRouting | None = None,
         project_id: str | None = None,
         project_context: str | None = None,
+        project_mode: str | None = None,
     ) -> OrchestratorResult:
         """Processa a solicitação do usuário, executando o ciclo de vida completo.
 
@@ -206,6 +208,8 @@ class Orchestrator:
                 ``payload["project_id"]``.
             project_context: Bloco com título, resumo e critério do ``Problema`` confirmado,
                 injetado no planejamento do Researcher junto ao contexto de ``input_context/``.
+            project_mode: ``"sem_grafo"`` quando o grafo estava fora do ar e o contorno explícito
+                está ligado; gravado em ``payload["project_mode"]``.
 
         Returns:
             O resultado final da orquestração.
@@ -220,6 +224,10 @@ class Orchestrator:
         start_date = datetime.utcnow().isoformat() + "Z"
 
         effective_mode = mode or SESSION_DEFAULT_MODE
+        if project_id:
+            from src.knowledge.projects import validate_project_id
+
+            project_id = validate_project_id(project_id)  # UUID; falha explícita antes de criar a sessão
 
         # ADR 017 — resolve o modelo de cada papel uma única vez, antes da sessão e de qualquer
         # chamada de LLM; o mapa vale até o fim da sessão (sem troca no meio).
@@ -250,6 +258,7 @@ class Orchestrator:
                 "budget": effective_budget.to_payload(),
                 "llm_routing": routing.payload(),
                 **({"project_id": project_id} if project_id else {}),
+                **({"project_mode": project_mode} if project_mode else {}),
             },
         )
 
@@ -267,7 +276,7 @@ class Orchestrator:
             self.output_manager.init_session(master_session.id)
             self._snapshot_input_context(bundle, master_session.id)
         # v17-research-project — o problema do projeto vai em todo planejamento (plano e replans).
-        self._project_context_block = project_context or ""
+        self._project_blocks[master_session.id] = project_context or ""
 
         # V5.6 — Telemetria: evento de início de execução
         telemetry = get_telemetry()
@@ -982,7 +991,8 @@ class Orchestrator:
         current_plan_data = previous_plan
         last_signature, repeats = "", 0
         
-        project_block = f"\n{self._project_context_block}\n\n" if self._project_context_block else ""
+        _pctx = self._project_blocks.get(master_session_id, "")
+        project_block = f"\n{_pctx}\n\n" if _pctx else ""
 
         for iteration in range(MAX_PLANNING_ITERATIONS):
             # 1. Executa o Researcher (que absorve o Planner na V14.3)

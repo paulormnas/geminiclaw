@@ -25,7 +25,8 @@ MAX_CARACTERISTICAS = 20
 MAX_CARACTERISTICA_CHAVE = 64
 MAX_CARACTERISTICA_VALOR = 200
 
-_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+# Remove controles inclusive "\r" (sobrescreveria a linha no terminal ao exibir o rascunho); "\n" é mantido.
+_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
 EDITABLE_FIELDS: tuple[str, ...] = (
     "titulo", "resumo", "classe", "dominios", "metrica", "alvo", "delta_min",
@@ -77,7 +78,9 @@ class ProblemDraft:
         }
 
 
-def clean_text(value: Any, name: str, max_len: int, *, required: bool = False) -> str | None:
+def clean_text(
+    value: Any, name: str, max_len: int, *, required: bool = False, single_line: bool = False
+) -> str | None:
     """Normaliza um texto livre: tipo ``str``, sem caracteres de controle, tamanho limitado.
 
     Args:
@@ -85,6 +88,7 @@ def clean_text(value: Any, name: str, max_len: int, *, required: bool = False) -
         name: Nome do campo (para a mensagem de erro).
         max_len: Tamanho máximo após ``strip``.
         required: Se True, vazio/``None`` é erro; senão devolve ``None``.
+        single_line: Se True, quebras de linha viram espaço (ex.: título).
 
     Raises:
         ProblemDraftError: Tipo inválido, vazio obrigatório ou acima do limite.
@@ -95,6 +99,8 @@ def clean_text(value: Any, name: str, max_len: int, *, required: bool = False) -
         return None
     if not isinstance(value, str):
         raise ProblemDraftError(f"Campo '{name}' deve ser texto.")
+    if single_line:
+        value = " ".join(value.split())
     text = _CONTROL_CHARS.sub("", value).strip()
     if len(text) > max_len:
         raise ProblemDraftError(f"Campo '{name}' excede {max_len} caracteres.")
@@ -181,7 +187,7 @@ def parse_problem_draft(raw: Any) -> ProblemDraft:
     if not isinstance(criterio, dict):
         raise ProblemDraftError("Campo 'criterio_sucesso' deve ser um objeto.")
     return ProblemDraft(
-        titulo=clean_text(raw.get("titulo"), "titulo", MAX_TITULO, required=True),  # type: ignore[arg-type]
+        titulo=clean_text(raw.get("titulo"), "titulo", MAX_TITULO, required=True, single_line=True),  # type: ignore[arg-type]
         resumo=clean_text(raw.get("resumo"), "resumo", MAX_RESUMO, required=True),  # type: ignore[arg-type]
         classe=clean_text(raw.get("classe"), "classe", MAX_CLASSE),
         caracteristicas_dados=_parse_caracteristicas(raw.get("caracteristicas_dados")),
@@ -209,7 +215,7 @@ def apply_edit(draft: ProblemDraft, campo: str, valor: str) -> ProblemDraft:
     if campo not in EDITABLE_FIELDS:
         raise ProblemDraftError(f"Campo '{campo}' não é editável; use um de: {', '.join(EDITABLE_FIELDS)}.")
     if campo == "titulo":
-        return replace(draft, titulo=clean_text(valor, "titulo", MAX_TITULO, required=True))  # type: ignore[arg-type]
+        return replace(draft, titulo=clean_text(valor, "titulo", MAX_TITULO, required=True, single_line=True))  # type: ignore[arg-type]
     if campo == "resumo":
         return replace(draft, resumo=clean_text(valor, "resumo", MAX_RESUMO, required=True))  # type: ignore[arg-type]
     if campo == "classe":

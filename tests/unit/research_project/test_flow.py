@@ -237,8 +237,8 @@ class TestOrquestrador:
         runtime.run = AsyncMock(return_value=AgentResult(
             agent_id="a", session_id="s1", status="success", response={}, error=None))
         orch = Orchestrator(session_manager=sm, agent_runtime=runtime)
-        await orch.handle_request("p", [AgentTask(agent_id="a", prompt="p")], project_id="proj-1",
-                                  project_context="CTX")
+        await orch.handle_request("p", [AgentTask(agent_id="a", prompt="p")],
+                                  project_id="01890000-0000-7000-8000-000000000001", project_context="CTX")
         payloads = [c.kwargs.get("payload", {}) for c in sm.update.call_args_list]
-        assert any(p.get("project_id") == "proj-1" for p in payloads)
-        assert orch._project_context_block == "CTX"
+        assert any(p.get("project_id") == "01890000-0000-7000-8000-000000000001" for p in payloads)
+        assert orch._project_blocks == {sess.id: "CTX"}

@@ -10,6 +10,7 @@ from __future__ import annotations
 from src.knowledge import schema
 from src.knowledge.errors import (
     DisallowedRelationError,
+    HumanConfirmationRequiredError,
     ImmutableFieldError,
     InvalidEnumValueError,
     MissingJustificationError,
@@ -220,3 +221,39 @@ def validate_edge_write(
         error_scope="aresta",
     )
     return relation_schema
+
+
+# Transições reservadas ao pesquisador: rótulo -> (campo, valor protegido). Não altera o schema:
+# a regra vive na porta única de escrita e a trilha fica na auditoria (autor ``pesquisador``).
+HUMAN_ONLY_TRANSITIONS: dict[str, tuple[str, str]] = {"Problema": ("status", "confirmado")}
+
+
+def validate_human_only(
+    label: str,
+    *,
+    current: dict[str, object] | None,
+    changes: dict[str, object],
+    actor_kind: str,
+) -> None:
+    """Só o pesquisador cria, promove ou rebaixa o estado ``confirmado`` do ``Problema``.
+
+    Args:
+        label: Rótulo do nó.
+        current: Propriedades atuais (``None`` em ``create_node``).
+        changes: Propriedades da criação ou mudanças do ``update_node``.
+        actor_kind: ``Actor.kind`` de quem escreve (recebido explicitamente).
+
+    Raises:
+        HumanConfirmationRequiredError: Escrita fora do pesquisador que cria com o valor
+            protegido, entra nele ou sai dele.
+    """
+    rule = HUMAN_ONLY_TRANSITIONS.get(label)
+    if rule is None or actor_kind == "pesquisador":
+        return
+    field, protected = rule
+    if field not in changes:
+        return
+    new = changes[field]
+    old = (current or {}).get(field)
+    if new == protected or (old == protected and new != protected):
+        raise HumanConfirmationRequiredError(label, field, actor_kind)

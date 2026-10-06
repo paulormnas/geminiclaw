@@ -136,7 +136,18 @@ def set_default_project(projeto_id: str, config_dir: Path | None = None) -> Path
     directory = _config_dir(config_dir)
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / _ACTIVE_PROJECT_FILENAME
-    path.write_text(pid + "\n", encoding="utf-8")
+    if path.is_symlink():
+        raise ProjectError(f"{path} é um link simbólico; remova-o antes de usar `project use`.")
+    # Arquivo temporário exclusivo (0600) + os.replace: atômico e nunca segue link no destino.
+    tmp = directory / f".{_ACTIVE_PROJECT_FILENAME}.{os.getpid()}.tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(pid + "\n")
+        os.replace(tmp, path)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
     return path
 
 
@@ -148,6 +159,8 @@ def get_default_project(config_dir: Path | None = None) -> str | None:
             nunca ignora silenciosamente).
     """
     path = _config_dir(config_dir) / _ACTIVE_PROJECT_FILENAME
+    if path.is_symlink():
+        raise ProjectError(f"{path} é um link simbólico; remova-o e rode `geminiclaw project use <id>`.")
     try:
         content = path.read_text(encoding="utf-8").strip()
     except FileNotFoundError:
@@ -185,17 +198,18 @@ def _link_domains(
     *,
     sessao_id: str,
     semantic_search: SemanticSearch | None,
+    actor: Actor = PESQUISADOR,
 ) -> None:
     """Resolve termos no vocabulário e liga ``src_id -NO_DOMINIO-> Dominio`` (sem duplicar)."""
     linked: set[str] = set()
     for term in terms:
         resolution = resolve_domain(
-            store, term, actor=PESQUISADOR, sessao_id=sessao_id, semantic_search=semantic_search
+            store, term, actor=actor, sessao_id=sessao_id, semantic_search=semantic_search
         )
         if resolution.node_id is None or resolution.node_id in linked:
             continue
         linked.add(resolution.node_id)
-        store.create_edge(src_id, "NO_DOMINIO", resolution.node_id, {}, actor=PESQUISADOR)
+        store.create_edge(src_id, "NO_DOMINIO", resolution.node_id, {}, actor=actor)
 
 
 def create_project(
@@ -221,7 +235,7 @@ def create_project(
     Raises:
         ProblemDraftError: Título ou objetivo vazio/grande demais.
     """
-    titulo_ok = clean_text(titulo, "titulo", MAX_TITULO_PROJETO, required=True)
+    titulo_ok = clean_text(titulo, "titulo", MAX_TITULO_PROJETO, required=True, single_line=True)
     objetivo_ok = clean_text(objetivo, "objetivo", MAX_OBJETIVO_PROJETO, required=True)
     projeto_id = generate_node_id()
     node_id = store.create_node(
@@ -282,15 +296,24 @@ def list_projects(store: GraphStore, status: str | None = None) -> list[ProjectS
 
 
 def get_active_problem(store: GraphStore, projeto_id: str) -> Node | None:
-    """Devolve o ``Problema`` **confirmado** do projeto (o mais recente), ou ``None``.
+    """Devolve o ``Problema`` **confirmado** do projeto, ou ``None``.
 
     Rascunhos (``status="rascunho"``) nunca são devolvidos: falha fechada.
+
+    Raises:
+        ProjectError: Se houver mais de um confirmado (nunca escolhe em silêncio).
     """
     pid = validate_project_id(projeto_id)
     nodes = store.find_nodes("Problema", {"projeto_id": pid, "status": "confirmado"}, limit=50)
     if not nodes:
         return None
-    return max(nodes, key=lambda n: str(n.properties.get("criado_em", "")))
+    if len(nodes) > 1:
+        # Fail-fast: nunca escolhe em silêncio entre vários (corrida de confirmações ou escrita indevida).
+        raise ProjectError(
+            f"O projeto {pid} tem {len(nodes)} Problemas confirmados; resolva o conflito pelo Curator "
+            "(só pode haver um)."
+        )
+    return nodes[0]
 
 
 def get_project(store: GraphStore, projeto_id: str) -> ProjectDetail:
@@ -347,8 +370,9 @@ def confirm_problem(
 
     1. Valida o rascunho (``metrica`` e ``delta_min`` obrigatórios) e resolve a métrica.
     2. Cria o ``Problema`` com ``status="rascunho"`` e autoria do Researcher.
-    3. Muda ``status`` para ``confirmado`` com autor ``pesquisador`` (auditado pelo grafo).
-    4. Liga ``Projeto -INVESTIGA-> Problema`` e ``Problema -NO_DOMINIO-> Dominio``.
+    3. Liga ``Projeto -INVESTIGA-> Problema`` e ``Problema -NO_DOMINIO-> Dominio``.
+    4. **Por último**, muda ``status`` para ``confirmado`` com autor ``pesquisador`` (auditado; o
+       ``GraphStore`` recusa qualquer outro ator) e recusa se já houver outro confirmado.
 
     Args:
         store: Grafo de conhecimento.
@@ -380,9 +404,12 @@ def confirm_problem(
     if not draft.metrica:
         raise ProblemDraftError("A métrica do critério de sucesso é obrigatória para confirmar o problema.")
 
+    agent = Actor(kind="agente", role="researcher", model=researcher_model)
     try:
+        # Termos vindos do rascunho do LLM entram no vocabulário como candidatos do Researcher
+        # (a autoria do humano é só a da confirmação).
         metric_res = resolve_metric(
-            store, draft.metrica, actor=confirmed_by, sessao_id=sessao_id,
+            store, draft.metrica, actor=agent, sessao_id=sessao_id,
             sentido=sentido_metrica, semantic_search=semantic_search,
         )
     except VocabularyError as exc:
@@ -397,7 +424,6 @@ def confirm_problem(
         criterio["metrica"] = str(metric_node.properties.get("nome", draft.metrica))
         criterio["metrica_id"] = metric_node.id
 
-    agent = Actor(kind="agente", role="researcher", model=researcher_model)
     problem_id = store.create_node(
         "Problema",
         {
@@ -414,9 +440,17 @@ def confirm_problem(
         },
         actor=agent,
     )
-    store.update_node(problem_id, {"status": "confirmado"}, actor=confirmed_by)
+    # Arestas e domínios com o nó ainda "rascunho"; a promoção é o ÚLTIMO passo, então uma falha
+    # no meio nunca deixa um Problema confirmado sem ligações (atomicidade por ordem).
     store.create_edge(project_node.id, "INVESTIGA", problem_id, {}, actor=confirmed_by)
-    _link_domains(store, problem_id, draft.dominios, sessao_id=sessao_id, semantic_search=semantic_search)
+    _link_domains(store, problem_id, draft.dominios, sessao_id=sessao_id, semantic_search=semantic_search,
+                  actor=agent)
+    store.update_node(problem_id, {"status": "confirmado"}, actor=confirmed_by)
+    try:
+        get_active_problem(store, pid)  # levanta ProjectError se a promoção criou um segundo confirmado
+    except ProjectError:
+        store.update_node(problem_id, {"status": "rascunho"}, actor=confirmed_by)
+        raise
     logger.info("Problema confirmado", extra={"extra": {"projeto_id": pid, "problema_id": problem_id}})
     return problem_id
 

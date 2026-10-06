@@ -90,3 +90,32 @@ planejamento, ao lado do `ContextBundle`.
 | Persistência | Chave `project_id` no payload JSONB; nós `Projeto`/`Problema`. |
 | Segurança | Confirmação humana obrigatória antes de gastar recursos. |
 | Testes & Telemetria | Testes da CLI e do fluxo de confirmação com entrada simulada. |
+
+## Decisões de implementação (revisão do PR #103)
+
+- **`projeto_id` x `id` do nó:** `projeto_id` é um UUIDv7 gerado em `create_project` e gravado na
+  propriedade imutável `projeto_id` do nó `Projeto`; o `id` do nó é outro UUID, atribuído pelo
+  `GraphStore`. Todos os nós do projeto carregam o `projeto_id`; `get_project`/`--project` usam-no.
+- **Assinaturas:** as funções de `projects.py` recebem o `store` como primeiro argumento;
+  `draft_problem` aceita `comentario` opcional (novo rascunho com comentário).
+- **Confirmação humana na porta única:** `validation.validate_human_only`, chamada por
+  `create_node` e `update_node` dos dois stores, recusa que qualquer ator diferente de
+  `pesquisador` crie `Problema` com `status="confirmado"`, o promova ou o rebaixe. Não há
+  `confirmado_por` no schema (sem mudança de schema); a trilha é a auditoria com autor
+  `pesquisador`. `Projeto` não tem esse gate (o ADR 015 §3 não o exige).
+- **Atomicidade:** `confirm_problem` cria o `Problema` como `rascunho`, liga `INVESTIGA` e os
+  domínios e **promove por último**; `get_active_problem` levanta erro se houver mais de um
+  confirmado (nunca escolhe em silêncio) e a promoção que cria um segundo é desfeita.
+- **Autoria no vocabulário:** domínios e métrica vindos do rascunho entram como candidatos do
+  ator `researcher/<modelo>`; o `pesquisador` aparece só na confirmação e nos domínios de
+  `project new`.
+- **Grafo fora do ar:** erro de driver (Postgres/Qdrant) vira `ProjectFlowError` acionável.
+  `RESEARCH_PROJECT_GRAPH_OPTIONAL` (padrão `false`): ligada, e somente se o grafo não abrir, a
+  sessão roda sem projeto (banner e `payload["project_mode"] = "sem_grafo"`); com o grafo
+  acessível, a confirmação continua obrigatória.
+- **Sem TTY:** a recusa ocorre antes de criar projeto automático (nenhum `Projeto` órfão).
+- **`project new` x ADR 015 §11:** `project new` é operação tipada e determinística do
+  pesquisador (sem LLM), gravada direto com autor `pesquisador`; alterar um `Problema` já
+  confirmado continua sendo via Curator (`v17-graph-cli`).
+- **Contexto por sessão:** o bloco do problema é guardado por sessão mestra no orquestrador
+  (`_project_blocks`), não como estado único da instância.

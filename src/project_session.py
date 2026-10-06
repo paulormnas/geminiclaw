@@ -36,6 +36,16 @@ MAX_MENU_ROUNDS = 50
 
 Drafter = Callable[..., Awaitable[ProblemDraft]]
 
+_NON_INTERACTIVE_MESSAGE = (
+    "Projeto {projeto} sem Problema confirmado e esta execução não é interativa (sem TTY). "
+    "Confirme o problema em um terminal interativo antes ({cmd}); a confirmação é pedida uma única "
+    "vez por projeto. Acompanhe o estado com `geminiclaw project show <id>`."
+)
+_GRAPH_DOWN_HINT = (
+    "Suba o PostgreSQL/Qdrant (`docker compose up -d`) e confira KNOWLEDGE_READER_DATABASE_URL no .env; "
+    "ou defina RESEARCH_PROJECT_GRAPH_OPTIONAL=true para rodar sem projeto enquanto o grafo estiver fora."
+)
+
 
 class ProjectFlowError(RuntimeError):
     """A sessão não pode começar (recusa, cancelamento ou erro acionável)."""
@@ -46,14 +56,16 @@ class ProjectBinding:
     """Projeto resolvido para a sessão.
 
     Attributes:
-        project_id: ``projeto_id`` gravado no payload da sessão.
+        project_id: ``projeto_id`` gravado no payload da sessão (``None`` em ``sem_grafo``).
         context_block: Bloco de texto (título, resumo e critério) injetado no planejamento.
         created: True se o projeto foi criado automaticamente a partir do prompt.
+        mode: ``"projeto"`` ou ``"sem_grafo"`` (gravado como ``project_mode`` no payload).
     """
 
-    project_id: str
+    project_id: str | None
     context_block: str
     created: bool = False
+    mode: str = "projeto"  # "projeto" ou "sem_grafo" (RESEARCH_PROJECT_GRAPH_OPTIONAL e grafo fora do ar)
 
 
 def is_interactive() -> bool:
@@ -71,6 +83,7 @@ def resolve_project(
     project_arg: str | None = None,
     config_dir: Path | None = None,
     output_fn: Callable[[str], Any] = print,
+    allow_create: bool = True,
 ) -> tuple[str, bool]:
     """Escolhe o projeto da sessão: ``--project`` > projeto padrão > criação automática.
 
@@ -78,12 +91,15 @@ def resolve_project(
         ``(projeto_id, criado_automaticamente)``.
 
     Raises:
-        ProjectFlowError: Projeto informado inexistente/inválido.
+        ProjectFlowError: Projeto informado inexistente/inválido, ou criação automática necessária
+            com ``allow_create=False`` (sem TTY: nenhum nó ``Projeto`` órfão é criado).
     """
     try:
         chosen = project_arg or projects.get_default_project(config_dir)
         if chosen:
             return projects.get_project(store, chosen).projeto_id, False
+        if not allow_create:
+            raise ProjectFlowError(_NON_INTERACTIVE_MESSAGE.format(projeto="novo", cmd="`geminiclaw project new ...`"))
         titulo = projects.derive_title(prompt)
         objetivo = prompt.strip()[: projects.MAX_OBJETIVO_PROJETO]
         projeto_id = projects.create_project(store, titulo, objetivo, [])
@@ -151,10 +167,9 @@ async def ensure_confirmed_problem(
         return detail
     if not interactive:
         raise ProjectFlowError(
-            f"O projeto {projeto_id} não tem Problema confirmado e esta execução não é interativa "
-            f"(sem TTY). Confirme o problema antes: rode `geminiclaw --project {projeto_id} \"<prompt>\"` "
-            f"em um terminal interativo (a confirmação é pedida uma única vez) e acompanhe o estado com "
-            f"`geminiclaw project show {projeto_id}`."
+            _NON_INTERACTIVE_MESSAGE.format(
+                projeto=projeto_id, cmd=f'rode `geminiclaw --project {projeto_id} "<prompt>"` num terminal'
+            )
         )
 
     comentario: str | None = None
@@ -231,6 +246,7 @@ class ProjectBinder:
         output_fn: Callable[[str], Any] = print,
         config_dir: Path | None = None,
         researcher_model: str | None = None,
+        graph_optional: bool | None = None,
     ) -> None:
         self._store_factory = store_factory
         self._project_arg = project_arg
@@ -240,7 +256,33 @@ class ProjectBinder:
         self._output_fn = output_fn
         self._config_dir = config_dir
         self._researcher_model = researcher_model
+        self._graph_optional = graph_optional
         self._binding: ProjectBinding | None = None
+
+    def _optional(self) -> bool:
+        if self._graph_optional is not None:
+            return self._graph_optional
+        from src import config
+
+        return bool(config.RESEARCH_PROJECT_GRAPH_OPTIONAL)
+
+    def _open_store(self) -> GraphStore | None:
+        """Abre e testa o grafo. ``None`` = fora do ar E contorno explícito ligado.
+
+        Raises:
+            ProjectFlowError: Grafo fora do ar sem o contorno (inclui erros de driver Postgres/Qdrant).
+        """
+        try:
+            store = self._store_factory()
+            store.list_nodes("Projeto", limit=1)  # sonda: abrir o pool é preguiçoso
+        except Exception as exc:  # noqa: BLE001 - qualquer falha de driver/serviço é "grafo fora do ar"
+            if self._optional():
+                logger.warning("Grafo indisponível; sessão sem projeto", extra={"extra": {"error": str(exc)}})
+                return None
+            raise ProjectFlowError(
+                f"Grafo de conhecimento indisponível ({type(exc).__name__}: {exc}). {_GRAPH_DOWN_HINT}"
+            ) from exc
+        return store
 
     async def bind(self, prompt: str, context: Any = None) -> ProjectBinding:
         """Devolve o vínculo projeto/contexto, resolvendo e confirmando na primeira chamada.
@@ -250,21 +292,32 @@ class ProjectBinder:
         """
         if self._binding is not None:
             return self._binding
-        try:
-            store = self._store_factory()
-        except RuntimeError as exc:
-            raise ProjectFlowError(f"Grafo de conhecimento indisponível: {exc}") from exc
-        projeto_id, created = resolve_project(
-            store, prompt, project_arg=self._project_arg, config_dir=self._config_dir, output_fn=self._output_fn,
-        )
-        drafter = self._drafter
-        if drafter is None:
-            from agents.researcher.agent import draft_problem as drafter  # noqa: PLC0415
+        store = self._open_store()
+        if store is None:
+            self._output_fn(
+                "SEM GRAFO: projeto e Problema não aplicados nesta sessão (RESEARCH_PROJECT_GRAPH_OPTIONAL)."
+            )
+            self._binding = ProjectBinding(None, "", False, "sem_grafo")
+            return self._binding
         interactive = is_interactive() if self._interactive is None else self._interactive
-        detail = await ensure_confirmed_problem(
-            store, projeto_id, prompt, context,
-            drafter=drafter, interactive=interactive, input_fn=self._input_fn,
-            output_fn=self._output_fn, researcher_model=self._researcher_model,
-        )
+        try:
+            projeto_id, created = resolve_project(
+                store, prompt, project_arg=self._project_arg, config_dir=self._config_dir,
+                output_fn=self._output_fn, allow_create=interactive,
+            )
+            drafter = self._drafter
+            if drafter is None:
+                from agents.researcher.agent import draft_problem as drafter  # noqa: PLC0415
+            detail = await ensure_confirmed_problem(
+                store, projeto_id, prompt, context,
+                drafter=drafter, interactive=interactive, input_fn=self._input_fn,
+                output_fn=self._output_fn, researcher_model=self._researcher_model,
+            )
+        except ProjectFlowError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - erro de driver no meio do fluxo vira mensagem acionável
+            raise ProjectFlowError(
+                f"Falha ao acessar o grafo de conhecimento ({type(exc).__name__}: {exc}). {_GRAPH_DOWN_HINT}"
+            ) from exc
         self._binding = ProjectBinding(projeto_id, projects.format_project_context(detail), created)
         return self._binding

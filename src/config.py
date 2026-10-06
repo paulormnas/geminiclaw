@@ -279,6 +279,11 @@ SIM_CALIBRATION_MIN_SAMPLES = int(get_env("SIM_CALIBRATION_MIN_SAMPLES", default
 # Liga o índice semântico ao GraphStore de produção (factory.open_graph_store).
 KNOWLEDGE_SEMANTIC_INDEX_ENABLED = get_env_bool("KNOWLEDGE_SEMANTIC_INDEX_ENABLED", default=True)
 
+# v17-research-project: contorno explícito para grafo fora do ar. Desligado (padrão), toda sessão exige o
+# grafo. Ligado, e SOMENTE se o grafo não abrir, a sessão roda sem projeto (payload project_mode="sem_grafo");
+# com o grafo acessível a confirmação humana do Problema continua obrigatória.
+RESEARCH_PROJECT_GRAPH_OPTIONAL = get_env_bool("RESEARCH_PROJECT_GRAPH_OPTIONAL", default=False)
+
 # Quick Search Fallback
 QUICK_SEARCH_STRATEGY = get_env("QUICK_SEARCH_STRATEGY", default="ddg,ddg_lite,brave")
 BRAVE_API_KEY = get_env("BRAVE_API_KEY", default="")

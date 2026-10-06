@@ -21,3 +21,7 @@
 
 ## 4. Fechamento
 - [x] 4.1 Ruff, testes, revisão nos 7 eixos, PR.
+
+## 5. Pendências (adiadas)
+- [ ] 5.1 Validar no Pi, com Apache AGE real, as propriedades de mapa (`criterio_sucesso`, `caracteristicas_dados`), `find_nodes` por `projeto_id`/`status` e `project_subgraph` (quando o projeto estiver mais estável).
+- [ ] 5.2 `geminiclaw project confirm <id>` para confirmar o problema sem iniciar uma sessão (mudança própria).

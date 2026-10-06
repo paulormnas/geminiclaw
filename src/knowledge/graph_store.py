@@ -298,6 +298,7 @@ class InMemoryGraphStore(GraphStore):
         validation.validate_node_write(
             label, full_props, requires_agent_provenance=actor.requires_provenance_justification
         )
+        validation.validate_human_only(label, current=None, changes=full_props, actor_kind=actor.kind)
         node = Node(id=full_props["id"], label=label, properties=full_props)
         self._nodes[node.id] = node
         logger.info(
@@ -312,6 +313,9 @@ class InMemoryGraphStore(GraphStore):
             raise NodeNotFoundError(node_id)
 
         validation.validate_node_update(node.label, changes)
+        validation.validate_human_only(
+            node.label, current=node.properties, changes=changes, actor_kind=actor.kind
+        )
         full_changes = prepare_node_update(changes)
 
         updated_props = {**node.properties, **full_changes}
@@ -641,6 +645,7 @@ class AgeGraphStore(GraphStore):
         validation.validate_node_write(
             label, full_props, requires_agent_provenance=actor.requires_provenance_justification
         )
+        validation.validate_human_only(label, current=None, changes=full_props, actor_kind=actor.kind)
 
         cypher_body = f"CREATE (n:{label} {self._property_map('props', full_props)}) RETURN n"
         self._run_cypher(cypher_body, {"props": full_props})
@@ -657,6 +662,9 @@ class AgeGraphStore(GraphStore):
             raise NodeNotFoundError(node_id)
 
         validation.validate_node_update(node.label, changes)
+        validation.validate_human_only(
+            node.label, current=node.properties, changes=changes, actor_kind=actor.kind
+        )
         full_changes = prepare_node_update(changes)
 
         # Nomes de propriedade vêm do schema (validados acima) — seguro interpolar

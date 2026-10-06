@@ -996,7 +996,11 @@ async def execute_prompt(
         except ProjectFlowError as e:
             print(f"\n  {STATUS_ICONS['error']} {RED}{e}{RESET}\n")
             return False
-        project_kwargs = {"project_id": binding.project_id, "project_context": binding.context_block}
+        if binding.mode == "sem_grafo":
+            print(f"\n  {YELLOW}SEM GRAFO: projeto e Problema não aplicados nesta sessão.{RESET}")
+            project_kwargs = {"project_mode": "sem_grafo"}
+        else:
+            project_kwargs = {"project_id": binding.project_id, "project_context": binding.context_block}
 
     print(f"\n  {STATUS_ICONS['running']} {DIM}Processando...{RESET}\n")
 
@@ -1351,7 +1355,11 @@ def main() -> None:
 
         return open_graph_store()
 
-    project_binder = ProjectBinder(_open_store, project_arg=args.project)
+    try:
+        researcher_model: str | None = llm_routing.resolution("researcher").id
+    except Exception:  # noqa: BLE001 - sem modelo conhecido, a autoria do rascunho fica só com o papel
+        researcher_model = None
+    project_binder = ProjectBinder(_open_store, project_arg=args.project, researcher_model=researcher_model)
 
     if args.prompt:
         # Modo direto: executa o prompt e sai

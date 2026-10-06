@@ -37,7 +37,13 @@ from qdrant_client.models import (
 from src import config
 from src.embeddings.base import EmbeddingProvider, embedding_payload, get_embedding_provider, text_hash
 from src.knowledge import schema
-from src.knowledge.domains import descendant_ids, domain_ancestors, node_domains
+from src.knowledge.domains import (
+    DomainHierarchy,
+    descendant_ids,
+    domain_ancestors,
+    load_domain_hierarchy,
+    node_domains,
+)
 from src.knowledge.graph_store import GraphStore, Node
 from src.knowledge.provenance import Actor
 from src.logger import get_logger
@@ -97,6 +103,8 @@ def _format_value(value: Any) -> str:
     return str(value).strip()
 
 
+# Níveis que já estão em (ou acima de) ``area`` (espelha ``domains._TOP_LEVELS``).
+_TOP_LEVELS = frozenset({"grande_area", "area"})
 # Rótulo de linha por nível dos ancestrais no texto do ``Dominio`` (a própria linha ``Nível`` cobre o termo).
 _ANCESTOR_LINE_LABEL = {"grande_area": "Grande área", "area": "Área", "subarea": "Subárea"}
 # Níveis do vocabulário, do mais amplo ao mais específico.
@@ -256,6 +264,8 @@ class SemanticIndex:
         self.collection = collection or config.KNOWLEDGE_COLLECTION
         self._ready = False
         self._listeners: list[Callable[[Node], None]] = []
+        # Mapa de pais dos domínios, vivo só durante ``reconcile`` (evita N+1 no grafo).
+        self._hierarchy: DomainHierarchy | None = None
 
     # -- Infra ---------------------------------------------------------------
 
@@ -359,7 +369,7 @@ class SemanticIndex:
 
     def _domain_chain(self, node: Node) -> tuple[list[Node], bool] | None:
         """Ancestrais e completude da cadeia de um ``Dominio`` (``None`` para outros rótulos)."""
-        return domain_ancestors(self._store, node) if node.label == "Dominio" else None
+        return domain_ancestors(self._store, node, self._hierarchy) if node.label == "Dominio" else None
 
     def text_for(self, node: Node, chain: tuple[list[Node], bool] | None = None) -> str | None:
         """Texto canônico efetivo de um nó; para o ``Dominio``, o texto hierárquico com ancestrais.
@@ -370,25 +380,35 @@ class SemanticIndex:
         """
         if node.label != "Dominio":
             return canonical_text(node.label, node.properties)
-        ancestors, _ = chain if chain is not None else domain_ancestors(self._store, node)
+        ancestors, _ = chain if chain is not None else domain_ancestors(self._store, node, self._hierarchy)
         return domain_canonical_text(node, ancestors)
 
     def _payload(
         self, node: Node, text: str, chain: tuple[list[Node], bool] | None = None
     ) -> dict[str, Any]:
         props = node.properties
+        if node.label == "Dominio" and chain is None:
+            chain = domain_ancestors(self._store, node, self._hierarchy)
+        if chain is not None:
+            # Domínio de um ``Dominio`` = seu ancestral em nível ``area`` (ou o mais alto alcançado);
+            # derivado da cadeia já resolvida, sem novas consultas ao grafo.
+            path = [*chain[0], node]
+            top = next((n for n in reversed(path) if n.properties.get("nivel") in _TOP_LEVELS), path[0])
+            dominios = [top.id]
+        else:
+            dominios = sorted(node_domains(self._store, node))
         payload: dict[str, Any] = {
             "tipo_no": node.label,
             "projeto_id": props.get("projeto_id"),
-            "dominios": sorted(node_domains(self._store, node)),
+            "dominios": dominios,
             "status": props.get("status"),
             "visibilidade": props.get("visibilidade"),
             "criado_em": props.get("criado_em"),
         }
         if props.get("veredito") is not None:
             payload["veredito"] = props["veredito"]
-        if node.label == "Dominio":
-            ancestors, complete = chain if chain is not None else domain_ancestors(self._store, node)
+        if chain is not None:
+            ancestors, complete = chain
             payload["nivel"] = props.get("nivel")
             payload["caminho_ids"] = [a.id for a in ancestors] + [node.id]
             payload["caminho_termos"] = [str(a.properties.get("termo")) for a in ancestors] + [
@@ -551,6 +571,27 @@ class SemanticIndex:
         self.ensure_collection(allow_recreate=allow_recreate)
         info = self._provider.info
         page_size = max(config.SIM_RECONCILE_BATCH_SIZE, 1)
+        self._hierarchy = load_domain_hierarchy(self._store)
+        try:
+            self._reconcile_labels(report, info, page_size)
+        finally:
+            self._hierarchy = None
+        report.elapsed_seconds = time.monotonic() - start
+        logger.info(
+            "Reconciliação do índice semântico concluída",
+            extra={
+                "extra": {
+                    "checked": report.checked,
+                    "reindexed": report.reindexed,
+                    "payload_refreshed": report.payload_refreshed,
+                    "failed": report.failed,
+                    "elapsed_seconds": round(report.elapsed_seconds, 3),
+                }
+            },
+        )
+        return report
+
+    def _reconcile_labels(self, report: ReconcileReport, info: Any, page_size: int) -> None:
         for label in sorted(schema.VECTORIZABLE_LABELS):
             after_id: str | None = None
             while True:
@@ -581,21 +622,6 @@ class SemanticIndex:
                         )
                 if len(batch) < page_size:
                     break
-        report.elapsed_seconds = time.monotonic() - start
-        logger.info(
-            "Reconciliação do índice semântico concluída",
-            extra={
-                "extra": {
-                    "checked": report.checked,
-                    "reindexed": report.reindexed,
-                    "payload_refreshed": report.payload_refreshed,
-                    "failed": report.failed,
-                    "elapsed_seconds": round(report.elapsed_seconds, 3),
-                }
-            },
-        )
-        return report
-
     def _stale_nodes(self, batch: list[Node], info: Any) -> tuple[list[Node], list[Node]]:
         """Separa nós a revetorizar (texto/modelo/estado) dos que só têm payload defasado."""
         points = {

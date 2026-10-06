@@ -60,7 +60,9 @@ lista), o que seleciona toda a subárvore de um nó com uma só condição.
 ancestral mudam. `SemanticIndex.reconcile()` já revetoriza nós cujo `text_hash` difere do ponto; esta mudança
 só acrescenta o **cálculo do hash com os ancestrais**: ao aprovar um sinônimo ou renomear um termo, os
 descendentes são marcados `pendente` (`estado_vetorizacao`) na mesma operação, em lotes limitados por
-`DOMAIN_REINDEX_BATCH` (padrão 200), sem bloquear a escrita.
+`DOMAIN_REINDEX_BATCH` (padrão 200). O "lote" é só o limite de fatia da marcação, feita em linha na escrita
+do ancestral; a reconciliação já pega os descendentes pelo `text_hash` mesmo que a marcação falhe. A
+reconciliação carrega o mapa de pais uma vez (`load_domain_hierarchy`), sem consultas por domínio ao grafo.
 
 ## 4. `DomainSearch`
 
@@ -107,9 +109,15 @@ busca nunca escreve.
 `vocabulary.resolve_domain` mantém os passos 1 (exato) e 2 (sinônimo). O passo 3 (semântico) passa a chamar
 `DomainSearch.search(term, context=problem_text)`:
 
-- melhor score ≥ `VOCAB_MATCH_THRESHOLD` (mesma variável de `v17-controlled-vocabulary`): status `semantico` com
-  o nó e as demais como `alternativas` (`(node_id, score)`);
+- **Decisão (revisão do PR #104):** vale a ordem da `DomainSearch` (§4, nível mais específico dentro de
+  `DOMAIN_SPECIFICITY_MARGIN`), não o score puro. Escolhe-se o **primeiro** candidato, nessa ordem, com score ≥
+  `VOCAB_MATCH_THRESHOLD` (mesma variável de `v17-controlled-vocabulary`): status `semantico` com o nó e as
+  demais como `alternativas` (`(node_id, score)`). Com área 0,92 e subárea 0,91, escolhe-se a subárea. Um
+  `semantic_search` injetado continua ordenado por score;
 - abaixo do limiar: segue para criar candidato, e as três melhores viram `alternativas` para revisão humana.
+
+Termos livres que viram candidato passam por `clean_free_text` (sem controles nem quebras de linha) e são
+recusados acima de `VOCAB_TERM_MAX_CHARS` (padrão 120), pois voltam ao prompt de outros agentes.
 
 O parâmetro `semantic_search` injetável de `resolve_domain` é preservado; `DomainSearch.search` é o valor
 padrão quando o índice existe.
@@ -131,6 +139,10 @@ mais `sem_correspondencia: true` quando vazio. Regras:
   interpolado em Cypher (a busca é vetorial e os filtros são parâmetros).
 - No máximo 10 resultados e 300 caracteres por entrada; resposta com no máximo 2 000 caracteres.
 - `dentro_de` aceita o `codigo_cnpq` ou o `id` do nó; valor desconhecido devolve erro explícito, não busca global.
+- **Saída é dado não confiável:** termos `candidato` (texto livre de agentes) saem encurtados a 80 caracteres,
+  entre `«...»`, com uma nota ao final; a descrição da ferramenta e o prompt do Researcher mandam ignorar
+  instruções dentro da saída. Texto e contexto da consulta têm controles e quebras de linha colapsados, e o
+  contexto longo é truncado (não é erro). A busca roda em `asyncio.to_thread`.
 - Evento de telemetria `domain_search` (`resultados`, `melhor_score`, `nivel_do_melhor`, `candidatos_incluidos`)
   **sem o texto da consulta**, pois ela pode conter conteúdo de pesquisa (ADR 019 §3).
 
@@ -143,6 +155,7 @@ mais `sem_correspondencia: true` quando vazio. Regras:
 | `DOMAIN_SPECIFICITY_MARGIN` | `0.03` | margem para preferir o nível mais específico |
 | `DOMAIN_SEARCH_MAX_QUERY_CHARS` | `300` | tamanho máximo da consulta |
 | `DOMAIN_REINDEX_BATCH` | `200` | lote de descendentes marcados `pendente` por operação |
+| `VOCAB_TERM_MAX_CHARS` | `120` | tamanho máximo de um termo livre que vira candidato |
 | `VOCAB_MATCH_THRESHOLD` | (existente) | limiar do passo semântico em `resolve_domain` |
 
 ## 8. Avaliação do modelo de embedding

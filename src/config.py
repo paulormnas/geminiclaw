@@ -439,6 +439,9 @@ DOMAIN_SPECIFICITY_MARGIN = float(get_env("DOMAIN_SPECIFICITY_MARGIN", default="
 DOMAIN_SEARCH_MAX_QUERY_CHARS = int(get_env("DOMAIN_SEARCH_MAX_QUERY_CHARS", default="300"))
 # Descendentes marcados como pendentes por lote quando um ancestral muda.
 DOMAIN_REINDEX_BATCH = int(get_env("DOMAIN_REINDEX_BATCH", default="200"))
+# Tamanho máximo (caracteres) de um termo livre de vocabulário que vira candidato. Termos
+# maiores são recusados: texto de agente não deve voltar ao prompt de outro sem limite.
+VOCAB_TERM_MAX_CHARS = int(get_env("VOCAB_TERM_MAX_CHARS", default="120"))
 
 # Identificador estável deste computador (fator de independência, ADR 015 §9).
 # Gerado uma vez e persistido em ~/.config/geminiclaw/node_id (ou $XDG_CONFIG_HOME).

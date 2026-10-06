@@ -15,6 +15,7 @@ from typing import Any
 
 from src import config
 from src.knowledge.graph_store import GraphStore
+from src.knowledge.normalization import clean_free_text
 from src.knowledge.semantic_index import DOMAIN_LEVELS, SemanticIndex
 from src.logger import get_logger
 
@@ -123,7 +124,8 @@ class DomainSearch:
         Raises:
             ValueError: Texto vazio ou curto demais, ``max_level`` inválido ou ``within`` desconhecido.
         """
-        query = (text or "").strip() if isinstance(text, str) else ""
+        # Sem quebras de linha nem controles: o texto não pode forjar campos (``Caminho:``) na consulta.
+        query = clean_free_text(text) if isinstance(text, str) else ""
         if len(query) < MIN_QUERY_CHARS:
             raise ValueError(f"O texto da busca deve ter ao menos {MIN_QUERY_CHARS} caracteres.")
         max_chars = max(config.DOMAIN_SEARCH_MAX_QUERY_CHARS, MIN_QUERY_CHARS)
@@ -134,8 +136,9 @@ class DomainSearch:
         within_id = self._resolve_within(within) if within is not None else None
 
         formatted = f"Domínio: {query}"
-        if context and context.strip():
-            formatted += f"\nContexto: {_clip(context.strip(), max_chars, 'contexto')}"
+        clean_context = clean_free_text(context) if isinstance(context, str) else ""
+        if clean_context:
+            formatted += f"\nContexto: {_clip(clean_context, max_chars, 'contexto')}"
 
         wanted = config.DOMAIN_SEARCH_LIMIT if limit is None else limit
         wanted = min(max(int(wanted), 1), MAX_RESULTS)

@@ -30,7 +30,7 @@ from src.knowledge import schema
 from src.knowledge.domain_search import DomainSearch
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.graph_store import Edge, GraphStore, Node
-from src.knowledge.normalization import normalize_domain_term, normalize_metric_name
+from src.knowledge.normalization import clean_free_text, normalize_domain_term, normalize_metric_name
 from src.knowledge.provenance import Actor
 from src.logger import get_logger
 
@@ -325,9 +325,19 @@ def _resolve(
     new_props: dict[str, Any],
     required_for_candidate: tuple[str, ...] = (),
     max_alternatives: int | None = None,
+    keep_search_order: bool = False,
 ) -> Resolution:
     """Núcleo comum: exato -> sinônimo -> semântico -> candidato."""
     if not term or not term.strip():
+        raise VocabularyError("Termo vazio não pode ser resolvido.")
+    # Texto de agente: sem controles/quebras de linha e com tamanho limitado (volta ao prompt de outros agentes).
+    term = clean_free_text(term)
+    if len(term) > config.VOCAB_TERM_MAX_CHARS:
+        raise VocabularyError(
+            f"Termo com {len(term)} caracteres excede o limite de {config.VOCAB_TERM_MAX_CHARS} "
+            "(VOCAB_TERM_MAX_CHARS); use a denominação do termo, não uma descrição."
+        )
+    if not term:
         raise VocabularyError("Termo vazio não pode ser resolvido.")
     norm = _normalizer(label)
     key = norm(term)
@@ -347,9 +357,12 @@ def _resolve(
     if semantic_search is not None:
         valid = {n.id: n for n in nodes}
         hits = [(nid, score) for nid, score in semantic_search(label, term) if nid in valid]
-        hits.sort(key=lambda h: h[1], reverse=True)
-        if hits and hits[0][1] >= config.VOCAB_MATCH_THRESHOLD:
-            best = valid[hits[0][0]]
+        if not keep_search_order:
+            hits.sort(key=lambda h: h[1], reverse=True)
+        # Na ordem da busca de domínio (mais específico dentro da margem), vale o primeiro que atinge o limiar.
+        chosen = next((h for h in hits if h[1] >= config.VOCAB_MATCH_THRESHOLD), None)
+        if chosen is not None:
+            best = valid[chosen[0]]
             pending = list(best.properties.get("sinonimos_candidatos") or [])
             if all(norm(p) != key for p in pending):
                 pending.append(term)
@@ -412,7 +425,9 @@ def resolve_domain(
 
     O passo semântico usa ``semantic_search`` quando injetada (compatibilidade); do contrário,
     ``domain_search`` (busca hierárquica de ``v17-domain-search``, que inclui termos candidatos
-    para não duplicá-los). Sem nenhuma das duas, o passo é pulado. Abaixo do limiar, as três
+    para não duplicá-los). Sem nenhuma das duas, o passo é pulado. Com ``domain_search``,
+    vale a ordem da busca (nível mais específico dentro de ``DOMAIN_SPECIFICITY_MARGIN``): o nó
+    escolhido é o primeiro cujo escore atinge o limiar. Abaixo do limiar, as três
     melhores correspondências ficam em ``alternativas`` para revisão humana.
 
     Args:
@@ -428,11 +443,13 @@ def resolve_domain(
     Returns:
         A ``Resolution``.
     """
-    if semantic_search is None and domain_search is not None:
+    uses_domain_search = semantic_search is None and domain_search is not None
+    if uses_domain_search:
         semantic_search = _domain_search_adapter(domain_search, context)
     return _resolve(
         store, "Dominio", term, actor=actor, sessao_id=sessao_id, semantic_search=semantic_search,
         new_props={"nivel": nivel}, max_alternatives=_DOMAIN_ALTERNATIVES,
+        keep_search_order=uses_domain_search,
     )
 
 

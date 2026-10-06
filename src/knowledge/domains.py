@@ -10,6 +10,8 @@ Inorgânica" contam como o mesmo domínio ``Química``.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from src.knowledge.graph_store import GraphStore, Node
 from src.logger import get_logger
 
@@ -99,7 +101,51 @@ def between_projects(node_a: Node, node_b: Node) -> bool:
     return node_a.properties.get("projeto_id") != node_b.properties.get("projeto_id")
 
 
-def domain_ancestors(store: GraphStore, node: Node) -> tuple[list[Node], bool]:
+@dataclass(frozen=True)
+class DomainHierarchy:
+    """Mapa em memória dos domínios globais e de seus pais (``SUBAREA_DE``), carregado uma vez.
+
+    Evita o custo N+1 de ``neighbors`` por domínio na reconciliação do índice.
+
+    Attributes:
+        nodes: ``Dominio`` por ID.
+        parents: IDs dos pais de cada domínio.
+    """
+
+    nodes: dict[str, Node]
+    parents: dict[str, list[str]]
+
+
+def load_domain_hierarchy(store: GraphStore, projeto_id: str = "__global__") -> DomainHierarchy:
+    """Carrega os ``Dominio`` de um projeto e suas arestas ``SUBAREA_DE`` com uma só leitura.
+
+    Args:
+        store: Grafo de conhecimento.
+        projeto_id: Projeto dos termos de vocabulário (padrão ``__global__``). Domínios fora
+            dele não entram no mapa e caem na subida por ``neighbors``.
+    """
+    sub = store.project_subgraph(projeto_id, ["Dominio"])
+    nodes = {n.id: n for n in sub.nodes if n.label == "Dominio"}
+    parents: dict[str, list[str]] = {}
+    for edge in sub.edges:
+        if edge.rel_type == "SUBAREA_DE" and edge.src_id in nodes and edge.dst_id in nodes:
+            parents.setdefault(edge.src_id, []).append(edge.dst_id)
+    return DomainHierarchy(nodes=nodes, parents=parents)
+
+
+def _parents_of(store: GraphStore, current: Node, hierarchy: DomainHierarchy | None) -> list[Node]:
+    if hierarchy is not None and current.id in hierarchy.nodes:
+        return [hierarchy.nodes[i] for i in hierarchy.parents.get(current.id, [])]
+    return [
+        n
+        for n in store.neighbors(current.id, ["SUBAREA_DE"], direction="out", depth=1).nodes
+        if n.label == "Dominio"
+    ]
+
+
+def domain_ancestors(
+    store: GraphStore, node: Node, hierarchy: DomainHierarchy | None = None
+) -> tuple[list[Node], bool]:
     """Resolve os ancestrais de um ``Dominio`` pelas arestas ``SUBAREA_DE`` (v17-domain-search §1).
 
     Se houver mais de um pai, escolhe o de menor ID (determinístico). Ciclos e cadeias
@@ -109,6 +155,8 @@ def domain_ancestors(store: GraphStore, node: Node) -> tuple[list[Node], bool]:
     Args:
         store: Grafo de conhecimento.
         node: Nó ``Dominio`` cujos ancestrais se deseja.
+        hierarchy: Mapa pré-carregado (``load_domain_hierarchy``); o resultado é idêntico ao da
+            subida por ``neighbors``, sem consultas ao grafo para os domínios do mapa.
 
     Returns:
         ``(ancestrais, completa)``: ancestrais da raiz até o pai imediato (vazia para a
@@ -121,14 +169,7 @@ def domain_ancestors(store: GraphStore, node: Node) -> tuple[list[Node], bool]:
     for _ in range(_MAX_CLIMB):
         if current.properties.get("nivel") == "grande_area":
             break
-        parents = sorted(
-            (
-                n
-                for n in store.neighbors(current.id, ["SUBAREA_DE"], direction="out", depth=1).nodes
-                if n.label == "Dominio" and n.id not in seen
-            ),
-            key=lambda n: n.id,
-        )
+        parents = sorted((n for n in _parents_of(store, current, hierarchy) if n.id not in seen), key=lambda n: n.id)
         if not parents:
             break
         current = parents[0]

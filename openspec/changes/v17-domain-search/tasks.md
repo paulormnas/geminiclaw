@@ -36,7 +36,15 @@
 
 ## 6. Fechamento
 - [x] 6.1 Variáveis do design §7 em `src/config.py` e `.env.example`, com teste dos padrões.
-- [x] 6.2 `uv run ruff check .`; suíte `-m "unit or integration"` (nenhum teste baixa modelo nem usa rede).
-- [ ] 6.3 Reindexação dos 1335 domínios no Pi 5 e medição do tempo de indexação e de consulta.
+- [x] 6.2 `uv run ruff check .` sem apontamentos novos (a base tem 438; os 3 de `agents/researcher/agent.py` são pré-existentes); suíte `-m "unit or integration"` sem falhas novas (nenhum teste baixa modelo nem usa rede).
+- [ ] 6.3 Reindexação dos 1335 domínios no Pi 5 e medição do tempo de indexação e de consulta; confirmar que o processo do Researcher (em processo no host) enxerga `KNOWLEDGE_READER_DATABASE_URL`, `QDRANT_URL` e o modelo de embedding já em cache (sem download na primeira chamada).
 - [ ] 6.4 Revisão do Analista de Segurança (entrada da ferramenta e telemetria); revisão nos 7 eixos; PR para
   `dev`; arquivar a mudança e consolidar `specs/domain-search/spec.md` depois do merge.
+
+## 7. Pós-revisão do PR #104
+- [x] 7.1 Termo de candidato limitado e saneado; saída da ferramenta como dado (delimitado, nota, prompt).
+- [x] 7.2 Reconciliação sem N+1 (`load_domain_hierarchy`, testado contando chamadas ao grafo).
+- [x] 7.3 `resolve_domain` respeita a ordem da `DomainSearch` (área 0,92 vs subárea 0,91).
+- [x] 7.4 Consulta e contexto sem quebras de linha; contexto truncado; busca em `asyncio.to_thread`.
+- [ ] 7.5 Carga do vocabulário (`scripts/seed_vocabulary.py`) pelo `IndexedGraphStore` vetoriza cada domínio na criação (sem ancestrais) e de novo na reconciliação: semear no grafo cru e reconciliar uma vez (dobra o custo de embeddings no Pi).
+- [ ] 7.6 Marcação dos descendentes (`mark_descendants_pending`) é síncrona e um update por nó; mover para a reconciliação ou para tarefa em segundo plano se a medição de 6.3 mostrar custo.

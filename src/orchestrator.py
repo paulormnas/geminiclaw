@@ -12,7 +12,6 @@ from typing import Any
 
 from src.logger import get_logger
 from src.config import (
-    DEFAULT_MODEL,
     GEMINI_REQUESTS_PER_MINUTE,
     GEMINI_RATE_LIMIT_COOLDOWN_SECONDS,
     MAX_AGENT_RUNS_PER_SESSION,
@@ -25,7 +24,7 @@ from src.config import (
 )
 from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
 from src.plan_normalizer import normalize_plan
-from src.model_config import DEFAULT_ROLE_CONFIGS, get_role_model_config
+from src.llm.session import SessionRouting, bind_session_routing, build_session_routing, get_session_routing
 from src.session import SessionManager
 from src.output_manager import OutputManager, generate_session_slug
 from src.autonomous_loop import AutonomousLoop
@@ -182,6 +181,7 @@ class Orchestrator:
         mode: str | None = None,
         context_bundle: ContextBundle | None = None,
         budget: UsageBudget | None = None,
+        llm_routing: SessionRouting | None = None,
     ) -> OrchestratorResult:
         """Processa a solicitação do usuário, executando o ciclo de vida completo.
 
@@ -195,6 +195,10 @@ class Orchestrator:
             budget: Orçamento de uso da sessão (Roadmap V18 / Spec `usage-limits`).
                 Se omitido, usa os defaults de ``src/config.py`` via
                 ``UsageBudget.from_config()``.
+            llm_routing: Mapa resolvido de modelos por papel (ADR 017), normalmente resolvido
+                pela CLI antes do banner. Se omitido, é resolvido aqui, antes de qualquer
+                chamada de LLM; sem modelo elegível, levanta ``RoutingError`` e a sessão
+                não começa.
 
         Returns:
             O resultado final da orquestração.
@@ -209,6 +213,11 @@ class Orchestrator:
         start_date = datetime.utcnow().isoformat() + "Z"
 
         effective_mode = mode or SESSION_DEFAULT_MODE
+
+        # ADR 017 — resolve o modelo de cada papel uma única vez, antes da sessão e de qualquer
+        # chamada de LLM; o mapa vale até o fim da sessão (sem troca no meio).
+        routing = llm_routing or await build_session_routing()
+        bind_session_routing(routing)
 
         logger.info(
             "Nova requisição recebida no orquestrador",
@@ -232,6 +241,7 @@ class Orchestrator:
                 "mode": effective_mode,
                 "prompt": prompt,
                 "budget": effective_budget.to_payload(),
+                "llm_routing": routing.payload(),
             },
         )
 
@@ -255,6 +265,18 @@ class Orchestrator:
         exec_id = history.start(prompt, start_date, exec_id=session_slug)
         bind_execution(exec_id or master_session.id, master_session.id)
         self._session_modes[master_session.id] = effective_mode
+        telemetry.record_agent_event(
+            execution_id=exec_id or master_session.id,
+            session_id=master_session.id,
+            agent_id="orchestrator",
+            event_type="session_start",
+            payload={
+                "catalog_hash": routing.catalogo.hash,
+                "catalog_version": routing.catalogo.versao,
+                "llm_data_policy": routing.politica,
+                "llm_routing": routing.modo,
+            },
+        )
 
         logger.info("Nova requisição registrada", extra={"execution_id": exec_id, "prompt_preview": prompt[:50]})
 
@@ -802,8 +824,12 @@ class Orchestrator:
             payload={"runtime": "inprocess"},
         )
 
-        role_cfg = get_role_model_config(task.agent_id) if task.agent_id in DEFAULT_ROLE_CONFIGS else None
-        model = task.preferred_model or (role_cfg.model if role_cfg else DEFAULT_MODEL)
+        # ADR 017 §7: a dica preferred_model do plano só vale como provedor/modelo validado pelo
+        # roteador; caso contrário o papel usa o modelo resolvido da sessão.
+        try:
+            model = get_session_routing().apply_hint(task.agent_id, task.preferred_model)
+        except ValueError:
+            model = ""  # papel fora do catálogo: o runtime recusa com mensagem própria
         enable_thinking = OLLAMA_ENABLE_THINKING if task.agent_id not in ("planner", "validator") else True
 
         async def _ask_researcher_callback(

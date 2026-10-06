@@ -201,6 +201,8 @@ class TestAgentRuntimeUsesTheGuard:
         assert result.status == "success"
         guard.slot.assert_called_once_with("ollama")
 
-    async def test_unknown_role_falls_back_to_the_global_provider(self) -> None:
-        with patch("src.agent_runtime.runtime.LLM_PROVIDER", "ollama"):
-            assert AgentRuntime._provider_name("papel_inexistente") == "ollama"
+    async def test_unknown_role_falls_back_to_the_researcher_provider(self) -> None:
+        """Papel fora do catálogo usa o provedor resolvido do researcher (não há mais provedor global)."""
+        from src.model_config import get_role_model_config
+
+        assert AgentRuntime._provider_name("papel_inexistente") == get_role_model_config("researcher").provider

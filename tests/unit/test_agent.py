@@ -8,7 +8,6 @@ from agents.base.agent import (
     _persist_session_context,
     root_agent,
 )
-from src.config import DEFAULT_MODEL
 
 
 @pytest.mark.unit
@@ -24,8 +23,8 @@ class TestAgentAttributes:
         assert root_agent.name == "base"
 
     def test_agent_has_model(self) -> None:
-        """root_agent deve ter o campo model definido e correspondente ao DEFAULT_MODEL."""
-        assert root_agent.model == DEFAULT_MODEL
+        """root_agent guarda só o rótulo do papel; o modelo vem do ModelRouter (ADR 017)."""
+        assert root_agent.model == "router:base"
 
     def test_agent_has_description(self) -> None:
         """root_agent deve ter description não-vazia."""

@@ -353,7 +353,11 @@ def judge_events(
         wanted = ["necessidade", "clareza"] + (["resposta"] if answer else []) + (["efeito"] if need_effect else [])
         prompt = _build_prompt(event, protected_names or [], texts, need_effect)
 
-        provider = provider_factory(selection.provider, selection.model)
+        try:
+            provider = provider_factory(selection.provider, selection.model)
+        except JudgeUnavailable as exc:
+            return {"events": results, "skipped": _count_skips(results), "cost_usd": round(spent, 6),
+                    "error": str(exc)}
         scores = None
         budget_stop = False
         for _ in range(2):  # uma nova tentativa
@@ -405,6 +409,42 @@ def _count_skips(results: list[dict[str, Any]]) -> dict[str, int]:
     return dict(counts)
 
 
+def routed_provider_factory(provider: str, model: str) -> Any:
+    """Cria o provedor do juiz passando pelo catálogo, pela política de dados e pelas regras de endpoint.
+
+    O juiz não pode contornar o roteador (ADR 017): o modelo precisa estar no catálogo efetivo e,
+    sob ``LLM_DATA_POLICY=self_hosted_only``, ser ``self_hosted``, mesmo com
+    ``COMM_EVAL_ALLOW_EXTERNAL_JUDGE`` verdadeiro. ``create_provider`` ainda recusa endpoint
+    remoto sem ``https``.
+
+    Raises:
+        JudgeUnavailable: Modelo fora do catálogo, recusado pela política ou endpoint inseguro.
+    """
+    from src.llm.catalog import CatalogError
+    from src.llm.endpoints import EndpointError
+    from src.llm.registry import create_provider
+    from src.llm.session import get_catalog
+
+    key = f"{provider}/{model}"
+    try:
+        entry = get_catalog().modelos.get(key)
+    except CatalogError as exc:  # inclui endpoint remoto sem https
+        raise JudgeUnavailable(str(exc)) from exc
+    if entry is None:
+        raise JudgeUnavailable(
+            f"Juiz {key} fora do catálogo de modelos: declare-o em catalog.local.yaml (ADR 017)."
+        )
+    if config.LLM_DATA_POLICY == "self_hosted_only" and entry.trust != "self_hosted":
+        raise JudgeUnavailable(
+            f"Juiz {key} é de terceiros e LLM_DATA_POLICY=self_hosted_only o recusa "
+            "(defina LLM_DATA_POLICY=third_party_allowed para usá-lo)."
+        )
+    try:
+        return create_provider(provider, model)
+    except EndpointError as exc:
+        raise JudgeUnavailable(str(exc)) from exc
+
+
 def judge_session(
     session_id: str,
     data: dict[str, Any],
@@ -415,14 +455,12 @@ def judge_session(
 
     Os nomes de arquivo do plano e da pasta da sessão são protegidos na redação (ADR 019 §3).
     """
-    from src.llm.registry import create_provider
-
     events = ask_events(session_id, data)
     override = f"{config.COMM_EVAL_JUDGE_PROVIDER}/{config.COMM_EVAL_JUDGE_MODEL}" if (
         config.COMM_EVAL_JUDGE_PROVIDER and config.COMM_EVAL_JUDGE_MODEL) else None
     texts = {name: [t.get("prompt", ""), t.get("scientific_rationale", "")] for name, t in (plan or {}).items()}
     result = judge_events(
-        events, data.get("models_by_role", {}), provider_factory=create_provider, texts_by_task=texts,
+        events, data.get("models_by_role", {}), provider_factory=routed_provider_factory, texts_by_task=texts,
         protected_names=protected_file_names(plan, session_dir),
         candidates=parse_candidates(config.COMM_EVAL_JUDGE_CANDIDATES), override=override,
     )

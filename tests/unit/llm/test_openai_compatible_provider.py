@@ -206,7 +206,7 @@ async def test_health_check_false_on_error():
 
 @pytest.mark.unit
 def test_missing_base_url_raises_value_error():
-    with pytest.raises(ValueError, match="OPENAI_BASE_URL"):
+    with pytest.raises(ValueError, match="OPENAI_COMPATIBLE_BASE_URL"):
         OpenAICompatibleProvider(base_url=None, model=MODEL)
 
 

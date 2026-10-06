@@ -109,9 +109,36 @@ class TestScoring:
 class TestRunner:
     def test_build_env_default_and_override(self):
         env = run_benchmark.build_env({"X": "1"}, {"DEVELOPER": "google/a", "*": "anthropic/b"})
-        assert env["DEVELOPER_PROVIDER"] == "google" and env["DEVELOPER_MODEL"] == "a"
-        assert env["BASE_PROVIDER"] == "anthropic" and env["REVIEWER_MODEL"] == "b"
-        assert env["LLM_MODEL"] == "b" and env["X"] == "1"
+        assert env["DEVELOPER_MODEL"] == "google/a"
+        assert env["BASE_MODEL"] == "anthropic/b" and env["REVIEWER_MODEL"] == "anthropic/b"
+        assert env["X"] == "1"
+
+    def test_build_env_usa_pins_sem_variaveis_removidas(self):
+        base = {"LLM_PROVIDER": "ollama", "LLM_MODEL": "x", "DEFAULT_MODEL": "y", "DEVELOPER_PROVIDER": "ollama"}
+        env = run_benchmark.build_env(base, {"*": "google/a"})
+        assert env["LLM_DATA_POLICY"] == "third_party_allowed" and env["LLM_ROUTING"] == "flexible"
+        for name in ("LLM_PROVIDER", "LLM_MODEL", "DEFAULT_MODEL", "DEVELOPER_PROVIDER"):
+            assert name not in env
+
+    def test_build_env_recusa_modelo_sem_provedor(self):
+        with pytest.raises(ValueError, match="provedor/modelo"):
+            run_benchmark.build_env({}, {"*": "modelo-sem-barra"})
+
+    def test_check_pins_ok_e_divergencias(self):
+        roles = {"DEVELOPER": "google/a", "*": "anthropic/b"}
+        ok = {"papeis": {r.lower(): {"id": "anthropic/b", "origem": "pin"} for r in run_benchmark.ROLES}}
+        ok["papeis"]["developer"] = {"id": "google/a", "origem": "pin_legado"}
+        assert run_benchmark.check_pins(roles, ok) == []
+
+        ok["papeis"]["reviewer"] = {"id": "ollama/qwen3:8b", "origem": "preferencia"}
+        ok["papeis"]["base"] = {"id": "anthropic/b", "origem": "preferencia"}
+        problems = run_benchmark.check_pins(roles, ok)
+        assert len(problems) == 2
+        assert any("REVIEWER" in p and "ollama/qwen3:8b" in p for p in problems)
+        assert any("BASE" in p and "origem=preferencia" in p for p in problems)
+
+    def test_check_pins_sem_payload_avisa(self):
+        assert run_benchmark.check_pins({"*": "google/a"}, None)
 
     def test_sum_tokens(self):
         usage = {"by_provider_model": [

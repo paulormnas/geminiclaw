@@ -39,4 +39,4 @@ ollama run qwen3.5:4b "Responda apenas: OK" --nowordwrap
 echo "=== Ollama configurado com sucesso! ==="
 echo "Modelo ativo: qwen3.5:4b"
 echo "Endpoint: http://localhost:11434"
-echo "Dica: Use LLM_PROVIDER=ollama e LLM_MODEL=qwen3.5:4b no seu arquivo .env"
+echo "Dica: mantenha LLM_DATA_POLICY=self_hosted_only (padrão) e, se quiser fixar o modelo, use RESEARCHER_MODEL=ollama/qwen3.5:4b no seu arquivo .env"

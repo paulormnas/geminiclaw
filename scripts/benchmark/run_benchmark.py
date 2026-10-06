@@ -30,23 +30,75 @@ ROLES = ("RESEARCHER", "VALIDATOR", "DEVELOPER", "BASE", "SUMMARIZER", "REVIEWER
 
 
 def build_env(base: dict[str, str], roles: dict[str, str], extra: dict[str, str] | None = None) -> dict[str, str]:
-    """Aplica ``{"*": "prov/modelo", "DEVELOPER": ...}`` sobre as variáveis de papel.
+    """Aplica ``{"*": "prov/modelo", "DEVELOPER": ...}`` como pins ``{PAPEL}_MODEL=provedor/modelo``.
 
-    ``extra`` (ex.: ``ANTHROPIC_EFFORT``, teto de custo da combinação) é aplicado por último.
+    O benchmark mede combinações explícitas de modelos pagos, então o ambiente da combinação usa
+    ``LLM_DATA_POLICY=third_party_allowed`` (ADR 017). O modo de roteamento é ``flexible`` para
+    preservar o fallback do Google no 429 (``GOOGLE_FALLBACK_MODEL`` da matriz), que o modo
+    ``strict`` desligaria; o modelo realmente usado continua nos totais por provedor/modelo da
+    telemetria e o mapa resolvido, no payload da sessão. As variáveis
+    removidas (``LLM_PROVIDER``, ``LLM_MODEL``, ``DEFAULT_MODEL``, ``{PAPEL}_PROVIDER``) são
+    retiradas do ambiente herdado. ``extra`` (ex.: ``ANTHROPIC_EFFORT``, teto de custo da
+    combinação) é aplicado por último.
     """
     env = dict(base)
+    for name in ("LLM_PROVIDER", "LLM_MODEL", "DEFAULT_MODEL", "AGENT_MODEL"):
+        env.pop(name, None)
+    for role in ROLES:
+        env.pop(f"{role}_PROVIDER", None)
     default = roles.get("*")
     assignments = {role: roles.get(role, default) for role in ROLES}
     for role, spec in assignments.items():
         if spec is None:
+            env.pop(f"{role}_MODEL", None)
             continue
-        provider, _, model = spec.partition("/")
-        env[f"{role}_PROVIDER"], env[f"{role}_MODEL"] = provider, model
-    if default:
-        provider, _, model = default.partition("/")
-        env["LLM_PROVIDER"], env["LLM_MODEL"], env["DEFAULT_MODEL"] = provider, model, model
+        if "/" not in spec:
+            raise ValueError(f"Combinação com '{role}': '{spec}' sem provedor; use provedor/modelo.")
+        env[f"{role}_MODEL"] = spec
+    env["LLM_DATA_POLICY"] = "third_party_allowed"
+    env["LLM_ROUTING"] = "flexible"
     env.update({k: str(v) for k, v in (extra or {}).items()})
     return env
+
+
+def check_pins(roles: dict[str, str], llm_routing: dict | None) -> list[str]:
+    """Confere o mapa resolvido da sessão com os pins da combinação (modo ``flexible``).
+
+    Em ``flexible`` um pin que não vale cai em silêncio na preferência do catálogo; sem esta
+    conferência o resultado seria atribuído a um modelo que não rodou.
+
+    Returns:
+        Divergências legíveis (vazio = todos os papéis rodaram no modelo pedido).
+    """
+    if not llm_routing:
+        return ["payload llm_routing ausente: não foi possível conferir os pins"]
+    default = roles.get("*")
+    resolved = llm_routing.get("papeis", {})
+    problems = []
+    for role in ROLES:
+        expected = roles.get(role, default)
+        if expected is None:
+            continue
+        entry = resolved.get(role.lower())
+        if entry is None:
+            problems.append(f"{role}: sem entrada no mapa resolvido")
+        elif entry.get("id") != expected or entry.get("origem") not in ("pin", "pin_legado"):
+            problems.append(
+                f"{role}: pedido {expected}, rodou {entry.get('id')} (origem={entry.get('origem')})"
+            )
+    return problems
+
+
+def db_llm_routing(session_id: str) -> dict | None:
+    """``payload["llm_routing"]`` da sessão mestra, ou ``None`` se indisponível."""
+    try:
+        from src.session import SessionManager
+
+        session = SessionManager().get(session_id)
+        payload = getattr(session, "payload", None)
+        return payload.get("llm_routing") if isinstance(payload, dict) else None
+    except Exception:  # noqa: BLE001 — banco indisponível não invalida a medição
+        return None
 
 
 def newest_session(output_dir: Path, since: float) -> Path | None:
@@ -147,6 +199,10 @@ def run_combination(
         usage = outcome.get("token_usage") or db_token_usage(session.name)  # sessão abortada: sem metadata
         result.update(session=session.name, outcome=outcome, score=score_session(session),
                       tokens=sum_tokens(usage), db=db_metrics(session.name))
+        divergences = check_pins(combo["roles"], db_llm_routing(session.name))
+        result["routing_check"] = {"ok": not divergences, "divergences": divergences}
+        for line in divergences:
+            print(f"[benchmark] AVISO {combo['name']}: {line}")
     return result
 
 

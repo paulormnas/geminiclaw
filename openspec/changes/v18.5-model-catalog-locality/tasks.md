@@ -4,6 +4,9 @@
 - [ ] 0.1 Confirmar que `v16-model-catalog-router` (catálogo e roteador do ADR 017) está implementada em `dev`; se não estiver, parar e avisar o pesquisador.
 - [ ] 0.2 Obter aprovação explícita do pesquisador para a coluna `token_usage.versao_efetiva`.
 
+## 0.b Alinhamento pendente com `v16-model-catalog-router`
+- [ ] 0.b.1 Alinhar o payload `catalogo`: o `v16-model-catalog-router` implementou `{versao, hash, local: bool}`; o design desta mudança usa `local_hash`. Decidir um formato (ex.: manter `local` e acrescentar `local_hash`) e ajustar design, spec e código antes de implementar.
+
 ## 1. Catálogo
 - [ ] 1.1 Esquema: `localidade`, `aceita_dados_brutos`, `familia_modelo`; padrões e regras de coerência (design §1).
 - [ ] 1.2 `WARNING` de coerência com o endpoint (loopback × não loopback), sem alterar a declaração.

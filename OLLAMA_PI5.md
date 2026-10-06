@@ -33,8 +33,8 @@ O modelo **Qwen3.5-4B** (lançado em Março de 2026) foi escolhido para o Pi 5 p
 Após rodar o script, atualize seu arquivo `.env`:
 
 ```dotenv
-LLM_PROVIDER=ollama
-LLM_MODEL=qwen3.5:4b
+LLM_DATA_POLICY=self_hosted_only
+RESEARCHER_MODEL=ollama/qwen3.5:4b   # opcional: pin provedor/modelo (o catálogo já inclui o Ollama)
 DEPLOYMENT_PROFILE=pi5
 OLLAMA_BASE_URL=http://localhost:11434
 ```

@@ -23,7 +23,7 @@ import time
 from google import genai
 from google.genai import types as genai_types
 
-from src.config import DEFAULT_MODEL, GEMINI_API_KEY
+from src.config import GEMINI_API_KEY
 from src.llm.base import LLMProvider, LLMResponse, ToolCall
 from src.llm.retry import RETRY_BACKOFFS_SECONDS, emit_connection_retry, is_retryable_error
 from src.logger import get_logger
@@ -57,7 +57,9 @@ class GoogleProvider(LLMProvider):
         fallback_model: str | None = None,
     ):
         self._api_key = api_key or GEMINI_API_KEY
-        self._model = model or DEFAULT_MODEL
+        if not model:
+            raise ValueError("GoogleProvider requer o nome do modelo (resolvido pelo roteador de modelos).")
+        self._model = model
         self._fallback_model = fallback_model if fallback_model and fallback_model != self._model else None
         self._fallback_until = 0.0
         self._last_model_used = self._model
@@ -286,15 +288,16 @@ class GoogleProvider(LLMProvider):
             yield response.text
 
     async def health_check(self) -> bool:
+        """Consulta os metadados do modelo (``models.get``): não gera texto nem gasta tokens."""
         try:
-            await self._client.aio.models.generate_content(
-                model=self._model,
-                contents="ping",
-                config=genai_types.GenerateContentConfig(max_output_tokens=16),
-            )
+            await self._client.aio.models.get(model=self._model)
             return True
         except Exception:
             return False
+
+    async def check_availability(self) -> str | None:
+        await self._client.aio.models.get(model=self._model)
+        return None
 
     @property
     def model_name(self) -> str:

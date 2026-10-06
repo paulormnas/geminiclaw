@@ -1,7 +1,9 @@
-"""Factory e roteador de provedores LLM por papel de agente (Roadmap V14.1).
+"""Roteador de provedores LLM por papel de agente (ADR 017).
 
-Implementa o Model Router para selecionar dinamicamente o provedor e modelo
-adequados para cada papel arquitetural (Researcher, Validator, Developer).
+``ModelRouter.get_provider(papel)`` lê o **mapa resolvido da sessão** (ver ``src/llm/session.py``):
+nenhuma variável de ambiente é consultada aqui. ``get_provider()`` sem papel delega ao
+``researcher``. A dica de modelo do plano chega em ``model`` no formato ``provedor/modelo`` e só é
+aceita se o roteador a validar (catálogo, requisitos, política e disponibilidade).
 """
 
 from typing import Dict, Optional
@@ -9,9 +11,10 @@ from typing import Dict, Optional
 # Import com efeito colateral: popula o registro de provedores (src.llm.providers.__init__).
 import src.llm.providers  # noqa: F401
 from src.llm.base import LLMProvider
+from src.llm.catalog import split_model_id
 from src.llm.registry import create_provider
+from src.llm.session import clear_catalog_cache, get_session_routing
 from src.logger import get_logger
-from src.model_config import RoleModelConfig, get_role_model_config
 
 logger = get_logger(__name__)
 
@@ -24,43 +27,41 @@ class ModelRouter:
 
     @classmethod
     def get_provider(cls, role: Optional[str] = None, model: Optional[str] = None) -> LLMProvider:
-        """Retorna uma instância de LLMProvider configurada para o papel.
+        """Retorna uma instância de LLMProvider para o papel, conforme o mapa resolvido da sessão.
 
         Args:
-            role: Nome do papel ('researcher', 'validator', 'developer').
-                  Se None, retorna o provedor padrão do sistema (compatibilidade retroativa).
-            model: Modelo a usar em vez do padrão do papel (Roadmap V16/ADR 014) —
-                permite que o runtime em processo honre ``AgentTask.preferred_model``
-                (ex.: sugestão do Planner), equivalente ao ``LLM_MODEL`` que o modo
-                container propagava via variável de ambiente. O provedor continua
-                sendo o do papel; apenas o modelo é sobrescrito.
+            role: Nome do papel (``researcher``, ``developer``, ``validator``, ``reviewer``,
+                ``summarizer``, ``base``; ``planner`` é alias de ``researcher``). ``None``
+                delega para ``researcher``.
+            model: Dica ``provedor/modelo`` (ex.: ``AgentTask.preferred_model`` do plano).
+                É validada pelo roteador; se não valer, o modelo resolvido do papel é usado.
 
         Returns:
             Instância de LLMProvider configurada.
 
         Raises:
-            ValueError: Se o papel ou o provedor configurado for inválido.
+            ValueError: Se o papel for desconhecido.
         """
-        if role is None:
-            # Fallback para o provedor singleton padrão (compatibilidade retroativa)
-            from src.llm.factory import get_provider
-            return get_provider()
-
-        role_cfg: RoleModelConfig = get_role_model_config(role)
-        effective_model = model or role_cfg.model
-        cache_key = (role_cfg.provider.lower(), effective_model)
+        routing = get_session_routing()
+        resolution = routing.resolution(role or "researcher")
+        effective_id = routing.apply_hint(resolution.papel, model)
+        provider_name, effective_model = split_model_id(effective_id)
+        cache_key = (provider_name, effective_model)
 
         if cache_key in _provider_cache:
             return _provider_cache[cache_key]
 
-        provider_instance = create_provider(role_cfg.provider, effective_model)
+        provider_instance = create_provider(
+            provider_name, effective_model, fallback_model=routing.fallback_for(effective_id)
+        )
 
         logger.info(
             "ModelRouter instanciou provedor",
             extra={
-                "role": role_cfg.role,
-                "provider": role_cfg.provider,
+                "role": resolution.papel,
+                "provider": provider_name,
                 "model": effective_model,
+                "origem": resolution.origem,
             },
         )
         _provider_cache[cache_key] = provider_instance
@@ -68,5 +69,6 @@ class ModelRouter:
 
     @classmethod
     def clear_cache(cls) -> None:
-        """Limpa o cache de provedores (útil para testes unitários)."""
+        """Limpa o cache de provedores e o do catálogo (útil para testes unitários)."""
         _provider_cache.clear()
+        clear_catalog_cache()

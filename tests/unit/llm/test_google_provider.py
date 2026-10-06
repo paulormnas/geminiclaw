@@ -264,8 +264,10 @@ class TestRateLimitFallback:
 
 
 @pytest.mark.unit
-def test_registry_passes_the_configured_fallback(monkeypatch) -> None:
-    monkeypatch.setattr("src.config.GOOGLE_FALLBACK_MODEL", FALLBACK)
+def test_registry_passes_the_validated_fallback() -> None:
+    """O fallback chega ao provedor pelo registro, já validado pelo roteador (ADR 017)."""
     with patch("src.llm.providers.google.genai.Client"):
-        provider = registry.create_provider("google", MODEL)
+        provider = registry.create_provider("google", MODEL, fallback_model=FALLBACK)
     assert provider._fallback_model == FALLBACK
+    with patch("src.llm.providers.google.genai.Client"):
+        assert registry.create_provider("google", MODEL)._fallback_model is None

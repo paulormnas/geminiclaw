@@ -1,72 +1,49 @@
-from unittest.mock import patch
+"""``get_provider()`` sem papel: delega ao ModelRouter (papel ``researcher``), sem singleton."""
 
 import pytest
 
 from src.llm.factory import get_provider
 from src.llm.providers.ollama import OllamaProvider
+from src.model_router import ModelRouter
 
 
 @pytest.fixture(autouse=True)
-def reset_singleton():
-    """Reseta a instância singleton do provedor antes de cada teste."""
-    import src.llm.factory
-    src.llm.factory._provider_instance = None
+def clean_router_cache():
+    ModelRouter.clear_cache()
     yield
+    ModelRouter.clear_cache()
 
 
 @pytest.mark.unit
-def test_get_provider_ollama_default():
-    """Valida a criação do OllamaProvider via registro."""
-    with patch("src.config.LLM_PROVIDER", "ollama"), \
-         patch("src.config.OLLAMA_BASE_URL", "http://test:11434"), \
-         patch("src.config.LLM_MODEL", "test-model"):
-        provider = get_provider()
-        assert isinstance(provider, OllamaProvider)
-        assert provider.model_name == "test-model"
+def test_get_provider_delega_ao_researcher(monkeypatch):
+    """Valida a criação do OllamaProvider pelo roteador (política padrão self_hosted_only)."""
+    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://localhost:11434")
+
+    provider = get_provider()
+
+    assert isinstance(provider, OllamaProvider)
+    assert provider.model_name == "qwen3:8b"
+    assert provider is ModelRouter.get_provider("researcher")
 
 
 @pytest.mark.unit
-def test_get_provider_local_alias_resolves_to_ollama():
-    """Valida que o alias legado 'local' resolve para o provedor 'ollama'."""
-    with patch("src.config.LLM_PROVIDER", "local"), \
-         patch("src.config.OLLAMA_BASE_URL", "http://test:11434"), \
-         patch("src.config.LLM_MODEL", "test-model"):
-        provider = get_provider()
-        assert isinstance(provider, OllamaProvider)
+def test_get_provider_sem_singleton_de_modulo():
+    import src.llm.factory as factory
+
+    assert not hasattr(factory, "_provider_instance")
 
 
 @pytest.mark.unit
-def test_get_provider_google_default():
-    """Valida que o provedor 'google' é criado via registro quando google-genai está instalado."""
-    pytest.importorskip("google.genai")
-    from src.llm.providers.google import GoogleProvider
+def test_get_provider_respeita_o_pin_do_researcher(monkeypatch):
+    monkeypatch.setenv("RESEARCHER_MODEL", "ollama/qwen3.5:4b")
+    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://localhost:11434")
 
-    with patch("src.config.LLM_PROVIDER", "google"), \
-         patch("src.config.GEMINI_API_KEY", "test-key"):
-        provider = get_provider()
-        assert isinstance(provider, GoogleProvider)
+    assert get_provider().model_name == "qwen3.5:4b"
 
 
 @pytest.mark.unit
-def test_get_provider_singleton():
-    """Valida que get_provider retorna a mesma instância (singleton)."""
-    with patch("src.config.LLM_PROVIDER", "ollama"), \
-         patch("src.config.OLLAMA_BASE_URL", "http://test:11434"), \
-         patch("src.config.LLM_MODEL", "test-model"):
-        p1 = get_provider()
-        p2 = get_provider()
-        assert p1 is p2
+def test_alias_local_do_registro_continua_resolvendo_para_ollama():
+    """O alias legado 'local' do registro continua valendo para a lista de permissão."""
+    from src.llm.availability import parse_priority
 
-
-@pytest.mark.unit
-def test_invalid_provider_raises_error_listing_available():
-    """Valida que um provedor inválido lança ValueError listando os provedores disponíveis."""
-    with patch("src.config.LLM_PROVIDER", "unknown"):
-        with pytest.raises(ValueError) as exc_info:
-            get_provider()
-
-        msg = str(exc_info.value)
-        assert "unknown" in msg
-        assert "ollama" in msg
-        assert "google" in msg
-        assert "openai_compatible" in msg
+    assert parse_priority("local", "default") == ("ollama",)

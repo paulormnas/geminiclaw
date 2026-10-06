@@ -5,9 +5,7 @@ de validação e artefatos esperados definidos no plano.
 """
 
 import asyncio
-import os
 from agents.base.agent import Agent, _load_session_context, _persist_session_context, _setup_skills
-from src.config import DEFAULT_MODEL
 from src.prompts import render_instruction
 
 AGENT_NAME = "reviewer"
@@ -54,7 +52,7 @@ def create_agent() -> Agent:
         name=AGENT_NAME,
         description=AGENT_DESCRIPTION,
         _instruction=AGENT_INSTRUCTION,
-        model=os.environ.get("LLM_MODEL", DEFAULT_MODEL),
+        model="router:reviewer",
         before_agent_callback=_load_session_context,
         after_agent_callback=_persist_session_context,
     )

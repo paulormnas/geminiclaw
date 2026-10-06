@@ -385,3 +385,47 @@ def test_notas_agregadas_por_juiz_e_selecao_registrada():
     """I5 e sugestão: nada mistura juízes diferentes; a seleção fica na saída."""
     out, _ = run([event(1)], [GOOD])
     assert out["selection"]["selected"] == LITE and out["selection"]["excluded"] == [DEV]
+
+
+# --- juiz passa pelo roteador (ADR 017) -----------------------------------------------------------
+
+
+def test_juiz_de_terceiros_recusado_sob_self_hosted_only(monkeypatch):
+    """O juiz externo permitido por COMM_EVAL_ALLOW_EXTERNAL_JUDGE ainda obedece a LLM_DATA_POLICY."""
+    monkeypatch.setattr("src.config.LLM_DATA_POLICY", "self_hosted_only")
+
+    with pytest.raises(cj.JudgeUnavailable, match="self_hosted_only"):
+        cj.routed_provider_factory("google", "gemini-3.1-flash-lite")
+
+
+def test_juiz_fora_do_catalogo_e_recusado():
+    with pytest.raises(cj.JudgeUnavailable, match="fora do catálogo"):
+        cj.routed_provider_factory("google", "modelo-que-nao-existe")
+
+
+def test_juiz_de_terceiros_aceito_sob_third_party_allowed(monkeypatch):
+    pytest.importorskip("google.genai")
+    monkeypatch.setattr("src.config.LLM_DATA_POLICY", "third_party_allowed")
+    monkeypatch.setattr("src.config.GEMINI_API_KEY", "k")
+
+    provider = cj.routed_provider_factory("google", "gemini-3.1-flash-lite")
+
+    assert provider.model_name == "gemini-3.1-flash-lite"
+
+
+def test_juiz_com_endpoint_remoto_sem_https_e_recusado(monkeypatch):
+    monkeypatch.setattr("src.config.LLM_DATA_POLICY", "self_hosted_only")
+    monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://gpu.exemplo.org:11434")
+
+    with pytest.raises(cj.JudgeUnavailable, match="https"):
+        cj.routed_provider_factory("ollama", "qwen3:8b")
+
+
+def test_judge_events_devolve_erro_quando_o_roteador_recusa_o_juiz():
+    def recusa(provider, model):
+        raise cj.JudgeUnavailable("recusado pela política")
+
+    out = cj.judge_events([event()], models(), provider_factory=recusa, allow_external=True, max_usd=1.0)
+
+    assert out["error"] == "recusado pela política"
+    assert out["events"] == []

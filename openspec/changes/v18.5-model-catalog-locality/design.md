@@ -113,6 +113,9 @@ primeiro envio:
 }
 ```
 
+> **Nota de alinhamento (tarefa 0.b.1):** `v16-model-catalog-router` implementou o bloco `catalogo` como `{versao, hash, local: bool}` (`payload["llm_routing"]`); este design usa `local_hash`. Os dois precisam ser alinhados antes da implementação.
+
+
 - `versao_efetiva` por papel começa com o valor conhecido no início (Ollama) ou
   `desconhecida`, e é atualizada com a primeira versão observada.
 - Os valores são **como declarados** no catálogo (ADR 019 §1), com `aceita_dados_brutos`

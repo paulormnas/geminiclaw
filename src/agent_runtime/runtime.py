@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 from src.agent_runtime.context import AgentContext, bind_agent_context
 from src.agent_runtime.definitions import get_agent_definition
 from src.agent_runtime.resources import ResourceGuard
-from src.config import AGENT_TIMEOUT_SECONDS, LLM_PROVIDER
+from src.config import AGENT_TIMEOUT_SECONDS
 from src.llm.agent_loop import run_agent_loop
 from src.logger import get_logger
 from src.model_config import get_role_model_config
@@ -45,11 +45,11 @@ class AgentRuntime:
 
     @staticmethod
     def _provider_name(agent_id: str) -> str:
-        """Provedor configurado para o papel (cai no provedor global para papéis sem configuração)."""
+        """Provedor resolvido para o papel (cai no do ``researcher`` para papéis fora do catálogo)."""
         try:
             return get_role_model_config(agent_id).provider
         except ValueError:
-            return LLM_PROVIDER
+            return get_role_model_config("researcher").provider
 
     async def run(self, task: "AgentTask", ctx: AgentContext) -> "AgentResult":
         """Executa a tarefa do agente descrito por ``task`` no contexto ``ctx``.
@@ -137,8 +137,8 @@ class AgentRuntime:
         bind_agent_context(ctx)
 
         definition = get_agent_definition(task.agent_id)
-        # ctx.model já resolve task.preferred_model (Planner) com fallback ao padrão
-        # do papel — equivalente ao LLM_MODEL propagado por env var no modo container.
+        # ctx.model é o ``provedor/modelo`` efetivo: a dica do plano (task.preferred_model), se o
+        # roteador a validou, ou o modelo resolvido do papel na sessão.
         provider = ModelRouter.get_provider(definition.role, model=ctx.model)
 
         return await run_agent_loop(

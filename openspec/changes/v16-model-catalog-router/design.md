@@ -72,7 +72,9 @@ aliases_papel:
 | Papel sem nenhum modelo na `preferencia`, ou `preferencia` cita `id` inexistente | erro |
 | Papel obrigatório ausente (`researcher`, `developer`, `reviewer`, `summarizer`, `validator`, `base`) | erro |
 | `catalog.local.yaml` com `papeis` ou alterando um `id` existente | erro |
-| `openai_compatible` com endpoint fora de loopback/rede privada e sem `https` | erro |
+| Provedor com `base_url` (`openai`, `openai_compatible`, `ollama`, `anthropic`, ...) e ao menos um modelo no catálogo, com endpoint fora de loopback/rede privada (link-local não conta) e sem `https` | erro (na carga do catálogo e na criação do provedor) |
+| `trust: self_hosted` em provedor só de nuvem (`google`, `anthropic`, `openai`) | erro |
+| Chave repetida no mesmo mapeamento YAML | erro |
 
 O catálogo efetivo recebe `catalog_hash` = sha256 do versionado concatenado ao local (se
 houver), usado no banner, no payload e na telemetria.
@@ -205,9 +207,7 @@ Removidas: `LLM_PROVIDER`, `LLM_MODEL`, `DEFAULT_MODEL` (e o bloco de `{PAPEL}_P
 Superfícies: (a) envio de prompts a terceiros sem decisão explícita — fechado pelo padrão
 `self_hosted_only`; (b) catálogo local adulterado para redirecionar um papel — mitigado porque
 o local não altera entradas nem papéis, só acrescenta, e o hash aparece no banner; um pin para
-um modelo local continua sujeito à política; (c) chave enviada a host errado — a chave é
-resolvida por provedor e só vai ao `base_url` configurado; endpoint remoto sem `https` é
-recusado; (d) vazamento em erro de health check — mensagens sanitizadas. O Analista de
+um modelo local continua sujeito à política; (c) chave enviada a host errado — a chave é resolvida por provedor e só vai ao `base_url` configurado do mesmo provedor; `openai` e `openai_compatible` têm variáveis próprias (`OPENAI_*` e `OPENAI_COMPATIBLE_*`), então a chave real da OpenAI nunca vai a um servidor compatível; todo `base_url` fora de loopback/rede privada (link-local excluído) exige `https`, validado na carga do catálogo e na criação do provedor (a versão anterior validava só entradas `openai_compatible`, o que deixava `openai`, `ollama` e `anthropic` sem proteção); (b') `trust` autodeclarado — `self_hosted` é recusado para provedores só de nuvem; (d) vazamento em erro de health check — mensagens sanitizadas. O Analista de
 Segurança deve confirmar (b) e (c) no PR.
 
 ## 9. Riscos

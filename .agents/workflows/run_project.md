@@ -32,8 +32,8 @@ O teste consiste em rodar o prompt do desafio em ambos os provedores e comparar 
 
 ### Passo A: Execução Local (Ollama)
 ```bash
-export LLM_PROVIDER=ollama
-export LLM_MODEL=qwen3.5:4b
+export LLM_DATA_POLICY=self_hosted_only
+export RESEARCHER_MODEL=ollama/qwen3.5:4b   # pin provedor/modelo (ADR 017); opcional
 export OLLAMA_BASE_URL=http://localhost:11434
 export OUTPUT_BASE_DIR=outputs/local
 
@@ -42,8 +42,8 @@ uv run geminiclaw "Implemente um pipeline de classificação supervisionada para
 
 ### Passo B: Execução em Nuvem (Google Gemini)
 ```bash
-export LLM_PROVIDER=google
-export LLM_MODEL=gemini-2.0-flash
+export LLM_DATA_POLICY=third_party_allowed
+export RESEARCHER_MODEL=google/gemini-3.8-flash   # pin provedor/modelo (ADR 017); requer GEMINI_API_KEY
 export OUTPUT_BASE_DIR=outputs/cloud
 unset OLLAMA_BASE_URL
 

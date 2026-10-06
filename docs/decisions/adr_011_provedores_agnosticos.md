@@ -62,7 +62,7 @@ O registro mantém, hoje, os cinco provedores abaixo; novos entram pelo mesmo me
 | Provedor | Uso | Observação |
 |---|---|---|
 | `ollama` | Execução local de LLMs | **Mantido como provedor de primeira classe.** Os testes futuros com modelos locais (hardware próprio do nó) dependem dele; nenhuma decisão deste ADR o rebaixa ou o remove |
-| `openai_compatible` | Servidores locais (llama.cpp, vLLM, LM Studio) e serviços hospedados compatíveis | Chave opcional; `OPENAI_BASE_URL` obrigatória |
+| `openai_compatible` | Servidores locais (llama.cpp, vLLM, LM Studio) e serviços hospedados compatíveis | Chave opcional; `OPENAI_COMPATIBLE_BASE_URL` obrigatória |
 | `google` | Gemini (API paga ou gratuita) | Fallback automático de modelo em HTTP 429 |
 | `anthropic` | Claude | Esforço de raciocínio configurável |
 | `openai` | API da OpenAI (modelos de raciocínio, ex.: `gpt-6-luna`) | Chave obrigatória; padrão `https://api.openai.com/v1` |

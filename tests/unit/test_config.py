@@ -15,6 +15,9 @@ def reset_env():
         "DEFAULT_MODEL",
         "LLM_PROVIDER",
         "LLM_MODEL",
+        "LLM_DATA_POLICY",
+        "LLM_ROUTING",
+        "LLM_PROVIDER_PRIORITY",
         "AGENT_TIMEOUT_SECONDS",
         "DATABASE_URL",
         "DEPLOYMENT_PROFILE",
@@ -36,23 +39,49 @@ def reset_env():
             del os.environ[k]
 
 @pytest.mark.unit
-def test_config_missing_required_variable_raises_error():
-    """Testa se omitir GEMINI_API_KEY lança RuntimeError."""
+def test_config_gemini_api_key_nao_e_obrigatoria():
+    """Sem GEMINI_API_KEY a importação não falha: só o provedor Google fica indisponível (ADR 017)."""
     with patch.dict(os.environ, {}, clear=True):
-        # Como o módulo é importado uma vez, precisamos recarregá-lo
-        with pytest.raises(RuntimeError) as excinfo:
-            importlib.reload(src.config)
-        assert "GEMINI_API_KEY" in str(excinfo.value)
+        importlib.reload(src.config)
+        assert src.config.GEMINI_API_KEY is None
 
 @pytest.mark.unit
 def test_config_default_values():
     """Testa se os valores padrão são aplicados corretamente."""
     with patch.dict(os.environ, {"GEMINI_API_KEY": "fake_key"}):
         importlib.reload(src.config)
-        assert src.config.DEFAULT_MODEL == "gemini-3.8-flash"
         assert src.config.AGENT_TIMEOUT_SECONDS == 300
         assert "postgresql://" in src.config.DATABASE_URL
         assert not hasattr(src.config, "SQLITE_DB_PATH") or src.config.DATABASE_URL
+
+@pytest.mark.unit
+def test_config_llm_routing_defaults():
+    """Padrões do roteamento: política restritiva, modo flexível, sem lista de permissão explícita."""
+    with patch.dict(os.environ, {}, clear=True):
+        importlib.reload(src.config)
+        assert src.config.LLM_DATA_POLICY == "self_hosted_only"
+        assert src.config.LLM_ROUTING == "flexible"
+        assert src.config.LLM_PROVIDER_PRIORITY == ""
+        assert src.config.LLM_HEALTH_CHECK_TIMEOUT_SECONDS == 5
+        assert src.config.LLM_CATALOG_LOCAL_PATH == ""
+
+@pytest.mark.unit
+def test_config_llm_routing_overrides():
+    env = {"LLM_DATA_POLICY": "Third_Party_Allowed", "LLM_ROUTING": "STRICT", "LLM_HEALTH_CHECK_TIMEOUT_SECONDS": "2"}
+    with patch.dict(os.environ, env, clear=True):
+        importlib.reload(src.config)
+        assert src.config.LLM_DATA_POLICY == "third_party_allowed"
+        assert src.config.LLM_ROUTING == "strict"
+        assert src.config.LLM_HEALTH_CHECK_TIMEOUT_SECONDS == 2
+
+@pytest.mark.unit
+def test_config_variaveis_de_modelo_removidas():
+    """LLM_PROVIDER/LLM_MODEL/DEFAULT_MODEL deixam de existir (o roteador decide por papel)."""
+    with patch.dict(os.environ, {"LLM_PROVIDER": "ollama", "LLM_MODEL": "x", "DEFAULT_MODEL": "y"}, clear=True):
+        importlib.reload(src.config)
+        assert not hasattr(src.config, "LLM_PROVIDER")
+        assert not hasattr(src.config, "LLM_MODEL")
+        assert not hasattr(src.config, "DEFAULT_MODEL")
 
 @pytest.mark.unit
 def test_config_custom_database_url():
@@ -65,3 +94,15 @@ def test_config_custom_database_url():
     with patch.dict(os.environ, custom_env):
         importlib.reload(src.config)
         assert src.config.DATABASE_URL == custom_url
+
+
+@pytest.mark.unit
+def test_config_strict_validation_removida():
+    """STRICT_VALIDATION não tinha leitor em lugar nenhum (código morto) e foi removida."""
+    with patch.dict(os.environ, {"STRICT_VALIDATION": "true"}, clear=True):
+        importlib.reload(src.config)
+        assert not hasattr(src.config, "STRICT_VALIDATION")
+        for profile in ("pi5", "default"):
+            with patch.dict(os.environ, {"DEPLOYMENT_PROFILE": profile}):
+                importlib.reload(src.config)
+                assert not hasattr(src.config, "STRICT_VALIDATION")

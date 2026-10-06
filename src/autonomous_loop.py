@@ -1156,8 +1156,8 @@ class AutonomousLoop:
             # que originaram as falhas.
             try:
                 from src.llm_cache import LLMResponseCache
-                import os as _os
-                _model = _os.environ.get("DEFAULT_MODEL", "unknown")
+                from src.llm.session import get_session_routing
+                _model = get_session_routing().resolution("researcher").id
                 _cache = LLMResponseCache()
                 for failed_task_obj in tasks:
                     if failed_task_obj.task_name in failed_tasks:
@@ -1704,7 +1704,7 @@ class AutonomousLoop:
         stop_reason: Optional[str],
     ) -> Any:
         """Monta ``ReportData`` com disco e telemetria, sem LLM e sem nunca derrubar a síntese."""
-        from src.model_config import DEFAULT_ROLE_CONFIGS, get_role_model_config
+        from src.model_config import get_role_model_config, known_roles
         from src.report.report_model import ReportMetadata, build_report_data
 
         telemetry = get_telemetry()
@@ -1727,7 +1727,7 @@ class AutonomousLoop:
             logger.warning("Falha ao coletar a telemetria do relatório", extra={"error": str(exc)})
 
         models_by_role: Dict[str, str] = {}
-        for role in DEFAULT_ROLE_CONFIGS:
+        for role in known_roles():
             cfg = get_role_model_config(role)
             models_by_role[role] = f"{cfg.provider}/{cfg.model}"
 

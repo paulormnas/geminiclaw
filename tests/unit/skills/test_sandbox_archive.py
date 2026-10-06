@@ -1,7 +1,6 @@
 """Retorno dos artefatos do sandbox pelo bind mount (ADR 018 §3), sem cópia por ``get_archive``."""
 
 import os
-os.environ["LLM_PROVIDER"] = "ollama"
 os.environ["GEMINI_API_KEY"] = "dummy"
 
 import io

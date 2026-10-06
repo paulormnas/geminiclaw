@@ -90,7 +90,7 @@ def test_provider_with_missing_optional_dependency_raises_value_error():
 @pytest.mark.unit
 def test_settings_resolve_base_url_and_api_key_from_config(monkeypatch):
     """`create_provider` lê `base_url`/`api_key` de `src.config`, não do ambiente bruto."""
-    monkeypatch.setattr(config, "FAKE_BASE_URL", "http://fake:1234", raising=False)
+    monkeypatch.setattr(config, "FAKE_BASE_URL", "https://fake:1234", raising=False)
     monkeypatch.setattr(config, "FAKE_API_KEY", "fake-secret", raising=False)
 
     captured = {}
@@ -102,7 +102,7 @@ def test_settings_resolve_base_url_and_api_key_from_config(monkeypatch):
     registry.register_provider("fake", _factory)
     registry.create_provider("fake", "fake-model")
 
-    assert captured["settings"].base_url == "http://fake:1234"
+    assert captured["settings"].base_url == "https://fake:1234"
     assert captured["settings"].api_key == "fake-secret"
 
 

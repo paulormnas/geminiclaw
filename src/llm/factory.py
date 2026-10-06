@@ -1,17 +1,12 @@
-# Import com efeito colateral: popula o registro de provedores (src.llm.providers.__init__).
-import src.llm.providers  # noqa: F401
-from src import config
 from src.llm.base import LLMProvider
-from src.llm.registry import create_provider
-
-_provider_instance: LLMProvider | None = None
 
 
 def get_provider() -> LLMProvider:
-    """Retorna uma instância singleton do provedor configurado em `LLM_PROVIDER`."""
-    global _provider_instance
-    if _provider_instance is not None:
-        return _provider_instance
+    """Provedor do papel ``researcher``, obtido pelo roteador (ADR 017 §10).
 
-    _provider_instance = create_provider(config.LLM_PROVIDER, config.LLM_MODEL)
-    return _provider_instance
+    Mantido por compatibilidade com chamadores sem papel (laço de agente sem provedor
+    explícito, triagem). Não há mais singleton nem leitura de ``LLM_PROVIDER``/``LLM_MODEL``.
+    """
+    from src.model_router import ModelRouter
+
+    return ModelRouter.get_provider()

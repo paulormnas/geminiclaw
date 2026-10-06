@@ -11,7 +11,6 @@ from agents.base.agent import (
     _persist_session_context,
     _setup_skills,
 )
-from src.config import DEFAULT_MODEL
 from src.logger import get_logger
 from src.prompts import render_instruction
 
@@ -63,7 +62,7 @@ _setup_skills()
 # Define o root_agent
 root_agent = Agent(
     name=AGENT_NAME,
-    model=DEFAULT_MODEL,
+    model="router:summarizer",
     description=AGENT_DESCRIPTION,
     # Roadmap V16/ADR 014: lambda (avaliada por tarefa), não string congelada no
     # import do módulo — no runtime em processo o módulo é importado uma única
@@ -79,7 +78,7 @@ logger.info(
     "Agente summarizer inicializado",
     extra={
         "agent_name": AGENT_NAME,
-        "model": DEFAULT_MODEL,
+        "model": "router:summarizer",
         "tools": [],
     },
 )

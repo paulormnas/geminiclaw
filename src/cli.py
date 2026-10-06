@@ -10,7 +10,10 @@ import signal
 import sys
 import os
 from pathlib import Path
-from typing import NoReturn, Any
+from typing import TYPE_CHECKING, NoReturn, Any
+
+if TYPE_CHECKING:
+    from src.llm.session import SessionRouting
 
 # Adiciona a raiz do projeto ao sys.path para permitir imports de 'src'
 # quando o script é executado diretamente (ex: python3 src/cli.py)
@@ -22,7 +25,6 @@ from src.logger import get_logger
 from src.config import (
     AGENT_TIMEOUT_SECONDS,
     APP_NAME,
-    DEFAULT_MODEL,
     SessionMode,
     SESSION_DEFAULT_MODE,
     INPUT_CONTEXT_DIR,
@@ -128,8 +130,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--model",
         type=str,
-        default=DEFAULT_MODEL,
-        help=f"Modelo Gemini a ser utilizado (padrão: {DEFAULT_MODEL}).",
+        default=None,
+        metavar="PROVEDOR/MODELO",
+        help=(
+            "Pin de modelo do papel researcher no formato provedor/modelo (ex.: ollama/qwen3:8b); "
+            "sujeito à política LLM_DATA_POLICY e à disponibilidade. Sem ele, o catálogo decide."
+        ),
     )
     parser.add_argument(
         "--version",
@@ -728,7 +734,10 @@ def run_embeddings_reindex(collection: str | None, auto_confirm: bool) -> None:
 
 
 def print_session_banner(
-    mode: str, context_dir: str = "input_context", budget: UsageBudget | None = None
+    mode: str,
+    context_dir: str = "input_context",
+    budget: UsageBudget | None = None,
+    llm_routing: "SessionRouting | None" = None,
 ) -> None:
     """Exibe o banner de inicialização de sessão (Roadmap V15.6 / Spec G10).
 
@@ -740,6 +749,9 @@ def print_session_banner(
         budget: Orçamento de uso efetivo da sessão (Roadmap V18 / Spec
             `usage-limits`). Se omitido, usa os defaults de `src/config.py`
             apenas para exibição (não altera o orçamento real da sessão).
+        llm_routing: Mapa resolvido de modelos por papel (ADR 017). Quando informado, o
+            banner traz uma linha por papel (``<papel>  <provedor/modelo>  (<trust>)``), a
+            política, o modo de roteamento e a versão/hash do catálogo — nunca segredos.
     """
     mode_label = {
         SessionMode.ASSISTED.value: "assistido",
@@ -777,6 +789,12 @@ def print_session_banner(
         f"{effective_budget.max_task_retries} retentativas/tarefa │ "
         f"{effective_budget.max_connection_retries} retentativas de conexão"
     )
+
+    if llm_routing is not None:
+        header, *role_lines = llm_routing.banner_lines()
+        print(f"  {DIM}{header}{RESET}")
+        for line in role_lines:
+            print(f"    {line}")
 
     if mode == SessionMode.AUTO.value:
         print(f"  {YELLOW}⚠ Modo autônomo ativo — sem consulta ao pesquisador{RESET}")
@@ -933,6 +951,7 @@ async def execute_prompt(
     mode: str | None = None,
     context_bundle: ContextBundle | None = None,
     budget: UsageBudget | None = None,
+    llm_routing: "SessionRouting | None" = None,
 ) -> None:
     """Executa um prompt no orquestrador e exibe o resultado.
 
@@ -943,12 +962,14 @@ async def execute_prompt(
         context_bundle: Contexto pré-carregado de `input_context/` (Spec G9).
         budget: Orçamento de uso da sessão (Roadmap V18 / Spec `usage-limits`).
             Se omitido, usa os defaults de `src/config.py`.
+        llm_routing: Mapa resolvido de modelos por papel (ADR 017); se omitido, o
+            orquestrador o resolve antes de qualquer chamada de LLM.
     """
     print(f"\n  {STATUS_ICONS['running']} {DIM}Processando...{RESET}\n")
 
     try:
         result = await orchestrator.handle_request(
-            prompt, mode=mode, context_bundle=context_bundle, budget=budget
+            prompt, mode=mode, context_bundle=context_bundle, budget=budget, llm_routing=llm_routing
         )
         print(format_result(result))
         if context_bundle and result.session_id:
@@ -963,6 +984,7 @@ async def interactive_mode(
     mode: str | None = None,
     context_bundle: ContextBundle | None = None,
     budget: UsageBudget | None = None,
+    llm_routing: "SessionRouting | None" = None,
 ) -> None:
     """Executa a CLI em modo interativo (REPL).
 
@@ -974,10 +996,12 @@ async def interactive_mode(
         budget: Orçamento de uso da sessão (Roadmap V18 / Spec `usage-limits`),
             reutilizado em todas as interações do REPL. Se omitido, usa os
             defaults de `src/config.py`.
+        llm_routing: Mapa resolvido de modelos por papel (ADR 017), resolvido uma vez para
+            todo o REPL.
     """
     print(BANNER)
     print(f"  {DIM}Modo interativo. Digite 'sair' para encerrar.{RESET}\n")
-    print_session_banner(mode or SESSION_DEFAULT_MODE, budget=budget)
+    print_session_banner(mode or SESSION_DEFAULT_MODE, budget=budget, llm_routing=llm_routing)
 
     while True:
         try:
@@ -1016,7 +1040,9 @@ async def interactive_mode(
                 await resume_session(orchestrator, s_id)
             continue
 
-        await execute_prompt(orchestrator, prompt, mode=mode, context_bundle=context_bundle, budget=budget)
+        await execute_prompt(
+            orchestrator, prompt, mode=mode, context_bundle=context_bundle, budget=budget, llm_routing=llm_routing
+        )
 
 
 def _handle_embeddings_command(argv: list[str]) -> None:
@@ -1259,11 +1285,33 @@ def main() -> None:
     if context_bundle is None:
         sys.exit(1)
 
+    # ADR 017 — resolve o modelo de cada papel uma única vez, antes do banner e de qualquer chamada
+    # de LLM; sem modelo elegível, a sessão não começa (mensagem acionável).
+    from src.llm.catalog import CatalogError
+    from src.llm.routing import RoutingError
+    from src.llm.session import build_session_routing
+
+    try:
+        llm_routing = asyncio.run(
+            build_session_routing(cli_pins={"researcher": args.model} if args.model else None)
+        )
+    except (RoutingError, CatalogError) as e:
+        print(f"\n  {STATUS_ICONS['error']} {RED}Falha na resolução de modelos: {e}{RESET}\n")
+        logger.error("Falha ao resolver modelos por papel", extra={"error": str(e)})
+        sys.exit(1)
+
     if args.prompt:
         # Modo direto: executa o prompt e sai
-        print_session_banner(mode, budget=budget)
+        print_session_banner(mode, budget=budget, llm_routing=llm_routing)
         asyncio.run(
-            execute_prompt(orchestrator, args.prompt, mode=mode, context_bundle=context_bundle, budget=budget)
+            execute_prompt(
+                orchestrator,
+                args.prompt,
+                mode=mode,
+                context_bundle=context_bundle,
+                budget=budget,
+                llm_routing=llm_routing,
+            )
         )
         # V11.1.2 — Flush explícito ao encerrar modo não-interativo
         try:
@@ -1273,7 +1321,11 @@ def main() -> None:
             logger.error("Erro no flush de telemetria final", extra={"error": str(_e)})
     else:
         # Modo interativo (REPL)
-        asyncio.run(interactive_mode(orchestrator, mode=mode, context_bundle=context_bundle, budget=budget))
+        asyncio.run(
+            interactive_mode(
+                orchestrator, mode=mode, context_bundle=context_bundle, budget=budget, llm_routing=llm_routing
+            )
+        )
         # V11.1.2 — Flush explícito ao sair do modo interativo
         try:
             from src.telemetry import get_telemetry

@@ -162,15 +162,54 @@ def recompute_tokens(results_path: Path, output_dir: Path | None = None) -> None
     results_path.write_text(json.dumps(results, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
 
 
+def evaluate_communication(results_path: Path, output_dir: Path, with_judge: bool) -> None:
+    """Avalia a comunicação das sessões de ``results.json`` (pós-execução) e grava o bloco ``comm_eval``."""
+    from scripts.benchmark import comm_judge
+    from scripts.benchmark.communication import (
+        evaluate_session,
+        fetch_session_data,
+        load_plan,
+        write_result,
+    )
+
+    results = json.loads(results_path.read_text(encoding="utf-8"))
+    for r in results:
+        session = r.get("session")
+        if not session:
+            continue
+        session_dir = output_dir / session
+        try:
+            data = fetch_session_data(session)
+            result = evaluate_session(session, session_dir, data)
+            if with_judge:
+                result["ask_researcher"] = comm_judge.judge_session(session, data, load_plan(session_dir), session_dir)
+        except Exception as exc:  # uma sessão sem dados não derruba as demais
+            r["comm_eval"] = {"error": str(exc)}
+            continue
+        detail = results_path.with_name(f"{results_path.stem}-comm-{session}.json")
+        write_result(result, detail, session_dir)
+        r["comm_eval"] = result
+    results_path.write_text(json.dumps(results, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("matrix", type=Path)
     parser.add_argument("--results", type=Path, required=True)
     parser.add_argument("--only", nargs="*", default=None)
     parser.add_argument("--recompute", action="store_true", help="refaz os tokens do banco e sai (sem rodar nada)")
+    parser.add_argument("--eval-comm", action="store_true",
+                        help="avalia a comunicação entre agentes das sessões já executadas, depois da execução")
+    parser.add_argument("--eval-judge", action="store_true",
+                        help="com --eval-comm, inclui o juiz LLM das perguntas de ask_researcher")
     args = parser.parse_args()
     if args.recompute:
         recompute_tokens(args.results, Path(dotenv_values('.env').get('OUTPUT_BASE_DIR') or 'outputs'))
+        return
+
+    if args.eval_comm:
+        evaluate_communication(args.results, Path(dotenv_values(".env").get("OUTPUT_BASE_DIR") or "outputs"),
+                               args.eval_judge)
         return
 
     matrix = json.loads(args.matrix.read_text(encoding="utf-8"))

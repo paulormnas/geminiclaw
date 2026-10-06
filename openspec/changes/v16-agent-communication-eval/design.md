@@ -84,6 +84,10 @@ Alvo = `("plan", sessão)` para `plan_validation` e `("subtask", task_name)` par
 
 ### 4.2 Taxa de resolução
 
+- **Nota de implementação (2026-10-06):** uma corrida de reprovações consecutivas que termina em aprovação conta
+  inteira como resolvida; a corrida no fim da sequência é `unresolved_tail`. Com a cauda fora do denominador,
+  `resolution_rate` vale 1,0 sempre que há corrida fechada; por isso a saída traz também
+  `resolution_rate_with_tail` e `first_retry_rate`, que são as medidas informativas.
 - Uma **reprovação** é *resolvida* se o evento seguinte do mesmo alvo é aprovação (inclusive
   `approved_with_warnings`).
 - `resolution_rate` = reprovações resolvidas / reprovações com ao menos um evento seguinte.

@@ -597,6 +597,7 @@ class Orchestrator:
             RESPONDIDO_RESEARCHER,
             RESPONDIDO_SUPOSICAO,
             assumption_text,
+            classify_reserved,
         )
         from src.research_consult.query_guard import protected_file_names
 
@@ -604,9 +605,15 @@ class Orchestrator:
         mode = task.mode or self._session_modes.get(session_key, "") or "auto"
 
         def _finish(
-            respondido_por: str, answer: str, motivo: str | None, consulta: dict[str, Any] | None = None
+            respondido_por: str,
+            answer: str,
+            motivo: str | None,
+            consulta: dict[str, Any] | None = None,
+            reutilizada: bool = False,
         ) -> str:
             extra: dict[str, Any] = {"motivo_fallback": motivo}
+            if reutilizada:
+                extra["reutilizada"] = True
             if consulta:
                 extra["consulta"] = consulta
             record = self._record_researcher_interaction(
@@ -631,6 +638,8 @@ class Orchestrator:
             return answer
 
         # 1. Decisão reservada ao humano: nunca responder (valor desconhecido também é reservado).
+        # Além da autodeclaração do agente, classifica a pergunta por palavras-chave (fail-closed).
+        decisao_reservada = decisao_reservada or classify_reserved(question)
         if decisao_reservada:
             return _finish(PENDENTE_PESQUISADOR, RESERVED_MESSAGE, None, {"decisao_reservada": decisao_reservada})
 
@@ -645,7 +654,7 @@ class Orchestrator:
                 "ask_researcher: pergunta similar já respondida nesta sessão — reutilizando resposta",
                 extra={"question": question[:100], "session_id": session_key},
             )
-            return cached_answer
+            return _finish(RESPONDIDO_RESEARCHER, cached_answer, None, reutilizada=True)
 
         # 4. Limite de consultas e orçamento.
         if self._session_consult_counts.get(session_key, 0) >= cfg.RESEARCHER_CONSULT_MAX_PER_SESSION:
@@ -653,7 +662,12 @@ class Orchestrator:
                 RESPONDIDO_SUPOSICAO, assumption_text(mode, question, "limite_consultas"), "limite_consultas"
             )
         tracker = self._usage_trackers.get(session_key)
-        if tracker is not None and tracker.check().should_close:
+        if tracker is None:
+            logger.warning(
+                "Consulta ao Researcher sem UsageTracker: orçamento de tokens/tempo não é verificado",
+                extra={"session_id": session_key},
+            )
+        elif tracker.check().should_close:
             return _finish(RESPONDIDO_SUPOSICAO, assumption_text(mode, question, "orcamento"), "orcamento")
         # A vaga é reservada antes do await: consultas concorrentes não furam o limite.
         self._session_consult_counts[session_key] = self._session_consult_counts.get(session_key, 0) + 1
@@ -687,6 +701,8 @@ class Orchestrator:
                     max_searches=cfg.RESEARCHER_CONSULT_MAX_SEARCHES,
                     max_reads=cfg.RESEARCHER_CONSULT_MAX_READS,
                     query_max_chars=cfg.RESEARCHER_CONSULT_QUERY_MAX_CHARS,
+                    allowed_hosts=cfg.RESEARCHER_CONSULT_ALLOWED_HOSTS,
+                    restrict_reads_to_searched_hosts=cfg.RESEARCHER_CONSULT_READ_ONLY_SEARCHED_HOSTS,
                 ),
                 timeout=cfg.RESEARCHER_CONSULT_TIMEOUT_SECONDS,
             )
@@ -696,7 +712,7 @@ class Orchestrator:
         except Exception as exc:
             logger.warning("Consulta ao Researcher falhou", extra={"session_id": session_key, "error": str(exc)})
             return _finish(
-                RESPONDIDO_SUPOSICAO, assumption_text(mode, question, "erro"), "erro", {"erro": str(exc)[:300]}
+                RESPONDIDO_SUPOSICAO, assumption_text(mode, question, "erro"), "erro", {"erro": str(exc)[:100]}
             )
 
         consulta = {

@@ -27,6 +27,7 @@ import yaml
 
 from src import config
 from src.knowledge import schema
+from src.knowledge.domain_search import DomainSearch
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.graph_store import Edge, GraphStore, Node
 from src.knowledge.normalization import normalize_domain_term, normalize_metric_name
@@ -323,6 +324,7 @@ def _resolve(
     semantic_search: SemanticSearch | None,
     new_props: dict[str, Any],
     required_for_candidate: tuple[str, ...] = (),
+    max_alternatives: int | None = None,
 ) -> Resolution:
     """Núcleo comum: exato -> sinônimo -> semântico -> candidato."""
     if not term or not term.strip():
@@ -353,7 +355,7 @@ def _resolve(
                 pending.append(term)
                 store.update_node(best.id, {"sinonimos_candidatos": pending}, actor=actor)
             return Resolution(best.id, "semantico", alternativas=hits)
-        alternativas = hits
+        alternativas = hits if max_alternatives is None else hits[:max_alternatives]
 
     for required in required_for_candidate:
         if required not in new_props:
@@ -374,6 +376,23 @@ def _resolve(
     return Resolution(node_id, "candidato_criado", alternativas=alternativas)
 
 
+_DOMAIN_ALTERNATIVES = 3
+
+
+def _domain_search_adapter(search: DomainSearch, context: str | None) -> SemanticSearch:
+    """Adapta ``DomainSearch`` ao contrato ``(rótulo, termo) -> [(node_id, score)]`` do passo semântico."""
+
+    def _search(_label: str, term: str) -> list[tuple[str, float]]:
+        try:
+            hits = search.search(term, context=context, include_candidates=True, limit=10)
+        except ValueError:
+            # Termo curto demais para a busca vetorial: segue para o candidato.
+            return []
+        return [(h.node_id, h.score) for h in hits]
+
+    return _search
+
+
 def resolve_domain(
     store: GraphStore,
     term: str,
@@ -382,12 +401,19 @@ def resolve_domain(
     sessao_id: str,
     nivel: str = "especialidade",
     semantic_search: SemanticSearch | None = None,
+    domain_search: DomainSearch | None = None,
+    context: str | None = None,
 ) -> Resolution:
     """Resolve um termo livre para um ``Dominio`` canônico ou cria um candidato.
 
     Ordem: nome exato normalizado, sinônimo, similaridade semântica
-    (>= ``VOCAB_MATCH_THRESHOLD``; pulada se ``semantic_search`` for ``None``) e, por fim,
+    (>= ``VOCAB_MATCH_THRESHOLD``; pulada se não houver busca semântica) e, por fim,
     candidato (``codigo_cnpq`` vazio, utilizável imediatamente).
+
+    O passo semântico usa ``semantic_search`` quando injetada (compatibilidade); do contrário,
+    ``domain_search`` (busca hierárquica de ``v17-domain-search``, que inclui termos candidatos
+    para não duplicá-los). Sem nenhuma das duas, o passo é pulado. Abaixo do limiar, as três
+    melhores correspondências ficam em ``alternativas`` para revisão humana.
 
     Args:
         store: Grafo de conhecimento.
@@ -396,13 +422,17 @@ def resolve_domain(
         sessao_id: Sessão corrente (proveniência).
         nivel: Nível do candidato, se for criado (padrão ``especialidade``).
         semantic_search: Busca semântica injetada ``(rótulo, termo) -> [(node_id, score)]``.
+        domain_search: Busca hierárquica de domínios, usada quando ``semantic_search`` é ``None``.
+        context: Contexto da busca (ex.: texto do problema); só vale com ``domain_search``.
 
     Returns:
         A ``Resolution``.
     """
+    if semantic_search is None and domain_search is not None:
+        semantic_search = _domain_search_adapter(domain_search, context)
     return _resolve(
         store, "Dominio", term, actor=actor, sessao_id=sessao_id, semantic_search=semantic_search,
-        new_props={"nivel": nivel},
+        new_props={"nivel": nivel}, max_alternatives=_DOMAIN_ALTERNATIVES,
     )
 
 

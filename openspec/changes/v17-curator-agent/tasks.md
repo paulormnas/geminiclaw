@@ -13,6 +13,7 @@
 ## 3. Ferramentas do Curator
 - [ ] 3.1 Leitura (`get_node`, `neighbors`, `find_nodes`, `similar`, `related_experience`, `read_query`, `pending_flags`, `next_similarity_batch`, `verdict_breakdown`).
 - [ ] 3.2 Escrita com regras embutidas (`create_discovery`, `reinforce_discovery`, `set_discovery_status`, `link_contradiction`, `create_opportunity`, `review_similarity`, `merge_approaches`, `register_open_path`).
+- [ ] 3.3 Registrar a ferramenta somente leitura `buscar_dominio` (`v17-domain-search`; `domain_search_tools("curator")` em `src/skills/vocabulary`) para o papel `curator` ao criar o agente; o papel ainda não existe em `src/agent_runtime/definitions.py`.
 
 ## 4. Sinalizações
 - [ ] 4.1 `flag_for_curator` para Researcher, Developer e Validator; `curator_flags.jsonl`.

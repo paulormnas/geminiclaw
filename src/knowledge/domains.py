@@ -11,6 +11,9 @@ Inorgânica" contam como o mesmo domínio ``Química``.
 from __future__ import annotations
 
 from src.knowledge.graph_store import GraphStore, Node
+from src.logger import get_logger
+
+logger = get_logger(__name__)
 
 # Níveis que já estão em (ou acima de) ``area``: não sobem mais.
 _TOP_LEVELS = frozenset({"grande_area", "area"})
@@ -94,3 +97,55 @@ def between_domains(domains_a: frozenset[str], domains_b: frozenset[str]) -> boo
 def between_projects(node_a: Node, node_b: Node) -> bool:
     """Par entre projetos = ``projeto_id`` diferentes."""
     return node_a.properties.get("projeto_id") != node_b.properties.get("projeto_id")
+
+
+def domain_ancestors(store: GraphStore, node: Node) -> tuple[list[Node], bool]:
+    """Resolve os ancestrais de um ``Dominio`` pelas arestas ``SUBAREA_DE`` (v17-domain-search §1).
+
+    Se houver mais de um pai, escolhe o de menor ID (determinístico). Ciclos e cadeias
+    longas demais interrompem a subida. Nunca falha: uma cadeia interrompida só produz
+    ``complete=False`` e, para termos já aprovados, um aviso estruturado no log.
+
+    Args:
+        store: Grafo de conhecimento.
+        node: Nó ``Dominio`` cujos ancestrais se deseja.
+
+    Returns:
+        ``(ancestrais, completa)``: ancestrais da raiz até o pai imediato (vazia para a
+        raiz ou para um termo sem pai) e ``True`` quando a cadeia chega a uma ``grande_area``
+        (inclusive quando o próprio nó é uma ``grande_area``).
+    """
+    chain: list[Node] = []
+    seen = {node.id}
+    current = node
+    for _ in range(_MAX_CLIMB):
+        if current.properties.get("nivel") == "grande_area":
+            break
+        parents = sorted(
+            (
+                n
+                for n in store.neighbors(current.id, ["SUBAREA_DE"], direction="out", depth=1).nodes
+                if n.label == "Dominio" and n.id not in seen
+            ),
+            key=lambda n: n.id,
+        )
+        if not parents:
+            break
+        current = parents[0]
+        seen.add(current.id)
+        chain.append(current)
+    chain.reverse()
+    top = chain[0] if chain else node
+    complete = top.properties.get("nivel") == "grande_area"
+    if not complete and node.properties.get("status") != "candidato":
+        logger.warning(
+            "Cadeia hierárquica do domínio incompleta; ponto indexado com caminho_completo=false",
+            extra={"extra": {"node_id": node.id, "nivel": node.properties.get("nivel"), "ancestrais": len(chain)}},
+        )
+    return chain, complete
+
+
+def descendant_ids(store: GraphStore, node_id: str) -> list[str]:
+    """IDs de todos os descendentes de um ``Dominio`` (filhos por ``SUBAREA_DE``), em ordem estável."""
+    sub = store.neighbors(node_id, ["SUBAREA_DE"], direction="in", depth=_MAX_CLIMB)
+    return sorted(n.id for n in sub.nodes if n.label == "Dominio" and n.id != node_id)

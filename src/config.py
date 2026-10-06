@@ -169,6 +169,18 @@ PLAN_REJECTION_STALL_LIMIT = int(get_env("PLAN_REJECTION_STALL_LIMIT", default="
 ARTIFACT_MATCH_MODE = get_env("ARTIFACT_MATCH_MODE", default="tolerant").lower()  # tolerant | strict
 CIRCUIT_BREAKER_STALL_CYCLES = int(get_env("CIRCUIT_BREAKER_STALL_CYCLES", default="2"))
 
+# v16-agent-communication-eval — avaliação pós-execução da comunicação entre agentes.
+# O modelo do juiz é selecionado automaticamente (design §5.3); PROVIDER/MODEL são sobrescrita opcional.
+COMM_EVAL_JUDGE_PROVIDER = get_env("COMM_EVAL_JUDGE_PROVIDER", default="").lower()
+COMM_EVAL_JUDGE_MODEL = get_env("COMM_EVAL_JUDGE_MODEL", default="")
+COMM_EVAL_JUDGE_CANDIDATES = get_env("COMM_EVAL_JUDGE_CANDIDATES", default="")  # "provedor/modelo,..."
+COMM_EVAL_ALLOW_EXTERNAL_JUDGE = get_env_bool("COMM_EVAL_ALLOW_EXTERNAL_JUDGE", default=False)
+COMM_EVAL_MAX_USD = float(get_env("COMM_EVAL_MAX_USD", default="0"))
+COMM_EVAL_JUDGE_CONTEXT_CHARS = int(get_env("COMM_EVAL_JUDGE_CONTEXT_CHARS", default="400"))
+COMM_EVAL_CALIBRATION_SIZE = int(get_env("COMM_EVAL_CALIBRATION_SIZE", default="20"))
+COMM_EVAL_MIN_KAPPA = float(get_env("COMM_EVAL_MIN_KAPPA", default="0.6"))
+COMM_EVAL_LOOP_MIN_LENGTH = int(get_env("COMM_EVAL_LOOP_MIN_LENGTH", default="3"))
+
 # --- Orçamento de Uso da Sessão (V18 / Spec usage-limits) ---
 # UsageBudget/UsageTracker (src/usage.py) transformam estes limites em condições de
 # parada reais (não apenas avisos — ver OPERATIONAL_THRESHOLDS abaixo). Fonte única:

@@ -33,6 +33,8 @@ class FakeDaemon:
         self._listing = listing if listing is not None else []
         self._disconnect_error = disconnect_error
         self.container.exec_run.side_effect = self._exec_run
+        self.container.put_archive.side_effect = lambda *a, **k: self.calls.append("put_archive")
+        self.container.kill.side_effect = lambda *a, **k: self.calls.append("kill")
         self.client.containers.run.return_value = self.container
         self.client.networks.get.side_effect = self._get_network
 
@@ -54,6 +56,7 @@ class FakeDaemon:
             self.calls.append("install")
             return SimpleNamespace(exit_code=self._install_exit, output=self._install_output)
         if cmd[0] == SANDBOX_VENV_PYTHON:
+            self.calls.append("list")
             return SimpleNamespace(exit_code=0, output=json.dumps(self._listing).encode())
         self.calls.append("script")
         return SimpleNamespace(exit_code=0, output=(b"ok", b""))
@@ -126,7 +129,8 @@ def test_parametros_de_criacao(make_sandbox, tmp_path, monkeypatch):
     assert "no-new-privileges:true" in kwargs["security_opt"]
     assert kwargs["read_only"] is True
     assert kwargs["pids_limit"] == 99
-    assert kwargs["tmpfs"] == {"/tmp": "size=256m"}
+    assert kwargs["tmpfs"] == {"/tmp": "size=256m,noexec,nosuid,nodev"}
+    assert kwargs["memswap_limit"] == kwargs["mem_limit"]
     assert kwargs["network_disabled"] is True
     assert kwargs["environment"]["HOME"] == "/tmp"
 
@@ -174,7 +178,10 @@ def test_comando_de_instalacao_fixo(make_sandbox, tmp_path):
     _run(make_sandbox(daemon), tmp_path, packages=["tabulate==0.9.0"])
 
     cmd = next(c for c, _ in daemon.exec_calls if c[0] == "uv")
-    assert cmd == ["uv", "pip", "install", "--python", SANDBOX_VENV_PYTHON, "--target", "/deps", "tabulate==0.9.0"]
+    assert cmd == [
+        "uv", "pip", "install", "--no-config", "--only-binary", ":all:",
+        "--python", SANDBOX_VENV_PYTHON, "--target", "/deps", "tabulate==0.9.0",
+    ]
     volumes = daemon.run_kwargs["volumes"]
     assert any(v["bind"] == "/deps" for v in volumes.values())
     assert daemon.run_kwargs["network_disabled"] is False
@@ -299,3 +306,137 @@ def test_variavel_ignorada(make_sandbox, tmp_path, monkeypatch):
     expected = str((tmp_path / "out" / "s" / "t").resolve())
     assert list(daemon.run_kwargs["volumes"]) == [expected]
     assert "HOST_PROJECT_PATH" not in (Path(__file__).parents[3] / "src" / "skills" / "code" / "sandbox.py").read_text()
+
+
+# --- Correções da revisão de segurança (PR #99) ----------------------------------------------
+
+@pytest.mark.unit
+def test_gitignore_mantem_pem_e_sandbox_work():
+    """B1: `*.pem` e `store/sandbox_work/` são linhas separadas do .gitignore."""
+    lines = (Path(__file__).parents[3] / ".gitignore").read_text(encoding="utf-8").splitlines()
+    assert "*.pem" in lines
+    assert "store/sandbox_work/" in lines
+
+
+@pytest.mark.unit
+def test_listagem_depois_da_desconexao_e_isolada(make_sandbox, tmp_path):
+    """I1: nenhum código roda no container com rede além do uv; a listagem usa `-I` e workdir /tmp."""
+    daemon = FakeDaemon(listing=[{"name": "tabulate", "version": "0.9.0"}])
+    _run(make_sandbox(daemon), tmp_path, packages=["tabulate"])
+
+    assert daemon.calls.index("disconnect:bridge") < daemon.calls.index("list")
+    cmd, kwargs = next((c, k) for c, k in daemon.exec_calls if c[0] == SANDBOX_VENV_PYTHON)
+    assert cmd[1] == "-I"
+    assert kwargs["workdir"] == "/tmp"
+
+
+@pytest.mark.unit
+def test_instalacao_sem_config_do_uv_e_em_tmp(make_sandbox, tmp_path):
+    """I2/I3: `--no-config`, `UV_NO_CONFIG=1`, workdir /tmp (não /outputs) e só wheels."""
+    daemon = FakeDaemon()
+    _run(make_sandbox(daemon), tmp_path, packages=["tabulate"])
+
+    cmd, kwargs = next((c, k) for c, k in daemon.exec_calls if c[0] == "uv")
+    assert "--no-config" in cmd
+    assert cmd[cmd.index("--only-binary") + 1] == ":all:"
+    assert kwargs["workdir"] == "/tmp"
+    assert kwargs["environment"]["UV_NO_CONFIG"] == "1"
+
+
+@pytest.mark.unit
+def test_falha_de_instalacao_explica_exigencia_de_wheel(make_sandbox, tmp_path):
+    """I3: pacote sem wheel falha de forma explícita e acionável."""
+    daemon = FakeDaemon(install_exit=1, install_output=b"error: no wheels")
+    result = _run(make_sandbox(daemon), tmp_path, packages=["so-sdist"])
+
+    assert result.install_failed is True
+    assert "wheel" in result.stderr and "--only-binary" in result.stderr
+
+
+@pytest.mark.unit
+def test_script_injetado_depois_da_desconexao(make_sandbox, tmp_path):
+    """I4: o script só entra depois da instalação e da desconexão; sem pacotes, só put_archive e script."""
+    daemon = FakeDaemon()
+    _run(make_sandbox(daemon), tmp_path, packages=["tabulate"])
+    assert daemon.calls.index("disconnect:bridge") < daemon.calls.index("put_archive") < daemon.calls.index("script")
+
+    falha = FakeDaemon(install_exit=1)
+    _run(make_sandbox(falha), tmp_path, packages=["tabulate"])
+    assert "put_archive" not in falha.calls
+
+
+@pytest.mark.unit
+def test_uid_zero_e_recusado(make_sandbox, tmp_path):
+    """I5: orquestrador como root => erro explícito, nenhum container."""
+    daemon = FakeDaemon()
+    with patch("src.skills.code.sandbox.os.getuid", return_value=0):
+        result = _run(make_sandbox(daemon), tmp_path)
+
+    assert result.exit_code == -1
+    assert "root" in result.stderr
+    daemon.client.containers.run.assert_not_called()
+
+
+@pytest.mark.unit
+def test_container_encerrado_antes_da_varredura(make_sandbox, tmp_path):
+    """I6: kill antes da varredura de links e de arquivos especiais."""
+    daemon = FakeDaemon()
+    ordem: list[str] = []
+    daemon.container.kill.side_effect = lambda *a, **k: ordem.append("kill")
+    with patch(
+        "src.skills.code.sandbox._purge_escaping_symlinks", side_effect=lambda *a: ordem.append("purge") or []
+    ):
+        _run(make_sandbox(daemon), tmp_path)
+
+    assert ordem.index("kill") < ordem.index("purge")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("name", ["../x", "a/b", "..", "", "x..y", "a b", ".."])
+@pytest.mark.parametrize("campo", ["task_name", "session_id"])
+def test_nomes_de_pasta_invalidos(make_sandbox, tmp_path, name, campo):
+    """I7: session_id e task_name com padrão restrito; nenhum container para nome inválido."""
+    daemon = FakeDaemon()
+    ids = {"session_id": "s", "task_name": "t", campo: name}
+    result = make_sandbox(daemon).run(code="pass", output_dir=str(tmp_path / "out"), **ids)
+
+    assert result.exit_code == -1
+    assert "Nome inválido" in result.stderr
+    daemon.client.containers.run.assert_not_called()
+
+
+@pytest.mark.unit
+def test_pasta_fora_do_diretorio_de_saida_e_recusada(make_sandbox, tmp_path):
+    """I7: um symlink na sessão que aponta para fora do diretório de saída é recusado."""
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "s").symlink_to(tmp_path)  # sessão -> fora de `out`
+    daemon = FakeDaemon()
+    result = make_sandbox(daemon).run(code="pass", session_id="s", task_name="t", output_dir=str(out))
+
+    assert result.exit_code == -1
+    daemon.client.containers.run.assert_not_called()
+
+
+@pytest.mark.unit
+def test_limites_da_lista_de_pacotes():
+    """S6: quantidade e tamanho dos requisitos são limitados."""
+    assert prepare_packages([f"pkg{i}" for i in range(21)])[0] == []
+    assert prepare_packages(["a" * 201])[1]
+    assert prepare_packages([f"pkg{i}" for i in range(20)])[1] == []
+
+
+@pytest.mark.unit
+def test_varredura_remove_fifo_e_preserva_arquivos(tmp_path):
+    """S7: FIFOs em /outputs são removidos; arquivos regulares, diretórios e links ficam."""
+    from src.skills.code.sandbox import _purge_special_files
+
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "ok.txt").write_text("x")
+    os.mkfifo(tmp_path / "sub" / "pipe")
+    (tmp_path / "link").symlink_to(tmp_path / "ok.txt")
+
+    removed = _purge_special_files(tmp_path)
+
+    assert removed == [os.path.join("sub", "pipe")]
+    assert (tmp_path / "ok.txt").exists() and (tmp_path / "link").is_symlink()

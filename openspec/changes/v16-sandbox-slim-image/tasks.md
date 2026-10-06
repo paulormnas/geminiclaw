@@ -31,3 +31,10 @@
 - [ ] 4.3 `uv run ruff check .`; `uv run pytest -m "unit or integration" -v`.
 - [ ] 4.4 Benchmark de referência (`run.sh`) no Pi 5 completo com a nova imagem.
 - [ ] 4.5 Revisão do Analista de Segurança (design §6); revisão nos 7 eixos; PR para `dev`.
+
+## 5. Correções da revisão de segurança (PR #99)
+- [x] 5.1 B1 `.gitignore` restaurado (`*.pem` e `store/sandbox_work/` em linhas separadas).
+- [x] 5.2 I1 a I7 corrigidos, com testes (desconexão antes da listagem, `python -I` e workdir `/tmp`; `--no-config` e `UV_NO_CONFIG`; `--only-binary :all:`; script injetado depois da desconexão; recusa de UID 0; kill antes da varredura; validação de `session_id`/`task_name`).
+- [x] 5.3 Sugestões: `tmpfs` com `noexec,nosuid,nodev`, `memswap_limit`, teto em `packages`, remoção de FIFOs.
+- [ ] 5.4 Validação real no Pi 5 e no Mac das correções acima (container e imagem reais): em particular, que o `uv` instala de `/tmp` com `noexec` e que `put_archive` funciona depois da desconexão. Motivo: sem imagem nem daemon neste ambiente.
+- [ ] 5.5 Lock multi-arquitetura e digests das imagens base: movidos para `v16-platform-images` (5.5.1, 5.5.2). Cota de disco e FIFO real: `v18.5-sandbox-phases` (5.5.1, 5.5.2).

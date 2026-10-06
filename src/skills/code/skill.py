@@ -7,7 +7,7 @@ from typing import List, Optional
 from src import config
 from src.config import get_env
 from src.skills.base import BaseSkill, SkillResult
-from src.skills.code.sandbox import PythonSandbox, SandboxResult
+from src.skills.code.sandbox import _SAFE_NAME_RE, PythonSandbox, SandboxResult
 from src.skills.code.manifest import WorkspaceManifest
 from src.logger import get_logger
 
@@ -159,6 +159,15 @@ class CodeSkill(BaseSkill):
                 output="",
                 error=validation_error
             )
+
+        # 1.1 session_id e task_name viram pastas do host (e o bind mount do sandbox)
+        for label, value in (("session_id", session_id), ("task_name", task_name)):
+            if not isinstance(value, str) or not _SAFE_NAME_RE.fullmatch(value) or ".." in value:
+                return SkillResult(
+                    success=False,
+                    output="",
+                    error=f"{label} inválido {value!r}: use letras, dígitos, '.', '_' e '-', sem '..'.",
+                )
 
         # 2. Pacotes sob demanda: a validação (PEP 508), o filtro da stdlib e do conjunto básico
         # e a instalação (sem root, em /deps) são do sandbox.

@@ -236,4 +236,5 @@ end_time.txt
 /swap
 
 # Chaves privadas
-*.pemstore/sandbox_work/
+*.pem
+store/sandbox_work/

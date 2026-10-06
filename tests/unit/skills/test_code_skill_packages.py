@@ -53,3 +53,17 @@ async def test_skill_falha_de_instalacao_e_falha_da_execucao(skill) -> None:
     assert result.success is False
     assert "Falha na instalação dos pacotes" in result.error
     assert result.metadata["install_failed"] is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize("campo", ["session_id", "task_name"])
+async def test_skill_recusa_nome_de_pasta_invalido(skill, campo) -> None:
+    """I7: a skill valida session_id e task_name antes de criar pastas ou chamar o sandbox."""
+    _RecordingSandbox.last_kwargs = {}
+    ids = {"session_id": "s", "task_name": "t", campo: "../fora"}
+    result = await skill.run(code="print(1)", **ids)
+
+    assert result.success is False
+    assert campo in result.error
+    assert _RecordingSandbox.last_kwargs == {}

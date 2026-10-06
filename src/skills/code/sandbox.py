@@ -5,7 +5,9 @@ import os
 import docker
 import docker.errors
 import pathlib
+import re
 import shutil
+import stat
 import sys
 import threading
 import time
@@ -72,6 +74,13 @@ BASIC_PACKAGES = frozenset(
 # Módulos da stdlib que o código gerado às vezes pede em `packages`: nunca são instalados.
 _STDLIB_NAMES = frozenset(canonicalize_name(n) for n in sys.stdlib_module_names)
 
+# Limites da lista `packages` (texto vem do LLM): quantidade e tamanho de cada requisito.
+MAX_PACKAGES = 20
+MAX_PACKAGE_LENGTH = 200
+
+# `session_id` e `task_name` viram diretórios no host montados com escrita no container.
+_SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
 SANDBOX_VENV_PYTHON = "/opt/sandbox-venv/bin/python"
 SANDBOX_DEPS_DIR = "/deps"
 
@@ -103,8 +112,13 @@ def prepare_packages(packages: Optional[List[str]]) -> tuple[List[str], List[str
     """
     to_install: List[str] = []
     invalid: List[str] = []
+    if len(packages or []) > MAX_PACKAGES:
+        return [], [f"lista com {len(packages)} itens: o máximo é {MAX_PACKAGES}"]
     for raw in packages or []:
         item = raw.strip() if isinstance(raw, str) else ""
+        if len(item) > MAX_PACKAGE_LENGTH:
+            invalid.append(f"{item[:40]!r}...: requisito com mais de {MAX_PACKAGE_LENGTH} caracteres")
+            continue
         if not item:
             invalid.append(f"{raw!r}: requisito vazio ou que não é texto")
             continue
@@ -190,6 +204,34 @@ def _purge_escaping_symlinks(root: pathlib.Path) -> list[str]:
             "Symlinks que apontavam para fora da pasta da tarefa foram removidos",
             extra={"removed": removed},
         )
+    return removed
+
+
+def _purge_special_files(root: pathlib.Path) -> list[str]:
+    """Remove de ``root`` tudo que não seja arquivo regular, diretório ou link simbólico.
+
+    O usuário sem privilégios do sandbox pode criar FIFOs (e sockets) em ``/outputs``; um leitor
+    do host que os abrisse ficaria bloqueado.
+
+    Args:
+        root: Pasta da tarefa a varrer.
+
+    Returns:
+        Caminhos (relativos a ``root``) dos arquivos especiais removidos.
+    """
+    removed: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        for name in [*dirnames, *filenames]:
+            path = os.path.join(dirpath, name)
+            if os.path.islink(path):
+                continue
+            mode = os.lstat(path).st_mode
+            if stat.S_ISREG(mode) or stat.S_ISDIR(mode):
+                continue
+            os.unlink(path)
+            removed.append(os.path.relpath(path, root))
+    if removed:
+        logger.warning("Arquivos especiais removidos da pasta da tarefa", extra={"removed": removed})
     return removed
 
 
@@ -300,7 +342,12 @@ class PythonSandbox:
             ``SandboxResult`` de falha (``install_failed=True``) se a instalação falhar ou
             estourar o timeout; ``None`` se a instalação teve sucesso.
         """
-        cmd = ["uv", "pip", "install", "--python", SANDBOX_VENV_PYTHON, "--target", SANDBOX_DEPS_DIR, *to_install]
+        # --no-config: o uv não lê uv.toml/pyproject.toml da pasta corrente (controlável pelo código
+        # gerado). --only-binary :all: evita executar setup.py/backends de build com rede ligada.
+        cmd = [
+            "uv", "pip", "install", "--no-config", "--only-binary", ":all:",
+            "--python", SANDBOX_VENV_PYTHON, "--target", SANDBOX_DEPS_DIR, *to_install,
+        ]
         requested = ", ".join(to_install)
         setup_timed_out = False
 
@@ -319,7 +366,7 @@ class PythonSandbox:
         exec_result = None
         try:
             logger.info(f"Instalando pacotes no sandbox (sem root, em {SANDBOX_DEPS_DIR}): {requested}")
-            exec_result = container.exec_run(cmd)
+            exec_result = container.exec_run(cmd, workdir="/tmp", environment={"UV_NO_CONFIG": "1"})
         except Exception:
             if not setup_timed_out:
                 raise
@@ -342,7 +389,12 @@ class PythonSandbox:
             logger.error("Falha na instalação de pacotes do sandbox", extra={"packages": requested})
             return SandboxResult(
                 stdout="",
-                stderr=f"Falha na instalação dos pacotes: {requested}.\n{tail}",
+                stderr=(
+                    f"Falha na instalação dos pacotes: {requested}.\n"
+                    "Só são instalados pacotes com wheel (--only-binary :all:); um pacote que exige "
+                    "compilar do código-fonte falha aqui. Use outro pacote ou versão com wheel.\n"
+                    f"{tail}"
+                ),
                 exit_code=exec_result.exit_code,
                 install_failed=True,
             )
@@ -351,7 +403,10 @@ class PythonSandbox:
     def _list_installed_packages(self, container) -> List[str]:
         """Lista ("nome==versão") o que ficou instalado em ``/deps``. Best-effort."""
         try:
-            exec_result = container.exec_run([SANDBOX_VENV_PYTHON, "-c", _LIST_DEPS_CODE])
+            # -I (modo isolado) e workdir /tmp: nada de /outputs entra no sys.path nem na configuração.
+            exec_result = container.exec_run(
+                [SANDBOX_VENV_PYTHON, "-I", "-c", _LIST_DEPS_CODE], workdir="/tmp"
+            )
             if exec_result.exit_code != 0:
                 raise RuntimeError(f"código de saída {exec_result.exit_code}")
             entries = json.loads(exec_result.output)
@@ -415,6 +470,36 @@ class PythonSandbox:
                 artifacts=[],
             )
 
+        if os.getuid() == 0:
+            return SandboxResult(
+                stdout="",
+                stderr=(
+                    "O orquestrador roda como root (UID 0); o sandbox herdaria root. Execute o "
+                    "orquestrador com um usuário sem privilégios."
+                ),
+                exit_code=-1,
+                artifacts=[],
+            )
+
+        # session_id e task_name viram diretórios do host montados com escrita no container.
+        output_root = pathlib.Path(output_dir).resolve()
+        abs_output_dir = output_root / str(session_id) / str(task_name)
+        bad_names = [
+            f"{label}={value!r}"
+            for label, value in (("session_id", session_id), ("task_name", task_name))
+            if not isinstance(value, str) or not _SAFE_NAME_RE.fullmatch(value) or ".." in value
+        ]
+        if bad_names or not abs_output_dir.resolve().is_relative_to(output_root):
+            return SandboxResult(
+                stdout="",
+                stderr=(
+                    "Nome inválido para pasta de saída (use letras, dígitos, '.', '_' e '-', sem '..'): "
+                    + (", ".join(bad_names) or "caminho fora do diretório de saída")
+                ),
+                exit_code=-1,
+                artifacts=[],
+            )
+
         container = None
         run_work_dir = self.work_dir / uuid.uuid4().hex
         try:
@@ -424,7 +509,6 @@ class PythonSandbox:
 
             # Pasta da subtarefa no host, com o modo padrão (umask do usuário): o container roda
             # com o mesmo UID/GID, então não é preciso abrir permissões.
-            abs_output_dir = pathlib.Path(output_dir).resolve() / session_id / task_name
             abs_output_dir.mkdir(parents=True, exist_ok=True)
 
             logger.info(f"Iniciando sandbox para sessão {session_id}, tarefa {task_name}")
@@ -458,13 +542,14 @@ class PythonSandbox:
                         user=f"{os.getuid()}:{os.getgid()}",
                         working_dir="/outputs",
                         mem_limit=self.memory_limit,
+                        memswap_limit=self.memory_limit,
                         cpu_period=self.cpu_period,
                         cpu_quota=self.cpu_quota,
                         pids_limit=self.pids_limit,
                         cap_drop=["ALL"],
                         security_opt=["no-new-privileges:true"],
                         read_only=True,
-                        tmpfs={"/tmp": f"size={self.tmpfs_size}"},
+                        tmpfs={"/tmp": f"size={self.tmpfs_size},noexec,nosuid,nodev"},
                         network_disabled=not to_install,
                         environment={
                             "HOME": "/tmp",
@@ -493,18 +578,20 @@ class PythonSandbox:
                 logger.error("Sandbox: conexão com o daemon Docker esgotou as retentativas")
                 raise last_exc
 
-            # Injetar o script (e arquivos extras) na pasta da subtarefa montada em /outputs.
-            tar_data = self._create_tar_archive({"script.py": code, **(extra_files or {})})
-            container.put_archive("/outputs", tar_data)
-
             packages_installed: List[str] = []
             if to_install:
                 failure = self._install_packages(container, to_install)
                 if failure is not None:
                     return failure
-                packages_installed = self._list_installed_packages(container)
-                # Script sem rede: desconecta e confirma antes de rodar (fail-closed).
+                # Script sem rede: desconecta e confirma (fail-closed) ANTES de qualquer outro
+                # código rodar no container (a listagem abaixo já roda sem rede).
                 self._disconnect_networks(container)
+                packages_installed = self._list_installed_packages(container)
+
+            # Injetar o script (e arquivos extras) só depois da instalação e da desconexão: o código
+            # de instalação (com rede) não vê nem reescreve o script que vai rodar.
+            tar_data = self._create_tar_archive({"script.py": code, **(extra_files or {})})
+            container.put_archive("/outputs", tar_data)
 
             logger.info("Executando script principal no sandbox")
             timed_out = False
@@ -542,11 +629,18 @@ class PythonSandbox:
                 timer.cancel()
 
             # Os artefatos já estão no host (bind mount, dono = usuário do orquestrador).
-            # O que o código gerado criou pode incluir symlinks para fora da pasta da tarefa.
+            # Antes da varredura o container é encerrado: um processo em segundo plano iniciado
+            # pelo script não pode recriar links depois dela. O que o código gerado criou pode
+            # incluir symlinks para fora da pasta da tarefa e arquivos especiais (FIFO).
+            try:
+                container.kill()
+            except Exception as e:  # noqa: BLE001 — já parado (timeout) ou removido
+                logger.debug(f"Container já encerrado antes da varredura: {e}")
             try:
                 _purge_escaping_symlinks(abs_output_dir)
+                _purge_special_files(abs_output_dir)
             except OSError as e:
-                logger.warning(f"Falha ao varrer symlinks da pasta da tarefa: {e}")
+                logger.warning(f"Falha ao varrer a pasta da tarefa: {e}")
 
             return SandboxResult(
                 stdout=stdout,

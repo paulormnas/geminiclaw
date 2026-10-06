@@ -40,7 +40,8 @@ def is_docker_available():
 def _geminiclaw_image_exists() -> bool:
     try:
         client = docker.from_env()
-        client.images.get("geminiclaw-base:latest")
+        from src import config
+        client.images.get(config.SANDBOX_IMAGE)
         return True
     except Exception:
         return False
@@ -284,7 +285,7 @@ print(f"Recomendação: {best_name}")
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(not is_docker_available() or not _geminiclaw_image_exists(), reason="Docker não está disponível ou imagem 'geminiclaw-base' não encontrada.")
+@pytest.mark.skipif(not is_docker_available() or not _geminiclaw_image_exists(), reason="Docker não está disponível ou imagem do sandbox não encontrada.")
 @pytest.mark.asyncio
 async def test_iris_pipeline_via_code_skill(caplog):
     """Executa o pipeline Iris completo via CodeSkill e verifica:

@@ -237,3 +237,4 @@ end_time.txt
 
 # Chaves privadas
 *.pem
+store/sandbox_work/

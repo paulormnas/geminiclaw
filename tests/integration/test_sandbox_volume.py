@@ -2,13 +2,14 @@ import os
 import pytest
 import docker
 import pathlib
+from src import config
 from src.skills.code.sandbox import PythonSandbox
 
 def _geminiclaw_image_exists() -> bool:
-    """Verifica se a imagem geminiclaw-base está disponível localmente."""
+    """Verifica se a imagem do sandbox (SANDBOX_IMAGE) está disponível localmente."""
     import subprocess
     try:
-        result = subprocess.run(["docker", "images", "-q", "geminiclaw-base:latest"], check=True, capture_output=True, text=True, timeout=2)
+        result = subprocess.run(["docker", "images", "-q", config.SANDBOX_IMAGE], check=True, capture_output=True, text=True, timeout=2)
         return bool(result.stdout.strip())
     except Exception:
         return False
@@ -16,8 +17,8 @@ def _geminiclaw_image_exists() -> bool:
 _SKIP_NO_IMAGE = pytest.mark.skipif(
     not _geminiclaw_image_exists(),
     reason=(
-        "Imagem 'geminiclaw-base' não encontrada. "
-        "Execute 'docker build -t geminiclaw-base -f containers/Dockerfile .' antes de rodar estes testes."
+        "Imagem do sandbox não encontrada. "
+        "Execute 'bash scripts/build_images.sh' antes de rodar estes testes."
     ),
 )
 

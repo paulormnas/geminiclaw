@@ -262,6 +262,16 @@ SKILL_DOCUMENT_PROCESSOR_ENABLED = get_env_bool("SKILL_DOCUMENT_PROCESSOR_ENABLE
 SKILL_CODE_ENABLED = get_env_bool("SKILL_CODE_ENABLED", default=True)
 CODE_SANDBOX_TIMEOUT_SECONDS = int(get_env("CODE_SANDBOX_TIMEOUT_SECONDS", default="60"))
 CODE_SANDBOX_MEMORY_LIMIT = get_env("CODE_SANDBOX_MEMORY_LIMIT", default="256m")
+# Limite da instalação de pacotes sob demanda no sandbox; ao estourar, a execução falha.
+CODE_SANDBOX_SETUP_TIMEOUT_SECONDS = int(get_env("CODE_SANDBOX_SETUP_TIMEOUT_SECONDS", default="300"))
+
+# Sandbox de código (v16-sandbox-slim-image / ADR 018)
+SANDBOX_IMAGE = get_env("SANDBOX_IMAGE", default="code-sandbox:latest")
+# Diretórios temporários por execução (ex.: /deps dos pacotes instalados sob demanda).
+SANDBOX_WORK_DIR = get_env("SANDBOX_WORK_DIR", default="store/sandbox_work")
+SANDBOX_PIDS_LIMIT = int(get_env("SANDBOX_PIDS_LIMIT", default="256"))
+SANDBOX_TMPFS_SIZE = get_env("SANDBOX_TMPFS_SIZE", default="256m")
+SANDBOX_INSTALL_LOG_TAIL_LINES = int(get_env("SANDBOX_INSTALL_LOG_TAIL_LINES", default="40"))
 
 # Health Monitoring (S7)
 HEALTH_CHECK_ENABLED = get_env_bool("HEALTH_CHECK_ENABLED", default=True)

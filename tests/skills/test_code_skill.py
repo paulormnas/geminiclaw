@@ -2,6 +2,7 @@ import pytest
 import os
 import pathlib
 import docker
+from src import config
 from src.skills.code.skill import CodeSkill
 from src.skills.code.sandbox import PythonSandbox
 
@@ -16,14 +17,14 @@ def is_docker_available():
 def _geminiclaw_image_exists() -> bool:
     try:
         client = docker.from_env()
-        client.images.get("geminiclaw-base:latest")
+        client.images.get(config.SANDBOX_IMAGE)
         return True
     except Exception:
         return False
 
 _SKIP_SANDBOX = pytest.mark.skipif(
     not is_docker_available() or not _geminiclaw_image_exists(),
-    reason="Docker daemon inacessível ou imagem 'geminiclaw-base' não encontrada (execute 'bash scripts/build_images.sh')."
+    reason="Docker daemon inacessível ou imagem do sandbox não encontrada (execute 'bash scripts/build_images.sh')."
 )
 
 @pytest.mark.integration

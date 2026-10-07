@@ -52,6 +52,10 @@ reconciliação.
 | imagens | **Um descritor**: nome, formato, dimensões; sem OCR nem descrição por modelo |
 | `outro` | Descritor com nome, formato e tamanho |
 
+Quando a estrutura de um conjunto de dados não pode ser lida (arquivo corrompido, biblioteca
+ausente), o descritor traz `estrutura: indisponivel` além do nome, formato e tamanho, para que o
+agente não confunda a ausência de colunas com um arquivo vazio.
+
 PDFs escaneados: o texto vem do OCR local já existente (`context_loader.py:335-354`). A partir
 da `v18.5-research-data-ingestion`, arquivos marcados `dado_de_pesquisa` no `dados.yaml` passam
 a ter só descritor, qualquer que seja a extensão (requisito já escrito aqui para quando a

@@ -210,7 +210,7 @@ def describe_dataset(path: Path) -> str:
             "Estrutura do conjunto de dados não pôde ser lida; descritor mínimo",
             extra={"arquivo": _name(path.name), "erro": type(exc).__name__},
         )
-        body = ""
+        body = "estrutura: indisponivel"
     return f"{head}\n{body}" if body else head
 
 

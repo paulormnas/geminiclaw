@@ -402,3 +402,17 @@ def test_instrucao_sem_contexto_nao_lista_documentos():
         text = _get_agent_instruction("base")
 
     assert "DOCUMENTOS DO USUÁRIO" not in text and None not in calls
+
+
+# --- BAIXA 6: estrutura ilegível é marcada ----------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_descritor_marca_estrutura_indisponivel_quando_o_parse_falha(tmp_path):
+    bad = tmp_path / "x.json"
+    bad.write_text("{not json")
+    good = tmp_path / "ok.json"
+    good.write_text('{"a": 1}')
+
+    assert "estrutura: indisponivel" in describe_dataset(bad)
+    assert "estrutura: indisponivel" not in describe_dataset(good)

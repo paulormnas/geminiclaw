@@ -391,7 +391,8 @@ async def test_retomada_recusa_sessao_ativa_erro_e_ja_continuada(tmp_path):
     with pytest.raises(ResumeError, match="erro"):
         await w2.prepare()
     w3 = World(tmp_path / "c")
-    w3.sm.add("sessao-b", "closed", {"continues_session_id": "sessao-a", "project_id": w3.pid, "motivo_parada": "limite_tempo"})
+    w3.sm.add("sessao-b", "closed", {"continues_session_id": "sessao-a", "project_id": w3.pid,
+                                     "motivo_parada": "limite_tempo"})
     w3.sm.rows["sessao-a"].payload["continued_by"] = "sessao-b"
     rec_b = CheckpointRecorder.start(w3.orch.output_manager.init_session("sessao-b"), session_id="sessao-b",
                                      project_id=w3.pid, continues_session_id="sessao-a", prompt="p", modo="auto")
@@ -479,7 +480,8 @@ async def test_telemetria_da_recuperacao_sem_dado_de_pesquisa(tmp_path):
     with patch("src.orchestrator.get_telemetry") as tel:
         await orch.recover_interrupted_sessions()
     payloads = [c.kwargs["payload"] for c in tel.return_value.record_agent_event.call_args_list]
-    assert payloads and all(set(p) <= {"subtarefas_em_andamento", "retomavel", "segundos_sem_batimento"} for p in payloads)
+    allowed = {"subtarefas_em_andamento", "retomavel", "segundos_sem_batimento"}
+    assert payloads and all(set(p) <= allowed for p in payloads)
 
 
 # -- Ciclo de vida do checkpoint no orquestrador -----------------------------------------------

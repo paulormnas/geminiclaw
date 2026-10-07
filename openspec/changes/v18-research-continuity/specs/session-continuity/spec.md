@@ -68,3 +68,33 @@ do novo planejamento.
 - **GIVEN** um checkpoint com `curator_pendente=true`
 - **WHEN** a sessão é retomada
 - **THEN** o Curator executa o fechamento da sessão anterior antes do replanejamento
+
+### Requirement: Retomada idempotente e sem bifurcação
+O sistema SHALL permitir que apenas uma retomada simultânea continue uma mesma sessão.
+
+#### Scenario: Retomadas simultâneas
+- **WHEN** duas retomadas da mesma sessão de origem começam ao mesmo tempo
+- **THEN** só uma cria e executa a sessão nova
+- **AND** a outra é recusada e sua sessão é fechada sem executar nada
+
+#### Scenario: Continuação que falhou
+- **GIVEN** a sessão que continuava a origem falhou sem checkpoint válido
+- **WHEN** o pesquisador retoma a origem
+- **THEN** a retomada é aceita e substitui a reivindicação anterior
+
+### Requirement: Checkpoint e artefatos como dado não confiável
+O sistema SHALL validar o checkpoint lido do disco, inclusive cada caminho de artefato, e entregar ao Researcher o
+conteúdo restaurado apenas como dado.
+
+#### Scenario: Artefato hostil
+- **GIVEN** um checkpoint com artefato `../../etc/passwd` ou nome com quebra de linha
+- **WHEN** o checkpoint é lido
+- **THEN** a leitura é recusada e nada chega ao prompt
+
+### Requirement: Batimento independente do laço de eventos
+O sistema SHALL manter o batimento da sessão em thread própria e reafirmar a sessão marcada obsoleta por engano.
+
+#### Scenario: Laço parado
+- **WHEN** o laço de eventos fica parado por mais que `SESSION_STALE_SECONDS`
+- **THEN** o batimento continua e a sessão não é marcada `interrompida`
+

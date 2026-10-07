@@ -142,10 +142,7 @@ def select_session_for_project(session_manager: Any, project_id: str) -> str:
     if not sessions:
         raise ResumeError(f"o projeto {project_id} não tem sessões para continuar.")
     continued = {
-        s.payload.get(key)
-        for s in sessions
-        for key in ("continues_session_id", "continued_by")
-        if isinstance(s.payload.get(key), str)
+        s.payload["continues_session_id"] for s in sessions if isinstance(s.payload.get("continues_session_id"), str)
     }
     leaves = [s for s in sessions if s.id not in continued] or list(sessions)
     return sorted(leaves, key=lambda s: s.created_at, reverse=True)[0].id
@@ -153,7 +150,8 @@ def select_session_for_project(session_manager: Any, project_id: str) -> str:
 
 def _seconds_since(iso: str) -> float | None:
     try:
-        return max((datetime.now(timezone.utc) - datetime.fromisoformat(str(iso).replace("Z", "+00:00"))).total_seconds(), 0.0)
+        then = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+        return max((datetime.now(timezone.utc) - then).total_seconds(), 0.0)
     except ValueError:
         return None
 

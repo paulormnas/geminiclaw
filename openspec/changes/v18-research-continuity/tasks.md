@@ -27,3 +27,16 @@
 
 ## 5. Fechamento
 - [x] 5.1 Ruff, testes, revisão nos 7 eixos, PR.
+
+## 6. Correções da revisão do PR #108 (2026-10-07)
+- [x] 6.0 Achados I-1 a I-6, I-8 e S-1 a S-9 corrigidos com teste (ver `tests/unit/continuity/test_review_fixes.py`).
+- [ ] 6.1 **Pendente (decisão do pesquisador: fora da condição de merge):** smoke do SQL novo de `src/session.py`
+  (`heartbeat`, `mark_stale`, `claim_continuation`, `release_continuation`, `reassert_active`, `find_continuation`,
+  `list_by_project`) contra PostgreSQL real no Raspberry Pi, incluindo a atomicidade de `claim_continuation` com duas
+  conexões simultâneas e a semântica de `payload || jsonb` / `?` e de `TIMESTAMPTZ`. Hoje o SQL só é coberto por mock
+  de DB que modela as cláusulas em Python (`tests/conftest.py`).
+- [ ] 6.2 **Pendente:** validar com Apache AGE real as consultas do contexto de retomada (`find_nodes` por
+  `tipo`/`sessao_id`, `related_experience`).
+- [ ] 6.3 **Pendente (débito):** fatos de falha de infraestrutura ingeridos por um falso positivo de obsolescência não são
+  retirados do grafo quando a sessão viva se reafirma (o batimento em thread torna isso raro).
+

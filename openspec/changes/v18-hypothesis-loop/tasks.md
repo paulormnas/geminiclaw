@@ -47,5 +47,5 @@
 - [ ] 8.2 **Pendente:** as decisões reservadas `autorizar_escrita_instrumento` e `ativar_modo_sem_limite` seguem sem
   ponto de decisão no código (`v19-equipment-control` e `v18-usage-limits`); o gate e o teste 6.99 já as tratam como
   pendentes para o pesquisador.
-- [ ] 8.3 **Pendente (Arquiteto):** ver "Notas de implementação" em `design.md` (resultado_posterior, alvo ausente,
+- [ ] 8.3 **Pendente (Arquiteto):** ver "Notas de implementação" em `design.md` (~~resultado_posterior~~ ratificado na spec e no design, alvo ausente,
   formato antigo, motivo de planos rejeitados, ciclos ociosos).

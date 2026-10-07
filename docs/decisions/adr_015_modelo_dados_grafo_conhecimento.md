@@ -120,6 +120,9 @@ canônica vem da aresta `MEDE`.
 evidência prévia, restrição de hardware), `resultado_posterior` (preenchido depois: a escolha
 se mostrou boa?).
 
+> Nota (v18-hypothesis-loop): `resultado_posterior` guarda só `acertada`/`nao_acertada`; o valor do veredito que
+> motivou a avaliação fica na trilha de auditoria da decisão.
+
 **`Descoberta`** — `tipo` (`funciona` / `nao_funciona` / `condicional` / `licao_de_caminho` /
 `caminho_sem_conclusao`), `enunciado`, `condicoes` (em que contexto vale), `veredito`
 (−1 a +1, §9) e `confianca` (= |veredito|),

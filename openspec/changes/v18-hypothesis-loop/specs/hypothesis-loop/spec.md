@@ -42,7 +42,9 @@ escolha tiver evidência moderada.
 
 #### Scenario: Avaliação posterior
 - **WHEN** o veredito da hipótese escolhida chega a −0,4
-- **THEN** a decisão recebe `resultado_posterior="nao_acertada"` com o valor
+- **THEN** a decisão recebe `resultado_posterior="nao_acertada"` e o valor do veredito (−0,4) fica registrado na
+  trilha de auditoria da decisão (o nó `Decisao` guarda só o texto `acertada`/`nao_acertada`; o schema não tem campo
+  para o valor)
 
 ### Requirement: Sugestões do Curator e respostas obrigatórias
 O Curator SHALL sugerir caminhos ao Researcher a cada ciclo, a partir de fontes permitidas, e o

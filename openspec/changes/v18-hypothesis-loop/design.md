@@ -69,7 +69,8 @@ Acrescenta ao JSON do Researcher:
 - Subtarefas: `Experimento-TESTA->Hipotese` pelo `hypothesis_ref`.
 - **Avaliação posterior:** quando uma hipótese escolhida atinge `|veredito| ≥ 0,3`,
   `Decisao.resultado_posterior` é preenchido deterministicamente (`"acertada"` se veredito
-  positivo, `"nao_acertada"` se negativo, com o valor). O Curator transforma decisões avaliadas
+  positivo, `"nao_acertada"` se negativo). O valor do veredito fica na trilha de auditoria da decisão
+  (`record_audit_note`), não no nó. O Curator transforma decisões avaliadas
   em `Descoberta(tipo="licao_de_caminho")` quando houver lição transferível.
 
 ## 4. Governança por SessionMode
@@ -174,7 +175,8 @@ foram tomadas na implementação e precisam ser ratificadas ou corrigidas na spe
 2. **Motivo de parada dos planos rejeitados.** A spec manda "fechar registrando o motivo"; sem valor novo de enumeração
    (só `sem_caminhos_promissores` foi aprovado), usou-se `limite_retentativas`. O teto de ciclos
    (`MAX_EXPLORATION_CYCLES`, default 20, à prova de laço infinito) usa `limite_execucoes`. Falha ao gravar o plano no
-   grafo fecha com `erro`. Todos gravam checkpoint.
+   grafo fecha com `erro`, assim como falha ao sugerir caminhos (Curator) ou ao consultar caminhos em aberto: vazio por
+   falha nunca vira `sem_caminhos_promissores` (fail-fast, AGENTS.md §1.6). Todos gravam checkpoint.
 3. **Origem da hipótese nunca vem do LLM.** `pesquisador` só existe para nós criados pelo pesquisador; a hipótese nova
    nasce `researcher`, `curator` (sugestão aceita) ou `oportunidade` (oportunidade **aprovada**). O campo `origem` do plano
    é ignorado. Hipótese `abandonada` (rejeitada) não volta, nem por `id` nem por enunciado equivalente.
@@ -186,8 +188,9 @@ foram tomadas na implementação e precisam ser ratificadas ou corrigidas na spe
    `hypothesis_ref` resolvível é retirada do ciclo.
 5. **Sem terminal.** No `assisted` sem TTY nada é aprovado (hipóteses ficam `proposta`) e a confirmação de solução não é
    decidida pelo sistema: a sessão é **suspensa** (`interrompida`, retomável), nunca encerrada ou continuada em silêncio.
-6. **`Decisao.resultado_posterior`.** Gravado como o texto `"acertada"` ou `"nao_acertada"` (leitura literal da spec); o
-   valor do veredito vai para a trilha de auditoria da decisão (`record_audit_note`), pois o schema não tem campo para ele.
+6. **`Decisao.resultado_posterior`.** Gravado como o texto `"acertada"` ou `"nao_acertada"`; o valor do veredito vai para
+   a trilha de auditoria da decisão (`record_audit_note`), pois o schema não tem campo para ele. **Ratificada** na spec
+   (cenário "Avaliação posterior") e em §3: a spec foi ajustada para documentar a implementação, sem mudança de código.
 7. **Critério de solução sem `alvo`.** O `criterio_sucesso` pode ter só `delta_min` e baseline. Nesse caso "atinge o alvo"
    significa superar o baseline em `delta_min`. Só resultado `validado` conta; o veredito é recalculado na hora.
 8. **"Sem caminhos promissores".** Um ciclo é **ocioso** quando o plano não traz subtarefa nova a executar. O primeiro ciclo

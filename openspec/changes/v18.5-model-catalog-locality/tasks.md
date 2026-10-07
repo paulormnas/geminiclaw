@@ -5,7 +5,7 @@
 - [ ] 0.2 Obter aprovação explícita do pesquisador para a coluna `token_usage.versao_efetiva`.
 
 ## 0.b Alinhamento pendente com `v16-model-catalog-router`
-- [ ] 0.b.1 Alinhar o payload `catalogo`: o `v16-model-catalog-router` implementou `{versao, hash, local: bool}`; o design desta mudança usa `local_hash`. Decidir um formato (ex.: manter `local` e acrescentar `local_hash`) e ajustar design, spec e código antes de implementar.
+- [x] 0.b.1 Alinhar o payload `catalogo`: o `v16-model-catalog-router` implementou `{versao, hash, local: bool}`; o design desta mudança usa `local_hash`. Decidir um formato (ex.: manter `local` e acrescentar `local_hash`) e ajustar design, spec e código antes de implementar. (Decidido: manter `local` e acrescentar `local_hash` em `payload["llm_routing"]["catalogo"]` e em `allocation_profile.catalogo`.)
 
 ## 1. Catálogo
 - [x] 1.1 Esquema: `localidade`, `aceita_dados_brutos`, `familia_modelo`; padrões e regras de coerência (design §1).
@@ -37,5 +37,5 @@
 
 ## 5. Fechamento
 - [x] 5.1 `.env.example` (nenhuma variável nova; comentário sobre os campos do catálogo).
-- [x] 5.2 `uv run ruff check .`; `uv run pytest -m "unit or integration" -v`.
+- [ ] 5.2 `uv run ruff check .`; testes unit locais e de integração (unit executados; integração fica para a bateria final, sem testes no Pi).
 - [ ] 5.3 Revisão nos 7 eixos; PR para `dev`.

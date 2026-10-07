@@ -113,7 +113,7 @@ primeiro envio:
 }
 ```
 
-> **Nota de alinhamento (tarefa 0.b.1):** `v16-model-catalog-router` implementou o bloco `catalogo` como `{versao, hash, local: bool}` (`payload["llm_routing"]`); este design usa `local_hash`. Os dois precisam ser alinhados antes da implementação.
+> **Nota de alinhamento (tarefa 0.b.1):** `v16-model-catalog-router` implementou o bloco `catalogo` como `{versao, hash, local: bool}` (`payload["llm_routing"]`); este design usa `local_hash`. Decisão: o bloco passa a `{versao, hash, local, local_hash}` (mantém `local`, acrescenta `local_hash`, `null` sem catálogo local), igual em `payload["llm_routing"]` e em `allocation_profile`.
 
 
 - `versao_efetiva` por papel começa com o valor conhecido no início (Ollama) ou

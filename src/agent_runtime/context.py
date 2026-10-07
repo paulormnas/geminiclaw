@@ -49,6 +49,8 @@ class AgentContext:
             provedor deve ser habilitado.
         execution_id: ID da execução (histórico/telemetria); usa
             ``session_id`` quando não houver um execution_id dedicado.
+        readable_dirs: Diretórios de outputs de sessões anteriores da cadeia (mesmo projeto), **somente leitura**
+            (v18-research-continuity); a escrita continua confinada a ``output_dir``.
         ask_researcher: Callback opcional para round-trip com o pesquisador
             humano (Spec G5), ligado a ``Orchestrator._handle_ask_researcher``
             sem passar por IPC. ``None`` quando a skill deve usar o caminho
@@ -69,6 +71,7 @@ class AgentContext:
     task_name: str = ""
     enable_thinking: bool = False
     execution_id: str = ""
+    readable_dirs: tuple[Path, ...] = ()
     ask_researcher: Optional[AskResearcherCallback] = None
     consult_researcher: Optional[ConsultResearcherCallback] = None
     extra: dict[str, Any] = field(default_factory=dict)

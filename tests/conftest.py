@@ -1,3 +1,4 @@
+import json
 import os
 import pytest
 
@@ -78,6 +79,72 @@ def mock_db_connection(request):
         # Normaliza query para facilitar o matching: remove quebras de linha e espaços extras
         query_norm = " ".join(query.strip().upper().split())
         
+        # V18 continuidade — consultas novas modeladas sobre `db_state` (semântica das cláusulas WHERE, em Python).
+        # Isto NÃO prova o SQL real (JSONB, TIMESTAMPTZ): a validação em PostgreSQL é tarefa pendente (tasks.md 6.1).
+        def _payload_of(row):
+            raw = row["payload"]
+            return json.loads(raw) if isinstance(raw, str) else dict(raw)
+
+        def _orch_rows():
+            return [r for r in db_state.values() if isinstance(r, dict) and r.get("agent_id") == "orchestrator"]
+
+        if "UPDATE AGENT_SESSIONS SET UPDATED_AT" in query_norm:
+            row = db_state.get(params[1])
+            if row and row["status"] == "active":
+                row["updated_at"] = params[0]
+                mock_cursor.fetchone.return_value = {"id": params[1]}
+            else:
+                mock_cursor.fetchone.return_value = None
+            return mock_cursor
+        if "UPDATE AGENT_SESSIONS SET STATUS = 'INTERROMPIDA'" in query_norm:
+            patch_json, now_iso, cutoff = params
+            hit = [r for r in _orch_rows() if r["status"] == "active" and str(r["updated_at"]) < cutoff]
+            for r in hit:
+                r["status"] = "interrompida"
+                r["payload"] = json.dumps({**_payload_of(r), **json.loads(patch_json)})
+                r["updated_at"] = now_iso
+            mock_cursor.fetchall.return_value = [dict(r) for r in hit]
+            return mock_cursor
+        if "UPDATE AGENT_SESSIONS SET PAYLOAD = PAYLOAD || JSONB_BUILD_OBJECT('CONTINUED_BY'" in query_norm:
+            new_id, now_iso, source = params[0], params[1], params[2]
+            row = db_state.get(source)
+            pl = _payload_of(row) if row else {}
+            ok = row is not None and (
+                ("continued_by" not in pl) if len(params) == 3 else pl.get("continued_by") == params[3]
+            )
+            if ok:
+                row["payload"] = json.dumps({**pl, "continued_by": new_id})
+            mock_cursor.fetchone.return_value = {"id": source} if ok else None
+            return mock_cursor
+        if "UPDATE AGENT_SESSIONS SET PAYLOAD = PAYLOAD - 'CONTINUED_BY'" in query_norm:
+            source, new_id = params
+            row = db_state.get(source)
+            pl = _payload_of(row) if row else {}
+            ok = row is not None and pl.get("continued_by") == new_id
+            if ok:
+                pl.pop("continued_by")
+                row["payload"] = json.dumps(pl)
+            mock_cursor.fetchone.return_value = {"id": source} if ok else None
+            return mock_cursor
+        if "UPDATE AGENT_SESSIONS SET STATUS = 'ACTIVE'" in query_norm:
+            now_iso, sid = params
+            row = db_state.get(sid)
+            ok = row is not None and row["status"] == "interrompida"
+            if ok:
+                pl = _payload_of(row)
+                pl.pop("motivo_parada", None)
+                row.update(status="active", payload=json.dumps(pl), updated_at=now_iso)
+            mock_cursor.fetchone.return_value = {"id": sid} if ok else None
+            return mock_cursor
+        if "FROM AGENT_SESSIONS WHERE AGENT_ID = 'ORCHESTRATOR'" in query_norm:
+            if "CONTINUES_SESSION_ID" in query_norm:
+                found = [r for r in _orch_rows() if _payload_of(r).get("continues_session_id") == params[0]]
+            else:
+                found = [r for r in _orch_rows() if _payload_of(r).get("project_id") == params[0]]
+            found.sort(key=lambda r: str(r["created_at"]), reverse=True)
+            mock_cursor.fetchone.return_value = dict(found[0]) if found else None
+            mock_cursor.fetchall.return_value = [dict(r) for r in found[: params[1] if len(params) > 1 else None]]
+            return mock_cursor
         # INSERT INTO agent_sessions (...) VALUES (%s, %s, %s, %s, %s, %s)
         if "INSERT INTO AGENT_SESSIONS" in query_norm:
             db_state[params[0]] = {

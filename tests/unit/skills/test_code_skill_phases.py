@@ -138,3 +138,26 @@ async def test_duas_subtarefas_em_paralelo(skill) -> None:
 
     assert all(r.success for r in results)
     assert elapsed < 0.9
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_skill_chama_o_sandbox_via_to_thread(skill) -> None:
+    """Cenário: Duas subtarefas em paralelo (determinístico). O sandbox roda fora da thread do event loop."""
+    import threading
+
+    threads: list[int] = []
+    original = _RecordingSandbox.run
+
+    def run_recording_thread(self, **kwargs):
+        threads.append(threading.get_ident())
+        return original(self, **kwargs)
+
+    with patch.object(_RecordingSandbox, "run", run_recording_thread):
+        await asyncio.gather(
+            skill.run(code="print(1)", session_id="s", task_name="t1"),
+            skill.run(code="print(2)", session_id="s", task_name="t2"),
+        )
+
+    assert len(threads) == 2
+    assert threading.get_ident() not in threads  # nenhuma execução bloqueou o event loop

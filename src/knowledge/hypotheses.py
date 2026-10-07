@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from src import config
-from src.human_gate import default_gate
+from src.human_gate import HumanGate, default_gate
 from src.knowledge import opportunities
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.graph_store import GraphStore, Node
@@ -405,6 +405,7 @@ class HypothesisBook:
         index: Any | None = None,
         similarity: float | None = None,
         pending_suggestions: Callable[[], list[PendingSuggestion]] | None = None,
+        gate: HumanGate | None = None,
     ) -> None:
         """Inicializa o livro de hipóteses da sessão.
 
@@ -414,12 +415,14 @@ class HypothesisBook:
             index: ``SemanticIndex`` para a deduplicação; sem ele a deduplicação é por enunciado normalizado exato.
             similarity: Limiar de reutilização (padrão: ``HYPOTHESIS_DEDUP_SIMILARITY``).
             pending_suggestions: Fornece as sugestões pendentes (para validar ``respostas_sugestoes``).
+            gate: ``HumanGate`` onde ficam pendentes as oportunidades citadas sem aprovação (padrão: o do processo).
         """
         self._store = store
         self._ctx = ctx
         self._index = index
         self._threshold = config.HYPOTHESIS_DEDUP_SIMILARITY if similarity is None else similarity
         self._pending = pending_suggestions or (lambda: [])
+        self._gate = gate
         self._writer = _Writer(store, ctx)
         self._session_node: str | None = None
 
@@ -519,6 +522,13 @@ class HypothesisBook:
         nodes: list[Node] = []
         for node_id in dict.fromkeys(ids):
             node = self._project_node(node_id, ("Insumo", "Descoberta", "Oportunidade"))
+            if node is None and isinstance(node_id, str):
+                # Descoberta compartilhável de outro projeto (visível por desenho, ADR 015) também fundamenta.
+                other = self._store.get_node(node_id)
+                if other is not None and other.label == "Descoberta" and (
+                    other.properties.get("visibilidade") == "compartilhavel"
+                ):
+                    node = other
             if node is not None:
                 nodes.append(node)
         return nodes
@@ -573,8 +583,13 @@ class HypothesisBook:
             self._link_opportunity(node, hypothesis_id)
 
     def _request_opportunity_decision(self, opportunity_id: str) -> None:
+        """Deixa a decisão sobre a oportunidade **pendente** para o pesquisador (sem duplicar pedidos)."""
+        gate = self._gate or default_gate()
+        if any(r.decisao == opportunities.DECISION_NAME and r.referencia == opportunity_id[:120]
+               for r in gate.pending()):
+            return
         try:
-            default_gate().request(opportunities.DECISION_NAME, opportunity_id)
+            gate.request(opportunities.DECISION_NAME, opportunity_id)
         except ValueError:  # pragma: no cover - a decisão é constante do próprio módulo
             logger.warning("Decisão reservada desconhecida ao registrar oportunidade pendente")
 

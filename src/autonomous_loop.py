@@ -28,6 +28,7 @@ from src.config import (
 )
 from src.telemetry import get_telemetry
 from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
+from src.knowledge.hypothesis_cycle import SolutionStatus
 from src.usage import UsageBudget, UsageTracker, StopReason
 from src.continuity import (
     ESTADO_FECHADO,
@@ -1397,7 +1398,13 @@ class AutonomousLoop:
             if exploration is not None:
                 # v18-hypothesis-loop §8: critério "solução encontrada" (veredito moderado e alvo atingido por
                 # resultado validado). Semi/auto param; o assisted pergunta ao pesquisador no terminal.
-                solution = await asyncio.to_thread(exploration.check_solution)
+                try:
+                    solution = await asyncio.to_thread(exploration.check_solution)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 - sem leitura do grafo não há como afirmar solução
+                    logger.warning("Critério de solução indisponível", extra={"error": type(exc).__name__})
+                    solution = SolutionStatus(False)
                 if solution.found and solution.hypothesis_id not in exploration.declined_solutions:
                     from src.exploration import ExplorationStop
 

@@ -71,7 +71,11 @@ def _all_projects(action: str) -> None:
     ctx = get_agent_context_optional()
     logger.warning(
         "document_processor: todos_os_projetos usado (acesso entre projetos)",
-        extra={"acao": action, "sessao": ctx.session_id if ctx else None, "projeto_id": ctx.project_id if ctx else None},
+        extra={
+            "acao": action,
+            "sessao": ctx.session_id if ctx else None,
+            "projeto_id": ctx.project_id if ctx else None,
+        },
     )
 
 

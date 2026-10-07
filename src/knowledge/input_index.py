@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src import config
-from src.knowledge.ingestion_io import IngestionFileError, list_regular_files
+from src.knowledge.ingestion_io import list_regular_files
 from src.logger import get_logger
 from src.skills.document_processor.enrichment import ProjectMeta
 from src.skills.document_processor.extractors.registry import ExtractorRegistry

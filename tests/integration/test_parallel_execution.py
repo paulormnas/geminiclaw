@@ -8,10 +8,13 @@ from src.output_manager import OutputManager
 from src.session import SessionManager
 
 @pytest.fixture
-def mock_orchestrator():
+def mock_orchestrator(tmp_path):
     orch = MagicMock(spec=Orchestrator)
     orch.output_manager = MagicMock(spec=OutputManager)
+    orch.output_manager.base_dir = tmp_path  # atributo de instância: o spec da classe não o expõe
     orch.output_manager.list_artifacts.return_value = []
+    orch.session_manager = MagicMock()  # atributo de instância (fora do spec da classe)
+    orch.session_manager.get.return_value = None
     
     # Fazemos mock do _run_planning_loop para retornar um plano com paralelismo
     tasks = [

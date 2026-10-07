@@ -63,7 +63,10 @@ INTERRUPTION_CATEGORY = "interrupcao_inesperada"
 
 # Motivos de parada que permitem retomar sem perguntar; ``solucao_encontrada`` pede confirmação.
 MOTIVOS_RETOMAVEIS = frozenset(
-    {"limite_tokens", "limite_tempo", "limite_retentativas", "limite_conexao", "limite_execucoes", "interrompida"}
+    {
+        "limite_tokens", "limite_tempo", "limite_retentativas", "limite_conexao", "limite_execucoes",
+        "versao_modelo", "interrompida",
+    }
 )
 MOTIVO_RESOLVIDA = "solucao_encontrada"
 

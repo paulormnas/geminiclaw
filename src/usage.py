@@ -30,6 +30,7 @@ class StopReason(str, Enum):
     RETRIES = "limite_retentativas"
     CONNECTION = "limite_conexao"
     RUNS = "limite_execucoes"
+    MODEL_VERSION = "versao_modelo"  # v18.5-model-catalog-locality (LLM_ROUTING=strict)
 
 
 @dataclass(frozen=True)
@@ -160,11 +161,18 @@ class LimitStatus:
     connection_retries: int
     connection_retries_pct: float
     connection_retries_exhausted: bool
+    # Parada solicitada por outra fonte além do orçamento (ex.: versão do modelo em strict).
+    pending_stop: StopReason | None = None
 
     @property
     def should_close(self) -> bool:
         """True se alguma condição de parada graciosa da sessão foi atingida."""
-        return self.tokens_exhausted or self.time_exhausted or self.connection_retries_exhausted
+        return (
+            self.tokens_exhausted
+            or self.time_exhausted
+            or self.connection_retries_exhausted
+            or self.pending_stop is not None
+        )
 
     @property
     def stop_reason(self) -> StopReason | None:
@@ -179,7 +187,7 @@ class LimitStatus:
             return StopReason.TIME
         if self.connection_retries_exhausted:
             return StopReason.CONNECTION
-        return None
+        return self.pending_stop
 
 
 def _default_token_reader(execution_id: str) -> int:
@@ -232,6 +240,7 @@ class UsageTracker:
         token_reader: Callable[[], int] | None = None,
         connection_retry_reader: Callable[[], int] | None = None,
         clock: Callable[[], float] | None = None,
+        pending_stop: Callable[[], StopReason | None] | None = None,
     ) -> None:
         """Inicializa o tracker.
 
@@ -246,6 +255,8 @@ class UsageTracker:
                 testes; por padrão lê a telemetria via `execution_id`.
             clock: Função sem argumentos que retorna um timestamp monotônico
                 em segundos. Injetável para testes de limite de tempo.
+            pending_stop: Função sem argumentos que devolve um motivo de parada pedido por outra fonte (versão do
+                modelo em ``strict``), verificada nos mesmos pontos que os limites; ``None`` = nenhuma.
         """
         self.budget = budget
         self.execution_id = execution_id
@@ -255,6 +266,7 @@ class UsageTracker:
         self._connection_retry_reader = connection_retry_reader or (
             lambda: _default_connection_retry_reader(execution_id)
         )
+        self._pending_stop = pending_stop
         self._task_retry_counts: dict[str, int] = {}
         self._abandoned_tasks: set[str] = set()
 
@@ -373,6 +385,7 @@ class UsageTracker:
             connection_retries=connection_retries,
             connection_retries_pct=connection_pct,
             connection_retries_exhausted=connection_exhausted,
+            pending_stop=self._pending_stop() if self._pending_stop is not None else None,
         )
 
         if status.should_close:

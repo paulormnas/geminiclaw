@@ -133,6 +133,7 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
                     "limite_retentativas",
                     "limite_conexao",
                     "limite_execucoes",
+                    "versao_modelo",  # v18.5-model-catalog-locality (strict: versão do modelo mudou ou desconhecida)
                     "erro",
                     "interrompida",
                 )

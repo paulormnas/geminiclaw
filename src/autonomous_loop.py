@@ -114,6 +114,27 @@ class AutonomousLoop:
         self._usage_tracker: "UsageTracker | None" = None
 
 
+    @staticmethod
+    def _pending_model_stop() -> "StopReason | None":
+        """``StopReason.MODEL_VERSION`` se, em ``strict``, a versão do modelo mudou ou é desconhecida (v18.5)."""
+        from src.llm.session import current_session_routing
+        from src.llm.versions import STOP_VERSION
+
+        routing = current_session_routing()
+        if routing is not None and routing.versions.parada_pendente == STOP_VERSION:
+            return StopReason.MODEL_VERSION
+        return None
+
+    @staticmethod
+    async def _refresh_model_versions() -> None:
+        """Relê o digest dos modelos Ollama da sessão (a cada checkpoint); falha nunca interrompe a pesquisa."""
+        from src.llm.allocation import refresh_ollama_versions
+
+        try:
+            await refresh_ollama_versions()
+        except Exception:  # noqa: BLE001 — telemetria de versão
+            logger.warning("Não foi possível reler as versões dos modelos Ollama", exc_info=True)
+
     def _recorder(self, master_session_id: str) -> "CheckpointRecorder | None":
         """Gravador de checkpoint da sessão, ou ``None`` (sem checkpoint a pesquisa continua)."""
         getter = getattr(self.orchestrator, "get_checkpoint", None)
@@ -191,7 +212,9 @@ class AutonomousLoop:
         # antes desta chamada, é respeitado como override de `max_task_retries` do
         # orçamento default — só é ignorado se `budget` for passado explicitamente.
         effective_budget = budget or UsageBudget.from_config(max_task_retries=self.max_retries)
-        self._usage_tracker = UsageTracker(effective_budget, execution_id=master_session_id)
+        self._usage_tracker = UsageTracker(
+            effective_budget, execution_id=master_session_id, pending_stop=self._pending_model_stop
+        )
         self.orchestrator.register_usage_tracker(master_session_id, self._usage_tracker)
         self.max_retries = effective_budget.max_task_retries
 
@@ -717,6 +740,7 @@ class AutonomousLoop:
             self._usage_tracker = UsageTracker(
                 UsageBudget.from_config(max_task_retries=self.max_retries),
                 execution_id=master_session_id,
+                pending_stop=self._pending_model_stop,
             )
             self.orchestrator.register_usage_tracker(master_session_id, self._usage_tracker)
 
@@ -781,6 +805,7 @@ class AutonomousLoop:
             # V18/usage-limits — não inicia um novo ciclo de planejamento (que despacharia
             # novas chamadas de exploração) se o orçamento já foi esgotado por um ciclo
             # anterior (ex: retentativas de conexão atingidas durante o último gather).
+            await self._refresh_model_versions()  # v18.5: digest do Ollama a cada ciclo (checkpoint)
             pre_cycle_status = self._usage_tracker.check()
             if pre_cycle_status.should_close:
                 return await self._close_session(
@@ -1793,6 +1818,7 @@ class AutonomousLoop:
         """
         from src.orchestrator import OrchestratorResult
 
+        await self._refresh_model_versions()  # v18.5: digest do Ollama no checkpoint de fechamento
         usage_status = self._usage_tracker.check()
 
         logger.warning(

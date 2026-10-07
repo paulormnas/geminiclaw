@@ -8,6 +8,7 @@ sandbox de código, acionado pela skill de código.
 import asyncio
 import os
 import json
+import threading
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -1427,6 +1428,9 @@ class Orchestrator:
         ``allocation_profile`` (v18.5-model-catalog-locality, design §4).
         """
         versions = routing.versions
+        # ``SessionManager.update`` substitui o payload inteiro (sem merge): serializa o ciclo ler-modificar-gravar
+        # para que chamadas de LLM concorrentes não percam eventos nem atualizações do perfil.
+        payload_lock = threading.Lock()
 
         def on_event(event: dict[str, Any]) -> None:
             get_telemetry().record_agent_event(
@@ -1436,23 +1440,25 @@ class Orchestrator:
                 event_type=event["tipo"],
                 payload=event,
             )
-            session = self.session_manager.get(session_id)
-            payload = dict(session.payload) if session is not None else {}
-            payload["eventos_versao_modelo"] = [*payload.get("eventos_versao_modelo", []), event]
-            self.session_manager.update(session_id, payload=payload)
+            with payload_lock:
+                session = self.session_manager.get(session_id)
+                payload = dict(session.payload) if session is not None else {}
+                payload["eventos_versao_modelo"] = [*payload.get("eventos_versao_modelo", []), event]
+                self.session_manager.update(session_id, payload=payload)
 
         def on_change(model_id: str, version: str) -> None:
-            session = self.session_manager.get(session_id)
-            if session is None:
-                return
-            payload = dict(session.payload)
-            profile = payload.get("allocation_profile")
-            if not isinstance(profile, dict):
-                return
-            for entry in profile.get("papeis", {}).values():
-                if entry.get("provedor_modelo") == model_id:
-                    entry["versao_efetiva"] = version
-            self.session_manager.update(session_id, payload=payload)
+            with payload_lock:
+                session = self.session_manager.get(session_id)
+                if session is None:
+                    return
+                payload = dict(session.payload)
+                profile = payload.get("allocation_profile")
+                if not isinstance(profile, dict):
+                    return
+                for entry in profile.get("papeis", {}).values():
+                    if entry.get("provedor_modelo") == model_id:
+                        entry["versao_efetiva"] = version
+                self.session_manager.update(session_id, payload=payload)
 
         versions.set_event_sink(on_event)
         versions.set_change_sink(on_change)

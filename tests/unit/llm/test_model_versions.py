@@ -488,3 +488,35 @@ async def test_ollama_aclose_fecha_o_cliente_http():
     await provider.aclose()
 
     assert provider._client.is_closed
+
+
+# --- M4: ciclo ler-modificar-gravar do payload da sessão é serializado ------------------------------------------
+
+
+def test_orquestrador_serializa_atualizacoes_concorrentes_do_payload(tmp_path):
+    import threading
+    import time
+
+    from src.orchestrator import Orchestrator
+
+    routing = _routing(tmp_path)
+    store = {"payload": {"allocation_profile": build_allocation_profile(routing), "eventos_versao_modelo": []}}
+
+    def slow_get(_id):
+        snapshot = SimpleNamespace(payload=json.loads(json.dumps(store["payload"])))
+        time.sleep(0.05)  # abre a janela de corrida entre ler e gravar
+        return snapshot
+
+    session_manager = MagicMock()
+    session_manager.get.side_effect = slow_get
+    session_manager.update.side_effect = lambda _id, payload: store.update(payload=payload)
+    orchestrator = Orchestrator(session_manager=session_manager, agent_runtime=MagicMock())
+    with patch("src.orchestrator.get_telemetry", return_value=MagicMock()):
+        orchestrator._wire_version_events(routing, "sess1")
+        sink = routing.versions._on_event
+        events = [{"tipo": "versao_modelo_alterada", "nova": f"v{i}"} for i in range(4)]
+        threads = [threading.Thread(target=sink, args=(e,)) for e in events]
+        [t.start() for t in threads]
+        [t.join() for t in threads]
+
+    assert sorted(e["nova"] for e in store["payload"]["eventos_versao_modelo"]) == ["v0", "v1", "v2", "v3"]

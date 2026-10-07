@@ -44,8 +44,15 @@ Developer**. O sandbox do ADR 003 §2 permanece, na forma ajustada em 2026-10-06
 `v16-sandbox-slim-image`): script injetado por `put_archive`, **somente** a pasta da subtarefa
 montada em `/outputs` (bind mount de leitura e escrita, única via de retorno dos artefatos),
 usuário não-root (UID/GID do orquestrador), sem capacidades, raiz somente leitura, rede
-desabilitada (ligada só durante a instalação de pacotes e desconectada antes do script) e
-limites de CPU/RAM/processos.
+desabilitada na execução do script e limites de CPU/RAM/processos.
+
+> **Ajuste de 2026-10-07 (ADR 019 §5, mudança `v18.5-sandbox-phases`, aprovado pelo pesquisador):**
+> além do bind mount de leitura e escrita de `/outputs`, a execução recebe montagens **somente
+> leitura**: `/inputs` (insumos da sessão), `/deps` (pacotes instalados), `/assets/<destino>`
+> (ativos verificados) e `/prior/<sessão>` (sessões anteriores da cadeia). A instalação de pacotes
+> e o download de ativos rodam em um **container de preparação separado**, com rede e **sem**
+> nenhum dado montado, removido antes da execução; o container de execução é criado com a rede
+> desligada (não há mais "ligar e depois desconectar").
 
 > **Nota de 2026-10-01 (ADR 018), resolvida em 2026-10-06:** o texto anterior ("`put_archive`/
 > `get_archive`, sem bind mounts") divergia do sandbox real e foi substituído pelo parágrafo acima,
@@ -76,8 +83,9 @@ de um agente não derrube a sessão.
 
 Ficam para a spec: se os agentes rodam como corrotinas no mesmo processo ou como processos
 locais separados, o destino do protocolo IPC do ADR 004 (removido ou mantido só para o
-sandbox), a política de rede do sandbox para instalação de pacotes e a migração do código
-existente (`ContainerRunner`, imagens `geminiclaw-<tipo>`).
+sandbox), a política de rede do sandbox para instalação de pacotes (decidida em 2026-10-07 pela
+`v18.5-sandbox-phases`, ver §2) e a migração do código existente (`ContainerRunner`, imagens
+`geminiclaw-<tipo>`).
 
 ---
 

@@ -17,7 +17,7 @@
 | Item | Estado |
 |---|---|
 | 1. Imagem mínima do sandbox com pacotes sob demanda | **Pendente.** `containers/Dockerfile` ainda instala os extras `deep_search`, `google` e `documents` e copia `src/` e `agents/`; a imagem `geminiclaw-base` tem 10,8 GB |
-| 2. Internet e usuário sem privilégios | **Pendente.** `src/skills/code/sandbox.py` executa a instalação de pacotes como root; a rede fica ligada sempre que há comandos de setup, e o script roda no mesmo container, ainda com rede (a separação por fases é o escopo de `v18.5-sandbox-phases`) |
+| 2. Internet e usuário sem privilégios | **Feito** (`v18.5-sandbox-phases`): usuário não-root; instalação e download de ativos em container de preparação separado (rede, sem dados); execução sem rede, com `/inputs`, `/deps` e `/assets` somente leitura |
 | 3. Montagem do `/outputs` | **Pendente** a conciliação com usuário não-root: o código ainda usa `chmod 777` e `chown` por `exec_run` como root, e `HOST_PROJECT_PATH` segue no sandbox |
 | 4. Qdrant em ARM64 | **Feito** (PR #74): imagem oficial `qdrant/qdrant:v1.19.1` |
 | 5. Identificação de plataforma e seleção de imagens | **Pendente.** Não há script; os Dockerfiles fixam `--platform=linux/arm64`; `src/platform_utils.py` só decide TCP/Unix para IPC, que foi removido |

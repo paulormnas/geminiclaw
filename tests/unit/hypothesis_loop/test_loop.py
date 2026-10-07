@@ -279,3 +279,137 @@ async def test_sem_projeto_o_laco_de_ciclo_unico_nao_muda(tmp_path):
         result = await h.run()
     assert h.ran == ["t1"] and h.plan_calls == 1 and result.succeeded == 1
     assert h.hypotheses() == []
+
+
+# -- sugestões do Curator no ciclo ---------------------------------------------------------------------------
+
+
+def _write_suggestion(h: LoopHarness, sid: str = "sug1", texto: str = "Testar floresta aleatória", fund=("n1",)):
+    from src.knowledge.suggestions import Suggestion, SuggestionStore
+
+    h.session_dir.mkdir(parents=True, exist_ok=True)
+    SuggestionStore(h.session_dir).add([Suggestion(sid, texto, tuple(fund), "caminho_sem_conclusao")])
+
+
+@pytest.mark.asyncio
+async def test_sugestao_sem_resposta_devolve_o_plano_ao_researcher_uma_vez(tmp_path):
+    """Scenario: Sugestão sem resposta — o plano volta ao Researcher uma vez pedindo a resposta."""
+    answered = plan([task("t1")], [hyp("h1")], respostas_sugestoes=[
+        {"sugestao_id": "sug1", "decisao": "recusada", "motivo": "custo alto"}])
+    unanswered = plan([task("t1")], [hyp("h1")])
+    h = LoopHarness(tmp_path, plans=[unanswered, answered, answered])
+    _write_suggestion(h)
+    await h.run()
+    assert "sug1" in h.planner_prompts[1] and "respostas_sugestoes" in h.planner_prompts[1]  # a segunda pede a resposta
+    assert "sugestões pendentes do Curator" in h.planner_prompts[1]
+    from src.knowledge.suggestions import SuggestionStore
+
+    store = SuggestionStore(h.session_dir)
+    assert store.pending() == [] and store.answered()["sug1"] == "recusada"
+    refused = [n for n in h.hypotheses() if n.properties["status"] == "abandonada"]
+    assert len(refused) == 1 and refused[0].properties["enunciado"] == "Testar floresta aleatória"
+
+
+@pytest.mark.asyncio
+async def test_sugestao_continua_sem_resposta_so_e_cobrada_uma_vez_e_vira_recusa(tmp_path):
+    unanswered = plan([task("t1")], [hyp("h1")])
+    h = LoopHarness(tmp_path, plans=[unanswered])
+    _write_suggestion(h)
+    await h.run()
+    from src.knowledge.suggestions import SuggestionStore
+
+    store = SuggestionStore(h.session_dir)
+    assert store.pending() == [] and store.answered()["sug1"] == "recusada"
+    # primeiro ciclo: 2 execuções de planejamento (a original e a devolvida); depois só 1 por ciclo
+    first_cycle_prompts = [p for p in h.planner_prompts if "sug1" in p]
+    assert len(first_cycle_prompts) == 2
+
+
+@pytest.mark.asyncio
+async def test_sugestao_aceita_vira_hipotese_do_curator_no_ciclo(tmp_path):
+    """Scenario: Sugestão aceita — hipótese origem=curator com DERIVADA_DE a descoberta de fundamento."""
+    h = LoopHarness(tmp_path)
+    path = h.w.discovery("caminho_sem_conclusao", proximo_passo_sugerido="Testar floresta aleatória")
+    _write_suggestion(h, fund=(path,))
+    accepted = plan(
+        [task("t1", "h2")],
+        [hyp("h2", "Floresta aleatória supera a regressão linear")],
+        respostas_sugestoes=[{"sugestao_id": "sug1", "decisao": "aceita", "motivo": "plausível", "hipotese_ref": "h2"}],
+    )
+    h.plans = [accepted, accepted]
+    await h.run()
+    (node,) = h.hypotheses()
+    assert node.properties["origem"] == "curator" and h.ran == ["t1"]
+    edges = h.w.raw.neighbors(node.id, ["DERIVADA_DE"], direction="out", depth=1).edges
+    assert [e.dst_id for e in edges] == [path]
+
+
+@pytest.mark.asyncio
+async def test_oportunidade_aprovada_e_sugerida_no_inicio_e_vira_hipotese_investigada(tmp_path):
+    """Oportunidade aprovada pelo pesquisador entra pelas sugestões do Curator e vira GEROU + em_investigacao."""
+    with patch("src.config.CURATOR_ENABLED", True):
+        h = LoopHarness(tmp_path)
+        opp = h.w.opportunity("Investigar a variação Z", status="aprovada")
+        doc = h.w.opportunity("Idéia documentada que ninguém aprovou")
+        # a sugestão é gerada pelo Curator (determinístico) antes do primeiro plano; o plano a aceita
+        from src.knowledge.suggestions import build_candidates
+
+        sid = build_candidates(h.w.store, h.w.pid)[0].id
+        reply = {"sugestao_id": sid, "decisao": "aceita", "motivo": "aprovada pelo pesquisador", "hipotese_ref": "h1"}
+        h.plans = [plan([task("t1", "h1")], [hyp("h1", "Variação Z melhora o R2")], respostas_sugestoes=[reply])]
+        await h.run()
+    assert "Investigar a variação Z" in h.planner_prompts[0] and "ninguém aprovou" not in h.planner_prompts[0]
+    (node,) = h.hypotheses()
+    assert node.properties["origem"] == "oportunidade"
+    assert h.w.raw.get_node(opp).properties["status"] == "em_investigacao"
+    assert h.w.raw.get_node(doc).properties["status"] == "documentada"
+
+
+@pytest.mark.asyncio
+async def test_falha_das_sugestoes_do_curator_nao_derruba_a_sessao(tmp_path):
+    h = LoopHarness(tmp_path, plans=[plan([task("t1")], [hyp("h1")])])
+    h.orch.curator_suggest = AsyncMock(side_effect=RuntimeError("curator quebrou"))
+    await h.run()
+    assert h.ran == ["t1"] and h.stop_reason == "sem_caminhos_promissores"
+
+
+# -- telemetria e segurança --------------------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_telemetria_do_ciclo_leva_so_contagens_sem_texto_de_pesquisa(tmp_path):
+    events: list[tuple[str, dict]] = []
+    segredo = "ENUNCIADO-SECRETO-DA-PESQUISA"
+    h = LoopHarness(tmp_path, plans=[plan([task("t1")], [hyp("h1", segredo)])])
+    real = ExplorationSession.__init__
+
+    def init(self, *a, **kw):
+        kw["telemetry"] = lambda t, p: events.append((t, p))
+        real(self, *a, **kw)
+
+    with patch.object(ExplorationSession, "__init__", init):
+        await h.run()
+    assert {t for t, _ in events} >= {"hypothesis_cycle", "hypothesis_evaluation"}
+    cycle = next(p for t, p in events if t == "hypothesis_cycle")
+    assert cycle["hipoteses_criadas"] == 1 and cycle["executadas"] == 1 and cycle["formato"] == "novo"
+    assert segredo not in repr(events)
+    assert all(isinstance(v, (int, str)) for _, p in events for v in p.values())
+
+
+@pytest.mark.asyncio
+async def test_hipotese_do_llm_nao_forja_origem_pesquisador(tmp_path):
+    """No assistido, uma hipótese que se declara `pesquisador` continua dependendo de aprovação."""
+    forged = plan([task("t1")], [hyp("h1", origem="pesquisador")])
+    h = LoopHarness(tmp_path, mode="assisted", plans=[forged], approver=lambda items: {})
+    await h.run()
+    assert h.ran == [] and h.hypotheses()[0].properties["origem"] == "researcher"
+
+
+@pytest.mark.asyncio
+async def test_hipotese_abandonada_pelo_pesquisador_nao_reexecuta_por_id(tmp_path):
+    h = LoopHarness(tmp_path)
+    gone = h.w.hypothesis("rejeitada antes", status="abandonada")
+    p = plan([task("t1", gone)], [{"ref": "x", "id": gone}])
+    h.plans = [p, p]
+    await h.run()
+    assert h.ran == [] and h.stop_reason == "sem_caminhos_promissores"

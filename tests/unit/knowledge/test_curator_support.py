@@ -174,7 +174,7 @@ def test_curator_sem_modelo_elegivel_nao_impede_a_sessao(tmp_path):
     mapa = resolve_session(catalog, disponiveis, "self_hosted_only")
 
     assert "curator" not in mapa and {"researcher", "developer", "base"} <= set(mapa)
-    assert OPTIONAL_ROLES == ("curator",) and "curator" in REQUIRED_ROLES
+    assert OPTIONAL_ROLES == ("curator",) and "curator" not in REQUIRED_ROLES
 
 
 def test_papel_obrigatorio_sem_modelo_continua_derrubando_a_sessao(tmp_path):
@@ -196,3 +196,18 @@ def test_session_routing_expoe_o_curator_com_o_catalogo_versionado():
 
     assert routing.resolution("curator").id.startswith("ollama/")
     assert "curator" in routing.payload()["papeis"]
+
+
+def test_pin_invalido_do_curator_em_strict_nao_derruba_a_sessao(tmp_path):
+    """Sugestão do PR #106 — PinError do papel opcional ``curator`` o desliga em vez de derrubar a sessão."""
+    from src.llm.routing import Pin, PinError
+
+    doc = cf.base_document()
+    catalog = cf.load(tmp_path, doc)
+    disponiveis = {m: cf.Availability(True) for m in catalog.modelos}
+
+    mapa = resolve_session(catalog, disponiveis, "third_party_allowed", {"curator": Pin("google/inexistente")}, "strict")
+
+    assert "curator" not in mapa and "researcher" in mapa
+    with pytest.raises(PinError):
+        resolve_session(catalog, disponiveis, "third_party_allowed", {"developer": Pin("google/inexistente")}, "strict")

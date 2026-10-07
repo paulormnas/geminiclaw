@@ -156,6 +156,7 @@ class Curator:
             report.reason = "desligado"
             return report
         started = time.monotonic()
+        toolkit: CuratorToolkit | None = None
         try:
             provider = self._provider_factory()
             toolkit = CuratorToolkit(
@@ -172,10 +173,6 @@ class Curator:
             await asyncio.wait_for(
                 self._loop(provider, toolkit, prompt, report), timeout=config.CURATOR_TIMEOUT_SECONDS
             )
-            stats = toolkit.stats
-            report.criados, report.reforcados = stats.criados, stats.reforcados
-            report.descartados, report.recusas = stats.descartados, stats.recusas
-            report.pares_revisados = stats.pares_revisados
         except asyncio.CancelledError:
             raise
         except asyncio.TimeoutError:
@@ -186,7 +183,31 @@ class Curator:
                 "Curator falhou; pendências ficam para a próxima execução",
                 extra={"extra": {"kind": kind, "erro": type(exc).__name__}},
             )
+        finally:
+            # As contagens valem também em timeout ou falha no meio (o que já foi escrito continua escrito).
+            if toolkit is not None:
+                stats = toolkit.stats
+                report.criados, report.reforcados = stats.criados, stats.reforcados
+                report.descartados, report.recusas = stats.descartados, stats.recusas
+                report.pares_revisados = stats.pares_revisados
         self._emit(report, int((time.monotonic() - started) * 1000))
+        return report
+
+    def defer(self, kind: str, reason: str) -> CuratorReport:
+        """Registra que uma execução foi **adiada** (ex.: tokens da sessão esgotados): telemetria e auditoria.
+
+        As pendências (sinalizações e fila de similaridade) persistem e são tratadas na próxima execução.
+        """
+        report = CuratorReport(kind=kind, ok=False, reason=reason)
+        self._emit(report, 0)
+        if self._session_dir is not None:
+            try:
+                from src.knowledge.curator_tools import CuratorToolkit as _T
+
+                _T(self._store, project_id=self._project_id, session_id=self._session_id,
+                   session_dir=self._session_dir, limits=self._limits)._audit("execucao_adiada", kind=kind, motivo=reason)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Auditoria do adiamento indisponível", extra={"extra": {"erro": type(exc).__name__}})
         return report
 
     def _emit(self, report: CuratorReport, duration_ms: int) -> None:

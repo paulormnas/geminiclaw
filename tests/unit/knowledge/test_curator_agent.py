@@ -400,6 +400,9 @@ async def test_telemetria_do_curator_nao_carrega_texto_de_pesquisa(world):
 @pytest.mark.asyncio
 async def test_reconcile_on_session_start_roda_antes_de_qualquer_consulta_ao_grafo(tmp_path, monkeypatch):
     """Task 5.4 — a reconciliação do índice acontece no início da sessão, antes da ingestão, com o store indexado."""
+    from src.knowledge import factory
+
+    factory.reset_reconcile_marker()
     ordem: list[str] = []
     store = InMemoryGraphStore()
     runtime = SimpleNamespace(store=store, index=MagicMock(), queue=MagicMock(), raw_store=store)
@@ -505,3 +508,54 @@ async def test_validator_sinaliza_ao_curator_a_partir_do_parecer(tmp_path, parec
 
     (flag,) = FlagStore(orch.output_manager.base_dir / "s1").pending()
     assert flag.agente == "validator" and flag.tipo == tipo and flag.subtarefa == "treinar"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_nao_roda_duas_vezes_no_mesmo_inicio_de_sessao(monkeypatch):
+    """Sugestão do PR #106 — CLI reconcilia ao abrir o grafo; o orquestrador pula a segunda reconciliação."""
+    from src.knowledge import factory
+
+    factory.reset_reconcile_marker()
+    chamadas: list[int] = []
+    store = InMemoryGraphStore()
+    runtime = SimpleNamespace(store=store, index=MagicMock(), queue=MagicMock(), raw_store=store)
+    monkeypatch.setattr("src.knowledge.semantic_runtime.reconcile_on_session_start", lambda rt: chamadas.append(1))
+    monkeypatch.setattr(config, "KNOWLEDGE_SEMANTIC_INDEX_ENABLED", True)
+    monkeypatch.setattr("src.knowledge.semantic_runtime.open_runtime", lambda: runtime)
+    factory.open_graph_store(reconcile=True)  # CLI
+    orch = Orchestrator(session_manager=MagicMock(), output_manager=OutputManager("/tmp/_x_out", "/tmp/_x_log"),
+                        agent_runtime=MagicMock(), knowledge_runtime_factory=lambda: runtime)
+
+    orch._reconcile_knowledge_index()
+
+    assert chamadas == [1]
+    factory.reset_reconcile_marker()
+
+
+@pytest.mark.asyncio
+async def test_timeout_preserva_as_contagens_e_adiamento_registra_pendencia(world, monkeypatch):
+    """Sugestões do PR #106 — contagens no timeout; ``close_session`` sem tokens registra o adiamento."""
+    env, graph, make, ids = world
+    env.provider.vectors["par9b"] = pair_vectors(DIM, 9, 1.0)[0]
+    monkeypatch.setattr(config, "CURATOR_TIMEOUT_SECONDS", 1)
+
+    class Lento(Scripted):
+        async def generate(self, messages, tools=None, system=None, temperature=0.7, max_tokens=4096):
+            if self.calls:
+                import asyncio
+
+                await asyncio.sleep(5)
+            return await super().generate(messages, tools, system, temperature, max_tokens)
+
+    provider = Lento([_step(_call("create_discovery", tipo="licao_de_caminho", enunciado="par9b", condicoes="c",
+                                  sobre_ids=[ids["abordagem"]], evidencia_ids=[ids["res"]], justificativa="j"))])
+    curator, events = make(provider)
+
+    report = await curator.consolidate()
+
+    assert report.reason == "timeout" and report.criados == 1  # a escrita que ocorreu antes do timeout é contada
+
+    adiado = curator.defer("close_session", "orcamento_da_sessao")
+    assert adiado.ok is False and events[-1][1]["reason"] == "orcamento_da_sessao"
+    linhas = (ids["dir"] / "curator_audit.jsonl").read_text()
+    assert "execucao_adiada" in linhas

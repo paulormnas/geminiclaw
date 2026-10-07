@@ -234,9 +234,12 @@ class Orchestrator:
             self._open_knowledge_store()
             runtime = self._knowledge_runtime
             if runtime is not None:
+                from src.knowledge import factory
                 from src.knowledge.semantic_runtime import reconcile_on_session_start
 
-                reconcile_on_session_start(runtime)
+                if not factory.reconciled_recently():  # a CLI já reconciliou neste início de sessão
+                    reconcile_on_session_start(runtime)
+                    factory.mark_reconciled()
         except Exception as exc:  # noqa: BLE001 - a sessão não depende do índice para começar
             logger.warning("Reconciliação do índice não executada", extra={"error": type(exc).__name__})
 
@@ -320,7 +323,10 @@ class Orchestrator:
         """Fechamento da sessão pelo Curator (fila de similaridade e caminhos sem conclusão). Nunca levanta."""
         curator = self.get_curator(session_id)
         try:
-            if curator is None or not self._curator_budget_left(session_id, closing=True):
+            if curator is None:
+                return
+            if not self._curator_budget_left(session_id, closing=True):
+                curator.defer("close_session", "orcamento_da_sessao")  # pendências ficam para a próxima execução
                 return
             session = self.session_manager.get(session_id)
             reason = (session.payload if session is not None else {}).get("motivo_parada")

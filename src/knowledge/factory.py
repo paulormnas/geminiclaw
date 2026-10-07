@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING
 
 from src import config
@@ -29,6 +30,29 @@ def open_raw_graph_store() -> AgeGraphStore:
         reader_conninfo=config.KNOWLEDGE_READER_DATABASE_URL,
         read_timeout_ms=config.KNOWLEDGE_READ_TIMEOUT_MS,
     )
+
+
+# Instante (monotônico) da última reconciliação de início de sessão neste processo: a CLI e o orquestrador abrem o grafo
+# no mesmo início de sessão e não devem reconciliar duas vezes.
+_last_reconcile: float | None = None
+RECONCILE_DEDUP_SECONDS = 60.0
+
+
+def reconciled_recently(window: float = RECONCILE_DEDUP_SECONDS) -> bool:
+    """``True`` se este processo já reconciliou o índice nos últimos ``window`` segundos."""
+    return _last_reconcile is not None and (time.monotonic() - _last_reconcile) < window
+
+
+def mark_reconciled() -> None:
+    """Registra uma reconciliação de início de sessão (usado por ``open_graph_store`` e pelo orquestrador)."""
+    global _last_reconcile
+    _last_reconcile = time.monotonic()
+
+
+def reset_reconcile_marker() -> None:
+    """Esquece a última reconciliação (testes)."""
+    global _last_reconcile
+    _last_reconcile = None
 
 
 def open_knowledge_runtime() -> "SemanticRuntime | None":
@@ -72,4 +96,5 @@ def open_graph_store(*, reconcile: bool = False) -> GraphStore:
         from src.knowledge.semantic_runtime import reconcile_on_session_start
 
         reconcile_on_session_start(runtime)
+        mark_reconciled()
     return runtime.store

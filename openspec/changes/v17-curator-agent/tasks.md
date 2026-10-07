@@ -42,3 +42,11 @@
 
 ## 7. Fechamento
 - [x] 7.1 Ruff, testes, revisão nos 7 eixos, PR.
+
+## 8. Pendências adiadas (revisão do PR #106, 2026-10-06)
+- [ ] 8.1 Validar com **Apache AGE real**: `update_edge`, `FUNDIDA_EM`, auditoria de arestas e as consultas do `KnowledgeService`.
+- [ ] 8.2 **Benchmark do `KnowledgeService` no Raspberry Pi 5** (~200 tentativas): mede o ganho do memo de leituras; considerar atualização incremental.
+- [ ] 8.3 Rodar `scripts/migrate_v17_knowledge.py` nos ambientes já migrados (cria o rótulo `FUNDIDA_EM`).
+- [ ] 8.4 Dividir `src/knowledge/curator_tools.py` (leitura, escrita, orçamento) em módulos.
+- [ ] 8.5 Comando humano para reverter fusão/substituição (hoje: `update_node` com autoria `pesquisador`).
+- [ ] 8.6 `VARIANTE_DE` entre `Descoberta`s (hoje `SEMELHANTE_A` + `diferenca`): extensão de schema a aprovar.

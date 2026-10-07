@@ -123,3 +123,30 @@ que foi criado, reforçado e descartado.
   (duplicata, evidência, status) estão nas ferramentas; o LLM não consegue contorná-las.
 - **Grafo crescendo com descobertas fracas** — mitigação: teste de significado + veredito
   visível + preferência por reforço.
+
+## Notas de implementação (2026-10-06, revisão de segurança do PR #106) — decisões registradas para o Arquiteto
+
+Estas decisões foram tomadas na implementação e revisão; o Arquiteto deve ratificá-las ou corrigi-las na spec.
+
+1. **`GraphStore.update_edge`** entrou na porta única só para as relações **derivadas** (`SUSTENTA`, `REFUTA`,
+   `FUNCIONOU_PARA`, `FALHOU_PARA`), apenas para os atores `orquestrador`/`pesquisador`, com auditoria
+   (`knowledge_audit`) e recusa de nó `rejeitado`. Fatos (`APLICOU.config`, `hash_params`) nunca são reescritos.
+2. **`validate_human_only` como allowlist para agentes**: `Oportunidade` só `documentada`; `Dominio`/`Metrica` só
+   `candidato`; `decidido_*` e `motivo_decisao` são sempre do humano; nó `rejeitado`/`rejeitada` é imutável para
+   agentes (inclusive suas arestas). O orquestrador continua semeando o vocabulário aprovado.
+3. **Gate de decisões reservadas** (`src/human_gate.py`): origem em enum fechado (`Source`); só `TERMINAL`/`CLI` valem.
+   Está ligado à confirmação do `Problema` (`project_session`) e a `vocab approve` (`cli`). A barreira final continua
+   sendo `validate_human_only` no `GraphStore`.
+4. **`OPTIONAL_ROLES = ("curator",)`**: sem modelo elegível (ou pin inválido em `strict`) o Curator é desligado na
+   sessão; os demais papéis seguem obrigatórios.
+5. **Fusão de abordagens** (`merge_approaches`): sem "desfazer" nas ferramentas, vale a condição estrita: projeto da
+   sessão, mesmo `tipo`, `SEMELHANTE_A` com `score >= SIM_DUPLICATE_MIN` confirmado em **execução anterior**.
+6. **Promoção de configuração**: gravada só no projeto da sessão sobre abordagem dele; tentativas de outro projeto só
+   contam se experimento e resultado forem `compartilhavel`; só projetos com `Sessao` real no grafo contam.
+7. **Leituras livres**: `read_query` exige `LIMIT` e devolve só UUIDs e números (texto vira `[omitido]`); a fila só
+   entrega ID e rótulo de nó privado de outro projeto.
+8. **Evidência e mudança de status**: evidência exige `Resultado` validado ligado ao escopo; contestar/substituir
+   exige evidência nova, escopo comum, substituta de execução anterior e teto por execução.
+9. **Validator**: sem laço de ferramentas, sua sinalização sai do parecer estruturado (divergente → `caminho_relevante`,
+   reprovado → `falha_relevante`), gravada pelo orquestrador com texto fixo.
+10. **`resolve_flag`** é ferramenta do Curator (marcar `registrada`/`descartada`), necessária ao §4.

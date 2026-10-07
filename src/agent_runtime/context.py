@@ -59,7 +59,10 @@ class AgentContext:
             `researcher-consult`), usado por ``ask_researcher`` nos modos ``semi``/``auto``,
             ligado a ``Orchestrator._consult_researcher_core``. ``None`` mantém a suposição
             documentada.
-        extra: Metadados adicionais não cobertos pelos campos acima.
+        project_id: Projeto de pesquisa da sessão (v17-input-document-index); restringe por padrão a busca e a
+            lista de documentos. ``None`` fora de sessões de projeto.
+        extra: Metadados adicionais não cobertos pelos campos acima (``project_meta``: ``ProjectMeta`` do projeto,
+            usado no cabeçalho enriquecido da ingestão de artefatos).
     """
 
     session_id: str
@@ -74,6 +77,7 @@ class AgentContext:
     readable_dirs: tuple[Path, ...] = ()
     ask_researcher: Optional[AskResearcherCallback] = None
     consult_researcher: Optional[ConsultResearcherCallback] = None
+    project_id: Optional[str] = None
     extra: dict[str, Any] = field(default_factory=dict)
 
 

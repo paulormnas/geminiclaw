@@ -1,8 +1,5 @@
 import asyncio
-import json
-import os
-import uuid
-from datetime import datetime, timezone
+import time
 from typing import Any, Dict, List, Optional
 
 from qdrant_client import QdrantClient
@@ -12,10 +9,13 @@ from src.config import QDRANT_CHECK_COMPATIBILITY, QDRANT_URL
 from src.db import get_connection
 from src.embeddings.base import EmbeddingProvider, embedding_payload, get_embedding_provider
 from src.logger import get_logger
-from src.skills.document_processor.chunker import DocumentChunk, DocumentChunker
-from src.skills.document_processor.extractors.base import ExtractedDocument
+from src.skills.document_processor.chunker import DocumentChunk
+from src.skills.document_processor.registry_store import DocumentRegistry, PostgresDocumentRegistry
 
 logger = get_logger(__name__)
+
+# Chunks vetorizados por lote (limita memória e permite respeitar o prazo da indexação).
+EMBED_BATCH = 32
 
 
 class DocumentIndexer:
@@ -29,7 +29,12 @@ class DocumentIndexer:
 
     COLLECTION_NAME = "geminiclaw_documents"
 
-    def __init__(self, url: str = QDRANT_URL, embedding_provider: Optional[EmbeddingProvider] = None):
+    def __init__(
+        self,
+        url: str = QDRANT_URL,
+        embedding_provider: Optional[EmbeddingProvider] = None,
+        registry: Optional[DocumentRegistry] = None,
+    ):
         """Inicializa o indexador e garante a coleção do Qdrant.
 
         Args:
@@ -37,8 +42,9 @@ class DocumentIndexer:
                 ``":memory:"`` para um cliente em memória (testes).
             embedding_provider: Provedor de embeddings a usar. Se omitido,
                 usa o singleton do processo (`get_embedding_provider`).
+            registry: Registro relacional de documentos e trechos. Se omitido, usa o PostgreSQL.
         """
-        self.chunker = DocumentChunker()
+        self.registry: DocumentRegistry = registry or PostgresDocumentRegistry(lambda: get_connection())
         self._embedding_provider = embedding_provider or get_embedding_provider()
         self._search_disabled = False
         if url == ":memory:":
@@ -87,6 +93,7 @@ class DocumentIndexer:
                     field_name="document_id",
                     field_schema="keyword",
                 )
+                self._ensure_payload_indexes()
                 return
 
             collection_dimension = self.qdrant.get_collection(self.COLLECTION_NAME).config.params.vectors.size
@@ -101,109 +108,89 @@ class DocumentIndexer:
                     },
                 )
                 self._search_disabled = True
+                return
+            self._ensure_payload_indexes()
         except Exception as e:
             logger.error(f"Erro ao verificar/criar coleção Qdrant para documentos: {e}")
 
-    async def ingest(self, doc: ExtractedDocument) -> str:
-        """Pipeline completo de ingestão."""
-        document_id = str(uuid.uuid4())
+    def _ensure_payload_indexes(self) -> None:
+        """Cria (de forma idempotente e aditiva) os índices de payload ``projeto_id`` e ``insumo_id``."""
+        for field_name in ("projeto_id", "insumo_id"):
+            try:
+                self.qdrant.create_payload_index(
+                    collection_name=self.COLLECTION_NAME, field_name=field_name, field_schema="keyword"
+                )
+            except Exception as e:  # noqa: BLE001 - índice é otimização; a busca funciona sem ele
+                logger.warning(
+                    "Índice de payload não criado",
+                    extra={"field": field_name, "error": type(e).__name__},
+                )
 
-        chunks = self.chunker.chunk(doc, document_id)
-
-        self._register_document(document_id, doc, len(chunks))
-        self._register_chunks(chunks)
-        await self._index_vectors(chunks)
-
-        logger.info(f"Documento {doc.title} ingerido com sucesso (ID: {document_id})", extra={"chunks": len(chunks)})
-        return document_id
-
-    def _register_document(self, doc_id: str, doc: ExtractedDocument, num_chunks: int):
-        """Registra metadados do documento no PostgreSQL."""
-        query = """
-            INSERT INTO documents (
-                id, source_path, filename, format, title, num_chunks, num_pages, file_size_bytes,
-                ingested_at, metadata_json
-            ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-            )
-        """
-
-        file_size = 0
-        if os.path.exists(doc.source_path):
-            file_size = os.path.getsize(doc.source_path)
-
-        params = (
-            doc_id,
-            doc.source_path,
-            doc.title,
-            doc.format,
-            doc.title,
-            num_chunks,
-            doc.num_pages,
-            file_size,
-            datetime.now(timezone.utc),
-            json.dumps(doc.metadata),
-        )
-
-        with get_connection() as conn:
-            conn.execute(query, params)
-
-    def _register_chunks(self, chunks: List[DocumentChunk]):
-        """Registra chunks no PostgreSQL."""
-        if not chunks:
-            return
-
-        query = """
-            INSERT INTO document_chunks (
-                id, document_id, chunk_index, content, token_count, metadata_json
-            ) VALUES (
-                %s, %s, %s, %s, %s, %s
-            )
-        """
-        with get_connection() as conn:
-            with conn.transaction():
-                for chunk in chunks:
-                    params = (
-                        chunk.chunk_id,
-                        chunk.document_id,
-                        chunk.chunk_index,
-                        chunk.content,
-                        chunk.token_count,
-                        json.dumps(chunk.metadata),
-                    )
-                    conn.execute(query, params)
-
-    async def _index_vectors(self, chunks: List[DocumentChunk]) -> None:
+    async def _index_vectors(self, chunks: List[DocumentChunk], deadline: Optional[float] = None) -> int:
         """Indexa no Qdrant para busca semântica, usando embeddings locais.
 
+        O vetor é gerado a partir de ``chunk.embed_text`` (cabeçalho enriquecido + trecho), quando
+        informado; o payload guarda só o trecho em ``content``. A vetorização é feita em lotes e
+        para quando ``deadline`` (instante de ``time.monotonic``) é ultrapassado.
+
         Args:
-            chunks: Chunks de documento já registrados no PostgreSQL.
+            chunks: Chunks já registrados.
+            deadline: Instante limite opcional.
+
+        Returns:
+            Quantidade de chunks vetorizados (0 se a coleção está desabilitada).
+
+        Raises:
+            Exception: Falha do modelo de embedding ou do Qdrant (quem chama decide o estado pendente).
         """
         if not chunks:
-            return
+            return 0
 
         if self._search_disabled:
             logger.warning(
                 "Indexação vetorial ignorada: coleção desabilitada por incompatibilidade de dimensão de embedding.",
                 extra={"collection": self.COLLECTION_NAME},
             )
-            return
+            return 0
 
-        texts = [chunk.content for chunk in chunks]
-        vectors = await asyncio.to_thread(self._embedding_provider.embed_documents, texts)
+        done = 0
+        for start in range(0, len(chunks), EMBED_BATCH):
+            if deadline is not None and start > 0 and time.monotonic() >= deadline:
+                break
+            batch = chunks[start:start + EMBED_BATCH]
+            texts = [chunk.embed_text or chunk.content for chunk in batch]
+            vectors = await asyncio.to_thread(self._embedding_provider.embed_documents, texts)
 
-        points = []
-        for chunk, vector in zip(chunks, vectors):
-            payload = {
-                "document_id": chunk.document_id,
-                "content": chunk.content,
-                "format": chunk.metadata.get("format", ""),
-                "chunk_index": chunk.chunk_index,
-                **embedding_payload(chunk.content, self._embedding_provider),
-            }
-            points.append(PointStruct(id=chunk.chunk_id, vector=vector, payload=payload))
+            points = []
+            for chunk, text, vector in zip(batch, texts, vectors):
+                payload = {
+                    "document_id": chunk.document_id,
+                    "content": chunk.content,
+                    "format": chunk.metadata.get("format", ""),
+                    "chunk_index": chunk.chunk_index,
+                    **chunk.payload_extra,
+                    **embedding_payload(text, self._embedding_provider),
+                }
+                points.append(PointStruct(id=chunk.chunk_id, vector=vector, payload=payload))
 
-        self.qdrant.upsert(collection_name=self.COLLECTION_NAME, points=points)
+            self.qdrant.upsert(collection_name=self.COLLECTION_NAME, points=points)
+            done += len(batch)
+        return done
+
+    async def vectorize(self, chunks: List[DocumentChunk], deadline: Optional[float] = None) -> bool:
+        """Vetoriza os chunks sem levantar: ``False`` quando Qdrant/embedding falham ou o prazo acaba.
+
+        Returns:
+            ``True`` se todos os chunks foram vetorizados; ``False`` deixa o documento ``pendente``.
+        """
+        try:
+            return await self._index_vectors(chunks, deadline) == len(chunks)
+        except Exception as e:  # noqa: BLE001 - a sessão não depende do Qdrant (vetorização pendente)
+            logger.warning(
+                "Vetorização falhou; documento fica pendente",
+                extra={"collection": self.COLLECTION_NAME, "error": type(e).__name__},
+            )
+            return False
 
     def _current_model_conditions(self) -> List[FieldCondition]:
         """Condições de filtro que casam apenas pontos do modelo/versão atuais."""
@@ -232,13 +219,20 @@ class DocumentIndexer:
             logger.debug(f"Não foi possível contar pontos de embedding desatualizados: {e}")
             return 0
 
-    def search(self, query: str, limit: int = 5, document_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def search(
+        self,
+        query: str,
+        limit: int = 5,
+        document_id: Optional[str] = None,
+        projeto_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         """Busca semântica no Qdrant usando o provedor de embeddings local.
 
         Args:
             query: Texto da consulta.
             limit: Número máximo de resultados.
             document_id: Filtro opcional por documento.
+            projeto_id: Restringe a busca aos pontos do projeto; ``None`` busca em todos os projetos.
 
         Returns:
             Lista de resultados (vazia se a busca semântica estiver
@@ -257,6 +251,8 @@ class DocumentIndexer:
         must_conditions = self._current_model_conditions()
         if document_id:
             must_conditions.append(FieldCondition(key="document_id", match=MatchValue(value=document_id)))
+        if projeto_id:
+            must_conditions.append(FieldCondition(key="projeto_id", match=MatchValue(value=projeto_id)))
         query_filter = Filter(must=must_conditions)
 
         results_obj = self.qdrant.query_points(
@@ -279,22 +275,19 @@ class DocumentIndexer:
                 "content": hit.payload["content"],
                 "document_id": hit.payload["document_id"],
                 "score": hit.score,
+                "projeto_id": hit.payload.get("projeto_id"),
+                "titulo": hit.payload.get("titulo"),
+                "tipo_insumo": hit.payload.get("tipo_insumo"),
+                "tipo_ponto": hit.payload.get("tipo_ponto"),
+                "insumo_id": hit.payload.get("insumo_id"),
             }
             for hit in results_obj.points
         ]
 
-    def list_documents(self, limit: int = 10) -> List[Dict[str, Any]]:
-        """Lista os documentos ingeridos a partir do PostgreSQL."""
-        query = "SELECT * FROM documents ORDER BY ingested_at DESC LIMIT %s"
-        with get_connection() as conn:
-            docs = conn.execute(query, (limit,)).fetchall()
-            return [dict(d) for d in docs]
+    def list_documents(self, limit: int = 10, projeto_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Lista os documentos ingeridos; ``projeto_id`` restringe ao projeto (``None`` lista todos)."""
+        return self.registry.list_documents(limit, projeto_id)
 
     def get_document_info(self, document_id: str) -> Optional[Dict[str, Any]]:
-        """Recupera detalhes de um documento no PostgreSQL."""
-        query = "SELECT * FROM documents WHERE id = %s"
-        with get_connection() as conn:
-            doc = conn.execute(query, (document_id,)).fetchone()
-            if doc:
-                return dict(doc)
-            return None
+        """Recupera detalhes de um documento."""
+        return self.registry.get(document_id)

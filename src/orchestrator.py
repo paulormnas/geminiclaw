@@ -57,6 +57,7 @@ if TYPE_CHECKING:
     from src.knowledge.graph_store import GraphStore
     from src.knowledge.ingestion import FactIngestor
     from src.knowledge.semantic_runtime import SemanticRuntime
+    from src.skills.document_processor.enrichment import ProjectMeta
 
 logger = get_logger(__name__)
 
@@ -218,6 +219,8 @@ class Orchestrator:
         self._recorders: dict[str, CheckpointRecorder] = {}
         self._resumes: dict[str, ResumeState] = {}
         self._resume_planning: set[str] = set()
+        # v17-input-document-index — metadados do projeto por sessão mestra (cabeçalho da ingestão de artefatos).
+        self._project_metas: dict[str, ProjectMeta] = {}
         # v18-hypothesis-loop — exploração ativa por sessão mestra e declarações do último plano aprovado.
         # ``exploration_approver``/``solution_confirmer`` são injetáveis (testes); em produção o pesquisador
         # decide no terminal interativo (sem TTY nada é aprovado).
@@ -418,6 +421,50 @@ class Orchestrator:
             self.human_gate.request(decisao, task.task_name or "")
         except ValueError:
             logger.warning("Decisão reservada desconhecida; tratada como pendente sem registro no gate")
+
+    async def _index_inputs(self, session_id: str, project_id: str | None) -> dict[str, Any] | None:
+        """Indexa o ``input_snapshot/`` da sessão na coleção de documentos (v17-input-document-index).
+
+        Nunca levanta: qualquer falha é registrada e a sessão segue para o planejamento. Devolve o relatório
+        (também gravado em ``payload["input_index"]``) ou ``None`` se desligada ou sem projeto. Se a indexação
+        em si falhar (ex.: PostgreSQL indisponível), o relatório traz ``erro`` (só o tipo da exceção), para que
+        o pesquisador veja que a busca nos insumos não está disponível.
+        """
+        from src import config
+
+        if not config.INPUT_INDEX_ENABLED or not project_id:
+            return None
+        try:
+            from src.knowledge.input_index import index_input_snapshot, load_project_meta
+            from src.skills.document_processor.enrichment import ProjectMeta
+
+            try:
+                store = await asyncio.to_thread(self._open_knowledge_store)
+            except Exception as exc:  # noqa: BLE001 - sem grafo, indexa com insumo_id nulo
+                logger.warning("Grafo indisponível para a indexação dos insumos", extra={"error": type(exc).__name__})
+                store = None
+            meta = (
+                await asyncio.to_thread(load_project_meta, store, project_id)
+                if store is not None
+                else ProjectMeta(projeto_id=project_id)
+            )
+            self._project_metas[session_id] = meta
+            report = await index_input_snapshot(self.output_manager.base_dir / session_id, meta, store=store)
+            current = self.session_manager.get(session_id)
+            if current is not None:
+                self.session_manager.update(session_id, payload={**current.payload, "input_index": report})
+            logger.info("Insumos indexados", extra={"input_index": report})
+            return report
+        except Exception as exc:  # noqa: BLE001 - a indexação nunca derruba a sessão
+            logger.warning("Indexação dos insumos falhou", extra={"error": type(exc).__name__})
+            report = {"erro": type(exc).__name__, "indexados": 0, "pendentes": [], "falhas": []}
+            try:
+                current = self.session_manager.get(session_id)
+                if current is not None:
+                    self.session_manager.update(session_id, payload={**current.payload, "input_index": report})
+            except Exception as inner:  # noqa: BLE001
+                logger.warning("Relatório de erro da indexação não gravado", extra={"error": type(inner).__name__})
+            return report
 
     @staticmethod
     async def _safe_ingest(fn: "Callable[[], Any]") -> None:
@@ -734,6 +781,11 @@ class Orchestrator:
             )
         ingestor.session_end(fim=after.atualizado_em, motivo_parada="interrompida", consumo=after.consumo)
 
+    def _session_project_id(self, session_id: str) -> str | None:
+        """Projeto da sessão mestra (``None`` em sessões sem projeto)."""
+        ingestor = self._ingestors.get(session_id)
+        return ingestor.ctx.project_id if ingestor is not None else None
+
     def get_ingestor(self, session_id: str) -> "FactIngestor | None":
         """Ingestor de fatos da sessão mestra (``None`` em sessões sem projeto)."""
         return self._ingestors.get(session_id)
@@ -789,6 +841,7 @@ class Orchestrator:
             logger.warning("Fim da sessão não registrado no grafo", extra={"error": type(err).__name__})
         finally:
             self._ingestors.pop(session_id, None)
+            self._project_metas.pop(session_id, None)
 
     def _end_ingestion_unsafe(
         self, ingestor: "FactIngestor", session_id: str, status: str, exc: BaseException | None
@@ -978,6 +1031,7 @@ class Orchestrator:
         # montam seu próprio plano (sem Researcher), logo não há prompt de planejamento
         # para injetar contexto — evitamos o custo (e o I/O) quando não é utilizável.
         bundle = context_bundle
+        input_index_report: dict[str, Any] | None = None
         if bundle is None and not agent_tasks:
             bundle = ContextLoader().load()
         if bundle is not None:
@@ -986,6 +1040,8 @@ class Orchestrator:
             self._snapshot_input_context(bundle, master_session.id)
             if ingestor is not None:
                 await self._safe_ingest(ingestor.inputs)
+                # v17-input-document-index — insumos na busca semântica antes do planejamento (sem LLM).
+                input_index_report = await self._index_inputs(master_session.id, ingestor.ctx.project_id)
         # v17-research-project — o problema do projeto vai em todo planejamento (plano e replans).
         self._project_blocks[master_session.id] = project_context or ""
 
@@ -1007,6 +1063,15 @@ class Orchestrator:
                 "llm_routing": routing.modo,
             },
         )
+
+        if input_index_report is not None:
+            telemetry.record_agent_event(
+                execution_id=exec_id or master_session.id,
+                session_id=master_session.id,
+                agent_id="orchestrator",
+                event_type="input_index",
+                payload=input_index_report,
+            )
 
         logger.info("Nova requisição registrada", extra={"execution_id": exec_id, "prompt_preview": prompt[:50]})
 
@@ -1646,6 +1711,10 @@ class Orchestrator:
             readable_dirs=self._resumes[effective_session_id].readable_dirs
             if effective_session_id in self._resumes
             else (),
+            project_id=self._session_project_id(effective_session_id),
+            extra={"project_meta": self._project_metas[effective_session_id]}
+            if effective_session_id in self._project_metas
+            else {},
             ask_researcher=_ask_researcher_callback,
             consult_researcher=_consult_researcher_callback,
         )

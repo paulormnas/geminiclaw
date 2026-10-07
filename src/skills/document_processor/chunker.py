@@ -1,20 +1,39 @@
 import uuid
-from dataclasses import dataclass
-from typing import List, Optional
+from dataclasses import dataclass, field
+from typing import List
 
 from src.skills.document_processor.extractors.base import ExtractedDocument
 
+# Namespace fixo dos IDs determinísticos de documento e trecho (v17-input-document-index, design §4).
+NAMESPACE_DOCUMENTOS = uuid.UUID("5f0c1c7e-6d52-4d0e-9c53-3b1f7f4d2a10")
+
+
+def document_id_for(projeto_id: str, hash_conteudo: str) -> str:
+    """ID determinístico do documento: o mesmo arquivo no mesmo projeto tem sempre o mesmo ID."""
+    return str(uuid.uuid5(NAMESPACE_DOCUMENTOS, f"{projeto_id}:{hash_conteudo}"))
+
+
+def chunk_id_for(document_id: str, indice: int) -> str:
+    """ID determinístico do trecho; torna a reindexação idempotente (``upsert`` sobre os mesmos IDs)."""
+    return str(uuid.uuid5(NAMESPACE_DOCUMENTOS, f"{document_id}:{indice}"))
+
+
 @dataclass
 class DocumentChunk:
-    """Um chunk de documento pronto para indexação."""
-    chunk_id: str              # UUID
+    """Um chunk de documento pronto para indexação.
+
+    ``content`` é só o texto do trecho (é o que se guarda e a busca devolve); o texto enviado ao
+    modelo de embedding é ``embed_text`` (cabeçalho enriquecido + trecho), quando informado.
+    """
+    chunk_id: str              # UUID determinístico
     document_id: str           # ID do documento pai
-    content: str               # Texto do chunk
+    content: str               # Texto do trecho, sem cabeçalho
     chunk_index: int           # Posição no documento
     total_chunks: int          # Total de chunks do documento
     metadata: dict             # source_path, format, page, section, etc.
     token_count: int           # Estimativa de tokens
-    context_prefix: str = ""   # Contextual Retrieval: "Documento: X | Seção: Y"
+    embed_text: str = ""       # Texto vetorizado (cabeçalho + trecho); vazio = ``content``
+    payload_extra: dict = field(default_factory=dict)  # Campos extras do ponto no Qdrant
 
 
 class DocumentChunker:
@@ -30,12 +49,10 @@ class DocumentChunker:
         max_chunk_size: int = 1500,    # Aproximadamente tokens / caracteres
         overlap: int = 150,            # Overlap de contexto
         strategy: str = "auto",        # auto | paragraph | fixed
-        prepend_context: bool = True,
     ):
         self.max_chunk_size = max_chunk_size
         self.overlap = overlap
         self.strategy = strategy
-        self.prepend_context = prepend_context
 
     def chunk(self, doc: ExtractedDocument, document_id: str) -> List[DocumentChunk]:
         """Divide o documento em chunks e retorna uma lista de DocumentChunk."""
@@ -55,11 +72,9 @@ class DocumentChunker:
         total_chunks = len(raw_chunks)
         
         for i, text_chunk in enumerate(raw_chunks):
-            chunk_id = str(uuid.uuid4())
-            context_prefix = f"Documento: {doc.title} ({doc.format.upper()})" if self.prepend_context else ""
-            
-            content = f"{context_prefix}\n\n{text_chunk}" if context_prefix else text_chunk
-            
+            chunk_id = chunk_id_for(document_id, i)
+            content = text_chunk
+
             # Estimativa básica: 1 token ~ 4 chars
             token_count = len(content) // 4
             
@@ -71,7 +86,6 @@ class DocumentChunker:
                 total_chunks=total_chunks,
                 metadata={"source_path": doc.source_path, "format": doc.format},
                 token_count=token_count,
-                context_prefix=context_prefix,
             ))
 
         return chunks

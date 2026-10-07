@@ -25,10 +25,19 @@ Logo depois do snapshot e da gravação dos `Insumo`s no grafo (`v17-structural-
    (mesmos IDs de trecho, `upsert`).
 4. Não indexado → extrai, divide, enriquece, vetoriza e registra.
 
-Limites: arquivos acima de `INPUT_INDEX_MAX_FILE_MB` (padrão 50) são registrados só com
-descritor e um `WARNING`; o tempo total é limitado por `INPUT_INDEX_MAX_SECONDS` (padrão 300).
+Limites: arquivos acima de `INPUT_INDEX_MAX_FILE_MB` (padrão 20) são registrados só com
+descritor e um `WARNING` (artigos acima disso não são extraídos). Conjuntos de dados em
+JSON/JSONL/xlsx/xls/ods/parquet, que o pandas ou o parser JSON carregam inteiros na memória do
+Pi 5, têm limite menor, `INPUT_INDEX_MAX_DATASET_MB` (padrão 10): acima dele só entra um
+descritor mínimo (nome, formato, tamanho) e um `WARNING`. CSV e TSV são lidos em fluxo e seguem
+só o limite geral. O tempo total é limitado por `INPUT_INDEX_MAX_SECONDS` (padrão 300).
 Ao estourar o tempo, os arquivos restantes ficam para a próxima sessão (a sessão segue) e o
 payload registra `input_index.pendentes`. Embedding roda em `asyncio.to_thread` (como hoje).
+
+O prazo é **melhor esforço**: ele é checado antes de começar cada arquivo e antes de extrair ou
+descrever, mas uma extração, leitura ou vetorização já iniciada não é interrompida (a thread de
+`asyncio.to_thread` não é cancelável). Por isso os limites de tamanho acima são a contenção real
+de memória e tempo; o prazo apenas impede começar trabalho novo.
 
 Falha do Qdrant ou do modelo de embedding não impede a sessão: o arquivo fica registrado com
 `vetorizacao: pendente` (mesmo padrão do ADR 015 §6, fluxo de escrita) e entra na próxima
@@ -43,10 +52,30 @@ reconciliação.
 | imagens | **Um descritor**: nome, formato, dimensões; sem OCR nem descrição por modelo |
 | `outro` | Descritor com nome, formato e tamanho |
 
+Quando a estrutura de um conjunto de dados não pode ser lida (arquivo corrompido, biblioteca
+ausente), o descritor traz `estrutura: indisponivel` além do nome, formato e tamanho, para que o
+agente não confunda a ausência de colunas com um arquivo vazio.
+
 PDFs escaneados: o texto vem do OCR local já existente (`context_loader.py:335-354`). A partir
 da `v18.5-research-data-ingestion`, arquivos marcados `dado_de_pesquisa` no `dados.yaml` passam
 a ter só descritor, qualquer que seja a extensão (requisito já escrito aqui para quando a
 marcação existir).
+
+### 2.1 Limitações conhecidas
+
+- **Origem do primeiro arquivo:** a deduplicação é por (`projeto_id`, `hash_conteudo`). Se o mesmo
+  conteúdo aparece depois com outro nome ou origem (ex.: um artefato idêntico a um insumo), nenhum
+  documento novo é criado: `nome_arquivo`, `source_path` e `origem` ficam os do **primeiro**
+  arquivo indexado.
+- **Artefatos `.txt`/`.md`:** artefatos que o agente grava em `artifacts/` e ingere com
+  `document_processor ingest` entram **integralmente** como trechos de texto, como qualquer artigo,
+  pois a extensão não distingue relato de dado. A marcação `dado_de_pesquisa` da
+  `v18.5-research-data-ingestion` passará a forçar só descritor também para eles; até lá, quem
+  grava dados em `.txt`/`.md` expõe esses valores ao índice (e à busca com `LLM_DATA_POLICY`).
+- **`.pptx`:** o índice trata `.pptx` como `artigo` (texto dos slides), enquanto a regra
+  `insumo_tipo` da `v17-structural-fact-ingestion` classifica o `Insumo` do grafo como `outro`. A
+  divergência é intencional (o texto dos slides é útil na busca) e `tipo_insumo` do documento
+  indexado é a fonte para a busca; o `Insumo` do grafo continua `outro`.
 
 ## 3. Texto enriquecido
 
@@ -103,7 +132,15 @@ Qdrant (coleção existente `geminiclaw_documents`), além dos campos atuais:
   skill aceita `todos_os_projetos: true` para busca sem filtro (o resultado informa o projeto de
   cada trecho).
 - O resultado traz `titulo`, `tipo_insumo`, `tipo_ponto`, `insumo_id` e o trecho.
-- `agents/base/agent.py` lista só os documentos do projeto da sessão.
+- `agents/base/agent.py` lista só os documentos do projeto da sessão; sem contexto de agente não
+  lista nada (fail-closed).
+- `info` trata o documento de outro projeto como inexistente (salvo `todos_os_projetos`) e nunca
+  devolve `source_path`. Cada uso de `todos_os_projetos` (busca, lista ou info) gera um `WARNING`
+  de auditoria.
+- Sessão sem projeto: o escopo é `sem_projeto:<session_id>`, não um bucket global; artefatos
+  ingeridos por uma sessão sem projeto não aparecem em outra.
+- Todo texto livre de insumo devolvido ao LLM (trecho, título, nome de arquivo, colunas) passa por
+  `clean_free_text` e é entregue entre `<dado_nao_confiavel>` (`wrap_data`), como na Curadoria.
 - O texto devolvido segue a política de saída já existente: documentos textuais obedecem à
   `LLM_DATA_POLICY`; descritores não têm valores (ADR 019 §3.1).
 
@@ -113,7 +150,8 @@ Qdrant (coleção existente `geminiclaw_documents`), além dos campos atuais:
 |---|---|---|
 | `INPUT_INDEX_ENABLED` | `true` | Liga a indexação automática |
 | `INPUT_INDEX_MAX_SECONDS` | 300 | Tempo máximo por sessão |
-| `INPUT_INDEX_MAX_FILE_MB` | 50 | Acima disso, só descritor |
+| `INPUT_INDEX_MAX_FILE_MB` | 20 | Acima disso, só descritor |
+| `INPUT_INDEX_MAX_DATASET_MB` | 10 | Acima disso, JSON/xlsx/parquet só com descritor mínimo |
 | `INPUT_INDEX_HEADER_MAX_CHARS` | 400 | Tamanho máximo do cabeçalho |
 
 ## 7. Análise de impacto (6 eixos)

@@ -241,6 +241,16 @@ def _setup_skills() -> None:
     )
 
 
+_MARKDOWN_CHARS = str.maketrans("", "", "`*#>[]<|~")
+
+
+def _safe_label(value: object, limit: int = 80) -> str:
+    """Rótulo de documento para a instrução: uma linha, sem markdown, com tamanho máximo."""
+    from src.knowledge.normalization import clean_free_text
+
+    return clean_free_text(str(value if value is not None else "")).translate(_MARKDOWN_CHARS)[:limit]
+
+
 def _get_agent_instruction(base_instruction: str) -> str:
     """Gera a instrução do agente com system_context dinâmico estruturado.
 
@@ -307,13 +317,25 @@ def _get_agent_instruction(base_instruction: str) -> str:
     # --- Documentos do usuário indexados ---
     try:
         from src.skills.document_processor.indexer import DocumentIndexer
+        from src.agent_runtime.context import get_agent_context_optional
+
         indexer = DocumentIndexer()
-        docs = indexer.list_documents(limit=10)
+        ctx = get_agent_context_optional()
+        # v17-input-document-index: só os documentos do projeto da sessão (sem projeto, o escopo da própria
+        # sessão). Sem contexto de agente não há escopo: não lista nada (fail-closed).
+        docs = (
+            indexer.list_documents(limit=10, projeto_id=ctx.project_id or f"sem_projeto:{ctx.session_id}")
+            if ctx
+            else []
+        )
 
         if docs:
             doc_lines = []
             for d in docs:
-                doc_lines.append(f"  - [{d['format'].upper()}] {d['title']} ({d['filename']}, {d['num_chunks']} chunks)")
+                doc_lines.append(
+                    f"  - [{_safe_label(d['format'], 10).upper()}] {_safe_label(d['title'])} "
+                    f"({_safe_label(d['filename'])}, {int(d['num_chunks'])} chunks)"
+                )
             context_sections.append(
                 "**DOCUMENTOS DO USUÁRIO DISPONÍVEIS** (consulte via `document_processor` ação 'search'):\n"
                 + "\n".join(doc_lines)

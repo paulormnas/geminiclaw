@@ -698,8 +698,10 @@ class PythonSandbox:
         """
         # --no-config: o uv não lê uv.toml/pyproject.toml da pasta corrente (controlável pelo código
         # gerado). --only-binary :all: evita executar setup.py/backends de build com rede ligada.
+        # --no-cache / --link-mode=copy: o cache do uv fica em tmpfs (/tmp) e não pode encher a memória;
+        # sem cache não há hardlinks para o cache, e os arquivos são copiados para /deps.
         cmd = [
-            "uv", "pip", "install", "--no-config", "--only-binary", ":all:",
+            "uv", "pip", "install", "--no-config", "--only-binary", ":all:", "--no-cache", "--link-mode=copy",
             "--python", SANDBOX_VENV_PYTHON, "--target", SANDBOX_DEPS_DIR, *to_install,
         ]
         requested = ", ".join(to_install)

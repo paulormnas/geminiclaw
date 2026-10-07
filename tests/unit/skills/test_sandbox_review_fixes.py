@@ -493,3 +493,15 @@ def test_m7_redirect_de_https_para_http_e_recusado(tmp_path, monkeypatch, sha_de
     monkeypatch.setattr(fetch_assets, "_PinnedHTTPConnection", Conn)
     with pytest.raises(fetch_assets.AssetError, match="https para http"):
         fetch_assets.download("https://exemplo.org/a", str(tmp_path / "a"), 100)
+
+
+# --- B1: o cache do uv não ocupa o tmpfs ---------------------------------------------------------------------
+
+@pytest.mark.unit
+def test_b1_install_sem_cache_e_com_copia(make_sandbox, tmp_path):
+    daemon = FakeDaemon()
+    _run(make_sandbox(daemon), tmp_path, packages=["tabulate"])
+
+    cmd = next(c for c, _kw in daemon.exec_calls if c[0] == "uv")
+    assert "--no-cache" in cmd and "--link-mode=copy" in cmd
+    assert "--only-binary" in cmd and "--no-config" in cmd

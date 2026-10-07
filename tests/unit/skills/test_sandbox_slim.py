@@ -200,7 +200,7 @@ def test_comando_de_instalacao_fixo(make_sandbox, tmp_path):
 
     cmd = next(c for c, _ in daemon.exec_calls if c[0] == "uv")
     assert cmd == [
-        "uv", "pip", "install", "--no-config", "--only-binary", ":all:",
+        "uv", "pip", "install", "--no-config", "--only-binary", ":all:", "--no-cache", "--link-mode=copy",
         "--python", SANDBOX_VENV_PYTHON, "--target", "/deps", "tabulate==0.9.0",
     ]
     prep_volumes = daemon.prep_kwargs["volumes"]

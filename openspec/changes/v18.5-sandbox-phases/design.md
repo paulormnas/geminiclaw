@@ -57,7 +57,8 @@ Consequência: com `packages`, código gerado roda com internet e com os artefat
 ### 2. Fase `install`
 
 - Comando fixo, montado pelo sandbox (não pela skill nem pelo LLM):
-  `uv pip install --no-cache-dir --python /app/.venv/bin/python --target /deps <pacotes>`.
+  `uv pip install --no-config --only-binary :all: --no-cache --link-mode=copy --python /opt/sandbox-venv/bin/python
+  --target /deps <pacotes>` (o venv da imagem é `/opt/sandbox-venv`, ADR 018; não `/app/.venv`).
   O parâmetro `setup_commands` (lista livre de comandos) é **substituído** por
   `packages: list[str]`; cada nome é validado contra a gramática de requisito do PEP 508
   (sem URLs diretas, sem `-e`, sem opções iniciadas por `-`). A lista de nomes da stdlib
@@ -315,3 +316,8 @@ Registro das correções e dos riscos aceitos decorrentes da revisão do Analist
   `install` não tem filtro de IP interno (a validação de destino do §3 vale só para o script de download);
   ele fala apenas com o PyPI fixo, mas um índice comprometido ou um redirecionamento do PyPI poderia levar
   a um destino interno. Mitiga-se com a rede dedicada para a preparação (ver A1), ainda não adotada.
+- **B1 (baixa) — comando de instalação:** acrescentados `--no-cache` e `--link-mode=copy` (o `UV_CACHE_DIR`
+  fica em tmpfs e não deve acumular); o design agora descreve também `--only-binary :all:` (nada de
+  `setup.py`/backends de build com rede ligada) e `--no-config` (o `uv` ignora `uv.toml`/`pyproject.toml`
+  do diretório corrente), e o interpretador `/opt/sandbox-venv` do ADR 018. Na lista de riscos, a opção
+  `SANDBOX_INSTALL_ONLY_BINARY` deixa de existir: `--only-binary` é sempre aplicado.

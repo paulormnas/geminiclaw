@@ -1,0 +1,158 @@
+"""Ativos declarados para o sandbox: validação, verificação de hash no host e cache (v18.5-sandbox-phases §3).
+
+O download acontece no container da fase ``fetch_assets`` (``fetch_assets.py``); o hash é sempre
+calculado aqui, no host, e o arquivo verificado vai para o cache por conteúdo
+(``SANDBOX_ASSET_CACHE_DIR/<sha256>``), de onde é montado somente leitura na fase ``execute``.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import os
+import pathlib
+import re
+import stat
+from dataclasses import dataclass
+from typing import Any, List, Literal, Optional
+
+from src.skills.code import fetch_assets as _fetch
+
+MAX_ASSETS = 10
+MAX_DESTINO_LENGTH = 100
+_DESTINO_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+_HASH_CHUNK = 1024 * 1024
+
+
+@dataclass(frozen=True)
+class AssetSpec:
+    """Ativo declarado pelo agente: URL, sha256 esperado (opcional) e nome em ``/assets/<destino>``."""
+
+    url: str
+    destino: str
+    sha256: Optional[str] = None
+
+
+@dataclass
+class AssetRecord:
+    """Ativo disponibilizado à execução, como registrado no resultado do sandbox."""
+
+    url: str
+    sha256: str
+    destino: str
+    tamanho: int
+    hash_declarado: bool
+    origem: Literal["download", "cache"]
+
+
+def parse_assets(raw: Optional[List[Any]]) -> tuple[List[AssetSpec], List[str]]:
+    """Valida a lista ``assets`` vinda do agente (texto não confiável).
+
+    Cada item precisa de ``url`` http/https sem destino interno, ``destino`` simples (sem ``/`` nem
+    ``..``) e, se presente, ``sha256`` com 64 dígitos hexadecimais.
+
+    Returns:
+        Tupla ``(specs, erros)``; ``erros`` traz uma mensagem por problema.
+    """
+    specs: List[AssetSpec] = []
+    errors: List[str] = []
+    items = list(raw or [])
+    if len(items) > MAX_ASSETS:
+        return [], [f"lista de assets com {len(items)} itens: o máximo é {MAX_ASSETS}"]
+    seen: set[str] = set()
+    for item in items:
+        if not isinstance(item, dict):
+            errors.append(f"{item!r}: cada ativo deve ser um objeto com url, destino e sha256 opcional")
+            continue
+        url, destino, sha = item.get("url"), item.get("destino"), item.get("sha256")
+        destino_ok = (
+            isinstance(destino, str)
+            and _DESTINO_RE.fullmatch(destino) is not None
+            and len(destino) <= MAX_DESTINO_LENGTH
+            and ".." not in destino
+        )
+        if not destino_ok:
+            errors.append(
+                f"destino {destino!r} inválido: use um nome simples (letras, dígitos, '.', '_' e '-'), sem '/' nem '..'"
+            )
+            continue
+        if destino in seen:
+            errors.append(f"destino {destino!r} repetido")
+            continue
+        if not isinstance(url, str) or not url.strip():
+            errors.append(f"ativo {destino!r}: url ausente")
+            continue
+        try:
+            _fetch.validate_url(url.strip())
+        except _fetch.AssetError as exc:
+            errors.append(f"ativo {destino!r}: URL recusada ({exc})")
+            continue
+        if sha is not None and not (isinstance(sha, str) and _SHA256_RE.fullmatch(sha)):
+            errors.append(f"ativo {destino!r}: sha256 deve ter 64 dígitos hexadecimais")
+            continue
+        seen.add(destino)
+        specs.append(AssetSpec(url=url.strip(), destino=destino, sha256=sha.lower() if sha else None))
+    return specs, errors
+
+
+def sha256_file(path: pathlib.Path) -> str:
+    """sha256 do conteúdo de ``path`` (lido em blocos)."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(_HASH_CHUNK), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def cached_path(cache_dir: pathlib.Path, sha256: str) -> Optional[pathlib.Path]:
+    """Caminho do ativo no cache, ou ``None`` se ausente ou se não for arquivo regular (nunca symlink)."""
+    path = cache_dir / sha256
+    try:
+        mode = os.lstat(path).st_mode
+    except FileNotFoundError:
+        return None
+    return path if stat.S_ISREG(mode) else None
+
+
+def verify_and_cache(
+    specs: List[AssetSpec], staging_dir: pathlib.Path, cache_dir: pathlib.Path
+) -> tuple[List[AssetRecord], Optional[str]]:
+    """Verifica os arquivos baixados em ``staging_dir`` e os move para o cache por conteúdo.
+
+    Returns:
+        Tupla ``(registros, erro)``. ``erro`` descreve a primeira falha (arquivo ausente, não regular
+        ou sha256 divergente, com os dois hashes); nesse caso a execução deve falhar na fase
+        ``fetch_assets``.
+    """
+    records: List[AssetRecord] = []
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    for spec in specs:
+        staged = staging_dir / spec.destino
+        try:
+            mode = os.lstat(staged).st_mode
+        except FileNotFoundError:
+            return records, f"ativo {spec.destino!r} não foi baixado"
+        if not stat.S_ISREG(mode):
+            return records, f"ativo {spec.destino!r} baixado não é um arquivo regular"
+        calculated = sha256_file(staged)
+        if spec.sha256 and spec.sha256 != calculated:
+            return records, (
+                f"sha256 do ativo {spec.destino!r} diverge: declarado {spec.sha256}, calculado {calculated}"
+            )
+        target = cache_dir / calculated
+        size = staged.stat().st_size
+        if cached_path(cache_dir, calculated) is None:
+            os.replace(staged, target)
+        else:
+            staged.unlink()
+        records.append(
+            AssetRecord(
+                url=spec.url,
+                sha256=calculated,
+                destino=spec.destino,
+                tamanho=size,
+                hash_declarado=spec.sha256 is not None,
+                origem="download",
+            )
+        )
+    return records, None

@@ -2,7 +2,7 @@
 
 ## 0. Pré-requisitos
 - [x] 0.1 Confirmar que `v16-model-catalog-router` (catálogo e roteador do ADR 017) está implementada em `dev`; se não estiver, parar e avisar o pesquisador.
-- [ ] 0.2 Obter aprovação explícita do pesquisador para a coluna `token_usage.versao_efetiva`.
+- [x] 0.2 Obter aprovação explícita do pesquisador para a coluna `token_usage.versao_efetiva`.
 
 ## 0.b Alinhamento pendente com `v16-model-catalog-router`
 - [x] 0.b.1 Alinhar o payload `catalogo`: o `v16-model-catalog-router` implementou `{versao, hash, local: bool}`; o design desta mudança usa `local_hash`. Decidir um formato (ex.: manter `local` e acrescentar `local_hash`) e ajustar design, spec e código antes de implementar. (Decidido: manter `local` e acrescentar `local_hash` em `payload["llm_routing"]["catalogo"]` e em `allocation_profile.catalogo`.)
@@ -22,7 +22,7 @@
 ## 3. Versão efetiva
 - [x] 3.1 `LLMResponse.versao_efetiva`; leitura por provedor (design §4).
 - [x] 3.2 Digest do Ollama no início da sessão e a cada checkpoint.
-- [ ] 3.3 Migração `scripts/migrations/v18_5_model_version.sql` e `scripts/init_db.sql`; `record_token_usage` com `versao_efetiva`.
+- [x] 3.3 Migração `scripts/migrations/v18_5_model_version.sql` e `scripts/init_db.sql`; `record_token_usage` com `versao_efetiva`.
 - [x] 3.4 `VersionTracker`: evento `versao_modelo_alterada`, `payload["eventos_versao_modelo"]`, `WARNING`.
 - [x] 3.5 `StopReason.VERSAO_MODELO` e `parada_pendente` verificada no `AutonomousLoop` com os limites de uso.
 

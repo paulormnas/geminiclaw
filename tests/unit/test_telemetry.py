@@ -451,3 +451,62 @@ class TestGetTelemetrySingleton:
         tel_module._collector = None
         t = get_telemetry()
         assert isinstance(t, TelemetryCollector)
+
+
+# ---------------------------------------------------------------------------
+# v18.5-model-catalog-locality: coluna token_usage.versao_efetiva
+# ---------------------------------------------------------------------------
+
+
+def _insert_token_usage_call(**kwargs):
+    col = _make_collector()
+    col.record_token_usage(
+        execution_id="e", session_id="s", agent_id="a", llm_provider="google",
+        llm_model="m", prompt_tokens=1, completion_tokens=1, latency_ms=1, **kwargs,
+    )
+    snap = col._buffer
+    col._buffer = _Buffer()
+    ctx, mock_conn = _make_conn_ctx()
+    with patch("src.telemetry.get_connection", return_value=ctx):
+        col._write_snapshot(snap)
+    for call in mock_conn.execute.call_args_list:
+        if "INSERT INTO token_usage" in call[0][0]:
+            return call[0][0], call[0][1]
+    raise AssertionError("INSERT INTO token_usage não executado")
+
+
+@pytest.mark.unit
+class TestTokenUsageVersaoEfetiva:
+    def test_insert_inclui_a_coluna_e_o_valor(self):
+        stmt, params = _insert_token_usage_call(versao_efetiva="gemini-2.5-pro-002")
+        assert "versao_efetiva" in stmt
+        assert stmt.count("%s") == len(params)
+        assert params[-1] == "gemini-2.5-pro-002"
+
+    def test_padrao_desconhecida(self):
+        _, params = _insert_token_usage_call()
+        assert params[-1] == "desconhecida"
+
+    def test_none_grava_null(self):
+        _, params = _insert_token_usage_call(versao_efetiva=None)
+        assert params[-1] is None
+
+
+@pytest.mark.unit
+class TestMigracaoVersaoEfetiva:
+    def _sql(self, name):
+        from pathlib import Path
+
+        return (Path(__file__).resolve().parents[2] / "scripts" / name).read_text(encoding="utf-8")
+
+    def test_migracao_idempotente_e_sem_destruicao(self):
+        sql = self._sql("migrations/v18_5_model_version.sql")
+        code = "\n".join(ln for ln in sql.splitlines() if not ln.strip().startswith("--")).upper()
+        assert "ADD COLUMN IF NOT EXISTS VERSAO_EFETIVA TEXT" in code
+        for forbidden in ("DROP ", "DELETE ", "TRUNCATE", "NOT NULL", "DEFAULT"):
+            assert forbidden not in code
+
+    def test_init_db_declara_a_coluna(self):
+        sql = self._sql("init_db.sql")
+        assert sql.count("versao_efetiva TEXT") == 2  # CREATE TABLE e ALTER ... IF NOT EXISTS
+        assert "ADD COLUMN IF NOT EXISTS versao_efetiva TEXT" in sql

@@ -52,3 +52,27 @@ async def test_digest_real_do_ollama():
     digest = await provider.fetch_digest()
 
     assert digest != UNKNOWN_VERSION and digest.startswith("sha256:")
+
+
+def _postgres_url() -> str:
+    url = os.environ.get("DATABASE_URL", "")
+    return url if url.startswith("postgresql://") else ""
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not _postgres_url(), reason="exige PostgreSQL em DATABASE_URL (escrito; roda só na bateria final)")
+def test_migracao_versao_efetiva_idempotente_e_retrocompativel():
+    """Aplica a migração duas vezes em banco de teste: coluna anulável criada e linhas antigas preservadas."""
+    from pathlib import Path
+
+    import psycopg
+
+    migration = (Path(__file__).resolve().parents[2] / "scripts/migrations/v18_5_model_version.sql").read_text()
+    with psycopg.connect(_postgres_url(), autocommit=True) as conn:
+        conn.execute(migration)
+        conn.execute(migration)  # idempotente
+        row = conn.execute(
+            "SELECT is_nullable FROM information_schema.columns "
+            "WHERE table_name = 'token_usage' AND column_name = 'versao_efetiva'"
+        ).fetchone()
+        assert row == ("YES",)

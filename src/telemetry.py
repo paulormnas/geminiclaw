@@ -143,9 +143,9 @@ class _TokenUsageRow:
     context_window_used: Optional[int]
     context_window_max: Optional[int]
     was_compressed: bool
-    # v18.5-model-catalog-locality: versão efetivamente servida. A gravação na coluna ``token_usage.versao_efetiva``
-    # depende da migração de schema (ainda sem aprovação do pesquisador); até lá o INSERT não a inclui.
-    versao_efetiva: str = "desconhecida"
+    # v18.5-model-catalog-locality: versão efetivamente servida, gravada em ``token_usage.versao_efetiva``
+    # (migração scripts/migrations/v18_5_model_version.sql). ``None`` grava NULL.
+    versao_efetiva: Optional[str] = "desconhecida"
 
 
 @dataclass
@@ -431,7 +431,7 @@ class TelemetryCollector:
         context_window_used: Optional[int] = None,
         context_window_max: Optional[int] = None,
         was_compressed: bool = False,
-        versao_efetiva: str = "desconhecida",
+        versao_efetiva: Optional[str] = "desconhecida",
     ) -> None:
         """Registra o consumo de tokens por chamada LLM.
 
@@ -684,8 +684,8 @@ class TelemetryCollector:
                             (id, execution_id, session_id, agent_id, task_name,
                              llm_provider, llm_model, prompt_tokens, completion_tokens,
                              total_tokens, estimated_cost_usd, latency_ms, timestamp,
-                             context_window_used, context_window_max, was_compressed)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                             context_window_used, context_window_max, was_compressed, versao_efetiva)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (id) DO NOTHING
                         """,
                         (
@@ -694,6 +694,7 @@ class TelemetryCollector:
                             row.prompt_tokens, row.completion_tokens, row.total_tokens,
                             row.estimated_cost_usd, row.latency_ms, row.timestamp,
                             row.context_window_used, row.context_window_max, row.was_compressed,
+                            row.versao_efetiva,
                         ),
                     )
 

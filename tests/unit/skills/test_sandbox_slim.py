@@ -1,4 +1,4 @@
-"""Specs da mudança v16-sandbox-slim-image (capacidade code-sandbox), com o cliente do daemon simulado.
+"""Specs das mudanças v16-sandbox-slim-image e v18.5-sandbox-phases (capacidade code-sandbox), com o cliente simulado.
 
 Nenhum teste constrói imagem nem cria container de verdade. Os cenários que dependem da imagem
 real (conteúdo, escrita fora das áreas permitidas, dono dos artefatos, socket sem rede) ficam em
@@ -20,50 +20,64 @@ from src.skills.code.sandbox import SANDBOX_VENV_PYTHON, PythonSandbox, prepare_
 class FakeDaemon:
     """Cliente do daemon simulado que registra a ordem das chamadas relevantes."""
 
-    def __init__(self, networks=("bridge",), install_exit=0, install_output=b"", listing=None,
-                 disconnect_error=None):
+    def __init__(self, install_exit=0, install_output=b"", listing=None, fetch_exit=0, fetch_output=b"",
+                 python="3.11.9 (main, Jan 1 2026)"):
         self.calls: list[str] = []
         self.exec_calls: list[tuple] = []
+        self.run_calls: list[dict] = []
+        self.put_archives: list[tuple] = []
         self.client = MagicMock()
         self.container = MagicMock()
-        self._networks = {name: {} for name in networks}
-        self.container.attrs = {"NetworkSettings": {"Networks": self._networks}}
         self._install_exit = install_exit
         self._install_output = install_output
+        self._fetch_exit = fetch_exit
+        self._fetch_output = fetch_output
         self._listing = listing if listing is not None else []
-        self._disconnect_error = disconnect_error
+        self._python = python
         self.container.exec_run.side_effect = self._exec_run
-        self.container.put_archive.side_effect = lambda *a, **k: self.calls.append("put_archive")
+        self.container.put_archive.side_effect = self._put_archive
         self.container.kill.side_effect = lambda *a, **k: self.calls.append("kill")
-        self.client.containers.run.return_value = self.container
-        self.client.networks.get.side_effect = self._get_network
+        self.container.remove.side_effect = lambda *a, **k: self.calls.append("remove")
+        self.client.containers.run.side_effect = self._containers_run
+        image = MagicMock()
+        image.id = "sha256:abc123"
+        image.attrs = {"RepoDigests": ["code-sandbox@sha256:def456"]}
+        self.client.images.get.return_value = image
 
-    def _get_network(self, name):
-        network = MagicMock()
+    def _containers_run(self, **kwargs):
+        self.run_calls.append(kwargs)
+        self.calls.append(f"run:{kwargs['labels']['geminiclaw.role']}")
+        return self.container
 
-        def disconnect(container):
-            if self._disconnect_error:
-                raise self._disconnect_error
-            self.calls.append(f"disconnect:{name}")
-            self._networks.pop(name, None)
-
-        network.disconnect.side_effect = disconnect
-        return network
+    def _put_archive(self, path, data):
+        self.calls.append("put_archive")
+        self.put_archives.append((path, data))
 
     def _exec_run(self, cmd, *args, **kwargs):
         self.exec_calls.append((cmd, kwargs))
         if cmd[0] == "uv":
             self.calls.append("install")
             return SimpleNamespace(exit_code=self._install_exit, output=self._install_output)
+        if cmd[0] == "python" and cmd[1] == "/tmp/fetch_assets.py":
+            self.calls.append("fetch")
+            return SimpleNamespace(exit_code=self._fetch_exit, output=self._fetch_output)
         if cmd[0] == SANDBOX_VENV_PYTHON:
-            self.calls.append("list")
-            return SimpleNamespace(exit_code=0, output=json.dumps(self._listing).encode())
+            self.calls.append("introspect")
+            deps = [[d["name"], d["version"]] for d in self._listing]
+            payload = {"python": self._python, "all": [["numpy", "1.26.0"], *deps], "deps": deps}
+            return SimpleNamespace(exit_code=0, output=json.dumps(payload).encode())
         self.calls.append("script")
         return SimpleNamespace(exit_code=0, output=(b"ok", b""))
 
     @property
     def run_kwargs(self) -> dict:
-        return self.client.containers.run.call_args.kwargs
+        """Argumentos do container de execução (o último criado)."""
+        return self.run_calls[-1]
+
+    @property
+    def prep_kwargs(self) -> dict:
+        """Argumentos do container de preparação (o primeiro, quando há preparação)."""
+        return self.run_calls[0]
 
 
 @pytest.fixture
@@ -182,9 +196,10 @@ def test_comando_de_instalacao_fixo(make_sandbox, tmp_path):
         "uv", "pip", "install", "--no-config", "--only-binary", ":all:",
         "--python", SANDBOX_VENV_PYTHON, "--target", "/deps", "tabulate==0.9.0",
     ]
-    volumes = daemon.run_kwargs["volumes"]
-    assert any(v["bind"] == "/deps" for v in volumes.values())
-    assert daemon.run_kwargs["network_disabled"] is False
+    prep_volumes = daemon.prep_kwargs["volumes"]
+    assert any(v == {"bind": "/deps", "mode": "rw"} for v in prep_volumes.values())
+    assert daemon.prep_kwargs["network_disabled"] is False
+    assert any(v == {"bind": "/deps", "mode": "ro"} for v in daemon.run_kwargs["volumes"].values())
 
 
 @pytest.mark.unit
@@ -249,43 +264,6 @@ def test_diretorio_de_trabalho_removido_na_falha(make_sandbox, tmp_path):
     assert list(sandbox.work_dir.iterdir()) == []
 
 
-# --- Requirement: Script sem rede depois da instalação --------------------------------------
-
-@pytest.mark.unit
-def test_desconexao_antes_do_script(make_sandbox, tmp_path):
-    """Cenário: Desconexão antes do script. Cada rede é desconectada depois da instalação."""
-    daemon = FakeDaemon(networks=("bridge", "outra"))
-    result = _run(make_sandbox(daemon), tmp_path, packages=["tabulate"])
-
-    assert result.exit_code == 0
-    assert daemon.calls.index("install") < daemon.calls.index("disconnect:bridge") < daemon.calls.index("script")
-    assert daemon.calls.index("disconnect:outra") < daemon.calls.index("script")
-
-
-@pytest.mark.unit
-def test_desconexao_falha(make_sandbox, tmp_path):
-    """Cenário: Desconexão falha. O script não roda (fail-closed) e o erro cita a desconexão."""
-    daemon = FakeDaemon(disconnect_error=docker.errors.APIError("boom"))
-    result = _run(make_sandbox(daemon), tmp_path, packages=["tabulate"])
-
-    assert "script" not in daemon.calls
-    assert result.exit_code == -1
-    assert "desconexão de rede" in result.stderr
-    daemon.container.remove.assert_called()
-
-
-@pytest.mark.unit
-def test_desconexao_nao_confirmada(make_sandbox, tmp_path):
-    """Se o container continua em alguma rede depois do disconnect, a execução é abortada."""
-    daemon = FakeDaemon()
-    daemon.client.networks.get.side_effect = lambda name: MagicMock()  # disconnect não faz nada
-
-    result = _run(make_sandbox(daemon), tmp_path, packages=["tabulate"])
-
-    assert "script" not in daemon.calls
-    assert "desconexão de rede" in result.stderr
-
-
 # --- Requirement: Saída por bind mount restrito à subtarefa ---------------------------------
 
 @pytest.mark.unit
@@ -319,15 +297,15 @@ def test_gitignore_mantem_pem_e_sandbox_work():
 
 
 @pytest.mark.unit
-def test_listagem_depois_da_desconexao_e_isolada(make_sandbox, tmp_path):
-    """I1: nenhum código roda no container com rede além do uv; a listagem usa `-I` e workdir /tmp."""
+def test_introspeccao_e_isolada(make_sandbox, tmp_path):
+    """I1: a introspecção roda no container de execução (sem preparação), com `-I` e workdir /tmp."""
     daemon = FakeDaemon(listing=[{"name": "tabulate", "version": "0.9.0"}])
     _run(make_sandbox(daemon), tmp_path, packages=["tabulate"])
 
-    assert daemon.calls.index("disconnect:bridge") < daemon.calls.index("list")
     cmd, kwargs = next((c, k) for c, k in daemon.exec_calls if c[0] == SANDBOX_VENV_PYTHON)
     assert cmd[1] == "-I"
     assert kwargs["workdir"] == "/tmp"
+    assert daemon.calls.index("run:sandbox") < daemon.calls.index("introspect")
 
 
 @pytest.mark.unit
@@ -354,11 +332,12 @@ def test_falha_de_instalacao_explica_exigencia_de_wheel(make_sandbox, tmp_path):
 
 
 @pytest.mark.unit
-def test_script_injetado_depois_da_desconexao(make_sandbox, tmp_path):
-    """I4: o script só entra depois da instalação e da desconexão; sem pacotes, só put_archive e script."""
+def test_script_injetado_depois_da_preparacao(make_sandbox, tmp_path):
+    """I4: o script só entra depois da instalação, já no container de execução; instalação falha => nada entra."""
     daemon = FakeDaemon()
     _run(make_sandbox(daemon), tmp_path, packages=["tabulate"])
-    assert daemon.calls.index("disconnect:bridge") < daemon.calls.index("put_archive") < daemon.calls.index("script")
+    assert daemon.calls.index("install") < daemon.calls.index("run:sandbox") < daemon.calls.index("put_archive")
+    assert daemon.calls.index("put_archive") < daemon.calls.index("script")
 
     falha = FakeDaemon(install_exit=1)
     _run(make_sandbox(falha), tmp_path, packages=["tabulate"])

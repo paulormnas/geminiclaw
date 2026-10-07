@@ -323,3 +323,5 @@ Registro das correções e dos riscos aceitos decorrentes da revisão do Analist
   `SANDBOX_INSTALL_ONLY_BINARY` deixa de existir: `--only-binary` é sempre aplicado.
 - **B2 (baixa) — não regulares:** `list_input_files` e `check_mount_source` recusam FIFOs, sockets e
   dispositivos (`stat.S_ISREG`; `check_mount_source` aceita também diretórios, que é o que `/prior` monta).
+- **B6 (baixa) — fase da exceção:** uma exceção depois da criação do container de execução (exec, injeção do
+  script, introspecção) vira `fase_falha="execute"` (com `infra_error` preenchido); até lá segue `infra`.

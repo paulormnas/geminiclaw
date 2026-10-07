@@ -962,6 +962,8 @@ class PythonSandbox:
         session_dir = output_root / str(session_id)
         snapshot_dir = session_dir / "input_snapshot"
         container = None
+        # Fase corrente para classificar exceções: "infra" até o container de execução existir.
+        phase: Literal["execute", "infra"] = "infra"
         run_work_dir = self.work_dir / uuid.uuid4().hex
         try:
             if self.input_delivery not in ("mount", "copy"):
@@ -1093,6 +1095,7 @@ class PythonSandbox:
                 task_name=task_name,
                 working_dir="/outputs",
             )
+            phase = "execute"
             res.rede_na_execucao = network
             if network:
                 logger.warning(
@@ -1196,7 +1199,8 @@ class PythonSandbox:
             res.exit_code = -1
             res.artifacts = []
             res.infra_error = infra_error
-            res.fase_falha = "infra"
+            # Exceção no meio da execução (exec, put_archive, introspecção) é da fase execute, não de infra de início.
+            res.fase_falha = phase
             return res
         finally:
             if container:

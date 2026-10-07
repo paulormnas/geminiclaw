@@ -289,7 +289,7 @@ def test_m4_erro_no_meio_do_exec_ainda_mata_e_varre(make_sandbox, tmp_path):
     daemon = _CrashAfterPlanting(task)
     result = _run(make_sandbox(daemon), tmp_path)
 
-    assert result.fase_falha == "infra"
+    assert result.fase_falha == "execute"  # a exceção ocorreu no meio da fase execute (B6)
     assert "kill" in daemon.calls and daemon.calls.index("kill") < daemon.calls.index("remove")
     assert not (task / "escape").is_symlink() and not (task / "fila").exists()
 
@@ -536,3 +536,24 @@ def test_b2_check_mount_source_recusa_nao_regulares_e_aceita_dir_e_arquivo(tmp_p
         check_mount_source(tmp_path / "fila", tmp_path)
     assert check_mount_source(tmp_path / "arq", tmp_path) == (tmp_path / "arq").resolve()
     assert check_mount_source(tmp_path / "dir", tmp_path) == (tmp_path / "dir").resolve()
+
+
+# --- B6: a fase corrente é registrada em exceções no meio do execute ---------------------------------------
+
+@pytest.mark.unit
+def test_b6_excecao_no_meio_do_execute_e_fase_execute(make_sandbox, tmp_path):
+    daemon = FakeDaemon()
+    daemon.container.put_archive.side_effect = RuntimeError("falha ao injetar o script")
+    result = _run(make_sandbox(daemon), tmp_path)
+
+    assert result.fase_falha == "execute" and result.infra_error == "sandbox_start_failed"
+    assert result.exit_code == -1
+
+
+@pytest.mark.unit
+def test_b6_falha_ao_criar_o_container_de_execucao_segue_infra(make_sandbox, tmp_path):
+    daemon = FakeDaemon()
+    daemon.client.containers.run.side_effect = ValueError("configuração inválida")
+    result = _run(make_sandbox(daemon), tmp_path)
+
+    assert result.fase_falha == "infra"

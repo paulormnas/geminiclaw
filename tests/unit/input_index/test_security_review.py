@@ -103,3 +103,69 @@ def test_nomes_de_colunas_e_chaves_sao_sanitizados(tmp_path):
     for p in (csv_path, js):
         text = describe_dataset(p)
         assert "\n# " not in text and "\nSISTEMA" not in text and "`" not in text
+
+
+# --- ALTA 2: valores não vazam pelo descritor -------------------------------------------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "first_row",
+    ["Maria,42,2024-03-01", "João,sim,31/12/2023", "Ana,7.5,texto"],
+)
+def test_csv_sem_cabecalho_com_linha_mista_nao_vaza_a_1a_linha(tmp_path, first_row):
+    path = tmp_path / "d.csv"
+    path.write_text(first_row + "\nPedro,1,2024-04-02\nLuiza,2,2024-05-03\n")
+
+    text = describe_dataset(path)
+
+    for value in ("Maria", "João", "Ana", "2024-03-01", "31/12/2023", "42"):
+        assert value not in text.split("Colunas:", 1)[1]
+    assert "coluna_1" in text and "coluna_3" in text
+    assert "3 linhas" in text
+
+
+@pytest.mark.unit
+def test_csv_com_cabecalho_textual_mantem_os_nomes(tmp_path):
+    path = tmp_path / "d.csv"
+    path.write_text("id_amostra,massa_g\n1,2.5\n")
+
+    assert "id_amostra (inteiro)" in describe_dataset(path)
+
+
+@pytest.mark.unit
+def test_json_dict_de_registros_nao_lista_chaves(tmp_path):
+    path = tmp_path / "d.json"
+    path.write_text('{"CPF-111.222.333-44": {"nome": "Maria"}, "CPF-555.666.777-88": {"nome": "Ana"}}')
+
+    text = describe_dataset(path)
+
+    assert "chaves: 2" in text
+    assert "CPF" not in text and "111" not in text
+
+
+@pytest.mark.unit
+def test_json_objeto_com_muitas_ou_longas_chaves_so_conta(tmp_path):
+    many = tmp_path / "many.json"
+    many.write_text("{" + ",".join(f'"campo{i}": {i}' for i in range(60)) + "}")
+    longk = tmp_path / "long.json"
+    longk.write_text('{"' + "x" * 100 + '": 1}')
+    small = tmp_path / "small.json"
+    small.write_text('{"versao": 1, "autor": "x"}')
+
+    assert "campo1" not in describe_dataset(many) and "chaves: 60" in describe_dataset(many)
+    assert "xxxx" not in describe_dataset(longk)
+    assert "versao (int)" in describe_dataset(small)
+
+
+@pytest.mark.unit
+def test_xlsx_sem_cabecalho_nao_vaza_a_1a_linha(tmp_path):
+    pd = pytest.importorskip("pandas")
+    pytest.importorskip("openpyxl")
+    path = tmp_path / "d.xlsx"
+    pd.DataFrame([["Maria", 42, "2024-03-01"], ["Pedro", 1, "2024-04-02"]]).to_excel(path, header=False, index=False)
+
+    text = describe_dataset(path)
+
+    assert "Maria" not in text and "42" not in text.split("Colunas:", 1)[1]
+    assert "coluna_1" in text and "2 linhas" in text

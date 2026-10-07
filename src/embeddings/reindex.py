@@ -24,12 +24,25 @@ from qdrant_client.models import Distance, PointStruct, VectorParams
 from src.config import QDRANT_URL
 from src.embeddings.base import EmbeddingProvider, embedding_payload, get_embedding_provider
 from src.logger import get_logger
+from src.skills.document_processor.enrichment import enriched_text
 
 logger = get_logger(__name__)
 
 # Coleções do Qdrant que os indexadores locais sabem revetorizar. A coleção
 # do grafo de conhecimento (V17) está fora do escopo desta mudança.
 REINDEXABLE_COLLECTIONS: tuple[str, ...] = ("geminiclaw_knowledge", "geminiclaw_documents")
+
+
+def text_to_embed(payload: dict) -> str:
+    """Texto a vetorizar de um ponto: o trecho enriquecido pelo cabeçalho guardado, quando houver.
+
+    Pontos da coleção de documentos (v17-input-document-index) guardam em ``content`` só o trecho e
+    em ``cabecalho`` o cabeçalho com que foram vetorizados; a reindexação por troca de modelo refaz o
+    texto enriquecido (cabeçalho + trecho), não o trecho nu. Outros pontos usam ``content``.
+    """
+    header = payload.get("cabecalho")
+    content = payload["content"]
+    return enriched_text(header, content) if header else content
 
 
 class CollectionNotFoundError(Exception):
@@ -199,12 +212,12 @@ class CollectionReindexer:
         def _flush() -> None:
             if not pending:
                 return
-            texts = [p.payload["content"] for p in pending]
+            texts = [text_to_embed(p.payload) for p in pending]
             vectors = self._provider.embed_documents(texts)
             batch = []
-            for point, vector in zip(pending, vectors):
+            for point, vector, text in zip(pending, vectors, texts):
                 payload = dict(point.payload)
-                payload.update(embedding_payload(payload["content"], self._provider))
+                payload.update(embedding_payload(text, self._provider))
                 batch.append(PointStruct(id=point.id, vector=vector, payload=payload))
             self.client.upsert(collection_name=self.collection, points=batch)
             report.updated += len(batch)

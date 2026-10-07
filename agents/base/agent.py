@@ -307,8 +307,12 @@ def _get_agent_instruction(base_instruction: str) -> str:
     # --- Documentos do usuário indexados ---
     try:
         from src.skills.document_processor.indexer import DocumentIndexer
+        from src.agent_runtime.context import get_agent_context_optional
+
         indexer = DocumentIndexer()
-        docs = indexer.list_documents(limit=10)
+        ctx = get_agent_context_optional()
+        # v17-input-document-index: só os documentos do projeto da sessão (sem projeto, o escopo "sem_projeto").
+        docs = indexer.list_documents(limit=10, projeto_id=(ctx.project_id or "sem_projeto") if ctx else None)
 
         if docs:
             doc_lines = []

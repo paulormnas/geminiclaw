@@ -333,6 +333,13 @@ class Curator:
             "2. A partir dos resultados e vereditos do resumo, registre ou reforce descobertas, seguindo as diretrizes "
             "(revise antes de criar; evidência obrigatória; consulte `verdict_breakdown`).",
         ]
+        if digest.get("decisoes_avaliadas"):
+            steps.append(
+                "2b. Para cada decisão de `decisoes_avaliadas` (a hipótese escolhida já tem veredito moderado), se "
+                "houver uma LIÇÃO TRANSFERÍVEL sobre por que o caminho funcionou ou não, registre "
+                "`create_discovery(tipo=\"licao_de_caminho\")` sobre a hipótese escolhida, com a decisão como "
+                "evidência. Sem lição transferível, não crie nada."
+            )
         if include_queue:
             steps += [
                 "3. Revise a fila de similaridade (`next_similarity_batch`, `review_similarity`) dentro do lote da "
@@ -372,6 +379,18 @@ class Curator:
                     ],
                 }
             )
+        evaluated: list[dict[str, Any]] = []
+        for decision in store.find_nodes("Decisao", {"projeto_id": self._project_id}, limit=_MAX_DIGEST_ITEMS * 4):
+            outcome = decision.properties.get("resultado_posterior")
+            if not outcome:
+                continue
+            chosen = store.neighbors(decision.id, ["ESCOLHEU"], direction="out", depth=1)
+            ids = [e.dst_id for e in chosen.edges if e.src_id == decision.id and e.rel_type == "ESCOLHEU"]
+            evaluated.append(
+                {"id": decision.id, "resultado_posterior": str(outcome)[:40], "hipotese_escolhida": ids[:1]}
+            )
+            if len(evaluated) >= _MAX_DIGEST_ITEMS:
+                break
         flags = FlagStore(self._session_dir).counts() if self._session_dir is not None else {}
         digest: dict[str, Any] = {
             "projeto_id": self._project_id,
@@ -382,6 +401,7 @@ class Curator:
                 for h in list(hypotheses.values())[:_MAX_DIGEST_ITEMS]
             ],
             "sinalizacoes": flags,
+            "decisoes_avaliadas": evaluated,
         }
         if include_queue:
             digest["motivo_parada"] = motivo_parada

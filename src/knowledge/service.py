@@ -15,6 +15,7 @@ grafo (inclusive texto escrito por agentes) é dado: nada aqui vira consulta, s�
 
 from __future__ import annotations
 
+import functools
 import math
 from dataclasses import dataclass, field
 from typing import Any
@@ -38,6 +39,24 @@ _PAGE = 200
 _MAX_CONFIG_KEYS_IN_NAME = 3
 _MAX_NAME_CHARS = 200
 _NO_CONFIG = "sem_config"
+# Relações de fatos (ingestão): seguras para memoizar durante uma operação.
+_CACHEABLE_RELS = frozenset({"TESTA", "APLICOU", "PRODUZIU", "MEDE", "SOBRE", "FUNDIDA_EM", "EXECUTADO_EM"})
+
+
+def _operation(fn: Any) -> Any:
+    """Marca uma operação pública: o memo de leituras vale do início ao fim da operação mais externa."""
+
+    @functools.wraps(fn)
+    def wrapper(self: "KnowledgeService", *args: Any, **kwargs: Any) -> Any:
+        if self._depth == 0:
+            self._begin()
+        self._depth += 1
+        try:
+            return fn(self, *args, **kwargs)
+        finally:
+            self._depth -= 1
+
+    return wrapper
 
 
 class KnowledgeServiceError(GraphStoreError):
@@ -55,6 +74,8 @@ class CollectedAttempt:
         abordagem_id: ``Abordagem`` aplicada, já resolvida por ``FUNDIDA_EM`` (``None`` se não houver).
         config: Configuração normalizada aplicada.
         projeto_id: Projeto do experimento.
+        sessao_real: O experimento está ligado (``EXECUTADO_EM``) a uma ``Sessao`` do próprio projeto.
+        compartilhavel: Experimento e resultado são ``compartilhavel`` (podem contar para outro projeto).
     """
 
     attempt: Attempt
@@ -63,6 +84,8 @@ class CollectedAttempt:
     abordagem_id: str | None
     config: dict[str, Any]
     projeto_id: str
+    sessao_real: bool = False
+    compartilhavel: bool = False
 
 
 @dataclass(frozen=True)
@@ -129,21 +152,42 @@ class KnowledgeService:
         self._store = store
         self._params = params or VerdictParams.from_config()
         self._actor = actor
+        # Memo de leituras estruturais, válido dentro de uma operação pública (limpo a cada entrada): evita o N+1.
+        self._nbcache: dict[tuple[str, str, str], Any] = {}
+        self._verdict_cache: dict[str, tuple[VerdictResult, list[CollectedAttempt], Node]] = {}
+        self._project_cache: dict[str, bool] = {}
+        self._depth = 0
 
     # ------------------------------------------------------------------ leitura
 
+    def _begin(self) -> None:
+        """Início de uma operação pública: descarta os memos (o grafo pode ter mudado desde a última)."""
+        self._nbcache.clear()
+        self._verdict_cache.clear()
+        self._project_cache.clear()
+
+
+    def _sub(self, node_id: str, rel: str, direction: str) -> Any:
+        """``neighbors`` de uma relação **estrutural** (fatos), memoizado; relações derivadas nunca são memoizadas."""
+        if rel not in _CACHEABLE_RELS:
+            return self._store.neighbors(node_id, [rel], direction=direction, depth=1)
+        key = (node_id, rel, direction)
+        if key not in self._nbcache:
+            self._nbcache[key] = self._store.neighbors(node_id, [rel], direction=direction, depth=1)
+        return self._nbcache[key]
+
     def _out(self, node_id: str, rel: str) -> list[Node]:
-        sub = self._store.neighbors(node_id, [rel], direction="out", depth=1)
+        sub = self._sub(node_id, rel, "out")
         by_id = {n.id: n for n in sub.nodes}
         return [by_id[e.dst_id] for e in sub.edges if e.src_id == node_id and e.rel_type == rel and e.dst_id in by_id]
 
     def _in(self, node_id: str, rel: str) -> list[Node]:
-        sub = self._store.neighbors(node_id, [rel], direction="in", depth=1)
+        sub = self._sub(node_id, rel, "in")
         by_id = {n.id: n for n in sub.nodes}
         return [by_id[e.src_id] for e in sub.edges if e.dst_id == node_id and e.rel_type == rel and e.src_id in by_id]
 
     def _out_edges(self, node_id: str, rel: str) -> list[Edge]:
-        sub = self._store.neighbors(node_id, [rel], direction="out", depth=1)
+        sub = self._sub(node_id, rel, "out")
         return [e for e in sub.edges if e.src_id == node_id and e.rel_type == rel]
 
     def canonical_approach(self, abordagem_id: str) -> str:
@@ -215,6 +259,16 @@ class KnowledgeService:
             return cfg, str(digest), self.canonical_approach(edge.dst_id)
         return {}, str(exp.properties.get("hash_params") or _NO_CONFIG), None
 
+    def _real_session(self, exp: Node, projeto: str) -> bool:
+        """Projeto existente no grafo e experimento ligado a uma ``Sessao`` desse projeto (dado do grafo, não do agente)."""
+        if not projeto:
+            return False
+        if projeto not in self._project_cache:
+            self._project_cache[projeto] = bool(self._store.find_nodes("Projeto", {"projeto_id": projeto}, limit=1))
+        if not self._project_cache[projeto]:
+            return False
+        return any(n.label == "Sessao" and n.properties.get("projeto_id") == projeto for n in self._out(exp.id, "EXECUTADO_EM"))
+
     def _attempt_from(self, exp: Node, metric: Node) -> CollectedAttempt | None:
         props = exp.properties
         cfg, config_hash, abordagem = self._config_of(exp)
@@ -228,6 +282,7 @@ class KnowledgeService:
             "config_hash": config_hash,
         }
         projeto = str(props.get("projeto_id") or "")
+        sessao_real = self._real_session(exp, projeto)
         if props.get("status") == "falha":
             cause = props.get("causa_falha")
             cause = cause if cause in ("infraestrutura", "abordagem", "ambigua") else "ambigua"
@@ -235,7 +290,7 @@ class KnowledgeService:
             attempt = Attempt(
                 attempt_id=exp.id, outcome_kind="falha", failure_cause=cause, failure_signature=signature, **base
             )
-            return CollectedAttempt(attempt, exp.id, None, abordagem, cfg, projeto)
+            return CollectedAttempt(attempt, exp.id, None, abordagem, cfg, projeto, sessao_real, False)
         for result in self._out(exp.id, "PRODUZIU"):
             if result.label != "Resultado":
                 continue
@@ -254,7 +309,11 @@ class KnowledgeService:
                 contract_complete=props.get("seed") is not None and props.get("hash_params") is not None,
                 **base,
             )
-            return CollectedAttempt(attempt, exp.id, result.id, abordagem, cfg, projeto)
+            shared = (
+                props.get("visibilidade") == "compartilhavel"
+                and result.properties.get("visibilidade") == "compartilhavel"
+            )
+            return CollectedAttempt(attempt, exp.id, result.id, abordagem, cfg, projeto, sessao_real, shared)
         return None  # experimento sem resultado da métrica do critério: não é tentativa desta hipótese
 
     def collect_attempts(self, hipotese: Node, metric: Node) -> list[CollectedAttempt]:
@@ -276,6 +335,7 @@ class KnowledgeService:
 
     # --------------------------------------------------------------- hipóteses
 
+    @_operation
     def verdict_for_hypothesis(
         self, hipotese_id: str, filtro: dict[str, Any] | None = None
     ) -> tuple[VerdictResult, list[CollectedAttempt], Node]:
@@ -287,14 +347,20 @@ class KnowledgeService:
         Raises:
             KnowledgeServiceError: Hipótese, problema ou métrica ausentes.
         """
+        if filtro is None and hipotese_id in self._verdict_cache:
+            return self._verdict_cache[hipotese_id]
         hipotese = self._hypothesis_node(hipotese_id)
         problema = self.problem_for(hipotese)
         if problema is None:
             raise KnowledgeServiceError(f"Hipótese '{hipotese_id}' sem Problema: veredito indisponível.")
         criterion, metric = self.criterion_for(problema)
         collected = [c for c in self.collect_attempts(hipotese, metric) if _matches_filter(c, filtro)]
-        return compute_verdict([c.attempt for c in collected], criterion, self._params), collected, metric
+        out = (compute_verdict([c.attempt for c in collected], criterion, self._params), collected, metric)
+        if filtro is None:
+            self._verdict_cache[hipotese_id] = out
+        return out
 
+    @_operation
     def recompute_hypothesis(self, hipotese_id: str) -> VerdictResult:
         """Recalcula e grava o veredito da hipótese e as arestas ``SUSTENTA``/``REFUTA``.
 
@@ -351,6 +417,7 @@ class KnowledgeService:
 
     # ------------------------------------------------------------- descobertas
 
+    @_operation
     def verdict_for_scope(
         self, sobre: list[Node], filtro: dict[str, Any] | None = None
     ) -> tuple[VerdictResult, list[CollectedAttempt], Node, Node | None, Node | None] | None:
@@ -408,6 +475,7 @@ class KnowledgeService:
                 return True
         return False
 
+    @_operation
     def recompute_discovery(self, descoberta_id: str) -> VerdictResult:
         """Recalcula ``veredito``, ``confianca`` e ``n_evidencias`` da descoberta e mantém os atalhos.
 
@@ -516,6 +584,7 @@ class KnowledgeService:
         pick = max if metric.properties.get("sentido") == "maior_melhor" else min
         return pick(pool, key=lambda c: c.attempt.value)  # type: ignore[arg-type,return-value]
 
+    @_operation
     def recompute_approach(self, abordagem_id: str) -> int:
         """Recalcula as descobertas ligadas à abordagem canônica e às fundidas nela (após uma fusão).
 
@@ -536,8 +605,9 @@ class KnowledgeService:
 
     # ---------------------------------------------------------------- promoção
 
+    @_operation
     def promotion_candidates(
-        self, projeto_id: str | None = None, *, abordagem_ids: set[str] | None = None
+        self, projeto_id: str, *, abordagem_ids: set[str] | None = None
     ) -> list[PromotionCandidate]:
         """Configurações elegíveis: mesma ``config`` (hash) numa ``Abordagem``, ≥ N positivos validados em ≥ M projetos.
 
@@ -545,8 +615,14 @@ class KnowledgeService:
         ``validado``. Abordagens fundidas contam na canônica. Idempotência: configurações já promovidas (uma
         ``Abordagem(tipo="configuracao")`` com o mesmo hash ligada por ``VARIANTE_DE``) não voltam a ser candidatas.
 
+        Escopo e privacidade (revisão do PR #106): a promoção pertence ao ``projeto_id`` da sessão e só considera
+        abordagens base **desse** projeto. Contam apenas tentativas de projetos **reais** (``Projeto`` no grafo e
+        experimento ligado por ``EXECUTADO_EM`` a uma ``Sessao`` do próprio projeto); tentativas de **outro** projeto só
+        contam se o experimento e o resultado forem ``compartilhavel``. Nada de outro projeto entra na configuração,
+        no nome ou nas evidências além do que for compartilhável.
+
         Args:
-            projeto_id: Se informado, só candidatas que envolvem este projeto.
+            projeto_id: Projeto da sessão (onde a promoção é gravada).
             abordagem_ids: Se informado, só estas abordagens base (canônicas).
         """
         groups: dict[tuple[str, str], list[CollectedAttempt]] = {}
@@ -564,6 +640,8 @@ class KnowledgeService:
                     or item.abordagem_id is None
                     or not item.config
                     or item.experimento_id in seen_exp
+                    or not item.sessao_real
+                    or (item.projeto_id != projeto_id and not item.compartilhavel)
                 ):
                     continue
                 seen_exp.add(item.experimento_id)
@@ -573,12 +651,17 @@ class KnowledgeService:
             if abordagem_ids is not None and abordagem_id not in abordagem_ids:
                 continue
             base = self._store.get_node(abordagem_id)
-            if base is None or base.properties.get("tipo") == "configuracao":
+            if (
+                base is None
+                or base.properties.get("tipo") == "configuracao"
+                or base.properties.get("projeto_id") != projeto_id
+            ):
+                continue
+            own = [i for i in items if i.projeto_id == projeto_id]
+            if not own:
                 continue
             projetos = tuple(sorted({i.projeto_id for i in items if i.projeto_id}))
             if len(items) < config.PROMOTION_MIN_POSITIVES or len(projetos) < config.PROMOTION_MIN_PROJECTS:
-                continue
-            if projeto_id is not None and projeto_id not in projetos:
                 continue
             if self._already_promoted(abordagem_id, digest):
                 continue
@@ -586,7 +669,7 @@ class KnowledgeService:
                 PromotionCandidate(
                     abordagem_id=abordagem_id,
                     config_hash=digest,
-                    config=items[0].config,
+                    config=own[0].config,
                     positivos=len(items),
                     projetos=projetos,
                     resultado_ids=tuple(i.resultado_id for i in items if i.resultado_id),
@@ -640,21 +723,26 @@ class KnowledgeService:
         scalars = [(k, v) for k, v in sorted(cfg.items()) if isinstance(v, (str, int, float, bool))]
         return ", ".join(f"{k}={v}" for k, v in scalars[:_MAX_CONFIG_KEYS_IN_NAME])
 
-    def promote_configuration(self, candidate: PromotionCandidate) -> str:
+    @_operation
+    def promote_configuration(self, candidate: PromotionCandidate, projeto_id: str) -> str:
         """Cria ``Abordagem(tipo="configuracao")`` + ``VARIANTE_DE`` a base; idempotente por (base, hash).
 
         O nome é ``"<base> [<até 3 pares chave=valor escalares, em ordem alfabética>]"``. As evidências ficam na
         aresta ``VARIANTE_DE`` (``evidencias``) e na descrição.
 
+        A nova abordagem é gravada **no projeto da sessão** (``projeto_id``), que deve ser o da abordagem base.
+
         Returns:
             O ``id`` da nova abordagem (ou da já existente, se a configuração já foi promovida).
 
         Raises:
-            KnowledgeServiceError: Abordagem base inexistente.
+            KnowledgeServiceError: Abordagem base inexistente ou de outro projeto.
         """
         base = self._store.get_node(candidate.abordagem_id)
         if base is None or base.label != "Abordagem":
             raise KnowledgeServiceError(f"Abordagem base '{candidate.abordagem_id}' não encontrada.")
+        if base.properties.get("projeto_id") != projeto_id:
+            raise KnowledgeServiceError("A promoção só grava no projeto da sessão e sobre abordagem dele.")
         for variant in self._in(base.id, "VARIANTE_DE"):
             cfg = variant.properties.get("config_normalizada")
             if (
@@ -677,7 +765,7 @@ class KnowledgeService:
                 "tipo": "configuracao",
                 "descricao": descricao,
                 "config_normalizada": {"hash": candidate.config_hash, "config": candidate.config},
-                "projeto_id": base.properties["projeto_id"],
+                "projeto_id": projeto_id,
                 "sessao_id": base.properties.get("sessao_id", "knowledge-service"),
             },
             actor=self._actor,
@@ -690,6 +778,7 @@ class KnowledgeService:
 
     # ------------------------------------------------------- pós-subtarefa (loop)
 
+    @_operation
     def after_subtask(self, projeto_id: str, subtarefa_id: str) -> RecomputeReport:
         """Recálculo determinístico após uma subtarefa ingerida (task 2.5).
 
@@ -733,7 +822,7 @@ class KnowledgeService:
         if abordagem_id is not None:
             try:
                 for candidate in self.promotion_candidates(projeto_id, abordagem_ids={abordagem_id}):
-                    report.promovidas.append(self.promote_configuration(candidate))
+                    report.promovidas.append(self.promote_configuration(candidate, projeto_id))
             except GraphStoreError as exc:
                 report.ignoradas += 1
                 logger.warning("Promoção de configuração falhou", extra={"extra": {"motivo": type(exc).__name__}})

@@ -183,7 +183,7 @@ def test_promocao_com_tres_positivos_em_um_projeto_nao_promove(world):
     for i, no in enumerate(("A", "B", "C")):
         graph.tentativa(hip, abordagem, valor=0.80, no=no, seed=i + 1, config={"modelo": "gb", "p": 1})
 
-    assert service.promotion_candidates() == []
+    assert service.promotion_candidates("proj1") == []
     assert not store.find_nodes("Abordagem", {"tipo": "configuracao"})
 
 
@@ -198,14 +198,14 @@ def test_promocao_com_tres_positivos_em_dois_projetos_promove_e_e_idempotente(wo
     graph.tentativa(hip1, abordagem, valor=0.80, no="A", config=cfg)
     graph.tentativa(hip1, abordagem, valor=0.80, no="B", config=cfg)
     # O experimento do projeto 2 aplicou a mesma abordagem (canônica, por fusão) com a mesma configuração.
-    g2.tentativa(hip2, abordagem, valor=0.81, no="C", config=cfg, projeto_id="proj2")
+    g2.tentativa(hip2, abordagem, valor=0.81, no="C", config=cfg, projeto_id="proj2", visibilidade="compartilhavel")
 
-    candidates = service.promotion_candidates()
+    candidates = service.promotion_candidates("proj1")
 
     assert len(candidates) == 1
     assert candidates[0].positivos == 3
     assert candidates[0].projetos == ("proj1", "proj2")
-    new_id = service.promote_configuration(candidates[0])
+    new_id = service.promote_configuration(candidates[0], "proj1")
     node = store.get_node(new_id)
     assert node.properties["tipo"] == "configuracao"
     assert node.properties["nome"].startswith("GradientBoosting [")
@@ -213,8 +213,8 @@ def test_promocao_com_tres_positivos_em_dois_projetos_promove_e_e_idempotente(wo
     variante = _edges(store, "VARIANTE_DE", src=new_id, dst=abordagem)
     assert len(variante) == 1 and len(variante[0].properties["evidencias"]) == 3
 
-    assert service.promotion_candidates() == []
-    assert service.promote_configuration(candidates[0]) == new_id
+    assert service.promotion_candidates("proj1") == []
+    assert service.promote_configuration(candidates[0], "proj1") == new_id
     assert len(store.find_nodes("Abordagem", {"tipo": "configuracao"})) == 1
 
 

@@ -26,6 +26,9 @@ class FakeDaemon:
         self.exec_calls: list[tuple] = []
         self.run_calls: list[dict] = []
         self.put_archives: list[tuple] = []
+        # Conteúdo do diretório de controle (/control) no momento da criação do container de preparação:
+        # o diretório de trabalho do run é removido ao fim.
+        self.control_files: dict[str, str] = {}
         self.client = MagicMock()
         self.container = MagicMock()
         self._install_exit = install_exit
@@ -46,6 +49,10 @@ class FakeDaemon:
 
     def _containers_run(self, **kwargs):
         self.run_calls.append(kwargs)
+        for host, vol in (kwargs.get("volumes") or {}).items():
+            if vol["bind"] == "/control":
+                assert vol["mode"] == "ro"
+                self.control_files = {f.name: f.read_text() for f in Path(host).iterdir()}
         self.calls.append(f"run:{kwargs['labels']['geminiclaw.role']}")
         return self.container
 
@@ -58,7 +65,7 @@ class FakeDaemon:
         if cmd[0] == "uv":
             self.calls.append("install")
             return SimpleNamespace(exit_code=self._install_exit, output=self._install_output)
-        if cmd[0] == "python" and cmd[1] == "/tmp/fetch_assets.py":
+        if cmd[0] == "python" and cmd[1] == "/control/fetch_assets.py":
             self.calls.append("fetch")
             return SimpleNamespace(exit_code=self._fetch_exit, output=self._fetch_output)
         if cmd[0] == SANDBOX_VENV_PYTHON:

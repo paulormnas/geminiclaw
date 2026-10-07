@@ -142,6 +142,8 @@ SANDBOX_INPUTS_DIR = "/inputs"
 SANDBOX_ASSETS_DIR = "/assets"
 SANDBOX_STAGING_DIR = "/staging"
 SANDBOX_PRIOR_DIR = "/prior"
+# Diretório de controle da preparação (somente leitura): script e spec do fetch, escritos no host antes de criar o container.
+SANDBOX_CONTROL_DIR = "/control"
 
 # Introspecção fixa (código do projeto, sem entrada do usuário): versão do Python e distribuições visíveis
 # na execução (imagem e /deps). `-I` ignora PYTHONPATH, então /deps entra explicitamente.
@@ -538,7 +540,6 @@ class PythonSandbox:
         task_name: str,
         working_dir: str,
         mounts: Optional[list] = None,
-        extra_tmpfs: Optional[Dict[str, str]] = None,
     ):
         """Cria um container ocioso do sandbox (usuário do orquestrador, sem capacidades), com retentativa.
 
@@ -570,7 +571,7 @@ class PythonSandbox:
                     cap_drop=["ALL"],
                     security_opt=["no-new-privileges:true"],
                     read_only=True,
-                    tmpfs={"/tmp": f"size={self.tmpfs_size},noexec,nosuid,nodev", **(extra_tmpfs or {})},
+                    tmpfs={"/tmp": f"size={self.tmpfs_size},noexec,nosuid,nodev"},
                     network_disabled=not network,
                     environment=environment,
                     volumes=volumes,
@@ -678,6 +679,23 @@ class PythonSandbox:
             )
         return None
 
+    def _write_fetch_control(self, control_dir: pathlib.Path, downloads: List[AssetSpec]) -> None:
+        """Escreve no host o script fixo e a spec do download (montados ``ro`` em ``/control`` na preparação).
+
+        Com a raiz somente leitura, ``put_archive`` só funciona em pontos de montagem; o script e a spec
+        não vão para ``/tmp`` nem para ``/staging`` (onde o código baixado poderia sobrescrevê-los).
+        """
+        spec = {
+            "assets": [{"url": a.url, "destino": a.destino} for a in downloads],
+            "max_bytes": self.asset_max_bytes,
+            "allow_private_hosts": list(self.allow_private_asset_hosts),
+        }
+        control_dir.mkdir(parents=True, exist_ok=True)
+        (control_dir / "fetch_assets.py").write_text(
+            pathlib.Path(_fetch_script.__file__).read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        (control_dir / "fetch_spec.json").write_text(json.dumps(spec), encoding="utf-8")
+
     def _fetch_assets(
         self, container, downloads: List[AssetSpec], staging_dir: pathlib.Path
     ) -> tuple[List[AssetRecord], Optional[SandboxResult]]:
@@ -686,18 +704,9 @@ class PythonSandbox:
         Returns:
             Tupla ``(registros, falha)``; ``falha`` é um ``SandboxResult`` com ``fase_falha="fetch_assets"``.
         """
-        spec = {
-            "assets": [{"url": a.url, "destino": a.destino} for a in downloads],
-            "max_bytes": self.asset_max_bytes,
-            "allow_private_hosts": list(self.allow_private_asset_hosts),
-        }
-        script_source = pathlib.Path(_fetch_script.__file__).read_text(encoding="utf-8")
-        container.put_archive(
-            "/tmp", self._create_tar_archive({"fetch_assets.py": script_source, "fetch_spec.json": json.dumps(spec)})
-        )
         logger.info("Baixando ativos declarados no sandbox", extra={"count": len(downloads)})
         exec_result, timed_out = self._exec_with_timeout(
-            container, ["python", "/tmp/fetch_assets.py", "/tmp/fetch_spec.json"], self.fetch_timeout, workdir="/tmp"
+            container, ["python", f"{SANDBOX_CONTROL_DIR}/fetch_assets.py", f"{SANDBOX_CONTROL_DIR}/fetch_spec.json"], self.fetch_timeout, workdir="/tmp"
         )
         if timed_out:
             return [], SandboxResult(
@@ -913,16 +922,24 @@ class PythonSandbox:
             volumes: Dict[str, dict] = {str(abs_output_dir): {"bind": "/outputs", "mode": "rw"}}
             if to_install:
                 volumes[str(deps_dir.resolve())] = {"bind": SANDBOX_DEPS_DIR, "mode": "ro"}
-            extra_tmpfs: Dict[str, str] = {}
             if input_files and res.modo_entrega == "mount":
                 volumes[str(snapshot_dir.resolve())] = {"bind": SANDBOX_INPUTS_DIR, "mode": "ro"}
-            elif input_files:
-                extra_tmpfs[SANDBOX_INPUTS_DIR] = (
-                    f"size={self.copy_max_bytes},mode=0555,uid={os.getuid()},gid={os.getgid()},noexec,nosuid,nodev"
-                )
             for prior in prior_mounts:
                 volumes[str(prior)] = {"bind": f"{SANDBOX_PRIOR_DIR}/{prior.name}", "mode": "ro"}
-            mounts = [
+            mounts = []
+            if input_files and res.modo_entrega == "copy":
+                # tmpfs como Mount (e não HostConfig.Tmpfs): com a raiz somente leitura o daemon só aceita
+                # put_archive em pontos de montagem. Modo 0555: o usuário do sandbox só lê.
+                mounts.append(
+                    docker.types.Mount(
+                        target=SANDBOX_INPUTS_DIR,
+                        source=None,
+                        type="tmpfs",
+                        tmpfs_size=self.copy_max_bytes,
+                        tmpfs_mode=0o555,
+                    )
+                )
+            mounts += [
                 docker.types.Mount(
                     target=f"{SANDBOX_ASSETS_DIR}/{rec.destino}",
                     source=str((self.asset_cache_dir / rec.sha256).resolve()),
@@ -937,7 +954,6 @@ class PythonSandbox:
                 network=network,
                 volumes=volumes,
                 mounts=mounts,
-                extra_tmpfs=extra_tmpfs,
                 environment={
                     "HOME": "/tmp",
                     "MPLCONFIGDIR": "/tmp",
@@ -1096,6 +1112,9 @@ class PythonSandbox:
         if downloads:
             staging_dir.mkdir(parents=True, exist_ok=True)
             volumes[str(staging_dir.resolve())] = {"bind": SANDBOX_STAGING_DIR, "mode": "rw"}
+            control_dir = run_work_dir / "control"
+            self._write_fetch_control(control_dir, downloads)
+            volumes[str(control_dir.resolve())] = {"bind": SANDBOX_CONTROL_DIR, "mode": "ro"}
         prep = self._create_container(
             role="sandbox-prep",
             network=True,

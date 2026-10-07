@@ -83,7 +83,9 @@ Declaração (parâmetro novo `assets` da skill):
 
 - `destino` é um nome simples (sem `/`, sem `..`); o ativo aparece em `/assets/<destino>`.
 - Um script **fixo do projeto** (`src/skills/code/fetch_assets.py`, somente stdlib) é injetado
-  por `put_archive` e executado no container de preparação. Ele aceita apenas `http`/`https`,
+  pelo host em um diretório de controle (`SANDBOX_WORK_DIR/<run_id>/control`), montado `ro` em
+  `/control` na preparação, e executado de lá (revisão A2: com a raiz somente leitura `put_archive`
+  só funciona em pontos de montagem). Ele Ele aceita apenas `http`/`https`,
   resolve o nome antes de conectar e recusa loopback, faixas privadas, link-local e
   `169.254.169.254` (mesmas regras do `web_reader`, `v16-in-process-agents` design §4), revalida
   a cada redirecionamento, respeita `SANDBOX_ASSET_MAX_BYTES` e grava em `/staging/<destino>`.
@@ -113,7 +115,8 @@ Declaração (parâmetro novo `assets` da skill):
   | `/prior/<sessão>` | diretórios legíveis de sessões anteriores (`AgentContext.readable_dirs`, `v18-research-continuity`), quando existirem | `ro` |
 
 - **Entrega de dados:** `SANDBOX_INPUT_DELIVERY=mount` (padrão) monta `input_snapshot/` somente
-  leitura; `copy` cria `/inputs` no container e copia os arquivos por `put_archive`, até
+  leitura; `copy` cria `/inputs` como `Mount` tmpfs (tamanho `SANDBOX_COPY_MAX_BYTES`, modo 0555) e copia os
+  arquivos por `put_archive`, até
   `SANDBOX_COPY_MAX_BYTES` (acima disso, erro acionável sugerindo `mount`). `copy` serve para
   ambientes em que o caminho do host não é montável (ex.: modo container dos agentes sem
   `HOST_PROJECT_PATH`). A escolha é informada no resultado.
@@ -270,3 +273,9 @@ Registro das correções e dos riscos aceitos decorrentes da revisão do Analist
   não filtra destinos por si só: restringir a saída aos índices de pacotes exige regras de firewall no
   host (iptables/nftables) ou proxy, fora do escopo sem tocar em Dockerfile/compose e sem validação no
   Pi. Fica como risco aceito (ver Riscos) para uma mudança futura.
+- **A2 (alta) — `put_archive` com raiz somente leitura:** o daemon só aceita `put_archive` em pontos de
+  montagem. `/inputs` (modo `copy`) passou de `HostConfig.Tmpfs` para `Mount(type="tmpfs")`; script e spec
+  do fetch passaram para o diretório de controle `/control` (`ro`). O script e a spec do sandbox de
+  execução continuam em `/outputs` (bind mount). Limitação: `Mount` tmpfs do SDK não expõe
+  `noexec/nosuid/nodev` nem uid/gid; `/inputs` fica com dono root e modo 0555 (somente leitura para o
+  usuário do sandbox). **Não validado com container real** (depende da bateria de integração).

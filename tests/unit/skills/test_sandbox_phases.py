@@ -67,7 +67,7 @@ def test_sem_pacotes_nem_ativos(make_sandbox, tmp_path):
 
 @pytest.mark.unit
 def test_montagens_da_preparacao(make_sandbox, tmp_path):
-    """Cenário: Montagens da preparação. Só deps e staging; ambiente fechado; sem dados da sessão."""
+    """Cenário: Montagens da preparação. Só deps, staging e control (ro); ambiente fechado; sem dados da sessão."""
     _snapshot(tmp_path)
     daemon = FakeDaemon()
     sandbox = make_sandbox(daemon, asset_cache_dir=str(tmp_path / "cache"))
@@ -77,8 +77,9 @@ def test_montagens_da_preparacao(make_sandbox, tmp_path):
     prep = daemon.prep_kwargs
     assert prep["labels"]["geminiclaw.role"] == "sandbox-prep"
     assert prep["network_disabled"] is False
-    assert sorted(v["bind"] for v in prep["volumes"].values()) == ["/deps", "/staging"]
-    assert all(v["mode"] == "rw" for v in prep["volumes"].values())
+    assert {v["bind"]: v["mode"] for v in prep["volumes"].values()} == {
+        "/control": "ro", "/deps": "rw", "/staging": "rw",
+    }
     assert not prep.get("mounts")
     assert set(prep["environment"]) == {"HOME", "UV_CACHE_DIR", "PATH"}
     assert prep["user"] == f"{os.getuid()}:{os.getgid()}"
@@ -142,16 +143,14 @@ class _FetchDaemon(FakeDaemon):
         self.content = content
 
     def _exec_run(self, cmd, *args, **kwargs):
-        if cmd[0] == "python" and cmd[1] == "/tmp/fetch_assets.py":
+        if cmd[0] == "python" and cmd[1] == "/control/fetch_assets.py":
             staging = next(h for h, v in self.run_calls[0]["volumes"].items() if v["bind"] == "/staging")
             for item in json.loads(self._spec())["assets"]:
                 (Path(staging) / item["destino"]).write_bytes(self.content)
         return super()._exec_run(cmd, *args, **kwargs)
 
     def _spec(self) -> str:
-        _path, data = self.put_archives[-1]
-        with tarfile.open(fileobj=io.BytesIO(data)) as tar:
-            return tar.extractfile("fetch_spec.json").read().decode()
+        return self.control_files["fetch_spec.json"]
 
 
 @pytest.mark.unit
@@ -206,11 +205,8 @@ def test_fetch_roda_antes_de_install_e_com_script_fixo(make_sandbox, tmp_path):
     _run(sandbox, tmp_path, packages=["tabulate"], assets=[{"url": "https://e.org/p", "destino": "p.bin"}])
 
     assert daemon.calls.index("fetch") < daemon.calls.index("install")
-    path, data = daemon.put_archives[0]
-    assert path == "/tmp"
-    with tarfile.open(fileobj=io.BytesIO(data)) as tar:
-        source = tar.extractfile("fetch_assets.py").read().decode()
-    assert "def download(" in source
+    assert "def download(" in daemon.control_files["fetch_assets.py"]
+    assert not any(path in ("/tmp", "/staging") for path, _data in daemon.put_archives)
 
 
 @pytest.mark.unit
@@ -263,7 +259,9 @@ def test_entrega_por_copia(make_sandbox, tmp_path, monkeypatch):
 
     assert result.modo_entrega == "copy"
     assert all(v["bind"] != "/inputs" for v in daemon.run_kwargs["volumes"].values())
-    assert "/inputs" in daemon.run_kwargs["tmpfs"]
+    assert "/inputs" not in daemon.run_kwargs["tmpfs"]
+    mount = next(m for m in daemon.run_kwargs["mounts"] if m["Target"] == "/inputs")
+    assert mount["Type"] == "tmpfs"
     _path, data = next(a for a in daemon.put_archives if a[0] == "/inputs")
     with tarfile.open(fileobj=io.BytesIO(data)) as tar:
         assert tar.extractfile("dados.csv").read() == (snap / "dados.csv").read_bytes()

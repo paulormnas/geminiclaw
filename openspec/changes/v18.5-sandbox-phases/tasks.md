@@ -14,12 +14,12 @@
 ## 2. Preparação
 - [x] 2.1 `src/skills/code/fetch_assets.py` (somente stdlib): http/https, bloqueio de IPs internos com revalidação em redirecionamentos, limite de tamanho.
 - [x] 2.2 `src/skills/code/assets.py`: hash no host, comparação com o declarado, cache por sha256, `origem`.
-- [x] 2.3 Container de preparação: montagens `deps`/`staging`, UID/GID do host, ambiente fechado; ordem `fetch_assets` → verificação no host → `install`; timeouts por fase.
+- [x] 2.3 Container de preparação: montagens `deps`/`staging`/`control` (ro), UID/GID do host, ambiente fechado; ordem `fetch_assets` → verificação no host → `install`; timeouts por fase. _(não validada com container real: depende da bateria de integração)_
 - [x] 2.4 Falha de `install` ou `fetch_assets` encerra o run sem criar o container de execução.
 
 ## 3. Execução
 - [x] 3.1 Container de execução com `network_disabled=True`; montagens `/outputs` (rw), `/inputs`, `/deps`, `/assets/*`, `/prior/*` (ro), com resolução e recusa de symlinks.
-- [x] 3.2 Modo `copy` por `put_archive` com `SANDBOX_COPY_MAX_BYTES`.
+- [x] 3.2 Modo `copy` por `put_archive` em `Mount` tmpfs, com `SANDBOX_COPY_MAX_BYTES`. _(não validada com container real: depende da bateria de integração)_
 - [x] 3.3 Introspecção fixa (versão do Python e distribuições) e digest da imagem.
 - [x] 3.4 Remover `user='root'`, `chown -R` e `chmod 777` (`sandbox.py:162-165`, `:276-282`).
 - [x] 3.5 `NETWORK_FAILURE_SIGNATURES` e `download_nao_declarado`.

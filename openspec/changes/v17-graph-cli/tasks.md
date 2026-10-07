@@ -37,3 +37,10 @@
 - [ ] 6.3 Carregar o subgrafo em streaming (hoje o projeto inteiro vai para a memória antes do corte); limite de 10.000
   domínios em `--dominio`.
 - [ ] 6.4 Compare-and-set no store para eliminar a janela entre conferência e escrita.
+- [ ] 6.5 `HumanConfirmation` é construível por qualquer código Python do mesmo processo; a guarda estática é regex e
+  cai com `getattr`/`importlib`. A fronteira real é o sandbox/processo (ADR 014), não a guarda. Avaliar assinatura/canal
+  fora do processo se o modelo de ameaça mudar.
+- [ ] 6.6 O prompt do `HumanGate` da Oportunidade corta a descrição em 400 caracteres (a tela principal da proposta é
+  íntegra); exibir a operação completa no prompt.
+- [ ] 6.7 A reversão grava `None` em campos que antes não existiam (equivalente a "sem valor" no store em memória);
+  confirmar no AGE real (junto com 6.1).

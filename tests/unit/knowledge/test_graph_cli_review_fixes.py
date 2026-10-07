@@ -26,6 +26,7 @@ from src.knowledge.change_proposals import (
     plan_changes,
     render_plan,
 )
+from src.knowledge.graph_store import Edge
 from src.knowledge.provenance import Actor
 from tests.support.graph_cli_world import PID, Scripted, World, propose
 
@@ -406,3 +407,25 @@ def test_gate_da_oportunidade_identifica_alvo_e_status_e_decidido_em_e_o_real(wo
     assert started <= decided <= datetime.now(timezone.utc)
     plan = plan_of(world, [op])
     assert "decidido_em" not in plan.items[0].effective  # não fixado no plano
+
+
+def test_project_id_faz_parte_da_impressao_digital(world):
+    """Mutar ``project_id`` depois de confirmar aborta (antes gravava em outro projeto)."""
+    op = {"op": "create_node", "label": "Abordagem", "props": {"nome": "x", "tipo": "algoritmo", "descricao": "d"}}
+    plan = plan_of(world, [op])
+    confirmation = confirm(plan)
+    plan.project_id = "22222222-2222-4222-8222-222222222222"
+    with pytest.raises(ProposalError, match="difere"):
+        apply_plan(world.store, plan, request=REQ, confirmation=confirmation)
+    assert world.store.find_nodes("Abordagem", {"nome": "x"}) == []
+
+
+def test_relacao_derivada_so_pode_ser_contestada(world):
+    """``set_edge_status`` não reafirma (``confirmada``) relação derivada; contestar segue permitido."""
+    world.store._edges.append(  # noqa: SLF001 - relação derivada gravada pelo cálculo (orquestrador)
+        Edge(world.ids["abordagem"], "FUNCIONOU_PARA", world.ids["problema"], {"status": "contestada"})
+    )
+    base = {"op": "set_edge_status", "src": world.ids["abordagem"], "rel": "FUNCIONOU_PARA",
+            "dst": world.ids["problema"]}
+    assert not plan_of(world, [{**base, "status": "confirmada"}]).ok
+    assert plan_of(world, [{**base, "status": "contestada"}]).ok

@@ -99,3 +99,8 @@ Modelo de ameaças do `graph edit` (nota de 2026-10-07, após a revisão de segu
   ajustes, e a exibição integral antes da confirmação.
 - **Reversão e `None`:** restaurar um campo antes ausente grava `None`; neste projeto `None` equivale a "sem valor".
   Confirmar essa semântica no AGE real é tarefa pendente (ver `tasks.md`).
+- **Limites conhecidos (2026-10-07):** `HumanConfirmation` pode ser construída por qualquer código Python no mesmo
+  processo (a guarda estática é regex e não vê `getattr`/`importlib`): a fronteira real é o sandbox/processo. O prompt do
+  `HumanGate` corta a descrição em 400 caracteres (a proposta na tela é íntegra). A reversão grava `None` em campos que
+  não existiam; confirmar no AGE real. Relações derivadas só podem ser **contestadas** (nunca reafirmadas) por
+  `set_edge_status`. O fingerprint cobre também `project_id` e a sessão de escrita.

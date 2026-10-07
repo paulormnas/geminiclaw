@@ -157,13 +157,13 @@ class Plan:
         Cobre operação, alvos, valores efetivos, estado anterior e decisão reservada: a confirmação humana vale para
         esta impressão, e ``apply_plan`` recusa um plano cuja impressão difira da confirmada.
         """
-        body = [
+        body = {"project": self.project_id, "session": EDIT_SESSION_ID, "ops": [
             {
                 "i": p.index, "kind": p.op.kind, "data": p.op.data, "motivo": p.op.motivo, "label": p.label,
                 "node": p.node_id, "effective": p.effective, "before": p.before, "decision": p.decision,
             }
             for p in self.items
-        ]
+        ]}
         raw = json.dumps(body, ensure_ascii=False, sort_keys=True, default=str)
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -503,6 +503,11 @@ class _Planner:
         allowed = schema.COMMON_EDGE_PROPERTIES["status"].enum or ()
         if data["status"] not in allowed:
             item.errors.append(f"status de relação deve ser um de {list(allowed)}.")
+            return
+        if data["rel"] in DERIVED_RELATIONS and data["status"] != "contestada":
+            item.errors.append(
+                f"{data['rel']} é derivada do cálculo de veredito: só pode ser contestada, nunca reafirmada."
+            )
             return
         if _REF_RE.fullmatch(data["src"]) or _REF_RE.fullmatch(data["dst"]):
             item.errors.append("set_edge_status não aceita referência '$N': só relações existentes.")

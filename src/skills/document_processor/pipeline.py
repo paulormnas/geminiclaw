@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from src.config import INPUT_INDEX_HEADER_MAX_CHARS, INPUT_INDEX_MAX_FILE_MB
+from src.config import INPUT_INDEX_HEADER_MAX_CHARS, INPUT_INDEX_MAX_DATASET_MB, INPUT_INDEX_MAX_FILE_MB
 from src.knowledge.ingestion import insumo_tipo
 from src.knowledge.ingestion_io import MAX_HASH_BYTES, sha256_file
 from src.logger import get_logger
@@ -45,6 +45,13 @@ logger = get_logger(__name__)
 SEM_PROJETO = "sem_projeto"
 ORIGEM_INPUT = "input_context"
 ORIGEM_ARTEFATO = "artefato"
+
+
+_STREAMED_DATASET_EXT = frozenset({".csv", ".tsv"})
+
+
+class IndexDeadlineExceeded(Exception):
+    """O prazo da indexação venceu antes do trabalho caro (extração/descritor); o arquivo fica pendente."""
 
 
 @dataclass(frozen=True)
@@ -197,6 +204,7 @@ async def index_file(
     insumo_resolver: Callable[[str], str | None] | None = None,
     deadline: float | None = None,
     max_file_mb: int = INPUT_INDEX_MAX_FILE_MB,
+    max_dataset_mb: int = INPUT_INDEX_MAX_DATASET_MB,
     header_max_chars: int = INPUT_INDEX_HEADER_MAX_CHARS,
 ) -> IndexOutcome:
     """Indexa um arquivo uma única vez por (``projeto_id``, ``hash_conteudo``).
@@ -211,12 +219,15 @@ async def index_file(
         insumo_id: ID do nó ``Insumo`` no grafo; ``None`` se o grafo está indisponível.
         insumo_resolver: Alternativa a ``insumo_id``: obtém o ID do ``Insumo`` a partir do hash do arquivo.
         deadline: Instante limite (``time.monotonic``) para a vetorização.
-        max_file_mb: Acima disso, só descritor.
+        max_file_mb: Acima disso, só descritor (artigos não são extraídos).
+        max_dataset_mb: Acima disso, JSON/xlsx/parquet não são lidos por inteiro: descritor mínimo e ``WARNING``.
         header_max_chars: Tamanho máximo do cabeçalho.
 
     Raises:
         IngestionFileError: Arquivo inseguro ou ilegível.
         ValueError: Falha de extração de um arquivo textual.
+        IndexDeadlineExceeded: Prazo vencido antes de extrair ou descrever (o prazo é melhor esforço: uma
+            extração ou leitura já iniciada não é interrompida).
     """
     digest = sha256_file(path, root, max_bytes=MAX_HASH_BYTES)
     if insumo_id is None and insumo_resolver is not None:
@@ -248,9 +259,18 @@ async def index_file(
             "ok" if ok else "pendente", len(chunks), len(chunks) if ok else 0,
         )
 
+    if deadline is not None and time.monotonic() >= deadline:
+        raise IndexDeadlineExceeded(path.name)
     tipo = tipo_insumo_for(path)
     size = os.stat(path).st_size
     oversized = size > max_file_mb * 1024 * 1024
+    dataset_too_big = (
+        tipo == "dataset"
+        and path.suffix.lower() not in _STREAMED_DATASET_EXT
+        and size > max_dataset_mb * 1024 * 1024
+    )
+    oversized = oversized or dataset_too_big
+    limite_mb = max_dataset_mb if dataset_too_big else max_file_mb
     metadata_extra: dict[str, Any] = {}
     if tipo == "artigo" and not oversized:
         extracted = await asyncio.to_thread(extractors.extract, str(path))
@@ -264,7 +284,7 @@ async def index_file(
         if oversized:
             logger.warning(
                 "Arquivo acima do limite de indexação; registrado só com descritor",
-                extra={"arquivo": path.name, "bytes": size, "limite_mb": max_file_mb},
+                extra={"arquivo": path.name, "bytes": size, "limite_mb": limite_mb},
             )
             text = describe_other(path) if tipo in ("artigo", "dataset") else describe_image(path)
             text += "\nIndexado só por descritor: acima do limite de tamanho."

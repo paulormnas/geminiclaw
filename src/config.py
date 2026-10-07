@@ -489,8 +489,11 @@ INGESTION_MAX_HASH_BYTES_PER_CALL = int(
 INPUT_INDEX_ENABLED = get_env_bool("INPUT_INDEX_ENABLED", default=True)
 # Tempo máximo (s) da indexação no início da sessão; o que sobrar fica pendente para a próxima sessão.
 INPUT_INDEX_MAX_SECONDS = int(get_env("INPUT_INDEX_MAX_SECONDS", default="300"))
-# Arquivos acima deste tamanho (MB) são registrados só com descritor.
-INPUT_INDEX_MAX_FILE_MB = int(get_env("INPUT_INDEX_MAX_FILE_MB", default="50"))
+# Arquivos acima deste tamanho (MB) são registrados só com descritor (artigos não são extraídos).
+INPUT_INDEX_MAX_FILE_MB = int(get_env("INPUT_INDEX_MAX_FILE_MB", default="20"))
+# Conjuntos de dados em JSON/JSONL/xlsx/xls/ods/parquet acima deste tamanho (MB) não são lidos por inteiro
+# (parse em memória): só descritor mínimo e WARNING. CSV/TSV são lidos em fluxo e seguem o limite geral.
+INPUT_INDEX_MAX_DATASET_MB = int(get_env("INPUT_INDEX_MAX_DATASET_MB", default="10"))
 # Tamanho máximo (caracteres) do cabeçalho enriquecido de cada trecho.
 INPUT_INDEX_HEADER_MAX_CHARS = int(get_env("INPUT_INDEX_HEADER_MAX_CHARS", default="400"))
 # Similaridade semântica mínima para um termo livre ser resolvido a um termo

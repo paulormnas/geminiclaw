@@ -97,7 +97,8 @@ def _base(path: Path, formato: str) -> str:
 def _delimited(path: Path, delimiter: str) -> str:
     encoding = "utf-8"
     try:
-        path.open("r", encoding="utf-8").read(1 << 20)
+        with path.open("r", encoding="utf-8") as probe:
+            probe.read(1 << 20)
     except UnicodeDecodeError:
         encoding = "latin-1"
     rows = 0

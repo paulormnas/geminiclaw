@@ -18,7 +18,7 @@ from src.logger import get_logger
 from src.skills.document_processor.enrichment import ProjectMeta
 from src.skills.document_processor.extractors.registry import ExtractorRegistry
 from src.skills.document_processor.indexer import DocumentIndexer
-from src.skills.document_processor.pipeline import ORIGEM_INPUT, index_file, recover_pending
+from src.skills.document_processor.pipeline import ORIGEM_INPUT, IndexDeadlineExceeded, index_file, recover_pending
 
 logger = get_logger(__name__)
 
@@ -117,6 +117,9 @@ async def index_input_snapshot(
                 indexer, extractors, path, root=session_dir, projeto=projeto, origem=ORIGEM_INPUT,
                 insumo_resolver=resolver, deadline=deadline,
             )
+        except IndexDeadlineExceeded:
+            report["pendentes"].append(path.name)
+            continue
         except Exception as exc:  # noqa: BLE001 - um arquivo ruim (ou o registro) não derruba a fila
             # Só o tipo do erro vai ao relatório e ao log: a mensagem pode conter valores do conteúdo.
             logger.warning("Insumo não indexado", extra={"arquivo": path.name, "error": type(exc).__name__})

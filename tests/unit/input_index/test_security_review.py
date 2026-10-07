@@ -228,3 +228,98 @@ async def test_orchestrator_postgres_indisponivel_devolve_relatorio_com_erro():
     assert report is not None and report["erro"] == "ConnectionError"
     assert "senha" not in str(report)
     assert orch.session_manager.update.call_args.kwargs["payload"]["input_index"]["erro"] == "ConnectionError"
+
+
+# --- MÉDIA 4: limites de tamanho e de prazo antes do trabalho caro ----------------------------------------
+
+import logging  # noqa: E402
+import time  # noqa: E402
+
+from src.skills.document_processor import pipeline  # noqa: E402
+from src.skills.document_processor.pipeline import IndexDeadlineExceeded, index_file  # noqa: E402
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_dataset_acima_do_limite_de_parse_vira_descritor_minimo_com_warning(
+    tmp_path, indexer, extractors, monkeypatch, caplog
+):
+    session = make_session(tmp_path, {"grande.json": '{"campo": 1}'})
+    monkeypatch.setattr(pipeline, "describe_dataset", MagicMock(side_effect=AssertionError("parse completo")))
+
+    with caplog.at_level(logging.WARNING):
+        out = await index_file(
+            indexer, extractors, session / "input_snapshot" / "grande.json", root=session,
+            projeto=PROJ_A, max_dataset_mb=0,
+        )
+
+    assert out.status == "indexado" and out.tipo_insumo == "dataset"
+    (doc,) = indexer.registry.list_documents(10, "proj-a")
+    (row,) = indexer.registry.get_chunks(doc["id"])
+    assert "campo" not in row["content"] and "acima do limite" in row["content"]
+    assert any("limite" in r.getMessage() for r in caplog.records if r.levelno == logging.WARNING)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_csv_continua_em_streaming_abaixo_do_limite_geral(tmp_path, indexer, extractors):
+    session = make_session(tmp_path, {"d.csv": "id,massa\n1,2.5\n"})
+
+    await index_file(
+        indexer, extractors, session / "input_snapshot" / "d.csv", root=session, projeto=PROJ_A, max_dataset_mb=0
+    )
+
+    (doc,) = indexer.registry.list_documents(10, "proj-a")
+    assert "massa (decimal)" in indexer.registry.get_chunks(doc["id"])[0]["content"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_artigo_acima_do_limite_nao_e_extraido(tmp_path, indexer, monkeypatch):
+    session = make_session(tmp_path, {"a.txt": "texto qualquer"})
+    boom = MagicMock()
+    boom.extract.side_effect = AssertionError("extraiu")
+
+    out = await index_file(
+        indexer, boom, session / "input_snapshot" / "a.txt", root=session, projeto=PROJ_A, max_file_mb=0
+    )
+
+    assert out.status == "indexado"
+    boom.extract.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_prazo_vencido_e_checado_antes_de_extrair(tmp_path, indexer):
+    session = make_session(tmp_path, {"a.txt": "texto qualquer"})
+    boom = MagicMock()
+    boom.extract.side_effect = AssertionError("extraiu")
+
+    with pytest.raises(IndexDeadlineExceeded):
+        await index_file(
+            indexer, boom, session / "input_snapshot" / "a.txt", root=session, projeto=PROJ_A,
+            deadline=time.monotonic() - 1,
+        )
+
+    boom.extract.assert_not_called()
+    assert indexer.registry.list_documents(10, "proj-a") == []
+
+
+@pytest.mark.unit
+def test_descritor_fecha_o_arquivo_de_deteccao_de_codificacao(tmp_path, monkeypatch):
+    import src.skills.document_processor.descriptors as d
+
+    path = tmp_path / "d.csv"
+    path.write_text("a,b\n1,2\n")
+    opened: list = []
+    real_open = Path.open
+
+    def tracking(self, *a, **k):
+        handle = real_open(self, *a, **k)
+        opened.append(handle)
+        return handle
+
+    monkeypatch.setattr(Path, "open", tracking)
+    d.describe_dataset(path)
+
+    assert opened and all(h.closed for h in opened)

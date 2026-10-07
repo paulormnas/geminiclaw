@@ -267,7 +267,9 @@ def test_aceita_com_hipotese_sem_relacao_nao_empresta_proveniencia_da_oportunida
     text = "Investigar a variação de temperatura no ensaio"
     suggestion = PendingSuggestion("s1", text, (opp,), "oportunidade_aprovada")
     extras = _extras(
-        hipoteses=[{"ref": "h1", "enunciado": "Normalizar os dados melhora o desempenho do modelo", "justificativa": "J"}],
+        hipoteses=[
+            {"ref": "h1", "enunciado": "Normalizar os dados melhora o desempenho do modelo", "justificativa": "J"}
+        ],
         respostas_sugestoes=[{"sugestao_id": "s1", "decisao": "aceita", "motivo": "ok", "hipotese_ref": "h1"}],
     )
     report = _book(w, [suggestion]).record(extras)

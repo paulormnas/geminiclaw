@@ -8,7 +8,6 @@ import pytest
 
 from src.exploration import ExplorationSession
 from src.knowledge.suggestions import SuggestionError
-from src.knowledge.suggestions import SuggestionError
 from src.knowledge.hypothesis_cycle import ApprovalDecision, SolutionStatus
 from tests.support.exploration_world import APPROVED, REJECTED, LoopHarness, hyp, plan, task
 

@@ -485,6 +485,14 @@ INGESTION_MAX_FILE_BYTES = int(get_env("INGESTION_MAX_FILE_BYTES", default=str(2
 INGESTION_MAX_HASH_BYTES_PER_CALL = int(
     get_env("INGESTION_MAX_HASH_BYTES_PER_CALL", default=str(1024 * 1024 * 1024))
 )
+# v17-input-document-index — indexação automática dos insumos de input_snapshot/ (sem LLM, antes do planejamento).
+INPUT_INDEX_ENABLED = get_env_bool("INPUT_INDEX_ENABLED", default=True)
+# Tempo máximo (s) da indexação no início da sessão; o que sobrar fica pendente para a próxima sessão.
+INPUT_INDEX_MAX_SECONDS = int(get_env("INPUT_INDEX_MAX_SECONDS", default="300"))
+# Arquivos acima deste tamanho (MB) são registrados só com descritor.
+INPUT_INDEX_MAX_FILE_MB = int(get_env("INPUT_INDEX_MAX_FILE_MB", default="50"))
+# Tamanho máximo (caracteres) do cabeçalho enriquecido de cada trecho.
+INPUT_INDEX_HEADER_MAX_CHARS = int(get_env("INPUT_INDEX_HEADER_MAX_CHARS", default="400"))
 # Similaridade semântica mínima para um termo livre ser resolvido a um termo
 # canônico do vocabulário controlado (faixa de duplicata, v17-controlled-vocabulary).
 VOCAB_MATCH_THRESHOLD = float(get_env("VOCAB_MATCH_THRESHOLD", default="0.90"))

@@ -154,7 +154,7 @@ def sha256_file(path: pathlib.Path) -> str:
 
 
 def _move_nofollow(source: pathlib.Path, target: pathlib.Path) -> None:
-    """Move ``source`` para ``target`` (``rename``; em ``EXDEV``, copia sem seguir symlink, renomeia e apaga a origem)."""
+    """Move ``source`` para ``target``; em ``EXDEV`` copia sem seguir symlink, renomeia e apaga a origem."""
     try:
         os.replace(source, target)
         return

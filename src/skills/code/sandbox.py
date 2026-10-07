@@ -142,7 +142,8 @@ SANDBOX_INPUTS_DIR = "/inputs"
 SANDBOX_ASSETS_DIR = "/assets"
 SANDBOX_STAGING_DIR = "/staging"
 SANDBOX_PRIOR_DIR = "/prior"
-# Diretório de controle da preparação (somente leitura): script e spec do fetch, escritos no host antes de criar o container.
+# Diretório de controle da preparação (somente leitura): script e spec do fetch, escritos no host
+# antes de criar o container.
 SANDBOX_CONTROL_DIR = "/control"
 
 # Introspecção fixa (código do projeto, sem entrada do usuário): versão do Python e distribuições visíveis
@@ -186,7 +187,8 @@ _RUNNER_CODE = (
     "        out += ('\\n[... %d bytes de saida omitidos ...]\\n' % dropped).encode()\n"
     "    dst.write(out + bytes(tail))\n"
     "    dst.flush()\n"
-    "p = subprocess.Popen(['python', script], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)\n"
+    "p = subprocess.Popen(['python', script], stdin=subprocess.DEVNULL,\n"
+    "                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)\n"
     "threads = [threading.Thread(target=pump, args=(p.stdout, sys.stdout.buffer)),\n"
     "           threading.Thread(target=pump, args=(p.stderr, sys.stderr.buffer))]\n"
     "[t.start() for t in threads]\n"
@@ -765,11 +767,14 @@ class PythonSandbox:
         verificação.
 
         Returns:
-            ``SandboxResult`` com ``fase_falha="fetch_assets"`` em caso de falha ou timeout; ``None`` se o download terminou.
+            ``SandboxResult`` com ``fase_falha="fetch_assets"`` em falha ou timeout; ``None`` se o download terminou.
         """
         logger.info("Baixando ativos declarados no sandbox", extra={"count": len(downloads)})
         exec_result, timed_out = self._exec_with_timeout(
-            container, ["python", f"{SANDBOX_CONTROL_DIR}/fetch_assets.py", f"{SANDBOX_CONTROL_DIR}/fetch_spec.json"], self.fetch_timeout, workdir="/tmp"
+            container,
+            ["python", f"{SANDBOX_CONTROL_DIR}/fetch_assets.py", f"{SANDBOX_CONTROL_DIR}/fetch_spec.json"],
+            self.fetch_timeout,
+            workdir="/tmp",
         )
         if timed_out:
             return SandboxResult(
@@ -812,7 +817,7 @@ class PythonSandbox:
             return []
 
     def _script_command(self) -> List[str]:
-        """Comando do script principal: lançador fixo que limita a saída (``-I``: ignora PYTHONPATH/ambiente do script)."""
+        """Comando do script principal: lançador fixo que limita a saída (``-I`` no lançador, não no script)."""
         return ["python", "-I", "-c", _RUNNER_CODE, str(max(2, self.output_max_bytes)), "/outputs/script.py"]
 
     def _check_free_disk(self, *paths: pathlib.Path) -> None:

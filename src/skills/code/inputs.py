@@ -61,7 +61,8 @@ def list_input_files(snapshot_dir: pathlib.Path, session_dir: pathlib.Path) -> L
         for name in filenames:
             path = pathlib.Path(dirpath) / name
             if not stat.S_ISREG(os.lstat(path).st_mode):
-                raise MountSourceError(f"arquivo que não é regular em insumos recusado: {path.relative_to(snapshot_dir)}")
+                rel = path.relative_to(snapshot_dir)
+                raise MountSourceError(f"arquivo que não é regular em insumos recusado: {rel}")
             files.append(path)
     return sorted(files)
 

@@ -232,7 +232,8 @@ def _run_launcher(tmp_path, script_source: str, cap: int):
     script = tmp_path / "script_alvo.py"
     script.write_text(script_source)
     return subprocess.run(
-        [sys.executable, "-I", "-c", _RUNNER_CODE.replace("['python',", f"[{sys.executable!r},"), str(cap), str(script)],
+        [sys.executable, "-I", "-c", _RUNNER_CODE.replace("['python',", f"[{sys.executable!r},"),
+         str(cap), str(script)],
         capture_output=True, timeout=60,
     )
 

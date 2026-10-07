@@ -86,7 +86,7 @@ class HypothesisWorld:
         )
 
     def discovery(self, tipo: str = "caminho_sem_conclusao", **extra: Any) -> str:
-        props = self.base(tipo=tipo, enunciado="E", n_evidencias=1, status="ativa", **extra)
+        props = self.base(**{"tipo": tipo, "enunciado": "E", "n_evidencias": 1, "status": "ativa", **extra})
         props.update(justificativa_criacao="teste", nos_consultados=[])
         return self.store.create_node("Descoberta", props, actor=CURATOR)
 

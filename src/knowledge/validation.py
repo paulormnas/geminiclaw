@@ -223,9 +223,59 @@ def validate_edge_write(
     return relation_schema
 
 
+def validate_edge_update(
+    src_label: str,
+    rel_type: str,
+    dst_label: str,
+    changes: dict[str, object],
+) -> RelationSchema:
+    """Valida a atualização de propriedades de uma aresta (``update_edge``).
+
+    Só as propriedades **específicas** da relação (e ``evidencias``) são atualizáveis: a proveniência
+    (``criado_em``, ``criado_por``, ``origem``) é imutável e ``status`` só muda por ``set_edge_status``.
+
+    Raises:
+        DisallowedRelationError: Par (origem, tipo, destino) não permitido.
+        UnknownPropertyError: Propriedade não atualizável.
+        InvalidEnumValueError: Valor fora da enumeração permitida.
+    """
+    relation_schema = schema.find_relation_schema(src_label, rel_type, dst_label)
+    if relation_schema is None:
+        raise DisallowedRelationError(src_label, rel_type, dst_label)
+    updatable: dict[str, PropertySchema] = {
+        **relation_schema.properties,
+        "evidencias": schema.COMMON_EDGE_PROPERTIES["evidencias"],
+    }
+    scope = f"{src_label}-{rel_type}->{dst_label}"
+    for name, value in changes.items():
+        prop_schema = updatable.get(name)
+        if prop_schema is None:
+            raise UnknownPropertyError(scope, name)
+        if prop_schema.enum is not None and value is not None and value not in prop_schema.enum:
+            raise InvalidEnumValueError(scope, name, value, prop_schema.enum)
+    return relation_schema
+
+
 # Transições reservadas ao pesquisador: rótulo -> (campo, valor protegido). Não altera o schema:
 # a regra vive na porta única de escrita e a trilha fica na auditoria (autor ``pesquisador``).
 HUMAN_ONLY_TRANSITIONS: dict[str, tuple[str, str]] = {"Problema": ("status", "confirmado")}
+
+
+# Campos de decisão do pesquisador que um AGENTE (Curator, Researcher...) nunca escreve (v17-curator-agent):
+# aprovar ou rejeitar termos do vocabulário e decidir sobre Oportunidades. ``None`` = qualquer valor é reservado.
+# O orquestrador continua podendo semear o vocabulário já aprovado (``vocabulary.seed_*``).
+AGENT_RESERVED_FIELDS: dict[str, dict[str, tuple[str, ...] | None]] = {
+    "Dominio": {"status": ("aprovado", "rejeitado"), "motivo_decisao": None},
+    "Metrica": {"status": ("aprovado", "rejeitado"), "motivo_decisao": None},
+    "Oportunidade": {
+        "status": ("aprovada", "rejeitada"),
+        "decidido_por": None,
+        "decidido_em": None,
+        "motivo_decisao": None,
+    },
+}
+# Nós rejeitados pelo pesquisador são imutáveis para agentes: a decisão humana não é reaberta por LLM.
+REJECTED_STATUSES: frozenset[str] = frozenset({"rejeitado", "rejeitada"})
 
 
 def validate_human_only(
@@ -235,7 +285,11 @@ def validate_human_only(
     changes: dict[str, object],
     actor_kind: str,
 ) -> None:
-    """Só o pesquisador cria, promove ou rebaixa o estado ``confirmado`` do ``Problema``.
+    """Decisões reservadas ao pesquisador: só ele as toma, nenhum agente (nem o orquestrador, no Problema).
+
+    - ``Problema``: só o pesquisador cria, promove ou rebaixa o estado ``confirmado``.
+    - Agentes (``actor_kind == "agente"``) não aprovam nem rejeitam ``Dominio``/``Metrica``, não decidem sobre
+      ``Oportunidade`` (``AGENT_RESERVED_FIELDS``) e não alteram nós já ``rejeitado``/``rejeitada``.
 
     Args:
         label: Rótulo do nó.
@@ -245,8 +299,10 @@ def validate_human_only(
 
     Raises:
         HumanConfirmationRequiredError: Escrita fora do pesquisador que cria com o valor
-            protegido, entra nele ou sai dele.
+            protegido, entra nele ou sai dele; ou escrita de agente num campo reservado ou num nó rejeitado.
     """
+    if actor_kind == "agente":
+        _validate_agent_reserved(label, current, changes)
     rule = HUMAN_ONLY_TRANSITIONS.get(label)
     if rule is None or actor_kind == "pesquisador":
         return
@@ -257,3 +313,12 @@ def validate_human_only(
     old = (current or {}).get(field)
     if new == protected or (old == protected and new != protected):
         raise HumanConfirmationRequiredError(label, field, actor_kind)
+
+
+def _validate_agent_reserved(label: str, current: dict[str, object] | None, changes: dict[str, object]) -> None:
+    """Aplica ``AGENT_RESERVED_FIELDS`` e a imutabilidade dos nós rejeitados a uma escrita de agente."""
+    if current is not None and current.get("status") in REJECTED_STATUSES and changes:
+        raise HumanConfirmationRequiredError(label, "status", "agente")
+    for field, reserved in AGENT_RESERVED_FIELDS.get(label, {}).items():
+        if field in changes and (reserved is None or changes[field] in reserved):
+            raise HumanConfirmationRequiredError(label, field, "agente")

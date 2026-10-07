@@ -421,6 +421,30 @@ VERDICT_THRESHOLDS: tuple[float, float, float] = tuple(
     float(x) for x in _verdict_thresholds_raw.split(",")
 )  # type: ignore[assignment]
 
+# --- Agente Curator (Roadmap V17 / ADR 012 §1-§2, ADR 015 §10; mudança v17-curator-agent) ---
+# O modelo do papel `curator` vem do catálogo (src/llm/catalog.yaml, ADR 017); para fixar um modelo use
+# `CURATOR_MODEL=provedor/modelo`. Os limites abaixo valem POR EXECUÇÃO do Curator (consolidate/close_session).
+CURATOR_ENABLED = get_env_bool("CURATOR_ENABLED", default=True)
+CURATOR_MAX_ITERATIONS = int(get_env("CURATOR_MAX_ITERATIONS", default="20"))
+CURATOR_MAX_TOKENS_PER_RUN = int(get_env("CURATOR_MAX_TOKENS_PER_RUN", default="30000"))
+CURATOR_QUEUE_BATCH = int(get_env("CURATOR_QUEUE_BATCH", default="20"))
+# Escritas no grafo por execução (criar/reforçar/ligar/mudar status) e consultas livres (read_query).
+CURATOR_MAX_WRITES_PER_RUN = int(get_env("CURATOR_MAX_WRITES_PER_RUN", default="30"))
+CURATOR_MAX_READ_QUERIES_PER_RUN = int(get_env("CURATOR_MAX_READ_QUERIES_PER_RUN", default="5"))
+# Tamanho máximo de cada campo de texto aceito pelas ferramentas de escrita (recusa, não trunca).
+CURATOR_MAX_TEXT_CHARS = int(get_env("CURATOR_MAX_TEXT_CHARS", default="1000"))
+# Tamanho máximo da saída de uma ferramenta devolvida ao modelo (dado não confiável) e do resumo de entrada.
+CURATOR_MAX_TOOL_OUTPUT_CHARS = int(get_env("CURATOR_MAX_TOOL_OUTPUT_CHARS", default="6000"))
+CURATOR_TIMEOUT_SECONDS = int(get_env("CURATOR_TIMEOUT_SECONDS", default="300"))
+# Sinalizações (flag_for_curator): máximo por sessão e tamanho do texto.
+CURATOR_MAX_FLAGS_PER_SESSION = int(get_env("CURATOR_MAX_FLAGS_PER_SESSION", default="100"))
+CURATOR_FLAG_MAX_CHARS = int(get_env("CURATOR_FLAG_MAX_CHARS", default="1000"))
+# Menor |veredito| que mantém os atalhos FUNCIONOU_PARA/FALHOU_PARA (a faixa "insuficiente" começa abaixo dele).
+KNOWLEDGE_SHORTCUT_MIN_VERDICT = float(get_env("KNOWLEDGE_SHORTCUT_MIN_VERDICT", default="0.1"))
+# Promoção de configuração a Abordagem(tipo="configuracao"): positivos validados e projetos distintos.
+PROMOTION_MIN_POSITIVES = int(get_env("PROMOTION_MIN_POSITIVES", default="3"))
+PROMOTION_MIN_PROJECTS = int(get_env("PROMOTION_MIN_PROJECTS", default="2"))
+
 # --- Grafo de Conhecimento (Roadmap V17 / ADR 009, ADR 015) ---
 # Nome do grafo Apache AGE (sem o nome do produto — ADR 011).
 KNOWLEDGE_GRAPH_NAME = get_env("KNOWLEDGE_GRAPH_NAME", default="knowledge")

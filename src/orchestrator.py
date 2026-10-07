@@ -37,11 +37,14 @@ from src.agents.validator_agent import ValidatorAgent
 from src.agent_runtime.context import AgentContext
 from src.agent_runtime.runtime import AgentRuntime
 from src.context_loader import ContextLoader, ContextBundle
+from src.human_gate import HumanGate
 from src.usage import UsageBudget, UsageTracker
 
 if TYPE_CHECKING:
+    from agents.curator.runner import Curator
     from src.knowledge.graph_store import GraphStore
     from src.knowledge.ingestion import FactIngestor
+    from src.knowledge.semantic_runtime import SemanticRuntime
 
 logger = get_logger(__name__)
 
@@ -142,6 +145,7 @@ class Orchestrator:
         output_manager: OutputManager | None = None,
         agent_runtime: AgentRuntime | None = None,
         knowledge_store_factory: "Callable[[], GraphStore] | None" = None,
+        knowledge_runtime_factory: "Callable[[], SemanticRuntime] | None" = None,
     ) -> None:
         """Inicializa o orquestrador com dependências injetadas.
 
@@ -153,6 +157,10 @@ class Orchestrator:
             knowledge_store_factory: Abre o grafo de conhecimento para a ingestão de fatos
                 (v17-structural-fact-ingestion). Se omitido, usa ``open_graph_store``; o grafo só
                 é aberto em sessões com projeto.
+            knowledge_runtime_factory: Abre o grafo **com** o índice semântico e a fila de similaridade
+                (``SemanticRuntime``), usados pelo Curator (v17-curator-agent) e pela reconciliação do
+                índice no início da sessão. Se omitido (e sem ``knowledge_store_factory``), usa
+                ``factory.open_knowledge_runtime``.
         """
         self.session_manager = session_manager
         self.output_manager = output_manager or OutputManager()
@@ -183,17 +191,183 @@ class Orchestrator:
         self.agent_runtime = agent_runtime or AgentRuntime()
         # v17-structural-fact-ingestion — ingestor de fatos por sessão mestra e grafo compartilhado.
         self._knowledge_store_factory = knowledge_store_factory
+        self._knowledge_runtime_factory = knowledge_runtime_factory
         self._knowledge_store: GraphStore | None = None
+        self._knowledge_runtime: SemanticRuntime | None = None
         self._ingestors: dict[str, FactIngestor] = {}
+        # v17-curator-agent — Curator por sessão mestra; provedor injetável (testes); gate de decisões reservadas.
+        self._curators: dict[str, Curator] = {}
+        self.curator_provider: Any = None
+        self.human_gate = HumanGate()
 
     def _open_knowledge_store(self) -> "GraphStore":
-        """Abre (uma vez) o grafo para a ingestão; falhas propagam e o ``FactIngestor`` as enfileira."""
+        """Abre (uma vez) o grafo para a ingestão; falhas propagam e o ``FactIngestor`` as enfileira.
+
+        Sem fábrica de ``GraphStore`` injetada, abre o ``SemanticRuntime`` (store **indexado**, fila de similaridade
+        e índice) por ``factory.open_knowledge_runtime``; com o índice desligado, o store cru.
+        """
         if self._knowledge_store is None:
             factory = self._knowledge_store_factory
-            if factory is None:
-                from src.knowledge.factory import open_graph_store as factory
-            self._knowledge_store = factory()
+            if factory is not None:
+                self._knowledge_store = factory()
+            else:
+                runtime_factory = self._knowledge_runtime_factory
+                if runtime_factory is None:
+                    from src.knowledge.factory import open_knowledge_runtime as runtime_factory
+                runtime = runtime_factory()
+                if runtime is None:
+                    from src.knowledge.factory import open_raw_graph_store
+
+                    self._knowledge_store = open_raw_graph_store()
+                else:
+                    self._knowledge_runtime = runtime
+                    self._knowledge_store = runtime.store
         return self._knowledge_store
+
+    def _reconcile_knowledge_index(self) -> None:
+        """Reconciliação do índice semântico no início da sessão, antes de qualquer consulta ao grafo.
+
+        Nunca levanta: sem grafo ou com o índice fora do ar, a sessão segue (o grafo é a fonte da verdade e a
+        próxima reconciliação corrige).
+        """
+        try:
+            self._open_knowledge_store()
+            runtime = self._knowledge_runtime
+            if runtime is not None:
+                from src.knowledge.semantic_runtime import reconcile_on_session_start
+
+                reconcile_on_session_start(runtime)
+        except Exception as exc:  # noqa: BLE001 - a sessão não depende do índice para começar
+            logger.warning("Reconciliação do índice não executada", extra={"error": type(exc).__name__})
+
+    # -- v17-curator-agent ----------------------------------------------------------------------------------
+
+    def get_curator(self, session_id: str) -> "Curator | None":
+        """Curator da sessão mestra (``None`` sem projeto, com o Curator desligado ou sem grafo)."""
+        from src import config as cfg
+
+        if not cfg.CURATOR_ENABLED:
+            return None
+        existing = self._curators.get(session_id)
+        if existing is not None:
+            return existing
+        ingestor = self._ingestors.get(session_id)
+        if ingestor is None:
+            return None
+        try:
+            from agents.curator.runner import Curator
+
+            store = self._open_knowledge_store()
+            runtime = self._knowledge_runtime
+            provider = self.curator_provider
+
+            def _provider() -> Any:
+                if provider is not None:
+                    return provider
+                from src.model_router import ModelRouter
+
+                return ModelRouter.get_provider("curator")
+
+            def _telemetry(event_type: str, payload: dict[str, Any]) -> None:
+                get_telemetry().record_agent_event(
+                    execution_id=session_id,
+                    session_id=session_id,
+                    agent_id="curator",
+                    event_type=event_type,
+                    payload=payload,
+                    duration_ms=payload.get("duration_ms"),
+                )
+
+            curator = Curator(
+                store,
+                project_id=ingestor.ctx.project_id,
+                session_id=session_id,
+                session_dir=self.output_manager.base_dir / session_id,
+                provider_factory=_provider,
+                index=runtime.index if runtime is not None else None,
+                queue=runtime.queue if runtime is not None else None,
+                telemetry=_telemetry,
+            )
+        except Exception as exc:  # noqa: BLE001 - sem Curator a sessão continua
+            logger.warning("Curator indisponível nesta sessão", extra={"error": type(exc).__name__})
+            return None
+        self._curators[session_id] = curator
+        return curator
+
+    def _curator_budget_left(self, session_id: str, *, closing: bool) -> bool:
+        """O Curator só roda com orçamento: no meio da sessão, fora do fechamento; no fim, com a reserva de tokens."""
+        tracker = self._usage_trackers.get(session_id)
+        if tracker is None:
+            return True
+        try:
+            return not (tracker.tokens_hard_exhausted() if closing else tracker.check().should_close)
+        except Exception:  # noqa: BLE001 - sem leitura de consumo, segue (o orçamento do Curator é próprio)
+            return True
+
+    async def curator_consolidate(self, session_id: str) -> None:
+        """Checkpoint de consolidação (fim de cada ciclo de planejamento). Nunca levanta."""
+        curator = self.get_curator(session_id)
+        if curator is None or not self._curator_budget_left(session_id, closing=False):
+            return
+        try:
+            await curator.consolidate()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - a falha do Curator nunca derruba a sessão
+            logger.warning("Consolidação do Curator falhou", extra={"error": type(exc).__name__})
+
+    async def curator_close(self, session_id: str) -> None:
+        """Fechamento da sessão pelo Curator (fila de similaridade e caminhos sem conclusão). Nunca levanta."""
+        curator = self.get_curator(session_id)
+        try:
+            if curator is None or not self._curator_budget_left(session_id, closing=True):
+                return
+            session = self.session_manager.get(session_id)
+            reason = (session.payload if session is not None else {}).get("motivo_parada")
+            await curator.close_session(reason if isinstance(reason, str) else None)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Fechamento do Curator falhou", extra={"error": type(exc).__name__})
+        finally:
+            self._curators.pop(session_id, None)
+
+    def knowledge_after_subtask(self, session_id: str, subtarefa_id: str) -> None:
+        """Recálculo determinístico (sem LLM) após uma subtarefa ingerida (v17-curator-agent task 2.5).
+
+        Síncrono (chamado via ``asyncio.to_thread``). Nunca levanta: sem grafo, a ingestão já enfileirou os fatos e
+        o recálculo acontece quando eles forem aplicados.
+        """
+        ingestor = self._ingestors.get(session_id)
+        if ingestor is None:
+            return
+        try:
+            from src.knowledge.service import KnowledgeService
+
+            report = KnowledgeService(self._open_knowledge_store()).after_subtask(ingestor.ctx.project_id, subtarefa_id)
+            get_telemetry().record_agent_event(
+                execution_id=session_id,
+                session_id=session_id,
+                agent_id="orchestrator",
+                event_type="knowledge_recompute",
+                payload={
+                    "hipoteses": report.hipoteses,
+                    "descobertas": report.descobertas,
+                    "promovidas": len(report.promovidas),
+                    "ignoradas": report.ignoradas,
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Recálculo do veredito não executado", extra={"error": type(exc).__name__})
+
+    def _register_reserved(self, decisao: str | None, task: "AgentTask") -> None:
+        """Registra no gate a decisão reservada como pendente para o pesquisador (a resposta do consultor não vale)."""
+        if not decisao:
+            return
+        try:
+            self.human_gate.request(decisao, task.task_name or "")
+        except ValueError:
+            logger.warning("Decisão reservada desconhecida; tratada como pendente sem registro no gate")
 
     @staticmethod
     async def _safe_ingest(fn: "Callable[[], Any]") -> None:
@@ -396,6 +570,8 @@ class Orchestrator:
             master_session.payload.get("continues_session_id"),
         )
         if ingestor is not None:
+            # v17-knowledge-semantic-index: reconcilia o índice antes de qualquer consulta ao grafo da sessão.
+            await asyncio.to_thread(self._reconcile_knowledge_index)
             await self._safe_ingest(ingestor.session_start)
 
         # V15.5/G9 — Carrega (ou reutiliza) o contexto de input_context/ e o disponibiliza
@@ -492,6 +668,9 @@ class Orchestrator:
             }
         )
         if ingestor is not None:
+            # v17-curator-agent: o Curator fecha a sessão (fila de similaridade, caminhos sem conclusão) antes de
+            # o fim da sessão ir ao grafo; qualquer falha dele é isolada.
+            await self.curator_close(master_session.id)
             await asyncio.to_thread(self._end_ingestion, ingestor, master_session.id, final_status, None)
         self.session_manager.close(master_session.id)
         
@@ -826,6 +1005,7 @@ class Orchestrator:
         # Além da autodeclaração do agente, classifica a pergunta por palavras-chave (fail-closed).
         decisao_reservada = decisao_reservada or classify_reserved(question)
         if decisao_reservada:
+            self._register_reserved(decisao_reservada, task)
             return _finish(PENDENTE_PESQUISADOR, RESERVED_MESSAGE, None, {"decisao_reservada": decisao_reservada})
 
         # 2. Consultor desligado.
@@ -911,6 +1091,7 @@ class Orchestrator:
         }
         # 6. Classificação pelo próprio consultor: decisão reservada.
         if outcome.reservada:
+            self._register_reserved(decisao_reservada or classify_reserved(question), task)
             return _finish(PENDENTE_PESQUISADOR, RESERVED_MESSAGE, None, consulta | {"reservada": True})
         return _finish(RESPONDIDO_RESEARCHER, format_answer(outcome.resposta), None, consulta)
 

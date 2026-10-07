@@ -496,11 +496,11 @@ class _Writer:
             return None
         exact = self.store.find_nodes("Abordagem", {"projeto_id": self.ctx.project_id, "nome": nome}, limit=1)
         if exact:
-            return exact[0].id
+            return self._canonical_approach(exact[0])
         candidates = self.store.find_nodes("Abordagem", {"projeto_id": self.ctx.project_id}, limit=1000)
         for node in candidates:
             if normalize_domain_term(str(node.properties.get("nome", ""))) == key:
-                return node.id
+                return self._canonical_approach(node)
         tipo = approach.get("tipo")
         label_task = _clean(task_name, MAX_NAME_CHARS)
         return self._create(
@@ -516,6 +516,26 @@ class _Writer:
             },
             ACTOR_RESEARCHER,
         )
+
+    def _canonical_approach(self, node: Node) -> str:
+        """Abordagem fundida (``FUNDIDA_EM``): o nome da duplicada passa a resolver para a canônica."""
+        current, seen = node, {node.id}
+        while current.properties.get("status") == "fundida":
+            edges = self.store.neighbors(current.id, ["FUNDIDA_EM"], direction="out", depth=1)
+            target = next(
+                (
+                    e.dst_id
+                    for e in edges.edges
+                    if e.src_id == current.id and e.properties.get("status") != "contestada"
+                ),
+                None,
+            )
+            nxt = self.store.get_node(target) if target and target not in seen else None
+            if nxt is None:
+                break
+            seen.add(nxt.id)
+            current = nxt
+        return current.id
 
     def hipotese(self, sub: SubtaskInput) -> str | None:
         """Hipótese provisória a partir do campo ``hypothesis`` (design §5; substituída na V18)."""

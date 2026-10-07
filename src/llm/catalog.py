@@ -26,7 +26,12 @@ logger = get_logger(__name__)
 CATALOG_PATH = Path(__file__).with_name("catalog.yaml")
 DEFAULT_LOCAL_PATH = Path(__file__).with_name("catalog.local.yaml")
 
-REQUIRED_ROLES: tuple[str, ...] = ("researcher", "developer", "reviewer", "summarizer", "validator", "base")
+REQUIRED_ROLES: tuple[str, ...] = (
+    "researcher", "developer", "reviewer", "summarizer", "validator", "curator", "base",
+)
+# Papéis que não impedem a sessão quando não há modelo elegível (a resolução os omite e o papel fica desligado): o
+# Curator (v17-curator-agent) nunca pode derrubar uma sessão (ADR 014 §4).
+OPTIONAL_ROLES: tuple[str, ...] = ("curator",)
 TRUST_VALUES: tuple[str, ...] = ("self_hosted", "third_party")
 # Provedores que só existem em nuvem: `trust: self_hosted` seria um rótulo falso que contornaria
 # `LLM_DATA_POLICY=self_hosted_only` (ADR 017 §3, §8). `ollama` e `openai_compatible` podem ser locais.

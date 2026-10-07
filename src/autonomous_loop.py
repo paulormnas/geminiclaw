@@ -1047,6 +1047,9 @@ class AutonomousLoop:
                     StopReason.RUNS, master_session_id, prompt, tasks, dag_state, final_results
                 )
 
+            # v17-curator-agent — checkpoint de consolidação ao fim do ciclo de planejamento (falha isolada).
+            await self.orchestrator.curator_consolidate(master_session_id)
+
             # Verifica se houve alguma falha
             failed_tasks = [t for t, state in dag_state.items() if state["status"] in ("failed", "cancelled")]
             abandoned_tasks = [t for t, state in dag_state.items() if state["status"] == "abandonada"]
@@ -1259,7 +1262,10 @@ class AutonomousLoop:
                 review_verified=bool((review or {}).get("verified", False)),
                 validation_criteria=[c for c in (task.validation_criteria or []) if isinstance(c, str)],
             )
-            await asyncio.to_thread(ingestor.subtask, sub)
+            if await asyncio.to_thread(ingestor.subtask, sub):
+                # v17-curator-agent: recálculo determinístico do veredito após cada subtarefa ingerida.
+                subtarefa_id = sub.subtask_id or f"{master_session_id}:{sub.task_name}"
+                await asyncio.to_thread(self.orchestrator.knowledge_after_subtask, master_session_id, subtarefa_id)
         except Exception as exc:  # noqa: BLE001 - a ingestão nunca derruba a subtarefa
             logger.warning("Falha ao ingerir fatos da subtarefa", extra={"error": type(exc).__name__})
 

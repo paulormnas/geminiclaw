@@ -164,3 +164,53 @@ async def manage_memory(action: str, key: str, value: Optional[str] = None, impo
         return result.output
     else:
         return f"Erro na operação de memória: {result.error}"
+
+
+async def flag_for_curator(tipo: str, texto: str, refs: Optional[list[str]] = None) -> str:
+    """Sinaliza um ponto importante ao Curator, que o avalia no próximo checkpoint (ADR 012 §2).
+
+    A sinalização é gravada em ``curator_flags.jsonl`` na pasta de outputs da sessão, com agente, subtarefa e horário;
+    o Curator decide registrar (e onde) ou descartar com motivo. Sinalizar não cria nada no grafo.
+
+    Args:
+        tipo: ``descoberta_potencial``, ``caminho_relevante``, ``oportunidade`` ou ``falha_relevante``.
+        texto: Descrição curta (sem dados brutos; até o limite configurado).
+        refs: IDs de nós ou caminhos de artefatos da sessão que sustentam o ponto.
+
+    Returns:
+        Mensagem de sucesso ou erro.
+    """
+    from src.knowledge.curator_flags import FlagError, record_flag
+
+    ctx = get_agent_context_optional()
+    if ctx is None:
+        return "Erro: flag_for_curator só funciona dentro de uma execução de agente."
+    try:
+        flag_id = record_flag(
+            ctx.output_dir, agente=ctx.agent_id, subtarefa=ctx.task_name, tipo=tipo, texto=texto, refs=refs
+        )
+    except FlagError as exc:
+        return f"Erro: {exc}"
+    except OSError as exc:
+        logger.warning("flag_for_curator: gravação falhou", extra={"error": type(exc).__name__})
+        return "Erro: não foi possível gravar a sinalização."
+    return f"Sinalização {flag_id} registrada para o Curator."
+
+
+flag_for_curator.parameters_schema = {
+    "type": "object",
+    "properties": {
+        "tipo": {
+            "type": "string",
+            "enum": ["descoberta_potencial", "caminho_relevante", "oportunidade", "falha_relevante"],
+            "description": "Tipo da sinalização.",
+        },
+        "texto": {"type": "string", "description": "Descrição curta do ponto importante."},
+        "refs": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "IDs de nós ou caminhos de artefatos da sessão.",
+        },
+    },
+    "required": ["tipo", "texto"],
+}

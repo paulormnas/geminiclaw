@@ -19,7 +19,7 @@ from agents.base.agent import (
     _persist_session_context,
     _setup_skills,
 )
-from agents.base.tools import write_artifact
+from agents.base.tools import flag_for_curator, write_artifact
 from src.knowledge.problem import ProblemDraft, ProblemDraftError, parse_problem_draft
 from src.logger import get_logger
 from src.prompts import render_instruction
@@ -125,6 +125,12 @@ QUANDO USAR `ask_researcher` (Roadmap V15.3 / Spec G5):
   sobre elas, preencha `decisao_reservada`. Nunca coloque valores, nomes de arquivos ou trechos dos
   dados do projeto na pergunta além do necessário.
 
+SINALIZAÇÕES AO CURATOR (ADR 012 §2):
+Quando notar algo que vale registrar no grafo de conhecimento (uma descoberta potencial, um caminho relevante, uma
+oportunidade ou uma falha relevante), chame `flag_for_curator(tipo, texto, refs)` com um texto curto, sem dados brutos
+nem trechos de documentos, e `refs` com IDs de nós ou caminhos de artefatos da sessão. Sinalizar não cria nada: o
+Curator decide, em lote, registrar ou descartar.
+
 DOMÍNIO DO PROBLEMA:
 Antes de ligar um Problema ou Projeto a um domínio do vocabulário controlado, use `buscar_dominio`
 com o termo (e, se útil, o título do problema em `contexto`) e escolha entre os candidatos devolvidos,
@@ -192,7 +198,7 @@ root_agent = Agent(
     description=AGENT_DESCRIPTION,
     _instruction=lambda: _get_agent_instruction(AGENT_INSTRUCTION),
     # `buscar_dominio` (somente leitura) só vai para researcher e curator, não para o registry global.
-    tools=registry.as_tools() + [write_artifact] + domain_search_tools(AGENT_NAME),
+    tools=registry.as_tools() + [write_artifact, flag_for_curator] + domain_search_tools(AGENT_NAME),
     before_agent_callback=_load_session_context,
     after_agent_callback=_persist_session_context,
 )

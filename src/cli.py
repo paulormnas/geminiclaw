@@ -1353,7 +1353,8 @@ def main() -> None:
     def _open_store() -> Any:
         from src.knowledge.factory import open_graph_store
 
-        return open_graph_store()
+        # Início da sessão: reconcilia o índice semântico antes da primeira consulta ao grafo (projeto e Problema).
+        return open_graph_store(reconcile=True)
 
     try:
         researcher_model: str | None = llm_routing.resolution("researcher").id

@@ -122,6 +122,9 @@ class IndexedGraphStore(GraphStore):
     def set_edge_status(self, src_id: str, rel: str, dst_id: str, status: str, *, actor: Actor) -> None:
         self._inner.set_edge_status(src_id, rel, dst_id, status, actor=actor)
 
+    def update_edge(self, src_id: str, rel: str, dst_id: str, changes: dict[str, Any], *, actor: Actor) -> None:
+        self._inner.update_edge(src_id, rel, dst_id, changes, actor=actor)
+
     # -- Leitura (delegada) --------------------------------------------------
 
     def get_node(self, node_id: str) -> Node | None:

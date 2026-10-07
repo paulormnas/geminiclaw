@@ -71,7 +71,7 @@ _KEYWORD_INDEXES = ("caminho_ids", "nivel")
 _RECONCILE_RETRIEVE_BATCH = 64
 
 # Pares/itens com estes ``status`` não participam de buscas nem de candidatos.
-IGNORED_STATUSES = frozenset({"substituida", "rejeitado", "rejeitada"})
+IGNORED_STATUSES = frozenset({"substituida", "rejeitado", "rejeitada", "fundida"})
 # Chaves de payload aceitas em ``filters`` (falha cedo em vez de devolver vazio).
 FILTERABLE_PAYLOAD_KEYS = frozenset(
     {"tipo_no", "projeto_id", "dominios", "status", "visibilidade", "veredito", "criado_em",

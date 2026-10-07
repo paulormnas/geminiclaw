@@ -43,7 +43,9 @@ async def test_mapa_no_payload(nuvem):
     routing = await build_session_routing()
     payload = routing.payload()
 
-    assert set(payload["papeis"]) == {"researcher", "developer", "reviewer", "summarizer", "validator", "base"}
+    assert set(payload["papeis"]) == {
+        "researcher", "developer", "reviewer", "summarizer", "validator", "curator", "base",
+    }
     for entry in payload["papeis"].values():
         assert set(entry) == {"id", "trust", "origem"}
     catalog_file = Path("src/llm/catalog.yaml")

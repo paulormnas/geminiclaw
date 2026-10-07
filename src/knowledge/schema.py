@@ -197,6 +197,8 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             "descricao": PropertySchema(required=True),
             "versao": PropertySchema(),
             "config_normalizada": PropertySchema(),
+            # v17-curator-agent: ``fundida`` marca a duplicata fundida a outra (``FUNDIDA_EM``); ausente = ``ativa``.
+            "status": PropertySchema(enum=("ativa", "fundida")),
         },
     ),
     "Experimento": NodeSchema(
@@ -246,6 +248,9 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             ),
             "enunciado": PropertySchema(required=True),
             "condicoes": PropertySchema(),
+            # v17-curator-agent: filtro estruturado das tentativas que contam no veredito
+            # (``{"dataset_ids": [...], "no_execucao": [...]}``); ``condicoes`` segue sendo o texto legível.
+            "filtro_condicoes": PropertySchema(),
             "veredito": PropertySchema(),
             "confianca": PropertySchema(),
             "n_evidencias": PropertySchema(required=True),
@@ -359,6 +364,8 @@ RELATION_SCHEMAS: list[RelationSchema] = [
         descoberta_id=PropertySchema(),
     ),
     _rel("Abordagem", "VARIANTE_DE", "Abordagem"),
+    # v17-curator-agent: duplicata de abordagem fundida na canônica, sem apagar nenhum nó.
+    _rel("Abordagem", "FUNDIDA_EM", "Abordagem"),
     _rel("Abordagem", "COMPONENTE_DE", "Abordagem"),
     _rel("Oportunidade", "ORIGINADA_DE", "Descoberta"),
     _rel("Oportunidade", "SUGERE", ("Abordagem", "Hipotese")),

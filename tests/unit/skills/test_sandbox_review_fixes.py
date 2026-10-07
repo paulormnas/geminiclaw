@@ -63,7 +63,7 @@ def test_a2_copy_usa_mount_tmpfs_com_tamanho_e_modo(make_sandbox, tmp_path, monk
     snap.mkdir(parents=True)
     (snap / "dados.csv").write_text("a,b\n")
     daemon = FakeDaemon()
-    _run(make_sandbox(daemon), tmp_path)
+    _run(make_sandbox(daemon, memory_limit="1g"), tmp_path)
 
     mount = next(m for m in daemon.run_kwargs["mounts"] if m["Target"] == "/inputs")
     assert mount["Type"] == "tmpfs"
@@ -159,3 +159,53 @@ def test_m1_disco_livre_suficiente_executa(make_sandbox, tmp_path, monkeypatch):
     result = _run(make_sandbox(FakeDaemon()), tmp_path)
 
     assert result.exit_code == 0 and result.infra_error is None
+
+
+# --- M2: o tmpfs de /inputs e o /tmp contam na memória do container ---------------------------------
+
+def _snapshot_com_dado(tmp_path):
+    snap = tmp_path / "out" / "s" / "input_snapshot"
+    snap.mkdir(parents=True)
+    (snap / "dados.csv").write_text("a,b\n")
+
+
+@pytest.mark.unit
+def test_m2_padrao_do_modo_copy_ate_64_mib(make_sandbox, monkeypatch):
+    monkeypatch.delenv("SANDBOX_COPY_MAX_BYTES", raising=False)
+    assert make_sandbox(FakeDaemon()).copy_max_bytes <= 64 * MIB
+
+
+@pytest.mark.unit
+def test_m2_copy_mais_tmpfs_nao_cabe_na_memoria(make_sandbox, tmp_path, monkeypatch):
+    monkeypatch.setenv("SANDBOX_INPUT_DELIVERY", "copy")
+    monkeypatch.setenv("SANDBOX_COPY_MAX_BYTES", str(64 * MIB))
+    monkeypatch.setenv("SANDBOX_TMPFS_SIZE", "256m")
+    _snapshot_com_dado(tmp_path)
+    daemon = FakeDaemon()
+    result = _run(make_sandbox(daemon, memory_limit="256m"), tmp_path)
+
+    daemon.client.containers.run.assert_not_called()
+    assert result.fase_falha == "infra"
+    assert "SANDBOX_COPY_MAX_BYTES" in result.stderr and "memória" in result.stderr
+
+
+@pytest.mark.unit
+def test_m2_copy_que_cabe_na_memoria_executa(make_sandbox, tmp_path, monkeypatch):
+    monkeypatch.setenv("SANDBOX_INPUT_DELIVERY", "copy")
+    monkeypatch.setenv("SANDBOX_COPY_MAX_BYTES", str(64 * MIB))
+    monkeypatch.setenv("SANDBOX_TMPFS_SIZE", "64m")
+    _snapshot_com_dado(tmp_path)
+    daemon = FakeDaemon()
+    result = _run(make_sandbox(daemon, memory_limit="256m"), tmp_path)
+
+    assert result.exit_code == 0 and result.infra_error is None
+
+
+@pytest.mark.unit
+def test_m2_modo_mount_nao_e_afetado(make_sandbox, tmp_path, monkeypatch):
+    monkeypatch.setenv("SANDBOX_INPUT_DELIVERY", "mount")
+    monkeypatch.setenv("SANDBOX_TMPFS_SIZE", "256m")
+    _snapshot_com_dado(tmp_path)
+    result = _run(make_sandbox(FakeDaemon(), memory_limit="256m"), tmp_path)
+
+    assert result.exit_code == 0

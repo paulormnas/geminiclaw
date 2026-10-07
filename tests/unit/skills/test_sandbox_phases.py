@@ -255,7 +255,7 @@ def test_entrega_por_copia(make_sandbox, tmp_path, monkeypatch):
     monkeypatch.setenv("SANDBOX_INPUT_DELIVERY", "copy")
     snap = _snapshot(tmp_path)
     daemon = FakeDaemon()
-    result = _run(make_sandbox(daemon), tmp_path)
+    result = _run(make_sandbox(daemon, memory_limit="1g"), tmp_path)
 
     assert result.modo_entrega == "copy"
     assert all(v["bind"] != "/inputs" for v in daemon.run_kwargs["volumes"].values())
@@ -273,7 +273,7 @@ def test_copia_acima_do_limite(make_sandbox, tmp_path, monkeypatch):
     monkeypatch.setenv("SANDBOX_COPY_MAX_BYTES", "4")
     _snapshot(tmp_path)
     daemon = FakeDaemon()
-    result = _run(make_sandbox(daemon), tmp_path)
+    result = _run(make_sandbox(daemon, memory_limit="1g"), tmp_path)
 
     daemon.client.containers.run.assert_not_called()
     assert result.fase_falha == "infra" and "SANDBOX_INPUT_DELIVERY=mount" in result.stderr

@@ -296,6 +296,21 @@ def cleanup_sandbox_containers() -> int:
     return removed
 
 
+_SIZE_UNITS = {"": 1, "b": 1, "k": 1024, "m": 1024**2, "g": 1024**3}
+
+
+def _parse_size(value: str | int) -> int:
+    """Converte um tamanho no estilo do daemon (``256m``, ``1g``, bytes) em bytes.
+
+    Raises:
+        ValueError: Formato não reconhecido.
+    """
+    match = re.fullmatch(r"\s*(\d+)\s*([bkmg]?)b?\s*", str(value).lower())
+    if match is None:
+        raise ValueError(f"tamanho inválido: {value!r} (use bytes ou sufixo k/m/g, ex.: 256m)")
+    return int(match.group(1)) * _SIZE_UNITS[match.group(2)]
+
+
 def _purge_reserved_names(root: pathlib.Path) -> list[str]:
     """Remove de ``root`` arquivos/links com nome reservado do orquestrador (qualquer caixa, em qualquer nível).
 
@@ -899,6 +914,20 @@ class PythonSandbox:
                         raise MountSourceError(f"nome de sessão anterior inválido: {prior.name!r}")
             except MountSourceError as exc:
                 raise _MountRefused(str(exc)) from exc
+            if res.modo_entrega == "copy":
+                # O tmpfs (inclusive o de /tmp) conta no limite de memória do container: o que não cabe
+                # nele termina em OOM durante a execução. Falha explícita antes de criar o container.
+                try:
+                    budget = self.copy_max_bytes + _parse_size(self.tmpfs_size)
+                    memory = _parse_size(self.memory_limit)
+                except ValueError as exc:
+                    raise _MountRefused(str(exc)) from exc
+                if budget >= memory:
+                    raise _MountRefused(
+                        f"SANDBOX_COPY_MAX_BYTES ({self.copy_max_bytes}) + SANDBOX_TMPFS_SIZE ({self.tmpfs_size}) "
+                        f"não cabem na memória do container ({self.memory_limit}); o tmpfs conta na memória. "
+                        "Reduza esses limites, aumente CODE_SANDBOX_MEMORY_LIMIT ou use SANDBOX_INPUT_DELIVERY=mount"
+                    )
             inputs_size = sum(p.stat().st_size for p in input_files)
             if res.modo_entrega == "copy" and inputs_size > self.copy_max_bytes:
                 raise _MountRefused(

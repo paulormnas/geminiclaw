@@ -214,7 +214,7 @@ são lidos por `v18.5-execution-provenance`; esta mudança não grava registro a
 | `SANDBOX_ASSET_CACHE_DIR` | `store/assets` | Cache de ativos por sha256 |
 | `SANDBOX_WORK_DIR` | `store/sandbox_work` | Diretórios temporários por execução (`deps`, `staging`), removidos ao fim |
 | `SANDBOX_INPUT_DELIVERY` | `mount` | `mount` ou `copy` |
-| `SANDBOX_COPY_MAX_BYTES` | 536870912 | Limite do modo `copy` |
+| `SANDBOX_COPY_MAX_BYTES` | 67108864 | Limite do modo `copy` (o tmpfs conta na memória do container) |
 
 ## Análise de impacto (6 eixos)
 
@@ -286,3 +286,7 @@ Registro das correções e dos riscos aceitos decorrentes da revisão do Analist
   antes de criar a preparação/execução (`SANDBOX_MIN_FREE_BYTES`, falha explícita `sandbox_disk_low`).
   **Risco aceito pendente (5.5.1):** sem cota de disco para os bind mounts `/outputs` e `/deps`; o
   script ainda pode encher o disco durante a execução.
+- **M2 (média) — tmpfs e memória:** no modo `copy`, `SANDBOX_COPY_MAX_BYTES + SANDBOX_TMPFS_SIZE` precisa
+  ser menor que o limite de memória do container (o tmpfs conta na memória); caso contrário a execução é
+  recusada antes de criar o container. Padrão de `SANDBOX_COPY_MAX_BYTES` reduzido para 64 MiB. Com os
+  padrões atuais (`/tmp` de 256m e memória de 256m) o modo `copy` exige ajustar um dos limites.

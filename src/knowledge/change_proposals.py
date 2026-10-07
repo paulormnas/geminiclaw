@@ -19,8 +19,10 @@ Garantias deste módulo:
 
 from __future__ import annotations
 
+import hashlib
+import json
+import math
 import re
-import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -32,7 +34,7 @@ from src.knowledge.graph_store import GraphStore, Node
 from src.knowledge.graph_views import node_text, sanitize_text
 from src.knowledge.provenance import Actor, prepare_edge_properties, prepare_node_properties
 
-PESQUISADOR = Actor(kind="pesquisador")
+_ACTOR = Actor(kind="pesquisador")  # privado: só `apply_plan` escreve, e só com `HumanConfirmation`
 EDIT_SESSION_ID = "__graph_edit__"
 OP_TYPES = ("update_node", "create_node", "create_edge", "set_edge_status")
 DECISION_OPPORTUNITY = "aprovar_oportunidade"
@@ -56,7 +58,11 @@ SYSTEM_FIELDS = frozenset(
     }
 )
 # Relações derivadas (cálculo determinístico) ou de fato: criá-las à mão forjaria evidência.
-DERIVED_RELATIONS = frozenset({"SUSTENTA", "REFUTA", "FUNCIONOU_PARA", "FALHOU_PARA"})
+DERIVED_RELATIONS = frozenset({"SUSTENTA", "REFUTA", "FUNCIONOU_PARA", "FALHOU_PARA", "SEMELHANTE_A"})
+# Propriedades de aresta controladas pelo sistema (proveniência e derivadas): nunca vêm do pedido.
+EDGE_SYSTEM_PROPS = frozenset(schema.COMMON_EDGE_PROPERTIES) | frozenset({"score", "modelo", "versao", "config",
+                                                                          "hash_params", "peso"})
+CONFIRM_WORD = "aplicar"
 VERDICT_DISCOVERY_TYPES = ("funciona", "nao_funciona")
 TERMINAL_STATUSES = frozenset(
     {"rejeitada", "rejeitado", "contestada", "substituida", "abandonada", "refutada", "inconclusiva", "concluida"}
@@ -87,10 +93,13 @@ class StaleProposalError(ProposalError):
 class ApplyError(RuntimeError):
     """Falha ao aplicar; informa o que foi revertido e o que permaneceu (nós criados não são apagados)."""
 
-    def __init__(self, message: str, *, rolled_back: int, kept_created: list[str]) -> None:
+    def __init__(
+        self, message: str, *, rolled_back: int, kept_created: list[str], rollback_failures: list[str] | None = None
+    ) -> None:
         super().__init__(message)
         self.rolled_back = rolled_back
         self.kept_created = kept_created
+        self.rollback_failures = rollback_failures or []
 
 
 @dataclass(frozen=True)
@@ -142,6 +151,22 @@ class Plan:
     def ok(self) -> bool:
         return not self.errors
 
+    def fingerprint(self) -> str:
+        """Impressão digital (SHA-256) da serialização canônica de **tudo o que será gravado**.
+
+        Cobre operação, alvos, valores efetivos, estado anterior e decisão reservada: a confirmação humana vale para
+        esta impressão, e ``apply_plan`` recusa um plano cuja impressão difira da confirmada.
+        """
+        body = [
+            {
+                "i": p.index, "kind": p.op.kind, "data": p.op.data, "motivo": p.op.motivo, "label": p.label,
+                "node": p.node_id, "effective": p.effective, "before": p.before, "decision": p.decision,
+            }
+            for p in self.items
+        ]
+        raw = json.dumps(body, ensure_ascii=False, sort_keys=True, default=str)
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
 
 @dataclass
 class ApplyResult:
@@ -157,16 +182,17 @@ class ApplyResult:
 
 
 def _scalar_ok(value: Any) -> bool:
+    if isinstance(value, float) and not math.isfinite(value):
+        return False  # nan/inf não são JSON válido (nem agtype)
     if value is None or isinstance(value, (bool, int, float)):
         return True
     return isinstance(value, str) and len(value) <= _MAX_TEXT
 
 
 def _clean_scalar(value: Any) -> Any:
-    """Texto livre sem controles nem quebras (``Cc``/``Cf``/``Zl``/``Zp`` viram espaço); outros escalares intactos."""
+    """Texto livre pela **mesma** sanitização da tela (sem corte): o que é gravado é o que é exibido."""
     if isinstance(value, str):
-        spaced = "".join(" " if unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp") else c for c in value)
-        return " ".join(spaced.split())
+        return sanitize_text(value, 0)
     return value
 
 
@@ -268,6 +294,14 @@ def _quote(value: Any, limit: int = 60) -> str:
     return sanitize_text(value, limit)
 
 
+def _shown(value: Any, limit: int | None = None) -> str:
+    """Valor como será gravado (JSON canônico, íntegro). Só o estado ``antes`` pode ser cortado (``limit``)."""
+    text = json.dumps(value, ensure_ascii=False, sort_keys=True)
+    if limit is not None and len(text) > limit:
+        text = text[: limit - 1] + "…"
+    return text
+
+
 def _describe_node(node: Node) -> str:
     return f"{sanitize_text(node.label, 40)} {sanitize_text(node.id, 64)} \"{node_text(node, 60)}\""
 
@@ -348,9 +382,8 @@ class _Planner:
                 item.decision = DECISION_OPPORTUNITY
                 item.sensitive = True
                 effective.pop("decidido_por", None)
-                effective.pop("decidido_em", None)
-                effective["decidido_por"] = PESQUISADOR.criado_por
-                effective["decidido_em"] = datetime.now(timezone.utc).isoformat()
+                effective.pop("decidido_em", None)  # preenchido na aplicação, com o instante real da confirmação
+                effective["decidido_por"] = _ACTOR.criado_por
                 if op.motivo and "motivo_decisao" not in effective:
                     effective["motivo_decisao"] = op.motivo
         else:
@@ -365,19 +398,24 @@ class _Planner:
                 item.errors.append(f"decisão reservada ao pesquisador por comando próprio: {reason}{hint}")
                 return
         item.before = {k: node.properties.get(k) for k in effective}
+        if item.decision:
+            item.before["decidido_em"] = node.properties.get("decidido_em")
         item.effective = effective
         status_new = effective.get("status")
         item.sensitive = item.sensitive or status_new in TERMINAL_STATUSES
         diffs = "; ".join(
-            f"{_quote(k, 40)}: {_quote(item.before.get(k), 80)!r} → {_quote(v, 80)!r}" for k, v in effective.items()
+            f"{_quote(k, 40)}: {_shown(item.before.get(k), 200)} → {_shown(v)}" for k, v in effective.items()
         )
+        if item.decision:
+            diffs += "; decidido_em: (instante da sua confirmação)"
         item.description = f"Alterar {_describe_node(node)}: {diffs}"
 
-    def _check_label_writable(self, item: PlannedOp, label: str) -> None:
+    def _check_label_writable(self, item: PlannedOp, label: str, *, edge: bool = False) -> None:
+        what = "relações a partir de" if edge else "alterações em"
         if label in BLOCKED_LABELS:
-            item.errors.append(f"{label} não é alterável por aqui: {BLOCKED_LABELS[label]}.")
+            item.errors.append(f"{what} {label} não são feitas por aqui: {BLOCKED_LABELS[label]}.")
         if label in validation.FACT_LABELS:
-            item.errors.append(f"{label} é fato estrutural (ingestão determinística): não é editável.")
+            item.errors.append(f"{what} {label} (fato estrutural, ingestão determinística) não são editáveis.")
 
     def _plan_create_node(self, item: PlannedOp) -> None:
         label, props = item.op.data["label"], dict(item.op.data["props"])
@@ -403,7 +441,7 @@ class _Planner:
             props.setdefault("n_evidencias", 0)
             props.setdefault("status", "ativa")
         full = prepare_node_properties(
-            {**props, "projeto_id": self.project_id, "sessao_id": EDIT_SESSION_ID}, PESQUISADOR
+            {**props, "projeto_id": self.project_id, "sessao_id": EDIT_SESSION_ID}, _ACTOR
         )
         validation.validate_node_write(label, full, requires_agent_provenance=False)
         item.effective = props
@@ -412,7 +450,7 @@ class _Planner:
         item.warnings.extend(self._duplicate_warnings(label, props))
         if label == "Descoberta":
             item.warnings.append("descoberta sem evidência ligada: crie as relações BASEADA_EM e SOBRE.")
-        shown = ", ".join(f"{_quote(k, 40)}={_quote(v, 80)!r}" for k, v in props.items())
+        shown = ", ".join(f"{_quote(k, 40)}={_shown(v)}" for k, v in props.items())
         item.description = f"Criar {sanitize_text(label, 40)} (referência ${item.index}): {shown}"
 
     def _plan_create_edge(self, item: PlannedOp) -> None:
@@ -429,10 +467,20 @@ class _Planner:
         if src is None or dst is None:
             return
         (src_label, src_node), (dst_label, dst_node) = src, dst
-        if src_label in validation.FACT_LABELS:
-            item.errors.append(f"relações a partir de {src_label} (fato estrutural) não são editáveis.")
+        if data["src"] == data["dst"]:
+            item.errors.append("relação de um nó com ele mesmo (auto-laço) não é aceita.")
             return
-        full = prepare_edge_properties(dict(data["props"]), PESQUISADOR)
+        self._check_label_writable(item, src_label, edge=True)
+        if item.errors:
+            return
+        props = dict(data["props"])
+        forbidden = sorted(set(props) & EDGE_SYSTEM_PROPS)
+        if forbidden:
+            item.errors.append(
+                f"propriedades de relação definidas pelo sistema não podem ser informadas: {', '.join(forbidden)}."
+            )
+            return
+        full = prepare_edge_properties(props, _ACTOR)
         validation.validate_edge_write(src_label, rel, dst_label, full)
         if src_node is not None and dst_node is not None:
             sub = self.store.neighbors(src_node.id, [rel], "out", 1)
@@ -440,10 +488,15 @@ class _Planner:
                 item.errors.append("a relação já existe.")
                 return
         item.label = src_label
+        item.effective = props  # tudo o que será gravado além dos campos fixos do sistema (afirmado/confirmada)
         item.node_id = src_node.id if src_node is not None else ""
         src_txt = _describe_node(src_node) if src_node else f"{sanitize_text(src_label, 40)} (referência {data['src']})"
         dst_txt = _describe_node(dst_node) if dst_node else f"{sanitize_text(dst_label, 40)} (referência {data['dst']})"
-        item.description = f"Criar relação: {src_txt} --{sanitize_text(rel, 40)}--> {dst_txt}"
+        extra = f" props={_shown(props)}" if props else ""
+        item.description = (
+            f"Criar relação: {src_txt} --{sanitize_text(rel, 40)}--> {dst_txt}{extra} "
+            "[origem=afirmado, status=confirmada, evidencias=[]]"
+        )
 
     def _plan_set_edge_status(self, item: PlannedOp) -> None:
         data = item.op.data
@@ -460,6 +513,9 @@ class _Planner:
             return
         src_node, dst_node = src[1], dst[1]
         assert src_node is not None and dst_node is not None
+        self._check_label_writable(item, src_node.label, edge=True)
+        if item.errors:
+            return
         sub = self.store.neighbors(src_node.id, [data["rel"]], "out", 1)
         edge = next(
             (e for e in sub.edges if e.src_id == src_node.id and e.rel_type == data["rel"] and e.dst_id == dst_node.id),
@@ -474,7 +530,7 @@ class _Planner:
         item.sensitive = data["status"] == "contestada"
         item.description = (
             f"Alterar o status da relação {_describe_node(src_node)} --{sanitize_text(data['rel'], 40)}--> "
-            f"{_describe_node(dst_node)}: {_quote(item.before['status'], 30)!r} → {_quote(data['status'], 30)!r}"
+            f"{_describe_node(dst_node)}: {_shown(item.before['status'], 40)} → {_shown(data['status'])}"
         )
 
     # -- duplicatas (aviso; o pesquisador pode prosseguir) -----------------------
@@ -534,6 +590,12 @@ def plan_changes(store: GraphStore, ops: list[Op], *, project_id: str, index: An
         item = PlannedOp(index=position, op=op)
         planner.plan(item)
         items.append(item)
+    shown = sum(len(i.description) + len(i.op.motivo) for i in items)
+    if items and shown > config.GRAPH_EDIT_MAX_DISPLAY_CHARS:
+        items[0].errors.append(
+            f"proposta grande demais para ser exibida por inteiro ({shown} caracteres; máximo "
+            f"{config.GRAPH_EDIT_MAX_DISPLAY_CHARS}): divida o pedido."
+        )
     return Plan(project_id=project_id, items=items)
 
 
@@ -556,16 +618,50 @@ def _check_unchanged(store: GraphStore, item: PlannedOp) -> None:
         edge = next((e for e in sub.edges if e.dst_id == data["dst"] and e.rel_type == data["rel"]), None)
         if edge is None or edge.properties.get("status") != item.before.get("status"):
             raise StaleProposalError(f"operação {item.index}: a relação mudou depois da proposta.")
+    elif item.op.kind == "create_edge":
+        data = item.op.data
+        if _REF_RE.fullmatch(data["src"]) or _REF_RE.fullmatch(data["dst"]):
+            return  # ponta criada na própria proposta: não existe ainda
+        if store.get_node(data["src"]) is None or store.get_node(data["dst"]) is None:
+            raise StaleProposalError(f"operação {item.index}: um dos nós da relação deixou de existir.")
+        sub = store.neighbors(data["src"], [data["rel"]], "out", 1)
+        if any(e.src_id == data["src"] and e.dst_id == data["dst"] and e.rel_type == data["rel"] for e in sub.edges):
+            raise StaleProposalError(f"operação {item.index}: a relação já foi criada depois da proposta.")
 
 
-def _note(request: str, item: PlannedOp, **extra: Any) -> dict[str, Any]:
-    return {
+@dataclass(frozen=True)
+class HumanConfirmation:
+    """Prova de que o pesquisador confirmou **esta** proposta, digitando a palavra exata, num terminal interativo.
+
+    Só ``src/cli_graph.py`` a emite (guarda estática em ``test_hardening``); ``apply_plan`` a exige e confere que a
+    impressão digital é a da proposta exibida.
+    """
+
+    fingerprint: str
+    typed: str
+    tty: bool
+
+    def __post_init__(self) -> None:
+        if self.tty is not True or self.typed != CONFIRM_WORD:
+            raise PermissionError("confirmação humana inválida: exige terminal interativo e a palavra exata.")
+
+
+def issue_confirmation(plan: Plan, typed: str | None, *, tty: bool) -> HumanConfirmation:
+    """Emite a confirmação para ``plan`` (``PermissionError`` se não houve TTY ou a palavra exata)."""
+    return HumanConfirmation(plan.fingerprint(), typed if typed is not None else "", bool(tty))
+
+
+def _note(request: str, item: PlannedOp, adjustments: tuple[str, ...], **extra: Any) -> dict[str, Any]:
+    note = {
         "origem": "graph edit",
-        "pedido_original": request[: config.GRAPH_EDIT_MAX_REQUEST_CHARS],
+        "pedido_original": sanitize_text(request, config.GRAPH_EDIT_MAX_REQUEST_CHARS),
         "operacao": item.op.kind,
         "motivo": item.op.motivo[:500],
         **extra,
     }
+    if adjustments:
+        note["ajustes_do_pesquisador"] = [sanitize_text(a, config.GRAPH_EDIT_MAX_REQUEST_CHARS) for a in adjustments]
+    return note
 
 
 def apply_plan(
@@ -573,32 +669,44 @@ def apply_plan(
     plan: Plan,
     *,
     request: str,
+    confirmation: HumanConfirmation,
+    adjustments: tuple[str, ...] = (),
 ) -> ApplyResult:
-    """Aplica uma proposta **já validada e confirmada**, com ``Actor(pesquisador)`` e o pedido original na auditoria.
+    """Aplica uma proposta **já validada, exibida e confirmada**, com ``Actor(pesquisador)`` e o pedido na auditoria.
 
-    Ordem: criações de nó, criações de relação e, por fim, mudanças de propriedade/status (as reversíveis ficam por
-    último). Antes de escrever, confere que o estado não mudou. Se uma escrita falhar, as mudanças reversíveis já
-    feitas são desfeitas; nós criados permanecem (nada é apagado) e são reportados em ``ApplyError``.
+    Exige a ``HumanConfirmation`` da **mesma** proposta exibida (impressão digital idêntica): o que é gravado é o que
+    foi mostrado. Ordem: criações de nó, de relação e, por fim, mudanças de propriedade/status (as reversíveis por
+    último). Antes de escrever, confere que o estado não mudou. Se uma escrita falha, as mudanças reversíveis já
+    feitas são desfeitas (e as falhas de reversão são reportadas e auditadas); nós criados permanecem (nada é
+    apagado) e são reportados em ``ApplyError``.
 
     Raises:
-        ProposalError: A proposta tem erros (não deve ser aplicada).
+        PermissionError: Sem ``HumanConfirmation`` válida.
+        ProposalError: A proposta tem erros ou difere da exibida.
         StaleProposalError: O grafo mudou depois da proposta (nada foi escrito).
         ApplyError: Falha durante a aplicação.
     """
+    if not isinstance(confirmation, HumanConfirmation):
+        raise PermissionError("apply_plan exige a confirmação humana da proposta.")
     if not plan.ok:
         raise ProposalError("proposta com erros: " + "; ".join(plan.errors))
+    if confirmation.fingerprint != plan.fingerprint():
+        raise ProposalError("a proposta a aplicar difere da que foi exibida e confirmada.")
     for item in plan.items:
         _check_unchanged(store, item)
 
     order = {"create_node": 0, "create_edge": 1, "update_node": 2, "set_edge_status": 2}
     queue = sorted(plan.items, key=lambda p: (order[p.op.kind], p.index))
     created: dict[int, str] = {}
-    undo: list[Callable[[], None]] = []
+    undo: list[tuple[str, Callable[[], None]]] = []
     applied = 0
 
     def resolve(ref: str) -> str:
         match = _REF_RE.fullmatch(ref)
         return created[int(match.group(1))] if match else ref
+
+    def note(node_id: str, item: PlannedOp, **extra: Any) -> None:
+        store.record_audit_note(node_id, _ACTOR, _note(request, item, adjustments, **extra))
 
     try:
         for item in queue:
@@ -607,55 +715,72 @@ def apply_plan(
                 node_id = store.create_node(
                     item.label,
                     {**item.effective, "projeto_id": plan.project_id, "sessao_id": EDIT_SESSION_ID},
-                    actor=PESQUISADOR,
+                    actor=_ACTOR,
                 )
                 created[item.index] = node_id
-                store.record_audit_note(node_id, PESQUISADOR, _note(request, item, criado=item.label))
+                note(node_id, item, criado=item.label)
             elif kind == "create_edge":
                 src, dst = resolve(data["src"]), resolve(data["dst"])
-                store.create_edge(src, data["rel"], dst, dict(data["props"]), actor=PESQUISADOR)
-                undo.append(
-                    lambda s=src, r=data["rel"], d=dst: store.set_edge_status(s, r, d, "contestada", actor=PESQUISADOR)
-                )
-                store.record_audit_note(src, PESQUISADOR, _note(request, item, aresta=f"{data['rel']}->{dst}"))
+                store.create_edge(src, data["rel"], dst, dict(item.effective), actor=_ACTOR)
+                undo.append((
+                    src,
+                    lambda s=src, r=data["rel"], d=dst: store.set_edge_status(s, r, d, "contestada", actor=_ACTOR),
+                ))
+                note(src, item, aresta=f"{data['rel']}->{dst}")
             elif kind == "update_node":
                 old = dict(item.before)
-                store.update_node(item.node_id, dict(item.effective), actor=PESQUISADOR)
-                undo.append(lambda i=item.node_id, o=old: store.update_node(i, o, actor=PESQUISADOR))
-                store.record_audit_note(item.node_id, PESQUISADOR, _note(request, item, campos=sorted(item.effective)))
+                changes = dict(item.effective)
+                if item.decision:
+                    changes["decidido_em"] = datetime.now(timezone.utc).isoformat()  # instante real da confirmação
+                store.update_node(item.node_id, changes, actor=_ACTOR)
+                undo.append((item.node_id, lambda i=item.node_id, o=old: store.update_node(i, o, actor=_ACTOR)))
+                note(item.node_id, item, campos=sorted(changes))
             else:
                 old_status = item.before["status"]
-                store.set_edge_status(data["src"], data["rel"], data["dst"], data["status"], actor=PESQUISADOR)
-                undo.append(
+                store.set_edge_status(data["src"], data["rel"], data["dst"], data["status"], actor=_ACTOR)
+                undo.append((
+                    data["src"],
                     lambda s=data["src"], r=data["rel"], d=data["dst"], o=old_status: store.set_edge_status(
-                        s, r, d, o, actor=PESQUISADOR
-                    )
-                )
-                store.record_audit_note(
-                    data["src"], PESQUISADOR,
-                    _note(request, item, aresta=f"{data['rel']}->{data['dst']}", status=data["status"]),
-                )
+                        s, r, d, o, actor=_ACTOR
+                    ),
+                ))
+                note(data["src"], item, aresta=f"{data['rel']}->{data['dst']}", status=data["status"])
             applied += 1
     except Exception as exc:  # noqa: BLE001 - qualquer falha reverte o que for reversível
-        rolled = 0
-        for action in reversed(undo):
+        rolled, failed = 0, []
+        for node_id, action in reversed(undo):
             try:
                 action()
                 rolled += 1
-            except Exception:  # noqa: BLE001 - reversão best effort; o relatório informa
-                pass
-        raise ApplyError(
+            except Exception as undo_exc:  # noqa: BLE001 - nunca engolida: reportada e auditada
+                failed.append(f"{node_id} ({type(undo_exc).__name__})")
+        trail = {
+            "origem": "graph edit", "evento": "reversao", "causa": type(exc).__name__,
+            "revertidas": rolled, "falhas_de_reversao": failed,
+            "pedido_original": sanitize_text(request, config.GRAPH_EDIT_MAX_REQUEST_CHARS),
+        }
+        for node_id in {n for n, _ in undo} | set(created.values()):
+            try:
+                store.record_audit_note(node_id, _ACTOR, trail)
+            except Exception:  # noqa: BLE001 - auditoria da reversão é best effort; o relatório informa
+                failed.append(f"auditoria de {node_id}")
+        message = (
             f"falha ao aplicar a operação {applied + 1} ({type(exc).__name__}: {sanitize_text(str(exc), 200)}); "
-            f"{rolled} alteração(ões) revertida(s).",
-            rolled_back=rolled,
-            kept_created=list(created.values()),
+            f"{rolled} alteração(ões) revertida(s)"
+        )
+        if undo:
+            message += "; relações criadas voltam como 'contestada' (nada é apagado)"
+        if failed:
+            message += f"; ATENÇÃO, a reversão FALHOU em: {', '.join(failed)}. Confira o grafo"
+        raise ApplyError(
+            message + ".", rolled_back=rolled, kept_created=list(created.values()), rollback_failures=failed
         ) from exc
     return ApplyResult(applied=applied, created_ids=created)
 
 
 def render_plan(plan: Plan, explanation: str) -> str:
-    """Texto da proposta para o pesquisador (tudo sanitizado): explicação, operações, avisos e erros."""
-    lines = ["PROPOSTA DO CURATOR (nada foi alterado ainda)", "", f"Explicação: {sanitize_text(explanation, 1500)}", ""]
+    """Texto da proposta (tudo sanitizado): operações **íntegras**, avisos, erros e, por último, a explicação do modelo."""
+    lines = ["PROPOSTA DO CURATOR (nada foi alterado ainda)", ""]
     if not plan.items:
         lines.append("O Curator não propôs nenhuma alteração.")
     for item in plan.items:
@@ -663,10 +788,17 @@ def render_plan(plan: Plan, explanation: str) -> str:
         mark += " [DECISÃO RESERVADA: exige autorização adicional]" if item.decision else ""
         lines.append(f"{item.index}. {item.description or sanitize_text(item.op.kind, 30)}{mark}")
         if item.op.motivo:
-            lines.append(f"   motivo: {sanitize_text(item.op.motivo, 300)}")
+            lines.append(f"   motivo: {_shown(item.op.motivo)}")
     if plan.warnings:
         lines += ["", "Avisos (você pode prosseguir mesmo assim):"] + [f"  - {w}" for w in plan.warnings]
     if plan.errors:
         lines += ["", "ERROS (a proposta não pode ser aplicada):"] + [f"  - {e}" for e in plan.errors]
-    lines += ["", "Nada é apagado: pedidos de remoção viram mudança de status."]
+    lines += [
+        "",
+        f"Sugestão do assistente (texto do modelo, NÃO verificado; vale o que está nas operações acima): "
+        f"{sanitize_text(explanation, 1500)}",
+        "",
+        "Nada é apagado: pedidos de remoção viram mudança de status.",
+        f"Impressão digital da proposta: {plan.fingerprint()[:16]} (é a do que será aplicado).",
+    ]
     return "\n".join(lines)

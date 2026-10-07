@@ -17,13 +17,15 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src import config
-from src.human_gate import HumanGate, default_gate
+from src.human_gate import HumanGate, Source, default_gate
 from src.knowledge import projects
 from src.knowledge.change_proposals import (
+    CONFIRM_WORD,
     ApplyError,
     Plan,
     ProposalError,
     apply_plan,
+    issue_confirmation,
     render_plan,
 )
 from src.knowledge.errors import GraphStoreError
@@ -39,7 +41,7 @@ from src.knowledge.graph_views import (
 )
 from src.knowledge.problem import ProblemDraftError
 
-_ANSWER_APPLY, _ANSWER_CANCEL, _ANSWER_ADJUST = "aplicar", "cancelar", "ajustar"
+_ANSWER_APPLY, _ANSWER_CANCEL, _ANSWER_ADJUST = CONFIRM_WORD, "cancelar", "ajustar"
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -162,16 +164,21 @@ def handle_graph_command(
 def _ask(input_fn: Callable[[str], str], prompt: str) -> str | None:
     """Lê uma resposta; fim de entrada ou Ctrl-C contam como cancelamento (``None``)."""
     try:
-        return input_fn(prompt).strip()
+        return input_fn(prompt)
     except (EOFError, KeyboardInterrupt):
         return None
 
 
 def _authorize_decisions(plan: Plan, gate: HumanGate, input_fn: Callable[[str], str]) -> bool:
-    """Decisões reservadas (``Oportunidade``): autorização adicional, no terminal, pelo ``HumanGate``."""
+    """Decisões reservadas (``Oportunidade``): autorização adicional, no terminal, pelo ``HumanGate``.
+
+    O prompt identifica o alvo e o novo status; só a resposta ``s`` digitada no terminal autoriza.
+    """
     for item in plan.decisions:
         request = gate.request(item.decision or "", item.node_id)
-        gate.ask_in_terminal(request.id, input_fn=input_fn, interactive=True)
+        target = sanitize_text(item.description, 400)
+        reply = _ask(input_fn, f"Autoriza a decisão '{item.decision}' (operação {item.index})?\n  {target}\n[s/N] ")
+        gate.answer(request.id, source=Source.TERMINAL, approved=reply is not None and reply.lower() in ("s", "sim"))
         if not gate.authorized(request.id):
             return False
     return True
@@ -223,6 +230,7 @@ def _edit(
 
     # 2. Rodadas: propor -> validar a seco -> mostrar -> aplicar/cancelar/ajustar.
     feedback: str | None = None
+    adjustments: list[str] = []
     previous: EditProposal | None = None
     for round_no in range(1, max(config.GRAPH_EDIT_MAX_ROUNDS, 1) + 1):
         outcome = asyncio.run(editor.propose(request, feedback=feedback, previous=previous))
@@ -238,38 +246,48 @@ def _edit(
         if can_apply:
             options.insert(0, _ANSWER_APPLY)
         answer = _ask(input_fn, f"\nResponda {', '.join(repr(o) for o in options)}: ")
-        choice = (answer or _ANSWER_CANCEL).lower()
-        if choice not in options:
+        choice = answer if answer is not None else _ANSWER_CANCEL  # resposta EXATA: sem strip nem caixa
+        if choice == "" or choice not in options:
             out("Resposta não reconhecida: proposta cancelada. Nada foi alterado.")
             return 1
         if choice == _ANSWER_CANCEL:
             out("Proposta cancelada. Nada foi alterado.")
             return 0
         if choice == _ANSWER_ADJUST:
-            text = _ask(input_fn, "Descreva o ajuste: ")
+            raw = _ask(input_fn, "Descreva o ajuste: ")
+            text = sanitize_text(raw, config.GRAPH_EDIT_MAX_REQUEST_CHARS) if raw else ""
             if not text:
                 out("Ajuste vazio: proposta cancelada. Nada foi alterado.")
                 return 0
             feedback = text[: config.GRAPH_EDIT_MAX_REQUEST_CHARS]
+            adjustments.append(feedback)
             continue
-        return _apply(store, plan, request, gate, input_fn, out)
+        return _apply(store, plan, request, gate, input_fn, out, tuple(adjustments))
     out("Limite de rodadas atingido. Nada foi alterado.")
     return 1
 
 
 def _apply(
-    store: Any, plan: Plan, request: str, gate: HumanGate, input_fn: Callable[[str], str], out: Callable[[str], Any]
+    store: Any,
+    plan: Plan,
+    request: str,
+    gate: HumanGate,
+    input_fn: Callable[[str], str],
+    out: Callable[[str], Any],
+    adjustments: tuple[str, ...],
 ) -> int:
     if not _authorize_decisions(plan, gate, input_fn):
         out("Decisão reservada não autorizada: nada foi alterado.")
         return 1
     try:
-        result = apply_plan(store, plan, request=request)
+        # A confirmação só existe aqui: terminal interativo já verificado e a palavra exata digitada acima.
+        confirmation = issue_confirmation(plan, _ANSWER_APPLY, tty=True)
+        result = apply_plan(store, plan, request=request, confirmation=confirmation, adjustments=adjustments)
     except ApplyError as exc:
         extra = f" Nós criados mantidos (nada é apagado): {', '.join(exc.kept_created)}." if exc.kept_created else ""
         out(f"Erro: {sanitize_text(exc, 400)}{extra}")
         return 1
-    except (ProposalError, GraphStoreError) as exc:
+    except (ProposalError, GraphStoreError, PermissionError) as exc:
         out(f"Erro: {sanitize_text(exc, 400)} Nada foi alterado.")
         return 1
     ids = ", ".join(f"${k}={sanitize_text(v, 64)}" for k, v in sorted(result.created_ids.items()))

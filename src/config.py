@@ -290,6 +290,7 @@ GRAPH_SHOW_MAX_TEXT_CHARS = int(get_env("GRAPH_SHOW_MAX_TEXT_CHARS", default="20
 GRAPH_EDIT_MAX_ROUNDS = int(get_env("GRAPH_EDIT_MAX_ROUNDS", default="3"))
 GRAPH_EDIT_MAX_OPS = int(get_env("GRAPH_EDIT_MAX_OPS", default="20"))
 GRAPH_EDIT_MAX_REQUEST_CHARS = int(get_env("GRAPH_EDIT_MAX_REQUEST_CHARS", default="2000"))
+GRAPH_EDIT_MAX_DISPLAY_CHARS = int(get_env("GRAPH_EDIT_MAX_DISPLAY_CHARS", default="8000"))
 
 # Quick Search Fallback
 QUICK_SEARCH_STRATEGY = get_env("QUICK_SEARCH_STRATEGY", default="ddg,ddg_lite,brave")

@@ -49,7 +49,7 @@ def test_proposta_aplicada(world):
     code, out, prompts = world.run(["edit", REQUEST], inputs=["aplicar"], provider=provider)
     assert code == 0, out
     assert "PROPOSTA DO CURATOR (nada foi alterado ainda)" in out
-    assert "'ativa' → 'contestada'" in out  # valor atual → novo
+    assert '"ativa" → "contestada"' in out  # valor atual → novo
     assert "Alteração aplicada" in out
     node = world.store.get_node(world.ids["descoberta"])
     assert node.properties["status"] == "contestada"
@@ -138,7 +138,7 @@ def test_pedido_de_remocao_vira_mudanca_de_status(world):
         ["edit", "apague a oportunidade Testar random forest"], inputs=["aplicar", "s"], provider=provider, gate=gate
     )
     assert code == 0, out
-    assert "Nada é apagado" in out and "'documentada' → 'rejeitada'" in out
+    assert "Nada é apagado" in out and '"documentada" → "rejeitada"' in out
     node = world.store.get_node(world.ids["oportunidade"])  # o nó continua existindo
     assert node.properties["status"] == "rejeitada"
     assert node.properties["decidido_por"] == "pesquisador" and node.properties["motivo_decisao"]
@@ -222,7 +222,7 @@ def test_mudar_status_de_relacao(world):
     op = {"op": "set_edge_status", "src": world.ids["descoberta"], "rel": "SOBRE", "dst": world.ids["abordagem"],
           "status": "contestada", "motivo": "m"}
     code, out, _ = world.run(["edit", "conteste a relação"], inputs=["aplicar"], provider=Scripted(propose([op])))
-    assert code == 0 and "'confirmada' → 'contestada'" in out
+    assert code == 0 and '"confirmada" → "contestada"' in out
     edge = world.store.neighbors(world.ids["descoberta"], ["SOBRE"], "out", 1).edges[0]
     assert edge.properties["status"] == "contestada"
 
@@ -302,19 +302,19 @@ def test_estrutura_estrita_das_operacoes(world):
 
 def test_estado_mudou_entre_proposta_e_aplicacao(world):
     """Aplicar com o grafo alterado depois da proposta aborta sem escrever (a confirmação vale para o que foi visto)."""
-    from src.knowledge.change_proposals import StaleProposalError, apply_plan
+    from src.knowledge.change_proposals import StaleProposalError, apply_plan, issue_confirmation
     from src.knowledge.provenance import Actor
 
     plan = plan_changes(world.store, parse_ops([contest(world)]), project_id=PID)
     world.store.update_node(world.ids["descoberta"], {"status": "substituida"}, actor=Actor(kind="pesquisador"))
     with pytest.raises(StaleProposalError):
-        apply_plan(world.store, plan, request="x")
+        apply_plan(world.store, plan, request="x", confirmation=issue_confirmation(plan, "aplicar", tty=True))
     assert status_of(world, "descoberta") == "substituida"
 
 
 def test_falha_na_aplicacao_reverte_o_que_for_reversivel(world, monkeypatch):
     """Aplicação atômica no reversível: se a 2ª escrita falha, a 1ª é desfeita e o relatório informa."""
-    from src.knowledge.change_proposals import ApplyError, apply_plan
+    from src.knowledge.change_proposals import ApplyError, apply_plan, issue_confirmation
 
     second = {"op": "update_node", "id": world.ids["descoberta2"], "changes": {"status": "ativa"}}
     plan = plan_changes(world.store, parse_ops([contest(world), second]), project_id=PID)
@@ -330,7 +330,7 @@ def test_falha_na_aplicacao_reverte_o_que_for_reversivel(world, monkeypatch):
 
     monkeypatch.setattr(world.store, "update_node", flaky)
     with pytest.raises(ApplyError) as info:
-        apply_plan(world.store, plan, request="x")
+        apply_plan(world.store, plan, request="x", confirmation=issue_confirmation(plan, "aplicar", tty=True))
     assert info.value.rolled_back == 1
     monkeypatch.undo()
     assert status_of(world, "descoberta") == "ativa" and status_of(world, "descoberta2") == "contestada"

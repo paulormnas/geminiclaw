@@ -392,13 +392,29 @@ def node_properties(node: Node, limit: int | None = None) -> dict[str, Any]:
     }
 
 
+JSON_TEXT_LIMIT = 1000
+
+
+def _clipped_fields(node: Node, limit: int) -> list[str]:
+    """Propriedades de texto que ``node_properties`` corta (para o JSON avisar em vez de truncar em silêncio)."""
+    return [
+        f"{sanitize_text(node.id, 64)}.{sanitize_text(k, 80)}"
+        for k, v in sorted(node.properties.items())
+        if k not in _HIDDEN_PROPERTIES and isinstance(v, str) and len(sanitize_text(v, 0)) > limit
+    ]
+
+
 def render_json(view: GraphView) -> str:
     """``{"nodes": [...], "edges": [...]}`` (JSON válido, strings sanitizadas), mais metadados de truncamento."""
     payload = {
         "nodes": [
-            {"id": sanitize_text(n.id, 64), "label": sanitize_text(n.label, 40), "properties": node_properties(n)}
+            {
+                "id": sanitize_text(n.id, 64), "label": sanitize_text(n.label, 40),
+                "properties": node_properties(n, JSON_TEXT_LIMIT),
+            }
             for n in view.nodes
         ],
+        "truncated_fields": [f for n in view.nodes for f in _clipped_fields(n, JSON_TEXT_LIMIT)],
         "edges": [
             {
                 "src": sanitize_text(e.src_id, 64),
@@ -418,6 +434,7 @@ def render_json(view: GraphView) -> str:
 def _mermaid_label(text: str) -> str:
     """Rótulo de nó Mermaid seguro: entre aspas, com ``" < > & | [ ] { } ( )`` neutralizados."""
     replacements = {
+        "#": "#35;", "%": "#37;",
         '"': "#quot;", "<": "#lt;", ">": "#gt;", "&": "#amp;", "|": "#124;",
         "[": "#91;", "]": "#93;", "{": "#123;", "}": "#125;", "(": "#40;", ")": "#41;", "`": "#96;",
     }
@@ -560,7 +577,6 @@ def render_node_detail(detail: NodeDetail, fmt: str = "text") -> str:
                 "label": sanitize_text(node.label, 40),
                 "properties": node_properties(node, 1000),
                 "relations": detail.relations,
-                "hidden_relations": detail.hidden_relations,
                 "history": detail.history,
                 "verdict_breakdown": detail.verdict,
                 "verdict_note": detail.verdict_note,
@@ -583,8 +599,6 @@ def render_node_detail(detail: NodeDetail, fmt: str = "text") -> str:
         lines.append(f"  {arrow} {rel['label']} {rel['no']} {rel['texto']}".rstrip())
     if not detail.relations:
         lines.append("  (nenhuma)")
-    if detail.hidden_relations:
-        lines.append(f"  ({detail.hidden_relations} relação(ões) com nós de outros projetos omitida(s))")
     lines += ["", f"Histórico de alterações ({len(detail.history)}):"]
     for item in detail.history:
         changes = json.dumps(item["changes"], ensure_ascii=False)

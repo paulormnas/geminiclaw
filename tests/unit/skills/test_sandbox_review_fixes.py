@@ -436,7 +436,7 @@ def test_m6_exdev_copia_e_renomeia(tmp_path, monkeypatch):
     assert error is None and records[0].sha256 == digest
     assert (cache / digest).read_bytes() == b"conteudo"
     assert not (staging / "p.bin").exists()
-    assert sorted(f.name for f in cache.iterdir()) == [digest]  # sem sobras (.part, .incoming)
+    assert sorted(f.name for f in cache.iterdir()) == [digest, f"{digest}.json"]  # blob e sidecar; sem .part/.incoming
 
 
 # --- M7: sem sha256 declarado só https; redirect https -> http é sempre recusado -----------------------------
@@ -557,3 +557,44 @@ def test_b6_falha_ao_criar_o_container_de_execucao_segue_infra(make_sandbox, tmp
     result = _run(make_sandbox(daemon), tmp_path)
 
     assert result.fase_falha == "infra"
+
+
+# --- B7: o acerto de cache registra a origem (URL original) em sidecar ------------------------------------
+
+@pytest.mark.unit
+def test_b7_download_grava_sidecar_e_acerto_de_cache_registra_a_origem(make_sandbox, tmp_path):
+    import hashlib
+
+    sha = hashlib.sha256(b"pesos").hexdigest()
+    cache = tmp_path / "cache"
+    daemon = _FetchDaemon(content=b"pesos")
+    first = _run(make_sandbox(daemon, asset_cache_dir=str(cache)), tmp_path,
+                 assets=[{"url": "https://origem.exemplo.org/p.bin", "destino": "p.bin", "sha256": sha}])
+    assert first.ativos[0].origem == "download"
+    sidecar = json.loads((cache / f"{sha}.json").read_text())
+    assert sidecar["url"] == "https://origem.exemplo.org/p.bin"
+
+    daemon2 = FakeDaemon()
+    second = _run(make_sandbox(daemon2, asset_cache_dir=str(cache)), tmp_path,
+                  assets=[{"url": "https://espelho.exemplo.org/outro.bin", "destino": "p.bin", "sha256": sha}])
+    record = second.ativos[0]
+    assert record.origem == "cache"
+    assert record.url == "https://espelho.exemplo.org/outro.bin"
+    assert record.url_original == "https://origem.exemplo.org/p.bin"
+    assert [c["labels"]["geminiclaw.role"] for c in daemon2.run_calls] == ["sandbox"]
+
+
+@pytest.mark.unit
+def test_b7_sidecar_nao_e_sobrescrito_pelo_mesmo_conteudo_de_outra_url(tmp_path):
+    import hashlib
+
+    from src.skills.code import assets
+
+    sha = hashlib.sha256(b"x").hexdigest()
+    staging, cache = tmp_path / "staging", tmp_path / "cache"
+    staging.mkdir()
+    for url in ("https://a.exemplo.org/x", "https://b.exemplo.org/x"):
+        (staging / "x").write_bytes(b"x")
+        assets.verify_and_cache([assets.AssetSpec(url, "x")], staging, cache)
+
+    assert assets.read_origin(cache, sha)["url"] == "https://a.exemplo.org/x"

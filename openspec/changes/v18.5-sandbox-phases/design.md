@@ -325,3 +325,6 @@ Registro das correções e dos riscos aceitos decorrentes da revisão do Analist
   dispositivos (`stat.S_ISREG`; `check_mount_source` aceita também diretórios, que é o que `/prior` monta).
 - **B6 (baixa) — fase da exceção:** uma exceção depois da criação do container de execução (exec, injeção do
   script, introspecção) vira `fase_falha="execute"` (com `infra_error` preenchido); até lá segue `infra`.
+- **B7 (baixa) — origem em acertos de cache:** o primeiro download de um conteúdo grava o sidecar
+  `SANDBOX_ASSET_CACHE_DIR/<sha256>.json` (`url`, `destino`, `baixado_em`; nunca sobrescrito). Um acerto de
+  cache registra `origem="cache"` e `url_original` (a URL do sidecar), ao lado da `url` declarada na chamada.

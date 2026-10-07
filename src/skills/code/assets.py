@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import errno
 import hashlib
+import json
 import os
 import pathlib
 import re
@@ -16,6 +17,7 @@ import stat
 import urllib.parse
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, List, Literal, Optional
 
 from src.skills.code import fetch_assets as _fetch
@@ -46,6 +48,8 @@ class AssetRecord:
     tamanho: int
     hash_declarado: bool
     origem: Literal["download", "cache"]
+    # URL do primeiro download do conteúdo (sidecar do cache); preenchida nos acertos de cache.
+    url_original: Optional[str] = None
 
 
 def parse_assets(raw: Optional[List[Any]]) -> tuple[List[AssetSpec], List[str]]:
@@ -100,6 +104,34 @@ def parse_assets(raw: Optional[List[Any]]) -> tuple[List[AssetSpec], List[str]]:
         seen.add(destino)
         specs.append(AssetSpec(url=url.strip(), destino=destino, sha256=sha.lower() if sha else None))
     return specs, errors
+
+
+def origin_sidecar(cache_dir: pathlib.Path, sha256: str) -> pathlib.Path:
+    """Caminho do sidecar com a origem (URL do primeiro download) de um ativo em cache."""
+    return cache_dir / f"{sha256}.json"
+
+
+def read_origin(cache_dir: pathlib.Path, sha256: str) -> Optional[dict]:
+    """Lê o sidecar de origem do ativo; ``None`` se ausente, ilegível ou não for um arquivo regular."""
+    path = origin_sidecar(cache_dir, sha256)
+    try:
+        if not stat.S_ISREG(os.lstat(path).st_mode):
+            return None
+        with _open_nofollow(path) as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _write_origin(cache_dir: pathlib.Path, spec: "AssetSpec", sha256: str) -> None:
+    """Grava o sidecar de origem na primeira vez que o conteúdo entra no cache (nunca sobrescreve)."""
+    payload = {"url": spec.url, "destino": spec.destino, "baixado_em": datetime.now(timezone.utc).isoformat()}
+    try:
+        with open(origin_sidecar(cache_dir, sha256), "x", encoding="utf-8") as handle:
+            json.dump(payload, handle)
+    except FileExistsError:
+        pass
 
 
 def _open_nofollow(path: pathlib.Path):
@@ -185,6 +217,7 @@ def verify_and_cache(
             size = os.lstat(incoming).st_size
             if cached_path(cache_dir, calculated) is None:
                 os.replace(incoming, cache_dir / calculated)
+                _write_origin(cache_dir, spec, calculated)
             else:
                 incoming.unlink()
         finally:

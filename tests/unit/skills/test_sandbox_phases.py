@@ -197,6 +197,7 @@ def test_ativo_ja_em_cache_dispensa_preparacao(make_sandbox, tmp_path):
 
     assert [c["labels"]["geminiclaw.role"] for c in daemon.run_calls] == ["sandbox"]
     assert result.ativos[0].origem == "cache" and result.ativos[0].tamanho == 5
+    assert result.ativos[0].url_original is None  # sem sidecar (conteúdo posto no cache fora do sandbox)
     assert daemon.run_kwargs["mounts"][0]["Target"] == "/assets/p.bin"
 
 

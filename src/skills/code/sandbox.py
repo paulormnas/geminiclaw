@@ -22,7 +22,7 @@ from src.llm.retry import RETRY_BACKOFFS_SECONDS, emit_connection_retry, is_retr
 from src.logger import get_logger
 from src.reserved_files import is_reserved_name
 from src.skills.code import fetch_assets as _fetch_script
-from src.skills.code.assets import AssetRecord, AssetSpec, cached_path, parse_assets, verify_and_cache
+from src.skills.code.assets import AssetRecord, AssetSpec, cached_path, parse_assets, read_origin, verify_and_cache
 from src.skills.code.inputs import (
     InputClassifier,
     MountSourceError,
@@ -1040,8 +1040,13 @@ class PythonSandbox:
                 if hit is None:
                     downloads.append(spec)
                 else:
+                    origin = read_origin(self.asset_cache_dir, spec.sha256) or {}
+                    url_original = origin.get("url")
                     records.append(
-                        AssetRecord(spec.url, spec.sha256, spec.destino, hit.stat().st_size, True, "cache")
+                        AssetRecord(
+                            spec.url, spec.sha256, spec.destino, hit.stat().st_size, True, "cache",
+                            url_original=url_original if isinstance(url_original, str) else None,
+                        )
                     )
 
             deps_dir = run_work_dir / "deps"

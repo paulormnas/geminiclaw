@@ -28,6 +28,7 @@ class CuratorGraph:
         self.metrica: str | None = None
         self.problema: str | None = None
         self._n = 0
+        self._sessoes: dict[tuple[str, str], str] = {}
 
     def base(self, **extra: Any) -> dict[str, Any]:
         return {"projeto_id": self.projeto_id, "sessao_id": self.sessao_id, **extra}
@@ -99,6 +100,8 @@ class CuratorGraph:
         projeto_id: str | None = None,
         falha: tuple[str, str | None] | None = None,
         com_metrica: bool = True,
+        visibilidade: str | None = None,
+        com_sessao: bool = True,
     ) -> tuple[str, str | None]:
         """Um ``Experimento`` (e, se não for falha, o ``Resultado`` da métrica do critério).
 
@@ -115,6 +118,8 @@ class CuratorGraph:
             "caminho_artefatos": "/x",
             "no_execucao": no,
         }
+        if visibilidade:
+            props["visibilidade"] = visibilidade
         if seed is not None:
             props["seed"] = seed
             props["hash_params"] = "hp"
@@ -126,6 +131,16 @@ class CuratorGraph:
                 props["assinatura_falha"] = sig
         exp = self.store.create_node("Experimento", props, actor=ORQ)
         self.store.create_edge(exp, "TESTA", hipotese, {}, actor=ORQ)
+        if com_sessao:
+            chave = (projeto, sessao or self.sessao_id)
+            if chave not in self._sessoes:
+                self._sessoes[chave] = self.store.create_node(
+                    "Sessao",
+                    {"projeto_id": projeto, "sessao_id": chave[1], "modo": "auto", "inicio": "2026-10-06T00:00:00+00:00",
+                     "no_execucao": no},
+                    actor=ORQ,
+                )
+            self.store.create_edge(exp, "EXECUTADO_EM", self._sessoes[chave], {}, actor=ORQ)
         if abordagem is not None:
             edge: dict[str, Any] = {"config": config or {"modelo": "gb"}}
             self.store.create_edge(exp, "APLICOU", abordagem, edge, actor=ORQ)
@@ -139,6 +154,8 @@ class CuratorGraph:
             "status_validacao": validacao,
             "caminho_metrics": "/m",
         }
+        if visibilidade:
+            res_props["visibilidade"] = visibilidade
         if baseline is not None:
             res_props["baseline"] = baseline
         res = self.store.create_node("Resultado", res_props, actor=ORQ)

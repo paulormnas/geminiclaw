@@ -10,6 +10,7 @@ from __future__ import annotations
 from src.knowledge import schema
 from src.knowledge.errors import (
     DisallowedRelationError,
+    EdgeUpdateNotAllowedError,
     HumanConfirmationRequiredError,
     ImmutableFieldError,
     InvalidEnumValueError,
@@ -261,14 +262,15 @@ def validate_edge_update(
 HUMAN_ONLY_TRANSITIONS: dict[str, tuple[str, str]] = {"Problema": ("status", "confirmado")}
 
 
-# Campos de decisão do pesquisador que um AGENTE (Curator, Researcher...) nunca escreve (v17-curator-agent):
-# aprovar ou rejeitar termos do vocabulário e decidir sobre Oportunidades. ``None`` = qualquer valor é reservado.
-# O orquestrador continua podendo semear o vocabulário já aprovado (``vocabulary.seed_*``).
-AGENT_RESERVED_FIELDS: dict[str, dict[str, tuple[str, ...] | None]] = {
-    "Dominio": {"status": ("aprovado", "rejeitado"), "motivo_decisao": None},
-    "Metrica": {"status": ("aprovado", "rejeitado"), "motivo_decisao": None},
+# Allowlist do que um AGENTE (Curator, Researcher...) pode escrever em campos de decisão do pesquisador
+# (v17-curator-agent; revisão do PR #106): rótulo -> campo -> valores permitidos (``None`` = nenhum valor é permitido).
+# Termos do vocabulário só nascem ``candidato`` e Oportunidades só ``documentada``; aprovar, rejeitar, investigar ou
+# concluir (e os ``decidido_*``/``motivo_decisao``) é do humano. O orquestrador segue semeando o vocabulário aprovado.
+AGENT_ALLOWED_VALUES: dict[str, dict[str, tuple[str, ...] | None]] = {
+    "Dominio": {"status": ("candidato",), "motivo_decisao": None},
+    "Metrica": {"status": ("candidato",), "motivo_decisao": None},
     "Oportunidade": {
-        "status": ("aprovada", "rejeitada"),
+        "status": ("documentada",),
         "decidido_por": None,
         "decidido_em": None,
         "motivo_decisao": None,
@@ -289,7 +291,7 @@ def validate_human_only(
 
     - ``Problema``: só o pesquisador cria, promove ou rebaixa o estado ``confirmado``.
     - Agentes (``actor_kind == "agente"``) não aprovam nem rejeitam ``Dominio``/``Metrica``, não decidem sobre
-      ``Oportunidade`` (``AGENT_RESERVED_FIELDS``) e não alteram nós já ``rejeitado``/``rejeitada``.
+      ``Oportunidade`` (``AGENT_ALLOWED_VALUES``) e não alteram nós já ``rejeitado``/``rejeitada``.
 
     Args:
         label: Rótulo do nó.
@@ -319,6 +321,35 @@ def _validate_agent_reserved(label: str, current: dict[str, object] | None, chan
     """Aplica ``AGENT_RESERVED_FIELDS`` e a imutabilidade dos nós rejeitados a uma escrita de agente."""
     if current is not None and current.get("status") in REJECTED_STATUSES and changes:
         raise HumanConfirmationRequiredError(label, "status", "agente")
-    for field, reserved in AGENT_RESERVED_FIELDS.get(label, {}).items():
-        if field in changes and (reserved is None or changes[field] in reserved):
+    for field, allowed in AGENT_ALLOWED_VALUES.get(label, {}).items():
+        if field in changes and (allowed is None or changes[field] not in allowed):
             raise HumanConfirmationRequiredError(label, field, "agente")
+
+
+# Relações cujas propriedades ``update_edge`` pode alterar: só as derivadas pelo cálculo determinístico. As demais
+# (``APLICOU.config`` e ``hash_params`` incluídas) são fatos e nunca são reescritas.
+EDGE_UPDATABLE_RELS: frozenset[str] = frozenset({"SUSTENTA", "REFUTA", "FUNCIONOU_PARA", "FALHOU_PARA"})
+EDGE_UPDATE_ACTORS: frozenset[str] = frozenset({"orquestrador", "pesquisador"})
+
+
+def validate_edge_update_policy(rel_type: str, actor_kind: str) -> None:
+    """Só o orquestrador (cálculo determinístico) ou o pesquisador atualizam arestas derivadas.
+
+    Raises:
+        EdgeUpdateNotAllowedError: Ator de agente ou relação protegida.
+    """
+    if actor_kind not in EDGE_UPDATE_ACTORS:
+        raise EdgeUpdateNotAllowedError(rel_type, actor_kind, "somente o orquestrador ou o pesquisador")
+    if rel_type not in EDGE_UPDATABLE_RELS:
+        raise EdgeUpdateNotAllowedError(rel_type, actor_kind, "relação protegida (fato ou afirmação)")
+
+
+def validate_edge_endpoints_mutable(
+    src: dict[str, object], dst: dict[str, object], rel_type: str, actor_kind: str
+) -> None:
+    """Agente não cria nem altera arestas de/para nós ``rejeitado``/``rejeitada`` (decisão humana imutável)."""
+    if actor_kind != "agente":
+        return
+    for props in (src, dst):
+        if props.get("status") in REJECTED_STATUSES:
+            raise HumanConfirmationRequiredError(rel_type, "status", actor_kind)

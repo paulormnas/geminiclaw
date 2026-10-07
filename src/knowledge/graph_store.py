@@ -363,6 +363,7 @@ class InMemoryGraphStore(GraphStore):
 
         full_props = prepare_edge_properties(props, actor)
         validation.validate_edge_write(src.label, rel, dst.label, full_props)
+        validation.validate_edge_endpoints_mutable(src.properties, dst.properties, rel, actor.kind)
 
         self._edges.append(Edge(src_id=src_id, rel_type=rel, dst_id=dst_id, properties=full_props))
         logger.info(
@@ -399,10 +400,20 @@ class InMemoryGraphStore(GraphStore):
         dst = self._nodes.get(dst_id)
         if dst is None:
             raise NodeNotFoundError(dst_id)
+        validation.validate_edge_update_policy(rel, actor.kind)
         validation.validate_edge_update(src.label, rel, dst.label, changes)
+        validation.validate_edge_endpoints_mutable(src.properties, dst.properties, rel, actor.kind)
         for i, edge in enumerate(self._edges):
             if edge.src_id == src_id and edge.rel_type == rel and edge.dst_id == dst_id:
                 self._edges[i] = Edge(src_id, rel, dst_id, {**edge.properties, **changes})
+                self.audit_log.append(
+                    {
+                        "node_id": src_id,
+                        "actor": actor.criado_por,
+                        "timestamp": prepare_node_update({})["atualizado_em"],
+                        "changes": {"aresta": f"{rel}->{dst_id}", **changes},
+                    }
+                )
                 logger.info(
                     "Aresta atualizada (InMemoryGraphStore)",
                     extra={"extra": {"src_id": src_id, "rel": rel, "dst_id": dst_id, "fields": list(changes)}},
@@ -741,6 +752,7 @@ class AgeGraphStore(GraphStore):
 
         full_props = prepare_edge_properties(props, actor)
         validation.validate_edge_write(src.label, rel, dst.label, full_props)
+        validation.validate_edge_endpoints_mutable(src.properties, dst.properties, rel, actor.kind)
 
         cypher_body = (
             f"MATCH (a:{src.label} {{id: $src_id}}), (b:{dst.label} {{id: $dst_id}}) "
@@ -787,7 +799,9 @@ class AgeGraphStore(GraphStore):
         dst = self.get_node(dst_id)
         if dst is None:
             raise NodeNotFoundError(dst_id)
+        validation.validate_edge_update_policy(rel, actor.kind)
         validation.validate_edge_update(src.label, rel, dst.label, changes)
+        validation.validate_edge_endpoints_mutable(src.properties, dst.properties, rel, actor.kind)
         if not changes:
             return
 
@@ -799,6 +813,10 @@ class AgeGraphStore(GraphStore):
             f"SET {set_clauses} RETURN r"
         )
         self._run_cypher(cypher_body, {"src_id": src_id, "dst_id": dst_id, "changes": changes})
+        self._record_audit(
+            node_id=src_id, actor=actor, changes={"aresta": f"{rel}->{dst_id}", **changes},
+            timestamp=prepare_node_update({})["atualizado_em"],
+        )
         logger.info(
             "Aresta atualizada (AgeGraphStore)",
             extra={"extra": {"src_id": src_id, "rel": rel, "dst_id": dst_id, "fields": list(changes),

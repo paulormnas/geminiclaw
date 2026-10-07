@@ -8,7 +8,7 @@ from src import config
 from src.config import get_env
 from src.skills.base import BaseSkill, SkillResult
 from src.reserved_files import is_reserved_name
-from src.skills.code.sandbox import _SAFE_NAME_RE, PythonSandbox, SandboxResult
+from src.skills.code.sandbox import _SAFE_NAME_RE, NETWORK_UNDECLARED_MESSAGE, PythonSandbox, SandboxResult
 from src.skills.code.manifest import WorkspaceManifest
 from src.logger import get_logger
 
@@ -39,6 +39,9 @@ class CodeSkill(BaseSkill):
         "Para instalar pacotes adicionais, use EXCLUSIVAMENTE o parâmetro 'packages' — "
         "instalação via 'subprocess'/'pip' dentro do código não é suportada (a instalação de "
         "pacotes acontece no próprio sandbox, fora do código gerado). "
+        "A execução do código NÃO tem acesso à rede: não baixe nada no código. Pesos, corpora e datasets "
+        "públicos são declarados no parâmetro 'assets' (url e, se souber, sha256) e lidos de "
+        "'/assets/<destino>'. Os insumos do projeto ficam somente leitura em '/inputs/'. "
         "Todo arquivo salvo em '/outputs/' estará disponível como artefato."
     )
     parameters_schema = {
@@ -64,7 +67,32 @@ class CodeSkill(BaseSkill):
                     "Os do conjunto básico da imagem (numpy, pandas, scipy, matplotlib, scikit-learn, "
                     "seaborn) já estão disponíveis e não precisam ser pedidos."
                 )
-            }
+            },
+            "assets": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string", "description": "URL http(s) pública do ativo."},
+                        "sha256": {"type": "string", "description": "sha256 esperado (opcional, recomendado)."},
+                        "destino": {
+                            "type": "string",
+                            "description": "Nome simples do arquivo; o ativo fica em /assets/<destino>.",
+                        },
+                    },
+                    "required": ["url", "destino"],
+                },
+                "description": (
+                    "Pesos, corpora ou datasets públicos a baixar ANTES da execução (o código não tem rede)."
+                ),
+            },
+            "needs_network": {
+                "type": "boolean",
+                "description": (
+                    "Pede rede na execução. Só é atendido quando todas as entradas são compartilháveis e "
+                    "nenhum dado produzido por execuções está visível; caso contrário roda sem rede. Padrão: false."
+                ),
+            },
         },
         "required": ["code", "session_id", "task_name"]
     }
@@ -76,7 +104,12 @@ class CodeSkill(BaseSkill):
         timeout = int(get_env("CODE_SANDBOX_TIMEOUT_SECONDS", default=str(config.CODE_SANDBOX_TIMEOUT_SECONDS)))
         memory = get_env("CODE_SANDBOX_MEMORY_LIMIT", default=config.CODE_SANDBOX_MEMORY_LIMIT)
         setup_timeout = int(
-            get_env("CODE_SANDBOX_SETUP_TIMEOUT_SECONDS", default=str(config.CODE_SANDBOX_SETUP_TIMEOUT_SECONDS))
+            get_env(
+                "SANDBOX_INSTALL_TIMEOUT_SECONDS",
+                default=get_env(
+                    "CODE_SANDBOX_SETUP_TIMEOUT_SECONDS", default=str(config.CODE_SANDBOX_SETUP_TIMEOUT_SECONDS)
+                ),
+            )
         )
         self.output_dir = get_env("OUTPUT_BASE_DIR", default=config.OUTPUT_BASE_DIR)
 
@@ -133,7 +166,33 @@ class CodeSkill(BaseSkill):
             "infra_error": result.infra_error,
             "imagem_sandbox": result.image or None,
             "pacotes": list(result.packages_installed)[:100],
+            "fase_falha": result.fase_falha,
+            "download_nao_declarado": bool(result.download_nao_declarado),
+            "rede_na_execucao": bool(result.rede_na_execucao),
+            "modo_entrega": result.modo_entrega,
         }
+
+    @staticmethod
+    def _phase_metadata(result: SandboxResult) -> dict:
+        """Campos de fase e rede do resultado do sandbox, para o metadata do ``SkillResult``."""
+        return {
+            "fase_falha": result.fase_falha,
+            "download_nao_declarado": bool(result.download_nao_declarado),
+            "rede_na_execucao": bool(result.rede_na_execucao),
+            "nota_rede": result.nota_rede,
+        }
+
+    @staticmethod
+    def _readable_prior_dirs() -> List[pathlib.Path]:
+        """Saídas de sessões anteriores da cadeia de continuidade (``AgentContext.readable_dirs``), se houver."""
+        try:
+            from src.agent_runtime.context import get_agent_context_optional
+
+            ctx = get_agent_context_optional()
+            return [pathlib.Path(d) for d in ctx.readable_dirs] if ctx is not None else []
+        except Exception as exc:  # contexto indisponível: nenhuma sessão anterior é montada
+            logger.warning("Falha ao ler as sessões anteriores do contexto", extra={"error": str(exc)})
+            return []
 
     def _validate_code(self, code: str) -> Optional[str]:
         """Valida o código contra padrões proibidos.
@@ -152,6 +211,8 @@ class CodeSkill(BaseSkill):
         session_id: str, 
         task_name: str, 
         packages: Optional[List[str]] = None,
+        assets: Optional[List[dict]] = None,
+        needs_network: bool = False,
         **kwargs
     ) -> SkillResult:
         """Executa o código Python.
@@ -161,6 +222,8 @@ class CodeSkill(BaseSkill):
             session_id: ID da sessão atual.
             task_name: Nome da tarefa atual.
             packages: Requisitos (PEP 508) de pacotes fora do conjunto básico da imagem do sandbox.
+            assets: Ativos públicos a baixar antes da execução (``url``, ``destino`` e ``sha256`` opcional).
+            needs_network: Pede rede na execução (só vale com entradas compartilháveis; ver o sandbox).
 
         Returns:
             SkillResult com a saída da execução.
@@ -238,6 +301,9 @@ class CodeSkill(BaseSkill):
                 output_dir=self.output_dir,
                 packages=requested_packages,
                 extra_files=extra_files,
+                assets=list(assets or []),
+                needs_network=bool(needs_network),
+                prior_dirs=self._readable_prior_dirs(),
             )
 
             success = not result.timed_out and result.exit_code == 0
@@ -301,6 +367,20 @@ class CodeSkill(BaseSkill):
                         "error_message": result.stderr[:500],
                         "error_location": "",
                     }
+                elif result.download_nao_declarado:
+                    summary = "Download não declarado: a execução não tem rede."
+                    error_info = {
+                        "error_type": "download_nao_declarado",
+                        "error_message": "O script tentou baixar algo na fase execute; declare o ativo em assets.",
+                        "error_location": "",
+                    }
+                elif result.fase_falha in ("fetch_assets", "infra"):
+                    summary = f"Execução falhou na fase {result.fase_falha}; o script não foi executado."
+                    error_info = {
+                        "error_type": f"SandboxPhaseError:{result.fase_falha}",
+                        "error_message": result.stderr[:500],
+                        "error_location": "",
+                    }
                 elif result.timed_out:
                     summary = "Execução cancelada por timeout."
                     error_info = {
@@ -328,6 +408,7 @@ class CodeSkill(BaseSkill):
                         "exit_code": result.exit_code,
                         "install_failed": True,
                         "timed_out": result.timed_out,
+                        **self._phase_metadata(result),
                     },
                 )
 
@@ -336,18 +417,26 @@ class CodeSkill(BaseSkill):
                     success=False,
                     output=result.stdout,
                     error="Timeout atingido durante a execução.",
-                    metadata={"exit_code": result.exit_code, "timed_out": True}
+                    metadata={"exit_code": result.exit_code, "timed_out": True, **self._phase_metadata(result)}
                 )
+
+            error = None
+            if not success:
+                # Download não declarado: mensagem fixa, sem repetir URL nem trechos do stderr (design §5).
+                error = NETWORK_UNDECLARED_MESSAGE if result.download_nao_declarado else result.stderr
+                if result.nota_rede:
+                    error = f"{error}\nRede na execução negada: {result.nota_rede}."
 
             return SkillResult(
                 success=success,
                 output=result.stdout,
-                error=result.stderr if not success else None,
+                error=error,
                 metadata={
                     "exit_code": result.exit_code,
                     "artifacts": result.artifacts,
                     "manifest_step": step_number,
                     "packages_installed": result.packages_installed,
+                    **self._phase_metadata(result),
                 }
             )
 

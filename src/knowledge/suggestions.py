@@ -76,7 +76,14 @@ class SuggestionStore:
 
     def _events(self) -> list[dict[str, Any]]:
         try:
-            if not self._path.is_file() or self._path.stat().st_size > _MAX_FILE_BYTES:
+            if not self._path.is_file():
+                return []
+            size = self._path.stat().st_size
+            if size > _MAX_FILE_BYTES:
+                logger.warning(
+                    "Arquivo de sugestões acima do limite: ignorado (sugestões e respostas indisponíveis)",
+                    extra={"extra": {"bytes": size, "limite": _MAX_FILE_BYTES, "arquivo": self._path.name}},
+                )
                 return []
             lines = self._path.read_text(encoding="utf-8", errors="replace").splitlines()
         except OSError as exc:

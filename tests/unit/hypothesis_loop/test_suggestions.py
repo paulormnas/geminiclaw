@@ -142,6 +142,17 @@ def test_arquivo_gigante_e_ignorado(tmp_path, monkeypatch):
     assert SuggestionStore(tmp_path).pending() == []
 
 
+def test_arquivo_gigante_registra_warning_explicito(tmp_path, monkeypatch):
+    from unittest.mock import patch
+
+    monkeypatch.setattr("src.knowledge.suggestions._MAX_FILE_BYTES", 10)
+    (tmp_path / FILENAME).write_text("x" * 100, encoding="utf-8")
+    with patch("src.knowledge.suggestions.logger") as log:
+        SuggestionStore(tmp_path).pending()
+    assert log.warning.called
+    assert "acima do limite" in log.warning.call_args.args[0]
+
+
 @pytest.mark.asyncio
 async def test_curator_suggest_paths_nao_usa_llm_e_distingue_falha_de_vazio(tmp_path, monkeypatch):
     monkeypatch.setattr("src.config.CURATOR_ENABLED", True)

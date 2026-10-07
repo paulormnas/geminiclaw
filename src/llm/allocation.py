@@ -89,6 +89,13 @@ def build_allocation_profile(routing: "SessionRouting") -> dict[str, Any]:
     }
 
 
+def allocation_catalog_line(routing: "SessionRouting") -> str:
+    """Linha do catálogo no bloco "Alocação": versão e hash, e se há catálogo local (com o seu hash)."""
+    catalog = routing.catalogo
+    local = f"local: sim (hash {(catalog.local_hash or '')[:12]})" if catalog.local else "local: não"
+    return f"catálogo v{catalog.versao} (hash {catalog.hash[:12]}) · {local}"
+
+
 def allocation_banner_lines(routing: "SessionRouting") -> list[str]:
     """Bloco "Alocação" do banner: uma linha por papel, sem segredos."""
     width = max((len(role) for role in routing.papeis), default=0)
@@ -190,6 +197,7 @@ def new_version_tracker(modo: str) -> VersionTracker:
 __all__ = [
     "RoleAllocation",
     "allocation_banner_lines",
+    "allocation_catalog_line",
     "allocation_for",
     "build_allocation_profile",
     "current_allocation",

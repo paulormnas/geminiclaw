@@ -897,9 +897,10 @@ def print_session_banner(
         for line in role_lines:
             print(f"    {line}")
         # v18.5-model-catalog-locality — bloco "Alocação": trust, localidade e dados brutos por papel.
-        from src.llm.allocation import allocation_banner_lines
+        from src.llm.allocation import allocation_banner_lines, allocation_catalog_line
 
         print(f"  {DIM}Alocação{RESET}")
+        print(f"    {allocation_catalog_line(llm_routing)}")
         for line in allocation_banner_lines(llm_routing):
             print(f"    {line}")
 

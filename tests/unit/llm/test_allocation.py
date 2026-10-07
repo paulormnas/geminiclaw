@@ -105,6 +105,7 @@ async def test_banner_com_bloco_alocacao(nuvem, capsys):
     )
     assert re.search(r"^\s*curator\s+→ ollama/qwen3:8b · self_hosted · no_no · dados brutos: sim$", out, re.M)
     assert len(allocation_banner_lines(routing)) == len(routing.papeis)
+    assert re.search(r"^\s*catálogo v\d+ \(hash [0-9a-f]{12}\) · local: (não|sim \(hash [0-9a-f]{12}\))$", out, re.M)
     assert CHAVE_GEMINI not in out and CHAVE_CLAUDE not in out
 
 

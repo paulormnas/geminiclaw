@@ -75,7 +75,6 @@ modelos:
     janela_contexto: 32768
     familia_modelo: qwen
 
-
 papeis:
   researcher:
     requisitos: {ferramentas: true}

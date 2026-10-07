@@ -416,3 +416,35 @@ def test_descritor_marca_estrutura_indisponivel_quando_o_parse_falha(tmp_path):
 
     assert "estrutura: indisponivel" in describe_dataset(bad)
     assert "estrutura: indisponivel" not in describe_dataset(good)
+
+
+# --- Desvio 6: prazo com relógio controlado ---------------------------------------------------------------
+
+import types  # noqa: E402
+
+from src.knowledge import input_index as input_index_module  # noqa: E402
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_prazo_estoura_apos_o_primeiro_arquivo_e_o_resto_fica_pendente(tmp_path, indexer, extractors, monkeypatch):
+    session = make_session(tmp_path, {"a.txt": "alfa alfa", "b.txt": "beta beta", "c.txt": "gama gama"})
+    clock = types.SimpleNamespace(now=100.0)
+    fake_time = types.SimpleNamespace(monotonic=lambda: clock.now)
+    monkeypatch.setattr(input_index_module, "time", fake_time)
+    monkeypatch.setattr(pipeline, "time", fake_time)
+    real_index_file = input_index_module.index_file
+
+    async def index_then_expire(*args, **kwargs):
+        outcome = await real_index_file(*args, **kwargs)
+        clock.now += 1000.0  # o primeiro arquivo consumiu todo o prazo
+        return outcome
+
+    monkeypatch.setattr(input_index_module, "index_file", index_then_expire)
+
+    report = await index_input_snapshot(session, PROJ_A, indexer=indexer, extractors=extractors, max_seconds=60)
+
+    assert report["indexados"] == 1
+    assert report["pendentes"] == ["b.txt", "c.txt"]
+    assert report["falhas"] == []
+    assert {p.payload["nome_arquivo"] for p in all_points(indexer)} == {"a.txt"}

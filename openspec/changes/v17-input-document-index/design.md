@@ -112,7 +112,15 @@ Qdrant (coleção existente `geminiclaw_documents`), além dos campos atuais:
   skill aceita `todos_os_projetos: true` para busca sem filtro (o resultado informa o projeto de
   cada trecho).
 - O resultado traz `titulo`, `tipo_insumo`, `tipo_ponto`, `insumo_id` e o trecho.
-- `agents/base/agent.py` lista só os documentos do projeto da sessão.
+- `agents/base/agent.py` lista só os documentos do projeto da sessão; sem contexto de agente não
+  lista nada (fail-closed).
+- `info` trata o documento de outro projeto como inexistente (salvo `todos_os_projetos`) e nunca
+  devolve `source_path`. Cada uso de `todos_os_projetos` (busca, lista ou info) gera um `WARNING`
+  de auditoria.
+- Sessão sem projeto: o escopo é `sem_projeto:<session_id>`, não um bucket global; artefatos
+  ingeridos por uma sessão sem projeto não aparecem em outra.
+- Todo texto livre de insumo devolvido ao LLM (trecho, título, nome de arquivo, colunas) passa por
+  `clean_free_text` e é entregue entre `<dado_nao_confiavel>` (`wrap_data`), como na Curadoria.
 - O texto devolvido segue a política de saída já existente: documentos textuais obedecem à
   `LLM_DATA_POLICY`; descritores não têm valores (ADR 019 §3.1).
 

@@ -323,3 +323,82 @@ def test_descritor_fecha_o_arquivo_de_deteccao_de_codificacao(tmp_path, monkeypa
     d.describe_dataset(path)
 
     assert opened and all(h.closed for h in opened)
+
+
+# --- MÉDIA 5: escopo de projeto fail-closed ---------------------------------------------------------------
+
+
+async def _ingest_for(skill, tmp_path, pid, meta, name, session="s"):
+    ctx = _bind(tmp_path, pid, meta, session=session)
+    f = ctx.output_dir / "artifacts" / name
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(f"texto de {name}")
+    return await skill.execute_async(action="ingest", file_path=str(f))
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_info_recusa_documento_de_outro_projeto_e_omite_source_path(tmp_path, provider, caplog):
+    from tests.unit.input_index.conftest import PROJ_B
+
+    skill = _skill(provider)
+    await _ingest_for(skill, tmp_path, "proj-a", PROJ_A, "a.md")
+    other = await _ingest_for(skill, tmp_path, "proj-b", PROJ_B, "b.md")
+    _bind(tmp_path, "proj-a", PROJ_A)
+
+    refused = await skill.execute_async(action="info", document_id=other["document_id"])
+    with caplog.at_level(logging.WARNING):
+        allowed = await skill.execute_async(action="info", document_id=other["document_id"], todos_os_projetos=True)
+    own = await skill.execute_async(action="info", document_id=(await _ingest_for(
+        skill, tmp_path, "proj-a", PROJ_A, "c.md"))["document_id"])
+
+    assert refused == {"error": "Documento não encontrado"}
+    assert allowed["document"]["id"] == other["document_id"]
+    assert "source_path" not in allowed["document"] and "source_path" not in own["document"]
+    assert any("todos_os_projetos" in r.getMessage() for r in caplog.records if r.levelno == logging.WARNING)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_todos_os_projetos_gera_aviso_de_auditoria_a_cada_uso(tmp_path, provider, caplog):
+    skill = _skill(provider)
+    await _ingest_for(skill, tmp_path, "proj-a", PROJ_A, "a.md")
+
+    with caplog.at_level(logging.WARNING):
+        await skill.execute_async(action="search", query="x", todos_os_projetos=True)
+        await skill.execute_async(action="list", todos_os_projetos=True)
+        await skill.execute_async(action="search", query="x")
+
+    audit = [r for r in caplog.records if "todos_os_projetos" in r.getMessage() and r.levelno == logging.WARNING]
+    assert len(audit) == 2
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_artefato_sem_projeto_fica_no_escopo_da_sessao(tmp_path, provider):
+    skill = _skill(provider)
+    await _ingest_for(skill, tmp_path, None, None, "x.md", session="s1")
+    await _ingest_for(skill, tmp_path, None, None, "y.md", session="s2")
+
+    listed = await skill.execute_async(action="list")  # contexto atual: s2
+
+    assert [d["projeto_id"] for d in listed["documents"]] == ["sem_projeto:s2"]
+    found = await skill.execute_async(action="search", query="texto")
+    assert {r["projeto_id"] for r in found["results"]} == {"sem_projeto:s2"}
+
+
+@pytest.mark.unit
+def test_instrucao_sem_contexto_nao_lista_documentos():
+    from agents.base.agent import _get_agent_instruction
+
+    calls: list = []
+
+    class FakeIndexer:
+        def list_documents(self, limit=10, projeto_id=None):
+            calls.append(projeto_id)
+            return [{"format": "pdf", "title": "T", "filename": "f.pdf", "num_chunks": 1}]
+
+    with patch("src.skills.document_processor.indexer.DocumentIndexer", FakeIndexer):
+        text = _get_agent_instruction("base")
+
+    assert "DOCUMENTOS DO USUÁRIO" not in text and None not in calls

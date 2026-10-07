@@ -66,16 +66,34 @@ def _resolve_ingest_path(file_path: str) -> str:
     return str(resolved)
 
 
+def _all_projects(action: str) -> None:
+    """Auditoria: ``todos_os_projetos`` cruza a fronteira de projeto e é registrado a cada uso."""
+    ctx = get_agent_context_optional()
+    logger.warning(
+        "document_processor: todos_os_projetos usado (acesso entre projetos)",
+        extra={"acao": action, "sessao": ctx.session_id if ctx else None, "projeto_id": ctx.project_id if ctx else None},
+    )
+
+
+def _scope(kwargs: Dict[str, Any], action: str) -> str | None:
+    """Projeto a que a ação se restringe; ``None`` (sem filtro) só com ``todos_os_projetos`` ou sem runtime."""
+    if kwargs.get("todos_os_projetos"):
+        _all_projects(action)
+        return None
+    return _session_project()[0]
+
+
 def _session_project() -> tuple[str | None, ProjectMeta]:
     """Projeto da sessão do agente e seus metadados (v17-input-document-index).
 
-    Dentro de uma sessão sem projeto o escopo é ``SEM_PROJETO``; fora do runtime de agentes (uso
+    Dentro de uma sessão sem projeto o escopo é ``sem_projeto:<session_id>``; fora do runtime de agentes (uso
     programático) não há projeto de sessão (``None``: sem filtro) e a ingestão usa ``SEM_PROJETO``.
     """
     ctx = get_agent_context_optional()
     if ctx is None:
         return None, ProjectMeta(projeto_id=SEM_PROJETO)
-    pid = ctx.project_id or SEM_PROJETO
+    # Sem projeto o escopo é a própria sessão: nunca um bucket global compartilhado entre sessões.
+    pid = ctx.project_id or f"{SEM_PROJETO}:{ctx.session_id}"
     meta = ctx.extra.get("project_meta")
     return pid, meta if isinstance(meta, ProjectMeta) and meta.projeto_id == pid else ProjectMeta(projeto_id=pid)
 
@@ -169,7 +187,7 @@ class DocumentProcessorSkill(BaseSkill):
                 
             top_k = kwargs.get("top_k", 5)
             document_id = kwargs.get("document_id")
-            projeto_id = None if kwargs.get("todos_os_projetos") else _session_project()[0]
+            projeto_id = _scope(kwargs, "search")
 
             try:
                 results = self.indexer.search(
@@ -189,7 +207,7 @@ class DocumentProcessorSkill(BaseSkill):
 
         elif action == "list":
             try:
-                projeto_id = None if kwargs.get("todos_os_projetos") else _session_project()[0]
+                projeto_id = _scope(kwargs, "list")
                 docs = self.indexer.list_documents(limit=50, projeto_id=projeto_id)
                 # Omitimos metadata_json muito longos para não poluir
                 summary = []
@@ -211,15 +229,29 @@ class DocumentProcessorSkill(BaseSkill):
                 return {"error": "document_id é obrigatório para info"}
                 
             try:
+                scope = _scope(kwargs, "info")
                 doc = self.indexer.get_document_info(document_id)
-                if not doc:
+                meta = (doc or {}).get("metadata_json") or {}
+                # Documento de outro projeto é tratado como inexistente (não revela que existe).
+                if not doc or (scope is not None and meta.get("projeto_id") != scope):
                     return {"error": "Documento não encontrado"}
-                
+
+                # Sem ``source_path`` (caminho no disco do nó) e com texto livre como dado não confiável.
+                info = {
+                    "id": doc["id"],
+                    "filename": _untrusted("nome_de_arquivo", doc.get("filename"), _TITLE_LIMIT),
+                    "format": doc.get("format"),
+                    "title": _untrusted("titulo_de_documento", doc.get("title"), _TITLE_LIMIT),
+                    "num_chunks": doc.get("num_chunks"),
+                    "num_pages": doc.get("num_pages"),
+                    "file_size_bytes": doc.get("file_size_bytes"),
+                    "ingested_at": doc.get("ingested_at"),
+                    "projeto_id": meta.get("projeto_id"),
+                    "tipo_insumo": meta.get("tipo_insumo"),
+                    "vetorizacao": meta.get("vetorizacao"),
+                }
                 # Para serialização JSON, converte datetime se existir
-                for k, v in doc.items():
-                    if hasattr(v, 'isoformat'):
-                        doc[k] = v.isoformat()
-                return {"document": doc}
+                return {"document": {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in info.items()}}
             except Exception as e:
                 return {"error": str(e)}
         else:

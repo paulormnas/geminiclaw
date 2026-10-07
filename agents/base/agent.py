@@ -321,8 +321,13 @@ def _get_agent_instruction(base_instruction: str) -> str:
 
         indexer = DocumentIndexer()
         ctx = get_agent_context_optional()
-        # v17-input-document-index: só os documentos do projeto da sessão (sem projeto, o escopo "sem_projeto").
-        docs = indexer.list_documents(limit=10, projeto_id=(ctx.project_id or "sem_projeto") if ctx else None)
+        # v17-input-document-index: só os documentos do projeto da sessão (sem projeto, o escopo da própria
+        # sessão). Sem contexto de agente não há escopo: não lista nada (fail-closed).
+        docs = (
+            indexer.list_documents(limit=10, projeto_id=ctx.project_id or f"sem_projeto:{ctx.session_id}")
+            if ctx
+            else []
+        )
 
         if docs:
             doc_lines = []

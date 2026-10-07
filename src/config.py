@@ -472,6 +472,8 @@ PROMOTION_MIN_POSITIVES = int(get_env("PROMOTION_MIN_POSITIVES", default="3"))
 PROMOTION_MIN_PROJECTS = int(get_env("PROMOTION_MIN_PROJECTS", default="2"))
 
 # --- Ciclo de hipóteses e exploração ativa (V18 / mudança v18-hypothesis-loop; ADR 012 §3-§4, ADR 015) ---
+# Desliga o ciclo de exploração (volta ao laço de ciclo único da V17) sem apagar nada do grafo.
+HYPOTHESIS_LOOP_ENABLED = get_env_bool("HYPOTHESIS_LOOP_ENABLED", default=True)
 # Pesos da prioridade de hipóteses, na ordem: relevância, apoio prévio, novidade, (1 - custo). Devem somar 1.
 HYPOTHESIS_PRIORITY_WEIGHTS: tuple[float, float, float, float] = tuple(  # type: ignore[assignment]
     float(x) for x in get_env("HYPOTHESIS_PRIORITY_WEIGHTS", default="0.35,0.30,0.20,0.15").split(",")

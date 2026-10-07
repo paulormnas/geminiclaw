@@ -18,7 +18,7 @@ confiável, saneado e conferido no grafo por ``src.knowledge.hypotheses``. A tel
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable
@@ -32,6 +32,7 @@ from src.knowledge.hypotheses import (
     PendingSuggestion,
     PlanExtras,
     RecordReport,
+    SuggestionReply,
     legacy_hypotheses,
     split_plan,
 )
@@ -101,7 +102,9 @@ ganham "hypothesis_ref").
   preparação (eda) ou de síntese podem omiti-lo.
 - Hipóteses de agentes dependem de aprovação do pesquisador conforme o modo da sessão; oportunidades só viram
   hipótese depois de aprovadas pelo pesquisador.
-- Subtarefas já concluídas continuam no plano, inalteradas (para manter as dependências); não são reexecutadas."""
+- Subtarefas já concluídas continuam no plano, inalteradas (para manter as dependências); não são reexecutadas.
+- Se você não vê mais nenhum caminho promissor, devolva o plano só com as subtarefas já concluídas e sem hipótese
+  nova: a sessão será encerrada como "sem caminhos promissores"."""
 
 
 def _is_interactive() -> bool:
@@ -265,21 +268,6 @@ class ExplorationSession:
 
     # ------------------------------------------------------------------ ciclo
 
-    def start(self) -> int:
-        """Antes do primeiro planejamento: sugestões iniciais (caminhos em aberto, oportunidades aprovadas)."""
-        return self._suggest_sync()
-
-    def _suggest_sync(self) -> int:
-        from src.knowledge.suggestions import suggest_paths
-
-        try:
-            fresh = suggest_paths(self.store, self.ctx.project_id, self.session_dir, index=self._index)
-        except Exception as exc:  # noqa: BLE001 - sem sugestões a exploração segue
-            logger.warning("Sugestões iniciais indisponíveis", extra={"extra": {"erro": type(exc).__name__}})
-            return 0
-        self._emit("curator_suggestions", {"novas": len(fresh), "inicial": True})
-        return len(fresh)
-
     @staticmethod
     def _is_bound(task: Any) -> bool:
         """Subtarefa que testa hipótese (precisa de ``hypothesis_ref`` resolvível no formato novo)."""
@@ -302,6 +290,19 @@ class ExplorationSession:
                     changed = True
         return out
 
+    def _with_unanswered_refused(self, extras: PlanExtras) -> PlanExtras:
+        """Sugestão que o Researcher continuou sem responder (mesmo após a nova solicitação) vira recusa registrada.
+
+        Evita que uma sugestão pendente prenda o ciclo: a recusa fica no grafo com o motivo, auditável.
+        """
+        unanswered = self.uncovered(extras)
+        if not unanswered:
+            return extras
+        replies = tuple(
+            SuggestionReply(sid, "recusada", "sem resposta do Researcher após nova solicitação") for sid in unanswered
+        )
+        return replace(extras, respostas=extras.respostas + replies)
+
     def prepare_cycle(self, tasks: list[Any], extras: PlanExtras, *, done: set[str]) -> CycleOutcome:
         """Grava o plano no grafo e aplica a governança do ``SessionMode`` (síncrono: chamar via ``to_thread``).
 
@@ -317,11 +318,12 @@ class ExplorationSession:
             HypothesisError / GraphStoreError: o grafo não aceitou o plano (o laço fecha a sessão com checkpoint).
         """
         legacy = False
+        extras = self._with_unanswered_refused(extras)
         if not extras.novo_formato:
             declared = legacy_hypotheses([{"hypothesis": t.hypothesis, "scientific_rationale": t.scientific_rationale,
                                            "approach": t.approach} for t in tasks])
             if declared:
-                extras = PlanExtras(hipoteses=declared, novo_formato=False)
+                extras = replace(extras, hipoteses=declared)
                 legacy = True
                 by_text = {normalize_domain_term(d.enunciado): d.ref for d in declared}
                 for task in tasks:

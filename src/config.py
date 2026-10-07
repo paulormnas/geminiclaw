@@ -481,7 +481,7 @@ HYPOTHESIS_PRIORITY_WEIGHTS: tuple[float, float, float, float] = tuple(  # type:
 if len(HYPOTHESIS_PRIORITY_WEIGHTS) != 4 or any(w < 0 for w in HYPOTHESIS_PRIORITY_WEIGHTS) or not (
     abs(sum(HYPOTHESIS_PRIORITY_WEIGHTS) - 1.0) < 1e-6
 ):
-    raise ValueError("HYPOTHESIS_PRIORITY_WEIGHTS deve ter 4 pesos não negativos que somam 1 (ex.: 0.35,0.30,0.20,0.15).")
+    raise ValueError("HYPOTHESIS_PRIORITY_WEIGHTS deve ter 4 pesos não negativos que somam 1 (0.35,0.30,0.20,0.15).")
 # Hipóteses executadas por ciclo nos modos `semi`/`auto` (as de maior prioridade); `assisted` executa as aprovadas.
 HYPOTHESES_PER_CYCLE = max(int(get_env("HYPOTHESES_PER_CYCLE", default="2")), 1)
 # Similaridade semântica a partir da qual uma hipótese nova reutiliza a existente do projeto.

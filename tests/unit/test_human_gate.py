@@ -13,7 +13,15 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.agent_runtime.context import bind_agent_context, current_context
-from src.human_gate import ESTADO_AUTORIZADA, ESTADO_NEGADA, ESTADO_PENDENTE, HUMAN_SOURCES, HumanGate
+from src.human_gate import (
+    ESTADO_AUTORIZADA,
+    ESTADO_NEGADA,
+    ESTADO_PENDENTE,
+    HUMAN_SOURCES,
+    HumanGate,
+    Source,
+    authorize_from_cli,
+)
 from src.knowledge.graph_store import InMemoryGraphStore
 from src.knowledge.problem import ProblemDraft
 from src.knowledge.projects import ProjectError, confirm_problem, create_project
@@ -41,7 +49,9 @@ def test_gate_com_resposta_do_consultor_continua_pendente(decisao):
     gate = HumanGate()
     req = gate.request(decisao, "subtarefa-1")
 
-    for fonte in ("researcher_consult", "ask_researcher", "consultor", "agente", "curator", "documento", ""):
+    fontes = (Source.RESEARCHER_CONSULT, Source.ASK_RESEARCHER, Source.AGENT, Source.DOCUMENT,
+              "terminal", "cli", "")  # string solta, mesmo "terminal", nunca vale
+    for fonte in fontes:
         resposta = gate.answer(req.id, source=fonte, approved=True)
         assert resposta.estado == ESTADO_PENDENTE
 
@@ -59,15 +69,15 @@ def test_so_o_pesquisador_no_terminal_ou_cli_resolve_o_pedido():
     gate.ask_in_terminal(negado.id, input_fn=lambda _: "n", interactive=True)
     gate.ask_in_terminal(sem_tty.id, input_fn=lambda _: "s", interactive=False)
 
-    assert HUMAN_SOURCES == {"terminal", "cli"}
+    assert HUMAN_SOURCES == {Source.TERMINAL, Source.CLI}
     assert gate.get(autorizado.id).estado == ESTADO_AUTORIZADA and gate.authorized(autorizado.id)
-    assert gate.get(autorizado.id).resolvido_por == "terminal"
+    assert gate.get(autorizado.id).resolvido_por == Source.TERMINAL
     assert gate.get(negado.id).estado == ESTADO_NEGADA and not gate.authorized(negado.id)
     assert gate.get(sem_tty.id).estado == ESTADO_PENDENTE
     cli = gate.request("confirmar_problema")
-    assert gate.answer(cli.id, source="cli", approved=True).estado == ESTADO_AUTORIZADA
+    assert gate.answer(cli.id, source=Source.CLI, approved=True).estado == ESTADO_AUTORIZADA
     # Uma vez decidido pelo humano, uma resposta posterior de outra fonte não reabre nem altera.
-    assert gate.answer(cli.id, source="researcher_consult", approved=False).estado == ESTADO_AUTORIZADA
+    assert gate.answer(cli.id, source=Source.RESEARCHER_CONSULT, approved=False).estado == ESTADO_AUTORIZADA
 
 
 def test_decisao_desconhecida_nao_e_registrada():
@@ -93,7 +103,7 @@ async def test_pedido_reservado_do_agente_fica_pendente_e_o_consultor_nao_e_cham
     (pedido,) = h.orch.human_gate.pending()
     assert pedido.decisao == decisao
     # Mesmo que a resposta do consultor chegasse ao gate, ela não autoriza.
-    assert h.orch.human_gate.answer(pedido.id, source="researcher_consult", approved=True).estado == ESTADO_PENDENTE
+    assert h.orch.human_gate.answer(pedido.id, source=Source.RESEARCHER_CONSULT, approved=True).estado == ESTADO_PENDENTE
     assert h.orch.human_gate.authorized(pedido.id) is False
 
 
@@ -120,3 +130,66 @@ def test_confirmar_problema_por_quem_nao_e_o_pesquisador_e_recusado():
         with pytest.raises(ProjectError):
             confirm_problem(store, pid, draft, confirmed_by=ator, sentido_metrica="maior_melhor")
     assert store.find_nodes("Problema", {}) == []
+
+
+# --------------------------------------------------------------------------- integração com os gates reais
+
+
+@pytest.mark.asyncio
+async def test_confirmacao_do_problema_passa_pelo_gate_real(monkeypatch):
+    """I7 — ensure_confirmed_problem consulta o gate (origem TERMINAL) antes de confirmar; gate negado não confirma."""
+    from src.project_session import ensure_confirmed_problem
+    from src.knowledge.problem import ProblemDraft
+
+    class _Negado(HumanGate):
+        def authorized(self, request_id):  # um gate que não autoriza (ex.: origem não humana)
+            return False
+
+    store = InMemoryGraphStore()
+    pid = create_project(store, "P", "O", [])
+    draft = ProblemDraft(titulo="T", resumo="R", metrica="r2", alvo=None, delta_min=0.05)
+
+    async def drafter(*_a, **_k):
+        return draft
+
+    respostas = iter(["c", "q"])
+    negado = _Negado()
+    with pytest.raises(Exception):
+        await ensure_confirmed_problem(
+            store, pid, "p", None, drafter=drafter, interactive=True, input_fn=lambda _: next(respostas),
+            output_fn=lambda *_: None, gate=negado,
+        )
+    assert store.find_nodes("Problema", {"status": "confirmado"}) == []
+    assert negado.get(1).decisao == "confirmar_problema"  # o pedido passou pelo gate
+
+    gate = HumanGate()
+    detail = await ensure_confirmed_problem(
+        store, pid, "p", None, drafter=drafter, interactive=True, input_fn=lambda _: "c",
+        output_fn=lambda *_: None, gate=gate,
+    )
+    assert detail.problema is not None
+    (pedido,) = [r for r in gate._requests.values()]  # noqa: SLF001
+    assert pedido.estado == ESTADO_AUTORIZADA and pedido.resolvido_por == Source.TERMINAL
+
+
+def test_vocab_approve_na_cli_passa_pelo_gate_e_resposta_de_agente_nao_aprova(monkeypatch, capsys):
+    """I7 — ``vocab approve`` só aprova com a origem CLI; um gate que recusa deixa o termo candidato."""
+    from src.cli import _handle_vocab_command
+    from src.knowledge.provenance import Actor as _Actor
+
+    store = InMemoryGraphStore()
+    termo = store.create_node(
+        "Dominio",
+        {"termo": "t", "nivel": "area", "status": "candidato", "projeto_id": "vocab", "sessao_id": "s",
+         "justificativa_criacao": "j", "nos_consultados": []},
+        actor=_Actor(kind="agente", role="researcher"),
+    )
+
+    monkeypatch.setattr("src.human_gate.authorize_from_cli", lambda *a, **k: False)
+    assert _handle_vocab_command(["approve", termo], store=store) == 1
+    assert store.get_node(termo).properties["status"] == "candidato"
+
+    monkeypatch.undo()
+    assert _handle_vocab_command(["approve", termo], store=store) == 0
+    assert store.get_node(termo).properties["status"] == "aprovado"
+    assert authorize_from_cli("aprovar_termo_vocabulario", "x") is True

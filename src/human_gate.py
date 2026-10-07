@@ -17,6 +17,7 @@ import itertools
 import sys
 import threading
 from dataclasses import dataclass, replace
+from enum import Enum
 from typing import Callable
 
 from src.logger import get_logger
@@ -28,9 +29,22 @@ ESTADO_PENDENTE = "pendente"
 ESTADO_AUTORIZADA = "autorizada"
 ESTADO_NEGADA = "negada"
 
-# Únicas origens de resposta que valem como ação do pesquisador. ``ask_researcher``, ``researcher_consult``, agentes e
-# conteúdo de arquivos ficam de fora de propósito.
-HUMAN_SOURCES: frozenset[str] = frozenset({"terminal", "cli"})
+
+
+class Source(str, Enum):
+    """Origem de uma resposta ao gate (enum fechado: texto livre nunca vale como origem humana)."""
+
+    TERMINAL = "terminal"  # o pesquisador respondeu no terminal interativo (TTY)
+    CLI = "cli"  # o pesquisador executou um comando da CLI (ex.: ``geminiclaw vocab approve``)
+    ASK_RESEARCHER = "ask_researcher"
+    RESEARCHER_CONSULT = "researcher_consult"
+    AGENT = "agente"
+    DOCUMENT = "documento"
+
+
+# Únicas origens que valem como ação do pesquisador. ``ask_researcher``, o consultor, agentes e conteúdo de arquivos
+# ficam de fora de propósito; uma string solta (mesmo "terminal") também não conta: só membros de ``Source``.
+HUMAN_SOURCES: frozenset[Source] = frozenset({Source.TERMINAL, Source.CLI})
 
 _MAX_REFERENCE_CHARS = 120
 
@@ -79,7 +93,7 @@ class HumanGate:
         logger.info("Decisão reservada ao pesquisador registrada", extra={"extra": {"decisao": decisao, "id": req.id}})
         return req
 
-    def answer(self, request_id: int, *, source: str, approved: bool) -> GateRequest:
+    def answer(self, request_id: int, *, source: Source, approved: bool) -> GateRequest:
         """Recebe uma resposta. Só ``HUMAN_SOURCES`` resolvem; outra fonte é ignorada e o pedido segue pendente.
 
         Args:
@@ -95,12 +109,12 @@ class HumanGate:
             req = self._requests[request_id]
             if req.estado != ESTADO_PENDENTE:
                 return req
-            if source not in HUMAN_SOURCES:
+            if not isinstance(source, Source) or source not in HUMAN_SOURCES:
                 req = replace(req, respostas_ignoradas=req.respostas_ignoradas + 1)
                 self._requests[request_id] = req
                 logger.warning(
                     "Resposta de fonte não humana ignorada: a decisão continua pendente para o pesquisador",
-                    extra={"extra": {"decisao": req.decisao, "origem": str(source)[:40]}},
+                    extra={"extra": {"decisao": req.decisao, "origem": str(getattr(source, "value", source))[:40]}},
                 )
                 return req
             req = replace(req, estado=ESTADO_AUTORIZADA if approved else ESTADO_NEGADA, resolvido_por=source)
@@ -145,4 +159,24 @@ class HumanGate:
             reply = input_fn(f"Autoriza '{req.decisao}'? [s/N] ").strip().lower()
         except (EOFError, KeyboardInterrupt):
             return req
-        return self.answer(request_id, source="terminal", approved=reply in ("s", "sim", "y", "yes"))
+        return self.answer(request_id, source=Source.TERMINAL, approved=reply in ("s", "sim", "y", "yes"))
+
+
+_default_gate = HumanGate()
+
+
+def default_gate() -> HumanGate:
+    """Gate do processo, usado pelos pontos reais de decisão (confirmação do Problema, ``vocab approve``)."""
+    return _default_gate
+
+
+def authorize_from_cli(decisao: str, referencia: str = "", gate: HumanGate | None = None) -> bool:
+    """Registra e autoriza uma decisão reservada executada pelo **pesquisador** na CLI.
+
+    Só deve ser chamado de dentro de um comando de CLI disparado pelo pesquisador (nunca de código que processe
+    resposta de agente ou de consultor). A barreira final continua sendo ``validate_human_only`` no ``GraphStore``.
+    """
+    gate = gate or default_gate()
+    req = gate.request(decisao, referencia)
+    gate.answer(req.id, source=Source.CLI, approved=True)
+    return gate.authorized(req.id)

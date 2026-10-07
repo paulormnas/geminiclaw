@@ -74,7 +74,7 @@ class CodeSkill(BaseSkill):
                     "type": "object",
                     "properties": {
                         "url": {"type": "string", "description": "URL http(s) pública do ativo."},
-                        "sha256": {"type": "string", "description": "sha256 esperado (opcional, recomendado)."},
+                        "sha256": {"type": "string", "description": "sha256 esperado (opcional, recomendado); sem ele a URL precisa ser https."},
                         "destino": {
                             "type": "string",
                             "description": "Nome simples do arquivo; o ativo fica em /assets/<destino>.",

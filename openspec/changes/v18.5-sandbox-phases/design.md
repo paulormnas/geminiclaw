@@ -309,3 +309,9 @@ Registro das correções e dos riscos aceitos decorrentes da revisão do Analist
   o arquivo é movido para um nome privado do cache e o hash é calculado sobre o arquivo já movido, com
   `O_NOFOLLOW`; em `EXDEV` (staging e cache em sistemas de arquivos diferentes) copia sem seguir symlink e
   renomeia. Custo: um container a mais (1–3 s) quando há `assets` baixados **e** `packages`.
+- **M7 (média) — integridade do download:** ativo **sem** `sha256` declarado exige URL `https` (sem hash, a
+  integridade só vem do TLS); com hash declarado `http` continua aceito porque o host verifica o hash. Um
+  redirecionamento de `https` para `http` é recusado em qualquer caso. **Risco aceito:** o `uv` da fase
+  `install` não tem filtro de IP interno (a validação de destino do §3 vale só para o script de download);
+  ele fala apenas com o PyPI fixo, mas um índice comprometido ou um redirecionamento do PyPI poderia levar
+  a um destino interno. Mitiga-se com a rede dedicada para a preparação (ver A1), ainda não adotada.

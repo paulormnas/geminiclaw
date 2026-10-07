@@ -13,6 +13,7 @@ import os
 import pathlib
 import re
 import stat
+import urllib.parse
 import uuid
 from dataclasses import dataclass
 from typing import Any, List, Literal, Optional
@@ -51,7 +52,8 @@ def parse_assets(raw: Optional[List[Any]]) -> tuple[List[AssetSpec], List[str]]:
     """Valida a lista ``assets`` vinda do agente (texto não confiável).
 
     Cada item precisa de ``url`` http/https sem destino interno, ``destino`` simples (sem ``/`` nem
-    ``..``) e, se presente, ``sha256`` com 64 dígitos hexadecimais.
+    ``..``) e, se presente, ``sha256`` com 64 dígitos hexadecimais. Sem ``sha256`` declarado a URL
+    precisa ser ``https`` (sem hash, a integridade só vem do TLS).
 
     Returns:
         Tupla ``(specs, erros)``; ``erros`` traz uma mensagem por problema.
@@ -91,6 +93,9 @@ def parse_assets(raw: Optional[List[Any]]) -> tuple[List[AssetSpec], List[str]]:
             continue
         if sha is not None and not (isinstance(sha, str) and _SHA256_RE.fullmatch(sha)):
             errors.append(f"ativo {destino!r}: sha256 deve ter 64 dígitos hexadecimais")
+            continue
+        if sha is None and urllib.parse.urlsplit(url.strip()).scheme != "https":
+            errors.append(f"ativo {destino!r}: sem sha256 declarado a URL precisa ser https")
             continue
         seen.add(destino)
         specs.append(AssetSpec(url=url.strip(), destino=destino, sha256=sha.lower() if sha else None))

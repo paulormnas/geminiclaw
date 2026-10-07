@@ -137,7 +137,11 @@ def download(url: str, destination: str, max_bytes: int, allow_private_hosts: It
                 location = response.getheader("Location")
                 if not location:
                     raise AssetError(f"redirecionamento (HTTP {response.status}) sem destino")
-                current = urllib.parse.urljoin(current, location)
+                target = urllib.parse.urljoin(current, location)
+                validate_url(target, allow)  # destino interno ou esquema inválido: recusa antes do rebaixamento
+                if parts.scheme == "https" and urllib.parse.urlsplit(target).scheme != "https":
+                    raise AssetError("redirecionamento de https para http recusado")
+                current = target
                 continue
             if response.status != 200:
                 raise AssetError(f"o servidor respondeu HTTP {response.status}")

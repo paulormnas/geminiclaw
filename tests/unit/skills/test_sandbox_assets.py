@@ -62,10 +62,11 @@ def test_url_recusada(url):
 def test_assets_validos_e_sha_normalizado():
     specs, errors = parse_assets([
         {"url": "https://exemplo.org/pesos.pt", "destino": "pesos.pt", "sha256": VALID_SHA.upper()},
-        {"url": "http://exemplo.org/c.txt", "destino": "c.txt", "sha256": None},
+        {"url": "https://exemplo.org/c.txt", "destino": "c.txt", "sha256": None},
+        {"url": "http://exemplo.org/d.txt", "destino": "d.txt", "sha256": VALID_SHA},
     ])
     assert errors == []
-    assert specs[0].sha256 == VALID_SHA and specs[1].sha256 is None
+    assert specs[0].sha256 == VALID_SHA and specs[1].sha256 is None and specs[2].url.startswith("http://")
 
 
 @pytest.mark.unit

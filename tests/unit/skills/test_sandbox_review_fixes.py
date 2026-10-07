@@ -437,3 +437,59 @@ def test_m6_exdev_copia_e_renomeia(tmp_path, monkeypatch):
     assert (cache / digest).read_bytes() == b"conteudo"
     assert not (staging / "p.bin").exists()
     assert sorted(f.name for f in cache.iterdir()) == [digest]  # sem sobras (.part, .incoming)
+
+
+# --- M7: sem sha256 declarado só https; redirect https -> http é sempre recusado -----------------------------
+
+@pytest.mark.unit
+def test_m7_http_sem_sha256_e_recusado_e_com_sha256_e_aceito():
+    from src.skills.code.assets import parse_assets
+
+    specs, errors = parse_assets([{"url": "http://exemplo.org/a", "destino": "a"}])
+    assert specs == [] and "https" in errors[0]
+
+    specs, errors = parse_assets([{"url": "https://exemplo.org/a", "destino": "a"}])
+    assert errors == [] and len(specs) == 1
+
+    specs, errors = parse_assets([{"url": "http://exemplo.org/a", "destino": "a", "sha256": "a" * 64}])
+    assert errors == [] and len(specs) == 1
+
+
+@pytest.mark.unit
+def test_m7_http_sem_sha256_nao_cria_containers(make_sandbox, tmp_path):
+    daemon = FakeDaemon()
+    result = _run(make_sandbox(daemon), tmp_path, assets=[{"url": "http://exemplo.org/a", "destino": "a"}])
+
+    daemon.client.containers.run.assert_not_called()
+    assert result.exit_code == -1 and "https" in result.stderr
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("sha_declarado", [False, True])
+def test_m7_redirect_de_https_para_http_e_recusado(tmp_path, monkeypatch, sha_declarado):
+    from src.skills.code import fetch_assets
+
+    class Resp:
+        status = 302
+
+        def getheader(self, name):
+            return "http://exemplo.org/destino" if name == "Location" else None
+
+    class Conn:
+        def __init__(self, *a, **k):
+            pass
+
+        def request(self, *a, **k):
+            pass
+
+        def getresponse(self):
+            return Resp()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(fetch_assets, "_resolve", lambda *a, **k: "93.184.216.34")
+    monkeypatch.setattr(fetch_assets, "_PinnedHTTPSConnection", Conn)
+    monkeypatch.setattr(fetch_assets, "_PinnedHTTPConnection", Conn)
+    with pytest.raises(fetch_assets.AssetError, match="https para http"):
+        fetch_assets.download("https://exemplo.org/a", str(tmp_path / "a"), 100)

@@ -125,11 +125,12 @@ def test_ativo_baixado_verificado_e_em_cache(tmp_path: Path, http_server) -> Non
     sandbox = _sandbox(tmp_path, allow_private_asset_hosts=(HOST_ALIAS,))
     code = "print(open('/assets/p.bin','rb').read().decode())\n" + _NO_NETWORK_CODE
 
-    # sem hash declarado: confiança no primeiro uso, registrada
-    first = _run(sandbox, tmp_path, code, assets=[{"url": url, "destino": "p.bin"}])
+    # Servidor local é http: sem sha256 declarado a URL seria recusada (M7, exige https); o caminho sem hash
+    # em https é coberto pelos testes unitários.
+    first = _run(sandbox, tmp_path, code, assets=[{"url": url, "destino": "p.bin", "sha256": sha}])
     assert first.exit_code == 0, first.stderr
     assert "pesos" in first.stdout
-    assert (first.ativos[0].sha256, first.ativos[0].hash_declarado, first.ativos[0].origem) == (sha, False, "download")
+    assert (first.ativos[0].sha256, first.ativos[0].hash_declarado, first.ativos[0].origem) == (sha, True, "download")
 
     # com hash declarado e já em cache: nenhum container de preparação
     second = _run(sandbox, tmp_path, code, task="t2", assets=[{"url": url, "destino": "p.bin", "sha256": sha}])

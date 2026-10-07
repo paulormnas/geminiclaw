@@ -114,3 +114,22 @@ async def test_pg_vetorizacao_pendente_e_recuperacao(tmp_path, registry, projeto
     )
 
     assert report["recuperados"] == 1 and registry.list_pending(projeto.projeto_id) == []
+
+
+@pytest.mark.asyncio
+async def test_pg_nul_no_texto_nao_derruba_a_fila(tmp_path, registry, projeto):
+    """Revisão de segurança, achado 3: \\x00 é removido antes do upsert e um arquivo ruim não interrompe os demais."""
+    indexer = DocumentIndexer(
+        url=":memory:", embedding_provider=FakeEmbeddingProvider(dimension=16), registry=registry
+    )
+    session = tmp_path / "s1"
+    snap = session / "input_snapshot"
+    snap.mkdir(parents=True)
+    (snap / "a.txt").write_bytes(b"antes\x00depois")
+    (snap / "b.txt").write_text("texto normal")
+
+    report = await index_input_snapshot(session, projeto, indexer=indexer, extractors=ExtractorRegistry())
+
+    assert report["indexados"] == 2 and report["falhas"] == []
+    for doc in registry.list_documents(10, projeto.projeto_id):
+        assert all("\x00" not in c["content"] for c in registry.get_chunks(doc["id"]))

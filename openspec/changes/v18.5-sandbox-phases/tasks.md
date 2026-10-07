@@ -2,7 +2,7 @@
 
 ## 0. Pré-requisitos
 - [x] 0.1 **Aprovação explícita do pesquisador** para as mudanças de comportamento dos containers do sandbox (proposal, "Aprovações necessárias").
-- [ ] 0.2 **Revisão do Analista de Segurança** do design (rede da preparação, montagens, usuário não-root).
+- [x] 0.2 **Revisão do Analista de Segurança** do design (rede da preparação, montagens, usuário não-root). Achados A1, A2, M1–M7, B1, B2, B6 e B7 aplicados (seção 7); B3, B4, B5 e B8 não alteram código.
 - [x] 0.3 Worktree `.worktrees/feat-v185-sandbox-phases` (branch `feat/v185-sandbox-phases`).
 
 ## 1. Configuração e contratos
@@ -52,3 +52,17 @@
 - [ ] 6.1 Medição no Pi 5: tempo por fase com e sem pacotes (registrar no PR).
 - [ ] 6.2 Ruff, `uv run pytest -m "unit or integration"`.
 - [ ] 6.3 Revisão nos 7 eixos, PR para `dev`.
+
+## 7. Achados da revisão de segurança (PR #111)
+- [x] 7.1 A1 (alta): rede na execução exige autorização explícita do classificador (`network_allowed`) antes de qualquer regra; sem insumos e com o classificador padrão, sem rede. Rede dedicada para a preparação avaliada: não adotada (exige firewall/proxy no host); risco registrado no design.
+- [x] 7.2 A2 (alta): `/inputs` (modo `copy`) como `Mount` tmpfs; script e spec do fetch por diretório de controle `ro`. _(não validada com container real: depende da bateria de integração)_
+- [x] 7.3 M1: padrão por ativo 512 MiB, teto somado por execução (2 GiB) e checagem de disco livre antes de criar containers. 5.5.1 (cota de `/outputs` e `/deps`) segue **risco aceito pendente**.
+- [x] 7.4 M2: `SANDBOX_COPY_MAX_BYTES + SANDBOX_TMPFS_SIZE < mem_limit` no modo `copy`; padrão de `SANDBOX_COPY_MAX_BYTES` em 64 MiB.
+- [x] 7.5 M3: saída do script limitada (~1 MiB por stream) por lançador fixo.
+- [x] 7.6 M4: `kill` + varredura também no `finally`; `decode(errors="replace")`.
+- [x] 7.7 M5: `/prior` exatamente `<saída>/<sessão>`, diferente da atual e sem repetição.
+- [x] 7.8 M6: container de download encerrado antes do hash; hash sobre o arquivo já movido com `O_NOFOLLOW`; cópia + rename em `EXDEV`; instalação em container próprio.
+- [x] 7.9 M7: ativo sem sha256 exige `https`; redirect `https` para `http` recusado; risco do `uv` sem filtro de IP interno registrado.
+- [x] 7.10 B1 (`--no-cache`, `--link-mode=copy`, design atualizado), B2 (não regulares), B6 (fase corrente), B7 (sidecar de origem); teste de `asyncio.to_thread` na skill.
+- [ ] 7.11 B3 (varredura de `SANDBOX_WORK_DIR` órfão no startup): não implementada (ver design). B4, B5 e B8: só documentados.
+- [ ] 7.12 Questão em aberto 2 (sha256 opcional): **decisão do pesquisador pendente** (assumida opcional + `https`).

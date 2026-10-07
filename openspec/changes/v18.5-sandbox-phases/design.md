@@ -328,3 +328,10 @@ Registro das correções e dos riscos aceitos decorrentes da revisão do Analist
 - **B7 (baixa) — origem em acertos de cache:** o primeiro download de um conteúdo grava o sidecar
   `SANDBOX_ASSET_CACHE_DIR/<sha256>.json` (`url`, `destino`, `baixado_em`; nunca sobrescrito). Um acerto de
   cache registra `origem="cache"` e `url_original` (a URL do sidecar), ao lado da `url` declarada na chamada.
+- **B3 (baixa) — diretórios de trabalho órfãos:** a varredura de `SANDBOX_WORK_DIR/<run_id>` deixados por
+  um encerramento abrupto (SIGKILL, queda de energia) **não foi implementada**: exige decidir um limite de
+  idade seguro para não apagar a execução de outro processo; o `finally` de `run` cobre os desfechos normais.
+  Os pontos B4, B5 e B8 do parecer ficam apenas **documentados**, sem alteração de código nesta mudança.
+- **Questão em aberto 2 (sha256 opcional):** mantida como assumida (aceitar ativo sem hash, registrando
+  `hash_declarado=false`), agora com a exigência de `https` (M7). **Exige decisão do pesquisador** se o hash
+  deve ser obrigatório sempre.

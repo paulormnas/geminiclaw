@@ -332,7 +332,7 @@ class _FailingScript(FakeDaemon):
         self._stderr = stderr
 
     def _exec_run(self, cmd, *args, **kwargs):
-        if cmd[0] == "python" and cmd[1] == "/outputs/script.py":
+        if cmd[0] == "python" and "/outputs/script.py" in cmd:
             self.calls.append("script")
             return SimpleNamespace(exit_code=1, output=(b"", self._stderr))
         return super()._exec_run(cmd, *args, **kwargs)

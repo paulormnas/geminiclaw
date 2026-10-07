@@ -209,3 +209,55 @@ def test_m2_modo_mount_nao_e_afetado(make_sandbox, tmp_path, monkeypatch):
     result = _run(make_sandbox(FakeDaemon(), memory_limit="256m"), tmp_path)
 
     assert result.exit_code == 0
+
+
+# --- M3: a saída do script é limitada antes de chegar ao orquestrador ---------------------------------
+
+@pytest.mark.unit
+def test_m3_script_roda_pelo_lancador_com_limite(make_sandbox, tmp_path, monkeypatch):
+    monkeypatch.setenv("SANDBOX_OUTPUT_MAX_BYTES", "4096")
+    daemon = FakeDaemon()
+    _run(make_sandbox(daemon), tmp_path)
+
+    cmd = next(c for c, _kw in daemon.exec_calls if "/outputs/script.py" in c)
+    assert cmd[:3] == ["python", "-I", "-c"] and cmd[-2:] == ["4096", "/outputs/script.py"]
+
+
+def _run_launcher(tmp_path, script_source: str, cap: int):
+    import subprocess
+    import sys
+
+    from src.skills.code.sandbox import _RUNNER_CODE
+
+    script = tmp_path / "script_alvo.py"
+    script.write_text(script_source)
+    return subprocess.run(
+        [sys.executable, "-I", "-c", _RUNNER_CODE.replace("['python',", f"[{sys.executable!r},"), str(cap), str(script)],
+        capture_output=True, timeout=60,
+    )
+
+
+@pytest.mark.unit
+def test_m3_lancador_trunca_saida_gigante_e_preserva_o_fim(tmp_path):
+    proc = _run_launcher(
+        tmp_path,
+        "import sys\n"
+        "sys.stdout.write('A' * 3_000_000)\n"
+        "sys.stderr.write('B' * 2_000_000 + 'Traceback FINAL')\n"
+        "sys.exit(3)\n",
+        cap=1024,
+    )
+
+    assert proc.returncode == 3
+    assert len(proc.stdout) < 1024 + 100 and len(proc.stderr) < 1024 + 100
+    assert b"omitidos" in proc.stdout and proc.stdout.startswith(b"A")
+    assert proc.stderr.endswith(b"Traceback FINAL")
+
+
+@pytest.mark.unit
+def test_m3_lancador_nao_altera_saida_pequena_e_propaga_sinal(tmp_path):
+    proc = _run_launcher(tmp_path, "print('ola')\n", cap=1024)
+    assert (proc.returncode, proc.stdout, proc.stderr) == (0, b"ola\n", b"")
+
+    killed = _run_launcher(tmp_path, "import os, signal\nos.kill(os.getpid(), signal.SIGKILL)\n", cap=1024)
+    assert killed.returncode == 137  # OOM continua reconhecível

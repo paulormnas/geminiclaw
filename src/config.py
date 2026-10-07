@@ -341,6 +341,7 @@ SANDBOX_ASSET_TOTAL_MAX_BYTES = int(get_env("SANDBOX_ASSET_TOTAL_MAX_BYTES", def
 SANDBOX_MIN_FREE_BYTES = int(get_env("SANDBOX_MIN_FREE_BYTES", default="1073741824"))  # 1 GiB livre para iniciar
 SANDBOX_ASSET_CACHE_DIR = get_env("SANDBOX_ASSET_CACHE_DIR", default="store/assets")
 SANDBOX_INPUT_DELIVERY = get_env("SANDBOX_INPUT_DELIVERY", default="mount")  # mount | copy
+SANDBOX_OUTPUT_MAX_BYTES = int(get_env("SANDBOX_OUTPUT_MAX_BYTES", default="1048576"))  # stdout/stderr devolvidos ao orquestrador
 SANDBOX_COPY_MAX_BYTES = int(get_env("SANDBOX_COPY_MAX_BYTES", default="67108864"))  # 64 MiB: tmpfs conta na memória
 
 # Health Monitoring (S7)

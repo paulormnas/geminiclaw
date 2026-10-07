@@ -214,6 +214,7 @@ são lidos por `v18.5-execution-provenance`; esta mudança não grava registro a
 | `SANDBOX_ASSET_CACHE_DIR` | `store/assets` | Cache de ativos por sha256 |
 | `SANDBOX_WORK_DIR` | `store/sandbox_work` | Diretórios temporários por execução (`deps`, `staging`), removidos ao fim |
 | `SANDBOX_INPUT_DELIVERY` | `mount` | `mount` ou `copy` |
+| `SANDBOX_OUTPUT_MAX_BYTES` | 1048576 | Limite de stdout e de stderr do script devolvidos ao orquestrador (cada) |
 | `SANDBOX_COPY_MAX_BYTES` | 67108864 | Limite do modo `copy` (o tmpfs conta na memória do container) |
 
 ## Análise de impacto (6 eixos)
@@ -290,3 +291,8 @@ Registro das correções e dos riscos aceitos decorrentes da revisão do Analist
   ser menor que o limite de memória do container (o tmpfs conta na memória); caso contrário a execução é
   recusada antes de criar o container. Padrão de `SANDBOX_COPY_MAX_BYTES` reduzido para 64 MiB. Com os
   padrões atuais (`/tmp` de 256m e memória de 256m) o modo `copy` exige ajustar um dos limites.
+- **M3 (média) — saída do script:** o `exec_run` bufferiza toda a saída na RAM do orquestrador. O script
+  passa a rodar por um lançador fixo do projeto (`python -I -c <lançador>`) que limita stdout e stderr a
+  `SANDBOX_OUTPUT_MAX_BYTES` (1 MiB) cada, mantendo o início e o fim (o traceback fica no fim) com um
+  marcador do trecho omitido, e propaga o código de saída (morte por sinal vira 128+sinal: 137 segue
+  indicando OOM). O comportamento do lançador é testado localmente (subprocesso), não só com cliente simulado.

@@ -155,6 +155,46 @@ _INTROSPECT_CODE = (
     f"'deps': dists(['{SANDBOX_DEPS_DIR}'])}}))"
 )
 
+# Lançador fixo (código do projeto) do script gerado: limita stdout e stderr a ``cap`` bytes cada (início e fim,
+# com marcador do trecho omitido) para que uma saída gigante não estoure a RAM do orquestrador, que recebe tudo
+# pelo ``exec_run``. Propaga o código de saída (morte por sinal vira 128+sinal: 137 continua indicando OOM).
+_RUNNER_CODE = (
+    "import subprocess, sys, threading\n"
+    "cap, script = int(sys.argv[1]), sys.argv[2]\n"
+    "head_cap = cap // 2\n"
+    "def pump(src, dst):\n"
+    "    head, tail, dropped = bytearray(), bytearray(), 0\n"
+    "    while True:\n"
+    "        chunk = src.read1(65536)\n"
+    "        if not chunk:\n"
+    "            break\n"
+    "        room = head_cap - len(head)\n"
+    "        if room > 0:\n"
+    "            head += chunk[:room]\n"
+    "            chunk = chunk[room:]\n"
+    "        tail += chunk\n"
+    "        if len(tail) > 2 * (cap - head_cap):\n"
+    "            cut = len(tail) - (cap - head_cap)\n"
+    "            dropped += cut\n"
+    "            del tail[:cut]\n"
+    "    if len(tail) > cap - head_cap:\n"
+    "        cut = len(tail) - (cap - head_cap)\n"
+    "        dropped += cut\n"
+    "        del tail[:cut]\n"
+    "    out = bytes(head)\n"
+    "    if dropped:\n"
+    "        out += ('\\n[... %d bytes de saida omitidos ...]\\n' % dropped).encode()\n"
+    "    dst.write(out + bytes(tail))\n"
+    "    dst.flush()\n"
+    "p = subprocess.Popen(['python', script], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)\n"
+    "threads = [threading.Thread(target=pump, args=(p.stdout, sys.stdout.buffer)),\n"
+    "           threading.Thread(target=pump, args=(p.stderr, sys.stderr.buffer))]\n"
+    "[t.start() for t in threads]\n"
+    "[t.join() for t in threads]\n"
+    "code = p.wait()\n"
+    "sys.exit(code if code >= 0 else 128 - code)\n"
+)
+
 # Assinaturas (no stderr do script) de falha de rede na fase `execute`, que roda sem rede (design §5).
 NETWORK_FAILURE_SIGNATURES = (
     "socket.gaierror",
@@ -439,6 +479,7 @@ class PythonSandbox:
         self.asset_max_bytes = int(_setting("SANDBOX_ASSET_MAX_BYTES"))
         self.asset_total_max_bytes = int(_setting("SANDBOX_ASSET_TOTAL_MAX_BYTES"))
         self.min_free_bytes = int(_setting("SANDBOX_MIN_FREE_BYTES"))
+        self.output_max_bytes = int(_setting("SANDBOX_OUTPUT_MAX_BYTES"))
         self.input_delivery = str(_setting("SANDBOX_INPUT_DELIVERY")).strip().lower()
         self.copy_max_bytes = int(_setting("SANDBOX_COPY_MAX_BYTES"))
         self.pids_limit = int(_setting("SANDBOX_PIDS_LIMIT"))
@@ -748,6 +789,10 @@ class PythonSandbox:
             return records, SandboxResult(stdout="", stderr=error, exit_code=-1, fase_falha="fetch_assets")
         return records, None
 
+    def _script_command(self) -> List[str]:
+        """Comando do script principal: lançador fixo que limita a saída (``-I``: ignora PYTHONPATH/ambiente do script)."""
+        return ["python", "-I", "-c", _RUNNER_CODE, str(max(2, self.output_max_bytes)), "/outputs/script.py"]
+
     def _check_free_disk(self, *paths: pathlib.Path) -> None:
         """Recusa iniciar a execução com menos de ``SANDBOX_MIN_FREE_BYTES`` livres nos discos usados.
 
@@ -1050,7 +1095,7 @@ class PythonSandbox:
             exit_code = -1
 
             try:
-                exec_result = container.exec_run(["python", "/outputs/script.py"], demux=True)
+                exec_result = container.exec_run(self._script_command(), demux=True)
                 if timed_out:
                     stdout = ""
                     stderr = "Timeout atingido durante a execução."

@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from src.exploration import ExplorationSession
+from src.knowledge.suggestions import SuggestionError
+from src.knowledge.suggestions import SuggestionError
 from src.knowledge.hypothesis_cycle import ApprovalDecision, SolutionStatus
 from tests.support.exploration_world import APPROVED, REJECTED, LoopHarness, hyp, plan, task
 
@@ -366,11 +368,21 @@ async def test_oportunidade_aprovada_e_sugerida_no_inicio_e_vira_hipotese_invest
 
 
 @pytest.mark.asyncio
-async def test_falha_das_sugestoes_do_curator_nao_derruba_a_sessao(tmp_path):
+async def test_falha_das_sugestoes_do_curator_fecha_com_erro_e_nao_como_sem_caminhos(tmp_path):
     h = LoopHarness(tmp_path, plans=[plan([task("t1")], [hyp("h1")])])
     h.orch.curator_suggest = AsyncMock(side_effect=RuntimeError("curator quebrou"))
     await h.run()
-    assert h.ran == ["t1"] and h.stop_reason == "sem_caminhos_promissores"
+    assert h.stop_reason == "erro"
+
+
+@pytest.mark.asyncio
+async def test_falha_ao_consultar_caminhos_em_aberto_fecha_com_erro(tmp_path):
+    h = LoopHarness(tmp_path, plans=[plan([task("t1")], [hyp("h1")])])
+    with patch.object(
+        ExplorationSession, "has_open_paths", side_effect=SuggestionError("grafo indisponível")
+    ) as probe:
+        await h.run()
+    assert probe.called and h.stop_reason == "erro"
 
 
 # -- telemetria e segurança --------------------------------------------------------------------------------------

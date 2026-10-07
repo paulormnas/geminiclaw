@@ -49,6 +49,7 @@ from src.continuity import (
 )
 from src.heartbeat import SessionHeartbeat
 from src.knowledge.hypotheses import PlanExtras, split_plan
+from src.knowledge.suggestions import SuggestionError
 
 if TYPE_CHECKING:
     from agents.curator.runner import Curator
@@ -476,7 +477,11 @@ class Orchestrator:
             logger.warning("Exploração de hipóteses não iniciada", extra={"error": type(exc).__name__})
 
     async def curator_suggest(self, session_id: str) -> list[Any]:
-        """Sugestões do Curator ao Researcher (determinísticas). Nunca levanta; vazio sem Curator ou sem orçamento."""
+        """Sugestões do Curator ao Researcher (determinísticas). Vazio sem Curator ou sem orçamento.
+
+        Raises:
+            SuggestionError: Falha ao sugerir (propagada: vazio significaria "sem caminhos").
+        """
         curator = self.get_curator(session_id)
         if curator is None or not self._curator_budget_left(session_id, closing=False):
             return []
@@ -484,9 +489,11 @@ class Orchestrator:
             return list(await curator.suggest_paths())
         except asyncio.CancelledError:
             raise
+        except SuggestionError:
+            raise
         except Exception as exc:  # noqa: BLE001
             logger.warning("Sugestões do Curator falharam", extra={"error": type(exc).__name__})
-            return []
+            raise SuggestionError(f"Falha ao gerar sugestões do Curator ({type(exc).__name__}).") from exc
 
     def _end_exploration(self, session_id: str) -> None:
         self._explorations.pop(session_id, None)

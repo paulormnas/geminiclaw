@@ -17,6 +17,7 @@ confiável, saneado e conferido no grafo por ``src.knowledge.hypotheses``. A tel
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from dataclasses import dataclass, field, replace
 from enum import Enum
@@ -39,12 +40,12 @@ from src.knowledge.hypotheses import (
 from src.knowledge.hypothesis_cycle import Approver, HypothesisCycle, Selection, SolutionStatus, terminal_approver
 from src.knowledge.ingestion import SessionContext
 from src.knowledge.normalization import normalize_domain_term
-from src.knowledge.suggestions import Suggestion, SuggestionStore
+from src.knowledge.suggestions import Suggestion, SuggestionError, SuggestionStore
 from src.logger import get_logger
 
 logger = get_logger(__name__)
 
-__all__ = ["CycleOutcome", "ExplorationSession", "ExplorationStop", "split_plan"]
+__all__ = ["CycleOutcome", "ExplorationSession", "ExplorationStop", "SuggestionError", "split_plan"]
 
 # Subtarefas que preparam ou sintetizam não testam hipótese; as demais de um plano no formato novo precisam de uma.
 PREPARATORY_TASK_TYPES = frozenset({"eda", "synthesis"})
@@ -390,14 +391,26 @@ class ExplorationSession:
         return counts
 
     async def suggest(self) -> int:
-        """Sugestões do Curator ao fim do ciclo (a falha do Curator nunca derruba a sessão)."""
+        """Sugestões do Curator ao fim do ciclo.
+
+        Returns:
+            Quantidade de sugestões novas (0 é "sem sugestões", um resultado válido).
+
+        Raises:
+            SuggestionError: O Curator falhou ao sugerir. Não vira 0: o laço fecha a sessão com ``erro`` em vez de
+                concluir "sem caminhos promissores" por uma falha (AGENTS.md §1.6).
+        """
         if self._curator_suggest is None:
             return 0
         try:
             fresh = await self._curator_suggest()
+        except asyncio.CancelledError:
+            raise
+        except SuggestionError:
+            raise
         except Exception as exc:  # noqa: BLE001
             logger.warning("Sugestões do Curator falharam", extra={"extra": {"erro": type(exc).__name__}})
-            return 0
+            raise SuggestionError(f"Falha ao gerar sugestões do Curator ({type(exc).__name__}).") from exc
         return len(fresh or [])
 
     def check_solution(self) -> SolutionStatus:
@@ -413,10 +426,14 @@ class ExplorationSession:
         return answer
 
     def has_open_paths(self, in_plan: set[str]) -> bool:
-        """Há caminho em aberto fora do plano: hipótese ``em_teste`` ou sugestão pendente do Curator."""
+        """Há caminho em aberto fora do plano: hipótese ``em_teste`` ou sugestão pendente do Curator.
+
+        Raises:
+            SuggestionError: Falha ao consultar as hipóteses em aberto (não equivale a "nenhum caminho").
+        """
         try:
             runnable = self.cycle.pending_runnable(in_plan)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Hipóteses em aberto indisponíveis", extra={"extra": {"erro": type(exc).__name__}})
-            runnable = []
+            raise SuggestionError(f"Falha ao consultar hipóteses em aberto ({type(exc).__name__}).") from exc
         return bool(runnable) or bool(self.pending_suggestions())

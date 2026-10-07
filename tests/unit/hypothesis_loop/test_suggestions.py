@@ -15,6 +15,7 @@ from src.knowledge.suggestions import (
     SUGGESTION_TYPES,
     SuggestionStore,
     build_candidates,
+    SuggestionError,
     suggest_paths,
 )
 from tests.support.controlled_embedding_provider import pair_vectors
@@ -142,7 +143,7 @@ def test_arquivo_gigante_e_ignorado(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_curator_suggest_paths_nao_usa_llm_e_isola_falhas(tmp_path, monkeypatch):
+async def test_curator_suggest_paths_nao_usa_llm_e_distingue_falha_de_vazio(tmp_path, monkeypatch):
     monkeypatch.setattr("src.config.CURATOR_ENABLED", True)
     w = HypothesisWorld()
     w.discovery("caminho_sem_conclusao", proximo_passo_sugerido="Passo X")
@@ -158,7 +159,8 @@ async def test_curator_suggest_paths_nao_usa_llm_e_isola_falhas(tmp_path, monkey
     assert events == [("curator_suggestions", {"novas": 1, "por_tipo": {"caminho_sem_conclusao": 1}})]
     broken = Curator(w.store, project_id=w.pid, session_id=w.sid, session_dir=tmp_path / "..\x00",
                      provider_factory=boom_provider)
-    assert await broken.suggest_paths() == []  # falha isolada: a sessão não cai
+    with pytest.raises(SuggestionError):  # falha não é "sem sugestões": quem chama decide (fail-fast)
+        await broken.suggest_paths()
     monkeypatch.setattr("src.config.CURATOR_ENABLED", False)
     assert await curator.suggest_paths() == []
 

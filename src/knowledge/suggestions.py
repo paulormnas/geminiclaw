@@ -44,6 +44,10 @@ _MAX_FILE_BYTES = 1024 * 1024
 _MAX_SCAN = 500
 
 
+class SuggestionError(RuntimeError):
+    """Falha ao sugerir caminhos (diferente de "sem sugestões": a lista vazia é um resultado válido)."""
+
+
 @dataclass(frozen=True)
 class Suggestion:
     """Sugestão do Curator (texto saneado)."""

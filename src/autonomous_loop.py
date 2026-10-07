@@ -29,6 +29,7 @@ from src.config import (
 from src.telemetry import get_telemetry
 from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
 from src.knowledge.hypothesis_cycle import SolutionStatus
+from src.knowledge.suggestions import SuggestionError
 from src.usage import UsageBudget, UsageTracker, StopReason
 from src.continuity import (
     ESTADO_FECHADO,
@@ -638,6 +639,27 @@ class AutonomousLoop:
             artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id),
         )
 
+    async def _close_on_suggestion_failure(
+        self,
+        exc: Exception,
+        master_session_id: str,
+        prompt: str,
+        tasks: List["AgentTask"],
+        dag_state: Dict[str, Any],
+        final_results: List["AgentResult"],
+    ) -> "OrchestratorResult":
+        """Falha ao sugerir caminhos: fecha com ``erro`` (nunca como ``sem_caminhos_promissores``; AGENTS.md §1.6)."""
+        from src.exploration import ExplorationStop
+
+        logger.error(
+            "Falha ao sugerir caminhos; sessão fechada com motivo_parada=erro. Verifique o grafo e o diretório de "
+            "saída da sessão e retome a pesquisa.",
+            extra={"error": type(exc).__name__, "detalhe": str(exc)[:200]},
+        )
+        return await self._close_exploration(
+            ExplorationStop.ERROR, master_session_id, prompt, tasks, dag_state, final_results
+        )
+
     async def _close_exploration(
         self,
         stop: Any,
@@ -727,7 +749,12 @@ class AutonomousLoop:
         cumulative_tasks: Dict[str, AgentTask] = {}
         cumulative_dag: Dict[str, Dict[str, Any]] = {}
         if exploration is not None:
-            await exploration.suggest()  # caminhos em aberto e oportunidades aprovadas, antes do primeiro plano
+            try:
+                await exploration.suggest()  # caminhos em aberto e oportunidades aprovadas, antes do primeiro plano
+            except SuggestionError as exc:
+                return await self._close_on_suggestion_failure(
+                    exc, master_session_id, prompt, list(cumulative_tasks.values()), cumulative_dag, final_results
+                )
 
         while True:
             if exploring:
@@ -837,7 +864,16 @@ class AutonomousLoop:
                     exploration.idle_cycles += 1
                     cycle_no += 1
                     in_plan = {t.hypothesis_id for t in plan_tasks if t.hypothesis_id}
-                    if exploration.idle_cycles >= 2 or not await asyncio.to_thread(exploration.has_open_paths, in_plan):
+                    try:
+                        has_open = exploration.idle_cycles < 2 and await asyncio.to_thread(
+                            exploration.has_open_paths, in_plan
+                        )
+                    except SuggestionError as exc:
+                        return await self._close_on_suggestion_failure(
+                            exc, master_session_id, prompt, list(cumulative_tasks.values()), cumulative_dag,
+                            final_results,
+                        )
+                    if not has_open:
                         from src.exploration import ExplorationStop
 
                         return await self._close_exploration(
@@ -1389,7 +1425,12 @@ class AutonomousLoop:
             except Exception as exc:  # noqa: BLE001 - a falha do Curator nunca derruba a sessão
                 logger.warning("Checkpoint do Curator falhou", extra={"error": type(exc).__name__})
             if exploration is not None:
-                await exploration.suggest()  # o Curator sugere novos caminhos (determinístico; falha isolada)
+                try:
+                    await exploration.suggest()  # o Curator sugere novos caminhos (determinístico)
+                except SuggestionError as exc:
+                    return await self._close_on_suggestion_failure(
+                        exc, master_session_id, prompt, list(cumulative_tasks.values()), cumulative_dag, final_results
+                    )
             try:  # v18-research-continuity — hipóteses, decisões e descobertas no checkpoint
                 await asyncio.to_thread(self.orchestrator.refresh_graph_checkpoint, master_session_id)
             except Exception as exc:  # noqa: BLE001

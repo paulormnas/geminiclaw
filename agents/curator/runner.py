@@ -36,6 +36,7 @@ from src.knowledge.graph_store import GraphStore, Node
 from src.knowledge.semantic_index import SemanticIndex
 from src.knowledge.similarity_queue import SimilarityQueue
 from src.knowledge.suggestions import Suggestion
+from src.knowledge.suggestions import SuggestionError
 from src.knowledge.suggestions import suggest_paths as suggest_paths_for_session
 from src.llm.base import LLMProvider
 from src.llm.metering import record_llm_call
@@ -153,7 +154,7 @@ class Curator:
         return await self._run(KIND_CLOSE, include_queue=True, motivo_parada=motivo_parada)
 
     async def suggest_paths(self, max_suggestions: int | None = None) -> list[Suggestion]:
-        """Sugere novos caminhos ao Researcher (v18-hypothesis-loop, design §6). Determinístico, sem LLM; nunca levanta.
+        """Sugere novos caminhos ao Researcher (v18-hypothesis-loop, design §6). Determinístico, sem LLM.
 
         Só as fontes permitidas (``src.knowledge.suggestions``): oportunidades **aprovadas** (nunca ``documentada``),
         caminhos sem conclusão, lições de caminho sobre hipóteses refutadas e abordagens que funcionaram em problemas
@@ -163,7 +164,10 @@ class Curator:
             max_suggestions: Máximo por ciclo (padrão: ``CURATOR_MAX_SUGGESTIONS``).
 
         Returns:
-            As sugestões novas (lista vazia se o Curator está desligado ou houve falha).
+            As sugestões novas (lista vazia se o Curator está desligado ou não há sugestões).
+
+        Raises:
+            SuggestionError: Falha ao gerar as sugestões (não é o mesmo que "sem sugestões"; fail-fast).
         """
         if not config.CURATOR_ENABLED or self._session_dir is None:
             return []
@@ -174,9 +178,9 @@ class Curator:
             )
         except asyncio.CancelledError:
             raise
-        except Exception as exc:  # noqa: BLE001 - a falha do Curator nunca derruba a sessão (ADR 014 §4)
+        except Exception as exc:  # noqa: BLE001 - vazio seria lido como "sem caminhos"; quem decide é a exploração
             logger.warning("Sugestões do Curator falharam", extra={"extra": {"erro": type(exc).__name__}})
-            return []
+            raise SuggestionError(f"Falha ao gerar sugestões do Curator ({type(exc).__name__}).") from exc
         if self._telemetry is not None:
             try:
                 counts: dict[str, int] = {}

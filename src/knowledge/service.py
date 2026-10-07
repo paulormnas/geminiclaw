@@ -260,14 +260,15 @@ class KnowledgeService:
         return {}, str(exp.properties.get("hash_params") or _NO_CONFIG), None
 
     def _real_session(self, exp: Node, projeto: str) -> bool:
-        """Projeto existente no grafo e experimento ligado a uma ``Sessao`` desse projeto (dado do grafo, não do agente)."""
+        """Projeto existente no grafo e experimento ligado a uma ``Sessao`` dele (dado do grafo, não do agente)."""
         if not projeto:
             return False
         if projeto not in self._project_cache:
             self._project_cache[projeto] = bool(self._store.find_nodes("Projeto", {"projeto_id": projeto}, limit=1))
         if not self._project_cache[projeto]:
             return False
-        return any(n.label == "Sessao" and n.properties.get("projeto_id") == projeto for n in self._out(exp.id, "EXECUTADO_EM"))
+        sessoes = self._out(exp.id, "EXECUTADO_EM")
+        return any(n.label == "Sessao" and n.properties.get("projeto_id") == projeto for n in sessoes)
 
     def _attempt_from(self, exp: Node, metric: Node) -> CollectedAttempt | None:
         props = exp.properties

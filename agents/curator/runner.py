@@ -204,8 +204,11 @@ class Curator:
             try:
                 from src.knowledge.curator_tools import CuratorToolkit as _T
 
-                _T(self._store, project_id=self._project_id, session_id=self._session_id,
-                   session_dir=self._session_dir, limits=self._limits)._audit("execucao_adiada", kind=kind, motivo=reason)
+                audit = _T(
+                    self._store, project_id=self._project_id, session_id=self._session_id,
+                    session_dir=self._session_dir, limits=self._limits,
+                )
+                audit._audit("execucao_adiada", kind=kind, motivo=reason)  # noqa: SLF001
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Auditoria do adiamento indisponível", extra={"extra": {"erro": type(exc).__name__}})
         return report

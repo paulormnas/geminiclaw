@@ -806,7 +806,7 @@ class SemanticIndex:
         ]
 
     def similarity_to(self, text: str, node_ids: list[str]) -> dict[str, float]:
-        """Similaridade cosseno do ``text`` com nós **específicos** (inclusive os que as buscas ignoram, como os rejeitados).
+        """Similaridade cosseno do ``text`` com nós **específicos** (inclusive os que as buscas ignoram).
 
         Nós sem ponto indexado ficam fora do resultado.
         """

@@ -668,7 +668,8 @@ class CuratorToolkit:
         for node in nodes:
             if node.label == "Resultado" and node.properties.get("status_validacao") != "validado":
                 return "evidência exige Resultado validado pelo Validator (status_validacao='validado')."
-            if node.label == "Experimento" and node.properties.get("status") not in ("sucesso", "divergente_documentado"):
+            done = ("sucesso", "divergente_documentado")
+            if node.label == "Experimento" and node.properties.get("status") not in done:
                 return "evidência exige Experimento concluído (sucesso ou divergente_documentado)."
             if not self.service.evidence_in_scope(node, sobre_nodes):
                 return "a evidência não está ligada ao escopo (sobre_ids): use resultados dos experimentos do escopo."
@@ -1180,7 +1181,7 @@ class CuratorToolkit:
             return None, f"o par não é duplicata (score < {config.SIM_DUPLICATE_MIN}): só pares 'duplicata' se fundem."
         older = [e for e in strong if str(e.properties.get("criado_em", "")) < self._started]
         if not older:
-            return None, "a duplicata foi confirmada nesta execução: a fusão só vale em uma execução anterior à confirmação."
+            return None, "duplicata confirmada nesta execução: a fusão só vale em execução anterior à confirmação."
         return max(float(e.properties.get("score") or 0) for e in older), ""
 
     def resolve_flag(

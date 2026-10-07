@@ -136,8 +136,8 @@ class CuratorGraph:
             if chave not in self._sessoes:
                 self._sessoes[chave] = self.store.create_node(
                     "Sessao",
-                    {"projeto_id": projeto, "sessao_id": chave[1], "modo": "auto", "inicio": "2026-10-06T00:00:00+00:00",
-                     "no_execucao": no},
+                    {"projeto_id": projeto, "sessao_id": chave[1], "modo": "auto",
+                     "inicio": "2026-10-06T00:00:00+00:00", "no_execucao": no},
                     actor=ORQ,
                 )
             self.store.create_edge(exp, "EXECUTADO_EM", self._sessoes[chave], {}, actor=ORQ)

@@ -96,7 +96,8 @@ def test_b1_fusao_exige_mesmo_tipo_e_deixa_registro_auditavel(world, tmp_path):
     env, g, tk, ids = world
     a = g.abordagem("m1")
     b = env.store.create_node(
-        "Abordagem", g.base(nome="m1b", tipo="biblioteca", descricao="d", justificativa_criacao="j", nos_consultados=[]),
+        "Abordagem",
+        g.base(nome="m1b", tipo="biblioteca", descricao="d", justificativa_criacao="j", nos_consultados=[]),
         actor=Actor(kind="agente", role="researcher"),
     )
     c = g.abordagem("m1c")
@@ -126,7 +127,8 @@ def test_b1_canonica_precisa_ser_do_proprio_projeto(world):
 
     out = json.loads(_toolkit(env).dispatch("merge_approaches", dict(duplicada_id=d, canonica_id=c, motivo="x")))
 
-    assert out["ok"] is False and "projeto da sessão" in out["erro"] and env.raw.get_node(d).properties.get("status") != "fundida"
+    assert out["ok"] is False and "projeto da sessão" in out["erro"]
+    assert env.raw.get_node(d).properties.get("status") != "fundida"
 
 
 # ----------------------------------------------------------------------------- B2

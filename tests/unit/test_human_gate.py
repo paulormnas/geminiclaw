@@ -103,7 +103,8 @@ async def test_pedido_reservado_do_agente_fica_pendente_e_o_consultor_nao_e_cham
     (pedido,) = h.orch.human_gate.pending()
     assert pedido.decisao == decisao
     # Mesmo que a resposta do consultor chegasse ao gate, ela não autoriza.
-    assert h.orch.human_gate.answer(pedido.id, source=Source.RESEARCHER_CONSULT, approved=True).estado == ESTADO_PENDENTE
+    resposta = h.orch.human_gate.answer(pedido.id, source=Source.RESEARCHER_CONSULT, approved=True)
+    assert resposta.estado == ESTADO_PENDENTE
     assert h.orch.human_gate.authorized(pedido.id) is False
 
 
@@ -138,8 +139,8 @@ def test_confirmar_problema_por_quem_nao_e_o_pesquisador_e_recusado():
 @pytest.mark.asyncio
 async def test_confirmacao_do_problema_passa_pelo_gate_real(monkeypatch):
     """I7 — ensure_confirmed_problem consulta o gate (origem TERMINAL) antes de confirmar; gate negado não confirma."""
-    from src.project_session import ensure_confirmed_problem
     from src.knowledge.problem import ProblemDraft
+    from src.project_session import ensure_confirmed_problem
 
     class _Negado(HumanGate):
         def authorized(self, request_id):  # um gate que não autoriza (ex.: origem não humana)

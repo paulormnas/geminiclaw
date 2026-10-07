@@ -485,7 +485,9 @@ async def test_laco_recalcula_o_veredito_apos_cada_subtarefa_ingerida(tmp_path, 
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("parecer,tipo", [("divergent_but_documented", "caminho_relevante"), ("fail", "falha_relevante")])
+@pytest.mark.parametrize(
+    "parecer,tipo", [("divergent_but_documented", "caminho_relevante"), ("fail", "falha_relevante")]
+)
 async def test_validator_sinaliza_ao_curator_a_partir_do_parecer(tmp_path, parecer, tipo):
     """I8/tarefa 4.1 — o parecer do Validator (divergente/reprovado) vira sinalização para o Curator."""
     from src.autonomous_loop import AutonomousLoop

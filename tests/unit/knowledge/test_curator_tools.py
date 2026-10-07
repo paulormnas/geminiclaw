@@ -558,7 +558,9 @@ def test_set_discovery_status_substituida_cria_substitui(world):
     env.provider.vectors["par9b"] = pair_vectors(DIM, 9, 1.0)[0]
     velha = _create(tk, ids, enunciado="par8b")["id"]
     _, res3 = graph.tentativa(ids["hip"], ids["abordagem"], valor=0.82, no="C")
-    nova = _create(tk, ids, enunciado="par9b", evidencia_ids=[res3], variacao_de=velha, diferenca="nova evidência")["id"]
+    nova = _create(
+        tk, ids, enunciado="par9b", evidencia_ids=[res3], variacao_de=velha, diferenca="nova evidência"
+    )["id"]
     depois = CuratorToolkit(
         env.store, project_id="proj1", session_id="s2", index=env.index, queue=env.queue, model="m", limits=_limits()
     )

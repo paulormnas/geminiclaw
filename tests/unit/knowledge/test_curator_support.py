@@ -206,7 +206,8 @@ def test_pin_invalido_do_curator_em_strict_nao_derruba_a_sessao(tmp_path):
     catalog = cf.load(tmp_path, doc)
     disponiveis = {m: cf.Availability(True) for m in catalog.modelos}
 
-    mapa = resolve_session(catalog, disponiveis, "third_party_allowed", {"curator": Pin("google/inexistente")}, "strict")
+    pin_curator = {"curator": Pin("google/inexistente")}
+    mapa = resolve_session(catalog, disponiveis, "third_party_allowed", pin_curator, "strict")
 
     assert "curator" not in mapa and "researcher" in mapa
     with pytest.raises(PinError):

@@ -37,5 +37,5 @@
 
 ## 5. Fechamento
 - [x] 5.1 `.env.example` (nenhuma variável nova; comentário sobre os campos do catálogo).
-- [ ] 5.2 `uv run ruff check .`; `uv run pytest -m "unit or integration" -v`.
+- [x] 5.2 `uv run ruff check .`; `uv run pytest -m "unit or integration" -v`.
 - [ ] 5.3 Revisão nos 7 eixos; PR para `dev`.

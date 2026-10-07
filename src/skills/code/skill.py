@@ -7,6 +7,7 @@ from typing import List, Optional
 from src import config
 from src.config import get_env
 from src.skills.base import BaseSkill, SkillResult
+from src.reserved_files import is_reserved_name
 from src.skills.code.sandbox import _SAFE_NAME_RE, PythonSandbox, SandboxResult
 from src.skills.code.manifest import WorkspaceManifest
 from src.logger import get_logger
@@ -176,7 +177,7 @@ class CodeSkill(BaseSkill):
 
         # 1.1 session_id e task_name viram pastas do host (e o bind mount do sandbox)
         for label, value in (("session_id", session_id), ("task_name", task_name)):
-            if not isinstance(value, str) or not _SAFE_NAME_RE.fullmatch(value) or ".." in value:
+            if not isinstance(value, str) or not _SAFE_NAME_RE.fullmatch(value) or ".." in value or value == "." or is_reserved_name(value):
                 return SkillResult(
                     success=False,
                     output="",

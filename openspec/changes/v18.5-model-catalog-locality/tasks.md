@@ -1,17 +1,17 @@
 # Tarefas: v18.5-model-catalog-locality
 
 ## 0. Pré-requisitos
-- [ ] 0.1 Confirmar que `v16-model-catalog-router` (catálogo e roteador do ADR 017) está implementada em `dev`; se não estiver, parar e avisar o pesquisador.
+- [x] 0.1 Confirmar que `v16-model-catalog-router` (catálogo e roteador do ADR 017) está implementada em `dev`; se não estiver, parar e avisar o pesquisador.
 - [ ] 0.2 Obter aprovação explícita do pesquisador para a coluna `token_usage.versao_efetiva`.
 
 ## 0.b Alinhamento pendente com `v16-model-catalog-router`
 - [ ] 0.b.1 Alinhar o payload `catalogo`: o `v16-model-catalog-router` implementou `{versao, hash, local: bool}`; o design desta mudança usa `local_hash`. Decidir um formato (ex.: manter `local` e acrescentar `local_hash`) e ajustar design, spec e código antes de implementar.
 
 ## 1. Catálogo
-- [ ] 1.1 Esquema: `localidade`, `aceita_dados_brutos`, `familia_modelo`; padrões e regras de coerência (design §1).
-- [ ] 1.2 `WARNING` de coerência com o endpoint (loopback × não loopback), sem alterar a declaração.
-- [ ] 1.3 `WARNING` para entradas de `catalog.local.yaml` que aceitam dados brutos.
-- [ ] 1.4 Atualizar `src/llm/catalog.yaml` versionado com os três campos em todas as entradas.
+- [x] 1.1 Esquema: `localidade`, `aceita_dados_brutos`, `familia_modelo`; padrões e regras de coerência (design §1).
+- [x] 1.2 `WARNING` de coerência com o endpoint (loopback × não loopback), sem alterar a declaração.
+- [x] 1.3 `WARNING` para entradas de `catalog.local.yaml` que aceitam dados brutos.
+- [x] 1.4 Atualizar `src/llm/catalog.yaml` versionado com os três campos em todas as entradas.
 
 ## 2. Roteador
 - [ ] 2.1 Posições de preferência com grupo (`id` ou lista de `id`s).
@@ -27,13 +27,13 @@
 - [ ] 3.5 `StopReason.VERSAO_MODELO` e `parada_pendente` verificada no `AutonomousLoop` com os limites de uso.
 
 ## 4. Testes
-- [ ] 4.1 Esquema: padrões, `no_no` implica dados brutos, três erros de coerência, família ausente.
-- [ ] 4.2 Avisos de endpoint (loopback e remoto) sem alterar a declaração.
+- [x] 4.1 Esquema: padrões, `no_no` implica dados brutos, três erros de coerência, família ausente.
+- [x] 4.2 Avisos de endpoint (loopback e remoto) sem alterar a declaração.
 - [ ] 4.3 Roteador: empate por família, família em posição inferior não vence, pin desliga desempate.
 - [ ] 4.4 Perfil de alocação no payload e no banner.
 - [ ] 4.5 Versão por provedor com respostas simuladas (Google, compatível com e sem campo, Ollama por digest).
 - [ ] 4.6 Troca de versão em modo flexível (evento) e em `strict` (fechamento com `versao_modelo`); versão desconhecida em `strict`.
-- [ ] 4.7 Teste do catálogo versionado (todas as entradas válidas).
+- [x] 4.7 Teste do catálogo versionado (todas as entradas válidas).
 
 ## 5. Fechamento
 - [ ] 5.1 `.env.example` (nenhuma variável nova; comentário sobre os campos do catálogo).

@@ -137,7 +137,7 @@ async def _fetch_ollama_digest(
         provider = (provider_factory or availability.default_provider_factory)(provider_name, model)
     except Exception as exc:  # noqa: BLE001 — a versão é telemetria
         logger.warning("Provedor Ollama indisponível para ler o digest", extra={"erro": type(exc).__name__})
-        return UNKNOWN_VERSION
+        return None
     fetch = getattr(provider, "fetch_digest", None)
     return await fetch() if fetch is not None else None
 
@@ -146,8 +146,8 @@ async def seed_ollama_versions(routing: "SessionRouting", provider_factory: Prov
     """Início da sessão: lê o digest de cada modelo Ollama do mapa e o guarda como versão inicial (sem evento)."""
     for model_id in sorted({res.id for res in routing.papeis.values() if res.id.startswith("ollama/")}):
         digest = await _fetch_ollama_digest(routing, model_id, provider_factory)
-        if digest is not None:
-            routing.versions.seed(model_id, digest)
+        # Só o seed inicial grava ``desconhecida`` quando a leitura falha.
+        routing.versions.seed(model_id, digest if digest is not None else UNKNOWN_VERSION)
 
 
 async def refresh_ollama_versions(
@@ -162,7 +162,8 @@ async def refresh_ollama_versions(
     events: list[dict[str, Any]] = []
     for model_id in sorted({res.id for res in routing.papeis.values() if res.id.startswith("ollama/")}):
         digest = await _fetch_ollama_digest(routing, model_id, provider_factory)
-        if digest is None:
+        if digest is None:  # leitura falhou: mantém a versão conhecida (falha transitória não é troca)
+            logger.warning("Digest do Ollama não lido; mantendo a versão anterior", extra={"provedor_modelo": model_id})
             continue
         roles = tuple(role for role, res in routing.papeis.items() if res.id == model_id)
         event = routing.versions.observe(model_id, digest, roles)

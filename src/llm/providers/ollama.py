@@ -190,11 +190,12 @@ class OllamaProvider(LLMProvider):
         except Exception:
             return False
 
-    async def fetch_digest(self) -> str:
+    async def fetch_digest(self) -> str | None:
         """Lê o ``digest`` do modelo em ``GET /api/tags`` e o guarda como o último conhecido.
 
-        Devolve ``desconhecida`` (sem inventar valor) se o servidor não responde, o modelo não está instalado ou o
-        campo vem vazio ou não textual.
+        Devolve ``desconhecida`` (sem inventar valor) se o modelo não está instalado ou o campo vem vazio ou não
+        textual. Se o servidor não responde (falha transitória), devolve ``None`` e **mantém** o digest já conhecido:
+        falha de leitura não é troca de versão.
         """
         try:
             r = await self._client.get("/api/tags", timeout=_health_timeout())
@@ -205,7 +206,7 @@ class OllamaProvider(LLMProvider):
                 "Não foi possível ler o digest do modelo Ollama",
                 extra={"model": self._model, "erro": type(exc).__name__},
             )
-            digest = UNKNOWN_VERSION
+            return None
         else:
             wanted = {self._model, self._model if ":" in self._model else f"{self._model}:latest"}
             digest = UNKNOWN_VERSION

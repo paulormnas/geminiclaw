@@ -413,3 +413,45 @@ def test_perfil_e_alocacao_atual_sem_segredos(tmp_path):
     assert allocation.aceita_dados_brutos is False
     assert allocation.familia_modelo == "anthropic"
     assert allocation.versao_efetiva == UNKNOWN_VERSION
+
+
+# --- M1: falha transitória em /api/tags não é troca de versão ---------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fetch_digest_em_falha_devolve_none_e_preserva_o_digest_conhecido():
+    ollama_module.clear_known_digests()
+    provider = OllamaProvider(OLLAMA_URL, "qwen3:8b")
+    tags = {"models": [{"name": "qwen3:8b", "digest": "sha256:abc123"}]}
+
+    async with respx.mock:
+        respx.get(f"{OLLAMA_URL}/api/tags").mock(return_value=httpx.Response(200, json=tags))
+        assert await provider.fetch_digest() == "sha256:abc123"
+        respx.get(f"{OLLAMA_URL}/api/tags").mock(return_value=httpx.Response(503))
+        assert await provider.fetch_digest() is None
+
+    assert ollama_module._known_digests[(provider._base_url, "qwen3:8b")] == "sha256:abc123"
+
+
+@pytest.mark.asyncio
+async def test_refresh_com_falha_nao_gera_evento_nem_parada_em_strict(tmp_path):
+    routing = _ollama_routing(tmp_path)
+    routing.versions.strict = True
+    factory = _TagsFactory(["sha256:a", None, "sha256:a"])
+
+    await seed_ollama_versions(routing, factory)
+    assert await refresh_ollama_versions(routing, factory) == []  # falha transitória
+    assert await refresh_ollama_versions(routing, factory) == []
+
+    assert routing.versions.current(QWEN) == "sha256:a"
+    assert routing.versions.parada_pendente is None
+    assert routing.versions.eventos == []
+
+
+@pytest.mark.asyncio
+async def test_seed_com_falha_grava_desconhecida(tmp_path):
+    routing = _ollama_routing(tmp_path)
+
+    await seed_ollama_versions(routing, _TagsFactory([None]))
+
+    assert routing.versions.current(QWEN) == UNKNOWN_VERSION

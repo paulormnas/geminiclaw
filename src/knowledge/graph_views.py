@@ -111,7 +111,7 @@ def sanitize_text(value: Any, limit: int | None = None) -> str:
 
 
 def sanitize_value(value: Any, limit: int | None = None, _depth: int = 0) -> Any:
-    """Versão recursiva de :func:`sanitize_text` para propriedades (textos limpos; coleções e profundidade limitadas)."""
+    """Versão recursiva de :func:`sanitize_text` para propriedades (coleções e profundidade limitadas)."""
     if isinstance(value, str):
         return sanitize_text(value, limit)
     if isinstance(value, bool) or value is None or isinstance(value, (int, float)):
@@ -316,7 +316,8 @@ def _truncation_notice(view: GraphView) -> str:
     return (
         f"AVISO: saída truncada: exibindo os nós {first}-{last} de {view.total_nodes} "
         f"(limite {config.GRAPH_SHOW_MAX_NODES}). Refine com --label, --status ou --dominio, ou use "
-        f"--offset {view.offset + len(view.nodes)} para a próxima página. Filtros atuais: {sanitize_text(filters, 120)}."
+        f"--offset {view.offset + len(view.nodes)} para a próxima página. "
+        f"Filtros atuais: {sanitize_text(filters, 120)}."
     )
 
 
@@ -328,7 +329,10 @@ def render_text(view: GraphView) -> str:
     out_edges: dict[str, list[Edge]] = {}
     for edge in view.edges:
         out_edges.setdefault(edge.src_id, []).append(edge)
-    lines = [f"Projeto {sanitize_text(view.projeto_id, 64)}: {view.total_nodes} nó(s), {len(view.edges)} relação(ões) exibida(s)."]
+    lines = [
+        f"Projeto {sanitize_text(view.projeto_id, 64)}: {view.total_nodes} nó(s) no filtro, "
+        f"{len(view.edges)} relação(ões) exibida(s)."
+    ]
     for label in sorted({n.label for n in view.nodes}):
         group = [n for n in view.nodes if n.label == label]
         lines.append("")
@@ -339,7 +343,8 @@ def render_text(view: GraphView) -> str:
             for i, edge in enumerate(rels):
                 branch = "└─" if i == len(rels) - 1 else "├─"
                 dst = index[edge.dst_id]
-                mark = "" if edge.properties.get("status") in (None, "confirmada") else f" ({sanitize_text(edge.properties.get('status'), 20)})"
+                st = edge.properties.get("status")
+                mark = "" if st in (None, "confirmada") else f" ({sanitize_text(st, 20)})"
                 lines.append(
                     f"    {branch} {sanitize_text(edge.rel_type, 40)}{mark} -> {sanitize_text(dst.label, 40)} "
                     f"{sanitize_text(dst.id, 64)} {node_text(dst, 60)}".rstrip()

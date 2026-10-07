@@ -299,7 +299,7 @@ class _Planner:
             return None
         own = node.properties.get("projeto_id") == self.project_id
         if write and not own:
-            item.errors.append(f"'{name}': só nós do projeto ativo podem ser alterados (nó de outro projeto ou compartilhado).")
+            item.errors.append(f"'{name}': só nós do projeto ativo são alterados (outro projeto ou compartilhado).")
             return None
         if not own and node.properties.get("visibilidade") != "compartilhavel":
             item.errors.append(f"'{name}': nó '{_quote(ref, 64)}' não pertence ao projeto.")
@@ -338,7 +338,7 @@ class _Planner:
         if system:
             item.errors.append(f"campos de proveniência/escopo não são editáveis: {', '.join(system)}.")
         if node.label == "Descoberta" and changes.get("tipo") in VERDICT_DISCOVERY_TYPES:
-            item.errors.append("descobertas 'funciona'/'nao_funciona' dependem de veredito calculado; não são editáveis.")
+            item.errors.append("descobertas 'funciona'/'nao_funciona' dependem de veredito calculado: não editáveis.")
         if item.errors:
             return
         validation.validate_node_update(node.label, changes)
@@ -354,12 +354,15 @@ class _Planner:
                 if op.motivo and "motivo_decisao" not in effective:
                     effective["motivo_decisao"] = op.motivo
         else:
-            # Decisões reservadas a humano (vocabulário, nós rejeitados de vocabulário): a mesma regra aplicada a agentes.
+            # Decisões reservadas a humano: aplica-se a mesma regra que barra os agentes.
             try:
-                validation.validate_human_only(node.label, current=node.properties, changes=changes, actor_kind="agente")
+                validation.validate_human_only(
+                    node.label, current=node.properties, changes=changes, actor_kind="agente"
+                )
             except GraphStoreError as exc:
                 hint = " Use `geminiclaw vocab`." if node.label in ("Dominio", "Metrica") else ""
-                item.errors.append(f"decisão reservada ao pesquisador por comando próprio: {sanitize_text(str(exc), 200)}{hint}")
+                reason = sanitize_text(str(exc), 200)
+                item.errors.append(f"decisão reservada ao pesquisador por comando próprio: {reason}{hint}")
                 return
         item.before = {k: node.properties.get(k) for k in effective}
         item.effective = effective
@@ -387,7 +390,7 @@ class _Planner:
         if bad:
             item.errors.append(f"campos definidos pelo sistema não podem ser informados: {', '.join(bad)}.")
         if label == "Descoberta" and props.get("tipo") in VERDICT_DISCOVERY_TYPES:
-            item.errors.append("descobertas 'funciona'/'nao_funciona' dependem de veredito calculado; não são criáveis.")
+            item.errors.append("descobertas 'funciona'/'nao_funciona' dependem de veredito calculado: não criáveis.")
         if item.errors:
             return
         # Oportunidade nasce documentada; decidir sobre ela é um passo posterior, com autorização do gate.
@@ -611,7 +614,9 @@ def apply_plan(
             elif kind == "create_edge":
                 src, dst = resolve(data["src"]), resolve(data["dst"])
                 store.create_edge(src, data["rel"], dst, dict(data["props"]), actor=PESQUISADOR)
-                undo.append(lambda s=src, r=data["rel"], d=dst: store.set_edge_status(s, r, d, "contestada", actor=PESQUISADOR))
+                undo.append(
+                    lambda s=src, r=data["rel"], d=dst: store.set_edge_status(s, r, d, "contestada", actor=PESQUISADOR)
+                )
                 store.record_audit_note(src, PESQUISADOR, _note(request, item, aresta=f"{data['rel']}->{dst}"))
             elif kind == "update_node":
                 old = dict(item.before)

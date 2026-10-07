@@ -35,6 +35,8 @@ from src.knowledge.curator_tools import CuratorLimits, CuratorToolkit, wrap_data
 from src.knowledge.graph_store import GraphStore, Node
 from src.knowledge.semantic_index import SemanticIndex
 from src.knowledge.similarity_queue import SimilarityQueue
+from src.knowledge.suggestions import Suggestion
+from src.knowledge.suggestions import suggest_paths as suggest_paths_for_session
 from src.llm.base import LLMProvider
 from src.llm.metering import record_llm_call
 from src.logger import get_logger
@@ -149,6 +151,41 @@ class Curator:
     async def close_session(self, motivo_parada: str | None = None) -> CuratorReport:
         """Fim da sessão: consolida, revisa a fila de similaridade (no lote) e registra caminhos sem conclusão."""
         return await self._run(KIND_CLOSE, include_queue=True, motivo_parada=motivo_parada)
+
+    async def suggest_paths(self, max_suggestions: int | None = None) -> list[Suggestion]:
+        """Sugere novos caminhos ao Researcher (v18-hypothesis-loop, design §6). Determinístico, sem LLM; nunca levanta.
+
+        Só as fontes permitidas (``src.knowledge.suggestions``): oportunidades **aprovadas** (nunca ``documentada``),
+        caminhos sem conclusão, lições de caminho sobre hipóteses refutadas e abordagens que funcionaram em problemas
+        similares. As sugestões novas vão para ``curator_suggestions.jsonl`` da sessão.
+
+        Args:
+            max_suggestions: Máximo por ciclo (padrão: ``CURATOR_MAX_SUGGESTIONS``).
+
+        Returns:
+            As sugestões novas (lista vazia se o Curator está desligado ou houve falha).
+        """
+        if not config.CURATOR_ENABLED or self._session_dir is None:
+            return []
+        try:
+            fresh = await asyncio.to_thread(
+                suggest_paths_for_session, self._store, self._project_id, self._session_dir,
+                index=self._index, max_suggestions=max_suggestions,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - a falha do Curator nunca derruba a sessão (ADR 014 §4)
+            logger.warning("Sugestões do Curator falharam", extra={"extra": {"erro": type(exc).__name__}})
+            return []
+        if self._telemetry is not None:
+            try:
+                counts: dict[str, int] = {}
+                for item in fresh:
+                    counts[item.tipo] = counts.get(item.tipo, 0) + 1
+                self._telemetry("curator_suggestions", {"novas": len(fresh), "por_tipo": counts})
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Telemetria das sugestões indisponível", extra={"extra": {"erro": type(exc).__name__}})
+        return fresh
 
     # ------------------------------------------------------------------ execução
 

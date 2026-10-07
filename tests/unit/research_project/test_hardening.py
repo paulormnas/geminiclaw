@@ -102,6 +102,26 @@ class TestHumanOnlyNoGraphStore:
                     offenders.append(str(path.relative_to(REPO)))
         assert not offenders, f"Código de agente/skill não pode construir Actor pesquisador: {offenders}"
 
+    def test_guarda_estatica_ninguem_em_agents_ou_skills_aplica_alteracao_do_pesquisador(self) -> None:
+        """v17-graph-cli: ``apply_plan`` e a confirmação humana só existem na CLI; agentes só importam a proposta."""
+        pattern = re.compile(r"\b(apply_plan|issue_confirmation|HumanConfirmation)\b")
+        offenders = [
+            str(path.relative_to(REPO))
+            for base in ("agents", "src/skills")
+            for path in (REPO / base).rglob("*.py")
+            if pattern.search(path.read_text(encoding="utf-8"))
+        ]
+        assert not offenders, f"Agente/skill não pode aplicar alteração do pesquisador: {offenders}"
+        importers = [
+            str(path.relative_to(REPO))
+            for base in ("agents", "src")
+            for path in (REPO / base).rglob("*.py")
+            if "change_proposals" in path.read_text(encoding="utf-8")
+            and str(path.relative_to(REPO))
+            not in {"src/knowledge/change_proposals.py", "src/cli_graph.py", "agents/curator/edit.py"}
+        ]
+        assert not importers, f"Importadores não previstos de change_proposals: {importers}"
+
 
 # --------------------------------------------------------------- grafo fora do ar
 

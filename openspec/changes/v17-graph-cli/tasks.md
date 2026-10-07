@@ -20,3 +20,20 @@
 
 ## 4. Fechamento
 - [x] 4.1 Ruff, testes, revisão nos 7 eixos, PR.
+
+## 5. Revisão de segurança do PR #107 (2026-10-07)
+- [x] 5.1 Mostrar por inteiro o que é gravado; propriedades de relação restritas; invariante gravado == exibido.
+- [x] 5.2 Regras de rótulo/fato/derivada em `create_edge` e `set_edge_status`.
+- [x] 5.3 `HumanConfirmation` exigida por `apply_plan`; guarda estática ampliada.
+- [x] 5.4 Requisitos e cenários de segurança na spec; seção "Segurança" no design.
+- [x] 5.5 Confirmação só com a palavra exata `aplicar`.
+- [x] 5.6 Mermaid escapa `#`; sugestões (contagem oculta, JSON, auditoria de ajustes, rótulo da explicação,
+  reconferência de `create_edge`, auto-laço, nan/inf, prompt do gate, `decidido_em`).
+- [x] 5.7 Falha de reversão reportada e auditada.
+
+## 6. Adiado (tarefas futuras)
+- [ ] 6.1 Validar com Apache AGE real: `audit_history`, `record_audit_note` e a reversão (inclui a semântica de `None`).
+- [ ] 6.2 Usar o papel `knowledge_reader` (ou transação `READ ONLY`) na visualização, em vez da fachada apenas.
+- [ ] 6.3 Carregar o subgrafo em streaming (hoje o projeto inteiro vai para a memória antes do corte); limite de 10.000
+  domínios em `--dominio`.
+- [ ] 6.4 Compare-and-set no store para eliminar a janela entre conferência e escrita.

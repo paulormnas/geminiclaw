@@ -779,7 +779,7 @@ def apply_plan(
 
 
 def render_plan(plan: Plan, explanation: str) -> str:
-    """Texto da proposta (tudo sanitizado): operações **íntegras**, avisos, erros e, por último, a explicação do modelo."""
+    """Texto da proposta (sanitizado): operações **íntegras**, avisos, erros e, por último, a explicação do modelo."""
     lines = ["PROPOSTA DO CURATOR (nada foi alterado ainda)", ""]
     if not plan.items:
         lines.append("O Curator não propôs nenhuma alteração.")

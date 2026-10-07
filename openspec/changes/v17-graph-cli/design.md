@@ -70,3 +70,32 @@ Curator, exibidas como aviso (o pesquisador pode prosseguir mesmo assim).
 | Persistência | Escritas autorizadas pelo pesquisador, auditadas. |
 | Segurança | Visualização sem LLM; edição só com confirmação humana; operações tipadas; sem acesso direto ao banco. |
 | Testes & Telemetria | Testes de formatos, validação a seco e fluxo de confirmação. |
+
+## Segurança
+
+Modelo de ameaças do `graph edit` (nota de 2026-10-07, após a revisão de segurança do PR #107):
+
+- **Entradas não confiáveis:** pedido e ajustes do pesquisador (podem conter texto colado), conteúdo do grafo e saída
+  do LLM. Pedido e ajuste entram no prompt como dado delimitado; a explicação do modelo é exibida **depois** das
+  operações e rotulada "não verificada".
+- **Mostrado == aplicado (2026-10-07):** todo valor a gravar é exibido por inteiro, em JSON canônico; a mesma
+  sanitização vale para a tela e para o que é gravado; proposta que não cabe em `GRAPH_EDIT_MAX_DISPLAY_CHARS` é
+  recusada, nunca truncada. A impressão digital (SHA-256 da serialização canônica de operações, alvos, valores efetivos,
+  estado anterior e decisão) é mostrada e conferida em `apply_plan`.
+- **Prova de confirmação:** `apply_plan` exige `HumanConfirmation` (palavra exata `aplicar`, TTY, impressão digital da
+  proposta); só `src/cli_graph.py` a emite e usa `apply_plan`. Guarda estática em `tests/unit/research_project/
+  test_hardening.py` e `test_graph_cli_review_fixes.py` proíbe o uso em `agents/` e `src/skills/`.
+- **Propriedades de relação:** `origem`, `status`, `evidencias`, `criado_*` e as derivadas (`score`, `modelo`, `versao`,
+  `config`, `hash_params`, `peso`) nunca vêm do pedido; a relação nasce `afirmado`/`confirmada`/sem evidências.
+- **Rótulos e relações:** `Problema`, `Projeto`, `Dominio`, `Metrica` e fatos estruturais não são alterados nem origem
+  de relação; relações derivadas (`SUSTENTA`, `REFUTA`, `FUNCIONOU_PARA`, `FALHOU_PARA`, `SEMELHANTE_A`) não são
+  criadas à mão, mas **podem ser contestadas** (`set_edge_status` para `contestada`; ADR 015 §7: contestar não apaga).
+- **Aplicação:** estado reconferido (inclusive `create_edge`) imediatamente antes de escrever; reversão do que for
+  reversível, com falhas de reversão reportadas e auditadas; nós criados permanecem. A janela entre a conferência e a
+  escrita não é atômica contra escritores concorrentes (sem compare-and-set no store): limitação registrada.
+- **Risco residual (2026-10-07):** um TTY real não distingue um humano de um processo que abre um pty (`script`,
+  `expect`, `pexpect`) e digita `aplicar`. Está **fora do modelo de ameaça local** (o processo com pty já controla a conta
+  do pesquisador e poderia usar a CLI diretamente). A mitigação é a conferência do estado, a auditoria com o pedido e os
+  ajustes, e a exibição integral antes da confirmação.
+- **Reversão e `None`:** restaurar um campo antes ausente grava `None`; neste projeto `None` equivale a "sem valor".
+  Confirmar essa semântica no AGE real é tarefa pendente (ver `tasks.md`).

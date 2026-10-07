@@ -452,7 +452,7 @@ async def test_laco_recalcula_o_veredito_apos_cada_subtarefa_ingerida(tmp_path, 
 
     store = InMemoryGraphStore()
     pid = "11111111-1111-4111-8111-111111111111"
-    graph = CuratorGraph(store, pid).setup_project()
+    CuratorGraph(store, pid).setup_project()
     sm = MagicMock()
     sessao = Session(id="s1", agent_id="orchestrator", status="active", created_at="2025-01-01T00:00:00+00:00",
                      updated_at="2025-01-01T00:00:00+00:00", payload={})

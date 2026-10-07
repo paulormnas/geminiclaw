@@ -321,3 +321,5 @@ Registro das correções e dos riscos aceitos decorrentes da revisão do Analist
   `setup.py`/backends de build com rede ligada) e `--no-config` (o `uv` ignora `uv.toml`/`pyproject.toml`
   do diretório corrente), e o interpretador `/opt/sandbox-venv` do ADR 018. Na lista de riscos, a opção
   `SANDBOX_INSTALL_ONLY_BINARY` deixa de existir: `--only-binary` é sempre aplicado.
+- **B2 (baixa) — não regulares:** `list_input_files` e `check_mount_source` recusam FIFOs, sockets e
+  dispositivos (`stat.S_ISREG`; `check_mount_source` aceita também diretórios, que é o que `/prior` monta).

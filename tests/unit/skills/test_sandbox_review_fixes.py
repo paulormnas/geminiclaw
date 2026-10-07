@@ -505,3 +505,34 @@ def test_b1_install_sem_cache_e_com_copia(make_sandbox, tmp_path):
     cmd = next(c for c, _kw in daemon.exec_calls if c[0] == "uv")
     assert "--no-cache" in cmd and "--link-mode=copy" in cmd
     assert "--only-binary" in cmd and "--no-config" in cmd
+
+
+# --- B2: origens de montagem não regulares são recusadas -----------------------------------------------------
+
+@pytest.mark.unit
+def test_b2_fifo_em_insumos_e_recusada(make_sandbox, tmp_path):
+    import os
+
+    snap = tmp_path / "out" / "s" / "input_snapshot"
+    snap.mkdir(parents=True)
+    os.mkfifo(snap / "fila")
+    daemon = FakeDaemon()
+    result = _run(make_sandbox(daemon), tmp_path)
+
+    daemon.client.containers.run.assert_not_called()
+    assert result.infra_error == "sandbox_mount_refused" and "não é regular" in result.stderr
+
+
+@pytest.mark.unit
+def test_b2_check_mount_source_recusa_nao_regulares_e_aceita_dir_e_arquivo(tmp_path):
+    import os
+
+    from src.skills.code.inputs import MountSourceError, check_mount_source
+
+    os.mkfifo(tmp_path / "fila")
+    (tmp_path / "arq").write_text("x")
+    (tmp_path / "dir").mkdir()
+    with pytest.raises(MountSourceError, match="nem arquivo regular"):
+        check_mount_source(tmp_path / "fila", tmp_path)
+    assert check_mount_source(tmp_path / "arq", tmp_path) == (tmp_path / "arq").resolve()
+    assert check_mount_source(tmp_path / "dir", tmp_path) == (tmp_path / "dir").resolve()

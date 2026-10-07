@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+import stat
 from typing import List, Protocol
 
 
@@ -45,7 +46,8 @@ def list_input_files(snapshot_dir: pathlib.Path, session_dir: pathlib.Path) -> L
     """Lista os arquivos de ``snapshot_dir`` recusando symlinks e origens fora de ``session_dir``.
 
     Raises:
-        MountSourceError: ``snapshot_dir`` é symlink ou resolve para fora da sessão, ou contém um symlink.
+        MountSourceError: ``snapshot_dir`` é symlink ou resolve para fora da sessão, ou contém um symlink
+            ou um arquivo que não é regular (FIFO, socket, dispositivo).
     """
     if snapshot_dir.is_symlink() or not snapshot_dir.resolve().is_relative_to(session_dir.resolve()):
         raise MountSourceError("a pasta de insumos da sessão está fora do lugar esperado (ou é um link simbólico)")
@@ -56,12 +58,16 @@ def list_input_files(snapshot_dir: pathlib.Path, session_dir: pathlib.Path) -> L
             if path.is_symlink():
                 rel = path.relative_to(snapshot_dir)
                 raise MountSourceError(f"link simbólico em insumos recusado: {rel}")
-        files.extend(pathlib.Path(dirpath) / n for n in filenames)
+        for name in filenames:
+            path = pathlib.Path(dirpath) / name
+            if not stat.S_ISREG(os.lstat(path).st_mode):
+                raise MountSourceError(f"arquivo que não é regular em insumos recusado: {path.relative_to(snapshot_dir)}")
+            files.append(path)
     return sorted(files)
 
 
 def check_mount_source(path: pathlib.Path, allowed_root: pathlib.Path) -> pathlib.Path:
-    """Resolve ``path`` e confirma que descende de ``allowed_root`` e não é symlink.
+    """Resolve ``path`` e confirma que descende de ``allowed_root``, não é symlink e é diretório ou arquivo regular.
 
     Returns:
         Caminho resolvido.
@@ -71,6 +77,12 @@ def check_mount_source(path: pathlib.Path, allowed_root: pathlib.Path) -> pathli
     """
     if path.is_symlink():
         raise MountSourceError(f"origem de montagem é link simbólico: {path.name}")
+    try:
+        mode = os.lstat(path).st_mode
+    except OSError as exc:
+        raise MountSourceError(f"origem de montagem inacessível: {path.name}") from exc
+    if not (stat.S_ISREG(mode) or stat.S_ISDIR(mode)):
+        raise MountSourceError(f"origem de montagem não é diretório nem arquivo regular: {path.name}")
     resolved = path.resolve()
     if not resolved.is_relative_to(allowed_root.resolve()):
         raise MountSourceError(f"origem de montagem fora de {allowed_root.name}: {path.name}")

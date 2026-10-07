@@ -13,6 +13,7 @@ import re
 import struct
 from pathlib import Path
 
+from src.knowledge.normalization import clean_free_text
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -23,11 +24,13 @@ _MAX_NAME_CHARS = 80
 _TYPE_SAMPLE_ROWS = 1000
 _INT_RE = re.compile(r"^[+-]?\d+$")
 _FLOAT_RE = re.compile(r"^[+-]?(\d+[.,]?\d*|[.,]\d+)([eE][+-]?\d+)?$")
+_MARKUP_CHARS = str.maketrans("", "", "`<>")
 _BOOL = frozenset({"true", "false", "sim", "não", "nao", "yes", "no"})
 
 
 def _name(value: object) -> str:
-    return " ".join(str(value).split())[:_MAX_NAME_CHARS]
+    """Nome de coluna, chave ou arquivo: uma linha, sem controles nem marcação, com tamanho máximo."""
+    return clean_free_text(str(value)).translate(_MARKUP_CHARS)[:_MAX_NAME_CHARS]
 
 
 def _is_number(cell: str) -> bool:

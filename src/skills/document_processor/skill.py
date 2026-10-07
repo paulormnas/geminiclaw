@@ -12,6 +12,17 @@ from src.skills.document_processor.pipeline import ORIGEM_ARTEFATO, SEM_PROJETO,
 
 logger = get_logger(__name__)
 
+_CONTENT_LIMIT = 4000
+_TITLE_LIMIT = 200
+
+
+def _untrusted(origem: str, text: object, limit: int) -> str:
+    """Texto livre de insumo, em uma linha e entre delimitadores: dado não confiável, nunca instrução."""
+    from src.knowledge.curator_tools import wrap_data
+    from src.knowledge.normalization import clean_free_text
+
+    return wrap_data(origem, clean_free_text(str(text if text is not None else "")), limit)
+
 
 def _resolve_ingest_path(file_path: str) -> str:
     """Resolve o caminho de ingestão, confinando-o ao diretório da sessão do agente.
@@ -164,7 +175,15 @@ class DocumentProcessorSkill(BaseSkill):
                 results = self.indexer.search(
                     query=query, limit=top_k, document_id=document_id, projeto_id=projeto_id
                 )
-                return {"results": results}
+                safe = [
+                    {
+                        **r,
+                        "content": _untrusted("trecho_de_documento", r.get("content"), _CONTENT_LIMIT),
+                        "titulo": _untrusted("titulo_de_documento", r.get("titulo"), _TITLE_LIMIT),
+                    }
+                    for r in results
+                ]
+                return {"results": safe}
             except Exception as e:
                 return {"error": str(e)}
 
@@ -177,7 +196,7 @@ class DocumentProcessorSkill(BaseSkill):
                 for d in docs:
                     summary.append({
                         "id": d["id"],
-                        "title": d["title"],
+                        "title": _untrusted("titulo_de_documento", d["title"], _TITLE_LIMIT),
                         "format": d["format"],
                         "chunks": d["num_chunks"],
                         "projeto_id": (d.get("metadata_json") or {}).get("projeto_id"),

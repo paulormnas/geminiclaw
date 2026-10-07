@@ -70,6 +70,7 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
   geminiclaw graph node <id> [--format text|json]
   geminiclaw graph edit "<pedido>" [--project <id>]   (o Curator propõe; você confirma no terminal)
   geminiclaw vocab pending|approve <id>|reject <id> [--motivo <texto>]|map <id> --para <id>
+  geminiclaw opportunities list [--project <id>] [--status <s>]|approve <id> [--motivo <t>]|reject <id> --motivo <t>
   geminiclaw knowledge stats|reindex [--yes]|sync [--session <id>]
   geminiclaw --metrics <execution_id>
 
@@ -1305,6 +1306,12 @@ def main() -> None:
 
     if len(sys.argv) >= 2 and sys.argv[1] == "vocab":
         sys.exit(_handle_vocab_command(sys.argv[2:]))
+
+    # V18 (v18-hypothesis-loop) — decisão do pesquisador sobre oportunidades documentadas.
+    if len(sys.argv) >= 2 and sys.argv[1] == "opportunities":
+        from src.cli_opportunities import handle_opportunities_command
+
+        sys.exit(handle_opportunities_command(sys.argv[2:]))
 
     # Roadmap V17 — 'geminiclaw knowledge stats|reindex' (índice semântico do grafo).
     if len(sys.argv) >= 2 and sys.argv[1] == "knowledge":

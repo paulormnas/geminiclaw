@@ -167,6 +167,7 @@ async def test_retomada_apos_limite_nao_reexecuta_concluidas(world):
     cp, _ = read_checkpoint(world.base / "sessao-b")
     assert cp.continues_session_id == "sessao-a" and cp.estado == "fechado"
     assert {s.task_name for s in cp.subtarefas if s.status == "concluida"} == set(NAMES)
+    assert (cp.find("treino").tentativas, cp.find("treino").resultado_resumo) == (1, "feito")  # 4.1 no laço
 
 
 @pytest.mark.asyncio

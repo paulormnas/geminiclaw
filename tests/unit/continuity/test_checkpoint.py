@@ -20,7 +20,6 @@ from src.continuity import (
     plan_entry,
     read_checkpoint,
     resolve_session_dir,
-    write_checkpoint,
 )
 from src.orchestrator import AgentTask
 

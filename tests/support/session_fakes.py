@@ -66,5 +66,8 @@ class FakeSessionManager:
         return sorted(found, key=lambda s: s.created_at)[-1] if found else None
 
     def list_by_project(self, project_id: str, limit: int = 20) -> list[Session]:
-        found = [s for s in self.rows.values() if s.agent_id == "orchestrator" and s.payload.get("project_id") == project_id]
+        found = [
+            s for s in self.rows.values()
+            if s.agent_id == "orchestrator" and s.payload.get("project_id") == project_id
+        ]
         return sorted(found, key=lambda s: s.created_at, reverse=True)[:limit]

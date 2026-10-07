@@ -749,7 +749,7 @@ class AutonomousLoop:
                 tasks = tasks[:self.max_subtasks]
 
             if resume is not None:
-                # Dependências já concluídas na sessão anterior têm o resultado pré-carregado: não exigem nó no plano.
+                # Dependências concluídas na sessão anterior têm o resultado pré-carregado: não exigem nó no plano.
                 names = {t.task_name for t in tasks if t.task_name}
                 for t in tasks:
                     t.depends_on = [d for d in t.depends_on if d in names or d not in resume.completed]
@@ -1049,7 +1049,9 @@ class AutonomousLoop:
                         cp_status = ST_FALHOU
                     cp_text = ""
                     if last_result is not None:
-                        cp_text = str(last_result.response.get("text") or "") if success else str(last_result.error or "")
+                        cp_text = (
+                            str(last_result.response.get("text") or "") if success else str(last_result.error or "")
+                        )
                     recorder.subtask_finished(
                         task.task_name,
                         status=cp_status,

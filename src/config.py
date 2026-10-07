@@ -218,7 +218,7 @@ CHECKPOINT_MAX_BYTES = int(get_env("CHECKPOINT_MAX_BYTES", default=str(2 * 1024 
 CHECKPOINT_MAX_SUBTASKS = int(get_env("CHECKPOINT_MAX_SUBTASKS", default="200"))
 # Profundidade máxima da cadeia de sessões continuadas lida na retomada (anti-ciclo e anti-custo).
 RESUME_MAX_CHAIN_DEPTH = int(get_env("RESUME_MAX_CHAIN_DEPTH", default="20"))
-# Bloco de contexto de retomada entregue ao Researcher (caracteres) e leitura de artefatos de sessões anteriores (bytes).
+# Bloco de contexto de retomada do Researcher (caracteres) e leitura de artefatos de sessões anteriores (bytes).
 RESUME_CONTEXT_MAX_CHARS = int(get_env("RESUME_CONTEXT_MAX_CHARS", default="12000"))
 RESUME_ARTIFACT_MAX_READ_BYTES = int(get_env("RESUME_ARTIFACT_MAX_READ_BYTES", default=str(256 * 1024)))
 

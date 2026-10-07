@@ -45,7 +45,6 @@ from src.continuity import (
     POWER_LOSS_CATEGORY,
     CheckpointRecorder,
     ResumeState,
-    validate_session_id,
 )
 
 if TYPE_CHECKING:
@@ -466,14 +465,14 @@ class Orchestrator:
                 pass
             try:
                 if not await asyncio.to_thread(self.session_manager.heartbeat, session_id):
-                    logger.warning("Batimento recusado: a sessão não está mais ativa", extra={"session_id": session_id})
+                    logger.warning("Batimento recusado: sessão não está mais ativa", extra={"session_id": session_id})
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001 - falha de batimento nunca derruba a pesquisa
                 logger.warning("Batimento da sessão falhou", extra={"error": type(exc).__name__})
 
     def refresh_graph_checkpoint(self, session_id: str) -> None:
-        """Atualiza no checkpoint hipóteses, decisões, descobertas e sinalizações pendentes (síncrono, falha isolada)."""
+        """Atualiza no checkpoint o estado do grafo e as sinalizações pendentes (síncrono, falha isolada)."""
         recorder = self._recorders.get(session_id)
         if recorder is None:
             return
@@ -511,7 +510,8 @@ class Orchestrator:
             session = self.session_manager.get(session_id)
             reason = (session.payload if session is not None else {}).get("motivo_parada")
             if reason not in MOTIVOS_PARADA:
-                reason = "interrompida" if suspended else ("solucao_encontrada" if final_status == "success" else "erro")
+                fallback = "solucao_encontrada" if final_status == "success" else "erro"
+                reason = "interrompida" if suspended else fallback
             tracker = self._usage_trackers.get(session_id)
             if tracker is not None:
                 usage = tracker.check()

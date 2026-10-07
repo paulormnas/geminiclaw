@@ -101,7 +101,9 @@ def build_chain(
         except CheckpointError as exc:
             if current == source_id:
                 raise ResumeError(str(exc)) from exc
-            logger.warning("Ancestral sem diretório de outputs; cadeia truncada", extra={"extra": {"session_id": current}})
+            logger.warning(
+                "Ancestral sem diretório de outputs; cadeia truncada", extra={"extra": {"session_id": current}}
+            )
             break
         nxt = session.payload.get("continues_session_id")
         try:

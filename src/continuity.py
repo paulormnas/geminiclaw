@@ -345,7 +345,8 @@ class Checkpoint:
             raise CheckpointError("versao_checkpoint ausente ou inválida.")
         if version > CHECKPOINT_VERSION:
             raise CheckpointVersionError(
-                f"checkpoint na versão {version}, mais nova que a suportada ({CHECKPOINT_VERSION}); atualize o framework."
+                f"checkpoint na versão {version}, mais nova que a suportada ({CHECKPOINT_VERSION}); "
+                "atualize o framework."
             )
         session_id = validate_session_id(data.get("session_id"))
         if session_id != expected_session_id:
@@ -700,7 +701,10 @@ class CheckpointRecorder:
         with self._lock:
             return replace(
                 self._cp,
-                subtarefas=[replace(s, depends_on=list(s.depends_on), artefatos=list(s.artefatos)) for s in self._cp.subtarefas],
+                subtarefas=[
+                    replace(s, depends_on=list(s.depends_on), artefatos=list(s.artefatos))
+                    for s in self._cp.subtarefas
+                ],
                 hipoteses=[dict(h) for h in self._cp.hipoteses],
                 decisoes=list(self._cp.decisoes),
                 descobertas_sessao=list(self._cp.descobertas_sessao),
@@ -837,7 +841,7 @@ class CheckpointRecorder:
         sinalizacoes_pendentes: int | None = None,
         hipotese_por_subtarefa: Mapping[str, str] | None = None,
     ) -> bool:
-        """Checkpoint do Curator: hipóteses (com vereditos), decisões, descobertas da sessão e sinalizações pendentes."""
+        """Checkpoint do Curator: hipóteses (com vereditos), decisões, descobertas e sinalizações pendentes."""
 
         def mutate(cp: Checkpoint) -> None:
             if hipoteses is not None:
@@ -897,7 +901,9 @@ class CheckpointRecorder:
 # ---------------------------------------------------------------------------
 
 
-def mark_checkpoint_interrupted(session_dir: Path | str, *, expected_session_id: str | None = None) -> Checkpoint | None:
+def mark_checkpoint_interrupted(
+    session_dir: Path | str, *, expected_session_id: str | None = None
+) -> Checkpoint | None:
     """Marca o checkpoint de uma sessão parada sem fechamento: ``interrompido`` e subtarefas em andamento viram
     ``falhou`` com causa ``infraestrutura``.
 

@@ -183,7 +183,7 @@ async def prepare_resume(
             raise ResumeError(str(exc)) from exc
 
     follow = session_manager.find_continuation(sid)
-    if follow is not None:
+    if follow is not None and follow.id != sid:
         raise ResumeError(
             f"a sessão '{sid}' já foi continuada por '{follow.id}'; use `geminiclaw resume --session {follow.id}` "
             "ou `geminiclaw continue --project <id>`."

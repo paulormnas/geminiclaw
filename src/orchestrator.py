@@ -457,7 +457,7 @@ class Orchestrator:
         """Batimento da sessão mestra a cada ``SESSION_HEARTBEAT_SECONDS`` até ser cancelado."""
         from src.config import SESSION_HEARTBEAT_SECONDS
 
-        interval = max(float(SESSION_HEARTBEAT_SECONDS), 1.0)
+        interval = max(float(SESSION_HEARTBEAT_SECONDS), 0.01)
         stop = asyncio.Event()  # nunca sinalizado: só serve de temporizador cancelável
         while True:
             try:
@@ -526,7 +526,7 @@ class Orchestrator:
             recorder.close(
                 ESTADO_INTERROMPIDO if suspended else ESTADO_FECHADO,
                 reason,
-                curator_pendente=curator_pending,
+                curator_pendente=curator_pending or recorder.snapshot().curator_pendente,
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("Checkpoint final não gravado", extra={"error": type(exc).__name__})

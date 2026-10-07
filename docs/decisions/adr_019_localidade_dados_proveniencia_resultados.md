@@ -260,6 +260,11 @@ definida por provedor na spec (ex.: identificador retornado pela API, digest obt
 no início da sessão). Quando o provedor não informa, o registro diz explicitamente
 "desconhecida".
 
+A garantia é "registrada como informada", não "imutável": a Anthropic pode devolver em
+`response.model` o próprio alias pedido (e não um identificador datado), e outros provedores
+podem informar só um alias estável. Nesses casos uma troca silenciosa por trás do alias não é
+detectável pela versão registrada.
+
 Uma mudança de versão dentro da sessão gera evento e aviso no relatório. Com
 `LLM_ROUTING=strict` (ADR 017 §7), versão desconhecida ou alterada encerra a execução **no
 próximo checkpoint** (V18), com retomada possível, sem perder o trabalho feito.

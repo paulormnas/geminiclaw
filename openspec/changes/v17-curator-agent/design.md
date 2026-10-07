@@ -134,17 +134,28 @@ Estas decisões foram tomadas na implementação e revisão; o Arquiteto deve ra
 2. **`validate_human_only` como allowlist para agentes**: `Oportunidade` só `documentada`; `Dominio`/`Metrica` só
    `candidato`; `decidido_*` e `motivo_decisao` são sempre do humano; nó `rejeitado`/`rejeitada` é imutável para
    agentes (inclusive suas arestas). O orquestrador continua semeando o vocabulário aprovado.
-3. **Gate de decisões reservadas** (`src/human_gate.py`): origem em enum fechado (`Source`); só `TERMINAL`/`CLI` valem.
-   Está ligado à confirmação do `Problema` (`project_session`) e a `vocab approve` (`cli`). A barreira final continua
-   sendo `validate_human_only` no `GraphStore`.
+3. **Gate de decisões reservadas** (`src/human_gate.py`): é **registro/auditoria**, não a barreira. Origem em enum
+   fechado (`Source`); só `TERMINAL`/`CLI` valem. Está ligado a **2 das 5** decisões reservadas
+   (`confirmar_problema` em `project_session`, `aprovar_termo_vocabulario` em `vocab approve`); `aprovar_oportunidade`
+   não tem ponto de decisão ainda (V18, `hypothesis-loop`), e `autorizar_escrita_instrumento` e `ativar_modo_sem_limite`
+   não existem no código (tarefas em `v19-equipment-control` e `v18-usage-limits`). A **barreira real** é o input
+   interativo (TTY) do pesquisador mais `validate_human_only` no `GraphStore`; respostas de `ask_researcher` e do
+   consultor já são tratadas como suposição documentada pelo `researcher-consult`.
 4. **`OPTIONAL_ROLES = ("curator",)`**: sem modelo elegível (ou pin inválido em `strict`) o Curator é desligado na
    sessão; os demais papéis seguem obrigatórios.
 5. **Fusão de abordagens** (`merge_approaches`): sem "desfazer" nas ferramentas, vale a condição estrita: projeto da
    sessão, mesmo `tipo`, `SEMELHANTE_A` com `score >= SIM_DUPLICATE_MIN` confirmado em **execução anterior**.
 6. **Promoção de configuração**: gravada só no projeto da sessão sobre abordagem dele; tentativas de outro projeto só
    contam se experimento e resultado forem `compartilhavel`; só projetos com `Sessao` real no grafo contam.
-7. **Leituras livres**: `read_query` exige `LIMIT` e devolve só UUIDs e números (texto vira `[omitido]`); a fila só
-   entrega ID e rótulo de nó privado de outro projeto.
+7. **Leituras livres**: `read_query` exige `LIMIT` e `$projeto_id` (injetado pelo toolkit), recusa literais de texto,
+   funções/predicados de texto (`length`, `size`, `STARTS WITH`, `CONTAINS`, `=~`, `toLower`...) e parâmetros de texto
+   livre, e devolve só UUIDs e números (texto vira `[omitido]`); a fila só entrega ID e rótulo de nó privado de outro
+   projeto. **Limitação residual**: o filtro é sintático; não prova que todo nó casado pertence ao projeto da sessão
+   (uma consulta pode citar `$projeto_id` e ainda casar outro nó), então estruturas e valores numéricos de outros
+   projetos continuam observáveis. Fechar isso exige reescrita/validação do Cypher ou views por projeto no AGE
+   (`tasks.md` 8.7).
+11. **Fatos estruturais**: `Sessao`, `Insumo`, `Experimento` e `Resultado` só são criados pela ingestão
+    determinística; o `GraphStore` recusa qualquer escrita desses rótulos por ator `agente` (`FactWriteNotAllowedError`).
 8. **Evidência e mudança de status**: evidência exige `Resultado` validado ligado ao escopo; contestar/substituir
    exige evidência nova, escopo comum, substituta de execução anterior e teto por execução.
 9. **Validator**: sem laço de ferramentas, sua sinalização sai do parecer estruturado (divergente → `caminho_relevante`,

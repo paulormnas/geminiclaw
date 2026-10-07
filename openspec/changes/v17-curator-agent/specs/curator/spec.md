@@ -154,6 +154,21 @@ de outro projeto.
 - **WHEN** `read_query` retorna texto de um nó de outro projeto
 - **THEN** o texto é substituído por `[omitido]`
 
+### Requirement: Fatos estruturais só pela ingestão
+O `GraphStore` MUST recusar a criação ou alteração de `Sessao`, `Insumo`, `Experimento` e `Resultado` por ator `agente`.
+
+#### Scenario: Agente cria Experimento
+- **WHEN** um agente chama `create_node("Experimento")` com justificativa e `nos_consultados` presentes
+- **THEN** a escrita é recusada por papel
+
+### Requirement: `read_query` restrito
+`read_query` SHALL exigir `LIMIT` e `$projeto_id`, recusar literais e funções/predicados de texto e devolver só IDs e
+números. A restrição é sintática (limitação residual registrada em `design.md`).
+
+#### Scenario: Oráculo de texto
+- **WHEN** a consulta usa `length(n.enunciado)` ou `STARTS WITH`
+- **THEN** a consulta é recusada
+
 ### Requirement: Papel opcional
 O papel `curator` SHALL ser opcional na resolução da sessão: sem modelo elegível ele é desligado e a sessão continua.
 

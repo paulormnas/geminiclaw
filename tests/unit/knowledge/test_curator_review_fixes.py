@@ -278,16 +278,58 @@ def test_i3_read_query_devolve_so_ids_e_numeros(env):
              "m": {"enunciado": "SEGREDO 2", "valor": 0.5}, "l": ["SEGREDO 3", 7]}]
     tk = CuratorToolkit(_FakeReadStore(env.store, rows), project_id="proj1", session_id="s1", limits=_limits())
 
-    saida = tk.dispatch("read_query", {"cypher": "MATCH (n:Projeto) RETURN n.id, n.titulo LIMIT 5"})
+    saida = tk.dispatch(
+        "read_query", {"cypher": "MATCH (n:Projeto) WHERE n.projeto_id = $projeto_id RETURN n.id, n.titulo LIMIT 5"}
+    )
 
     assert "SEGREDO" not in saida and "[omitido]" in saida
     assert "01890000-0000-7000-8000-000000000001" in saida and "0.5" in saida
 
 
+@pytest.mark.parametrize("cypher", [
+    "MATCH (n:Descoberta) WHERE n.projeto_id = $projeto_id AND length(n.enunciado) > 5 RETURN n.id LIMIT 5",
+    "MATCH (n:Descoberta) WHERE n.projeto_id = $projeto_id AND n.enunciado STARTS WITH $p RETURN n.id LIMIT 5",
+    "MATCH (n:Descoberta) WHERE n.projeto_id = $projeto_id AND n.enunciado = 'segredo' RETURN n.id LIMIT 5",
+    "MATCH (n:Descoberta) WHERE n.projeto_id = $projeto_id AND n.enunciado =~ $p RETURN n.id LIMIT 5",
+    "MATCH (n:Descoberta) WHERE n.projeto_id = $projeto_id AND toLower(n.enunciado) = $p RETURN n.id LIMIT 5",
+    "MATCH (n:Descoberta) WHERE n.projeto_id = $projeto_id AND n.enunciado CONTAINS $p RETURN n.id LIMIT 5",
+    "MATCH (n:Descoberta) RETURN n.id LIMIT 5",  # sem $projeto_id
+])
+def test_i3_read_query_recusa_oraculos_de_texto_e_exige_escopo(env, cypher):
+    """I3 (reverificação) — length/STARTS WITH/literais/regex/CONTAINS e consulta sem $projeto_id são recusados."""
+    store = _FakeReadStore(env.store, [{"id": "01890000-0000-7000-8000-000000000001"}])
+    tk = CuratorToolkit(store, project_id="proj1", session_id="s1", limits=_limits())
+
+    saida = tk.dispatch("read_query", {"cypher": cypher, "params": {"p": "seg"}})
+
+    assert '"ok": false' in saida and "01890000" not in saida
+
+
+def test_i3_read_query_com_escopo_e_params_seguros_funciona_e_injeta_projeto(env):
+    visto = {}
+
+    class Store(_FakeReadStore):
+        def read_query(self, cypher, params):
+            visto.update(params)
+            return self._rows
+
+    tk = CuratorToolkit(Store(env.store, [{"id": "01890000-0000-7000-8000-000000000001", "n": 2}]),
+                        project_id="proj1", session_id="s1", limits=_limits())
+
+    saida = tk.dispatch("read_query", {
+        "cypher": "MATCH (n:Descoberta) WHERE n.projeto_id = $projeto_id AND n.n_evidencias > $min RETURN n.id LIMIT 5",
+        "params": {"min": 1, "projeto_id": "outro-projeto"},
+    })
+
+    assert '"ok": true' in saida and visto["projeto_id"] == "proj1"  # o projeto da sessão sempre vence
+
+
 def test_i3_read_query_exige_limit(env):
     tk = CuratorToolkit(_FakeReadStore(env.store, []), project_id="proj1", session_id="s1", limits=_limits())
 
-    assert '"ok": false' in tk.dispatch("read_query", {"cypher": "MATCH (n) RETURN n.id"})
+    assert '"ok": false' in tk.dispatch(
+        "read_query", {"cypher": "MATCH (n) WHERE n.projeto_id = $projeto_id RETURN n.id"}
+    )
 
 
 # ----------------------------------------------------------------------------- I4
@@ -415,3 +457,24 @@ def test_flags_cota_conta_so_pendentes(tmp_path):
         store.resolve(fid, "descartada", "m")
 
     record_flag(tmp_path, agente="a", subtarefa="s", tipo="oportunidade", texto="nova", max_flags=2)
+
+
+# ----------------------------------------------------------------------------- fatos só pela ingestão
+
+
+@pytest.mark.parametrize("label,props", [
+    ("Sessao", {"modo": "auto", "inicio": "2026-10-06T00:00:00+00:00", "no_execucao": "n"}),
+    ("Experimento", {"subtarefa_id": "s", "status": "sucesso", "caminho_artefatos": "/x", "no_execucao": "n"}),
+    ("Resultado", {"nome_original": "r2", "valor": 0.9, "status_validacao": "validado", "caminho_metrics": "/m"}),
+])
+def test_agente_nao_cria_fatos_estruturais_mesmo_com_justificativa(env, label, props):
+    """Revisão — Sessao/Experimento/Resultado são fatos da ingestão: agente é recusado POR PAPEL."""
+    from src.knowledge.errors import GraphStoreError
+
+    completo = {**props, "projeto_id": "proj1", "sessao_id": "s1", "justificativa_criacao": "porque sim",
+                "nos_consultados": []}
+    with pytest.raises(GraphStoreError, match="fato"):
+        env.store.create_node(label, completo, actor=CUR)
+    assert env.raw.find_nodes(label, {}) == []
+    sem_agente = {k: v for k, v in completo.items() if k not in ("justificativa_criacao", "nos_consultados")}
+    env.store.create_node(label, sem_agente, actor=ORQ)

@@ -38,7 +38,7 @@
 - [x] 6.10 Orçamento: com 50 pares na fila e lote 20, restam 30 pendentes.
 - [x] 6.11 Falha do LLM do Curator não interrompe a sessão.
 
-- [x] 6.99 Gate humano não pode aceitar resposta do consultor: aprovação de Oportunidade, confirmação de Problema, aprovação de termo de vocabulário, autorização de escrita em instrumento e ativação do modo sem limite exigem ação explícita do pesquisador (terminal/CLI); a resposta de `ask_researcher` (inclusive do Researcher consultor, `v18-researcher-consult`) nunca conta como autorização. Teste: gate com resposta do consultor continua pendente.
+- [x] 6.99 (parcial, ver design nota 3: o gate é registro/auditoria ligado a 2 das 5 decisões; a barreira real é o input interativo + `validate_human_only`; as demais decisões não têm ponto no código: tarefas em `v18-usage-limits` e `v19-equipment-control`) Gate humano não pode aceitar resposta do consultor: aprovação de Oportunidade, confirmação de Problema, aprovação de termo de vocabulário, autorização de escrita em instrumento e ativação do modo sem limite exigem ação explícita do pesquisador (terminal/CLI); a resposta de `ask_researcher` (inclusive do Researcher consultor, `v18-researcher-consult`) nunca conta como autorização. Teste: gate com resposta do consultor continua pendente.
 
 ## 7. Fechamento
 - [x] 7.1 Ruff, testes, revisão nos 7 eixos, PR.
@@ -50,3 +50,4 @@
 - [ ] 8.4 Dividir `src/knowledge/curator_tools.py` (leitura, escrita, orçamento) em módulos.
 - [ ] 8.5 Comando humano para reverter fusão/substituição (hoje: `update_node` com autoria `pesquisador`).
 - [ ] 8.6 `VARIANTE_DE` entre `Descoberta`s (hoje `SEMELHANTE_A` + `diferenca`): extensão de schema a aprovar.
+- [ ] 8.7 Fechar a limitação residual de `read_query` (provar que todo nó casado é do projeto da sessão: reescrita do Cypher ou views por projeto no AGE).

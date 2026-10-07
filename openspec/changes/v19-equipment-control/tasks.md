@@ -44,3 +44,5 @@
 - [ ] 6.3 `uv run ruff check .`; `uv run pytest -m "unit or integration" -v`.
 - [ ] 6.4 Validação no Pi 5 com um sensor I2C e um LED em GPIO.
 - [ ] 6.5 Revisão do Analista de Segurança e do Pentester; revisão nos 7 eixos; PR para `dev`.
+
+- [ ] X.1 **Gate humano** (de `v17-curator-agent` 6.99): ligar `autorizar_escrita_instrumento` ao `HumanGate` (`src/human_gate.py`, origem `Source.TERMINAL`/`Source.CLI`) quando existir a escrita em instrumento; a resposta de `ask_researcher`/consultor nunca autoriza; teste de integração do ponto de decisão.

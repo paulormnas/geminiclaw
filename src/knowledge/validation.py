@@ -11,6 +11,7 @@ from src.knowledge import schema
 from src.knowledge.errors import (
     DisallowedRelationError,
     EdgeUpdateNotAllowedError,
+    FactWriteNotAllowedError,
     HumanConfirmationRequiredError,
     ImmutableFieldError,
     InvalidEnumValueError,
@@ -276,6 +277,8 @@ AGENT_ALLOWED_VALUES: dict[str, dict[str, tuple[str, ...] | None]] = {
         "motivo_decisao": None,
     },
 }
+# Fatos estruturais (ADR 015 §1, project.md): escritos só pela ingestão determinística; agente nunca os cria nem altera.
+FACT_LABELS: frozenset[str] = frozenset({"Sessao", "Insumo", "Experimento", "Resultado"})
 # Nós rejeitados pelo pesquisador são imutáveis para agentes: a decisão humana não é reaberta por LLM.
 REJECTED_STATUSES: frozenset[str] = frozenset({"rejeitado", "rejeitada"})
 
@@ -304,6 +307,8 @@ def validate_human_only(
             protegido, entra nele ou sai dele; ou escrita de agente num campo reservado ou num nó rejeitado.
     """
     if actor_kind == "agente":
+        if label in FACT_LABELS:
+            raise FactWriteNotAllowedError(label, actor_kind)
         _validate_agent_reserved(label, current, changes)
     rule = HUMAN_ONLY_TRANSITIONS.get(label)
     if rule is None or actor_kind == "pesquisador":

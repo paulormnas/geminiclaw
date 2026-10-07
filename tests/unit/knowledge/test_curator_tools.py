@@ -366,7 +366,9 @@ def test_inventario_nenhuma_ferramenta_remove_dados_nem_aceita_cypher_de_escrita
     # A consulta livre é só leitura: o filtro textual do store recusa escrita antes de qualquer execução.
     with pytest.raises(ReadOnlyQueryViolation):
         env.raw.read_query("MATCH (n) DETACH DELETE n", {})
-    saida = tk.dispatch("read_query", {"cypher": "MATCH (n) SET n.x = 1 RETURN n LIMIT 1"})
+    saida = tk.dispatch(
+        "read_query", {"cypher": "MATCH (n) WHERE n.projeto_id = $projeto_id SET n.x = 1 RETURN n LIMIT 1"}
+    )
     assert '"ok": false' in saida and "SET" in saida
 
 

@@ -35,6 +35,9 @@ from src.knowledge.curator_tools import CuratorLimits, CuratorToolkit, wrap_data
 from src.knowledge.graph_store import GraphStore, Node
 from src.knowledge.semantic_index import SemanticIndex
 from src.knowledge.similarity_queue import SimilarityQueue
+from src.knowledge.suggestions import Suggestion
+from src.knowledge.suggestions import SuggestionError
+from src.knowledge.suggestions import suggest_paths as suggest_paths_for_session
 from src.llm.base import LLMProvider
 from src.llm.metering import record_llm_call
 from src.logger import get_logger
@@ -149,6 +152,44 @@ class Curator:
     async def close_session(self, motivo_parada: str | None = None) -> CuratorReport:
         """Fim da sessão: consolida, revisa a fila de similaridade (no lote) e registra caminhos sem conclusão."""
         return await self._run(KIND_CLOSE, include_queue=True, motivo_parada=motivo_parada)
+
+    async def suggest_paths(self, max_suggestions: int | None = None) -> list[Suggestion]:
+        """Sugere novos caminhos ao Researcher (v18-hypothesis-loop, design §6). Determinístico, sem LLM.
+
+        Só as fontes permitidas (``src.knowledge.suggestions``): oportunidades **aprovadas** (nunca ``documentada``),
+        caminhos sem conclusão, lições de caminho sobre hipóteses refutadas e abordagens que funcionaram em problemas
+        similares. As sugestões novas vão para ``curator_suggestions.jsonl`` da sessão.
+
+        Args:
+            max_suggestions: Máximo por ciclo (padrão: ``CURATOR_MAX_SUGGESTIONS``).
+
+        Returns:
+            As sugestões novas (lista vazia se o Curator está desligado ou não há sugestões).
+
+        Raises:
+            SuggestionError: Falha ao gerar as sugestões (não é o mesmo que "sem sugestões"; fail-fast).
+        """
+        if not config.CURATOR_ENABLED or self._session_dir is None:
+            return []
+        try:
+            fresh = await asyncio.to_thread(
+                suggest_paths_for_session, self._store, self._project_id, self._session_dir,
+                index=self._index, max_suggestions=max_suggestions,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - vazio seria lido como "sem caminhos"; quem decide é a exploração
+            logger.warning("Sugestões do Curator falharam", extra={"extra": {"erro": type(exc).__name__}})
+            raise SuggestionError(f"Falha ao gerar sugestões do Curator ({type(exc).__name__}).") from exc
+        if self._telemetry is not None:
+            try:
+                counts: dict[str, int] = {}
+                for item in fresh:
+                    counts[item.tipo] = counts.get(item.tipo, 0) + 1
+                self._telemetry("curator_suggestions", {"novas": len(fresh), "por_tipo": counts})
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Telemetria das sugestões indisponível", extra={"extra": {"erro": type(exc).__name__}})
+        return fresh
 
     # ------------------------------------------------------------------ execução
 
@@ -296,6 +337,13 @@ class Curator:
             "2. A partir dos resultados e vereditos do resumo, registre ou reforce descobertas, seguindo as diretrizes "
             "(revise antes de criar; evidência obrigatória; consulte `verdict_breakdown`).",
         ]
+        if digest.get("decisoes_avaliadas"):
+            steps.append(
+                "2b. Para cada decisão de `decisoes_avaliadas` (a hipótese escolhida já tem veredito moderado), se "
+                "houver uma LIÇÃO TRANSFERÍVEL sobre por que o caminho funcionou ou não, registre "
+                "`create_discovery(tipo=\"licao_de_caminho\")` sobre a hipótese escolhida, com a decisão como "
+                "evidência. Sem lição transferível, não crie nada."
+            )
         if include_queue:
             steps += [
                 "3. Revise a fila de similaridade (`next_similarity_batch`, `review_similarity`) dentro do lote da "
@@ -335,6 +383,18 @@ class Curator:
                     ],
                 }
             )
+        evaluated: list[dict[str, Any]] = []
+        for decision in store.find_nodes("Decisao", {"projeto_id": self._project_id}, limit=_MAX_DIGEST_ITEMS * 4):
+            outcome = decision.properties.get("resultado_posterior")
+            if not outcome:
+                continue
+            chosen = store.neighbors(decision.id, ["ESCOLHEU"], direction="out", depth=1)
+            ids = [e.dst_id for e in chosen.edges if e.src_id == decision.id and e.rel_type == "ESCOLHEU"]
+            evaluated.append(
+                {"id": decision.id, "resultado_posterior": str(outcome)[:40], "hipotese_escolhida": ids[:1]}
+            )
+            if len(evaluated) >= _MAX_DIGEST_ITEMS:
+                break
         flags = FlagStore(self._session_dir).counts() if self._session_dir is not None else {}
         digest: dict[str, Any] = {
             "projeto_id": self._project_id,
@@ -345,6 +405,7 @@ class Curator:
                 for h in list(hypotheses.values())[:_MAX_DIGEST_ITEMS]
             ],
             "sinalizacoes": flags,
+            "decisoes_avaliadas": evaluated,
         }
         if include_queue:
             digest["motivo_parada"] = motivo_parada

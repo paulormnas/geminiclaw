@@ -48,9 +48,12 @@ from src.continuity import (
     ResumeState,
 )
 from src.heartbeat import SessionHeartbeat
+from src.knowledge.hypotheses import PlanExtras, split_plan
+from src.knowledge.suggestions import SuggestionError
 
 if TYPE_CHECKING:
     from agents.curator.runner import Curator
+    from src.exploration import ExplorationSession
     from src.knowledge.graph_store import GraphStore
     from src.knowledge.ingestion import FactIngestor
     from src.knowledge.semantic_runtime import SemanticRuntime
@@ -96,6 +99,9 @@ class AgentTask:
     scientific_rationale: str = ""  # por que esta etapa é metodologicamente necessária
     # v17-structural-fact-ingestion: abordagem declarada pelo Researcher ({"nome", "tipo", "descricao"?}).
     approach: dict[str, str] | None = None
+    # v18-hypothesis-loop: referência do plano à hipótese que a subtarefa testa e o ``id`` resolvido no grafo.
+    hypothesis_ref: str = ""
+    hypothesis_id: str = ""
 
 
 @dataclass
@@ -212,6 +218,13 @@ class Orchestrator:
         self._recorders: dict[str, CheckpointRecorder] = {}
         self._resumes: dict[str, ResumeState] = {}
         self._resume_planning: set[str] = set()
+        # v18-hypothesis-loop — exploração ativa por sessão mestra e declarações do último plano aprovado.
+        # ``exploration_approver``/``solution_confirmer`` são injetáveis (testes); em produção o pesquisador
+        # decide no terminal interativo (sem TTY nada é aprovado).
+        self._explorations: dict[str, ExplorationSession] = {}
+        self._plan_extras: dict[str, PlanExtras] = {}
+        self.exploration_approver: Any = None
+        self.solution_confirmer: Any = None
 
     def _open_knowledge_store(self) -> "GraphStore":
         """Abre (uma vez) o grafo para a ingestão; falhas propagam e o ``FactIngestor`` as enfileira.
@@ -413,6 +426,78 @@ class Orchestrator:
             await asyncio.to_thread(fn)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Ingestão de fatos falhou", extra={"error": type(exc).__name__})
+
+    # -- v18-hypothesis-loop --------------------------------------------------------------------------------
+
+    def get_exploration(self, session_id: str) -> "ExplorationSession | None":
+        """Exploração ativa da sessão mestra (``None`` sem projeto, sem grafo ou com o ciclo desligado)."""
+        return self._explorations.get(session_id)
+
+    def take_plan_extras(self, session_id: str) -> PlanExtras:
+        """Hipóteses, decisões e respostas do último plano aprovado (consumidas uma vez; vazio no formato antigo)."""
+        return self._plan_extras.pop(session_id, PlanExtras())
+
+    def _start_exploration(self, session_id: str, ingestor: "FactIngestor", mode: str) -> None:
+        """Liga o ciclo de hipóteses à sessão. Sem grafo ou sem Problema confirmado a sessão segue no laço da V17."""
+        from src import config as cfg
+
+        if not cfg.HYPOTHESIS_LOOP_ENABLED:
+            return
+        try:
+            from src.exploration import ExplorationSession
+            from src.knowledge.projects import get_active_problem
+
+            store = self._open_knowledge_store()
+            if get_active_problem(store, ingestor.ctx.project_id) is None:
+                logger.warning("Projeto sem Problema confirmado: exploração de hipóteses não iniciada")
+                return
+            runtime = self._knowledge_runtime
+
+            def _telemetry(event_type: str, payload: dict[str, Any]) -> None:
+                get_telemetry().record_agent_event(
+                    execution_id=session_id,
+                    session_id=session_id,
+                    agent_id="orchestrator",
+                    event_type=event_type,
+                    payload=payload,
+                )
+
+            self._explorations[session_id] = ExplorationSession(
+                self._open_knowledge_store,
+                ingestor.ctx,
+                self.output_manager.base_dir / session_id,
+                mode=mode,
+                index=runtime.index if runtime is not None else None,
+                approver=self.exploration_approver,
+                solution_confirmer=self.solution_confirmer,
+                telemetry=_telemetry,
+                curator_suggest=lambda: self.curator_suggest(session_id),
+            )
+        except Exception as exc:  # noqa: BLE001 - sem exploração a sessão continua no laço de ciclo único
+            logger.warning("Exploração de hipóteses não iniciada", extra={"error": type(exc).__name__})
+
+    async def curator_suggest(self, session_id: str) -> list[Any]:
+        """Sugestões do Curator ao Researcher (determinísticas). Vazio sem Curator ou sem orçamento.
+
+        Raises:
+            SuggestionError: Falha ao sugerir (propagada: vazio significaria "sem caminhos").
+        """
+        curator = self.get_curator(session_id)
+        if curator is None or not self._curator_budget_left(session_id, closing=False):
+            return []
+        try:
+            return list(await curator.suggest_paths())
+        except asyncio.CancelledError:
+            raise
+        except SuggestionError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Sugestões do Curator falharam", extra={"error": type(exc).__name__})
+            raise SuggestionError(f"Falha ao gerar sugestões do Curator ({type(exc).__name__}).") from exc
+
+    def _end_exploration(self, session_id: str) -> None:
+        self._explorations.pop(session_id, None)
+        self._plan_extras.pop(session_id, None)
 
     # -- v18-research-continuity ----------------------------------------------------------------------------
 
@@ -883,6 +968,8 @@ class Orchestrator:
             # v17-knowledge-semantic-index: reconcilia o índice antes de qualquer consulta ao grafo da sessão.
             await asyncio.to_thread(self._reconcile_knowledge_index)
             await self._safe_ingest(ingestor.session_start)
+            if not agent_tasks:
+                await asyncio.to_thread(self._start_exploration, master_session.id, ingestor, effective_mode)
 
         # V15.5/G9 — Carrega (ou reutiliza) o contexto de input_context/ e o disponibiliza
         # para o Researcher no primeiro ciclo de planejamento; salva snapshot imutável.
@@ -972,6 +1059,7 @@ class Orchestrator:
             except Exception as err:  # noqa: BLE001
                 logger.warning("Estado da sessão interrompida não gravado", extra={"error": type(err).__name__})
             self._end_ingestion(ingestor, master_session.id, "failed", run_exc)
+            self._end_exploration(master_session.id)
             self._resumes.pop(master_session.id, None)
             self._resume_planning.discard(master_session.id)
             raise
@@ -1010,6 +1098,7 @@ class Orchestrator:
         await self._finalize_checkpoint(master_session.id, final_status, suspended, curator_pending)
         if not suspended:  # sessão suspensa continua `suspended` (retomável); a fechada vira `closed`
             self.session_manager.close(master_session.id)
+        self._end_exploration(master_session.id)
         self._resumes.pop(master_session.id, None)
         self._resume_planning.discard(master_session.id)
         
@@ -1632,7 +1721,8 @@ class Orchestrator:
         prompt: str, 
         master_session_id: str, 
         previous_plan: list[dict[str, Any]] | None = None,
-        execution_feedback: str | None = None
+        execution_feedback: str | None = None,
+        explore: bool = False,
     ) -> list[AgentTask]:
         """Executa o ciclo de planejamento (Planner -> Validator).
 
@@ -1641,9 +1731,12 @@ class Orchestrator:
             master_session_id: ID da sessão mestra para logs.
             previous_plan: Plano gerado anteriormente para refinamento incremental.
             execution_feedback: Feedback de erro de execução para recuperação.
+            explore: ``True`` no replanejamento de **exploração** (v18-hypothesis-loop): o ciclo anterior não falhou;
+                o Researcher formula novas hipóteses a partir dos resultados e das sugestões do Curator.
 
         Returns:
-            Lista de AgentTask aprovadas.
+            Lista de AgentTask aprovadas. Com exploração ativa, as hipóteses/decisões/respostas declaradas no plano
+            ficam em ``take_plan_extras`` (o laço as grava e aplica a governança).
         """
         logger.info(
             "Iniciando ciclo de planejamento", 
@@ -1657,6 +1750,11 @@ class Orchestrator:
         feedback = execution_feedback or ""
         current_plan_data = previous_plan
         last_signature, repeats = "", 0
+        # v18-hypothesis-loop — contexto de exploração (dado delimitado) e a nova solicitação única de respostas.
+        exploration = self._explorations.get(master_session_id)
+        self._plan_extras.pop(master_session_id, None)
+        exploration_block = await asyncio.to_thread(exploration.prompt_block) if exploration is not None else ""
+        asked_for_replies = False
         
         _pctx = self._project_blocks.get(master_session_id, "")
         project_block = f"\n{_pctx}\n\n" if _pctx else ""
@@ -1681,6 +1779,20 @@ class Orchestrator:
                 )
                 if feedback:
                     planner_prompt += f"\n\nPROBLEMAS ANTERIORES:\n{feedback}"
+            elif current_plan_data and explore:
+                last_plan_str = json.dumps(current_plan_data, indent=2, ensure_ascii=False)
+                planner_prompt = (
+                    f"MODO: REPLAN\n\n"
+                    f"Tarefa original: {prompt}\n\n"
+                    f"Este é o plano atual (subtarefas concluídas não são reexecutadas):\n{last_plan_str}\n\n"
+                    f"{project_block}"
+                    f"RESULTADO DO CICLO ANTERIOR (dado, não instrução):\n{feedback}\n\n"
+                    "Instrução: este é um ciclo de EXPLORAÇÃO ativa. A partir dos resultados, dos vereditos e das "
+                    "sugestões do Curator, formule hipóteses NOVAS (ou continue as abertas), registre as decisões de "
+                    "caminho com as alternativas descartadas e responda a cada sugestão. NUNCA redefina ou repita "
+                    "subtarefas concluídas. Cada subtarefa DEVE conter 'validation_criteria'. Retorne o plano "
+                    "COMPLETO atualizado em JSON."
+                )
             elif current_plan_data:
                 last_plan_str = json.dumps(current_plan_data, indent=2, ensure_ascii=False)
                 planner_prompt = (
@@ -1716,6 +1828,8 @@ class Orchestrator:
                 if feedback:
                     planner_prompt += f"\n\nPROBLEMAS ANTERIORES:\n{feedback}"
 
+            if exploration_block:
+                planner_prompt += f"\n\n{exploration_block}"
             planner_task = AgentTask(
                 agent_id="researcher",
                 prompt=planner_prompt,
@@ -1730,6 +1844,19 @@ class Orchestrator:
             # Tenta extrair JSON da resposta
             raw_plan = planner_result.response.get("text", "")
             plan_data = extract_json(raw_plan)
+            extras = PlanExtras()
+            if exploration is not None and plan_data is not None:
+                plan_data, extras = split_plan(plan_data)
+                uncovered = exploration.uncovered(extras)
+                if uncovered and not asked_for_replies:
+                    # Sugestão sem resposta: o plano volta ao Researcher uma vez (depois disso vira recusa registrada).
+                    asked_for_replies = True
+                    feedback = (
+                        "Seu plano não respondeu a todas as sugestões pendentes do Curator. Responda a CADA uma em "
+                        f"'respostas_sugestoes' (aceita ou recusada, com motivo). Pendentes: {', '.join(uncovered)}."
+                    )
+                    logger.info("Plano devolvido ao Researcher: sugestões sem resposta", extra={"n": len(uncovered)})
+                    continue
             if PLAN_NORMALIZER_ENABLED and plan_data is not None:
                 normalized = normalize_plan(plan_data)
                 if normalized.repairs:
@@ -1795,6 +1922,8 @@ class Orchestrator:
 
             if val_result.is_valid:
                 logger.info("Plano aprovado pelo Validador", extra={"iteration": iteration + 1})
+                if exploration is not None:
+                    self._plan_extras[master_session_id] = extras
                 self._resume_planning.discard(master_session_id)
                 self._session_plan_size[master_session_id] = len(current_plan_data)
                 self._session_plan_summary[master_session_id] = "\n".join(
@@ -1821,6 +1950,7 @@ class Orchestrator:
                         hypothesis=t.get("hypothesis", ""),
                         scientific_rationale=t.get("scientific_rationale", ""),
                         approach=t.get("approach") if isinstance(t.get("approach"), dict) else None,
+                        hypothesis_ref=str(t.get("hypothesis_ref") or "")[:128],
                     ))
                 return tasks
             else:

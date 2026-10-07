@@ -87,6 +87,7 @@ _MAX_CONSULTED = 50
 _MAX_CRITERIA = 20
 _MAX_CRITERION = 500
 _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_NODE_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
 EVENT_SESSION_START = "session_start"
 EVENT_INPUTS = "inputs"
@@ -200,6 +201,8 @@ class SubtaskInput:
             não rodou). Ausente em eventos antigos: tratado como não verificado.
         validation_criteria: Critérios de aceite da subtarefa (os quantitativos indicam quais
             métricas o Validator avaliou contra um limiar).
+        hypothesis_id: ``id`` da ``Hipotese`` formal que a subtarefa testa (``v18-hypothesis-loop``); quando presente,
+            o ``Experimento`` liga-se a ela por ``TESTA`` e a hipótese provisória da V17 não é criada.
     """
 
     task_name: str
@@ -214,6 +217,7 @@ class SubtaskInput:
     review_status: str | None = None
     review_verified: bool = False
     validation_criteria: list[str] = field(default_factory=list)
+    hypothesis_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serializa para o evento da fila."""
@@ -249,6 +253,7 @@ class SubtaskInput:
             validation_criteria=[
                 c[:_MAX_CRITERION] for c in (criteria if isinstance(criteria, list) else []) if isinstance(c, str)
             ][:_MAX_CRITERIA],
+            hypothesis_id=_opt_id(data.get("hypothesis_id")),
         )
 
 
@@ -263,6 +268,11 @@ def _text_field(data: dict[str, Any], key: str, limit: int, *, required: bool = 
 
 def _opt_text(value: object, limit: int) -> str | None:
     return value[:limit] if isinstance(value, str) and value else None
+
+
+def _opt_id(value: object) -> str | None:
+    """Identificador de nó vindo de arquivo/LLM: só caracteres seguros (a fila é um arquivo não confiável)."""
+    return value if isinstance(value, str) and _NODE_ID_RE.fullmatch(value) else None
 
 
 def _clean(text: object, limit: int = _MAX_TEXT) -> str:
@@ -538,7 +548,23 @@ class _Writer:
         return current.id
 
     def hipotese(self, sub: SubtaskInput) -> str | None:
-        """Hipótese provisória a partir do campo ``hypothesis`` (design §5; substituída na V18)."""
+        """Hipótese que a subtarefa testa.
+
+        Com ``hypothesis_id`` (``v18-hypothesis-loop``) vale a hipótese **formal** do projeto, conferida no grafo
+        (existe, é do projeto e não está ``abandonada``); a provisória da V17 não é criada. Sem ele, e só então, cai
+        na hipótese provisória do campo ``hypothesis`` (design §5 da V17).
+        """
+        if sub.hypothesis_id:
+            node = self.store.get_node(sub.hypothesis_id)
+            if (
+                node is not None
+                and node.label == "Hipotese"
+                and node.properties.get("projeto_id") == self.ctx.project_id
+                and node.properties.get("status") != "abandonada"
+            ):
+                return node.id
+            logger.warning("Hipótese formal da subtarefa não encontrada no projeto; subtarefa sem TESTA")
+            return None
         enunciado = _clean(sub.hypothesis)
         if not enunciado:
             return None

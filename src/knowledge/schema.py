@@ -127,6 +127,7 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             "motivo_parada": PropertySchema(
                 enum=(
                     "solucao_encontrada",
+                    "sem_caminhos_promissores",  # v18-hypothesis-loop
                     "limite_tokens",
                     "limite_tempo",
                     "limite_retentativas",

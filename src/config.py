@@ -471,6 +471,37 @@ KNOWLEDGE_SHORTCUT_MIN_VERDICT = float(get_env("KNOWLEDGE_SHORTCUT_MIN_VERDICT",
 PROMOTION_MIN_POSITIVES = int(get_env("PROMOTION_MIN_POSITIVES", default="3"))
 PROMOTION_MIN_PROJECTS = int(get_env("PROMOTION_MIN_PROJECTS", default="2"))
 
+# --- Ciclo de hipóteses e exploração ativa (V18 / mudança v18-hypothesis-loop; ADR 012 §3-§4, ADR 015) ---
+# Desliga o ciclo de exploração (volta ao laço de ciclo único da V17) sem apagar nada do grafo.
+HYPOTHESIS_LOOP_ENABLED = get_env_bool("HYPOTHESIS_LOOP_ENABLED", default=True)
+# Pesos da prioridade de hipóteses, na ordem: relevância, apoio prévio, novidade, (1 - custo). Devem somar 1.
+HYPOTHESIS_PRIORITY_WEIGHTS: tuple[float, float, float, float] = tuple(  # type: ignore[assignment]
+    float(x) for x in get_env("HYPOTHESIS_PRIORITY_WEIGHTS", default="0.35,0.30,0.20,0.15").split(",")
+)
+if len(HYPOTHESIS_PRIORITY_WEIGHTS) != 4 or any(w < 0 for w in HYPOTHESIS_PRIORITY_WEIGHTS) or not (
+    abs(sum(HYPOTHESIS_PRIORITY_WEIGHTS) - 1.0) < 1e-6
+):
+    raise ValueError("HYPOTHESIS_PRIORITY_WEIGHTS deve ter 4 pesos não negativos que somam 1 (0.35,0.30,0.20,0.15).")
+# Hipóteses executadas por ciclo nos modos `semi`/`auto` (as de maior prioridade); `assisted` executa as aprovadas.
+HYPOTHESES_PER_CYCLE = max(int(get_env("HYPOTHESES_PER_CYCLE", default="2")), 1)
+# Similaridade semântica a partir da qual uma hipótese nova reutiliza a existente do projeto.
+HYPOTHESIS_DEDUP_SIMILARITY = float(get_env("HYPOTHESIS_DEDUP_SIMILARITY", default="0.90"))
+# |veredito| a partir do qual a hipótese escolhida avalia a `Decisao` ("acertada"/"nao_acertada") e a hipótese
+# passa a `validada`/`refutada`.
+DECISION_EVAL_MIN_VERDICT = float(get_env("DECISION_EVAL_MIN_VERDICT", default="0.3"))
+# Sugestões do Curator ao Researcher por ciclo.
+CURATOR_MAX_SUGGESTIONS = max(int(get_env("CURATOR_MAX_SUGGESTIONS", default="3")), 0)
+# Menor veredito de uma hipótese sobre o Problema para a solução ser considerada encontrada (evidência moderada).
+SOLUTION_MIN_VERDICT = float(get_env("SOLUTION_MIN_VERDICT", default="0.3"))
+# Ciclos de exploração por sessão (planejar -> executar -> consolidar -> sugerir): teto de iteração à prova de laço
+# infinito, além dos limites de uso (tokens, tempo, retentativas, execuções) e do circuito de progresso zero.
+MAX_EXPLORATION_CYCLES = max(int(get_env("MAX_EXPLORATION_CYCLES", default="20")), 1)
+# Tamanho máximo (caracteres) dos textos de hipótese, decisão e sugestão aceitos do plano (recusa, não trunca) e
+# quantidades máximas por plano.
+HYPOTHESIS_TEXT_MAX_CHARS = int(get_env("HYPOTHESIS_TEXT_MAX_CHARS", default="1000"))
+HYPOTHESES_MAX_PER_PLAN = int(get_env("HYPOTHESES_MAX_PER_PLAN", default="10"))
+DECISIONS_MAX_PER_PLAN = int(get_env("DECISIONS_MAX_PER_PLAN", default="10"))
+
 # --- Grafo de Conhecimento (Roadmap V17 / ADR 009, ADR 015) ---
 # Nome do grafo Apache AGE (sem o nome do produto — ADR 011).
 KNOWLEDGE_GRAPH_NAME = get_env("KNOWLEDGE_GRAPH_NAME", default="knowledge")

@@ -69,7 +69,8 @@ Acrescenta ao JSON do Researcher:
 - Subtarefas: `Experimento-TESTA->Hipotese` pelo `hypothesis_ref`.
 - **Avaliação posterior:** quando uma hipótese escolhida atinge `|veredito| ≥ 0,3`,
   `Decisao.resultado_posterior` é preenchido deterministicamente (`"acertada"` se veredito
-  positivo, `"nao_acertada"` se negativo, com o valor). O Curator transforma decisões avaliadas
+  positivo, `"nao_acertada"` se negativo). O valor do veredito fica na trilha de auditoria da decisão
+  (`record_audit_note`), não no nó. O Curator transforma decisões avaliadas
   em `Descoberta(tipo="licao_de_caminho")` quando houver lição transferível.
 
 ## 4. Governança por SessionMode
@@ -159,3 +160,53 @@ Em todos os casos, o fechamento grava checkpoint e registra caminhos sem conclus
   progresso zero, critério "sem caminhos promissores", novidade na prioridade.
 - **Plano mais complexo para LLMs locais** — mitigação: parser tolerante, reparo de JSON,
   retrocompatibilidade com o formato antigo.
+
+## Notas de implementação (2026-10-07) — decisões registradas para o Arquiteto
+
+O pesquisador adiou as questões em aberto em 2026-10-06; foram adotados os defaults propostos neste design
+(`HYPOTHESIS_PRIORITY_WEIGHTS=0,35/0,30/0,20/0,15`, `HYPOTHESES_PER_CYCLE=2`, `CURATOR_MAX_SUGGESTIONS=3`,
+`SOLUTION_MIN_VERDICT=0,3`, similaridade de reaproveitamento 0,90, limiar de avaliação de decisão 0,3). As decisões abaixo
+foram tomadas na implementação e precisam ser ratificadas ou corrigidas na spec.
+
+1. **Quando o ciclo vale.** A exploração contínua só liga em sessão **com projeto, grafo disponível e Problema
+   confirmado** (`ExplorationSession`). Sem isso (e com `HYPOTHESIS_LOOP_ENABLED=false`) vale o laço de ciclo único da V17,
+   com `MAX_PLAN_RETRIES` contando todos os ciclos. Com o ciclo, `MAX_PLAN_RETRIES` conta só os planos consecutivos
+   rejeitados (um plano aprovado zera a contagem).
+2. **Motivo de parada dos planos rejeitados.** A spec manda "fechar registrando o motivo"; sem valor novo de enumeração
+   (só `sem_caminhos_promissores` foi aprovado), usou-se `limite_retentativas`. O teto de ciclos
+   (`MAX_EXPLORATION_CYCLES`, default 20, à prova de laço infinito) usa `limite_execucoes`. Falha ao gravar o plano no
+   grafo fecha com `erro`, assim como falha ao sugerir caminhos (Curator) ou ao consultar caminhos em aberto: vazio por
+   falha nunca vira `sem_caminhos_promissores` (fail-fast, AGENTS.md §1.6). Todos gravam checkpoint.
+3. **Origem da hipótese nunca vem do LLM.** `pesquisador` só existe para nós criados pelo pesquisador; a hipótese nova
+   nasce `researcher`, `curator` (sugestão aceita) ou `oportunidade` (oportunidade **aprovada**). O campo `origem` do plano
+   é ignorado. Hipótese `abandonada` (rejeitada) não volta, nem por `id` nem por enunciado equivalente.
+4. **Formato antigo.** Continua aceito e executa, mas o texto do campo `hypothesis` das subtarefas vira uma hipótese
+   **formal e governada** (`researcher`, `proposta`): no `assisted` exige aprovação como qualquer outra; no `semi`/`auto`
+   compete por prioridade. A regra provisória da V17 (hipótese `em_teste` sem aprovação) permanece na ingestão só quando a
+   subtarefa chega **sem** `hypothesis_id`. Motivo: deixar a governança contornável pela escolha do formato do plano.
+   No formato novo, subtarefa experimental (Developer que não seja `eda`/`synthesis`, ou com `approach`) sem
+   `hypothesis_ref` resolvível é retirada do ciclo.
+5. **Sem terminal.** No `assisted` sem TTY nada é aprovado (hipóteses ficam `proposta`) e a confirmação de solução não é
+   decidida pelo sistema: a sessão é **suspensa** (`interrompida`, retomável), nunca encerrada ou continuada em silêncio.
+6. **`Decisao.resultado_posterior`.** Gravado como o texto `"acertada"` ou `"nao_acertada"`; o valor do veredito vai para
+   a trilha de auditoria da decisão (`record_audit_note`), pois o schema não tem campo para ele. **Ratificada** na spec
+   (cenário "Avaliação posterior") e em §3: a spec foi ajustada para documentar a implementação, sem mudança de código.
+7. **Critério de solução sem `alvo`.** O `criterio_sucesso` pode ter só `delta_min` e baseline. Nesse caso "atinge o alvo"
+   significa superar o baseline em `delta_min`. Só resultado `validado` conta; o veredito é recalculado na hora.
+8. **"Sem caminhos promissores".** Um ciclo é **ocioso** quando o plano não traz subtarefa nova a executar. O primeiro ciclo
+   ocioso só encerra se não houver hipótese `em_teste` fora do plano nem sugestão pendente; um segundo ciclo ocioso seguido
+   encerra sempre. Hipótese de menor prioridade adiada (`proposta`) não conta como "aprovada pendente".
+9. **Sugestões do Curator.** `suggest_paths` é determinístico (sem LLM, sem orçamento de tokens) e só usa as fontes do §6;
+   o texto vem de nós escritos por agentes e vai ao Researcher como dado delimitado. Sugestão que continua sem resposta
+   depois da devolução única do plano vira **recusa registrada** (motivo "sem resposta"), para não prender o ciclo.
+   Recusa vira `Decisao-DESCARTOU->Hipotese(abandonada, origem=curator)`.
+10. **Prioridade.** `apoio_previo` usa as mesmas primitivas de `related_experience` (problemas similares visíveis pelo
+    índice e arestas `FUNCIONOU_PARA`/`FALHOU_PARA` com o veredito da `Descoberta`); sem índice relevância e apoio ficam
+    neutros (0,5) e a novidade compara enunciados normalizados.
+11. **Estados da hipótese.** `validada`/`refutada` passam a ser gravados pelo orquestrador **só** a partir do veredito
+    calculado (`|veredito| >= 0,3`); ninguém mais os grava. Uma oportunidade `em_investigacao` ligada a uma hipótese
+    concluída avança a `concluida`.
+12. **Barreira nova no `GraphStore`.** `validate_human_only` agora também recusa que o **orquestrador** aprove/rejeite
+    `Oportunidade` ou grave `decidido_*`; ele só avança uma oportunidade já aprovada (`aprovada -> em_investigacao ->
+    concluida`). `geminiclaw opportunities approve|reject` passa pelo `HumanGate` (origem `cli`).
+13. **Correção colateral.** O fechamento por limite (`_close_session`) preserva `curator_pendente` herdado da retomada.

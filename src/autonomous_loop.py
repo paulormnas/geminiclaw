@@ -21,12 +21,15 @@ from src.health import PiHealthMonitor
 from src.config import (
     CIRCUIT_BREAKER_STALL_CYCLES,
     LIMIT_GRACE_SECONDS,
+    MAX_EXPLORATION_CYCLES,
     MAX_PLAN_RETRIES,
     MAX_SUBTASKS_PER_TASK,
     SESSION_MAX_TASK_RETRIES,
 )
 from src.telemetry import get_telemetry
 from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
+from src.knowledge.hypothesis_cycle import SolutionStatus
+from src.knowledge.suggestions import SuggestionError
 from src.usage import UsageBudget, UsageTracker, StopReason
 from src.continuity import (
     ESTADO_FECHADO,
@@ -39,6 +42,7 @@ from src.continuity import (
 )
 
 if TYPE_CHECKING:
+    from src.exploration import ExplorationSession, ExplorationStop
     from src.orchestrator import Orchestrator, AgentTask, AgentResult, OrchestratorResult
 
 logger = get_logger(__name__)
@@ -601,6 +605,101 @@ class AutonomousLoop:
             retry_attempt=task.retry_attempt,
         )
 
+    def _exploration(self, master_session_id: str) -> "ExplorationSession | None":
+        """Exploração ativa da sessão (v18-hypothesis-loop); ``None`` mantém o laço de ciclo único da V17."""
+        from src.exploration import ExplorationSession
+
+        getter = getattr(self.orchestrator, "get_exploration", None)
+        found = getter(master_session_id) if callable(getter) else None
+        return found if isinstance(found, ExplorationSession) else None
+
+    async def _suspend_session(
+        self, master_session_id: str, tasks: List["AgentTask"], final_results: List["AgentResult"], text: str
+    ) -> "OrchestratorResult":
+        """Suspende (retomável) a sessão que espera uma decisão do pesquisador que não pôde ser tomada agora."""
+        from src.orchestrator import AgentResult, OrchestratorResult
+
+        current = self.orchestrator.session_manager.get(master_session_id)
+        payload = dict(current.payload) if current is not None else {}
+        payload["motivo_parada"] = "interrompida"  # retomável (v18-research-continuity)
+        self.orchestrator.session_manager.update(master_session_id, status="suspended", payload=payload)
+        logger.warning("Sessão suspensa à espera do pesquisador", extra={"master_session_id": master_session_id})
+        final_results.append(
+            AgentResult(
+                agent_id="orchestrator", session_id=master_session_id, status="success", response={"text": text}
+            )
+        )
+        self._short_term_memory.clear(master_session_id)
+        succeeded = sum(1 for r in final_results if r.status == "success")
+        return OrchestratorResult(
+            results=final_results,
+            total=len(tasks),
+            succeeded=succeeded,
+            failed=len(final_results) - succeeded,
+            artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id),
+        )
+
+    async def _close_on_suggestion_failure(
+        self,
+        exc: Exception,
+        master_session_id: str,
+        prompt: str,
+        tasks: List["AgentTask"],
+        dag_state: Dict[str, Any],
+        final_results: List["AgentResult"],
+    ) -> "OrchestratorResult":
+        """Falha ao sugerir caminhos: fecha com ``erro`` (nunca como ``sem_caminhos_promissores``; AGENTS.md §1.6)."""
+        from src.exploration import ExplorationStop
+
+        logger.error(
+            "Falha ao sugerir caminhos; sessão fechada com motivo_parada=erro. Verifique o grafo e o diretório de "
+            "saída da sessão e retome a pesquisa.",
+            extra={"error": type(exc).__name__, "detalhe": str(exc)[:200]},
+        )
+        return await self._close_exploration(
+            ExplorationStop.ERROR, master_session_id, prompt, tasks, dag_state, final_results
+        )
+
+    async def _close_exploration(
+        self,
+        stop: Any,
+        master_session_id: str,
+        prompt: str,
+        tasks: List["AgentTask"],
+        dag_state: Dict[str, Any],
+        final_results: List["AgentResult"],
+    ) -> "OrchestratorResult":
+        """Fechamento da exploração por critério próprio (solução, sem caminhos, teto de ciclos ou erro).
+
+        Nas paradas normais (solução e sem caminhos) promove as descobertas da sessão antes de fechar; em todas grava
+        o checkpoint e consolida pelo fechamento comum (``_close_session``). A falha da promoção nunca impede o
+        fechamento.
+        """
+        if getattr(stop, "value", "") in ("solucao_encontrada", "sem_caminhos_promissores") and any(
+            r.status == "success" for r in final_results
+        ):
+            try:
+                await self._promote_findings(prompt, master_session_id)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - a promoção é complementar
+                logger.warning("Promoção de descobertas falhou", extra={"error": type(exc).__name__})
+        get_telemetry().record_agent_event(
+            execution_id=master_session_id,
+            session_id=master_session_id,
+            agent_id="autonomous_loop",
+            event_type="exploration_stop",
+            payload={"motivo_parada": getattr(stop, "value", str(stop))},
+        )
+        ok_before = sum(1 for r in final_results if r.status == "success")
+        failed_before = len(final_results) - ok_before
+        result = await self._close_session(stop, master_session_id, prompt, tasks, dag_state, final_results)
+        if getattr(stop, "value", "") in ("solucao_encontrada", "sem_caminhos_promissores"):
+            # Parada por critério da pesquisa (não por limite): o saldo reflete as subtarefas, sem contar o relatório
+            # de síntese, como no fechamento de sucesso da V17.
+            result.succeeded, result.failed, result.total = ok_before, failed_before, ok_before + failed_before
+        return result
+
     async def _run_complex_path(self, prompt: str, master_session_id: str) -> "OrchestratorResult":
         """Executa a tarefa via caminho complexo (Planner -> Loop de Subtarefas em DAG)."""
         from src.orchestrator import AgentTask, OrchestratorResult, AgentResult
@@ -631,12 +730,52 @@ class AutonomousLoop:
         final_results: List[AgentResult] = []
         tasks: List[AgentTask] = []
         current_plan_dicts: List[Dict[str, Any]] = []
-        # V12.5.1 — Circuit breaker: progresso do ciclo anterior (v16-pipeline-robustness §4)
+        # V12.5.1 — Circuito de progresso zero: progresso do ciclo anterior (v16-pipeline-robustness §4)
         _previous_progress: CycleProgress | None = None
         _stalled_cycles = 0
-        
 
-        for plan_attempt in range(max_plan_retries):
+        # v18-hypothesis-loop — exploração ativa (projeto com Problema confirmado): o laço repete planejar -> executar
+        # -> consolidar -> sugerir até solução, falta de caminhos ou limite de uso. Sem ela, vale o laço de ciclo
+        # único da V17 (e MAX_PLAN_RETRIES conta todos os ciclos). Com ela, MAX_PLAN_RETRIES conta só os planos
+        # consecutivos rejeitados pelo Validator.
+        exploration = self._exploration(master_session_id)
+        exploring = exploration is not None
+        cycle_no = 0
+        rejected_plans = 0
+        legacy_attempt = 0
+        explore_next = False
+        done_results: Dict[str, AgentResult] = {}  # subtarefas concluídas na sessão (nunca reexecutadas)
+        latest_results: Dict[str, AgentResult] = {}
+        cumulative_tasks: Dict[str, AgentTask] = {}
+        cumulative_dag: Dict[str, Dict[str, Any]] = {}
+        if exploration is not None:
+            try:
+                await exploration.suggest()  # caminhos em aberto e oportunidades aprovadas, antes do primeiro plano
+            except SuggestionError as exc:
+                return await self._close_on_suggestion_failure(
+                    exc, master_session_id, prompt, list(cumulative_tasks.values()), cumulative_dag, final_results
+                )
+
+        while True:
+            if exploring:
+                if cycle_no >= MAX_EXPLORATION_CYCLES:
+                    logger.warning("Teto de ciclos de exploração atingido", extra={"cycles": cycle_no})
+                    return await self._close_exploration(
+                        StopReason.RUNS, master_session_id, prompt, list(cumulative_tasks.values()),
+                        cumulative_dag, final_results,
+                    )
+                if rejected_plans >= max_plan_retries:
+                    logger.error("Planos consecutivos rejeitados: exploração encerrada", extra={"n": rejected_plans})
+                    return await self._close_exploration(
+                        StopReason.RETRIES, master_session_id, prompt, list(cumulative_tasks.values()),
+                        cumulative_dag, final_results,
+                    )
+                plan_attempt = cycle_no
+            else:
+                if legacy_attempt >= max_plan_retries:
+                    break
+                plan_attempt = legacy_attempt
+                legacy_attempt += 1
             logger.info(f"Iniciando ciclo de planejamento/recuperação {plan_attempt+1}/{max_plan_retries}")
 
             # V18/usage-limits — não inicia um novo ciclo de planejamento (que despacharia
@@ -650,11 +789,13 @@ class AutonomousLoop:
 
             # 1. Planejamento ou Recuperação Incremental
             try:
+                planning_kwargs: Dict[str, Any] = {"explore": True} if (exploring and explore_next) else {}
                 tasks = await self.orchestrator._run_planning_loop(
                     prompt=prompt,
                     master_session_id=master_session_id,
                     previous_plan=current_plan_dicts if current_plan_dicts else None,
-                    execution_feedback=execution_feedback
+                    execution_feedback=execution_feedback,
+                    **planning_kwargs,
                 )
             except AgentRunLimitReached as limit_exc:
                 self._record_run_limit(master_session_id, limit_exc)
@@ -663,6 +804,11 @@ class AutonomousLoop:
                 )
             except PlanningStalled as stalled:
                 logger.error("Planejamento encerrado por reprovação repetida", extra={"issues": stalled.issues})
+                if exploring:
+                    rejected_plans += 1
+                    issues_text = "; ".join(stalled.issues)[:500]
+                    execution_feedback = f"O Validador reprovou o plano repetidamente: {issues_text}"
+                    continue
                 self._short_term_memory.clear(master_session_id)
                 final_results.append(AgentResult(
                     agent_id="orchestrator",
@@ -679,12 +825,81 @@ class AutonomousLoop:
             if not tasks:
                 logger.error(f"Falha na tentativa {plan_attempt+1} de gerar/recuperar plano")
                 execution_feedback = "O orquestrador falhou ao gerar um plano aprovado."
+                if exploring:
+                    rejected_plans += 1
                 continue
+            rejected_plans = 0
+
+            plan_tasks = tasks  # plano completo (inclusive o que a governança retirar), base do próximo replanejamento
+            if exploration is not None:
+                # v18-hypothesis-loop §2/§4: grava hipóteses/decisões/respostas e aplica a governança do SessionMode.
+                try:
+                    outcome = await asyncio.to_thread(
+                        exploration.prepare_cycle, tasks, self.orchestrator.take_plan_extras(master_session_id),
+                        done=set(done_results),
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 - o grafo não aceitou o plano: fecha com checkpoint
+                    logger.error(
+                        "Plano não gravado no grafo; exploração encerrada", extra={"error": type(exc).__name__}
+                    )
+                    from src.exploration import ExplorationStop
+
+                    return await self._close_exploration(
+                        ExplorationStop.ERROR, master_session_id, prompt, list(cumulative_tasks.values()),
+                        cumulative_dag, final_results,
+                    )
+                tasks = outcome.tasks
+                if outcome.dropped:
+                    logger.info("Subtarefas retiradas pela governança", extra={"dropped": outcome.dropped})
+                new_tasks = [t for t in tasks if t.task_name not in done_results]
+                if not new_tasks:
+                    # Ciclo ocioso: nada novo a executar.
+                    if outcome.pending_approval:
+                        return await self._suspend_session(
+                            master_session_id, list(cumulative_tasks.values()), final_results,
+                            "Sessão suspensa: há hipóteses aguardando a aprovação do pesquisador.",
+                        )
+                    exploration.idle_cycles += 1
+                    cycle_no += 1
+                    in_plan = {t.hypothesis_id for t in plan_tasks if t.hypothesis_id}
+                    try:
+                        has_open = exploration.idle_cycles < 2 and await asyncio.to_thread(
+                            exploration.has_open_paths, in_plan
+                        )
+                    except SuggestionError as exc:
+                        return await self._close_on_suggestion_failure(
+                            exc, master_session_id, prompt, list(cumulative_tasks.values()), cumulative_dag,
+                            final_results,
+                        )
+                    if not has_open:
+                        from src.exploration import ExplorationStop
+
+                        return await self._close_exploration(
+                            ExplorationStop.NO_PATHS, master_session_id, prompt, list(cumulative_tasks.values()),
+                            cumulative_dag, final_results,
+                        )
+                    execution_feedback = (
+                        "Nenhuma subtarefa nova no plano. Há hipóteses em teste ou sugestões do Curator ainda "
+                        "abertas: inclua subtarefas que as testem, ou encerre sem hipótese nova."
+                    )
+                    explore_next = True
+                    current_plan_dicts = [
+                        {k: v for k, v in t.__dict__.items() if v is not None and k not in ("subtask_id", "created_at")}
+                        for t in plan_tasks
+                    ]
+                    continue
+                exploration.idle_cycles = 0
+                if len(new_tasks) > self.max_subtasks:
+                    logger.warning(f"Número de subtarefas novas ({len(new_tasks)}) excede o limite {self.max_subtasks}")
+                    keep = {t.task_name for t in new_tasks[: self.max_subtasks]}
+                    tasks = [t for t in tasks if t.task_name in done_results or t.task_name in keep]
 
             # Atualiza o estado do plano atual (para a próxima iteração se falhar)
             current_plan_dicts = [
                 {k: v for k, v in t.__dict__.items() if v is not None and k not in ("subtask_id", "created_at")} 
-                for t in tasks
+                for t in plan_tasks
             ]
             
             logger.info(f"Plano ativo com {len(tasks)} subtarefas")
@@ -749,7 +964,7 @@ class AutonomousLoop:
                     plan_usage_status.stop_reason, master_session_id, prompt, tasks, {}, final_results
                 )
 
-            if len(tasks) > self.max_subtasks:
+            if not exploring and len(tasks) > self.max_subtasks:
                 logger.warning(f"Número de subtarefas ({len(tasks)}) excede o limite {self.max_subtasks}")
                 tasks = tasks[:self.max_subtasks]
 
@@ -769,6 +984,7 @@ class AutonomousLoop:
                 await asyncio.to_thread(recorder.set_plan, [plan_entry(t) for t in tasks])
 
             final_results = []
+            cycle_results: Dict[str, AgentResult] = {}  # resultado final de cada subtarefa executada NESTE ciclo
             
             # Futures para cada tarefa (para sincronização do DAG)
             dag_state = {}
@@ -808,12 +1024,21 @@ class AutonomousLoop:
                     done = resume.completed[task.task_name]
                     logger.info("Subtarefa já concluída na sessão anterior; não reexecutada",
                                 extra={"task_name": task.task_name, "source": resume.source_session_id})
-                    final_results.append(AgentResult(
+                    resumed_result = AgentResult(
                         agent_id=done.agent_id or task.agent_id,
                         session_id=master_session_id,
                         status="success",
                         response={"text": done.resultado_resumo, "resumed_from": resume.source_session_id},
-                    ))
+                    )
+                    final_results.append(resumed_result)
+                    cycle_results[task.task_name] = resumed_result
+                    dag_state[task.task_name]["status"] = "success"
+                    dag_state[task.task_name]["future"].set_result(None)
+                    return
+
+                # v18-hypothesis-loop — subtarefa concluída em ciclo anterior desta sessão: nunca reexecutada (o plano
+                # replanejado a repete inalterada para manter as dependências); o resultado segue na memória curta.
+                if task.task_name and task.task_name in done_results:
                     dag_state[task.task_name]["status"] = "success"
                     dag_state[task.task_name]["future"].set_result(None)
                     return
@@ -1040,6 +1265,8 @@ class AutonomousLoop:
 
                 if last_result:
                     final_results.append(last_result)
+                    if task.task_name:
+                        cycle_results[task.task_name] = last_result
 
                 # v17-structural-fact-ingestion — fatos da subtarefa (revisada) no grafo, sem LLM.
                 await self._ingest_subtask(task, last_result, last_review, master_session_id)
@@ -1168,6 +1395,28 @@ class AutonomousLoop:
                     StopReason.RUNS, master_session_id, prompt, tasks, dag_state, final_results
                 )
 
+            if exploration is not None:
+                # Acumula o que o ciclo produziu (a sessão agora tem vários ciclos) e fecha o ciclo no grafo: status
+                # das hipóteses e avaliação das decisões, só a partir do veredito calculado.
+                for t in tasks:
+                    if t.task_name:
+                        cumulative_tasks[t.task_name] = t
+                for name, state in dag_state.items():
+                    cumulative_dag[name] = {"status": state["status"], "error": state.get("error")}
+                for name, result in cycle_results.items():
+                    latest_results[name] = result
+                    if dag_state.get(name, {}).get("status") == "success":
+                        done_results[name] = result
+                final_results = list(latest_results.values())
+                cycle_no += 1
+                exploration.cycles = cycle_no
+                try:
+                    await asyncio.to_thread(exploration.after_cycle)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 - a avaliação é complementar: a pesquisa segue
+                    logger.warning("Avaliação do ciclo falhou", extra={"error": type(exc).__name__})
+
             # v17-curator-agent — checkpoint de consolidação ao fim do ciclo de planejamento (falha isolada).
             try:
                 await self.orchestrator.curator_consolidate(master_session_id)
@@ -1175,10 +1424,43 @@ class AutonomousLoop:
                 raise
             except Exception as exc:  # noqa: BLE001 - a falha do Curator nunca derruba a sessão
                 logger.warning("Checkpoint do Curator falhou", extra={"error": type(exc).__name__})
+            if exploration is not None:
+                try:
+                    await exploration.suggest()  # o Curator sugere novos caminhos (determinístico)
+                except SuggestionError as exc:
+                    return await self._close_on_suggestion_failure(
+                        exc, master_session_id, prompt, list(cumulative_tasks.values()), cumulative_dag, final_results
+                    )
             try:  # v18-research-continuity — hipóteses, decisões e descobertas no checkpoint
                 await asyncio.to_thread(self.orchestrator.refresh_graph_checkpoint, master_session_id)
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Checkpoint sem estado do grafo", extra={"error": type(exc).__name__})
+
+            if exploration is not None:
+                # v18-hypothesis-loop §8: critério "solução encontrada" (veredito moderado e alvo atingido por
+                # resultado validado). Semi/auto param; o assisted pergunta ao pesquisador no terminal.
+                try:
+                    solution = await asyncio.to_thread(exploration.check_solution)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 - sem leitura do grafo não há como afirmar solução
+                    logger.warning("Critério de solução indisponível", extra={"error": type(exc).__name__})
+                    solution = SolutionStatus(False)
+                if solution.found and solution.hypothesis_id not in exploration.declined_solutions:
+                    from src.exploration import ExplorationStop
+
+                    stop_args = (master_session_id, prompt, list(cumulative_tasks.values()), cumulative_dag,
+                                 final_results)
+                    if self._session_mode in ("semi", "auto"):
+                        return await self._close_exploration(ExplorationStop.SOLUTION, *stop_args)
+                    answer = await asyncio.to_thread(exploration.confirm_solution, solution)
+                    if answer == "encerrar":
+                        return await self._close_exploration(ExplorationStop.SOLUTION, *stop_args)
+                    if answer is None:
+                        return await self._suspend_session(
+                            master_session_id, list(cumulative_tasks.values()), final_results,
+                            "Sessão suspensa: critério de solução atingido, à espera da confirmação do pesquisador.",
+                        )
 
             # Verifica se houve alguma falha
             failed_tasks = [t for t, state in dag_state.items() if state["status"] in ("failed", "cancelled")]
@@ -1189,16 +1471,27 @@ class AutonomousLoop:
                 # independentes do DAG — design §3, "Tarefa abandonada").
                 succeeded = sum(1 for r in final_results if r.status == "success")
                 failed = len(final_results) - succeeded
+                cycle_succeeded = (
+                    sum(1 for r in cycle_results.values() if r.status == "success") if exploring else succeeded
+                )
 
                 # V18/usage-limits — se TODAS as tarefas do ciclo foram abandonadas por
                 # retentativas (nada teve sucesso), a sessão inteira fecha com
                 # motivo_parada="limite_retentativas" (design §3, "Todas abandonadas").
-                if abandoned_tasks and succeeded == 0 and self._usage_tracker.all_pending_abandoned(
+                if abandoned_tasks and cycle_succeeded == 0 and self._usage_tracker.all_pending_abandoned(
                     list(dag_state.keys())
                 ):
                     return await self._close_session(
-                        StopReason.RETRIES, master_session_id, prompt, tasks, dag_state, final_results
+                        StopReason.RETRIES, master_session_id, prompt,
+                        list(cumulative_tasks.values()) if exploring else tasks,
+                        cumulative_dag if exploring else dag_state, final_results,
                     )
+
+                if exploring:
+                    # v18-hypothesis-loop: sucesso do ciclo não encerra a pesquisa; replaneja em modo de exploração.
+                    execution_feedback = self._exploration_feedback(cycle_no, cycle_results, abandoned_tasks)
+                    explore_next = True
+                    continue
 
                 if succeeded > 0:
                     await self._promote_findings(prompt, master_session_id)
@@ -1224,6 +1517,7 @@ class AutonomousLoop:
                 )
             
             # Se falhou, preparamos o feedback para a próxima tentativa de plano (Recuperação Incremental)
+            explore_next = False
             succeeded_tasks = [t for t, state in dag_state.items() if state["status"] == "success"]
             logger.warning(f"O plano falhou nas tarefas: {failed_tasks}. Iniciando recuperação incremental...")
 
@@ -1359,6 +1653,22 @@ class AutonomousLoop:
             artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id)
         )
 
+    @staticmethod
+    def _exploration_feedback(cycle_no: int, cycle_results: Dict[str, Any], abandoned: List[str]) -> str:
+        """Resumo do ciclo para o replanejamento de exploração: só nomes e estados (nenhum texto de saída)."""
+        ok = sorted(n for n, r in cycle_results.items() if r.status == "success")
+        lines = [
+            f"Ciclo de exploração {cycle_no} concluído.",
+            f"- Subtarefas concluídas neste ciclo: {', '.join(ok) if ok else 'nenhuma'}",
+        ]
+        if abandoned:
+            lines.append(f"- Subtarefas abandonadas por retentativas: {', '.join(sorted(abandoned))}")
+        lines.append(
+            "- Os vereditos e o estado das hipóteses estão no contexto de exploração; decida os próximos caminhos "
+            "a partir deles e das sugestões do Curator."
+        )
+        return "\n".join(lines)
+
     async def _ingest_subtask(
         self,
         task: "AgentTask",
@@ -1392,6 +1702,7 @@ class AutonomousLoop:
                 review_status=(review or {}).get("status"),
                 review_verified=bool((review or {}).get("verified", False)),
                 validation_criteria=[c for c in (task.validation_criteria or []) if isinstance(c, str)],
+                hypothesis_id=task.hypothesis_id or None,
             )
             if await asyncio.to_thread(ingestor.subtask, sub):
                 # v17-curator-agent: recálculo determinístico do veredito após cada subtarefa ingerida.
@@ -1444,7 +1755,7 @@ class AutonomousLoop:
 
     async def _close_session(
         self,
-        reason: "StopReason",
+        reason: "StopReason | ExplorationStop",
         master_session_id: str,
         prompt: str,
         tasks: List["AgentTask"],
@@ -1558,7 +1869,11 @@ class AutonomousLoop:
                     recorder.subtask_finished(
                         t_name, status=ST_ABANDONADA, tentativas=state.tentativas, resumo=state.resultado_resumo
                     )
-            recorder.close(ESTADO_FECHADO, reason.value, curator_pendente=consolidation_pending)
+            # O fechamento do Curator pendente da sessão anterior (set_curator_pending na retomada) não se perde.
+            recorder.close(
+                ESTADO_FECHADO, reason.value,
+                curator_pendente=consolidation_pending or recorder.snapshot().curator_pendente,
+            )
 
         # Consolidação final (equivalente ao Curator — ver nota de integração acima),
         # usando a reserva de tokens quando disponível.

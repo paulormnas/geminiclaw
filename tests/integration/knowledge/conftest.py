@@ -29,6 +29,8 @@ conexão real configurada acima.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from src import config
@@ -69,7 +71,22 @@ def _graph_ready() -> tuple[bool, str]:
 
 _ready, _reason = _graph_ready()
 
-pytestmark = pytest.mark.skipif(not _ready, reason=_reason)
+_HERE = Path(__file__).resolve().parent
+
+
+def pytest_collection_modifyitems(config, items):  # noqa: ARG001 - assinatura do pytest
+    """Pula, na coleta, todos os testes deste diretório quando o AGE de teste não está acessível.
+
+    Um ``pytestmark`` em ``conftest.py`` **não** vale para os módulos de teste (só vale no próprio módulo), e o
+    pool de ``src.db`` esperaria ``getconn(timeout=30)`` em cada teste. O hook de um ``conftest`` recebe os itens da
+    sessão inteira, então filtra só os que estão sob este diretório.
+    """
+    if _ready:
+        return
+    skip = pytest.mark.skip(reason=_reason)
+    for item in items:
+        if _HERE in Path(str(item.fspath)).resolve().parents:
+            item.add_marker(skip)
 
 
 @pytest.fixture

@@ -310,6 +310,8 @@ def validate_human_only(
         if label in FACT_LABELS:
             raise FactWriteNotAllowedError(label, actor_kind)
         _validate_agent_reserved(label, current, changes)
+    if label == "Oportunidade" and actor_kind == "orquestrador":
+        _validate_opportunity_orchestrator(current, changes)
     rule = HUMAN_ONLY_TRANSITIONS.get(label)
     if rule is None or actor_kind == "pesquisador":
         return
@@ -320,6 +322,36 @@ def validate_human_only(
     old = (current or {}).get(field)
     if new == protected or (old == protected and new != protected):
         raise HumanConfirmationRequiredError(label, field, actor_kind)
+
+
+# Transições de ``Oportunidade`` que o orquestrador pode fazer sozinho, só depois da aprovação do pesquisador
+# (v18-hypothesis-loop §7): ``aprovada -> em_investigacao`` (virou hipótese) e ``em_investigacao -> concluida``.
+OPPORTUNITY_ORCHESTRATOR_TRANSITIONS: dict[str, str] = {"em_investigacao": "aprovada", "concluida": "em_investigacao"}
+OPPORTUNITY_DECISION_FIELDS: tuple[str, ...] = ("decidido_por", "decidido_em", "motivo_decisao")
+
+
+def _validate_opportunity_orchestrator(current: dict[str, object] | None, changes: dict[str, object]) -> None:
+    """O orquestrador nunca decide sobre ``Oportunidade``: aprovar e rejeitar são do pesquisador (CLI).
+
+    Ele só cria ``documentada`` e só avança uma oportunidade **já aprovada pelo pesquisador** (``aprovada`` ->
+    ``em_investigacao`` -> ``concluida``). Os campos ``decidido_*`` e ``motivo_decisao`` são sempre do humano.
+    """
+    for field in OPPORTUNITY_DECISION_FIELDS:
+        if field in changes:
+            raise HumanConfirmationRequiredError("Oportunidade", field, "orquestrador")
+    if "status" not in changes:
+        return
+    new = changes["status"]
+    old = (current or {}).get("status")
+    if current is None:
+        if new != "documentada":
+            raise HumanConfirmationRequiredError("Oportunidade", "status", "orquestrador")
+        return
+    if new == old:
+        return
+    required_previous = OPPORTUNITY_ORCHESTRATOR_TRANSITIONS.get(str(new))
+    if required_previous is None or old != required_previous:
+        raise HumanConfirmationRequiredError("Oportunidade", "status", "orquestrador")
 
 
 def _validate_agent_reserved(label: str, current: dict[str, object] | None, changes: dict[str, object]) -> None:

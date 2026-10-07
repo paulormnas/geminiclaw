@@ -99,6 +99,8 @@ def _node_line(node: Node) -> dict[str, Any]:
 class Curator:
     """Curator de uma sessão: ``consolidate`` e ``close_session`` com falha isolada e orçamento por execução."""
 
+    _system_prompt = AGENT_INSTRUCTION  # o modo de edição (``agents.curator.edit``) troca o prompt de sistema
+
     def __init__(
         self,
         store: GraphStore,
@@ -242,7 +244,7 @@ class Curator:
                 return
             started = time.monotonic()
             response = await provider.generate(
-                messages=messages, tools=tools, system=AGENT_INSTRUCTION, temperature=0.2,
+                messages=messages, tools=tools, system=self._system_prompt, temperature=0.2,
                 max_tokens=min(_MAX_GENERATE_TOKENS, remaining),
             )
             record_llm_call(provider, response, int((time.monotonic() - started) * 1000), agent_id=AGENT_ID)

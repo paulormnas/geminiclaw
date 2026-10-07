@@ -284,6 +284,14 @@ KNOWLEDGE_SEMANTIC_INDEX_ENABLED = get_env_bool("KNOWLEDGE_SEMANTIC_INDEX_ENABLE
 # com o grafo acessível a confirmação humana do Problema continua obrigatória.
 RESEARCH_PROJECT_GRAPH_OPTIONAL = get_env_bool("RESEARCH_PROJECT_GRAPH_OPTIONAL", default=False)
 
+# v17-graph-cli: acesso do pesquisador ao grafo pela CLI (visualizar sem LLM; alterar só pelo Curator, com confirmação).
+GRAPH_SHOW_MAX_NODES = int(get_env("GRAPH_SHOW_MAX_NODES", default="200"))
+GRAPH_SHOW_MAX_TEXT_CHARS = int(get_env("GRAPH_SHOW_MAX_TEXT_CHARS", default="200"))
+GRAPH_EDIT_MAX_ROUNDS = int(get_env("GRAPH_EDIT_MAX_ROUNDS", default="3"))
+GRAPH_EDIT_MAX_OPS = int(get_env("GRAPH_EDIT_MAX_OPS", default="20"))
+GRAPH_EDIT_MAX_REQUEST_CHARS = int(get_env("GRAPH_EDIT_MAX_REQUEST_CHARS", default="2000"))
+GRAPH_EDIT_MAX_DISPLAY_CHARS = int(get_env("GRAPH_EDIT_MAX_DISPLAY_CHARS", default="8000"))
+
 # Quick Search Fallback
 QUICK_SEARCH_STRATEGY = get_env("QUICK_SEARCH_STRATEGY", default="ddg,ddg_lite,brave")
 BRAVE_API_KEY = get_env("BRAVE_API_KEY", default="")

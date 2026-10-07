@@ -64,6 +64,10 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
   geminiclaw embeddings reindex [--collection <nome>] [--yes]
   geminiclaw project new --titulo <t> --objetivo <o> [--dominio <termo>]|list [--status <s>]|show <id>|use <id>
   geminiclaw --project <id> "<tarefa>"
+  geminiclaw graph show [--project <id>] [--label <r>] [--dominio <t>] [--status <s>] [--depth N]
+                        [--format text|table|json|mermaid]
+  geminiclaw graph node <id> [--format text|json]
+  geminiclaw graph edit "<pedido>" [--project <id>]   (o Curator propõe; você confirma no terminal)
   geminiclaw vocab pending|approve <id>|reject <id> [--motivo <texto>]|map <id> --para <id>
   geminiclaw knowledge stats|reindex [--yes]|sync [--session <id>]
   geminiclaw --metrics <execution_id>
@@ -1209,6 +1213,11 @@ def main() -> None:
         from src.cli_project import handle_project_command
 
         sys.exit(handle_project_command(sys.argv[2:]))
+
+    if len(sys.argv) >= 2 and sys.argv[1] == "graph":
+        from src.cli_graph import handle_graph_command
+
+        sys.exit(handle_graph_command(sys.argv[2:]))
 
     if len(sys.argv) >= 2 and sys.argv[1] == "vocab":
         sys.exit(_handle_vocab_command(sys.argv[2:]))

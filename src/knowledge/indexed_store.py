@@ -125,7 +125,13 @@ class IndexedGraphStore(GraphStore):
     def update_edge(self, src_id: str, rel: str, dst_id: str, changes: dict[str, Any], *, actor: Actor) -> None:
         self._inner.update_edge(src_id, rel, dst_id, changes, actor=actor)
 
+    def record_audit_note(self, node_id: str, actor: Actor, note: dict[str, Any]) -> None:
+        self._inner.record_audit_note(node_id, actor, note)
+
     # -- Leitura (delegada) --------------------------------------------------
+
+    def audit_history(self, node_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        return self._inner.audit_history(node_id, limit)
 
     def get_node(self, node_id: str) -> Node | None:
         return self._inner.get_node(node_id)

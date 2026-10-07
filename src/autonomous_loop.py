@@ -28,6 +28,15 @@ from src.config import (
 from src.telemetry import get_telemetry
 from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
 from src.usage import UsageBudget, UsageTracker, StopReason
+from src.continuity import (
+    ESTADO_FECHADO,
+    ST_ABANDONADA,
+    ST_CONCLUIDA,
+    ST_FALHOU,
+    CheckpointRecorder,
+    list_task_artifacts,
+    plan_entry,
+)
 
 if TYPE_CHECKING:
     from src.orchestrator import Orchestrator, AgentTask, AgentResult, OrchestratorResult
@@ -101,6 +110,46 @@ class AutonomousLoop:
         self._usage_tracker: "UsageTracker | None" = None
 
 
+    def _recorder(self, master_session_id: str) -> "CheckpointRecorder | None":
+        """Gravador de checkpoint da sessão, ou ``None`` (sem checkpoint a pesquisa continua)."""
+        getter = getattr(self.orchestrator, "get_checkpoint", None)
+        if not callable(getter):
+            return None
+        rec = getter(master_session_id)
+        return rec if isinstance(rec, CheckpointRecorder) else None
+
+    def _resume(self, master_session_id: str) -> Any:
+        """``ResumeState`` da sessão (retomada), ou ``None``."""
+        from src.continuity import ResumeState
+
+        getter = getattr(self.orchestrator, "get_resume", None)
+        state = getter(master_session_id) if callable(getter) else None
+        return state if isinstance(state, ResumeState) else None
+
+    def _preload_resumed_results(self, master_session_id: str, resume: Any) -> None:
+        """Entrega às dependentes o resultado das subtarefas concluídas na sessão anterior (sem reexecutá-las)."""
+        from src.subtask_output import SubtaskOutput
+
+        for name, state in resume.completed.items():
+            artifacts = [
+                {"name": rel.rsplit("/", 1)[-1], "path": f"{resume.source_session_id}/{rel}"}
+                for rel in state.artefatos
+            ]
+            output = SubtaskOutput(
+                task_name=name,
+                agent_id=state.agent_id or "developer",
+                status="success",
+                text_summary=f"[concluída na sessão {resume.source_session_id}] {state.resultado_resumo}".strip(),
+                artifacts=artifacts,
+            )
+            self._short_term_memory.write(
+                session_id=master_session_id,
+                key=f"result:{name}",
+                value=output.to_json(),
+                source=output.agent_id,
+                tags=["subtask_result", name, "structured", "resumed"],
+            )
+
     async def run(
         self,
         prompt: str,
@@ -144,8 +193,14 @@ class AutonomousLoop:
 
         telemetry = get_telemetry()
 
+        # v18-research-continuity — a retomada sempre segue o caminho complexo (há plano a continuar) e, antes de
+        # replanejar, conclui o fechamento do Curator que ficou pendente na sessão anterior.
+        resume = self._resume(master_session_id)
+        if resume is not None:
+            await self.orchestrator.resume_curator_pending(master_session_id)
+
         # 1. Triage: Simples vs Complexo
-        is_complex = await self._is_complex_triage(prompt, master_session_id)
+        is_complex = True if resume is not None else await self._is_complex_triage(prompt, master_session_id)
 
         # V5.8 — Telemetria: triage_decision
         telemetry.record_agent_event(
@@ -380,7 +435,12 @@ class AutonomousLoop:
             answer = None
 
         if answer and answer.strip().lower() in ("s", "sim"):
-            self.orchestrator.session_manager.update(master_session_id, status="suspended")
+            current = self.orchestrator.session_manager.get(master_session_id)
+            suspended_payload = dict(current.payload) if current is not None else {}
+            suspended_payload["motivo_parada"] = "interrompida"  # retomável (v18-research-continuity)
+            self.orchestrator.session_manager.update(
+                master_session_id, status="suspended", payload=suspended_payload
+            )
             logger.info("Sessão suspensa pelo pesquisador", extra={"master_session_id": master_session_id})
             return True
 
@@ -556,6 +616,11 @@ class AutonomousLoop:
             )
             self.orchestrator.register_usage_tracker(master_session_id, self._usage_tracker)
 
+        resume = self._resume(master_session_id)
+        if resume is not None:
+            self._preload_resumed_results(master_session_id, resume)
+        recorder = self._recorder(master_session_id)
+        session_out_dir = self.orchestrator.output_manager.base_dir / master_session_id
         max_plan_retries = MAX_PLAN_RETRIES
         execution_feedback = ""
         final_results: List[AgentResult] = []
@@ -683,12 +748,20 @@ class AutonomousLoop:
                 logger.warning(f"Número de subtarefas ({len(tasks)}) excede o limite {self.max_subtasks}")
                 tasks = tasks[:self.max_subtasks]
 
+            if resume is not None:
+                # Dependências já concluídas na sessão anterior têm o resultado pré-carregado: não exigem nó no plano.
+                names = {t.task_name for t in tasks if t.task_name}
+                for t in tasks:
+                    t.depends_on = [d for d in t.depends_on if d in names or d not in resume.completed]
             try:
                 TaskScheduler.validate_dag(tasks)
             except ValueError as e:
                 execution_feedback = f"Grafo de dependências inválido: {e}"
                 logger.error(execution_feedback)
                 continue
+
+            if recorder is not None:
+                recorder.set_plan([plan_entry(t) for t in tasks])
 
             final_results = []
             
@@ -723,6 +796,22 @@ class AutonomousLoop:
                                 dag_state[task.task_name]["status"] = "cancelled"
                                 dag_state[task.task_name]["future"].set_result(None)
                             return
+
+                # v18-research-continuity — subtarefa concluída na sessão anterior: nunca reexecutada; o resultado
+                # (resumo e artefatos) já foi entregue às dependentes por `_preload_resumed_results`.
+                if resume is not None and task.task_name in resume.completed:
+                    done = resume.completed[task.task_name]
+                    logger.info("Subtarefa já concluída na sessão anterior; não reexecutada",
+                                extra={"task_name": task.task_name, "source": resume.source_session_id})
+                    final_results.append(AgentResult(
+                        agent_id=done.agent_id or task.agent_id,
+                        session_id=master_session_id,
+                        status="success",
+                        response={"text": done.resultado_resumo, "resumed_from": resume.source_session_id},
+                    ))
+                    dag_state[task.task_name]["status"] = "success"
+                    dag_state[task.task_name]["future"].set_result(None)
+                    return
 
                 # V18/usage-limits — não redespacha uma tarefa já ABANDONADA por
                 # esgotamento de retentativas em um ciclo de replanejamento anterior. O
@@ -811,6 +900,8 @@ class AutonomousLoop:
                 while True:
                     attempt_number = self._usage_tracker.record_task_attempt(retry_key)
                     attempt = attempt_number - 1  # índice 0-based, compatível com os logs abaixo
+                    if recorder is not None and task.task_name:
+                        recorder.subtask_started(task.task_name, attempt_number)
                     logger.info(
                         f"Executando tentativa {attempt_number}/{self._usage_tracker.budget.max_task_retries} "
                         f"para {task.agent_id} [{task.task_name}]"
@@ -948,6 +1039,28 @@ class AutonomousLoop:
                 # v17-structural-fact-ingestion — fatos da subtarefa (revisada) no grafo, sem LLM.
                 await self._ingest_subtask(task, last_result, last_review, master_session_id)
 
+                # v18-research-continuity — checkpoint do fim da subtarefa (status, tentativas, artefatos, resumo).
+                if recorder is not None and task.task_name:
+                    if success:
+                        cp_status = ST_CONCLUIDA
+                    elif self._usage_tracker.task_retries_exhausted(retry_key):
+                        cp_status = ST_ABANDONADA
+                    else:
+                        cp_status = ST_FALHOU
+                    cp_text = ""
+                    if last_result is not None:
+                        cp_text = str(last_result.response.get("text") or "") if success else str(last_result.error or "")
+                    recorder.subtask_finished(
+                        task.task_name,
+                        status=cp_status,
+                        tentativas=self._usage_tracker.task_attempts(retry_key),
+                        resumo=cp_text,
+                        artefatos=list_task_artifacts(session_out_dir, task.task_name),
+                        causa_falha="infraestrutura"
+                        if (not success and getattr(last_result, "error_category", None))
+                        else None,
+                    )
+
                 # Roadmap V15.3 / Spec G5 — DivergenceReport quando a subtarefa esgota
                 # todas as tentativas (padrão de falha recorrente detectado).
                 if not success and self._usage_tracker.task_retries_exhausted(retry_key):
@@ -1054,6 +1167,10 @@ class AutonomousLoop:
                 raise
             except Exception as exc:  # noqa: BLE001 - a falha do Curator nunca derruba a sessão
                 logger.warning("Checkpoint do Curator falhou", extra={"error": type(exc).__name__})
+            try:  # v18-research-continuity — hipóteses, decisões e descobertas no checkpoint
+                await asyncio.to_thread(self.orchestrator.refresh_graph_checkpoint, master_session_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Checkpoint sem estado do grafo", extra={"error": type(exc).__name__})
 
             # Verifica se houve alguma falha
             failed_tasks = [t for t, state in dag_state.items() if state["status"] in ("failed", "cancelled")]
@@ -1417,14 +1534,23 @@ class AutonomousLoop:
         payload["checkpoint"] = checkpoint
         self.orchestrator.session_manager.update(master_session_id, payload=payload)
 
-        try:
-            session_dir = self.orchestrator.output_manager.base_dir / master_session_id
-            session_dir.mkdir(parents=True, exist_ok=True)
-            (session_dir / "checkpoint.json").write_text(
-                json.dumps(checkpoint, indent=2, ensure_ascii=False), encoding="utf-8"
+        # v18-research-continuity — checkpoint.json atômico e versionado (substitui o dicionário ad hoc anterior).
+        recorder = self._recorder(master_session_id)
+        if recorder is not None:
+            recorder.set_usage(
+                consumo={
+                    "tokens": usage_status.tokens_used,
+                    "minutos": round(usage_status.minutes_elapsed, 2),
+                    "retentativas_conexao": usage_status.connection_retries,
+                }
             )
-        except Exception as e:
-            logger.warning("Falha ao gravar checkpoint.json", extra={"error": str(e)})
+            for t_name in abandoned_tasks:
+                state = recorder.snapshot().find(t_name)
+                if state is not None and state.status != ST_ABANDONADA:
+                    recorder.subtask_finished(
+                        t_name, status=ST_ABANDONADA, tentativas=state.tentativas, resumo=state.resultado_resumo
+                    )
+            recorder.close(ESTADO_FECHADO, reason.value, curator_pendente=consolidation_pending)
 
         # Consolidação final (equivalente ao Curator — ver nota de integração acima),
         # usando a reserva de tokens quando disponível.

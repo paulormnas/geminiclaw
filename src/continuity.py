@@ -734,6 +734,19 @@ class CheckpointRecorder:
                 return False
             return self._flush()
 
+    def seed(self, states: Iterable[SubtaskState]) -> bool:
+        """Herda subtarefas concluídas de uma sessão anterior (retomada), como histórico do plano."""
+        copies = [
+            replace(s, depends_on=list(s.depends_on), artefatos=list(s.artefatos))
+            for s in states
+            if s.status == ST_CONCLUIDA
+        ][: config.CHECKPOINT_MAX_SUBTASKS]
+
+        def mutate(cp: Checkpoint) -> None:
+            cp.subtarefas = copies
+
+        return self._update(mutate)
+
     # -- momentos de gravação (design §1) -------------------------------------
 
     def set_plan(self, entries: Iterable[Mapping[str, Any]]) -> bool:
@@ -998,3 +1011,18 @@ def is_within(path: Path, roots: Iterable[Path]) -> bool:
         except OSError:
             continue
     return False
+
+
+def clear_curator_pending(session_dir: Path | str) -> bool:
+    """Limpa ``curator_pendente`` no checkpoint de uma sessão (o Curator concluiu o fechamento na retomada)."""
+    directory = Path(session_dir)
+    try:
+        cp, _origin = read_checkpoint(directory)
+    except CheckpointError:
+        return False
+    if not cp.curator_pendente:
+        return True
+    cp.curator_pendente = False
+    cp.atualizado_em = _now()
+    write_checkpoint(directory, cp)
+    return True

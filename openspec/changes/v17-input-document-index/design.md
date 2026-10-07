@@ -61,6 +61,22 @@ da `v18.5-research-data-ingestion`, arquivos marcados `dado_de_pesquisa` no `dad
 a ter só descritor, qualquer que seja a extensão (requisito já escrito aqui para quando a
 marcação existir).
 
+### 2.1 Limitações conhecidas
+
+- **Origem do primeiro arquivo:** a deduplicação é por (`projeto_id`, `hash_conteudo`). Se o mesmo
+  conteúdo aparece depois com outro nome ou origem (ex.: um artefato idêntico a um insumo), nenhum
+  documento novo é criado: `nome_arquivo`, `source_path` e `origem` ficam os do **primeiro**
+  arquivo indexado.
+- **Artefatos `.txt`/`.md`:** artefatos que o agente grava em `artifacts/` e ingere com
+  `document_processor ingest` entram **integralmente** como trechos de texto, como qualquer artigo,
+  pois a extensão não distingue relato de dado. A marcação `dado_de_pesquisa` da
+  `v18.5-research-data-ingestion` passará a forçar só descritor também para eles; até lá, quem
+  grava dados em `.txt`/`.md` expõe esses valores ao índice (e à busca com `LLM_DATA_POLICY`).
+- **`.pptx`:** o índice trata `.pptx` como `artigo` (texto dos slides), enquanto a regra
+  `insumo_tipo` da `v17-structural-fact-ingestion` classifica o `Insumo` do grafo como `outro`. A
+  divergência é intencional (o texto dos slides é útil na busca) e `tipo_insumo` do documento
+  indexado é a fonte para a busca; o `Insumo` do grafo continua `outro`.
+
 ## 3. Texto enriquecido
 
 Modelo fixo (`versao_enriquecimento = 1`), montado sem LLM:

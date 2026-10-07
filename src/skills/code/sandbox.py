@@ -975,9 +975,21 @@ class PythonSandbox:
                 if snapshot_dir.exists() or snapshot_dir.is_symlink():
                     input_files = list_input_files(snapshot_dir, session_dir)
                 prior_mounts = [check_mount_source(pathlib.Path(d), output_root) for d in (prior_dirs or [])]
+                seen_priors: set[str] = set()
                 for prior in prior_mounts:
                     if not _SAFE_NAME_RE.fullmatch(prior.name) or ".." in prior.name:
                         raise MountSourceError(f"nome de sessão anterior inválido: {prior.name!r}")
+                    # Exatamente <raiz>/<sessão> (profundidade 1): nunca a raiz de todas as sessões nem
+                    # uma subpasta; nunca a sessão atual; sem repetir (colidiria o destino /prior/<sessão>).
+                    if prior.parent != output_root:
+                        raise MountSourceError(
+                            f"sessão anterior fora do formato <saída>/<sessão>: {prior.name!r}"
+                        )
+                    if prior.name == str(session_id):
+                        raise MountSourceError("a sessão atual não pode ser montada como sessão anterior")
+                    if prior.name in seen_priors:
+                        raise MountSourceError(f"sessão anterior repetida: {prior.name!r}")
+                    seen_priors.add(prior.name)
             except MountSourceError as exc:
                 raise _MountRefused(str(exc)) from exc
             if res.modo_entrega == "copy":

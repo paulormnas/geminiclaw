@@ -299,3 +299,6 @@ Registro das correções e dos riscos aceitos decorrentes da revisão do Analist
 - **M4 (média) — varredura nos caminhos de erro:** `kill` + varredura (symlinks para fora, FIFOs, nomes
   reservados) também rodam no `finally` de `run`, não só no caminho normal; stdout/stderr são decodificados
   com `errors="replace"` (bytes inválidos não viram falha de infraestrutura).
+- **M5 (média) — origem de `/prior`:** cada sessão anterior precisa ser exatamente `<saída>/<sessão>`
+  (profundidade 1, nunca a raiz de todas as sessões nem uma subpasta), diferente da sessão atual e sem
+  repetição; qualquer violação recusa a execução antes de criar containers.

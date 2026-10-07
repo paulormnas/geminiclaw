@@ -307,3 +307,53 @@ def test_m4_saida_com_bytes_invalidos_nao_derruba_a_execucao(make_sandbox, tmp_p
 
     assert result.infra_error is None and result.exit_code == 0
     assert result.stdout.startswith("ok ") and "\ufffd" in result.stdout and "\ufffd" in result.stderr
+
+
+# --- M5: /prior é exatamente <saída>/<sessão>, diferente da sessão atual e sem repetição -------------------
+
+def _out(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir(exist_ok=True)
+    return out
+
+
+@pytest.mark.unit
+def test_m5_prior_igual_a_raiz_de_saida_e_recusado(make_sandbox, tmp_path):
+    daemon = FakeDaemon()
+    result = _run(make_sandbox(daemon), tmp_path, prior_dirs=[_out(tmp_path)])
+
+    daemon.client.containers.run.assert_not_called()
+    assert result.infra_error == "sandbox_mount_refused" and "<saída>/<sessão>" in result.stderr
+
+
+@pytest.mark.unit
+def test_m5_prior_igual_a_sessao_atual_e_recusado(make_sandbox, tmp_path):
+    atual = _out(tmp_path) / "s"  # a sessão de _run é "s"
+    atual.mkdir()
+    daemon = FakeDaemon()
+    result = _run(make_sandbox(daemon), tmp_path, prior_dirs=[atual])
+
+    daemon.client.containers.run.assert_not_called()
+    assert result.infra_error == "sandbox_mount_refused" and "sessão atual" in result.stderr
+
+
+@pytest.mark.unit
+def test_m5_prior_em_profundidade_maior_e_recusado(make_sandbox, tmp_path):
+    funda = _out(tmp_path) / "antiga" / "tarefa"
+    funda.mkdir(parents=True)
+    daemon = FakeDaemon()
+    result = _run(make_sandbox(daemon), tmp_path, prior_dirs=[funda])
+
+    daemon.client.containers.run.assert_not_called()
+    assert result.infra_error == "sandbox_mount_refused"
+
+
+@pytest.mark.unit
+def test_m5_prior_repetido_e_recusado(make_sandbox, tmp_path):
+    antiga = _out(tmp_path) / "antiga"
+    antiga.mkdir()
+    daemon = FakeDaemon()
+    result = _run(make_sandbox(daemon), tmp_path, prior_dirs=[antiga, antiga])
+
+    daemon.client.containers.run.assert_not_called()
+    assert "repetida" in result.stderr

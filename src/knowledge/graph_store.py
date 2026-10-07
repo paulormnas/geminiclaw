@@ -205,6 +205,22 @@ class GraphStore(ABC):
 
     # -- Leitura -------------------------------------------------------------
 
+    def record_audit_note(self, node_id: str, actor: Actor, note: dict[str, Any]) -> None:
+        """Grava em ``knowledge_audit`` uma anotação de contexto de uma escrita (ex.: o pedido original).
+
+        Não altera o grafo nem cria schema: usa a mesma trilha das alterações de nó. Implementações concretas
+        devem sobrescrever; o padrão falha explicitamente (nunca descarta a auditoria em silêncio).
+        """
+        raise NotImplementedError(f"{type(self).__name__} não implementa record_audit_note.")
+
+    def audit_history(self, node_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        """Histórico de alterações do nó (``knowledge_audit``), mais recente primeiro. Somente leitura.
+
+        Returns:
+            Lista de ``{"actor", "timestamp", "changes"}``.
+        """
+        raise NotImplementedError(f"{type(self).__name__} não implementa audit_history.")
+
     @abstractmethod
     def get_node(self, node_id: str) -> Node | None:
         """Busca um nó pelo ID.
@@ -422,6 +438,23 @@ class InMemoryGraphStore(GraphStore):
         from src.knowledge.errors import GraphStoreError
 
         raise GraphStoreError(f"Aresta '{src_id}-{rel}->{dst_id}' não encontrada.")
+
+    def record_audit_note(self, node_id: str, actor: Actor, note: dict[str, Any]) -> None:
+        self.audit_log.append(
+            {
+                "node_id": node_id,
+                "actor": actor.criado_por,
+                "timestamp": prepare_node_update({})["atualizado_em"],
+                "changes": dict(note),
+            }
+        )
+
+    def audit_history(self, node_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        rows = [e for e in self.audit_log if e["node_id"] == node_id]
+        return [
+            {"actor": e["actor"], "timestamp": e["timestamp"], "changes": dict(e["changes"])}
+            for e in reversed(rows[-max(limit, 0):])
+        ]
 
     def get_node(self, node_id: str) -> Node | None:
         return self._nodes.get(node_id)
@@ -730,6 +763,29 @@ class AgeGraphStore(GraphStore):
             "Nó atualizado (AgeGraphStore)",
             extra={"extra": {"node_id": node_id, "actor": actor.criado_por, "fields": list(changes)}},
         )
+
+    def record_audit_note(self, node_id: str, actor: Actor, note: dict[str, Any]) -> None:
+        self._record_audit(
+            node_id=node_id, actor=actor, changes=note, timestamp=prepare_node_update({})["atualizado_em"]
+        )
+
+    def audit_history(self, node_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        with self._connection() as conn:
+            cur = conn.execute(
+                """
+                SELECT actor, "timestamp", changes FROM knowledge_audit
+                WHERE node_id = %s ORDER BY "timestamp" DESC, id DESC LIMIT %s
+                """,
+                (node_id, max(int(limit), 0)),
+            )
+            rows = cur.fetchall()
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            actor, ts, changes = (row["actor"], row["timestamp"], row["changes"]) if isinstance(row, dict) else row
+            if isinstance(changes, str):
+                changes = json.loads(changes)
+            out.append({"actor": actor, "timestamp": str(ts), "changes": changes})
+        return out
 
     def _record_audit(self, *, node_id: str, actor: Actor, changes: dict[str, Any], timestamp: str) -> None:
         """Grava o registro de auditoria de ``update_node`` na tabela relacional ``knowledge_audit``."""

@@ -482,6 +482,11 @@ def _read_verdict(veredito: float, thresholds: tuple[float, float, float]) -> tu
     return "insuficiente", None
 
 
+def read_verdict(veredito: float, thresholds: tuple[float, float, float]) -> tuple[str, str | None]:
+    """Versão pública de ``_read_verdict``: ``(leitura, tipo_descoberta)`` de um veredito numérico (sem LLM)."""
+    return _read_verdict(veredito, thresholds)
+
+
 def compute_verdict(
     attempts: list[Attempt], criterion: Criterion, params: VerdictParams | None = None
 ) -> VerdictResult:

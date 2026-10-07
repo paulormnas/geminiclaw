@@ -169,3 +169,62 @@ def test_xlsx_sem_cabecalho_nao_vaza_a_1a_linha(tmp_path):
 
     assert "Maria" not in text and "42" not in text.split("Colunas:", 1)[1]
     assert "coluna_1" in text and "2 linhas" in text
+
+
+# --- MÉDIA 3: falha de um arquivo não derruba a fila nem vaza conteúdo ------------------------------------
+
+from unittest.mock import AsyncMock, MagicMock  # noqa: E402
+
+from src.knowledge.input_index import index_input_snapshot  # noqa: E402
+from src.orchestrator import Orchestrator  # noqa: E402
+from tests.unit.input_index.conftest import all_points, make_session  # noqa: E402
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_falha_no_meio_da_fila_registra_tipo_do_erro_e_segue(tmp_path, indexer, extractors, monkeypatch):
+    session = make_session(tmp_path, {"a.txt": "alfa alfa", "b.txt": "SEGREDO-123 beta", "c.txt": "gama gama"})
+    real = indexer.registry.upsert_document
+
+    def flaky(doc, chunks):
+        if doc["filename"] == "b.txt":
+            raise RuntimeError("falha com valor SEGREDO-123 do conteúdo")
+        return real(doc, chunks)
+
+    monkeypatch.setattr(indexer.registry, "upsert_document", flaky)
+
+    report = await index_input_snapshot(session, PROJ_A, indexer=indexer, extractors=extractors)
+
+    assert report["indexados"] == 2
+    assert report["falhas"] == [{"arquivo": "b.txt", "erro": "RuntimeError"}]
+    assert "SEGREDO-123" not in str(report)
+    assert {p.payload["nome_arquivo"] for p in all_points(indexer)} == {"a.txt", "c.txt"}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_nul_removido_do_texto_antes_do_registro(tmp_path, indexer, extractors):
+    session = make_session(tmp_path, {"a.txt": b"antes\x00depois do nul"})
+
+    report = await index_input_snapshot(session, PROJ_A, indexer=indexer, extractors=extractors)
+
+    assert report["indexados"] == 1
+    (doc,) = indexer.registry.list_documents(10, "proj-a")
+    rows = indexer.registry.get_chunks(doc["id"])
+    assert all("\x00" not in r["content"] for r in rows) and "antesdepois" in rows[0]["content"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_orchestrator_postgres_indisponivel_devolve_relatorio_com_erro():
+    orch = Orchestrator(session_manager=MagicMock(), agent_runtime=MagicMock())
+    orch._open_knowledge_store = MagicMock(return_value=None)
+    orch.session_manager.get.return_value = MagicMock(payload={"mode": "auto"})
+
+    with patch("src.knowledge.input_index.index_input_snapshot", AsyncMock(side_effect=ConnectionError("pg://u:senha@h"))):
+        with patch("src.knowledge.input_index.load_project_meta", MagicMock(return_value=PROJ_A)):
+            report = await orch._index_inputs("sess", "proj-a")
+
+    assert report is not None and report["erro"] == "ConnectionError"
+    assert "senha" not in str(report)
+    assert orch.session_manager.update.call_args.kwargs["payload"]["input_index"]["erro"] == "ConnectionError"

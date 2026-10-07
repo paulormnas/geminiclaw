@@ -115,7 +115,8 @@ async def test_orchestrator_index_inputs_nunca_interrompe_a_sessao():
     orch._open_knowledge_store = MagicMock(side_effect=RuntimeError("sem grafo"))
 
     with patch("src.knowledge.input_index.index_input_snapshot", AsyncMock(side_effect=RuntimeError("boom"))):
-        assert await orch._index_inputs("sess", "proj-a") is None
+        report = await orch._index_inputs("sess", "proj-a")
+        assert report is not None and report["erro"] == "RuntimeError"
 
     assert await orch._index_inputs("sess", None) is None
     with patch("src.config.INPUT_INDEX_ENABLED", False):

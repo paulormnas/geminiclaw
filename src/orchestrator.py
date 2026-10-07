@@ -413,7 +413,9 @@ class Orchestrator:
         """Indexa o ``input_snapshot/`` da sessão na coleção de documentos (v17-input-document-index).
 
         Nunca levanta: qualquer falha é registrada e a sessão segue para o planejamento. Devolve o relatório
-        (também gravado em ``payload["input_index"]``) ou ``None`` se desligada, sem projeto ou com erro.
+        (também gravado em ``payload["input_index"]``) ou ``None`` se desligada ou sem projeto. Se a indexação
+        em si falhar (ex.: PostgreSQL indisponível), o relatório traz ``erro`` (só o tipo da exceção), para que
+        o pesquisador veja que a busca nos insumos não está disponível.
         """
         from src import config
 
@@ -442,7 +444,14 @@ class Orchestrator:
             return report
         except Exception as exc:  # noqa: BLE001 - a indexação nunca derruba a sessão
             logger.warning("Indexação dos insumos falhou", extra={"error": type(exc).__name__})
-            return None
+            report = {"erro": type(exc).__name__, "indexados": 0, "pendentes": [], "falhas": []}
+            try:
+                current = self.session_manager.get(session_id)
+                if current is not None:
+                    self.session_manager.update(session_id, payload={**current.payload, "input_index": report})
+            except Exception as inner:  # noqa: BLE001
+                logger.warning("Relatório de erro da indexação não gravado", extra={"error": type(inner).__name__})
+            return report
 
     @staticmethod
     async def _safe_ingest(fn: "Callable[[], Any]") -> None:

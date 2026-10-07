@@ -87,7 +87,7 @@ async def index_input_snapshot(
 
     Returns:
         Relatório para ``payload["input_index"]``: contagens, ``pendentes`` (não tratados por falta de
-        tempo), ``falhas``, ``vetorizacao_pendente`` e ``segundos``.
+        tempo), ``falhas`` (``arquivo`` e tipo do ``erro``), ``vetorizacao_pendente`` e ``segundos``.
     """
     started = time.monotonic()
     limit = config.INPUT_INDEX_MAX_SECONDS if max_seconds is None else max_seconds
@@ -117,12 +117,10 @@ async def index_input_snapshot(
                 indexer, extractors, path, root=session_dir, projeto=projeto, origem=ORIGEM_INPUT,
                 insumo_resolver=resolver, deadline=deadline,
             )
-        except (IngestionFileError, ValueError, OSError) as exc:
-            logger.warning(
-                "Insumo não indexado",
-                extra={"arquivo": path.name, "error": type(exc).__name__, "motivo": str(exc)[:200]},
-            )
-            report["falhas"].append(path.name)
+        except Exception as exc:  # noqa: BLE001 - um arquivo ruim (ou o registro) não derruba a fila
+            # Só o tipo do erro vai ao relatório e ao log: a mensagem pode conter valores do conteúdo.
+            logger.warning("Insumo não indexado", extra={"arquivo": path.name, "error": type(exc).__name__})
+            report["falhas"].append({"arquivo": path.name, "erro": type(exc).__name__})
             continue
         report[status_key[outcome.status]] += 1
         report["pontos_vetorizados"] += outcome.vetorizados

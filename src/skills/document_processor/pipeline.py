@@ -288,6 +288,11 @@ async def index_file(
         ]
         metadata_extra["so_descritor"] = True
 
+    # PostgreSQL rejeita \x00 em texto: removido do conteúdo e do título antes do registro e do embedding.
+    title = title.replace("\x00", "")
+    for chunk in chunks:
+        chunk.content = chunk.content.replace("\x00", "")
+
     meta = {
         "projeto_id": projeto_id,
         "hash_conteudo": digest,

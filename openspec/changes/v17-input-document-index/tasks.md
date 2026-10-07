@@ -32,6 +32,14 @@
 - [x] 4.5 Busca por projeto e em todos os projetos.
 - [x] 4.6 Qdrant fora do ar e recuperação.
 
+## 4b. Achados da revisão de segurança
+- [x] 4b.1 Texto de insumo ao LLM como dado não confiável (`wrap_data`, `clean_free_text`); título e arquivo sanitizados na instrução; nomes de colunas e chaves sanitizados.
+- [x] 4b.2 Descritores sem vazamento: cabeçalho suspeito vira `coluna_N`; JSON dicionário de registros só com `chaves: N`.
+- [x] 4b.3 Falha por arquivo registrada com o tipo do erro; `\x00` removido; erro explícito do orquestrador.
+- [x] 4b.4 Limites: 20 MB (arquivo) e 10 MB (JSON/xlsx/parquet, `INPUT_INDEX_MAX_DATASET_MB`); prazo checado antes de extrair; arquivo fechado; prazo documentado como melhor esforço.
+- [x] 4b.5 Escopo de projeto fail-closed: `info`, lista do agente, auditoria de `todos_os_projetos`, `sem_projeto:<session_id>`.
+- [x] 4b.6 `estrutura: indisponivel`; limitações documentadas (design §2.1); teste de prazo com relógio controlado.
+
 ## 5. Fechamento
 - [x] 5.1 `.env.example`.
 - [ ] 5.2 `uv run ruff check .`; `uv run pytest -m "unit or integration" -v`.

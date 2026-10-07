@@ -1048,7 +1048,12 @@ class AutonomousLoop:
                 )
 
             # v17-curator-agent — checkpoint de consolidação ao fim do ciclo de planejamento (falha isolada).
-            await self.orchestrator.curator_consolidate(master_session_id)
+            try:
+                await self.orchestrator.curator_consolidate(master_session_id)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - a falha do Curator nunca derruba a sessão
+                logger.warning("Checkpoint do Curator falhou", extra={"error": type(exc).__name__})
 
             # Verifica se houve alguma falha
             failed_tasks = [t for t, state in dag_state.items() if state["status"] in ("failed", "cancelled")]

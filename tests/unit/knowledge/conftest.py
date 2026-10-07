@@ -54,7 +54,9 @@ class Env:
         """Cria um nó pelo store com gancho (preenche os campos obrigatórios do rótulo)."""
         data = {**_REQUIRED[label], "projeto_id": projeto_id, "sessao_id": "s1", **props}
         # Problema "confirmado" só nasce pela mão do pesquisador (validate_human_only).
-        return self.store.create_node(label, data, actor=PESQUISADOR if label == "Problema" else ORQ)
+        # Oportunidade fora de "documentada" também é decisão do pesquisador (v18-hypothesis-loop).
+        human = label == "Problema" or (label == "Oportunidade" and data.get("status") != "documentada")
+        return self.store.create_node(label, data, actor=PESQUISADOR if human else ORQ)
 
     def node(self, node_id: str):
         return self.raw.get_node(node_id)

@@ -4,7 +4,8 @@ O Curator **registra conhecimento interpretado** no grafo: descobertas (o que fu
 e lições), oportunidades documentadas, caminhos sem conclusão e a confirmação de similaridades. Ele **não** decide pelo
 pesquisador (confirmar o ``Problema``, aprovar termos de vocabulário e decidir sobre ``Oportunidade`` são do humano) e
 só escreve por ferramentas tipadas (``src/knowledge/curator_tools.py``), que aplicam as diretrizes do ADR 015 §10 e
-recusam o que as violar. O ciclo ativo Curator <-> Researcher é da mudança ``v18-hypothesis-loop``.
+recusam o que as violar. No ciclo ativo Curator <-> Researcher (``v18-hypothesis-loop``) ele também consolida lições de
+caminho a partir de decisões avaliadas e **sugere** novos caminhos (``Curator.suggest_paths``, determinístico).
 
 Papel executado em processo (ADR 014) pelo ``CuratorRunner`` (``agents/curator/runner.py``), ligado a projeto, sessão e
 orçamento. O papel **não** está em ``AGENT_IDS``: um plano gerado por LLM não pode atribuir-lhe subtarefas.

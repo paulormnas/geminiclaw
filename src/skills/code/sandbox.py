@@ -19,6 +19,7 @@ from packaging.utils import canonicalize_name
 from src import config
 from src.llm.retry import RETRY_BACKOFFS_SECONDS, emit_connection_retry, is_retryable_status
 from src.logger import get_logger
+from src.reserved_files import is_reserved_name
 
 logger = get_logger(__name__)
 
@@ -209,6 +210,31 @@ def cleanup_sandbox_containers() -> int:
                 logger.warning(f"Falha ao remover container de sandbox {container.short_id}: {exc}")
     except Exception as exc:  # noqa: BLE001 — sem daemon não há o que limpar
         logger.warning(f"Cleanup de sandboxes ignorado: {exc}")
+    return removed
+
+
+def _purge_reserved_names(root: pathlib.Path) -> list[str]:
+    """Remove de ``root`` arquivos/links com nome reservado do orquestrador (qualquer caixa, em qualquer nível).
+
+    Args:
+        root: Pasta da tarefa a varrer.
+
+    Returns:
+        Caminhos (relativos a ``root``) removidos.
+    """
+    removed: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        for name in [*dirnames, *filenames]:
+            if not is_reserved_name(name):
+                continue
+            path = os.path.join(dirpath, name)
+            if os.path.isdir(path) and not os.path.islink(path):
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                os.unlink(path)
+            removed.append(os.path.relpath(path, root))
+    if removed:
+        logger.warning("Arquivos reservados do orquestrador removidos da saída", extra={"removed": removed})
     return removed
 
 
@@ -527,9 +553,15 @@ class PythonSandbox:
         bad_names = [
             f"{label}={value!r}"
             for label, value in (("session_id", session_id), ("task_name", task_name))
-            if not isinstance(value, str) or not _SAFE_NAME_RE.fullmatch(value) or ".." in value
+            if not isinstance(value, str)
+            or not _SAFE_NAME_RE.fullmatch(value)
+            or ".." in value
+            or value == "."  # "." faria do bind mount a pasta da sessão (ou a raiz de todas as sessões)
+            or is_reserved_name(value)
         ]
-        if bad_names or not abs_output_dir.resolve().is_relative_to(output_root):
+        resolved = abs_output_dir.resolve()
+        # A pasta da tarefa é sempre <raiz>/<sessão>/<tarefa>, mesmo através de symlinks: nunca a pasta da sessão.
+        if bad_names or not resolved.is_relative_to(output_root) or len(resolved.relative_to(output_root).parts) != 2:
             return SandboxResult(
                 stdout="",
                 stderr=(
@@ -679,8 +711,17 @@ class PythonSandbox:
             try:
                 _purge_escaping_symlinks(abs_output_dir)
                 _purge_special_files(abs_output_dir)
+                reserved_removed = _purge_reserved_names(abs_output_dir)
             except OSError as e:
                 logger.warning(f"Falha ao varrer a pasta da tarefa: {e}")
+                reserved_removed = []
+            if reserved_removed:
+                stderr = (
+                    f"{stderr}\nArquivo(s) reservado(s) do orquestrador removido(s) da saída da tarefa: "
+                    f"{', '.join(reserved_removed)}. Esses nomes não podem ser gravados pelo código gerado."
+                ).strip()
+                if exit_code == 0:
+                    exit_code = 1
 
             return SandboxResult(
                 stdout=stdout,

@@ -258,3 +258,56 @@ def test_sem_problema_confirmado_nao_grava():
     with pytest.raises(HypothesisError):
         HypothesisBook(store, ctx).record(_extras(hipoteses=[{"ref": "h1", "enunciado": "X"}]))
     assert issubclass(HypothesisError, GraphStoreError)
+
+
+def test_aceita_com_hipotese_sem_relacao_nao_empresta_proveniencia_da_oportunidade():
+    """Scenario: Sugestão aceita sem relação — não herda DERIVADA_DE/GEROU nem muda a oportunidade aprovada."""
+    w = HypothesisWorld()
+    opp = w.opportunity("Investigar a variação de temperatura no ensaio", status="aprovada")
+    text = "Investigar a variação de temperatura no ensaio"
+    suggestion = PendingSuggestion("s1", text, (opp,), "oportunidade_aprovada")
+    extras = _extras(
+        hipoteses=[{"ref": "h1", "enunciado": "Normalizar os dados melhora o desempenho do modelo", "justificativa": "J"}],
+        respostas_sugestoes=[{"sugestao_id": "s1", "decisao": "aceita", "motivo": "ok", "hipotese_ref": "h1"}],
+    )
+    report = _book(w, [suggestion]).record(extras)
+    hid = report.ref_map["h1"]
+    assert w.raw.get_node(hid).properties["origem"] == "researcher"
+    assert _out(w, hid, "DERIVADA_DE") == [] and _out(w, opp, "GEROU") == []
+    assert w.raw.get_node(opp).properties["status"] == "aprovada"
+    assert report.respostas_registradas == {"s1": "recusada"}
+
+
+def test_aceita_com_derivada_de_explicito_igual_ao_fundamento_liga_a_oportunidade():
+    w = HypothesisWorld()
+    opp = w.opportunity("Investigar a variação de temperatura no ensaio", status="aprovada")
+    text = "Investigar a variação de temperatura no ensaio"
+    suggestion = PendingSuggestion("s1", text, (opp,), "oportunidade_aprovada")
+    extras = _extras(
+        hipoteses=[{"ref": "h1", "enunciado": "Hipótese redigida de outro modo", "justificativa": "J",
+                    "derivada_de": [opp]}],
+        respostas_sugestoes=[{"sugestao_id": "s1", "decisao": "aceita", "motivo": "ok", "hipotese_ref": "h1"}],
+    )
+    report = _book(w, [suggestion]).record(extras)
+    hid = report.ref_map["h1"]
+    assert [n.id for n, _ in _out(w, opp, "GEROU")] == [hid]
+    assert report.respostas_registradas == {"s1": "aceita"}
+
+
+def _aceita_com_indice(enunciado: str):
+    w = HypothesisWorld(index=True)
+    a, near = pair_vectors(DIM, 0, 0.95)
+    _, far = pair_vectors(DIM, 0, 0.30)
+    w.provider.vectors.update({"gama-sug": a, "gama-perto": near, "gama-longe": far})
+    path = w.discovery("caminho_sem_conclusao", proximo_passo_sugerido="gama-sug")
+    suggestion = PendingSuggestion("s1", "gama-sug", (path,), "caminho_sem_conclusao")
+    extras = _extras(
+        hipoteses=[{"ref": "h1", "enunciado": enunciado, "justificativa": "J"}],
+        respostas_sugestoes=[{"sugestao_id": "s1", "decisao": "aceita", "motivo": "ok", "hipotese_ref": "h1"}],
+    )
+    return _book(w, [suggestion]).record(extras)
+
+
+def test_aceita_com_indice_exige_similaridade_semantica_com_o_texto_da_sugestao():
+    assert _aceita_com_indice("gama-longe").respostas_registradas == {"s1": "recusada"}
+    assert _aceita_com_indice("gama-perto").respostas_registradas == {"s1": "aceita"}

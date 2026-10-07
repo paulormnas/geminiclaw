@@ -805,6 +805,14 @@ class SemanticIndex:
             for p in response.points
         ]
 
+    def text_similarity(self, a: str, b: str) -> float:
+        """Similaridade cosseno entre dois textos livres (sem passar pelo índice)."""
+        va, vb = self._provider.embed_query(a), self._provider.embed_query(b)
+        na, nb = sum(x * x for x in va) ** 0.5, sum(x * x for x in vb) ** 0.5
+        if not na or not nb:
+            return 0.0
+        return sum(x * y for x, y in zip(va, vb)) / (na * nb)
+
     def similarity_to(self, text: str, node_ids: list[str]) -> dict[str, float]:
         """Similaridade cosseno do ``text`` com nós **específicos** (inclusive os que as buscas ignoram).
 

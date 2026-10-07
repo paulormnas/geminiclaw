@@ -66,6 +66,7 @@ _PLAN_LIST_KEYS = ("subtarefas", "tasks", "plan", "subtasks", "steps")
 _MAX_LIST_ITEMS = 20
 _MAX_CONSULTED = 50
 _MAX_SIMILAR = 5
+_LEXICAL_MIN_OVERLAP = 0.5  # sem índice semântico: fração mínima de termos do menor enunciado em comum
 _MAX_DISCARDED = 10
 _PLAN_DATA_KEYS = ("hipoteses", "decisoes", "respostas_sugestoes")
 
@@ -384,6 +385,11 @@ class RecordReport:
         }
 
 
+def _significant_tokens(text: str) -> set[str]:
+    """Termos normalizados (>= 3 caracteres ou com dígito) usados na comparação lexical."""
+    return {t for t in normalize_domain_term(text).split("_") if len(t) >= 3 or any(c.isdigit() for c in t)}
+
+
 @dataclass(frozen=True)
 class PendingSuggestion:
     """Sugestão pendente conhecida pelo orquestrador (``curator_suggestions.jsonl``), usada para validar respostas."""
@@ -505,16 +511,44 @@ class HypothesisBook:
         pending = {s.id: s for s in self._pending()}
         replies = {r.sugestao_id: r for r in extras.respostas if r.sugestao_id in pending}
         accepted_by_ref: dict[str, PendingSuggestion] = {}
+        unsupported: set[str] = set()  # aceitas cuja hipótese não se liga ao texto da sugestão
+        decls = {d.ref: d for d in extras.hipoteses}
         for reply in replies.values():
             ref = reply.hipotese_ref
-            if reply.decisao == "aceita" and ref and ref not in accepted_by_ref:
+            if reply.decisao != "aceita" or not ref:
+                continue
+            decl = decls.get(ref)
+            if decl is None or not self._supports(decl, pending[reply.sugestao_id]):
+                unsupported.add(reply.sugestao_id)  # sem fundamento herdado: nenhum DERIVADA_DE/GEROU da sugestão
+            elif ref not in accepted_by_ref:
                 accepted_by_ref[ref] = pending[reply.sugestao_id]
         for decl in extras.hipoteses:
             self._record_hypothesis(decl, problem, report, accepted_by_ref.get(decl.ref))
-        self._record_replies(replies, pending, problem, report)
+        self._record_replies(replies, pending, problem, report, unsupported)
         for decision in extras.decisoes:
             self._record_decision(decision, report)
         return report
+
+    def _supports(self, decl: HypothesisDecl, suggestion: PendingSuggestion) -> bool:
+        """A hipótese declarada está ligada à sugestão (e pode herdar o fundamento dela)?
+
+        Só liga com ``derivada_de`` explícito igual a um fundamento da sugestão ou com enunciado semanticamente
+        próximo do texto da sugestão (similaridade mínima de reutilização; sem índice, sobreposição lexical). Evita
+        que uma resposta ``aceita`` empreste a proveniência (``DERIVADA_DE``/``GEROU``) a uma hipótese sem relação.
+        """
+        if set(decl.derivada_de) & set(suggestion.fundamento_ids):
+            return True
+        if not decl.enunciado or not suggestion.texto:
+            return False
+        if self._index is not None:
+            try:
+                return float(self._index.text_similarity(decl.enunciado, suggestion.texto)) >= self._threshold
+            except Exception as exc:  # noqa: BLE001 - índice fora do ar: cai para a comparação lexical
+                logger.warning(
+                    "Similaridade com a sugestão indisponível", extra={"extra": {"erro": type(exc).__name__}}
+                )
+        a, b = _significant_tokens(decl.enunciado), _significant_tokens(suggestion.texto)
+        return bool(a and b) and len(a & b) / min(len(a), len(b)) >= _LEXICAL_MIN_OVERLAP
 
     def _declared_sources(self, decl: HypothesisDecl, suggestion: PendingSuggestion | None) -> list[Node]:
         """Nós de origem (``DERIVADA_DE``) **verificados no grafo**: ID inventado ou de outro projeto é ignorado."""
@@ -640,11 +674,16 @@ class HypothesisBook:
         pending: dict[str, PendingSuggestion],
         problem: Node,
         report: RecordReport,
+        unsupported: set[str] | None = None,
     ) -> None:
         for sid, reply in replies.items():
             suggestion = pending[sid]
             if reply.decisao == "aceita":
-                linked = reply.hipotese_ref is not None and reply.hipotese_ref in report.ref_map
+                linked = (
+                    reply.hipotese_ref is not None
+                    and reply.hipotese_ref in report.ref_map
+                    and sid not in (unsupported or ())
+                )
                 if linked:
                     report.respostas_registradas[sid] = "aceita"
                     continue

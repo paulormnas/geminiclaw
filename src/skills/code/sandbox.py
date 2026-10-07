@@ -731,14 +731,19 @@ class PythonSandbox:
     ) -> tuple[bool, Optional[str]]:
         """Decide se a fase ``execute`` roda com rede (design §6).
 
-        Só com ``needs_network`` explícito, todas as entradas ``compartilhavel`` e nenhum dado produzido
-        por execução visível. A nota devolvida não cita nomes de arquivos de dados.
+        Só com ``needs_network`` explícito, autorização explícita do classificador (``network_allowed``,
+        verificada antes de qualquer outra regra: sem manifesto, nenhuma execução tem rede), todas as
+        entradas ``compartilhavel`` e nenhum dado produzido por execução visível. A nota devolvida não
+        cita nomes de arquivos de dados.
 
         Returns:
             Tupla ``(rede, nota)``; ``nota`` explica a condição que falhou quando a rede foi pedida e negada.
         """
         if not needs_network:
             return False, None
+        authorize = getattr(self.input_classifier, "network_allowed", None)
+        if not callable(authorize) or authorize() is not True:
+            return False, "o classificador de insumos não autoriza rede na execução (sem manifesto de dados)"
         if any(not self.input_classifier.is_shareable(path) for path in input_files):
             return False, "há entradas não compartilháveis em /inputs; a execução roda sem rede"
         produced = [

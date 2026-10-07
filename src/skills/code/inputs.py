@@ -8,7 +8,16 @@ from typing import List, Protocol
 
 
 class InputClassifier(Protocol):
-    """Decide se um insumo é ``compartilhavel`` (pode coexistir com rede na fase ``execute``)."""
+    """Decide se um insumo é ``compartilhavel`` (pode coexistir com rede na fase ``execute``).
+
+    A rede na fase ``execute`` exige, antes de qualquer outra regra, que o classificador a **autorize
+    explicitamente** (``network_allowed``): sem manifesto de dados não há base para afirmar que nada
+    sensível está visível, então a ausência de insumos não equivale a "tudo compartilhável".
+    """
+
+    def network_allowed(self) -> bool:
+        """True somente se o classificador tem base (manifesto de dados) para autorizar rede na execução."""
+        ...
 
     def is_shareable(self, path: pathlib.Path) -> bool:
         """True somente se o arquivo está marcado como compartilhável."""
@@ -20,6 +29,9 @@ class NoneShareableClassifier:
 
     A implementação real vem de ``v18.5-research-data-ingestion``; até lá nenhuma execução tem rede.
     """
+
+    def network_allowed(self) -> bool:
+        return False
 
     def is_shareable(self, path: pathlib.Path) -> bool:
         return False

@@ -25,6 +25,9 @@ SHA_A = hashlib.sha256(b"pesos").hexdigest()
 
 
 class ShareAll:
+    def network_allowed(self):
+        return True
+
     def is_shareable(self, path):
         return True
 
@@ -390,6 +393,9 @@ def test_uma_entrada_nao_compartilhavel(make_sandbox, tmp_path):
     _snapshot(tmp_path, {"a.csv": "1", "b.csv": "2"})
 
     class OnlyA:
+        def network_allowed(self):
+            return True
+
         def is_shareable(self, path):
             return path.name == "a.csv"
 

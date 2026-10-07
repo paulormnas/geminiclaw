@@ -150,6 +150,9 @@ Para `v17-structural-fact-ingestion` §3, a falha é `causa_falha="abordagem"` c
 
 A fase `execute` só roda com rede quando **todas** as condições valem:
 
+0. o classificador de insumos **autoriza a rede explicitamente** (`InputClassifier.network_allowed()`),
+   verificado antes de todas as outras regras. Sem manifesto, nenhuma execução tem rede, nem a que
+   não tem insumos (`all([])` é verdadeiro e não pode valer como autorização; revisão A1);
 1. a chamada pede rede explicitamente (parâmetro `needs_network=true` da skill);
 2. todo arquivo de `/inputs` está marcado `compartilhavel`, segundo o classificador de
    insumos (`InputClassifier.is_shareable(path) -> bool`);
@@ -256,3 +259,14 @@ container de preparação desta mudança (ver questão 4).
    limite de tamanho, ou por idade?
 4. Cache de pacotes entre execuções no container de preparação (`UV_CACHE_DIR` persistente
    montado só na fase `install`): incluir nesta mudança ou deixar para depois?
+
+## Achados da revisão de segurança (PR #111)
+
+Registro das correções e dos riscos aceitos decorrentes da revisão do Analista de Segurança.
+
+- **A1 (alta) — rede sem insumos:** a exceção do §6 passou a exigir `network_allowed()` do classificador
+  antes de qualquer outra regra; sem insumos e com o classificador padrão, a execução roda sem rede.
+  *Rede dedicada para a preparação:* avaliada e **não adotada aqui**. Uma rede de containers própria
+  não filtra destinos por si só: restringir a saída aos índices de pacotes exige regras de firewall no
+  host (iptables/nftables) ou proxy, fora do escopo sem tocar em Dockerfile/compose e sem validação no
+  Pi. Fica como risco aceito (ver Riscos) para uma mudança futura.

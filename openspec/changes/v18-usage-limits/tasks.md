@@ -38,3 +38,5 @@
 ## 6. Fechamento
 - [x] 6.1 Ruff, testes.
 - [ ] 6.2 Revisão nos 7 eixos, PR.
+
+- [ ] X.1 **Gate humano** (de `v17-curator-agent` 6.99): ligar `ativar_modo_sem_limite` ao `HumanGate` (`src/human_gate.py`, origem `Source.TERMINAL`/`Source.CLI`) quando o modo existir; a resposta de `ask_researcher`/consultor nunca autoriza; teste de integração do ponto de decisão.

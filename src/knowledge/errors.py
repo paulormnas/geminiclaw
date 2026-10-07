@@ -120,3 +120,22 @@ class HumanConfirmationRequiredError(GraphStoreError):
         self.label = label
         self.field = field
         self.actor_kind = actor_kind
+
+
+class FactWriteNotAllowedError(GraphStoreError):
+    """Agente tentou criar ou alterar um fato estrutural (escrito só pela ingestão determinística do orquestrador)."""
+
+    def __init__(self, label: str, actor_kind: str) -> None:
+        super().__init__(
+            f"'{label}' é um fato estrutural, escrito só pela ingestão do orquestrador; ator '{actor_kind}' recusado."
+        )
+        self.label = label
+
+
+class EdgeUpdateNotAllowedError(GraphStoreError):
+    """``update_edge`` fora da política: ator não autorizado ou relação protegida."""
+
+    def __init__(self, rel: str, actor_kind: str, reason: str) -> None:
+        super().__init__(f"update_edge recusado em '{rel}' (ator '{actor_kind}'): {reason}.")
+        self.rel = rel
+        self.actor_kind = actor_kind

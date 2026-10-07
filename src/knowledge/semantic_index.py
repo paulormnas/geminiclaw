@@ -71,7 +71,7 @@ _KEYWORD_INDEXES = ("caminho_ids", "nivel")
 _RECONCILE_RETRIEVE_BATCH = 64
 
 # Pares/itens com estes ``status`` não participam de buscas nem de candidatos.
-IGNORED_STATUSES = frozenset({"substituida", "rejeitado", "rejeitada"})
+IGNORED_STATUSES = frozenset({"substituida", "rejeitado", "rejeitada", "fundida"})
 # Chaves de payload aceitas em ``filters`` (falha cedo em vez de devolver vazio).
 FILTERABLE_PAYLOAD_KEYS = frozenset(
     {"tipo_no", "projeto_id", "dominios", "status", "visibilidade", "veredito", "criado_em",
@@ -804,6 +804,26 @@ class SemanticIndex:
             Hit(node_id=str(p.id), label="Dominio", score=p.score, payload=p.payload or {})
             for p in response.points
         ]
+
+    def similarity_to(self, text: str, node_ids: list[str]) -> dict[str, float]:
+        """Similaridade cosseno do ``text`` com nós **específicos** (inclusive os que as buscas ignoram).
+
+        Nós sem ponto indexado ficam fora do resultado.
+        """
+        if not node_ids:
+            return {}
+        query = self._provider.embed_query(text)
+        found = self._client.retrieve(self.collection, ids=list(node_ids), with_vectors=True)
+        out: dict[str, float] = {}
+        qn = sum(x * x for x in query) ** 0.5
+        for point in found:
+            vector = point.vector
+            if isinstance(vector, dict):
+                vector = next(iter(vector.values()))
+            vn = sum(x * x for x in vector) ** 0.5  # type: ignore[union-attr]
+            if qn and vn:
+                out[str(point.id)] = sum(a * b for a, b in zip(query, vector)) / (qn * vn)  # type: ignore[arg-type]
+        return out
 
     def iter_neighbors(
         self, node_id: str, labels: list[str], min_score: float, page_size: int

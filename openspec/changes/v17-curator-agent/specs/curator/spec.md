@@ -112,3 +112,66 @@ As ferramentas do Curator MUST NOT apagar nós ou arestas nem executar Cypher de
 #### Scenario: Inventário
 - **WHEN** as ferramentas do Curator são inspecionadas
 - **THEN** nenhuma remove dados, e a única consulta livre usa o papel somente-leitura
+
+## ADDED Requirements (2026-10-06 — deltas da implementação, a ratificar pelo Arquiteto)
+
+### Requirement: Decisões reservadas ao pesquisador
+Agentes SHALL NOT confirmar o `Problema`, aprovar ou rejeitar termos do vocabulário nem decidir sobre `Oportunidade`.
+O `GraphStore` MUST recusar essas escritas a atores `agente` (allowlist: `Oportunidade` só `documentada`, vocabulário
+só `candidato`) e MUST tratar nós `rejeitado`/`rejeitada` como imutáveis para agentes.
+
+#### Scenario: Agente tenta pular a aprovação
+- **WHEN** um agente cria ou atualiza uma `Oportunidade` com `status="em_investigacao"`
+- **THEN** a escrita é recusada
+
+#### Scenario: Resposta do consultor não autoriza
+- **GIVEN** um pedido de decisão reservada registrado no gate
+- **WHEN** a resposta vem de `ask_researcher` ou do Researcher consultor
+- **THEN** o pedido continua pendente
+
+### Requirement: Atualização de arestas derivadas
+`GraphStore.update_edge` SHALL alterar apenas propriedades das relações derivadas (`SUSTENTA`, `REFUTA`,
+`FUNCIONOU_PARA`, `FALHOU_PARA`), apenas para `orquestrador`/`pesquisador`, registrando auditoria.
+
+#### Scenario: Reescrever APLICOU.config
+- **WHEN** qualquer ator tenta `update_edge` em `APLICOU`
+- **THEN** a operação é recusada
+
+### Requirement: Fusão e promoção restritas ao projeto
+`merge_approaches` SHALL exigir abordagens do projeto da sessão, do mesmo tipo, com `SEMELHANTE_A` de score
+`>= SIM_DUPLICATE_MIN` confirmado em execução anterior. A promoção SHALL gravar só no projeto da sessão e contar
+projetos com `Sessao` real; tentativas de outro projeto só contam se `compartilhavel`.
+
+#### Scenario: Par relacionado confirmado
+- **WHEN** um par `relacionado` é confirmado e a fusão é pedida
+- **THEN** a fusão é recusada
+
+### Requirement: Leituras sem dados privados de outros projetos
+`read_query` SHALL devolver somente IDs e números; a fila de similaridade SHALL entregar só ID e rótulo de nó privado
+de outro projeto.
+
+#### Scenario: Consulta livre com texto privado
+- **WHEN** `read_query` retorna texto de um nó de outro projeto
+- **THEN** o texto é substituído por `[omitido]`
+
+### Requirement: Fatos estruturais só pela ingestão
+O `GraphStore` MUST recusar a criação ou alteração de `Sessao`, `Insumo`, `Experimento` e `Resultado` por ator `agente`.
+
+#### Scenario: Agente cria Experimento
+- **WHEN** um agente chama `create_node("Experimento")` com justificativa e `nos_consultados` presentes
+- **THEN** a escrita é recusada por papel
+
+### Requirement: `read_query` restrito
+`read_query` SHALL exigir `LIMIT` e `$projeto_id`, recusar literais e funções/predicados de texto e devolver só IDs e
+números. A restrição é sintática (limitação residual registrada em `design.md`).
+
+#### Scenario: Oráculo de texto
+- **WHEN** a consulta usa `length(n.enunciado)` ou `STARTS WITH`
+- **THEN** a consulta é recusada
+
+### Requirement: Papel opcional
+O papel `curator` SHALL ser opcional na resolução da sessão: sem modelo elegível ele é desligado e a sessão continua.
+
+#### Scenario: Sem modelo elegível
+- **WHEN** nenhum modelo atende ao papel `curator`
+- **THEN** os demais papéis resolvem e o Curator fica desligado

@@ -1172,6 +1172,11 @@ def _handle_vocab_command(argv: list[str], store: Any | None = None) -> int:
                 extra = f" sinônimos candidatos: {item['sinonimos_candidatos']}" if item["tipo"] == "sinonimo" else ""
                 print(f"{item['id']}  {item['label']}  {item['tipo']}  {item['termo']}{extra}")
         elif args.action == "approve":
+            from src.human_gate import authorize_from_cli
+
+            if not authorize_from_cli("aprovar_termo_vocabulario", args.id):
+                print("Aprovação não autorizada pelo gate (exige a ação do pesquisador na CLI).")
+                return 1
             vocabulary.approve_term(store, args.id)
             print(f"Aprovado: {args.id}")
         elif args.action == "reject":
@@ -1353,7 +1358,8 @@ def main() -> None:
     def _open_store() -> Any:
         from src.knowledge.factory import open_graph_store
 
-        return open_graph_store()
+        # Início da sessão: reconcilia o índice semântico antes da primeira consulta ao grafo (projeto e Problema).
+        return open_graph_store(reconcile=True)
 
     try:
         researcher_model: str | None = llm_routing.resolution("researcher").id

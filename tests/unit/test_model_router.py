@@ -34,7 +34,7 @@ def test_model_router_default_roles_sob_a_politica_padrao(monkeypatch):
     """Sem política explícita (self_hosted_only) todos os papéis caem no Ollama do catálogo."""
     monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://localhost:11434")
 
-    for role in ("researcher", "validator", "developer", "base", "summarizer", "reviewer"):
+    for role in ("researcher", "validator", "developer", "base", "summarizer", "reviewer", "curator"):
         cfg = get_role_model_config(role)
         assert cfg.provider == "ollama", role
         assert cfg.model == "qwen3:8b", role

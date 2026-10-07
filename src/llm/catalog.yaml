@@ -92,6 +92,14 @@ papeis:
       - google/gemini-3.8-flash
       - ollama/qwen3:8b
       - ollama/qwen3.5:4b
+  # Curator (v17-curator-agent): registra conhecimento no grafo. Padrão local (Ollama), por custo e por manter os
+  # dados de pesquisa no host. É papel opcional na resolução da sessão (`OPTIONAL_ROLES`): sem modelo elegível o
+  # Curator fica desligado na sessão em vez de impedi-la. Para usar nuvem: `CURATOR_MODEL=provedor/modelo`.
+  curator:
+    requisitos: {ferramentas: true}
+    preferencia:
+      - ollama/qwen3:8b
+      - ollama/qwen3.5:4b
   base:
     requisitos: {ferramentas: true}
     preferencia:

@@ -130,7 +130,7 @@ def test_validator_sem_exigencia_de_trust(catalog):
 def test_resolve_session_resolve_todos_os_papeis(catalog):
     mapa = resolve_session(catalog, all_available(catalog), "third_party_allowed")
 
-    assert set(mapa) == {"researcher", "developer", "reviewer", "summarizer", "validator", "base"}
+    assert set(mapa) == {"researcher", "developer", "reviewer", "summarizer", "validator", "curator", "base"}
 
 
 def test_modelo_nao_verificado_e_descartado(catalog):

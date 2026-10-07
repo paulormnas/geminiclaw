@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from typing import Mapping
 
 from src.llm.availability import MOTIVO_NAO_VERIFICADO, Availability
-from src.llm.catalog import Catalog, ModelEntry
+from src.llm.catalog import OPTIONAL_ROLES, Catalog, ModelEntry
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -208,7 +208,15 @@ def resolve_session(
     for role in catalogo.papeis:
         try:
             resolved[role] = resolve(role, catalogo, disponiveis, politica, overrides, routing)
-        except NoEligibleModelError as exc:
+        except (NoEligibleModelError, PinError) as exc:
+            if role in OPTIONAL_ROLES:
+                logger.warning(
+                    "Papel opcional sem modelo elegível: desligado nesta sessão",
+                    extra={"role": role, "politica": politica},
+                )
+                continue
+            if isinstance(exc, PinError):
+                raise  # pin inválido de papel obrigatório segue fatal (strict)
             failures.append(exc)
     if len(failures) == 1:
         raise failures[0]

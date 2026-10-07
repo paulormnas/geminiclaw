@@ -19,7 +19,7 @@ from agents.base.agent import (
     _setup_skills,
     _task_state,
 )
-from agents.base.tools import write_artifact
+from agents.base.tools import flag_for_curator, write_artifact
 from src.logger import get_logger
 from src.prompts import render_instruction
 from src.skills import registry
@@ -98,6 +98,12 @@ QUANDO USAR `ask_researcher` (Roadmap V15.3 / Spec G5):
   autorizar escrita em instrumento e ativar o modo sem limite são sempre do pesquisador: ao perguntar
   sobre elas, preencha `decisao_reservada`. Nunca coloque valores, nomes de arquivos ou trechos dos
   dados do projeto na pergunta além do necessário.
+
+SINALIZAÇÕES AO CURATOR (ADR 012 §2):
+Quando notar algo que vale registrar no grafo de conhecimento (uma descoberta potencial, um caminho relevante, uma
+oportunidade ou uma falha relevante), chame `flag_for_curator(tipo, texto, refs)` com um texto curto, sem dados brutos
+nem trechos de documentos, e `refs` com IDs de nós ou caminhos de artefatos da sessão. Sinalizar não cria nada: o
+Curator decide, em lote, registrar ou descartar.
 """
 AGENT_INSTRUCTION = render_instruction(_INSTRUCTION_TEMPLATE)
 
@@ -166,7 +172,7 @@ root_agent = Agent(
     model=agent_model,
     description=AGENT_DESCRIPTION,
     _instruction=_build_developer_instruction,
-    tools=active_tools + [write_artifact],
+    tools=active_tools + [write_artifact, flag_for_curator],
     before_agent_callback=_load_session_context,
     after_agent_callback=_persist_session_context,
 )

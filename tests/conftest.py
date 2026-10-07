@@ -16,6 +16,9 @@ os.environ["LLM_DATA_POLICY"] = "self_hosted_only"
 os.environ["LLM_ROUTING"] = "flexible"
 os.environ.pop("LLM_PROVIDER_PRIORITY", None)
 os.environ["SEARCH_CACHE_TTL_SECONDS"] = "3600"
+# v17-curator-agent: o Curator (LLM) fica desligado por padrão nos testes que atravessam o orquestrador; os testes do
+# Curator o ligam explicitamente e usam um provedor simulado (nenhum teste chama provedor ou rede).
+os.environ["CURATOR_ENABLED"] = "false"
 
 # Sinaliza para pular testes de integração que consomem cota de API durante a suíte completa
 os.environ["CI_SKIP_INTEGRATION"] = "1"

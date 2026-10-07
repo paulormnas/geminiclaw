@@ -240,3 +240,4 @@ end_time.txt
 # Catálogo local de modelos (ADR 017 §8): só acrescenta modelos, nunca é versionado
 src/llm/catalog.local.yaml
 store/sandbox_work/
+store/assets/

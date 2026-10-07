@@ -333,6 +333,13 @@ SANDBOX_WORK_DIR = get_env("SANDBOX_WORK_DIR", default="store/sandbox_work")
 SANDBOX_PIDS_LIMIT = int(get_env("SANDBOX_PIDS_LIMIT", default="256"))
 SANDBOX_TMPFS_SIZE = get_env("SANDBOX_TMPFS_SIZE", default="256m")
 SANDBOX_INSTALL_LOG_TAIL_LINES = int(get_env("SANDBOX_INSTALL_LOG_TAIL_LINES", default="40"))
+# v18.5-sandbox-phases — fases de rede e dados do sandbox (ADR 019 §5).
+SANDBOX_INSTALL_TIMEOUT_SECONDS = int(get_env("SANDBOX_INSTALL_TIMEOUT_SECONDS", default=str(CODE_SANDBOX_SETUP_TIMEOUT_SECONDS)))
+SANDBOX_FETCH_TIMEOUT_SECONDS = int(get_env("SANDBOX_FETCH_TIMEOUT_SECONDS", default="600"))
+SANDBOX_ASSET_MAX_BYTES = int(get_env("SANDBOX_ASSET_MAX_BYTES", default="2147483648"))
+SANDBOX_ASSET_CACHE_DIR = get_env("SANDBOX_ASSET_CACHE_DIR", default="store/assets")
+SANDBOX_INPUT_DELIVERY = get_env("SANDBOX_INPUT_DELIVERY", default="mount")  # mount | copy
+SANDBOX_COPY_MAX_BYTES = int(get_env("SANDBOX_COPY_MAX_BYTES", default="536870912"))
 
 # Health Monitoring (S7)
 HEALTH_CHECK_ENABLED = get_env_bool("HEALTH_CHECK_ENABLED", default=True)

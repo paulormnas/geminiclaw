@@ -25,6 +25,7 @@ from src.config import (
 )
 from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
 from src.plan_normalizer import normalize_plan
+from src.llm.allocation import build_allocation_profile
 from src.llm.session import SessionRouting, bind_session_routing, build_session_routing, get_session_routing
 from src.session import SessionManager
 from src.output_manager import OutputManager, generate_session_slug
@@ -971,11 +972,15 @@ class Orchestrator:
                 "prompt": prompt,
                 "budget": effective_budget.to_payload(),
                 "llm_routing": routing.payload(),
+                # v18.5-model-catalog-locality — perfil de alocação gravado antes do primeiro envio a um modelo.
+                "allocation_profile": build_allocation_profile(routing),
+                "eventos_versao_modelo": [],
                 **({"project_id": project_id} if project_id else {}),
                 **({"project_mode": project_mode} if project_mode else {}),
                 **({"continues_session_id": resume.source_session_id} if resume is not None else {}),
             },
         )
+        self._wire_version_events(routing, master_session.id)
         continues_id = resume.source_session_id if resume is not None else None
         if resume is not None:
             # Compare-and-set atômico: só uma retomada simultânea da mesma origem vence (sem bifurcar a pesquisa).
@@ -1413,6 +1418,44 @@ class Orchestrator:
             extra={"session_id": session_key, "subtask_name": task.task_name, "respondido_por": respondido_por},
         )
         return record
+
+    def _wire_version_events(self, routing: Any, session_id: str) -> None:
+        """Liga o rastreador de versões da sessão à telemetria e ao payload da sessão mestra.
+
+        Uma troca de versão grava o evento ``versao_modelo_alterada`` em ``agent_events`` e o acrescenta a
+        ``payload["eventos_versao_modelo"]``; a primeira versão observada de cada modelo atualiza
+        ``allocation_profile`` (v18.5-model-catalog-locality, design §4).
+        """
+        versions = routing.versions
+
+        def on_event(event: dict[str, Any]) -> None:
+            get_telemetry().record_agent_event(
+                execution_id=session_id,
+                session_id=session_id,
+                agent_id="orchestrator",
+                event_type=event["tipo"],
+                payload=event,
+            )
+            session = self.session_manager.get(session_id)
+            payload = dict(session.payload) if session is not None else {}
+            payload["eventos_versao_modelo"] = [*payload.get("eventos_versao_modelo", []), event]
+            self.session_manager.update(session_id, payload=payload)
+
+        def on_change(model_id: str, version: str) -> None:
+            session = self.session_manager.get(session_id)
+            if session is None:
+                return
+            payload = dict(session.payload)
+            profile = payload.get("allocation_profile")
+            if not isinstance(profile, dict):
+                return
+            for entry in profile.get("papeis", {}).values():
+                if entry.get("provedor_modelo") == model_id:
+                    entry["versao_efetiva"] = version
+            self.session_manager.update(session_id, payload=payload)
+
+        versions.set_event_sink(on_event)
+        versions.set_change_sink(on_change)
 
     def register_usage_tracker(self, master_session_id: str, tracker: UsageTracker) -> None:
         """Registra o ``UsageTracker`` da sessão (criado pelo ``AutonomousLoop``), para que o

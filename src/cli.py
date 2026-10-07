@@ -896,6 +896,12 @@ def print_session_banner(
         print(f"  {DIM}{header}{RESET}")
         for line in role_lines:
             print(f"    {line}")
+        # v18.5-model-catalog-locality — bloco "Alocação": trust, localidade e dados brutos por papel.
+        from src.llm.allocation import allocation_banner_lines
+
+        print(f"  {DIM}Alocação{RESET}")
+        for line in allocation_banner_lines(llm_routing):
+            print(f"    {line}")
 
     if mode == SessionMode.AUTO.value:
         print(f"  {YELLOW}⚠ Modo autônomo ativo — sem consulta ao pesquisador{RESET}")

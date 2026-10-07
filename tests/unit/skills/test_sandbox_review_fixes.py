@@ -261,3 +261,49 @@ def test_m3_lancador_nao_altera_saida_pequena_e_propaga_sinal(tmp_path):
 
     killed = _run_launcher(tmp_path, "import os, signal\nos.kill(os.getpid(), signal.SIGKILL)\n", cap=1024)
     assert killed.returncode == 137  # OOM continua reconhecível
+
+
+# --- M4: kill + varredura também nos caminhos de erro; decodificação tolerante -----------------------------
+
+class _CrashAfterPlanting(FakeDaemon):
+    """O script planta um symlink para fora e uma FIFO em /outputs e então o exec falha no meio."""
+
+    def __init__(self, task_dir, **kwargs):
+        super().__init__(**kwargs)
+        self.task_dir = task_dir
+
+    def _exec_run(self, cmd, *args, **kwargs):
+        if "/outputs/script.py" in cmd:
+            import os
+
+            os.symlink("/etc/passwd", self.task_dir / "escape")
+            os.mkfifo(self.task_dir / "fila")
+            raise RuntimeError("conexão com o daemon perdida")
+        return super()._exec_run(cmd, *args, **kwargs)
+
+
+@pytest.mark.unit
+def test_m4_erro_no_meio_do_exec_ainda_mata_e_varre(make_sandbox, tmp_path):
+    task = tmp_path / "out" / "s" / "t"
+    task.mkdir(parents=True)
+    daemon = _CrashAfterPlanting(task)
+    result = _run(make_sandbox(daemon), tmp_path)
+
+    assert result.fase_falha == "infra"
+    assert "kill" in daemon.calls and daemon.calls.index("kill") < daemon.calls.index("remove")
+    assert not (task / "escape").is_symlink() and not (task / "fila").exists()
+
+
+class _InvalidUtf8(FakeDaemon):
+    def _exec_run(self, cmd, *args, **kwargs):
+        if "/outputs/script.py" in cmd:
+            return SimpleNamespace(exit_code=0, output=(b"ok \xff\xfe", b"aviso \xc3"))
+        return super()._exec_run(cmd, *args, **kwargs)
+
+
+@pytest.mark.unit
+def test_m4_saida_com_bytes_invalidos_nao_derruba_a_execucao(make_sandbox, tmp_path):
+    result = _run(make_sandbox(_InvalidUtf8()), tmp_path)
+
+    assert result.infra_error is None and result.exit_code == 0
+    assert result.stdout.startswith("ok ") and "\ufffd" in result.stdout and "\ufffd" in result.stderr

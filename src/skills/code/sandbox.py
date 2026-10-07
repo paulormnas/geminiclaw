@@ -789,6 +789,27 @@ class PythonSandbox:
             return records, SandboxResult(stdout="", stderr=error, exit_code=-1, fase_falha="fetch_assets")
         return records, None
 
+    @staticmethod
+    def _kill_and_purge(container, task_dir: pathlib.Path) -> list[str]:
+        """Encerra o container e varre a pasta da tarefa (symlinks para fora, arquivos especiais, nomes reservados).
+
+        Best-effort e idempotente: roda no caminho normal e de novo no ``finally`` de ``run``.
+
+        Returns:
+            Caminhos reservados do orquestrador removidos (relativos à pasta da tarefa).
+        """
+        try:
+            container.kill()
+        except Exception as e:  # noqa: BLE001 — já parado (timeout) ou removido
+            logger.debug(f"Container já encerrado antes da varredura: {e}")
+        try:
+            _purge_escaping_symlinks(task_dir)
+            _purge_special_files(task_dir)
+            return _purge_reserved_names(task_dir)
+        except OSError as e:
+            logger.warning(f"Falha ao varrer a pasta da tarefa: {e}")
+            return []
+
     def _script_command(self) -> List[str]:
         """Comando do script principal: lançador fixo que limita a saída (``-I``: ignora PYTHONPATH/ambiente do script)."""
         return ["python", "-I", "-c", _RUNNER_CODE, str(max(2, self.output_max_bytes)), "/outputs/script.py"]
@@ -1102,8 +1123,8 @@ class PythonSandbox:
                     exit_code = -1
                 else:
                     out_bytes, err_bytes = exec_result.output
-                    stdout = out_bytes.decode("utf-8") if out_bytes else ""
-                    stderr = err_bytes.decode("utf-8") if err_bytes else ""
+                    stdout = out_bytes.decode("utf-8", errors="replace") if out_bytes else ""
+                    stderr = err_bytes.decode("utf-8", errors="replace") if err_bytes else ""
                     exit_code = exec_result.exit_code
             except Exception:
                 if not timed_out:
@@ -1116,17 +1137,7 @@ class PythonSandbox:
             # Antes da varredura o container é encerrado: um processo em segundo plano iniciado
             # pelo script não pode recriar links depois dela. O que o código gerado criou pode
             # incluir symlinks para fora da pasta da tarefa e arquivos especiais (FIFO).
-            try:
-                container.kill()
-            except Exception as e:  # noqa: BLE001 — já parado (timeout) ou removido
-                logger.debug(f"Container já encerrado antes da varredura: {e}")
-            try:
-                _purge_escaping_symlinks(abs_output_dir)
-                _purge_special_files(abs_output_dir)
-                reserved_removed = _purge_reserved_names(abs_output_dir)
-            except OSError as e:
-                logger.warning(f"Falha ao varrer a pasta da tarefa: {e}")
-                reserved_removed = []
+            reserved_removed = self._kill_and_purge(container, abs_output_dir)
             if reserved_removed:
                 stderr = (
                     f"{stderr}\nArquivo(s) reservado(s) do orquestrador removido(s) da saída da tarefa: "
@@ -1176,6 +1187,9 @@ class PythonSandbox:
             return res
         finally:
             if container:
+                # Também nos caminhos de erro (ex.: falha no meio do exec): o que o código gerado já gravou
+                # em /outputs (symlinks para fora, FIFOs) não pode ficar para os leitores do host.
+                self._kill_and_purge(container, abs_output_dir)
                 try:
                     container.remove(force=True)
                 except Exception:

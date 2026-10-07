@@ -296,3 +296,6 @@ Registro das correções e dos riscos aceitos decorrentes da revisão do Analist
   `SANDBOX_OUTPUT_MAX_BYTES` (1 MiB) cada, mantendo o início e o fim (o traceback fica no fim) com um
   marcador do trecho omitido, e propaga o código de saída (morte por sinal vira 128+sinal: 137 segue
   indicando OOM). O comportamento do lançador é testado localmente (subprocesso), não só com cliente simulado.
+- **M4 (média) — varredura nos caminhos de erro:** `kill` + varredura (symlinks para fora, FIFOs, nomes
+  reservados) também rodam no `finally` de `run`, não só no caminho normal; stdout/stderr são decodificados
+  com `errors="replace"` (bytes inválidos não viram falha de infraestrutura).

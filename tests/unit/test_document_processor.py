@@ -15,6 +15,7 @@ def mock_csv_file(tmp_path):
     file_path.write_text("id,name\n1,Alice\n2,Bob")
     return str(file_path)
 
+@pytest.mark.unit
 def test_text_extractor_via_registry(mock_text_file):
     registry = ExtractorRegistry()
     doc = registry.extract(mock_text_file)
@@ -24,6 +25,7 @@ def test_text_extractor_via_registry(mock_text_file):
     assert doc.title == "test.txt"
     assert not doc.extraction_errors
 
+@pytest.mark.unit
 def test_csv_extractor_via_registry(mock_csv_file):
     registry = ExtractorRegistry()
     doc = registry.extract(mock_csv_file)
@@ -36,6 +38,7 @@ def test_csv_extractor_via_registry(mock_csv_file):
     assert doc.tables[0]["header"] == ["id", "name"]
     assert not doc.extraction_errors
 
+@pytest.mark.unit
 def test_chunker_fixed_size():
     doc = ExtractedDocument(
         source_path="/fake/test.txt",
@@ -43,7 +46,7 @@ def test_chunker_fixed_size():
         title="test.txt",
         text_content="A" * 2000
     )
-    chunker = DocumentChunker(max_chunk_size=1000, overlap=100, strategy="fixed", prepend_context=False)
+    chunker = DocumentChunker(max_chunk_size=1000, overlap=100, strategy="fixed")
     chunks = chunker.chunk(doc, "doc_123")
     
     assert len(chunks) == 3
@@ -52,6 +55,7 @@ def test_chunker_fixed_size():
     # 3rd chunk: 1800 to 2000
     assert chunks[0].document_id == "doc_123"
 
+@pytest.mark.unit
 def test_chunker_paragraphs():
     doc = ExtractedDocument(
         source_path="/fake/test.txt",
@@ -59,7 +63,7 @@ def test_chunker_paragraphs():
         title="test.txt",
         text_content="P1\n\nP2\n\nP3"
     )
-    chunker = DocumentChunker(max_chunk_size=2, overlap=0, strategy="paragraph", prepend_context=False)
+    chunker = DocumentChunker(max_chunk_size=2, overlap=0, strategy="paragraph")
     chunks = chunker.chunk(doc, "doc_123")
     
     # Each chunk should contain roughly one paragraph if max size is small
@@ -68,16 +72,30 @@ def test_chunker_paragraphs():
     assert chunks[1].content == "P2"
     assert chunks[2].content == "P3"
 
-def test_chunker_context_prefix():
+@pytest.mark.unit
+def test_chunker_content_has_only_chunk_text():
+    """Cenário "Busca devolve só o trecho": o content do trecho não leva mais o prefixo antigo."""
     doc = ExtractedDocument(
         source_path="/fake/test.txt",
         format="txt",
         title="test.txt",
         text_content="Content"
     )
-    chunker = DocumentChunker(max_chunk_size=1000, overlap=100, strategy="fixed", prepend_context=True)
+    chunker = DocumentChunker(max_chunk_size=1000, overlap=100, strategy="fixed")
     chunks = chunker.chunk(doc, "doc_123")
-    
+
     assert len(chunks) == 1
-    assert chunks[0].context_prefix == "Documento: test.txt (TXT)"
-    assert chunks[0].content.startswith("Documento: test.txt (TXT)\n\nContent")
+    assert chunks[0].content == "Content"
+
+
+@pytest.mark.unit
+def test_chunker_ids_are_deterministic():
+    doc = ExtractedDocument(source_path="/f.txt", format="txt", title="f", text_content="A" * 2000)
+    chunker = DocumentChunker(max_chunk_size=1000, overlap=100, strategy="fixed")
+    first = [c.chunk_id for c in chunker.chunk(doc, "doc_123")]
+    second = [c.chunk_id for c in chunker.chunk(doc, "doc_123")]
+    other = [c.chunk_id for c in chunker.chunk(doc, "doc_456")]
+
+    assert first == second
+    assert len(set(first)) == len(first)
+    assert not set(first) & set(other)

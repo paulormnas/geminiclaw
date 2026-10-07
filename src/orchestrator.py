@@ -42,10 +42,12 @@ from src.usage import UsageBudget, UsageTracker
 from src.continuity import (
     ESTADO_FECHADO,
     ESTADO_INTERROMPIDO,
-    POWER_LOSS_CATEGORY,
+    INTERRUPTION_CATEGORY,
     CheckpointRecorder,
+    ResumeConflictError,
     ResumeState,
 )
+from src.heartbeat import SessionHeartbeat
 
 if TYPE_CHECKING:
     from agents.curator.runner import Curator
@@ -452,24 +454,16 @@ class Orchestrator:
         self._recorders[session_id] = recorder
         return recorder
 
-    async def _heartbeat_loop(self, session_id: str) -> None:
-        """Batimento da sessão mestra a cada ``SESSION_HEARTBEAT_SECONDS`` até ser cancelado."""
+    def _start_heartbeat(self, session_id: str) -> SessionHeartbeat:
+        """Batimento da sessão em thread dedicada (não depende do laço de eventos)."""
         from src.config import SESSION_HEARTBEAT_SECONDS
 
-        interval = max(float(SESSION_HEARTBEAT_SECONDS), 0.01)
-        stop = asyncio.Event()  # nunca sinalizado: só serve de temporizador cancelável
-        while True:
-            try:
-                await asyncio.wait_for(stop.wait(), timeout=interval)
-            except asyncio.TimeoutError:
-                pass
-            try:
-                if not await asyncio.to_thread(self.session_manager.heartbeat, session_id):
-                    logger.warning("Batimento recusado: sessão não está mais ativa", extra={"session_id": session_id})
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:  # noqa: BLE001 - falha de batimento nunca derruba a pesquisa
-                logger.warning("Batimento da sessão falhou", extra={"error": type(exc).__name__})
+        sm = self.session_manager
+        return SessionHeartbeat(
+            lambda: bool(sm.heartbeat(session_id)),
+            lambda: bool(sm.reassert_active(session_id)),
+            interval=SESSION_HEARTBEAT_SECONDS,
+        ).start()
 
     def refresh_graph_checkpoint(self, session_id: str) -> None:
         """Atualiza no checkpoint o estado do grafo e as sinalizações pendentes (síncrono, falha isolada)."""
@@ -512,6 +506,8 @@ class Orchestrator:
             if reason not in MOTIVOS_PARADA:
                 fallback = "solucao_encontrada" if final_status == "success" else "erro"
                 reason = "interrompida" if suspended else fallback
+            if session is not None and session.payload.get("motivo_parada") != reason:
+                self.session_manager.update(session_id, payload={**session.payload, "motivo_parada": reason})
             tracker = self._usage_trackers.get(session_id)
             if tracker is not None:
                 usage = tracker.check()
@@ -599,18 +595,36 @@ class Orchestrator:
             logger.warning("Sessão interrompida sem checkpoint utilizável", extra={"error": str(exc)[:200]})
             return
         in_flight = [s for s in before.subtarefas if s.status == ST_EM_ANDAMENTO]
-        after = mark_checkpoint_interrupted(session_dir) or before
+        from datetime import datetime, timezone
+
+        try:
+            silence = max(
+                (datetime.now(timezone.utc) - datetime.fromisoformat(before.atualizado_em.replace("Z", "+00:00")))
+                .total_seconds(),
+                0.0,
+            )
+        except ValueError:
+            silence = 0.0
+        after = mark_checkpoint_interrupted(
+            session_dir, detail=f"parada inesperada: sem batimento por {silence:.0f} s (causa não observada)"
+        ) or before
         get_telemetry().record_agent_event(
             execution_id=session.id,
             session_id=session.id,
             agent_id="orchestrator",
             event_type="session_interrupted",
-            payload={"subtarefas_em_andamento": len(in_flight), "retomavel": True},
+            payload={
+                "subtarefas_em_andamento": len(in_flight),
+                "retomavel": True,
+                "segundos_sem_batimento": round(silence),
+            },
         )
         project_id = session.payload.get("project_id")
+        cont = session.payload.get("continues_session_id")  # do banco (validado na criação), não do arquivo
         if not project_id:
             return
         from src.config import NODE_ID
+        from src.continuity import SESSION_ID_RE
         from src.knowledge.ingestion import MODOS, FactIngestor, SessionContext, SubtaskInput
 
         ctx = SessionContext(
@@ -619,7 +633,7 @@ class Orchestrator:
             modo=after.modo if after.modo in MODOS else "assisted",
             inicio=session.created_at,
             no_execucao=NODE_ID,
-            continues_session_id=after.continues_session_id,
+            continues_session_id=cont if isinstance(cont, str) and SESSION_ID_RE.fullmatch(cont) else None,
         )
         ingestor = FactIngestor(self._open_knowledge_store, ctx, session_dir)
         ingestor.session_start()
@@ -630,7 +644,7 @@ class Orchestrator:
                     subtask_id=state.subtask_id,
                     agent_id=state.agent_id,
                     agent_status="error",
-                    agent_error_category=POWER_LOSS_CATEGORY,
+                    agent_error_category=INTERRUPTION_CATEGORY,
                 )
             )
         ingestor.session_end(fim=after.atualizado_em, motivo_parada="interrompida", consumo=after.consumo)
@@ -826,10 +840,36 @@ class Orchestrator:
         )
         continues_id = resume.source_session_id if resume is not None else None
         if resume is not None:
+            # Compare-and-set atômico: só uma retomada simultânea da mesma origem vence (sem bifurcar a pesquisa).
+            claimed = await asyncio.to_thread(
+                self.session_manager.claim_continuation, resume.source_session_id, master_session.id,
+                resume.stale_claim,
+            )
+            if not claimed:
+                self.session_manager.update(
+                    master_session.id, status="closed",
+                    payload={**master_session.payload, "motivo_parada": "erro", "retomada_recusada": True},
+                )
+                raise ResumeConflictError(
+                    f"a sessão '{resume.source_session_id}' já foi continuada por outra retomada; "
+                    "use `geminiclaw continue --project <id>` para achar a ponta da cadeia."
+                )
             self._resumes[master_session.id] = resume
             self._resume_planning.add(master_session.id)
         recorder = self._start_recorder(master_session.id, project_id, continues_id, prompt, effective_mode,
                                         effective_budget, resume)
+        if resume is not None and recorder is None:
+            # Retomada sem checkpoint inicial deixaria a origem "continuada" por uma sessão irretomável.
+            self.session_manager.update(
+                master_session.id, status="interrompida",
+                payload={**master_session.payload, "motivo_parada": "interrompida"},
+            )
+            await asyncio.to_thread(
+                self.session_manager.release_continuation, resume.source_session_id, master_session.id
+            )
+            self._resumes.pop(master_session.id, None)
+            self._resume_planning.discard(master_session.id)
+            raise RuntimeError("checkpoint inicial da sessão retomada não pôde ser gravado (disco/permissão?).")
 
         # v17-structural-fact-ingestion — fatos da sessão no grafo (só com projeto), sem LLM.
         ingestor = self._start_ingestor(
@@ -883,7 +923,7 @@ class Orchestrator:
 
         logger.info("Nova requisição registrada", extra={"execution_id": exec_id, "prompt_preview": prompt[:50]})
 
-        heartbeat = asyncio.create_task(self._heartbeat_loop(master_session.id))
+        heartbeat = self._start_heartbeat(master_session.id)
         try:
             # Se tarefas explícitas forem fornecidas, executa sequencialmente (compatibilidade)
             if agent_tasks:
@@ -913,17 +953,29 @@ class Orchestrator:
                     prompt, exec_id or master_session.id, mode=effective_mode, budget=effective_budget
                 )
         except BaseException as run_exc:  # noqa: BLE001 - registra o fim da sessão no grafo e repropaga
-            heartbeat.cancel()
+            await asyncio.to_thread(heartbeat.stop)
+            interrupted = isinstance(run_exc, (KeyboardInterrupt, asyncio.CancelledError))
             if recorder is not None:
-                recorder.close(
-                    ESTADO_INTERROMPIDO,
-                    "interrompida" if isinstance(run_exc, (KeyboardInterrupt, asyncio.CancelledError)) else "erro",
+                recorder.close(ESTADO_INTERROMPIDO, "interrompida" if interrupted else "erro", curator_pendente=True)
+            try:  # o estado no banco acompanha o checkpoint: Ctrl+C é retomável; erro fatal não
+                cur = self.session_manager.get(master_session.id)
+                cur_payload = dict(cur.payload) if cur is not None else {}
+                self.session_manager.update(
+                    master_session.id,
+                    status="interrompida" if interrupted else "closed",
+                    payload={**cur_payload, "motivo_parada": "interrompida" if interrupted else "erro"},
                 )
+                if resume is not None and not interrupted:
+                    await asyncio.to_thread(
+                        self.session_manager.release_continuation, resume.source_session_id, master_session.id
+                    )
+            except Exception as err:  # noqa: BLE001
+                logger.warning("Estado da sessão interrompida não gravado", extra={"error": type(err).__name__})
             self._end_ingestion(ingestor, master_session.id, "failed", run_exc)
             self._resumes.pop(master_session.id, None)
             self._resume_planning.discard(master_session.id)
             raise
-        heartbeat.cancel()
+        await asyncio.to_thread(heartbeat.stop)
 
         # Atualiza a sessão mestra com o resultado consolidado.
         # V18/usage-limits — o payload é mesclado (não substituído) para preservar
@@ -948,7 +1000,7 @@ class Orchestrator:
                 }
             }
         )
-        curator_pending = False
+        curator_pending = suspended and ingestor is not None  # a consolidação da sessão suspensa não se perde
         if ingestor is not None and not suspended:
             # v17-curator-agent: o Curator fecha a sessão (fila de similaridade, caminhos sem conclusão) antes de
             # o fim da sessão ir ao grafo; qualquer falha dele é isolada.

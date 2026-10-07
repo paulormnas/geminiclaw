@@ -305,3 +305,57 @@ class SessionManager:
                 (project_id, limit),
             ).fetchall()
         return [self._row_to_session(r) for r in rows or []]
+
+    def claim_continuation(self, source_id: str, new_id: str, expected: str | None = None) -> bool:
+        """Reivindica, de forma atômica, a continuação de ``source_id`` por ``new_id`` (compare-and-set no payload).
+
+        Só uma retomada simultânea vence: o ``UPDATE`` grava ``payload.continued_by`` apenas se ele ainda não existe
+        (ou, em ``expected``, se ainda vale o valor de uma continuação falha anterior). Sem esquema novo (JSONB).
+
+        Args:
+            source_id: Sessão continuada.
+            new_id: Sessão nova que a continua.
+            expected: ``continued_by`` anterior (continuação que falhou sem checkpoint) a ser substituído.
+
+        Returns:
+            ``True`` se a reivindicação foi gravada; ``False`` se outra retomada chegou antes.
+        """
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        with get_connection() as conn:
+            if expected is None:
+                row = conn.execute(
+                    "UPDATE agent_sessions SET payload = payload || jsonb_build_object('continued_by', %s::text), "
+                    "updated_at = %s WHERE id = %s AND NOT (payload ? 'continued_by') RETURNING id",
+                    (new_id, now, source_id),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "UPDATE agent_sessions SET payload = payload || jsonb_build_object('continued_by', %s::text), "
+                    "updated_at = %s WHERE id = %s AND payload->>'continued_by' = %s RETURNING id",
+                    (new_id, now, source_id, expected),
+                ).fetchone()
+        return row is not None
+
+    def release_continuation(self, source_id: str, new_id: str) -> bool:
+        """Libera a reivindicação de ``new_id`` sobre ``source_id`` (a continuação falhou cedo)."""
+        with get_connection() as conn:
+            row = conn.execute(
+                "UPDATE agent_sessions SET payload = payload - 'continued_by' "
+                "WHERE id = %s AND payload->>'continued_by' = %s RETURNING id",
+                (source_id, new_id),
+            ).fetchone()
+        return row is not None
+
+    def reassert_active(self, session_id: str) -> bool:
+        """Reafirma ``active`` numa sessão viva marcada ``interrompida`` por engano (falso positivo de obsolescência).
+
+        Limpa o ``motivo_parada`` herdado da marcação. Só age se o status ainda é ``interrompida``.
+        """
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        with get_connection() as conn:
+            row = conn.execute(
+                "UPDATE agent_sessions SET status = 'active', payload = payload - 'motivo_parada', updated_at = %s "
+                "WHERE id = %s AND status = 'interrompida' RETURNING id",
+                (now, session_id),
+            ).fetchone()
+        return row is not None

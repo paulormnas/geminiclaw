@@ -1,10 +1,11 @@
 """Ferramentas comuns para todos os agentes GeminiClaw."""
 
+import asyncio
 import errno
 import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from src.agent_runtime.context import get_agent_context_optional
 
@@ -148,22 +149,13 @@ _READ_TOP_FILES = frozenset({"manifest.json", "relatorio_final.md", "plan.json",
 _READ_DENIED_DIRS = frozenset({"logs"})
 
 
-async def read_artifact(path: str, session_id: str = "") -> str:
-    """Lê (somente leitura) um artefato da sessão atual ou de uma sessão anterior da cadeia do projeto.
+def _read_artifact_sync(ctx: Any, path: str, session_id: str) -> str:
+    """Leitura bloqueante (roda em thread): ver ``read_artifact``."""
+    import stat as _stat
 
-    Args:
-        path: Caminho relativo ao diretório da sessão (ex.: ``artifacts/dados.csv`` ou ``<tarefa>/metrics.json``).
-        session_id: Sessão anterior (listada no contexto de retomada); vazio = sessão atual.
-
-    Returns:
-        Conteúdo em texto (truncado no limite configurado) ou mensagem de erro.
-    """
     from src import config
     from src.continuity import SESSION_ID_RE
 
-    ctx = get_agent_context_optional()
-    if ctx is None:
-        return "Erro: read_artifact só funciona dentro de uma execução de agente."
     try:
         if session_id and session_id != ctx.output_dir.name:
             if not SESSION_ID_RE.fullmatch(session_id):
@@ -185,10 +177,9 @@ async def read_artifact(path: str, session_id: str = "") -> str:
         if target.resolve() != target or not target.resolve().is_relative_to(root):
             return "Erro: caminho com link simbólico ou fora da sessão; recusado."
         limit = int(config.RESUME_ARTIFACT_MAX_READ_BYTES)
-        fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW)
+        # O_NONBLOCK: abrir um FIFO (criável pelo código do sandbox) sem escritor não pode travar a leitura.
+        fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0))
         with os.fdopen(fd, "rb") as handle:
-            import stat as _stat
-
             if not _stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
                 return "Erro: não é um arquivo comum."
             data = handle.read(limit + 1)
@@ -199,6 +190,25 @@ async def read_artifact(path: str, session_id: str = "") -> str:
         return "Erro: artefato não encontrado."
     except OSError as exc:
         return f"Erro ao ler artefato: {type(exc).__name__}"
+
+
+async def read_artifact(path: str, session_id: str = "") -> str:
+    """Lê (somente leitura) um artefato da sessão atual ou de uma sessão anterior da cadeia do projeto.
+
+    A leitura roda em thread, com ``O_NONBLOCK`` e só aceita arquivo comum (FIFO e dispositivo são recusados sem
+    travar o laço de eventos).
+
+    Args:
+        path: Caminho relativo ao diretório da sessão (ex.: ``artifacts/dados.csv`` ou ``<tarefa>/metrics.json``).
+        session_id: Sessão anterior (listada no contexto de retomada); vazio = sessão atual.
+
+    Returns:
+        Conteúdo em texto (truncado no limite configurado) ou mensagem de erro.
+    """
+    ctx = get_agent_context_optional()
+    if ctx is None:
+        return "Erro: read_artifact só funciona dentro de uma execução de agente."
+    return await asyncio.to_thread(_read_artifact_sync, ctx, path, session_id)
 
 
 read_artifact.parameters_schema = {

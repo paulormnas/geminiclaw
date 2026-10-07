@@ -674,6 +674,11 @@ async def _run_resume(
     bind_session_routing(routing)
 
     print_session_banner(prep.mode, budget=budget, llm_routing=routing)
+    if prep.accumulated.get("tokens") or prep.accumulated.get("minutos"):
+        print(
+            f"  {DIM}Consumo acumulado da cadeia: {prep.accumulated['tokens']:.0f} tokens, "
+            f"{prep.accumulated['minutos']:.1f} min (esta sessão tem orçamento novo).{RESET}"
+        )
     print(
         f"\n  {DIM}Retomando a sessão {prep.state.source_session_id} a partir do checkpoint "
         f"({len(prep.state.completed)} subtarefa(s) concluída(s) não serão reexecutadas); "
@@ -692,9 +697,10 @@ async def _run_resume(
             resume=prep.state,
         )
         print(format_result(result))
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001 - ResumeConflictError inclusive: o código de saída reflete a falha
         logger.error("Erro ao retomar a sessão", extra={"error": str(e)})
         print(f"\n  {STATUS_ICONS['error']} {RED}Erro: {e}{RESET}\n")
+        return False
     return True
 
 
@@ -1102,6 +1108,7 @@ async def execute_prompt(
 async def interactive_mode(
     orchestrator: Orchestrator,
     mode: str | None = None,
+    explicit_mode: str | None = None,
     context_bundle: ContextBundle | None = None,
     budget: UsageBudget | None = None,
     llm_routing: "SessionRouting | None" = None,
@@ -1159,7 +1166,7 @@ async def interactive_mode(
             if not s_id:
                 print(f"\n  {RED}❌ Use: resume <session_id>{RESET}\n")
             else:
-                await resume_session(orchestrator, s_id, mode=mode, budget=budget)
+                await resume_session(orchestrator, s_id, mode=explicit_mode, budget=budget)
             continue
 
         await execute_prompt(
@@ -1501,7 +1508,7 @@ def main() -> None:
         # Modo interativo (REPL)
         asyncio.run(
             interactive_mode(
-                orchestrator, mode=mode, context_bundle=context_bundle, budget=budget,
+                orchestrator, mode=mode, explicit_mode=args.mode, context_bundle=context_bundle, budget=budget,
                 llm_routing=llm_routing, project_binder=project_binder,
             )
         )

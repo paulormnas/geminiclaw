@@ -128,18 +128,23 @@ class AutonomousLoop:
 
     def _preload_resumed_results(self, master_session_id: str, resume: Any) -> None:
         """Entrega às dependentes o resultado das subtarefas concluídas na sessão anterior (sem reexecutá-las)."""
+        from src.continuity import safe_artifact_path
+        from src.knowledge.normalization import clean_free_text
         from src.subtask_output import SubtaskOutput
 
         for name, state in resume.completed.items():
+            # O checkpoint é dado não confiável: caminhos revalidados e resumo em uma linha, sem títulos forjados.
             artifacts = [
                 {"name": rel.rsplit("/", 1)[-1], "path": f"{resume.source_session_id}/{rel}"}
                 for rel in state.artefatos
+                if safe_artifact_path(rel)
             ]
+            summary = clean_free_text(state.resultado_resumo).replace("#", "")[:1000]
             output = SubtaskOutput(
                 task_name=name,
-                agent_id=state.agent_id or "developer",
+                agent_id=clean_free_text(state.agent_id)[:64] or "developer",
                 status="success",
-                text_summary=f"[concluída na sessão {resume.source_session_id}] {state.resultado_resumo}".strip(),
+                text_summary=f"[dado da sessão {resume.source_session_id}, concluída] {summary}".strip(),
                 artifacts=artifacts,
             )
             self._short_term_memory.write(
@@ -761,7 +766,7 @@ class AutonomousLoop:
                 continue
 
             if recorder is not None:
-                recorder.set_plan([plan_entry(t) for t in tasks])
+                await asyncio.to_thread(recorder.set_plan, [plan_entry(t) for t in tasks])
 
             final_results = []
             
@@ -901,7 +906,7 @@ class AutonomousLoop:
                     attempt_number = self._usage_tracker.record_task_attempt(retry_key)
                     attempt = attempt_number - 1  # índice 0-based, compatível com os logs abaixo
                     if recorder is not None and task.task_name:
-                        recorder.subtask_started(task.task_name, attempt_number)
+                        await asyncio.to_thread(recorder.subtask_started, task.task_name, attempt_number)
                     logger.info(
                         f"Executando tentativa {attempt_number}/{self._usage_tracker.budget.max_task_retries} "
                         f"para {task.agent_id} [{task.task_name}]"
@@ -1052,7 +1057,8 @@ class AutonomousLoop:
                         cp_text = (
                             str(last_result.response.get("text") or "") if success else str(last_result.error or "")
                         )
-                    recorder.subtask_finished(
+                    await asyncio.to_thread(
+                        recorder.subtask_finished,
                         task.task_name,
                         status=cp_status,
                         tentativas=self._usage_tracker.task_attempts(retry_key),

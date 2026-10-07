@@ -57,8 +57,9 @@ STATUS_SUBTAREFA = (ST_CONCLUIDA, ST_EM_ANDAMENTO, ST_PENDENTE, ST_ABANDONADA, S
 
 CAUSAS_FALHA = ("infraestrutura", "abordagem", "ambigua")
 # Categoria estruturada (``AgentResult.error_category``) de uma subtarefa que estava em andamento quando o processo
-# parou sem aviso (``classify_failure`` a classifica como causa ``infraestrutura``).
-POWER_LOSS_CATEGORY = "queda_de_energia"
+# parou sem aviso (``classify_failure`` a classifica como causa ``infraestrutura``). O nome é neutro de propósito: a
+# única evidência é a falta de batimento (pode ter sido queda de energia, OOM-kill, ``kill -9`` ou erro fatal).
+INTERRUPTION_CATEGORY = "interrupcao_inesperada"
 
 # Motivos de parada que permitem retomar sem perguntar; ``solucao_encontrada`` pede confirmação.
 MOTIVOS_RETOMAVEIS = frozenset(
@@ -69,6 +70,9 @@ MOTIVO_RESOLVIDA = "solucao_encontrada"
 SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _NODE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+# Artefato: caminho relativo à sessão, componentes de [A-Za-z0-9._-] (sem "..", sem barra inicial, sem controles,
+# crases nem quebras de linha): vira texto de prompt das subtarefas dependentes.
+_ARTIFACT_RE = re.compile(r"^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$")
 
 MAX_PROMPT_CHARS = 20_000
 MAX_SUMMARY_CHARS = 1_000
@@ -91,6 +95,20 @@ _CONSUMO_KEYS = frozenset({"tokens", "minutos", "retentativas_conexao"})
 
 class CheckpointError(ValueError):
     """Checkpoint ausente, ilegível, inválido ou inseguro (mensagem acionável, sem eco do conteúdo)."""
+
+
+class ResumeConflictError(RuntimeError):
+    """Outra retomada da mesma sessão chegou antes (reivindicação atômica perdida)."""
+
+
+def safe_artifact_path(value: object) -> bool:
+    """``True`` se ``value`` é caminho relativo seguro de artefato (ver ``_ARTIFACT_RE``)."""
+    return (
+        isinstance(value, str)
+        and 0 < len(value) <= MAX_ARTIFACT_CHARS
+        and bool(_ARTIFACT_RE.fullmatch(value))
+        and all(part not in (".", "..") for part in value.split("/"))
+    )
 
 
 class CheckpointVersionError(CheckpointError):
@@ -253,7 +271,7 @@ class SubtaskState:
         if (
             not isinstance(artefatos, list)
             or len(artefatos) > MAX_ARTIFACTS_PER_SUBTASK
-            or not all(isinstance(a, str) and 0 < len(a) <= MAX_ARTIFACT_CHARS for a in artefatos)
+            or not all(safe_artifact_path(a) for a in artefatos)
         ):
             raise CheckpointError("subtarefa com artefatos inválidos.")
         causa = data.get("causa_falha")
@@ -295,6 +313,7 @@ class Checkpoint:
     descobertas_sessao: list[str] = field(default_factory=list)
     sinalizacoes_pendentes: int = 0
     curator_pendente: bool = False
+    detalhe_parada: str = ""
 
     def find(self, task_name: str) -> SubtaskState | None:
         """Subtarefa pelo nome, ou ``None``."""
@@ -324,6 +343,7 @@ class Checkpoint:
             "descobertas_sessao": list(self.descobertas_sessao),
             "sinalizacoes_pendentes": self.sinalizacoes_pendentes,
             "curator_pendente": self.curator_pendente,
+            "detalhe_parada": self.detalhe_parada,
         }
 
     @classmethod
@@ -340,6 +360,11 @@ class Checkpoint:
         """
         if not isinstance(data, dict):
             raise CheckpointError("o checkpoint deve ser um objeto JSON.")
+        if "versao_checkpoint" not in data and ("completed_tasks" in data or "pending_tasks" in data):
+            raise CheckpointError(
+                "checkpoint em formato legado (anterior à continuidade V18, sem versao_checkpoint); não é retomável. "
+                "Inicie uma nova sessão a partir do prompt original."
+            )
         version = data.get("versao_checkpoint")
         if not isinstance(version, int) or isinstance(version, bool) or version < 1:
             raise CheckpointError("versao_checkpoint ausente ou inválida.")
@@ -408,6 +433,7 @@ class Checkpoint:
             descobertas_sessao=_id_list(data.get("descobertas_sessao"), "descobertas_sessao", MAX_IDS),
             sinalizacoes_pendentes=pendentes,
             curator_pendente=curator,
+            detalhe_parada=_text(data, "detalhe_parada", 200),
         )
 
 
@@ -642,7 +668,7 @@ def list_task_artifacts(session_dir: Path, task_name: str, *, limit: int = MAX_A
                 if path.is_symlink() or not path.is_file():
                     continue
                 rel = path.relative_to(session_dir).as_posix()
-                if len(rel) <= MAX_ARTIFACT_CHARS:
+                if safe_artifact_path(rel):
                     found.append(rel)
                 if len(found) >= limit:
                     return found
@@ -825,9 +851,7 @@ class CheckpointRecorder:
             state.tentativas = max(int(tentativas), state.tentativas)
             state.resultado_resumo = " ".join(str(resumo or "").split())[:MAX_SUMMARY_CHARS]
             if artefatos is not None:
-                state.artefatos = [a for a in artefatos if isinstance(a, str) and 0 < len(a) <= MAX_ARTIFACT_CHARS][
-                    :MAX_ARTIFACTS_PER_SUBTASK
-                ]
+                state.artefatos = [a for a in artefatos if safe_artifact_path(a)][:MAX_ARTIFACTS_PER_SUBTASK]
             state.causa_falha = causa_falha if causa_falha in CAUSAS_FALHA else None
 
         return self._update(mutate)
@@ -902,7 +926,7 @@ class CheckpointRecorder:
 
 
 def mark_checkpoint_interrupted(
-    session_dir: Path | str, *, expected_session_id: str | None = None
+    session_dir: Path | str, *, expected_session_id: str | None = None, detail: str = ""
 ) -> Checkpoint | None:
     """Marca o checkpoint de uma sessão parada sem fechamento: ``interrompido`` e subtarefas em andamento viram
     ``falhou`` com causa ``infraestrutura``.
@@ -927,6 +951,8 @@ def mark_checkpoint_interrupted(
     if cp.estado == ESTADO_EM_EXECUCAO:
         cp.estado = ESTADO_INTERROMPIDO
         cp.motivo_parada = cp.motivo_parada or "interrompida"
+        cp.curator_pendente = True  # a consolidação do Curator desta sessão não se perde
+        cp.detalhe_parada = " ".join(detail.split())[:200] if detail else cp.detalhe_parada
         changed = True
     if changed:
         cp.atualizado_em = _now()
@@ -951,15 +977,33 @@ class Resumability:
     message: str = ""
 
 
-def evaluate_resumability(session_status: str, checkpoint: Checkpoint) -> Resumability:
+def evaluate_resumability(
+    session_status: str,
+    checkpoint: Checkpoint,
+    db_motivo: str | None = None,
+    *,
+    seconds_since_beat: float | None = None,
+) -> Resumability:
     """Decide se a sessão pode ser retomada (design §3).
 
     Retomáveis: ``suspended``, ``interrompida`` ou fechada por ``limite_*``. ``solucao_encontrada`` pede
-    confirmação. Sessão ainda ativa, ``erro`` e fechamento sem motivo são recusados.
+    confirmação. Sessão ainda ativa, ``erro`` e fechamento sem motivo são recusados. O motivo do **banco** de
+    sessões vale mais que o do arquivo; divergência entre os dois é recusada (arquivo adulterado).
     """
     if session_status == "active":
-        return Resumability(RESUME_REFUSE, "a sessão ainda está em execução (batimento recente).")
+        wait = ""
+        if seconds_since_beat is not None:
+            left = max(float(config.SESSION_STALE_SECONDS) - seconds_since_beat, 0.0)
+            wait = (
+                f" (último batimento há {seconds_since_beat:.0f}s; se o processo caiu, a sessão vira obsoleta em "
+                f"~{left:.0f}s; veja `geminiclaw sessions`)"
+            )
+        return Resumability(RESUME_REFUSE, "a sessão ainda está em execução" + wait + ".")
     motivo = checkpoint.motivo_parada
+    if db_motivo is not None:
+        if motivo is not None and motivo != db_motivo:
+            return Resumability(RESUME_REFUSE, "o motivo de parada do checkpoint diverge do registrado no banco.")
+        motivo = db_motivo
     if session_status in ("suspended", "interrompida"):
         return Resumability(RESUME_OK)
     if motivo in MOTIVOS_RETOMAVEIS:
@@ -997,6 +1041,7 @@ class ResumeState:
     context_block: str = ""
     curator_pending: bool = False
     graph_available: bool = True
+    stale_claim: str | None = None
 
     @property
     def completed(self) -> dict[str, SubtaskState]:

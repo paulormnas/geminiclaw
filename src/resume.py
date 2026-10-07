@@ -18,7 +18,8 @@ Regras de segurança:
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -48,12 +49,17 @@ class ResumeError(RuntimeError):
 
 @dataclass(frozen=True)
 class ResumePreparation:
-    """Resultado de ``prepare_resume``."""
+    """Resultado de ``prepare_resume``.
+
+    ``accumulated`` soma consumo (tokens, minutos) das sessões anteriores da cadeia, para o banner e o teto opcional
+    ``RESUME_MAX_CHAIN_TOKENS``.
+    """
 
     state: ResumeState
     prompt: str
     mode: str
     project_context: str
+    accumulated: dict[str, float] = field(default_factory=dict)
 
 
 def _verify_in_graph(store: GraphStore | None, session_id: str, project_id: str) -> bool:
@@ -124,15 +130,62 @@ def pending_flags(session_dir: Path) -> list[dict[str, str]]:
 
 
 def select_session_for_project(session_manager: Any, project_id: str) -> str:
-    """Sessão mais recente do projeto (a ponta da cadeia).
+    """Ponta (folha) da cadeia de sessões do projeto.
+
+    Prefere a sessão que nenhuma outra continua; ``created_at`` só desempata (o relógio de um Pi sem RTC pode
+    voltar depois de uma queda de energia).
 
     Raises:
         ResumeError: Projeto sem sessões.
     """
-    sessions = session_manager.list_by_project(project_id, limit=1)
+    sessions = session_manager.list_by_project(project_id, limit=100)
     if not sessions:
         raise ResumeError(f"o projeto {project_id} não tem sessões para continuar.")
-    return sessions[0].id
+    continued = {
+        s.payload.get(key)
+        for s in sessions
+        for key in ("continues_session_id", "continued_by")
+        if isinstance(s.payload.get(key), str)
+    }
+    leaves = [s for s in sessions if s.id not in continued] or list(sessions)
+    return sorted(leaves, key=lambda s: s.created_at, reverse=True)[0].id
+
+
+def _seconds_since(iso: str) -> float | None:
+    try:
+        return max((datetime.now(timezone.utc) - datetime.fromisoformat(str(iso).replace("Z", "+00:00"))).total_seconds(), 0.0)
+    except ValueError:
+        return None
+
+
+def _check_previous_claim(session_manager: Any, base_dir: Path | str, sid: str, claimed: Any) -> str | None:
+    """Decide o que fazer com ``continued_by`` já gravado na origem.
+
+    Returns:
+        ``None`` se não há reivindicação; o ID da reivindicação **falha** (a continuação não gerou checkpoint válido
+        ou não é retomável: a origem pode ser retomada de novo, substituindo-a).
+
+    Raises:
+        ResumeError: A continuação existe, está em curso ou é retomável (retome-a em vez da origem).
+    """
+    if not isinstance(claimed, str) or claimed == sid:
+        return None
+    other = session_manager.get(claimed)
+    if other is None:
+        return claimed
+    if other.status == "active":
+        raise ResumeError(f"a sessão '{sid}' já está sendo continuada por '{claimed}' (em execução).")
+    try:
+        cp, _ = read_checkpoint(resolve_session_dir(base_dir, claimed))
+    except CheckpointError:
+        return claimed  # a continuação falhou sem checkpoint válido: a origem volta a ser retomável
+    verdict = evaluate_resumability(other.status, cp, other.payload.get("motivo_parada"))
+    if verdict.decision == RESUME_REFUSE:
+        return claimed  # a continuação terminou em erro: não há de onde seguir por ela
+    raise ResumeError(
+        f"a sessão '{sid}' já foi continuada por '{claimed}'; use `geminiclaw resume --session {claimed}` "
+        "ou `geminiclaw continue --project <id>`."
+    )
 
 
 async def prepare_resume(
@@ -184,12 +237,7 @@ async def prepare_resume(
         except GraphStoreError as exc:
             raise ResumeError(str(exc)) from exc
 
-    follow = session_manager.find_continuation(sid)
-    if follow is not None and follow.id != sid:
-        raise ResumeError(
-            f"a sessão '{sid}' já foi continuada por '{follow.id}'; use `geminiclaw resume --session {follow.id}` "
-            "ou `geminiclaw continue --project <id>`."
-        )
+    stale_claim = _check_previous_claim(session_manager, base_dir, sid, session.payload.get("continued_by"))
 
     try:
         source_dir = resolve_session_dir(base_dir, sid)
@@ -201,7 +249,10 @@ async def prepare_resume(
     if checkpoint.project_id != project_id:
         raise ResumeError("o project_id do checkpoint diverge do da sessão; retomada recusada.")
 
-    verdict = evaluate_resumability(session.status, checkpoint)
+    verdict = evaluate_resumability(
+        session.status, checkpoint, session.payload.get("motivo_parada"),
+        seconds_since_beat=_seconds_since(session.updated_at),
+    )
     if verdict.decision == RESUME_REFUSE:
         raise ResumeError(f"sessão '{sid}' não retomável: {verdict.message}")
     if verdict.decision == RESUME_CONFIRM and not (confirm is not None and confirm(verdict.message)):
@@ -244,11 +295,32 @@ async def prepare_resume(
         context_block=block,
         curator_pending=checkpoint.curator_pendente,
         graph_available=graph_ok,
+        stale_claim=stale_claim,
     )
+    accumulated = _accumulated_usage(chain)
+    ceiling = int(config.RESUME_MAX_CHAIN_TOKENS)
+    if ceiling > 0 and accumulated["tokens"] >= ceiling:
+        raise ResumeError(
+            f"a cadeia já consumiu {accumulated['tokens']:.0f} tokens (teto RESUME_MAX_CHAIN_TOKENS={ceiling}); "
+            "aumente o teto conscientemente para continuar."
+        )
     return ResumePreparation(
         state=state,
         prompt=prompt,
         mode=mode or checkpoint.modo or session.payload.get("mode") or config.SESSION_DEFAULT_MODE,
         project_context=project_block,
+        accumulated=accumulated,
     )
 
+
+def _accumulated_usage(chain: tuple[Path, ...]) -> dict[str, float]:
+    """Soma o consumo registrado nos checkpoints da cadeia (melhor esforço; ilegível conta zero)."""
+    total = {"tokens": 0.0, "minutos": 0.0}
+    for directory in chain:
+        try:
+            cp, _ = read_checkpoint(directory)
+        except CheckpointError:
+            continue
+        total["tokens"] += float(cp.consumo.get("tokens", 0))
+        total["minutos"] += float(cp.consumo.get("minutos", 0))
+    return total

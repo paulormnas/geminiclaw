@@ -73,7 +73,7 @@ async def test_queda_de_energia(tmp_path):
     (exp,) = store.find_nodes("Experimento", {"subtarefa_id": "s-2"})
     assert exp.properties["status"] == "falha"
     assert exp.properties["causa_falha"] == "infraestrutura"
-    assert exp.properties["assinatura_falha"] == "queda_de_energia"
+    assert exp.properties["assinatura_falha"] == "interrupcao_inesperada"
 
 
 @pytest.mark.asyncio
@@ -104,22 +104,38 @@ async def test_sessao_sem_checkpoint_e_marcada_sem_derrubar(tmp_path):
     assert sm.get("antiga").status == "interrompida"
 
 
-@pytest.mark.asyncio
-async def test_batimento_periodico_durante_a_sessao(tmp_path):
-    """Batimento: a tarefa periódica atualiza a sessão e para ao ser cancelada."""
-    import asyncio
+def test_batimento_periodico_em_thread_independe_do_laco(tmp_path):
+    """Batimento (I-5): a thread bate mesmo com o laço de eventos bloqueado e para ao ser interrompida."""
+    import time
 
-    sm = MagicMock()
-    sm.heartbeat.return_value = True
-    orch = _orch(tmp_path, sm, InMemoryGraphStore())
-    with patch("src.config.SESSION_HEARTBEAT_SECONDS", 0.01):
-        task = asyncio.create_task(orch._heartbeat_loop("s1"))
-        await asyncio.sleep(0.1)
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
-    assert sm.heartbeat.call_count >= 2
-    sm.heartbeat.assert_called_with("s1")
+    from src.heartbeat import SessionHeartbeat
+
+    calls: list[int] = []
+    hb = SessionHeartbeat(lambda: calls.append(1) or True, interval=0.01).start()
+    time.sleep(0.15)  # bloqueia a thread principal, como um laço de eventos parado
+    hb.stop()
+    n = len(calls)
+    assert n >= 3
+    time.sleep(0.05)
+    assert len(calls) == n  # parou
+
+
+def test_falso_positivo_de_obsolescencia_e_reafirmado(tmp_path):
+    """I-5: sessão viva marcada `interrompida` por engano volta a `active` e perde o motivo herdado."""
+    import time
+
+    from src.heartbeat import SessionHeartbeat
+
+    sm = FakeSessionManager()
+    sm.add("viva", "active", {"prompt": "p"}, updated_delta=-3600)
+    assert [s.id for s in sm.mark_stale(300)] == ["viva"]  # outro processo a marcou obsoleta
+    assert sm.get("viva").payload["motivo_parada"] == "interrompida"
+    hb = SessionHeartbeat(lambda: sm.heartbeat("viva"), lambda: sm.reassert_active("viva"), interval=0.01).start()
+    time.sleep(0.1)
+    hb.stop()
+    assert sm.get("viva").status == "active"
+    assert "motivo_parada" not in sm.get("viva").payload
+    assert hb.reasserted == 1
 
 
 # -- SessionManager (SQL) ----------------------------------------------------------------------

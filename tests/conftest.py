@@ -78,6 +78,23 @@ def mock_db_connection(request):
         # Normaliza query para facilitar o matching: remove quebras de linha e espaços extras
         query_norm = " ".join(query.strip().upper().split())
         
+        # V18 continuidade: batimento, marcação de obsoletas e consultas de cadeia/projeto
+        if "UPDATE AGENT_SESSIONS SET UPDATED_AT" in query_norm:
+            sid = params[1]
+            row = db_state.get(sid)
+            if row and row["status"] == "active":
+                row["updated_at"] = params[0]
+                mock_cursor.fetchone.return_value = {"id": sid}
+            else:
+                mock_cursor.fetchone.return_value = None
+            return mock_cursor
+        if "UPDATE AGENT_SESSIONS SET STATUS = 'INTERROMPIDA'" in query_norm:
+            mock_cursor.fetchall.return_value = []
+            return mock_cursor
+        if "FROM AGENT_SESSIONS WHERE AGENT_ID = 'ORCHESTRATOR'" in query_norm:
+            mock_cursor.fetchone.return_value = None
+            mock_cursor.fetchall.return_value = []
+            return mock_cursor
         # INSERT INTO agent_sessions (...) VALUES (%s, %s, %s, %s, %s, %s)
         if "INSERT INTO AGENT_SESSIONS" in query_norm:
             db_state[params[0]] = {

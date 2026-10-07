@@ -228,3 +228,80 @@ class SessionManager:
             )
             for row in rows
         ]
+
+    @staticmethod
+    def _row_to_session(row: Any) -> Session:
+        return Session(
+            id=row["id"],
+            agent_id=row["agent_id"],
+            status=row["status"],
+            created_at=row["created_at"] if isinstance(row["created_at"], str) else row["created_at"].isoformat(),
+            updated_at=row["updated_at"] if isinstance(row["updated_at"], str) else row["updated_at"].isoformat(),
+            payload=json.loads(row["payload"]) if isinstance(row["payload"], str) else row["payload"],
+        )
+
+    def heartbeat(self, session_id: str) -> bool:
+        """Batimento da sessão: atualiza só ``updated_at`` (nunca o payload) enquanto ela está ``active``.
+
+        Args:
+            session_id: ID da sessão mestra.
+
+        Returns:
+            ``True`` se a sessão ainda estava ``active``; ``False`` se outro processo já a marcou
+            ``interrompida`` (ou ela foi fechada).
+        """
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        with get_connection() as conn:
+            row = conn.execute(
+                "UPDATE agent_sessions SET updated_at = %s WHERE id = %s AND status = 'active' RETURNING id",
+                (now, session_id),
+            ).fetchone()
+        return row is not None
+
+    def mark_stale(self, stale_seconds: float) -> list[Session]:
+        """Marca ``interrompida`` as sessões mestras ``active`` sem batimento há mais de ``stale_seconds``.
+
+        A transição é atômica e condicional (``status='active'`` e ``updated_at`` antigo no mesmo
+        ``UPDATE``): uma sessão viva, cujo batimento chegou entre a leitura e a escrita, não é marcada.
+        Só sessões do orquestrador (``agent_id='orchestrator'``) entram; as sessões por agente são efêmeras.
+
+        Returns:
+            As sessões marcadas (com o ``status`` já ``interrompida``).
+        """
+        now = datetime.datetime.now(datetime.timezone.utc)
+        cutoff = (now - datetime.timedelta(seconds=stale_seconds)).isoformat()
+        patch = json.dumps({"motivo_parada": "interrompida"})
+        with get_connection() as conn:
+            rows = conn.execute(
+                """
+                UPDATE agent_sessions
+                SET status = 'interrompida', payload = payload || %s::jsonb, updated_at = %s
+                WHERE agent_id = 'orchestrator' AND status = 'active' AND updated_at < %s
+                RETURNING *
+                """,
+                (patch, now.isoformat(), cutoff),
+            ).fetchall()
+        sessions = [self._row_to_session(r) for r in rows or []]
+        for sess in sessions:
+            logger.warning("Sessão obsoleta marcada interrompida", extra={"extra": {"session_id": sess.id}})
+        return sessions
+
+    def find_continuation(self, session_id: str) -> Session | None:
+        """Sessão que continua ``session_id`` (``payload.continues_session_id``), a mais recente, se houver."""
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM agent_sessions WHERE agent_id = 'orchestrator' "
+                "AND payload->>'continues_session_id' = %s ORDER BY created_at DESC LIMIT 1",
+                (session_id,),
+            ).fetchone()
+        return self._row_to_session(row) if row else None
+
+    def list_by_project(self, project_id: str, limit: int = 20) -> list[Session]:
+        """Sessões mestras do projeto (``payload.project_id``), da mais recente para a mais antiga."""
+        with get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM agent_sessions WHERE agent_id = 'orchestrator' "
+                "AND payload->>'project_id' = %s ORDER BY created_at DESC LIMIT %s",
+                (project_id, limit),
+            ).fetchall()
+        return [self._row_to_session(r) for r in rows or []]

@@ -163,12 +163,13 @@ async def test_confirmacao_do_problema_passa_pelo_gate_real(monkeypatch):
     assert negado.get(1).decisao == "confirmar_problema"  # o pedido passou pelo gate
 
     gate = HumanGate()
+    entradas = iter(["c", "m", "c"])  # confirmar, sentido da métrica nova, confirmar
     detail = await ensure_confirmed_problem(
-        store, pid, "p", None, drafter=drafter, interactive=True, input_fn=lambda _: "c",
+        store, pid, "p", None, drafter=drafter, interactive=True, input_fn=lambda _: next(entradas),
         output_fn=lambda *_: None, gate=gate,
     )
     assert detail.problema is not None
-    (pedido,) = [r for r in gate._requests.values()]  # noqa: SLF001
+    pedido = list(gate._requests.values())[-1]  # noqa: SLF001
     assert pedido.estado == ESTADO_AUTORIZADA and pedido.resolvido_por == Source.TERMINAL
 
 

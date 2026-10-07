@@ -2,7 +2,7 @@
 """Specs da mudança v18.5-sandbox-phases (capacidade code-sandbox), com o cliente do daemon simulado.
 
 Nenhum teste cria container de verdade; os cenários que dependem da imagem real e de rede ficam em
-``tests/integration/test_sandbox_phases.py``. Reaproveita o ``FakeDaemon`` de ``test_sandbox_slim``.
+``tests/integration/test_sandbox_phases_real.py``. Reaproveita o ``FakeDaemon`` de ``test_sandbox_slim``.
 """
 
 import hashlib

@@ -16,7 +16,17 @@ from src.llm.catalog import Catalog, load_catalog
 REGISTERED = {"google", "anthropic", "openai", "ollama", "openai_compatible"}
 
 
-def model(model_id: str, trust: str, *, ferramentas: bool = True, saida: bool = True, janela: int = 100000) -> dict:
+def model(
+    model_id: str,
+    trust: str,
+    *,
+    ferramentas: bool = True,
+    saida: bool = True,
+    janela: int = 100000,
+    familia: str | None = None,
+    **extra: object,
+) -> dict:
+    """Entrada de catálogo; ``familia`` padrão = provedor; ``extra``: ``localidade``/``aceita_dados_brutos``."""
     return {
         "id": model_id,
         "provedor": model_id.split("/", 1)[0],
@@ -24,6 +34,8 @@ def model(model_id: str, trust: str, *, ferramentas: bool = True, saida: bool = 
         "ferramentas": ferramentas,
         "saida_estruturada": saida,
         "janela_contexto": janela,
+        "familia_modelo": familia or model_id.split("/", 1)[0],
+        **extra,
     }
 
 

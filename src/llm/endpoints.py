@@ -55,3 +55,21 @@ def validate_remote_endpoint(provider: str, base_url: str, env_name: str | None 
         f"Endpoint do provedor '{provider}' ('{parsed.scheme}://{host}') está fora de loopback e de redes "
         f"privadas e não usa https: {variable}(a chave de API e os prompts não podem trafegar em claro)."
     )
+
+
+def endpoint_host(base_url: str) -> str:
+    """Host de uma URL de endpoint (``unix`` para socket Unix); nunca inclui credenciais."""
+    parsed = urlparse(base_url)
+    if parsed.scheme in ("unix", "http+unix", "https+unix"):
+        return "unix"
+    return parsed.hostname or ""
+
+
+def is_loopback_host(host: str) -> bool:
+    """``localhost``, ``127.0.0.0/8``, ``::1`` ou socket Unix (sem resolver DNS)."""
+    if host.lower() in ("localhost", "localhost.localdomain", "unix"):
+        return True
+    try:
+        return ipaddress.ip_address(host.strip("[]")).is_loopback
+    except ValueError:
+        return False

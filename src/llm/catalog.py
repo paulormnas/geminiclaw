@@ -12,13 +12,20 @@ houver), usado no banner, no payload da sessão e na telemetria.
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
 import yaml
 
-from src.llm.endpoints import EndpointError, is_private_host, validate_remote_endpoint  # noqa: F401
+from src.llm.endpoints import (  # noqa: F401
+    EndpointError,
+    endpoint_host,
+    is_loopback_host,
+    is_private_host,
+    validate_remote_endpoint,
+)
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -37,7 +44,12 @@ CLOUD_ONLY_PROVIDERS: frozenset[str] = frozenset({"google", "anthropic", "openai
 
 _TOP_KEYS = {"versao", "modelos", "papeis", "aliases_papel"}
 _LOCAL_KEYS = {"modelos"}
-_MODEL_KEYS = {"id", "provedor", "trust", "ferramentas", "saida_estruturada", "janela_contexto"}
+LOCALIDADE_VALUES: tuple[str, ...] = ("no_no", "fora_do_no")
+_MODEL_REQUIRED_KEYS = {
+    "id", "provedor", "trust", "ferramentas", "saida_estruturada", "janela_contexto", "familia_modelo",
+}
+_MODEL_KEYS = _MODEL_REQUIRED_KEYS | {"localidade", "aceita_dados_brutos"}
+_FAMILY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _ROLE_KEYS = {"requisitos", "preferencia"}
 _REQUIREMENT_KEYS = {"ferramentas", "saida_estruturada", "janela_contexto_min"}
 
@@ -57,6 +69,10 @@ class ModelEntry:
     ferramentas: bool
     saida_estruturada: bool
     janela_contexto: int
+    familia_modelo: str
+    # Declarações do operador (ADR 019 §1); nunca inferidas do endpoint. Padrões seguros.
+    localidade: str = "fora_do_no"
+    aceita_dados_brutos: bool = False  # valor efetivo (no_no implica True)
 
 
 @dataclass(frozen=True)
@@ -65,7 +81,13 @@ class RoleSpec:
 
     papel: str
     requisitos: Mapping[str, Any]
-    preferencia: tuple[str, ...]
+    # Cada posição é um grupo de ids (empate); posição simples = grupo de um id (design v18.5 §2).
+    preferencia_grupos: tuple[tuple[str, ...], ...]
+
+    @property
+    def preferencia(self) -> tuple[str, ...]:
+        """Lista achatada, na ordem (compatível com quem ignora os grupos)."""
+        return tuple(model_id for group in self.preferencia_grupos for model_id in group)
 
 
 @dataclass(frozen=True)
@@ -79,6 +101,7 @@ class Catalog:
     hash: str
     local: bool = False
     local_path: str | None = None
+    local_hash: str | None = None  # sha256 do catálogo local (None sem catálogo local)
 
     def normalize_role(self, papel: str) -> str:
         """Aplica ``aliases_papel`` e valida o papel (``planner`` -> ``researcher``)."""
@@ -159,7 +182,7 @@ def _parse_models(
         model_id = item.get("id")
         shown_id = model_id if isinstance(model_id, str) else None
         _check_keys(item, _MODEL_KEYS, source, path, shown_id)
-        for key in _MODEL_KEYS:
+        for key in sorted(_MODEL_REQUIRED_KEYS):
             if key not in item:
                 raise _fail(source, f"{path}.{key}", f"campo obrigatório '{key}' ausente", shown_id)
         if not isinstance(model_id, str):
@@ -197,6 +220,36 @@ def _parse_models(
                 f"provedor de nuvem '{provider}' não pode ser 'self_hosted' (use 'third_party')",
                 model_id,
             )
+        family = item["familia_modelo"]
+        if not isinstance(family, str) or not _FAMILY_PATTERN.match(family):
+            raise _fail(
+                source,
+                f"{path}.familia_modelo",
+                f"precisa ser texto minúsculo não vazio ({_FAMILY_PATTERN.pattern})",
+                model_id,
+            )
+        locality = item.get("localidade", "fora_do_no")
+        if locality not in LOCALIDADE_VALUES:
+            raise _fail(
+                source, f"{path}.localidade", f"localidade '{locality}' fora de {list(LOCALIDADE_VALUES)}", model_id
+            )
+        raw_flag = item.get("aceita_dados_brutos")
+        if raw_flag is not None and not isinstance(raw_flag, bool):
+            raise _fail(source, f"{path}.aceita_dados_brutos", "precisa ser booleano", model_id)
+        if locality == "no_no" and item["trust"] == "third_party":
+            raise _fail(source, f"{path}.localidade", "'no_no' é incompatível com trust 'third_party'", model_id)
+        if raw_flag is True and item["trust"] == "third_party":
+            raise _fail(
+                source, f"{path}.aceita_dados_brutos", "'true' é incompatível com trust 'third_party'", model_id
+            )
+        if locality == "no_no" and raw_flag is False:
+            raise _fail(
+                source,
+                f"{path}.aceita_dados_brutos",
+                "declaração contraditória: 'no_no' implica aceita_dados_brutos true",
+                model_id,
+            )
+        accepts_raw = True if locality == "no_no" else bool(raw_flag)
         seen[model_id] = source
         parsed[model_id] = ModelEntry(
             id=model_id,
@@ -206,6 +259,9 @@ def _parse_models(
             ferramentas=item["ferramentas"],
             saida_estruturada=item["saida_estruturada"],
             janela_contexto=window,
+            familia_modelo=family,
+            localidade=locality,
+            aceita_dados_brutos=accepts_raw,
         )
     return parsed
 
@@ -232,12 +288,18 @@ def _parse_roles(raw_roles: Any, source: str, models: Mapping[str, ModelEntry]) 
         preference = spec.get("preferencia")
         if not isinstance(preference, list) or not preference:
             raise _fail(source, f"{path}.preferencia", f"papel '{name}' sem nenhum modelo na preferência")
-        for model_id in preference:
-            if model_id not in models:
-                raise _fail(
-                source, f"{path}.preferencia", f"cita id inexistente '{model_id}'", str(model_id)
-            )
-        roles[name] = RoleSpec(papel=name, requisitos=dict(requirements), preferencia=tuple(preference))
+        groups: list[tuple[str, ...]] = []
+        for position in preference:
+            members = position if isinstance(position, list) else [position]
+            if not members:
+                raise _fail(source, f"{path}.preferencia", "posição de preferência vazia")
+            for model_id in members:
+                if not isinstance(model_id, str) or model_id not in models:
+                    raise _fail(
+                        source, f"{path}.preferencia", f"cita id inexistente '{model_id}'", str(model_id)
+                    )
+            groups.append(tuple(members))
+        roles[name] = RoleSpec(papel=name, requisitos=dict(requirements), preferencia_grupos=tuple(groups))
     for required in REQUIRED_ROLES:
         if required not in roles:
             raise _fail(source, f"papeis.{required}", f"papel obrigatório '{required}' ausente")
@@ -253,6 +315,26 @@ def _parse_aliases(raw: Any, source: str, roles: Mapping[str, RoleSpec]) -> dict
         if target not in roles:
             raise _fail(source, f"aliases_papel.{alias}", f"aponta para papel inexistente '{target}'")
     return {str(alias).lower(): target for alias, target in raw.items()}
+
+
+def _warn_locality_mismatch(provider: str, base_url: str, entries: Any) -> None:
+    """Avisa quando a ``localidade`` declarada diverge do endpoint; nunca altera a declaração (ADR 019 §1)."""
+    host = endpoint_host(base_url)
+    loopback = is_loopback_host(host)
+    for entry in entries:
+        if entry.provedor != provider:
+            continue
+        if entry.localidade == "no_no" and not loopback:
+            logger.warning(
+                f"Modelo '{entry.id}' declarado no nó, mas o endpoint está em '{host}' (fora de loopback)",
+                extra={"id": entry.id, "host": host},
+            )
+        elif entry.localidade == "fora_do_no" and loopback:
+            logger.warning(
+                f"Modelo '{entry.id}' declarado fora do nó, mas o endpoint está em loopback ('{host}'): "
+                "pode ser túnel ou proxy; mantida como declarada",
+                extra={"id": entry.id, "host": host},
+            )
 
 
 def load_catalog(
@@ -295,6 +377,7 @@ def load_catalog(
 
     digest_input = raw
     local_used: str | None = None
+    local_digest: str | None = None
     if local_path is None:
         local_path = config.LLM_CATALOG_LOCAL_PATH or DEFAULT_LOCAL_PATH
     local_file = Path(local_path)
@@ -304,9 +387,17 @@ def load_catalog(
         if "papeis" in local_data:
             raise _fail(local_source, "papeis", "o catálogo local só pode ter a chave 'modelos'")
         _check_keys(local_data, _LOCAL_KEYS, local_source, "")
-        models.update(_parse_models(local_data.get("modelos", []), local_source, registered, seen))
+        local_models = _parse_models(local_data.get("modelos", []), local_source, registered, seen)
+        models.update(local_models)
         digest_input = raw + local_raw
         local_used = local_source
+        local_digest = hashlib.sha256(local_raw).hexdigest()
+        for entry in local_models.values():
+            if entry.aceita_dados_brutos:
+                logger.warning(
+                    "Entrada do catálogo local aceita dados brutos de pesquisa",
+                    extra={"id": entry.id, "path": local_source, "sha256": local_digest},
+                )
         logger.warning(
             "Catálogo local de modelos carregado",
             extra={"path": local_source, "sha256": hashlib.sha256(local_raw).hexdigest()},
@@ -322,6 +413,7 @@ def load_catalog(
                 validate_remote_endpoint(provider, base_url, registry.base_url_env_name(provider))
             except EndpointError as exc:
                 raise CatalogError(str(exc)) from exc
+            _warn_locality_mismatch(provider, base_url, models.values())
 
     return Catalog(
         versao=version,
@@ -331,4 +423,5 @@ def load_catalog(
         hash=hashlib.sha256(digest_input).hexdigest(),
         local=local_used is not None,
         local_path=local_used,
+        local_hash=local_digest,
     )

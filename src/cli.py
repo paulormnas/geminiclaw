@@ -57,7 +57,8 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
   geminiclaw [opções] "<tarefa>"
   geminiclaw sessions
   geminiclaw stop [--session <id>]
-  geminiclaw resume --session <id>
+  geminiclaw resume --session <id>   (retoma a partir do checkpoint, em nova sessão com orçamento novo)
+  geminiclaw continue --project <id> (retoma a sessão mais recente do projeto)
   geminiclaw convert --session <id> --format latex|html|docx
   geminiclaw clear-context
   geminiclaw history
@@ -602,44 +603,120 @@ def clear_context(context_dir: str | None = None) -> None:
     print(f"  {GREEN}✅ input_context/ limpo com sucesso.{RESET}\n")
 
 
-async def resume_session(orchestrator: Orchestrator, session_id: str) -> None:
-    """Retoma uma sessão suspensa (Roadmap V15.3 / Spec G5).
+def _ask_yes_no(question: str) -> bool:
+    """Pergunta sim/não no terminal; sem TTY a resposta é "não" (nada é confirmado por omissão)."""
+    from src.project_session import is_interactive
 
-    Limitação conhecida: o framework não faz checkpoint do estado de execução do DAG,
-    então "retomar" reinicia o ciclo de planejamento a partir do prompt original —
-    não é uma resumição exata do ponto de suspensão. Artefatos já gerados antes da
-    suspensão permanecem em `outputs/<session_id>/` e são reconhecidos e reaproveitados
-    pelo Developer Agent (WorkspaceManifest), reduzindo retrabalho na prática.
+    if not is_interactive():
+        return False
+    try:
+        return input(f"  {question} [s/N] ").strip().lower() in ("s", "sim", "y", "yes")
+    except (EOFError, KeyboardInterrupt):
+        return False
 
-    Args:
-        orchestrator: Instância do orquestrador.
-        session_id: ID da sessão suspensa a retomar.
+
+async def _run_resume(
+    orchestrator: Orchestrator,
+    session_id: str,
+    *,
+    project_arg: str | None = None,
+    mode: str | None = None,
+    budget: UsageBudget | None = None,
+    model_pin: str | None = None,
+) -> bool:
+    """Retoma ``session_id`` a partir do checkpoint, em uma NOVA sessão ligada à anterior (v18-research-continuity).
+
+    Orçamento novo por sessão retomada. Nunca confirma o Problema nem aprova decisão reservada.
+
+    Returns:
+        ``True`` se a nova sessão foi executada; ``False`` se a retomada foi recusada.
     """
-    session = orchestrator.session_manager.get(session_id)
-    if session is None:
-        print(f"\n  {RED}❌ Sessão '{session_id}' não encontrada.{RESET}\n")
-        return
-    if session.status != "suspended":
-        print(f"\n  {YELLOW}⚠ Sessão '{session_id}' não está suspensa (status: {session.status}).{RESET}\n")
-        return
+    from src.llm.catalog import CatalogError
+    from src.llm.routing import RoutingError
+    from src.llm.session import bind_session_routing, build_session_routing
+    from src.resume import ResumeError, prepare_resume
 
-    original_prompt = session.payload.get("prompt")
-    if not original_prompt:
-        print(f"\n  {RED}❌ Sessão '{session_id}' não tem um prompt original registrado — não é possível retomar.{RESET}\n")
-        return
+    try:
+        await orchestrator.recover_interrupted_sessions()
+    except Exception as e:  # noqa: BLE001 - a detecção de paradas nunca impede a retomada
+        logger.warning("Detecção de sessões interrompidas falhou", extra={"error": type(e).__name__})
 
-    mode = session.payload.get("mode", SESSION_DEFAULT_MODE)
+    store = index = None
+    try:
+        from src.knowledge.factory import open_graph_store, open_knowledge_runtime
+
+        runtime = open_knowledge_runtime()
+        store = runtime.store if runtime is not None else open_graph_store()
+        index = runtime.index if runtime is not None else None
+    except Exception as e:  # noqa: BLE001 - sem grafo, a preparação recusa se a sessão tinha projeto
+        logger.warning("Grafo indisponível para a retomada", extra={"error": type(e).__name__})
+
+    try:
+        prep = await prepare_resume(
+            session_manager=orchestrator.session_manager,
+            base_dir=orchestrator.output_manager.base_dir,
+            session_id=session_id,
+            project_arg=project_arg,
+            mode=mode,
+            store=store,
+            index=index,
+            confirm=_ask_yes_no,
+        )
+    except ResumeError as e:
+        print(f"\n  {STATUS_ICONS['error']} {RED}{e}{RESET}\n")
+        return False
+
+    try:
+        routing = await build_session_routing(cli_pins={"researcher": model_pin} if model_pin else None)
+    except (RoutingError, CatalogError) as e:
+        print(f"\n  {STATUS_ICONS['error']} {RED}Falha na resolução de modelos: {e}{RESET}\n")
+        return False
+    bind_session_routing(routing)
+
+    print_session_banner(prep.mode, budget=budget, llm_routing=routing)
     print(
-        f"\n  {DIM}Retomando a partir do prompt original em um novo ciclo de planejamento "
-        f"(modo: {mode}). Artefatos da sessão suspensa permanecem em outputs/{session_id}/ "
-        f"e são reaproveitados automaticamente quando reconhecidos pelo Developer Agent.{RESET}\n"
+        f"\n  {DIM}Retomando a sessão {prep.state.source_session_id} a partir do checkpoint "
+        f"({len(prep.state.completed)} subtarefa(s) concluída(s) não serão reexecutadas); "
+        f"orçamento novo (modo: {prep.mode}).{RESET}\n"
     )
+    try:
+        result = await orchestrator.handle_request(
+            prep.prompt,
+            mode=prep.mode,
+            context_bundle=ContextBundle(),
+            budget=budget,
+            llm_routing=routing,
+            project_id=prep.state.project_id,
+            project_context=prep.project_context,
+            project_mode=None if prep.state.project_id else "sem_grafo",
+            resume=prep.state,
+        )
+        print(format_result(result))
+    except Exception as e:  # noqa: BLE001
+        logger.error("Erro ao retomar a sessão", extra={"error": str(e)})
+        print(f"\n  {STATUS_ICONS['error']} {RED}Erro: {e}{RESET}\n")
+    return True
 
-    context_bundle = load_context_with_confirmation()
-    if context_bundle is None:
-        return
 
-    await execute_prompt(orchestrator, original_prompt, mode=mode, context_bundle=context_bundle)
+async def resume_session(orchestrator: Orchestrator, session_id: str, **kwargs: Any) -> bool:
+    """``geminiclaw resume --session <id>``: retoma a sessão a partir do checkpoint (sem reiniciar do prompt)."""
+    return await _run_resume(orchestrator, session_id, **kwargs)
+
+
+async def continue_project(orchestrator: Orchestrator, project_id: str, **kwargs: Any) -> bool:
+    """``geminiclaw continue --project <id>``: retoma a sessão mais recente do projeto."""
+    from src.knowledge.errors import GraphStoreError
+    from src.knowledge.projects import validate_project_id
+    from src.resume import ResumeError, select_session_for_project
+
+    try:
+        await orchestrator.recover_interrupted_sessions()
+        pid = validate_project_id(project_id)
+        session_id = select_session_for_project(orchestrator.session_manager, pid)
+    except (GraphStoreError, ResumeError) as e:
+        print(f"\n  {STATUS_ICONS['error']} {RED}{e}{RESET}\n")
+        return False
+    return await _run_resume(orchestrator, session_id, project_arg=pid, **kwargs)
 
 
 def convert_report(session_id: str, format: str) -> None:
@@ -1082,7 +1159,7 @@ async def interactive_mode(
             if not s_id:
                 print(f"\n  {RED}❌ Use: resume <session_id>{RESET}\n")
             else:
-                await resume_session(orchestrator, s_id)
+                await resume_session(orchestrator, s_id, mode=mode, budget=budget)
             continue
 
         await execute_prompt(
@@ -1328,7 +1405,13 @@ def main() -> None:
         logger.error("Falha ao inicializar CLI", extra={"error": str(e)})
         sys.exit(1)
 
-    # Roadmap V15.3 / Spec G5 — retomar sessão suspensa
+    # v18-research-continuity — paradas inesperadas: sessões sem batimento viram `interrompida` na inicialização.
+    try:
+        asyncio.run(orchestrator.recover_interrupted_sessions())
+    except Exception as _e:  # noqa: BLE001 - nunca impede a inicialização
+        logger.warning("Detecção de sessões interrompidas falhou", extra={"error": type(_e).__name__})
+
+    # Roadmap V15.3 / Spec G5 + v18-research-continuity — retomar a partir do checkpoint
     if args.prompt:
         p_lower_resume = args.prompt.strip().lower()
         if p_lower_resume == "resume" or p_lower_resume.startswith("resume "):
@@ -1338,8 +1421,24 @@ def main() -> None:
             if not target_sess:
                 print(f"\n  {RED}❌ Especifique --session <id> (ex: geminiclaw resume --session <id>).{RESET}\n")
                 sys.exit(1)
-            asyncio.run(resume_session(orchestrator, target_sess))
-            sys.exit(0)
+            ok = asyncio.run(
+                resume_session(
+                    orchestrator, target_sess, project_arg=args.project,
+                    mode=args.mode, budget=budget, model_pin=args.model,
+                )
+            )
+            sys.exit(0 if ok else 1)
+        if p_lower_resume == "continue" or p_lower_resume.startswith("continue "):
+            target_project = args.project
+            if not target_project and " " in args.prompt.strip():
+                target_project = args.prompt.strip().split(maxsplit=1)[1]
+            if not target_project:
+                print(f"\n  {RED}❌ Especifique --project <id> (ex: geminiclaw continue --project <id>).{RESET}\n")
+                sys.exit(1)
+            ok = asyncio.run(
+                continue_project(orchestrator, target_project, mode=args.mode, budget=budget, model_pin=args.model)
+            )
+            sys.exit(0 if ok else 1)
 
     # Roadmap V15.5 / Spec G9 — carrega input_context/ uma única vez por invocação
     context_bundle = load_context_with_confirmation()

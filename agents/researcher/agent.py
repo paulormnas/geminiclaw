@@ -19,7 +19,7 @@ from agents.base.agent import (
     _persist_session_context,
     _setup_skills,
 )
-from agents.base.tools import flag_for_curator, write_artifact
+from agents.base.tools import flag_for_curator, read_artifact, write_artifact
 from src.knowledge.problem import ProblemDraft, ProblemDraftError, parse_problem_draft
 from src.logger import get_logger
 from src.prompts import render_instruction
@@ -198,7 +198,7 @@ root_agent = Agent(
     description=AGENT_DESCRIPTION,
     _instruction=lambda: _get_agent_instruction(AGENT_INSTRUCTION),
     # `buscar_dominio` (somente leitura) só vai para researcher e curator, não para o registry global.
-    tools=registry.as_tools() + [write_artifact, flag_for_curator] + domain_search_tools(AGENT_NAME),
+    tools=registry.as_tools() + [write_artifact, read_artifact, flag_for_curator] + domain_search_tools(AGENT_NAME),
     before_agent_callback=_load_session_context,
     after_agent_callback=_persist_session_context,
 )

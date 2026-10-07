@@ -55,6 +55,11 @@ async def write_artifact(filename: str, content: str) -> str:
         return "Erro: Nome do arquivo ou conteúdo vazio."
 
     try:
+        ctx_ro = get_agent_context_optional()
+        if ctx_ro is not None and _targets_readonly_dir(filename, ctx_ro.readable_dirs):
+            logger.warning("write_artifact: escrita recusada — sessão anterior é somente leitura")
+            return "Erro: escrita recusada — artefatos de sessões anteriores são somente leitura."
+
         task_dir = _resolve_artifacts_dir()
         if task_dir is None:
             return "Erro: Diretório de outputs não encontrado."
@@ -116,6 +121,93 @@ write_artifact.parameters_schema = {
         }
     },
     "required": ["filename", "content"]
+}
+
+
+def _targets_readonly_dir(filename: str, readable_dirs: tuple[Path, ...]) -> bool:
+    """``True`` se ``filename`` aponta para dentro de uma sessão anterior (somente leitura).
+
+    Cobre caminho absoluto resolvido (inclusive via link simbólico) e caminho relativo que cita o diretório da
+    sessão anterior (``<sessão>/artifacts/x``).
+    """
+    if not readable_dirs:
+        return False
+    candidate = Path(filename)
+    for root in readable_dirs:
+        try:
+            if candidate.is_absolute() and candidate.resolve().is_relative_to(root.resolve()):
+                return True
+        except OSError:
+            return True
+        if root.name in candidate.parts:
+            return True
+    return False
+
+
+_READ_TOP_FILES = frozenset({"manifest.json", "relatorio_final.md", "plan.json", "results.json"})
+_READ_DENIED_DIRS = frozenset({"logs"})
+
+
+async def read_artifact(path: str, session_id: str = "") -> str:
+    """Lê (somente leitura) um artefato da sessão atual ou de uma sessão anterior da cadeia do projeto.
+
+    Args:
+        path: Caminho relativo ao diretório da sessão (ex.: ``artifacts/dados.csv`` ou ``<tarefa>/metrics.json``).
+        session_id: Sessão anterior (listada no contexto de retomada); vazio = sessão atual.
+
+    Returns:
+        Conteúdo em texto (truncado no limite configurado) ou mensagem de erro.
+    """
+    from src import config
+    from src.continuity import SESSION_ID_RE
+
+    ctx = get_agent_context_optional()
+    if ctx is None:
+        return "Erro: read_artifact só funciona dentro de uma execução de agente."
+    try:
+        if session_id and session_id != ctx.output_dir.name:
+            if not SESSION_ID_RE.fullmatch(session_id):
+                return "Erro: session_id inválido."
+            roots = [d for d in ctx.readable_dirs if d.name == session_id]
+            if not roots:
+                return "Erro: sessão não permitida; só sessões anteriores da cadeia do projeto podem ser lidas."
+            root = roots[0].resolve()
+        else:
+            root = ctx.output_dir.resolve()
+        rel = Path(path)
+        if not path or rel.is_absolute() or ".." in rel.parts or len(rel.parts) > 8:
+            return "Erro: caminho inválido (use caminho relativo dentro da sessão)."
+        if len(rel.parts) == 1 and rel.parts[0] not in _READ_TOP_FILES:
+            return "Erro: arquivo de controle da sessão não é legível por agentes."
+        if rel.parts[0] in _READ_DENIED_DIRS:
+            return "Erro: diretório não legível."
+        target = root.joinpath(*rel.parts)
+        if target.resolve() != target or not target.resolve().is_relative_to(root):
+            return "Erro: caminho com link simbólico ou fora da sessão; recusado."
+        limit = int(config.RESUME_ARTIFACT_MAX_READ_BYTES)
+        fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as handle:
+            import stat as _stat
+
+            if not _stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                return "Erro: não é um arquivo comum."
+            data = handle.read(limit + 1)
+        text = data[:limit].decode("utf-8", errors="replace")
+        suffix = "\n[...truncado]" if len(data) > limit else ""
+        return f"[artefato da sessão {root.name}: {path}]\n{text}{suffix}"
+    except FileNotFoundError:
+        return "Erro: artefato não encontrado."
+    except OSError as exc:
+        return f"Erro ao ler artefato: {type(exc).__name__}"
+
+
+read_artifact.parameters_schema = {
+    "type": "object",
+    "properties": {
+        "path": {"type": "string", "description": "Caminho relativo dentro da sessão (ex.: 'artifacts/dados.csv')."},
+        "session_id": {"type": "string", "description": "Sessão anterior da cadeia; vazio = sessão atual."},
+    },
+    "required": ["path"],
 }
 
 _memory_skill_instance = None

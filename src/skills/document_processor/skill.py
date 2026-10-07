@@ -37,11 +37,13 @@ def _resolve_ingest_path(file_path: str) -> str:
 
     session_dir = ctx.output_dir.resolve()
     roots = [session_dir / "input_snapshot", session_dir / "artifacts"]
+    # v18-research-continuity: artefatos de sessões anteriores da cadeia (somente leitura).
+    extra_roots = [d.resolve() / "artifacts" for d in ctx.readable_dirs]
     candidate = Path(file_path)
     if not candidate.is_absolute():
         candidate = roots[0] / candidate
     resolved = candidate.resolve()
-    if not any(resolved.is_relative_to(root.resolve()) for root in roots):
+    if not any(resolved.is_relative_to(root.resolve()) for root in [*roots, *extra_roots]):
         logger.warning(
             "document_processor: ingest recusado, arquivo fora do diretório da sessão",
             extra={"requested": file_path, "resolved": str(resolved)},

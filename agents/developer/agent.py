@@ -19,7 +19,7 @@ from agents.base.agent import (
     _setup_skills,
     _task_state,
 )
-from agents.base.tools import flag_for_curator, write_artifact
+from agents.base.tools import flag_for_curator, read_artifact, write_artifact
 from src.logger import get_logger
 from src.prompts import render_instruction
 from src.skills import registry
@@ -172,7 +172,7 @@ root_agent = Agent(
     model=agent_model,
     description=AGENT_DESCRIPTION,
     _instruction=_build_developer_instruction,
-    tools=active_tools + [write_artifact, flag_for_curator],
+    tools=active_tools + [write_artifact, read_artifact, flag_for_curator],
     before_agent_callback=_load_session_context,
     after_agent_callback=_persist_session_context,
 )

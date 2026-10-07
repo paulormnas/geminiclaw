@@ -755,20 +755,22 @@ class PythonSandbox:
         )
         (control_dir / "fetch_spec.json").write_text(json.dumps(spec), encoding="utf-8")
 
-    def _fetch_assets(
-        self, container, downloads: List[AssetSpec], staging_dir: pathlib.Path
-    ) -> tuple[List[AssetRecord], Optional[SandboxResult]]:
-        """Fase ``fetch_assets``: baixa no container, verifica o hash no host e move para o cache.
+    def _fetch_assets(self, container, downloads: List[AssetSpec]) -> Optional[SandboxResult]:
+        """Fase ``fetch_assets``: baixa os ativos no container para ``/staging``.
+
+        A verificação do hash e a movida para o cache acontecem no host, **depois** de o container ser
+        encerrado (:meth:`_prepare_fetch`): nenhum processo do container pode trocar o arquivo durante a
+        verificação.
 
         Returns:
-            Tupla ``(registros, falha)``; ``falha`` é um ``SandboxResult`` com ``fase_falha="fetch_assets"``.
+            ``SandboxResult`` com ``fase_falha="fetch_assets"`` em caso de falha ou timeout; ``None`` se o download terminou.
         """
         logger.info("Baixando ativos declarados no sandbox", extra={"count": len(downloads)})
         exec_result, timed_out = self._exec_with_timeout(
             container, ["python", f"{SANDBOX_CONTROL_DIR}/fetch_assets.py", f"{SANDBOX_CONTROL_DIR}/fetch_spec.json"], self.fetch_timeout, workdir="/tmp"
         )
         if timed_out:
-            return [], SandboxResult(
+            return SandboxResult(
                 stdout="",
                 stderr=f"Timeout de {self.fetch_timeout}s atingido no download dos ativos declarados.",
                 exit_code=-1,
@@ -778,16 +780,13 @@ class PythonSandbox:
         if exec_result.exit_code != 0:
             text = self._output_text(exec_result.output)
             tail = "\n".join(text.splitlines()[-self.install_log_tail_lines:])
-            return [], SandboxResult(
+            return SandboxResult(
                 stdout="",
                 stderr=f"Falha no download dos ativos declarados.\n{tail}",
                 exit_code=exec_result.exit_code,
                 fase_falha="fetch_assets",
             )
-        records, error = verify_and_cache(downloads, staging_dir, self.asset_cache_dir)
-        if error:
-            return records, SandboxResult(stdout="", stderr=error, exit_code=-1, fase_falha="fetch_assets")
-        return records, None
+        return None
 
     @staticmethod
     def _kill_and_purge(container, task_dir: pathlib.Path) -> list[str]:
@@ -1218,27 +1217,32 @@ class PythonSandbox:
         session_id: str,
         task_name: str,
     ) -> bool:
-        """Container de preparação: rede, **sem dados** (só ``/deps`` e ``/staging``). Removido ao terminar.
+        """Preparação: containers com rede e **sem dados**, um por fase, removidos ao terminar.
 
-        Ordem: ``fetch_assets`` (o host verifica e move os ativos para o cache) e depois ``install``,
-        para que o código de instalação nunca tenha acesso aos arquivos baixados.
+        Ordem: ``fetch_assets`` (container com ``/staging`` e ``/control``; encerrado e removido antes de o
+        host verificar e mover os ativos para o cache) e depois ``install`` (outro container, só com
+        ``/deps``): o código de instalação nunca tem acesso aos arquivos baixados nem a ``/staging``.
 
         Returns:
             ``True`` se tudo teve sucesso; ``False`` com ``res`` preenchido com a falha.
         """
-        volumes: Dict[str, dict] = {}
-        staging_dir = run_work_dir / "staging"
-        if to_install:
-            deps_dir = run_work_dir / "deps"
-            deps_dir.mkdir(parents=True, exist_ok=True)
-            volumes[str(deps_dir.resolve())] = {"bind": SANDBOX_DEPS_DIR, "mode": "rw"}
+        failure: Optional[SandboxResult] = None
         if downloads:
-            staging_dir.mkdir(parents=True, exist_ok=True)
-            volumes[str(staging_dir.resolve())] = {"bind": SANDBOX_STAGING_DIR, "mode": "rw"}
-            control_dir = run_work_dir / "control"
-            self._write_fetch_control(control_dir, downloads)
-            volumes[str(control_dir.resolve())] = {"bind": SANDBOX_CONTROL_DIR, "mode": "ro"}
-        prep = self._create_container(
+            start = _now()
+            failure = self._prepare_fetch(run_work_dir, downloads, records, session_id, task_name)
+            res.fases.append(PhaseTiming("fetch_assets", start, _now(), -1 if failure else 0))
+        if failure is None and to_install:
+            start = _now()
+            failure = self._prepare_install(run_work_dir, to_install, session_id, task_name)
+            res.fases.append(PhaseTiming("install", start, _now(), failure.exit_code if failure else 0))
+        if failure is None:
+            return True
+        for name in ("stdout", "stderr", "exit_code", "timed_out", "install_failed", "fase_falha"):
+            setattr(res, name, getattr(failure, name))
+        return False
+
+    def _create_prep_container(self, volumes: Dict[str, dict], session_id: str, task_name: str):
+        return self._create_container(
             role="sandbox-prep",
             network=True,
             volumes=volumes,
@@ -1248,27 +1252,63 @@ class PythonSandbox:
             task_name=task_name,
             working_dir="/tmp",
         )
-        failure: Optional[SandboxResult] = None
+
+    @staticmethod
+    def _dispose_prep(prep) -> None:
+        """Encerra e remove o container de preparação (best-effort; ``cleanup_sandbox_containers`` cobre sobras)."""
         try:
-            if downloads:
-                start = _now()
-                new_records, failure = self._fetch_assets(prep, downloads, staging_dir)
-                records.extend(new_records)
-                res.fases.append(PhaseTiming("fetch_assets", start, _now(), -1 if failure else 0))
-            if failure is None and to_install:
-                start = _now()
-                failure = self._install_packages(prep, to_install)
-                res.fases.append(PhaseTiming("install", start, _now(), failure.exit_code if failure else 0))
+            prep.kill()
+        except Exception as exc:  # noqa: BLE001 — já parado (timeout) ou removido
+            logger.debug(f"Container de preparação já encerrado: {exc}")
+        try:
+            prep.remove(force=True)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"Falha ao remover o container de preparação: {exc}")
+
+    def _prepare_fetch(
+        self,
+        run_work_dir: pathlib.Path,
+        downloads: List[AssetSpec],
+        records: List[AssetRecord],
+        session_id: str,
+        task_name: str,
+    ) -> Optional[SandboxResult]:
+        """Fase ``fetch_assets`` completa: download no container e, com ele encerrado, verificação no host."""
+        staging_dir = run_work_dir / "staging"
+        control_dir = run_work_dir / "control"
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        self._write_fetch_control(control_dir, downloads)
+        volumes = {
+            str(staging_dir.resolve()): {"bind": SANDBOX_STAGING_DIR, "mode": "rw"},
+            str(control_dir.resolve()): {"bind": SANDBOX_CONTROL_DIR, "mode": "ro"},
+        }
+        prep = self._create_prep_container(volumes, session_id, task_name)
+        try:
+            failure = self._fetch_assets(prep, downloads)
         finally:
-            try:
-                prep.remove(force=True)
-            except Exception as exc:  # noqa: BLE001 — limpeza best-effort; cleanup_sandbox_containers cobre sobras
-                logger.warning(f"Falha ao remover o container de preparação: {exc}")
-        if failure is None:
-            return True
-        for name in ("stdout", "stderr", "exit_code", "timed_out", "install_failed", "fase_falha"):
-            setattr(res, name, getattr(failure, name))
-        return False
+            # kill + remove ANTES de ler /staging: nenhum processo do container troca o arquivo durante o hash.
+            self._dispose_prep(prep)
+        if failure is not None:
+            return failure
+        new_records, error = verify_and_cache(downloads, staging_dir, self.asset_cache_dir)
+        records.extend(new_records)
+        if error:
+            return SandboxResult(stdout="", stderr=error, exit_code=-1, fase_falha="fetch_assets")
+        return None
+
+    def _prepare_install(
+        self, run_work_dir: pathlib.Path, to_install: List[str], session_id: str, task_name: str
+    ) -> Optional[SandboxResult]:
+        """Fase ``install``: container só com ``/deps`` (rw), sem os ativos nem a spec do download."""
+        deps_dir = run_work_dir / "deps"
+        deps_dir.mkdir(parents=True, exist_ok=True)
+        prep = self._create_prep_container(
+            {str(deps_dir.resolve()): {"bind": SANDBOX_DEPS_DIR, "mode": "rw"}}, session_id, task_name
+        )
+        try:
+            return self._install_packages(prep, to_install)
+        finally:
+            self._dispose_prep(prep)
 
     def _introspect(self, container, res: SandboxResult) -> None:
         """Registra versão do Python e distribuições visíveis na execução. Best-effort (não derruba a execução)."""

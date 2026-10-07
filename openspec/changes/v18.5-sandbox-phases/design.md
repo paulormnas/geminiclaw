@@ -44,8 +44,9 @@ Consequência: com `packages`, código gerado roda com internet e com os artefat
   montados já na instalação. Além disso, código de instalação (ex.: `setup.py` de um pacote
   sem wheel) é código arbitrário; ele poderia deixar um processo residente esperando os dados.
   Com containers separados, nada da preparação sobrevive até a execução.
-- **Ordem dentro da preparação:** `fetch_assets` roda **antes** de `install`, e o host verifica
-  e move os ativos para o cache (§3) antes de a instalação começar. Assim o código de
+- **Ordem dentro da preparação:** `fetch_assets` roda **antes** de `install`, em **containers
+  distintos** (revisão M6): o de download é encerrado e removido antes de o host verificar e mover os
+  ativos para o cache (§3), e o de instalação só monta `/deps`. Assim o código de
   instalação nunca tem acesso aos arquivos baixados. Os nomes das fases seguem o ADR 019 §5;
   a numeração do ADR descreve as fases, não impõe ordem entre as duas que têm rede.
 - **Sem pacotes nem ativos:** só o container de execução é criado (comportamento e custo
@@ -302,3 +303,9 @@ Registro das correções e dos riscos aceitos decorrentes da revisão do Analist
 - **M5 (média) — origem de `/prior`:** cada sessão anterior precisa ser exatamente `<saída>/<sessão>`
   (profundidade 1, nunca a raiz de todas as sessões nem uma subpasta), diferente da sessão atual e sem
   repetição; qualquer violação recusa a execução antes de criar containers.
+- **M6 (média) — TOCTOU na verificação dos ativos:** a preparação passou a usar um container por fase; o de
+  `fetch_assets` recebe `kill` + `remove` antes da verificação no host (nenhum processo dele troca o
+  arquivo durante o hash), e o de `install` só monta `/deps` (nunca vê `/staging` nem `/control`). No host,
+  o arquivo é movido para um nome privado do cache e o hash é calculado sobre o arquivo já movido, com
+  `O_NOFOLLOW`; em `EXDEV` (staging e cache em sistemas de arquivos diferentes) copia sem seguir symlink e
+  renomeia. Custo: um container a mais (1–3 s) quando há `assets` baixados **e** `packages`.

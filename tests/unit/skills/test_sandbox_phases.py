@@ -69,7 +69,7 @@ def test_sem_pacotes_nem_ativos(make_sandbox, tmp_path):
 def test_montagens_da_preparacao(make_sandbox, tmp_path):
     """Cenário: Montagens da preparação. Só deps, staging e control (ro); ambiente fechado; sem dados da sessão."""
     _snapshot(tmp_path)
-    daemon = FakeDaemon()
+    daemon = _FetchDaemon()
     sandbox = make_sandbox(daemon, asset_cache_dir=str(tmp_path / "cache"))
     _run(sandbox, tmp_path, packages=["tabulate"],
          assets=[{"url": "https://exemplo.org/p.bin", "destino": "p.bin"}])
@@ -77,9 +77,12 @@ def test_montagens_da_preparacao(make_sandbox, tmp_path):
     prep = daemon.prep_kwargs
     assert prep["labels"]["geminiclaw.role"] == "sandbox-prep"
     assert prep["network_disabled"] is False
-    assert {v["bind"]: v["mode"] for v in prep["volumes"].values()} == {
-        "/control": "ro", "/deps": "rw", "/staging": "rw",
-    }
+    # Um container por fase: o de instalação não enxerga /staging nem /control (M6).
+    assert {v["bind"]: v["mode"] for v in prep["volumes"].values()} == {"/control": "ro", "/staging": "rw"}
+    install = daemon.run_calls[1]
+    assert install["labels"]["geminiclaw.role"] == "sandbox-prep" and install["network_disabled"] is False
+    assert {v["bind"]: v["mode"] for v in install["volumes"].values()} == {"/deps": "rw"}
+    assert set(install["environment"]) == {"HOME", "UV_CACHE_DIR", "PATH"}
     assert not prep.get("mounts")
     assert set(prep["environment"]) == {"HOME", "UV_CACHE_DIR", "PATH"}
     assert prep["user"] == f"{os.getuid()}:{os.getgid()}"

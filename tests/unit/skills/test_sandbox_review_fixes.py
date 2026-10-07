@@ -357,3 +357,83 @@ def test_m5_prior_repetido_e_recusado(make_sandbox, tmp_path):
 
     daemon.client.containers.run.assert_not_called()
     assert "repetida" in result.stderr
+
+
+# --- M6: verificação dos ativos com o container encerrado e sem seguir symlink -------------------------------
+
+@pytest.mark.unit
+def test_m6_prep_e_encerrado_antes_da_verificacao_do_hash(make_sandbox, tmp_path, monkeypatch):
+    from src.skills.code import sandbox as sandbox_module
+
+    daemon = _FetchDaemon()
+    real = sandbox_module.verify_and_cache
+
+    def spy(*args, **kwargs):
+        daemon.calls.append("verify")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(sandbox_module, "verify_and_cache", spy)
+    _run(make_sandbox(daemon, asset_cache_dir=str(tmp_path / "cache")), tmp_path,
+         packages=["tabulate"], assets=[{"url": "https://e.org/p", "destino": "p.bin"}])
+
+    calls = daemon.calls
+    assert calls.index("fetch") < calls.index("kill") < calls.index("remove") < calls.index("verify")
+    assert calls.index("verify") < calls.index("install")  # a instalação roda em outro container, depois
+
+
+@pytest.mark.unit
+def test_m6_hash_nao_segue_symlink(tmp_path):
+    from src.skills.code.assets import sha256_file
+
+    (tmp_path / "alvo").write_bytes(b"x")
+    (tmp_path / "link").symlink_to(tmp_path / "alvo")
+    with pytest.raises(OSError):
+        sha256_file(tmp_path / "link")
+
+
+@pytest.mark.unit
+def test_m6_hash_e_calculado_sobre_o_arquivo_ja_movido(tmp_path, monkeypatch):
+    from src.skills.code import assets
+
+    staging, cache = tmp_path / "staging", tmp_path / "cache"
+    staging.mkdir()
+    (staging / "p.bin").write_bytes(b"abc")
+    seen = []
+    real = assets.sha256_file
+
+    def spy(path):
+        seen.append((path.parent == cache, (staging / "p.bin").exists()))
+        return real(path)
+
+    monkeypatch.setattr(assets, "sha256_file", spy)
+    records, error = assets.verify_and_cache([assets.AssetSpec("https://e.org/p", "p.bin")], staging, cache)
+
+    assert error is None and seen == [(True, False)]  # hasheado no cache, já fora de staging
+
+
+@pytest.mark.unit
+def test_m6_exdev_copia_e_renomeia(tmp_path, monkeypatch):
+    import errno
+    import hashlib
+    import os
+
+    from src.skills.code import assets
+
+    staging, cache = tmp_path / "staging", tmp_path / "cache"
+    staging.mkdir()
+    (staging / "p.bin").write_bytes(b"conteudo")
+    real_replace = os.replace
+
+    def replace(src, dst):
+        if os.fspath(src).startswith(str(staging)):
+            raise OSError(errno.EXDEV, "Invalid cross-device link")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", replace)
+    records, error = assets.verify_and_cache([assets.AssetSpec("https://e.org/p", "p.bin")], staging, cache)
+
+    digest = hashlib.sha256(b"conteudo").hexdigest()
+    assert error is None and records[0].sha256 == digest
+    assert (cache / digest).read_bytes() == b"conteudo"
+    assert not (staging / "p.bin").exists()
+    assert sorted(f.name for f in cache.iterdir()) == [digest]  # sem sobras (.part, .incoming)

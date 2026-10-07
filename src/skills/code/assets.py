@@ -7,11 +7,13 @@ calculado aqui, no host, e o arquivo verificado vai para o cache por conteúdo
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
 import pathlib
 import re
 import stat
+import uuid
 from dataclasses import dataclass
 from typing import Any, List, Literal, Optional
 
@@ -95,13 +97,42 @@ def parse_assets(raw: Optional[List[Any]]) -> tuple[List[AssetSpec], List[str]]:
     return specs, errors
 
 
+def _open_nofollow(path: pathlib.Path):
+    """Abre ``path`` para leitura binária sem seguir symlink no último componente (``O_NOFOLLOW``)."""
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    return os.fdopen(fd, "rb")
+
+
 def sha256_file(path: pathlib.Path) -> str:
-    """sha256 do conteúdo de ``path`` (lido em blocos)."""
+    """sha256 do conteúdo de ``path`` (lido em blocos), sem seguir symlink.
+
+    Raises:
+        OSError: ``path`` é um link simbólico (``ELOOP``) ou não pode ser lido.
+    """
     digest = hashlib.sha256()
-    with open(path, "rb") as handle:
+    with _open_nofollow(path) as handle:
         for chunk in iter(lambda: handle.read(_HASH_CHUNK), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _move_nofollow(source: pathlib.Path, target: pathlib.Path) -> None:
+    """Move ``source`` para ``target`` (``rename``; em ``EXDEV``, copia sem seguir symlink, renomeia e apaga a origem)."""
+    try:
+        os.replace(source, target)
+        return
+    except OSError as exc:
+        if exc.errno != errno.EXDEV:
+            raise
+    partial = target.with_name(target.name + ".part")
+    try:
+        with _open_nofollow(source) as src, open(partial, "wb") as dst:
+            for chunk in iter(lambda: src.read(_HASH_CHUNK), b""):
+                dst.write(chunk)
+        os.replace(partial, target)
+    finally:
+        partial.unlink(missing_ok=True)
+    source.unlink()
 
 
 def cached_path(cache_dir: pathlib.Path, sha256: str) -> Optional[pathlib.Path]:
@@ -134,17 +165,25 @@ def verify_and_cache(
             return records, f"ativo {spec.destino!r} não foi baixado"
         if not stat.S_ISREG(mode):
             return records, f"ativo {spec.destino!r} baixado não é um arquivo regular"
-        calculated = sha256_file(staged)
-        if spec.sha256 and spec.sha256 != calculated:
-            return records, (
-                f"sha256 do ativo {spec.destino!r} diverge: declarado {spec.sha256}, calculado {calculated}"
-            )
-        target = cache_dir / calculated
-        size = staged.stat().st_size
-        if cached_path(cache_dir, calculated) is None:
-            os.replace(staged, target)
-        else:
-            staged.unlink()
+        # Primeiro move o arquivo para um nome privado do cache e só então calcula o hash, sobre o arquivo já
+        # movido e sem seguir symlink: o que foi hasheado é exatamente o que entra no cache.
+        incoming = cache_dir / f".incoming-{uuid.uuid4().hex}"
+        _move_nofollow(staged, incoming)
+        try:
+            if not stat.S_ISREG(os.lstat(incoming).st_mode):
+                return records, f"ativo {spec.destino!r} baixado não é um arquivo regular"
+            calculated = sha256_file(incoming)
+            if spec.sha256 and spec.sha256 != calculated:
+                return records, (
+                    f"sha256 do ativo {spec.destino!r} diverge: declarado {spec.sha256}, calculado {calculated}"
+                )
+            size = os.lstat(incoming).st_size
+            if cached_path(cache_dir, calculated) is None:
+                os.replace(incoming, cache_dir / calculated)
+            else:
+                incoming.unlink()
+        finally:
+            incoming.unlink(missing_ok=True)
         records.append(
             AssetRecord(
                 url=spec.url,

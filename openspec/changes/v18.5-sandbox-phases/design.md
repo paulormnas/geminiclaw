@@ -208,7 +208,9 @@ são lidos por `v18.5-execution-provenance`; esta mudança não grava registro a
 |---|---|---|
 | `SANDBOX_INSTALL_TIMEOUT_SECONDS` | 300 | Timeout da fase `install` |
 | `SANDBOX_FETCH_TIMEOUT_SECONDS` | 600 | Timeout da fase `fetch_assets` |
-| `SANDBOX_ASSET_MAX_BYTES` | 2147483648 | Tamanho máximo por ativo |
+| `SANDBOX_ASSET_MAX_BYTES` | 536870912 | Tamanho máximo por ativo |
+| `SANDBOX_ASSET_TOTAL_MAX_BYTES` | 2147483648 | Teto somado dos ativos baixados por execução |
+| `SANDBOX_MIN_FREE_BYTES` | 1073741824 | Espaço livre mínimo no disco para iniciar a execução (erro explícito) |
 | `SANDBOX_ASSET_CACHE_DIR` | `store/assets` | Cache de ativos por sha256 |
 | `SANDBOX_WORK_DIR` | `store/sandbox_work` | Diretórios temporários por execução (`deps`, `staging`), removidos ao fim |
 | `SANDBOX_INPUT_DELIVERY` | `mount` | `mount` ou `copy` |
@@ -279,3 +281,8 @@ Registro das correções e dos riscos aceitos decorrentes da revisão do Analist
   execução continuam em `/outputs` (bind mount). Limitação: `Mount` tmpfs do SDK não expõe
   `noexec/nosuid/nodev` nem uid/gid; `/inputs` fica com dono root e modo 0555 (somente leitura para o
   usuário do sandbox). **Não validado com container real** (depende da bateria de integração).
+- **M1 (média) — disco do Pi:** padrão por ativo reduzido para 512 MiB; teto somado por execução
+  (`SANDBOX_ASSET_TOTAL_MAX_BYTES`, 2 GiB, aplicado no script de download); `shutil.disk_usage` checado
+  antes de criar a preparação/execução (`SANDBOX_MIN_FREE_BYTES`, falha explícita `sandbox_disk_low`).
+  **Risco aceito pendente (5.5.1):** sem cota de disco para os bind mounts `/outputs` e `/deps`; o
+  script ainda pode encher o disco durante a execução.

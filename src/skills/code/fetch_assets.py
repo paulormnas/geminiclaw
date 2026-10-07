@@ -5,7 +5,7 @@ fase ``fetch_assets`` (com rede e sem dados) e também importado no host para re
 de URL. Nada aqui vem do LLM além da lista ``{url, destino}`` validada antes pelo host.
 
 Uso no container: ``python fetch_assets.py <spec.json>``. O JSON é
-``{"assets": [{"url", "destino"}], "max_bytes": N, "allow_private_hosts": [...]}``. Cada arquivo é
+``{"assets": [{"url", "destino"}], "max_bytes": N, "total_max_bytes": N, "allow_private_hosts": [...]}``. Cada arquivo é
 gravado em ``/staging/<destino>``; o hash é calculado e verificado pelo host.
 """
 
@@ -167,12 +167,15 @@ def main(argv: list[str]) -> int:
     with open(argv[1], encoding="utf-8") as handle:
         spec = json.load(handle)
     max_bytes = int(spec["max_bytes"])
+    remaining = int(spec.get("total_max_bytes", max_bytes * len(spec["assets"])))
     allow = spec.get("allow_private_hosts", [])
     failed = False
     for item in spec["assets"]:
         destino = item["destino"]
         try:
-            size = download(item["url"], os.path.join(STAGING_DIR, destino), max_bytes, allow)
+            # Teto somado por execução: cada download só pode usar o que resta do total.
+            size = download(item["url"], os.path.join(STAGING_DIR, destino), min(max_bytes, remaining), allow)
+            remaining -= size
             print(f"ok {destino} {size}")
         except AssetError as exc:
             failed = True

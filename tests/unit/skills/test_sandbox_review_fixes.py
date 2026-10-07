@@ -1,6 +1,10 @@
 # ruff: noqa: F811 — a fixture make_sandbox é reexportada e usada como argumento
 """Achados da revisão de segurança do PR #111 (v18.5-sandbox-phases): um grupo de testes por achado."""
 
+import json
+from pathlib import Path
+from types import SimpleNamespace
+
 import pytest
 from test_sandbox_phases import _FetchDaemon
 from test_sandbox_slim import FakeDaemon, _run, make_sandbox  # noqa: F401 — fixture reexportada
@@ -82,3 +86,76 @@ def test_a2_fetch_usa_diretorio_de_controle_ro_e_nao_put_archive(make_sandbox, t
     assert [path for path, _data in daemon.put_archives] == ["/outputs"]  # só o script, em ponto de montagem
     fetch_cmd = next(c for c, _kw in daemon.exec_calls if c[0] == "python" and "fetch" in c[1])
     assert fetch_cmd == ["python", "/control/fetch_assets.py", "/control/fetch_spec.json"]
+
+
+# --- M1: limites de ativos e de disco ----------------------------------------------------------------
+
+MIB = 1024 * 1024
+
+
+@pytest.mark.unit
+def test_m1_padroes_de_limite_de_ativos(make_sandbox, monkeypatch):
+    for name in ("SANDBOX_ASSET_MAX_BYTES", "SANDBOX_ASSET_TOTAL_MAX_BYTES", "SANDBOX_MIN_FREE_BYTES"):
+        monkeypatch.delenv(name, raising=False)
+    sandbox = make_sandbox(FakeDaemon())
+
+    assert sandbox.asset_max_bytes == 512 * MIB
+    assert sandbox.asset_total_max_bytes == 2048 * MIB
+    assert sandbox.min_free_bytes > 0
+
+
+@pytest.mark.unit
+def test_m1_spec_do_fetch_leva_o_teto_somado(make_sandbox, tmp_path, monkeypatch):
+    monkeypatch.setenv("SANDBOX_ASSET_TOTAL_MAX_BYTES", "12345")
+    daemon = _FetchDaemon()
+    _run(make_sandbox(daemon, asset_cache_dir=str(tmp_path / "cache")), tmp_path,
+         assets=[{"url": "https://e.org/p", "destino": "p.bin"}])
+
+    assert json.loads(daemon.control_files["fetch_spec.json"])["total_max_bytes"] == 12345
+
+
+@pytest.mark.unit
+def test_m1_fetch_recusa_ao_estourar_o_teto_somado(tmp_path, monkeypatch):
+    from src.skills.code import fetch_assets
+
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    monkeypatch.setattr(fetch_assets, "STAGING_DIR", str(staging))
+
+    def fake_download(url, destination, max_bytes, allow=()):
+        if 6 > max_bytes:
+            raise fetch_assets.AssetError(f"o ativo excede o limite de {max_bytes} bytes")
+        Path(destination).write_bytes(b"x" * 6)
+        return 6
+
+    monkeypatch.setattr(fetch_assets, "download", fake_download)
+    spec = tmp_path / "spec.json"
+    spec.write_text(json.dumps({
+        "assets": [{"url": "https://e.org/a", "destino": "a"}, {"url": "https://e.org/b", "destino": "b"}],
+        "max_bytes": 100, "total_max_bytes": 10,
+    }))
+
+    assert fetch_assets.main(["x", str(spec)]) == 1  # o segundo ativo ultrapassa 10 bytes somados
+
+
+@pytest.mark.unit
+def test_m1_disco_livre_insuficiente_recusa_antes_dos_containers(make_sandbox, tmp_path, monkeypatch):
+    monkeypatch.setenv("SANDBOX_MIN_FREE_BYTES", str(10 * MIB))
+    monkeypatch.setattr("src.skills.code.sandbox.shutil.disk_usage",
+                        lambda path: SimpleNamespace(total=100 * MIB, used=95 * MIB, free=5 * MIB))
+    daemon = FakeDaemon()
+    result = _run(make_sandbox(daemon), tmp_path, packages=["tabulate"])
+
+    daemon.client.containers.run.assert_not_called()
+    assert result.fase_falha == "infra" and result.infra_error == "sandbox_disk_low"
+    assert "SANDBOX_MIN_FREE_BYTES" in result.stderr
+
+
+@pytest.mark.unit
+def test_m1_disco_livre_suficiente_executa(make_sandbox, tmp_path, monkeypatch):
+    monkeypatch.setenv("SANDBOX_MIN_FREE_BYTES", str(10 * MIB))
+    monkeypatch.setattr("src.skills.code.sandbox.shutil.disk_usage",
+                        lambda path: SimpleNamespace(total=100 * MIB, used=50 * MIB, free=50 * MIB))
+    result = _run(make_sandbox(FakeDaemon()), tmp_path)
+
+    assert result.exit_code == 0 and result.infra_error is None

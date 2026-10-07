@@ -44,7 +44,7 @@
 - [x] 5.9 Atualizar `tests/unit/skills/test_sandbox.py`, `tests/unit/skills/test_sandbox_archive.py`, `tests/skills/test_code_skill.py` e `tests/integration/test_sandbox_volume.py` para o novo contrato.
 
 ## 5.5 Pendências herdadas da revisão de segurança do PR #99 (v16-sandbox-slim-image)
-- [ ] 5.5.1 Cota de disco para os bind mounts `/outputs` e `/deps` (hoje só o `/tmp` em `tmpfs` tem limite; um script ou instalação pode encher o disco do Pi). Motivo: depende de decisão do mecanismo (quota de sistema de arquivos, `ulimit fsize` ou monitor) e de validação no Pi.
+- [ ] 5.5.1 Cota de disco para os bind mounts `/outputs` e `/deps` (hoje só o `/tmp` em `tmpfs` tem limite; um script ou instalação pode encher o disco do Pi). Motivo: depende de decisão do mecanismo (quota de sistema de arquivos, `ulimit fsize` ou monitor) e de validação no Pi. **RISCO ACEITO PENDENTE** (revisão de segurança M1): mitigado só pela checagem de espaço livre antes de iniciar (`SANDBOX_MIN_FREE_BYTES`), pelo teto por ativo (512 MiB) e pelo teto somado (2 GiB); não limita o que o script grava durante a execução.
 - [ ] 5.5.2 Teste de integração real de FIFO/arquivo especial criado em `/outputs` (a varredura `_purge_special_files` só tem teste unitário no host). Motivo: precisa de container e imagem reais. _(escrito em `tests/integration/test_sandbox_phases_real.py`; não executado: bateria de integração ao final)_
 - [x] 5.5.3 Fechar o residual de instalação com rede vendo `/outputs` (containers separados por fase) e documentar que `/deps` sombreia versões do lock com hash (`PYTHONPATH=/deps` precede o venv).
 

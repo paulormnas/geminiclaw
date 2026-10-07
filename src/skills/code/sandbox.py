@@ -422,6 +422,8 @@ class PythonSandbox:
         )
         self.fetch_timeout = int(_setting("SANDBOX_FETCH_TIMEOUT_SECONDS"))
         self.asset_max_bytes = int(_setting("SANDBOX_ASSET_MAX_BYTES"))
+        self.asset_total_max_bytes = int(_setting("SANDBOX_ASSET_TOTAL_MAX_BYTES"))
+        self.min_free_bytes = int(_setting("SANDBOX_MIN_FREE_BYTES"))
         self.input_delivery = str(_setting("SANDBOX_INPUT_DELIVERY")).strip().lower()
         self.copy_max_bytes = int(_setting("SANDBOX_COPY_MAX_BYTES"))
         self.pids_limit = int(_setting("SANDBOX_PIDS_LIMIT"))
@@ -688,6 +690,7 @@ class PythonSandbox:
         spec = {
             "assets": [{"url": a.url, "destino": a.destino} for a in downloads],
             "max_bytes": self.asset_max_bytes,
+            "total_max_bytes": self.asset_total_max_bytes,
             "allow_private_hosts": list(self.allow_private_asset_hosts),
         }
         control_dir.mkdir(parents=True, exist_ok=True)
@@ -729,6 +732,23 @@ class PythonSandbox:
         if error:
             return records, SandboxResult(stdout="", stderr=error, exit_code=-1, fase_falha="fetch_assets")
         return records, None
+
+    def _check_free_disk(self, *paths: pathlib.Path) -> None:
+        """Recusa iniciar a execução com menos de ``SANDBOX_MIN_FREE_BYTES`` livres nos discos usados.
+
+        Raises:
+            _DiskLow: Espaço livre abaixo do mínimo configurado (mensagem acionável).
+        """
+        for path in paths:
+            existing = path
+            while not existing.exists() and existing != existing.parent:
+                existing = existing.parent
+            free = shutil.disk_usage(existing).free
+            if free < self.min_free_bytes:
+                raise _DiskLow(
+                    f"espaço livre de {free} bytes em {existing.name or str(existing)!r} abaixo do mínimo "
+                    f"SANDBOX_MIN_FREE_BYTES={self.min_free_bytes}; libere espaço (workflow clean) ou ajuste o limite"
+                )
 
     def _network_decision(
         self,
@@ -886,6 +906,7 @@ class PythonSandbox:
                     "use SANDBOX_INPUT_DELIVERY=mount"
                 )
             res.entradas_entregues = [p.relative_to(snapshot_dir).as_posix() for p in input_files]
+            self._check_free_disk(output_root, self.work_dir, self.asset_cache_dir)
 
             res.imagem = self._ensure_image()
 
@@ -1062,6 +1083,8 @@ class PythonSandbox:
                 infra_error = "sandbox_image_missing"
             elif isinstance(e, _MountRefused):
                 infra_error = "sandbox_mount_refused"
+            elif isinstance(e, _DiskLow):
+                infra_error = "sandbox_disk_low"
             elif _is_docker_connection_error(e):
                 infra_error = "docker_unavailable"
             else:
@@ -1069,7 +1092,7 @@ class PythonSandbox:
             res.stdout = ""
             res.stderr = (
                 f"Execução recusada: {e}"
-                if isinstance(e, _MountRefused)
+                if isinstance(e, (_MountRefused, _DiskLow))
                 else f"Exception during sandbox execution: {str(e)}"
             )
             res.exit_code = -1
@@ -1160,6 +1183,10 @@ class PythonSandbox:
             res.packages_installed = sorted(f"{name}=={version}" for name, version in data["deps"])
         except Exception as exc:  # noqa: BLE001 — o registro não deve derrubar uma execução válida
             logger.warning(f"Não foi possível registrar os pacotes e a versão do Python: {exc}")
+
+
+class _DiskLow(RuntimeError):
+    """Espaço livre em disco abaixo do mínimo configurado, antes de criar qualquer container."""
 
 
 class _MountRefused(RuntimeError):

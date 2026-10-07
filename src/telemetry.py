@@ -143,6 +143,9 @@ class _TokenUsageRow:
     context_window_used: Optional[int]
     context_window_max: Optional[int]
     was_compressed: bool
+    # v18.5-model-catalog-locality: versão efetivamente servida. A gravação na coluna ``token_usage.versao_efetiva``
+    # depende da migração de schema (ainda sem aprovação do pesquisador); até lá o INSERT não a inclui.
+    versao_efetiva: str = "desconhecida"
 
 
 @dataclass
@@ -428,6 +431,7 @@ class TelemetryCollector:
         context_window_used: Optional[int] = None,
         context_window_max: Optional[int] = None,
         was_compressed: bool = False,
+        versao_efetiva: str = "desconhecida",
     ) -> None:
         """Registra o consumo de tokens por chamada LLM.
 
@@ -445,6 +449,7 @@ class TelemetryCollector:
             context_window_used: Tokens usados do contexto.
             context_window_max: Contexto máximo configurado.
             was_compressed: Se o histórico foi comprimido antes da chamada.
+            versao_efetiva: Versão servida, como o provedor informa; ``desconhecida`` quando não informa.
         """
         row = _TokenUsageRow(
             id=uuid.uuid4().hex,
@@ -463,6 +468,7 @@ class TelemetryCollector:
             context_window_used=context_window_used,
             context_window_max=context_window_max,
             was_compressed=was_compressed,
+            versao_efetiva=versao_efetiva,
         )
         self._buffer.token_usage.append(row)
         logger.debug(

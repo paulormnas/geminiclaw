@@ -6,6 +6,7 @@ import httpx
 
 from src.llm.base import LLMProvider, LLMResponse, ToolCall
 from src.llm.retry import RETRY_BACKOFFS_SECONDS, emit_connection_retry, is_retryable_status
+from src.llm.versions import compose_compatible_version
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -112,6 +113,7 @@ class OpenAICompatibleProvider(LLMProvider):
                 # Retentativas de conexão/429 desta chamada — insumo para v18-usage-limits.
                 "retry_count": retry_count,
             },
+            versao_efetiva=compose_compatible_version(data.get("model"), data.get("system_fingerprint")),
         )
 
     def _parse_tool_calls(self, raw_tool_calls: list[dict]) -> list[ToolCall]:

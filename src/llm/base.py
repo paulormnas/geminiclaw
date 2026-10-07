@@ -19,6 +19,9 @@ class LLMResponse:
     # de pensamento assinados da Anthropic, que devem ser devolvidos intactos no ciclo de
     # ferramentas). Os demais provedores ignoram este campo.
     provider_data: dict | None = None
+    # Versão efetivamente servida, como o provedor informa (v18.5-model-catalog-locality);
+    # "desconhecida" quando não informa. Nunca derivada do nome pedido.
+    versao_efetiva: str = "desconhecida"
 
     def to_message(self) -> dict:
         """Converte a resposta para o formato de mensagem do histórico."""

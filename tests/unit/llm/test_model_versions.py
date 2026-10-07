@@ -455,3 +455,36 @@ async def test_seed_com_falha_grava_desconhecida(tmp_path):
     await seed_ollama_versions(routing, _TagsFactory([None]))
 
     assert routing.versions.current(QWEN) == UNKNOWN_VERSION
+
+
+# --- M3: o cliente HTTP do provedor de digest é fechado ---------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_leitura_de_digest_fecha_o_cliente_do_provedor(tmp_path):
+    routing = _ollama_routing(tmp_path)
+    closed = []
+
+    def factory(provider, model):
+        class _P:
+            async def fetch_digest(self):
+                return "sha256:a"
+
+            async def aclose(self):
+                closed.append(model)
+
+        return _P()
+
+    await seed_ollama_versions(routing, factory)
+    await refresh_ollama_versions(routing, factory)
+
+    assert len(closed) == 2
+
+
+@pytest.mark.asyncio
+async def test_ollama_aclose_fecha_o_cliente_http():
+    provider = OllamaProvider(OLLAMA_URL, "qwen3:8b")
+
+    await provider.aclose()
+
+    assert provider._client.is_closed

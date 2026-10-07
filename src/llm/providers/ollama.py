@@ -183,6 +183,10 @@ class OllamaProvider(LLMProvider):
         if response.text:
             yield response.text
 
+    async def aclose(self) -> None:
+        """Fecha o cliente HTTP (para instâncias efêmeras, como a leitura de digest)."""
+        await self._client.aclose()
+
     async def health_check(self) -> bool:
         try:
             r = await self._client.get("/api/tags", timeout=_health_timeout())

@@ -138,8 +138,16 @@ async def _fetch_ollama_digest(
     except Exception as exc:  # noqa: BLE001 — a versão é telemetria
         logger.warning("Provedor Ollama indisponível para ler o digest", extra={"erro": type(exc).__name__})
         return None
-    fetch = getattr(provider, "fetch_digest", None)
-    return await fetch() if fetch is not None else None
+    try:
+        fetch = getattr(provider, "fetch_digest", None)
+        return await fetch() if fetch is not None else None
+    finally:
+        close = getattr(provider, "aclose", None)
+        if close is not None:
+            try:
+                await close()
+            except Exception:  # noqa: BLE001 — fechar o cliente nunca derruba a sessão
+                logger.warning("Falha ao fechar o cliente do provedor de digest", extra={"provedor_modelo": model_id})
 
 
 async def seed_ollama_versions(routing: "SessionRouting", provider_factory: ProviderFactory | None = None) -> None:

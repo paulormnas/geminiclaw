@@ -1251,6 +1251,7 @@ class AutonomousLoop:
         ingestor = self.orchestrator.get_ingestor(master_session_id)
         if not isinstance(ingestor, FactIngestor) or result is None or not task.task_name:
             return
+        self._flag_from_review(task, review, master_session_id)
         try:
 
             sub = SubtaskInput(
@@ -1273,6 +1274,31 @@ class AutonomousLoop:
                 await asyncio.to_thread(self.orchestrator.knowledge_after_subtask, master_session_id, subtarefa_id)
         except Exception as exc:  # noqa: BLE001 - a ingestão nunca derruba a subtarefa
             logger.warning("Falha ao ingerir fatos da subtarefa", extra={"error": type(exc).__name__})
+
+    def _flag_from_review(self, task: "AgentTask", review: Optional[Dict[str, Any]], master_session_id: str) -> None:
+        """Sinalização do Validator ao Curator (ADR 012 §2; task 4.1), gravada pelo orquestrador.
+
+        O Validator não tem laço de ferramentas, então a sinalização sai do **parecer estruturado** dele: divergência
+        documentada vira ``caminho_relevante`` e reprovação ``falha_relevante``. O texto é um modelo fixo (nenhum
+        texto de LLM ou de documento entra na sinalização).
+        """
+        status = (review or {}).get("status")
+        tipo = {"divergent_but_documented": "caminho_relevante", "fail": "falha_relevante"}.get(status or "")
+        if tipo is None or not task.task_name:
+            return
+        try:
+            from src.knowledge.curator_flags import record_flag
+
+            record_flag(
+                self.orchestrator.output_manager.base_dir / master_session_id,
+                agente="validator",
+                subtarefa=task.task_name,
+                tipo=tipo,
+                texto=f"Parecer do Validator sobre a subtarefa '{task.task_name}': {status}.",
+                refs=[task.task_name],
+            )
+        except Exception as exc:  # noqa: BLE001 - sinalizar nunca derruba a subtarefa
+            logger.warning("Sinalização do Validator não gravada", extra={"error": type(exc).__name__})
 
     def _record_run_limit(self, master_session_id: str, exc: AgentRunLimitReached) -> None:
         """Registra o evento ``limit_reached`` do limite de execuções (observabilidade segura)."""

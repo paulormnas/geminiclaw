@@ -479,3 +479,29 @@ async def test_laco_recalcula_o_veredito_apos_cada_subtarefa_ingerida(tmp_path, 
     (hip,) = store.find_nodes("Hipotese", {})
     assert hip.properties["n_tentativas"] == 1 and hip.properties["veredito"] > 0
     assert [e.rel_type for e in store._edges if e.rel_type == "SUSTENTA"] == ["SUSTENTA"]  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("parecer,tipo", [("divergent_but_documented", "caminho_relevante"), ("fail", "falha_relevante")])
+async def test_validator_sinaliza_ao_curator_a_partir_do_parecer(tmp_path, parecer, tipo):
+    """I8/tarefa 4.1 — o parecer do Validator (divergente/reprovado) vira sinalização para o Curator."""
+    from src.autonomous_loop import AutonomousLoop
+
+    store = InMemoryGraphStore()
+    pid = create_project(store, "P", "O", [])
+    sm = MagicMock()
+    sessao = Session(id="s1", agent_id="orchestrator", status="active", created_at="2025-01-01T00:00:00+00:00",
+                     updated_at="2025-01-01T00:00:00+00:00", payload={})
+    sm.create.return_value = sm.get.return_value = sessao
+    orch = Orchestrator(
+        session_manager=sm, output_manager=OutputManager(str(tmp_path / "out"), str(tmp_path / "logs")),
+        agent_runtime=MagicMock(), knowledge_store_factory=lambda: store,
+    )
+    orch._start_ingestor("s1", pid, "auto", "2026-10-06T10:00:00+00:00", None)
+    task = AgentTask(agent_id="developer", prompt="p", task_name="treinar")
+    result = AgentResult(agent_id="developer", session_id="x", status="success", response={})
+
+    await AutonomousLoop(orch)._ingest_subtask(task, result, {"status": parecer, "verified": True}, "s1")
+
+    (flag,) = FlagStore(orch.output_manager.base_dir / "s1").pending()
+    assert flag.agente == "validator" and flag.tipo == tipo and flag.subtarefa == "treinar"

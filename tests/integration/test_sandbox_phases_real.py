@@ -230,3 +230,47 @@ def test_duas_execucoes_paralelas_levam_menos_que_a_soma(tmp_path: Path) -> None
 
     assert all(result.exit_code == 0 for result, _ in outcomes)
     assert elapsed < sum(duration for _, duration in outcomes) - 1
+
+
+# --- revisão de segurança do PR #111 (escritos e NÃO executados) -----------------------------------------
+
+def test_needs_network_sem_insumos_continua_sem_rede(tmp_path: Path) -> None:
+    """A1: sem manifesto (classificador padrão), nem a execução sem insumos tem rede."""
+    result = _run(_sandbox(tmp_path), tmp_path, _NO_NETWORK_CODE, needs_network=True)
+    assert result.exit_code == 0, result.stderr
+    assert result.rede_na_execucao is False and "sem dns" in result.stdout
+
+
+def test_modo_copy_com_raiz_somente_leitura(tmp_path: Path, monkeypatch) -> None:
+    """A2: put_archive em /inputs (Mount tmpfs) funciona com a raiz ro; o script lê e não consegue gravar lá."""
+    monkeypatch.setenv("SANDBOX_INPUT_DELIVERY", "copy")
+    monkeypatch.setenv("SANDBOX_COPY_MAX_BYTES", str(16 * 1024 * 1024))
+    monkeypatch.setenv("SANDBOX_TMPFS_SIZE", "32m")
+    snap = tmp_path / "out" / "s" / "input_snapshot"
+    snap.mkdir(parents=True)
+    (snap / "dados.csv").write_text("a,b\n1,2\n")
+    code = (
+        "print(open('/inputs/dados.csv').read())\n"
+        "try:\n    open('/inputs/novo.txt', 'w')\nexcept OSError:\n    print('somente leitura')\n"
+    )
+    result = _run(_sandbox(tmp_path, memory_limit="256m"), tmp_path, code)
+    assert result.exit_code == 0, result.stderr
+    assert "a,b" in result.stdout and "somente leitura" in result.stdout
+
+
+def test_saida_gigante_do_script_e_truncada(tmp_path: Path, monkeypatch) -> None:
+    """M3: 20 MiB em stdout chegam truncados (~1 MiB) e o código de saída é propagado."""
+    monkeypatch.setenv("SANDBOX_OUTPUT_MAX_BYTES", "1048576")
+    code = "import sys\nsys.stdout.write('A' * 20_000_000)\nsys.stderr.write('fim')\nraise SystemExit(3)\n"
+    result = _run(_sandbox(tmp_path), tmp_path, code)
+    assert result.exit_code == 3
+    assert len(result.stdout) < 1_100_000 and "omitidos" in result.stdout
+    assert result.stderr.endswith("fim")
+
+
+def test_instalacao_em_container_proprio_sem_staging(tmp_path: Path) -> None:
+    """M6: com packages e assets em cache, a instalação roda; /staging e /control não existem no script."""
+    code = "import os\nprint(os.path.exists('/staging'), os.path.exists('/control'))\n"
+    result = _run(_sandbox(tmp_path), tmp_path, code, packages=["tabulate"])
+    assert result.exit_code == 0, result.stderr
+    assert "False False" in result.stdout

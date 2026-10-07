@@ -14,8 +14,8 @@
 - [x] 1.4 Atualizar `src/llm/catalog.yaml` versionado com os três campos em todas as entradas.
 
 ## 2. Roteador
-- [ ] 2.1 Posições de preferência com grupo (`id` ou lista de `id`s).
-- [ ] 2.2 Ordem de resolução com `validator` por último; desempate por família; pin desliga o desempate.
+- [x] 2.1 Posições de preferência com grupo (`id` ou lista de `id`s).
+- [x] 2.2 Ordem de resolução com `validator` por último; desempate por família; pin desliga o desempate.
 - [ ] 2.3 `src/llm/allocation.py` (`RoleAllocation`, `current_allocation`); `allocation_profile` no payload antes do primeiro envio.
 - [ ] 2.4 Bloco "Alocação" no banner.
 
@@ -29,7 +29,7 @@
 ## 4. Testes
 - [x] 4.1 Esquema: padrões, `no_no` implica dados brutos, três erros de coerência, família ausente.
 - [x] 4.2 Avisos de endpoint (loopback e remoto) sem alterar a declaração.
-- [ ] 4.3 Roteador: empate por família, família em posição inferior não vence, pin desliga desempate.
+- [x] 4.3 Roteador: empate por família, família em posição inferior não vence, pin desliga desempate.
 - [ ] 4.4 Perfil de alocação no payload e no banner.
 - [ ] 4.5 Versão por provedor com respostas simuladas (Google, compatível com e sem campo, Ollama por digest).
 - [ ] 4.6 Troca de versão em modo flexível (evento) e em `strict` (fechamento com `versao_modelo`); versão desconhecida em `strict`.

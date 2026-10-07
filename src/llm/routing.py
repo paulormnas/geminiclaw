@@ -13,6 +13,11 @@ argumentos. O algoritmo, por papel:
    preferência, ``strict`` levanta :class:`PinError`;
 5. o primeiro candidato restante vence; nenhum -> :class:`NoEligibleModelError` com a sugestão.
 
+Cada posição da preferência pode ser um grupo de ids (empate; v18.5-model-catalog-locality, ADR 019 §6): só para
+o ``validator``, se a primeira posição com elegível tiver mais de um, vence o de ``familia_modelo`` diferente das
+``familias_autor`` (famílias dos papéis que escrevem afirmações); sem diferente, vale a ordem da lista. Um modelo de
+posição inferior nunca substitui o da primeira posição com elegível, e o pin desliga o desempate.
+
 Este módulo também é o único lugar que lista as variáveis de ambiente removidas
 (``LLM_PROVIDER``, ``LLM_MODEL``, ``DEFAULT_MODEL``, ``AGENT_MODEL``) para o aviso de obsolescência.
 """
@@ -21,7 +26,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Collection, Mapping
 
 from src.llm.availability import MOTIVO_NAO_VERIFICADO, Availability
 from src.llm.catalog import OPTIONAL_ROLES, Catalog, ModelEntry
@@ -37,6 +42,10 @@ ROUTING_STRICT = "strict"
 ROUTING_MODES = (ROUTING_FLEXIBLE, ROUTING_STRICT)
 
 MOTIVO_POLITICA = "politica"
+
+# Papéis que escrevem afirmações verificadas pelo Validator (ADR 019 §6); o Validator é resolvido por último.
+AUTHOR_ROLES: tuple[str, ...] = ("researcher", "developer", "summarizer", "curator")
+VALIDATOR_ROLE = "validator"
 
 # Variáveis que deixaram de existir (ADR 017, Consequências): ignoradas com um WARNING único.
 REMOVED_ENV_VARS = ("LLM_PROVIDER", "LLM_MODEL", "DEFAULT_MODEL", "AGENT_MODEL")
@@ -84,6 +93,8 @@ class RoleResolution:
     trust: str
     origem: str  # "preferencia" | "pin" | "pin_legado"
     descartados: tuple[tuple[str, str], ...] = ()
+    # Só no validator: {"aplicado", "familias_autor", "candidatos", "escolhido"} (ADR 019 §6).
+    desempate: Mapping[str, object] | None = None
 
 
 def validate_policy(politica: str) -> str:
@@ -145,6 +156,19 @@ def _suggestion(politica: str, descartados: tuple[tuple[str, str], ...]) -> str:
     )
 
 
+def _tiebreak_record(
+    role: str, applied: bool, familias_autor: Collection[str], candidates: Collection[str], chosen: str
+) -> dict[str, object] | None:
+    if role != VALIDATOR_ROLE:
+        return None
+    return {
+        "aplicado": applied,
+        "familias_autor": sorted(set(familias_autor)),
+        "candidatos": list(candidates),
+        "escolhido": chosen,
+    }
+
+
 def resolve(
     papel: str,
     catalogo: Catalog,
@@ -152,8 +176,11 @@ def resolve(
     politica: str,
     overrides: Mapping[str, Pin] | None = None,
     routing: str = ROUTING_FLEXIBLE,
+    familias_autor: Collection[str] = (),
 ) -> RoleResolution:
     """Resolve o modelo de um papel (função pura; ver o algoritmo no docstring do módulo).
+
+    ``familias_autor``: famílias já resolvidas para os papéis autores (usadas só no ``validator``).
 
     Raises:
         ValueError: Papel desconhecido.
@@ -171,7 +198,10 @@ def resolve(
         entry = catalogo.modelos.get(pin.id)
         reason = "fora_do_catalogo" if entry is None else _discard_reason(entry, spec.requisitos, disponiveis, politica)
         if reason is None and entry is not None:
-            return RoleResolution(role, entry.id, entry.trust, "pin_legado" if pin.legado else "pin")
+            return RoleResolution(
+                role, entry.id, entry.trust, "pin_legado" if pin.legado else "pin",
+                desempate=_tiebreak_record(role, False, familias_autor, (), entry.id),
+            )
         message = f"Pin '{pin.id}' do papel '{role}' não vale: {reason}"
         if reason == MOTIVO_POLITICA:
             message += " (defina LLM_DATA_POLICY=third_party_allowed ou remova o pin)"
@@ -180,12 +210,26 @@ def resolve(
         logger.warning(message + "; seguindo a ordem de preferência do catálogo.")
         descartados.append((pin.id, f"pin:{reason}"))
 
-    for model_id in spec.preferencia:
-        entry = catalogo.modelos[model_id]
-        reason = _discard_reason(entry, spec.requisitos, disponiveis, politica)
-        if reason is None:
-            return RoleResolution(role, entry.id, entry.trust, "preferencia", tuple(descartados))
-        descartados.append((model_id, reason))
+    for group in spec.preferencia_grupos:
+        eligible: list[ModelEntry] = []
+        for model_id in group:
+            entry = catalogo.modelos[model_id]
+            reason = _discard_reason(entry, spec.requisitos, disponiveis, politica)
+            if reason is None:
+                eligible.append(entry)
+            else:
+                descartados.append((model_id, reason))
+        if not eligible:
+            continue
+        chosen, applied = eligible[0], False
+        if role == VALIDATOR_ROLE and len(eligible) > 1:
+            different = [e for e in eligible if e.familia_modelo not in set(familias_autor)]
+            if different:
+                chosen, applied = different[0], True
+        return RoleResolution(
+            role, chosen.id, chosen.trust, "preferencia", tuple(descartados),
+            desempate=_tiebreak_record(role, applied, familias_autor, [e.id for e in eligible], chosen.id),
+        )
 
     discarded = tuple(descartados)
     raise NoEligibleModelError(role, politica, discarded, _suggestion(politica, discarded))
@@ -205,9 +249,16 @@ def resolve_session(
     """
     resolved: dict[str, RoleResolution] = {}
     failures: list[NoEligibleModelError] = []
-    for role in catalogo.papeis:
+    # O validator vai por último: o desempate precisa das famílias dos papéis autores (ADR 019 §6).
+    order = [r for r in catalogo.papeis if r != VALIDATOR_ROLE] + [r for r in catalogo.papeis if r == VALIDATOR_ROLE]
+    for role in order:
+        authors = {
+            catalogo.modelos[res.id].familia_modelo
+            for name, res in resolved.items()
+            if name in AUTHOR_ROLES and res.id in catalogo.modelos
+        }
         try:
-            resolved[role] = resolve(role, catalogo, disponiveis, politica, overrides, routing)
+            resolved[role] = resolve(role, catalogo, disponiveis, politica, overrides, routing, authors)
         except (NoEligibleModelError, PinError) as exc:
             if role in OPTIONAL_ROLES:
                 logger.warning(
@@ -228,7 +279,7 @@ def resolve_session(
             failures[0].sugestao,
         )
         raise merged
-    return resolved
+    return {role: resolved[role] for role in catalogo.papeis if role in resolved}
 
 
 def validate_hint(

@@ -261,3 +261,88 @@ def test_dica_invalida_por_politica_catalogo_ou_estrito(catalog):
     assert inexistente is None
     assert validate_hint("developer", QWEN, catalog, disponiveis, "third_party_allowed", "strict") is None
     assert validate_hint("developer", None, catalog, disponiveis, "third_party_allowed", "flexible") is None
+
+
+# --- v18.5-model-catalog-locality: desempate por família no Validator -------------------------------------------
+
+GEMMA = "ollama/gemma3:12b"
+
+
+def _catalog_com_empate(tmp_path, *, validator_pref, familia_autor="qwen"):
+    doc = base_document()
+    doc["modelos"] = [
+        model(QWEN, "self_hosted", familia=familia_autor),
+        model(GEMMA, "self_hosted", familia="gemma"),
+        model(CLAUDE, "third_party", familia="claude"),
+        model(GEMINI, "third_party", familia="gemini"),
+    ]
+    for role in ("researcher", "developer", "reviewer", "summarizer", "curator", "base"):
+        doc["papeis"][role]["preferencia"] = [QWEN]
+    doc["papeis"]["validator"]["preferencia"] = validator_pref
+    return load(tmp_path, doc)
+
+
+def test_empate_resolvido_por_familia(tmp_path):
+    """Cenário: Empate resolvido por família."""
+    catalog = _catalog_com_empate(tmp_path, validator_pref=[[QWEN, GEMMA]])
+
+    resolved = resolve_session(catalog, all_available(catalog), "self_hosted_only")
+
+    assert resolved["validator"].id == GEMMA
+    desempate = resolved["validator"].desempate
+    assert desempate["aplicado"] is True
+    assert desempate["familias_autor"] == ["qwen"]
+    assert desempate["candidatos"] == [QWEN, GEMMA]
+    assert desempate["escolhido"] == GEMMA
+    assert resolved["researcher"].desempate is None
+
+
+def test_familia_diferente_em_posicao_inferior(tmp_path):
+    """Cenário: Família diferente em posição inferior."""
+    catalog = _catalog_com_empate(tmp_path, validator_pref=[QWEN, GEMMA])
+
+    resolved = resolve_session(catalog, all_available(catalog), "self_hosted_only")
+
+    assert resolved["validator"].id == QWEN
+    assert resolved["validator"].desempate["aplicado"] is False
+
+
+def test_empate_sem_familia_diferente_usa_a_ordem_da_lista(tmp_path):
+    catalog = _catalog_com_empate(tmp_path, validator_pref=[[QWEN, GEMMA]], familia_autor="gemma")
+
+    resolved = resolve_session(catalog, all_available(catalog), "self_hosted_only")
+
+    assert resolved["validator"].id == QWEN
+    assert resolved["validator"].desempate["aplicado"] is False
+
+
+def test_pin_desliga_o_desempate(tmp_path):
+    """Cenário: Pin desliga o desempate."""
+    catalog = _catalog_com_empate(tmp_path, validator_pref=[[QWEN, GEMMA]])
+
+    resolved = resolve_session(catalog, all_available(catalog), "self_hosted_only", {"validator": Pin(QWEN)})
+
+    assert resolved["validator"].id == QWEN
+    assert resolved["validator"].origem == "pin"
+    assert resolved["validator"].desempate["aplicado"] is False
+
+
+def test_validator_e_resolvido_depois_dos_autores_com_pin_de_autor(tmp_path):
+    """As famílias dos autores incluem o modelo fixado por pin (Developer em gemma -> Validator em qwen)."""
+    catalog = _catalog_com_empate(tmp_path, validator_pref=[[GEMMA, QWEN]])
+
+    resolved = resolve_session(
+        catalog, all_available(catalog), "self_hosted_only",
+        {r: Pin(GEMMA) for r in ("researcher", "developer", "summarizer", "curator")},
+    )
+
+    assert resolved["validator"].id == QWEN
+    assert resolved["validator"].desempate["familias_autor"] == ["gemma"]
+
+
+def test_ordem_do_mapa_resolvido_segue_o_catalogo(tmp_path):
+    catalog = _catalog_com_empate(tmp_path, validator_pref=[[QWEN, GEMMA]])
+
+    resolved = resolve_session(catalog, all_available(catalog), "self_hosted_only")
+
+    assert list(resolved) == list(catalog.papeis)

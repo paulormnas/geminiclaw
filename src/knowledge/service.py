@@ -467,6 +467,41 @@ class KnowledgeService:
             return verdict, collected, metric, abordagem, problema
         return None
 
+    @_operation
+    def evidence_in_scope(self, evidence: Node, sobre: list[Node]) -> bool:
+        """A evidência (``Resultado``, ``Experimento`` ou ``Decisao``) está ligada ao escopo (``sobre``) da descoberta.
+
+        ``Resultado``/``Experimento``: o experimento testa uma das hipóteses do escopo, aplica a abordagem do
+        escopo (ou de uma fundida nela) ou testa hipótese sobre o ``Problema`` do escopo. ``Decisao``: ``ESCOLHEU`` ou
+        ``DESCARTOU`` algum nó do escopo.
+        """
+        scope_ids = {n.id for n in sobre}
+        if evidence.label == "Decisao":
+            for rel in ("ESCOLHEU", "DESCARTOU"):
+                sub = self._store.neighbors(evidence.id, [rel], direction="out", depth=1)
+                if any(e.src_id == evidence.id and e.dst_id in scope_ids for e in sub.edges):
+                    return True
+            return False
+        exp = evidence
+        if evidence.label == "Resultado":
+            owners = [n for n in self._in(evidence.id, "PRODUZIU") if n.label == "Experimento"]
+            if not owners:
+                return False
+            exp = owners[0]
+        hip_ids = {h.id for h in self._out(exp.id, "TESTA") if h.label == "Hipotese"}
+        if hip_ids & scope_ids:
+            return True
+        family: set[str] = set()
+        for node in sobre:
+            if node.label == "Abordagem":
+                family |= self.merged_approaches(self.canonical_approach(node.id))
+        if family and any(a.id in family for a in self._out(exp.id, "APLICOU")):
+            return True
+        for node in sobre:
+            if node.label == "Problema" and self._experiment_targets(exp, node):
+                return True
+        return False
+
     def _experiment_targets(self, exp: Node, problema: Node) -> bool:
         """O experimento testa uma hipótese sobre este ``Problema`` (``SOBRE`` ou o confirmado do projeto)."""
         for hip in self._out(exp.id, "TESTA"):

@@ -50,11 +50,13 @@ def world(env, tmp_path):
     abordagem = graph.abordagem("GB")
     hip = graph.hipotese()
     exp, res = graph.tentativa(hip, abordagem, valor=0.80)
+    ab2, hip2 = graph.abordagem("Outra"), graph.hipotese("H2")
+    _, res2 = graph.tentativa(hip2, ab2, valor=0.80, no="B")
     toolkit = CuratorToolkit(
         env.store, project_id="proj1", session_id="s1", session_dir=tmp_path / "s1", index=env.index,
         queue=env.queue, model="m", limits=_limits(),
     )
-    return env, graph, toolkit, {"abordagem": abordagem, "hip": hip, "exp": exp, "res": res}
+    return env, graph, toolkit, {"abordagem": abordagem, "hip": hip, "exp": exp, "res": res, "ab2": ab2, "res2": res2}
 
 
 def _create(tk, ids, enunciado="par1b", tipo="licao_de_caminho", **kw):
@@ -313,27 +315,37 @@ def test_confirmar_par_cria_semelhante_a_e_sugere_fusao(world):
     assert env.queue.pending_count() == 0
 
 
-def test_merge_approaches_nao_apaga_e_exige_duplicata_reconhecida(world):
-    """Scenario: Fusão — ambas existem, a primeira 'fundida'; fusão arbitrária (sem duplicata reconhecida) é
-    recusada (tarefa 6.9)."""
+def test_merge_approaches_nao_apaga_e_exige_duplicata_confirmada_antes(world):
+    """Scenario: Fusão — ambas existem, a primeira 'fundida'; só duplicata confirmada em execução anterior
+    funde (tarefa 6.9)."""
     env, graph, tk, ids = world
-    _pair(env, 3, 0.95, "resnet18", "ResNet-18")
     canonica = graph.abordagem("ResNet-18")
     duplicada = graph.abordagem("resnet18")
     qualquer = graph.abordagem("Outra Coisa")
-    env.provider.vectors["Outra Coisa"] = pair_vectors(DIM, 4, 1.0)[0]
     exp, _ = graph.tentativa(ids["hip"], duplicada, valor=0.80, no="C")
+    a, b = sorted([duplicada, canonica])
+    env.queue.enqueue(Candidate(
+        node_a=a, node_b=b, label_a="Abordagem", label_b="Abordagem", tipo="duplicata", score=0.95,
+        entre_dominios=False, entre_projetos=False, prioridade=1.0, text_hash_a="h", text_hash_b="h",
+        embedding_model="m", embedding_version="1",
+    ))
+    par = tk.next_similarity_batch()["pares"][0]
+    assert tk.review_similarity(queue_id=par["queue_id"], decisao="confirmar", motivo="mesmo método")["ok"]
+    depois = CuratorToolkit(
+        env.store, project_id="proj1", session_id="s2", index=env.index, queue=env.queue, model="m",
+        limits=_limits(),
+    )
 
-    recusada = tk.merge_approaches(duplicada_id=duplicada, canonica_id=qualquer, motivo="m")
-    ok = tk.merge_approaches(duplicada_id=duplicada, canonica_id=canonica, motivo="mesmo modelo")
+    recusada = depois.merge_approaches(duplicada_id=duplicada, canonica_id=qualquer, motivo="m")
+    ok = depois.merge_approaches(duplicada_id=duplicada, canonica_id=canonica, motivo="mesmo modelo")
 
-    assert recusada["ok"] is False and "duplicatas" in recusada["motivo"]
+    assert recusada["ok"] is False and "SEMELHANTE_A" in recusada["motivo"]
     assert ok["ok"] is True
     assert env.raw.get_node(duplicada).properties["status"] == "fundida"
     assert env.raw.get_node(canonica) is not None
     assert any(e.src_id == duplicada and e.rel_type == "FUNDIDA_EM" and e.dst_id == canonica for e in env.raw._edges)  # noqa: SLF001
     assert any(e.src_id == exp for e in env.raw._edges)  # noqa: SLF001 - nada foi apagado
-    assert tk.merge_approaches(duplicada_id=duplicada, canonica_id=canonica, motivo="de novo")["ok"] is False
+    assert depois.merge_approaches(duplicada_id=duplicada, canonica_id=canonica, motivo="de novo")["ok"] is False
 
 
 # --------------------------------------------------------------------------- segurança
@@ -354,7 +366,7 @@ def test_inventario_nenhuma_ferramenta_remove_dados_nem_aceita_cypher_de_escrita
     # A consulta livre é só leitura: o filtro textual do store recusa escrita antes de qualquer execução.
     with pytest.raises(ReadOnlyQueryViolation):
         env.raw.read_query("MATCH (n) DETACH DELETE n", {})
-    saida = tk.dispatch("read_query", {"cypher": "MATCH (n) SET n.x = 1 RETURN n"})
+    saida = tk.dispatch("read_query", {"cypher": "MATCH (n) SET n.x = 1 RETURN n LIMIT 1"})
     assert '"ok": false' in saida and "SET" in saida
 
 
@@ -460,11 +472,11 @@ def test_orcamento_de_escritas_por_execucao(world):
     env.provider.vectors["par8b"] = pair_vectors(DIM, 8, 1.0)[0]
     env.provider.vectors["par9b"] = pair_vectors(DIM, 9, 1.0)[0]
 
-    outra = graph.abordagem("Outra")
+    outra = ids["ab2"]
     assert _create(tk, ids, enunciado="par8b")["ok"]
     segunda = json.loads(tk.dispatch("create_discovery", dict(
         tipo="licao_de_caminho", enunciado="par9b", condicoes="c", sobre_ids=[outra],
-        evidencia_ids=[ids["res"]], justificativa="j",
+        evidencia_ids=[ids["res2"]], justificativa="j",
     )))
 
     assert segunda["ok"] is False and "orçamento de escritas" in segunda["erro"]
@@ -528,7 +540,7 @@ def test_trilha_de_auditoria_registra_decisoes_sem_telemetria_de_texto(world, tm
     env.provider.vectors["par8b"] = pair_vectors(DIM, 8, 1.0)[0]
     env.provider.vectors["par9b"] = pair_vectors(DIM, 9, 1.0)[0]
     a = _create(tk, ids, enunciado="par8b")["id"]
-    b = _create(tk, ids, enunciado="par9b", sobre_ids=[graph.abordagem("Outra")])["id"]
+    b = _create(tk, ids, enunciado="par9b", sobre_ids=[ids["ab2"]], evidencia_ids=[ids["res2"]])["id"]
 
     assert tk.link_contradiction(a_id=a, b_id=b, motivo="resultados opostos no mesmo dataset")["ok"]
     assert tk.link_contradiction(a_id=a, b_id=b, motivo="de novo")["ok"] is False
@@ -545,12 +557,17 @@ def test_set_discovery_status_substituida_cria_substitui(world):
     env.provider.vectors["par8b"] = pair_vectors(DIM, 8, 1.0)[0]
     env.provider.vectors["par9b"] = pair_vectors(DIM, 9, 1.0)[0]
     velha = _create(tk, ids, enunciado="par8b")["id"]
-    nova = _create(tk, ids, enunciado="par9b", sobre_ids=[graph.abordagem("Outra")])["id"]
+    _, res3 = graph.tentativa(ids["hip"], ids["abordagem"], valor=0.82, no="C")
+    nova = _create(tk, ids, enunciado="par9b", evidencia_ids=[res3], variacao_de=velha, diferenca="nova evidência")["id"]
+    depois = CuratorToolkit(
+        env.store, project_id="proj1", session_id="s2", index=env.index, queue=env.queue, model="m", limits=_limits()
+    )
 
-    sem = tk.set_discovery_status(id=velha, status="substituida", motivo="m")
-    ok = tk.set_discovery_status(id=velha, status="substituida", motivo="superada", substituida_por=nova)
+    mesma_execucao = tk.set_discovery_status(id=velha, status="substituida", motivo="m", substituida_por=nova)
+    sem = depois.set_discovery_status(id=velha, status="substituida", motivo="m")
+    ok = depois.set_discovery_status(id=velha, status="substituida", motivo="superada", substituida_por=nova)
 
-    assert sem["ok"] is False and ok["ok"] is True
+    assert mesma_execucao["ok"] is False and sem["ok"] is False and ok["ok"] is True
     assert env.raw.get_node(velha).properties["status"] == "substituida"
     assert any(e.src_id == nova and e.rel_type == "SUBSTITUI" and e.dst_id == velha for e in env.raw._edges)  # noqa: SLF001
     assert set(WRITE_TOOLS) >= {"create_discovery", "reinforce_discovery", "merge_approaches"}
@@ -578,5 +595,5 @@ def test_fila_so_serve_pares_do_projeto_e_oculta_propriedades_de_outro_projeto(w
     assert len(servidos) == 1
     visto = {servidos[0]["a"]["id"]: servidos[0]["a"], servidos[0]["b"]["id"]: servidos[0]["b"]}
     assert "propriedades" in visto[ids["abordagem"]]
-    assert "propriedades" not in visto[x] and visto[x]["resumo"] == "Privada X"
+    assert "propriedades" not in visto[x] and "Privada X" not in json.dumps(servidos)
     assert env.queue.pending_count() == 2

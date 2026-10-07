@@ -431,6 +431,8 @@ CURATOR_QUEUE_BATCH = int(get_env("CURATOR_QUEUE_BATCH", default="20"))
 # Escritas no grafo por execução (criar/reforçar/ligar/mudar status) e consultas livres (read_query).
 CURATOR_MAX_WRITES_PER_RUN = int(get_env("CURATOR_MAX_WRITES_PER_RUN", default="30"))
 CURATOR_MAX_READ_QUERIES_PER_RUN = int(get_env("CURATOR_MAX_READ_QUERIES_PER_RUN", default="5"))
+# Mudanças de status de descobertas (contestar/substituir) por execução: ações duráveis, com teto baixo.
+CURATOR_MAX_STATUS_CHANGES_PER_RUN = int(get_env("CURATOR_MAX_STATUS_CHANGES_PER_RUN", default="3"))
 # Tamanho máximo de cada campo de texto aceito pelas ferramentas de escrita (recusa, não trunca).
 CURATOR_MAX_TEXT_CHARS = int(get_env("CURATOR_MAX_TEXT_CHARS", default="1000"))
 # Tamanho máximo da saída de uma ferramenta devolvida ao modelo (dado não confiável) e do resumo de entrada.

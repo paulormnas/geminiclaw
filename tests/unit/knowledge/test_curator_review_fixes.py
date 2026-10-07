@@ -124,9 +124,9 @@ def test_b1_canonica_precisa_ser_do_proprio_projeto(world):
     par = tk.next_similarity_batch()["pares"][0]
     tk.review_similarity(queue_id=par["queue_id"], decisao="confirmar", motivo="dup")
 
-    out = _toolkit(env).merge_approaches(duplicada_id=d, canonica_id=c, motivo="x")
+    out = json.loads(_toolkit(env).dispatch("merge_approaches", dict(duplicada_id=d, canonica_id=c, motivo="x")))
 
-    assert out["ok"] is False and env.raw.get_node(d).properties.get("status") != "fundida"
+    assert out["ok"] is False and "projeto da sessão" in out["erro"] and env.raw.get_node(d).properties.get("status") != "fundida"
 
 
 # ----------------------------------------------------------------------------- B2
@@ -343,7 +343,7 @@ def test_i5_substituir_descoberta_exige_escopo_evidencia_nova_e_nao_ser_da_mesma
     assert novo.set_discovery_status(id=legit, status="substituida", motivo="m", substituida_por=fake)["ok"] is False
     assert env.raw.get_node(legit).properties["status"] == "ativa"
     # Contestar exige evidência nova validada e ligada ao escopo.
-    sem = novo.set_discovery_status(id=legit, status="contestada", motivo="m")
+    sem = json.loads(novo.dispatch("set_discovery_status", dict(id=legit, status="contestada", motivo="m")))
     igual = novo.set_discovery_status(id=legit, status="contestada", motivo="m", evidencia_ids=[ids["res"]])
     assert sem["ok"] is False and igual["ok"] is False
     assert env.raw.get_node(legit).properties["status"] == "ativa"

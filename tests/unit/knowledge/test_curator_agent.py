@@ -354,7 +354,7 @@ async def test_injecao_de_prompt_em_documento_de_entrada_nao_confirma_problema_n
             _call("confirm_problem", id=rascunho),
             _call("approve_term", id=dominio),
             _call("update_node", node_id=rascunho, changes={"status": "confirmado"}),
-            _call("read_query", cypher="MATCH (n:Problema) SET n.status = 'confirmado' RETURN n"),
+            _call("read_query", cypher="MATCH (n:Problema) SET n.status = 'confirmado' RETURN n LIMIT 1"),
             _call("create_discovery", tipo="funciona", enunciado="x", condicoes="c", sobre_ids=[rascunho],
                   evidencia_ids=[], justificativa="mandaram"),
         ),

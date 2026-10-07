@@ -149,8 +149,11 @@ def record_flag(
         raise FlagError(f"'refs' deve ser uma lista de até {MAX_REFS} itens.")
     clean_refs = [_clean_ref(r) for r in refs]
     limit = config.CURATOR_MAX_FLAGS_PER_SESSION if max_flags is None else max_flags
-    if sum(1 for r in _read_lines(session_dir) if "resolve" not in r and "id" in r) >= limit:
-        raise FlagError(f"limite de {limit} sinalizações por sessão atingido.")
+    lines = _read_lines(session_dir)
+    resolved_ids = {str(r["resolve"]) for r in lines if "resolve" in r}
+    # A cota conta só as PENDENTES: sinalizações já decididas pelo Curator não bloqueiam as legítimas.
+    if sum(1 for r in lines if "resolve" not in r and "id" in r and r["id"] not in resolved_ids) >= limit:
+        raise FlagError(f"limite de {limit} sinalizações pendentes atingido.")
     flag_id = uuid.uuid4().hex[:12]
     _append(
         session_dir,

@@ -330,7 +330,10 @@ class CuratorToolkit:
             logger.warning("Trilha de auditoria do Curator indisponível", extra={"extra": {"erro": type(exc).__name__}})
 
     def _base_props(self) -> dict[str, Any]:
-        return {"projeto_id": self.project_id, "sessao_id": self.session_id}
+        # `tainted`: o texto do nó é produto de um modelo que aceita dados brutos (v18.5-egress-gate, design §7).
+        from src.egress.gate import role_tainted
+
+        return {"projeto_id": self.project_id, "sessao_id": self.session_id, "tainted": role_tainted("curator")}
 
     def _edge(self, src: str, rel: str, dst: str, evidencias: list[str] | None = None, **props: Any) -> None:
         self.store.create_edge(

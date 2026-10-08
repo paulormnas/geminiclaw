@@ -213,3 +213,49 @@ linhas, registros ou valores individuais.
 #### Scenario: Prompt renderizado
 - **WHEN** a instrução do Developer é renderizada
 - **THEN** ela contém a regra de imprimir agregados e não imprimir `head()`, `print(df)` ou registros
+
+### Requirement: Resistência a entrada adversarial
+O sistema SHALL tratar texto de saída de execução, documentos, páginas e respostas de modelo como não confiável: marcas
+em linha forjadas MUST NOT ter efeito fora de texto montado pelo orquestrador, e nenhum filtro MAY levar tempo
+superlinear em linhas ou entradas longas.
+
+#### Scenario: Marca forjada por aninhamento
+- **WHEN** um conteúdo contém `⟦⟦/T⟧/T⟧`
+- **THEN** nenhuma marca sobra após a limpeza e o texto envolvido não é fechado antes do fim
+
+#### Scenario: Tabela dividida por marcas forjadas
+- **GIVEN** uma saída de execução com três linhas numéricas em que a do meio está envolta em `⟦T⟧…⟦/T⟧`
+- **WHEN** ela é enviada a destino sem dados brutos
+- **THEN** o bloco continua retido como tabela
+
+#### Scenario: Linha de 100 mil caracteres
+- **WHEN** a saída tem uma linha de 100 000 caracteres de espaços, ou 1 MiB de texto
+- **THEN** o filtro termina em tempo limitado (menos de 2 s) e a linha longa é trocada por um marcador de omissão
+
+#### Scenario: Prefixo de letra
+- **WHEN** um trecho contaminado contém `v37` ou `x_12.5`
+- **THEN** o destino sem dados brutos recebe os dígitos como marcadores, salvo identificador conhecido da sessão ou estrutural (`step_02`)
+
+#### Scenario: Extremo com nome composto
+- **WHEN** o `stdout` contém `Max value (mV): 12.537` ou `temperatura máxima = 12.537`
+- **THEN** o valor vai como faixa `[10, 20)`
+
+#### Scenario: Mensagem de exceção multilinha
+- **WHEN** a mensagem de uma exceção continua em linhas seguintes com literais
+- **THEN** os literais das linhas de continuação também viram marcadores
+
+#### Scenario: Arquivo em input_context/ sem extensão de dados
+- **WHEN** `classify_path` recebe `input_context/notas.txt` sem marcação explícita de documento
+- **THEN** o arquivo é `dado_de_pesquisa`; um link simbólico para um arquivo de dados também é
+
+#### Scenario: Leitura web antes do DNS
+- **WHEN** o `web_reader` recebe uma URL de papel contaminado com segmento que contém dígitos, fora de resultado de busca
+- **THEN** a leitura é recusada e registrada antes de qualquer resolução de DNS
+
+#### Scenario: Fallback de modelo
+- **WHEN** o provedor atende a chamada com um modelo de fallback
+- **THEN** a troca é registrada em `egress_log` e é recusada se o modelo não tem a mesma localidade e aceitação de dados brutos do destino filtrado
+
+#### Scenario: Fonte de retenção maliciosa
+- **WHEN** o nome do arquivo de dados contém quebras de linha ou `<<<`
+- **THEN** o aviso de retenção não contém quebras de linha nem delimitadores

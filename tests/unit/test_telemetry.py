@@ -508,5 +508,6 @@ class TestMigracaoVersaoEfetiva:
 
     def test_init_db_declara_a_coluna(self):
         sql = self._sql("init_db.sql")
-        assert sql.count("versao_efetiva TEXT") == 2  # CREATE TABLE e ALTER ... IF NOT EXISTS
+        # token_usage (CREATE TABLE) + ALTER ... IF NOT EXISTS + egress_log (v18.5-egress-gate, mesma coluna)
+        assert sql.count("versao_efetiva TEXT") == 3
         assert "ADD COLUMN IF NOT EXISTS versao_efetiva TEXT" in sql

@@ -22,9 +22,14 @@ class LLMResponse:
     # Versão efetivamente servida, como o provedor informa (v18.5-model-catalog-locality);
     # "desconhecida" quando não informa. Nunca derivada do nome pedido.
     versao_efetiva: str = "desconhecida"
+    # v18.5-egress-gate: preenchidos pelo ``GatedProvider``. ``tainted`` = o modelo que respondeu aceita dados
+    # brutos (o texto é contaminado, ADR 019 §3.8); ``produced_by`` = papel que respondeu. ``None`` = resposta
+    # fora da camada de saída (a mensagem do histórico não leva rótulo).
+    tainted: bool = False
+    produced_by: str | None = None
 
     def to_message(self) -> dict:
-        """Converte a resposta para o formato de mensagem do histórico."""
+        """Converte a resposta para o formato de mensagem do histórico (rotulada quando passou pela camada de saída)."""
         msg = {"role": "assistant"}
         if self.text:
             msg["content"] = self.text
@@ -44,6 +49,17 @@ class LLMResponse:
                 }
                 for tc in self.tool_calls
             ]
+        if self.produced_by is not None:
+            from src.egress.fragments import FRAGMENTS_KEY, TOOL_CALLS_TAINTED_KEY, ContentOrigin, PromptFragment
+
+            if self.text:
+                msg[FRAGMENTS_KEY] = [
+                    PromptFragment(
+                        self.text, ContentOrigin.INSTRUCAO, tainted=self.tainted, produced_by=self.produced_by or None
+                    )
+                ]
+            if self.tool_calls:
+                msg[TOOL_CALLS_TAINTED_KEY] = self.tainted
         return msg
 
 class LLMProvider(ABC):

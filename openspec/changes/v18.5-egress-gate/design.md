@@ -353,3 +353,60 @@ codificação)." Não altera a spec `v16-research-assistant-prompts`; fica regis
 - Trocar números de código contaminado por marcadores reduz a utilidade de revisões por modelo
   sem dados brutos. É o custo aceito do perfil misto.
 - A cópia local dos envios ocupa disco no Pi 5 (comprimida; limpa pelo workflow `clean`).
+
+## 15. Implementação: marcas em linha e desvios deliberados (PR #113)
+
+### 15.1 Marcas em linha (desvio do §1)
+
+Muito texto chega ao envio por concatenação de strings (instrução do papel, prompt de subtarefa, resumo de
+dependência, memória). Para que a origem sobreviva a isso, além de `_fragments` existem marcas em linha, convertidas
+em trechos pelo `EgressGate` e removidas antes do envio:
+
+| Marca | Origem resultante |
+|---|---|
+| `⟦T⟧…⟦/T⟧` | mesmo trecho, `tainted=True` |
+| `⟦D:fonte⟧…⟦/D⟧` | `dado_de_pesquisa` com `source=fonte` |
+| `⟦S:fonte⟧…⟦/S⟧` | `saida_execucao` |
+| `⟦A:artefatos⟧…⟦/A⟧` | `esquema_agregado` (nomes de artefatos, regra §3.5) |
+
+Regras de segurança das marcas:
+
+- **Só valem em texto montado pelo orquestrador** (trecho `instrucao` sem produtor de modelo, e o `system`). Em
+  `saida_execucao`, `documento`, `grafo`, `dado_de_pesquisa`, resultado de ferramenta e texto produzido por modelo as
+  marcas são apenas removidas, sem efeito (uma marca forjada não divide uma tabela nem reclassifica o trecho).
+- **O construtor limpa o conteúdo** (`strip_marks` até o ponto fixo) antes de envolvê-lo; `⟦⟦/T⟧/T⟧` não forma marca.
+- Marca sem par falha para o lado seguro (resto contaminado ou com a origem da marca).
+
+### 15.2 Demais desvios do §§1-12
+
+2. **Marca persistida:** no checkpoint, campo irmão `resultado_marca` (não objeto aninhado); `SubtaskOutput.tainted`; tag
+   `egress:tainted` na memória (escrita sem declaração de proveniência = contaminada); propriedade opcional `tainted` nos
+   nós de agentes do grafo (sem DDL). O payload da sessão do agente base (`agents/base/agent.py`) só devolve o que carregou
+   e não recebe texto de modelo; as interações `ask_researcher` levam `marca_pergunta` e `marca_resposta`.
+3. **§9:** o leitor do tracker é `egress_reader` (o texto original cita `connection_retry_reader`, lido como erro de digitação).
+4. **Schema do grafo:** `tainted` opcional em `AGENT_PROVENANCE_PROPERTIES`.
+5. **Visão:** `OCR_PROVIDER=gemini` passa a recusar (e registrar) imagens de `input_context/` até a marcação de arquivo
+   compartilhável da ingestão.
+6. **7.6:** allowlist por consulta = hosts vistos na busca (`RESEARCHER_CONSULT_READ_ONLY_SEARCHED_HOSTS=true`);
+   a lista estática segue vazia.
+7. Intervenções extras: `saida_retida_limite_egresso` e `modelo_de_fallback`.
+8. **Achados fora do escopo:** `DocumentProcessorSkill` é abstrata (a recusa de `ingest` está em `execute_async`).
+9. **Falha fechada de `input_context/`** até a ingestão nova; as duas mudanças saem juntas.
+
+### 15.3 Endurecimento após a revisão de segurança
+
+- Entrada do filtro limitada antes de qualquer regex (linha de 2 000 e total de 400 000 caracteres; nomes de 64) contra ReDoS.
+- Extremos reconhecidos por token em qualquer posição do nome; mensagem de exceção multilinha mascarada por inteiro.
+- Números colados a prefixo de letra (`v37`, `x_12.5`) são trocados, salvo identificadores conhecidos ou estruturais (`step_02`).
+- `classify_path`: dentro de `input_context/` e `input_snapshot/` o padrão é negar (tudo é dado de pesquisa), salvo documento
+  explicitamente marcado; symlinks são resolvidos.
+- `check_url` antes da resolução de DNS; segmento de caminho com dígito conta como dado embutido.
+- O fallback do Google só é aceito com mesma localidade e mesma aceitação de dados brutos; a troca de modelo é registrada.
+- O juiz do benchmark passa por `GatedProvider`; a varredura 7.2 cobre `scripts/`.
+
+### 15.4 Riscos de manutenção aceitos
+
+- **B3:** a lista de nomes de estatística (`_EXTREME_TOKENS`, `_AGGREGATE_TOKENS`) e os formatos tabulares reconhecidos são
+  heurísticos e crescem por demanda; a cobertura é documentada pelo corpus de testes.
+- **B5:** as marcas em linha acoplam produtores de texto (orquestrador) ao gate; todo novo ponto que monte prompt por
+  concatenação com texto de agente deve usar `taint_if`/`mark_*`, e a varredura de testes só cobre chamadas a provedores.

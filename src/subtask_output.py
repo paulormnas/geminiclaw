@@ -30,6 +30,9 @@ class SubtaskOutput:
     confidence: float = 1.0
     validation_results: List[Dict[str, Any]] = field(default_factory=list)
     artifact_aliases: Dict[str, str] = field(default_factory=dict)  # esperado -> caminho real
+    # v18.5-egress-gate: o texto veio de modelo que aceita dados brutos (contaminado, ADR 019 §3.8). ``None`` = sem
+    # marca (resultado anterior à V18.5): vale a regra de texto legado.
+    tainted: Optional[bool] = None
 
     def to_json(self) -> str:
         """Serializa o objeto para JSON."""
@@ -46,7 +49,9 @@ class SubtaskOutput:
         lines = [f"### Resultado de `{self.task_name}` (Agente: {self.agent_id})"]
         
         if self.text_summary:
-            lines.append(f"**Resumo:**\n{self.text_summary}")
+            from src.egress.persisted import tag_text
+
+            lines.append(f"**Resumo:**\n{tag_text(self.text_summary, self.tainted)}")
         
         if self.sources:
             lines.append("**Fontes Principais:**")
@@ -57,23 +62,26 @@ class SubtaskOutput:
         
         if self.artifacts:
             lines.append("**Artefatos Gerados:**")
-            for art in self.artifacts:
-                name = art.get("name", "arquivo")
-                path = art.get("path", "")
-                lines.append(f"- `{name}` em `{path}`")
+            from src.egress.fragments import mark_artifact_names
+
+            names = [f"- `{art.get('name', 'arquivo')}` em `{art.get('path', '')}`" for art in self.artifacts]
+            lines.append(mark_artifact_names("\n".join(names)))
 
         if self.artifact_aliases:
             lines.append("**Arquivos produzidos (esperado → real):**")
-            for expected, real in self.artifact_aliases.items():
-                lines.append(f"- {expected} → {real}")
+            from src.egress.fragments import mark_artifact_names
+
+            aliases = [f"- {expected} → {real}" for expected, real in self.artifact_aliases.items()]
+            lines.append(mark_artifact_names("\n".join(aliases)))
 
         return "\n".join(lines)
 
     @classmethod
     def from_agent_result(cls, task_name: str, agent_id: str, result: Any, review_data: Optional[Dict[str, Any]] = None) -> "SubtaskOutput":
         """Cria um SubtaskOutput a partir do resultado de um agente e dados de revisão."""
+        from src.egress.gate import role_tainted
         from src.utils.json_parser import extract_json
-        
+
         text = result.response.get("text", "")
         status = result.status
         
@@ -109,4 +117,5 @@ class SubtaskOutput:
             confidence=confidence,
             validation_results=validation_results,
             artifact_aliases=dict((review_data or {}).get("resolved_artifacts") or {}),
+            tainted=role_tainted(agent_id),
         )

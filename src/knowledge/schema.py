@@ -84,6 +84,9 @@ COMMON_NODE_PROPERTIES: dict[str, PropertySchema] = {
 AGENT_PROVENANCE_PROPERTIES: dict[str, PropertySchema] = {
     "justificativa_criacao": PropertySchema(required=True),
     "nos_consultados": PropertySchema(required=True),
+    # v18.5-egress-gate (design §7): texto escrito por agente cujo modelo aceita dados brutos (contaminado).
+    # Opcional: nós anteriores à V18.5 não a têm e seguem a regra de texto legado. Sem DDL (propriedade do AGE).
+    "tainted": PropertySchema(required=False),
 }
 
 # Campos de proveniência que update_node nunca pode alterar (Requirement

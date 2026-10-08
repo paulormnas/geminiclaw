@@ -15,6 +15,16 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from src.artifact_match import ArtifactResolution, resolve_artifacts
 from src.config import APP_NAME, ARTIFACT_MATCH_MODE
+from src.egress.classification import artifact_origin
+from src.egress.fragments import (
+    ARTIFACT_NAMES_SOURCE,
+    ContentOrigin,
+    PromptFragment,
+    labeled,
+    plain_text,
+    taint_if,
+)
+from src.egress.gate import role_tainted
 from src.knowledge.normalization import normalize_metric_name
 from src.llm.base import LLMProvider
 from src.llm.metering import record_llm_call
@@ -224,6 +234,62 @@ _EVIDENCE_HEAD_CHARS = 700
 _EVIDENCE_MAX_FILES = 12
 
 
+def build_artifact_evidence_fragments(
+    output_dir: Optional[Path | str],
+    expected_artifacts: List[str],
+    resolutions: Optional[List[ArtifactResolution]] = None,
+) -> List[PromptFragment]:
+    """Resume os artefatos esperados que existem em disco como trechos rotulados (v18.5-egress-gate).
+
+    Caminho relativo, tamanho e começo do conteúdo. O começo do conteúdo de um arquivo de dados (tabular, JSON, imagem)
+    é ``dado_de_pesquisa`` (retido para revisor sem dados brutos); ``metrics.json``, texto e logs são
+    ``saida_execucao`` (filtrados); linhas só com nome e tamanho (binários) são nomes de artefatos.
+    """
+    ins = ContentOrigin.INSTRUCAO
+    if not output_dir:
+        return [PromptFragment("(sem diretório de sessão)", ins)]
+    root = Path(output_dir)
+    if not root.exists():
+        return [PromptFragment("(diretório de sessão inexistente)", ins)]
+    tier_by_file: Dict[Path, str] = {}
+    if resolutions is not None:
+        for res in resolutions:
+            for matched in res.matched:
+                tier_by_file[matched] = res.tier
+    wanted = {Path(e).name for e in expected_artifacts}
+    fragments: List[PromptFragment] = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.name in ("scientific_helpers.py", "script.py") or path.suffix == ".pyc":
+            continue
+        rel = path.relative_to(root)
+        if resolutions is not None:
+            if rel not in tier_by_file:
+                continue
+        elif wanted and path.name not in wanted:
+            continue
+        if len(fragments) >= _EVIDENCE_MAX_FILES:
+            break
+        size = path.stat().st_size
+        tier = tier_by_file.get(rel)
+        note = f" [resolvido por {tier}]" if tier in ("normalized", "extension") else ""
+        if path.suffix.lower() in _TEXT_EVIDENCE_SUFFIXES and size < 2_000_000:
+            head = path.read_text(encoding="utf-8", errors="replace")[:_EVIDENCE_HEAD_CHARS].replace("\n", " ")
+            fragments.append(
+                PromptFragment(
+                    f"- {rel} ({size} bytes){note}: {head}", artifact_origin(path), source=f"artefato:{rel.as_posix()}"
+                )
+            )
+        else:
+            fragments.append(
+                PromptFragment(
+                    f"- {rel} ({size} bytes, binário){note}",
+                    ContentOrigin.ESQUEMA_AGREGADO,
+                    source=ARTIFACT_NAMES_SOURCE,
+                )
+            )
+    return fragments or [PromptFragment("(nenhum dos artefatos esperados encontrado)", ins)]
+
+
 def build_artifact_evidence(
     output_dir: Optional[Path | str],
     expected_artifacts: List[str],
@@ -236,38 +302,7 @@ def build_artifact_evidence(
     Com ``resolutions`` (comparador tolerante), mostra os arquivos resolvidos mesmo quando o nome
     difere do esperado, indicando a camada de resolução.
     """
-    if not output_dir:
-        return "(sem diretório de sessão)"
-    root = Path(output_dir)
-    if not root.exists():
-        return "(diretório de sessão inexistente)"
-    tier_by_file: Dict[Path, str] = {}
-    if resolutions is not None:
-        for res in resolutions:
-            for matched in res.matched:
-                tier_by_file[matched] = res.tier
-    wanted = {Path(e).name for e in expected_artifacts}
-    lines: List[str] = []
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.name in ("scientific_helpers.py", "script.py") or path.suffix == ".pyc":
-            continue
-        rel = path.relative_to(root)
-        if resolutions is not None:
-            if rel not in tier_by_file:
-                continue
-        elif wanted and path.name not in wanted:
-            continue
-        if len(lines) >= _EVIDENCE_MAX_FILES:
-            break
-        size = path.stat().st_size
-        tier = tier_by_file.get(rel)
-        note = f" [resolvido por {tier}]" if tier in ("normalized", "extension") else ""
-        if path.suffix.lower() in _TEXT_EVIDENCE_SUFFIXES and size < 2_000_000:
-            head = path.read_text(encoding="utf-8", errors="replace")[:_EVIDENCE_HEAD_CHARS].replace("\n", " ")
-            lines.append(f"- {rel} ({size} bytes){note}: {head}")
-        else:
-            lines.append(f"- {rel} ({size} bytes, binário){note}")
-    return "\n".join(lines) or "(nenhum dos artefatos esperados encontrado)"
+    return plain_text(build_artifact_evidence_fragments(output_dir, expected_artifacts, resolutions))
 
 
 @dataclass
@@ -408,12 +443,19 @@ class ValidatorAgent:
             '{\n  "status": "approved" | "revision_needed",\n  "reason": "explicação curta",\n  "issues": ["problema 1", ...]\n}'
         )
 
-        user_content = f"SOLICITAÇÃO ORIGINAL:\n{prompt}\n\nPLANO PROPOSTO:\n{plan_str}"
+        # O plano é texto do Researcher: contaminado se o modelo dele aceita dados brutos (ADR 019 §3.8).
+        user_message = labeled(
+            "user",
+            PromptFragment(
+                f"SOLICITAÇÃO ORIGINAL:\n{prompt}\n\nPLANO PROPOSTO:", ContentOrigin.INSTRUCAO, source="plano"
+            ),
+            PromptFragment(plan_str, ContentOrigin.INSTRUCAO, tainted=role_tainted("researcher"), source="plano"),
+        )
 
         try:
             _t0 = time.monotonic()
             response = await self.provider.generate(
-                messages=[{"role": "user", "content": user_content}],
+                messages=[user_message],
                 system=system_prompt,
                 temperature=0.1,
                 max_tokens=1000,
@@ -590,18 +632,30 @@ class ValidatorAgent:
                 "Responda estritamente em JSON com o formato:\n"
                 '{\n  "status": "pass" | "fail",\n  "feedback": "explicação do parecer",\n  "issues": []\n}'
             )
-            evidence = build_artifact_evidence(output_dir, expected_artifacts, resolutions if resolutions else None)
-            user_content = (
-                f"SUBTAREFA: {task_name}\n"
-                f"CRITÉRIOS DE ACEITE:\n{criteria_str}\n\n"
-                f"EVIDÊNCIA EM DISCO:\n{evidence}\n\n"
-                f"RESPOSTA DO AGENTE:\n{response_text[:3000]}"
+            evidence = build_artifact_evidence_fragments(
+                output_dir, expected_artifacts, resolutions if resolutions else None
+            )
+            agent_role = getattr(task, "agent_id", None) or (task.get("agent_id") if isinstance(task, dict) else None)
+            user_message = labeled(
+                "user",
+                PromptFragment(
+                    f"SUBTAREFA: {task_name}\nCRITÉRIOS DE ACEITE:\n{criteria_str}\n\nEVIDÊNCIA EM DISCO:",
+                    ContentOrigin.INSTRUCAO,
+                    tainted=role_tainted("researcher"),
+                    source="criterios",
+                ),
+                *evidence,
+                PromptFragment(
+                    taint_if(f"\nRESPOSTA DO AGENTE:\n{response_text[:3000]}", role_tainted(agent_role)),
+                    ContentOrigin.INSTRUCAO,
+                    source="resposta_do_agente",
+                ),
             )
 
             try:
                 _t0 = time.monotonic()
                 response = await self.provider.generate(
-                    messages=[{"role": "user", "content": user_content}],
+                    messages=[user_message],
                     system=system_prompt,
                     temperature=0.1,
                     max_tokens=800,

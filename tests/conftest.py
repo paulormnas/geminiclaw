@@ -20,6 +20,8 @@ os.environ["SEARCH_CACHE_TTL_SECONDS"] = "3600"
 # v17-curator-agent: o Curator (LLM) fica desligado por padrão nos testes que atravessam o orquestrador; os testes do
 # Curator o ligam explicitamente e usam um provedor simulado (nenhum teste chama provedor ou rede).
 os.environ["CURATOR_ENABLED"] = "false"
+# v18.5-egress-gate: k das estatísticas é decisão do pesquisador; os testes o fixam (a ausência é testada à parte).
+os.environ["LOCALITY_MIN_GROUP_SIZE"] = "10"
 
 # Sinaliza para pular testes de integração que consomem cota de API durante a suíte completa
 os.environ["CI_SKIP_INTEGRATION"] = "1"
@@ -67,6 +69,7 @@ def mock_db_connection(request):
     if (
         "test_db.py" in path
         or "test_db_integration.py" in path
+        or "test_egress_log_integration.py" in path
         or f"{os.sep}tests{os.sep}integration{os.sep}knowledge{os.sep}" in path
     ):
         yield
@@ -144,6 +147,17 @@ def mock_db_connection(request):
             found.sort(key=lambda r: str(r["created_at"]), reverse=True)
             mock_cursor.fetchone.return_value = dict(found[0]) if found else None
             mock_cursor.fetchall.return_value = [dict(r) for r in found[: params[1] if len(params) > 1 else None]]
+            return mock_cursor
+        # v18.5-egress-gate — registro de egresso (INSERT e soma de bytes novos por sessão).
+        if "INSERT INTO EGRESS_LOG" in query_norm:
+            db_state[f"egress_{params[0]}"] = {
+                "id": params[0], "session_id": params[1], "canal": params[3],
+                "bytes_saida_execucao_novos": params[12], "recusado": params[15],
+            }
+            return mock_cursor
+        if "FROM EGRESS_LOG" in query_norm:
+            rows = [r for k, r in db_state.items() if k.startswith("egress_") and r["session_id"] == params[0]]
+            mock_cursor.fetchone.return_value = {"total": sum(r["bytes_saida_execucao_novos"] for r in rows)}
             return mock_cursor
         # INSERT INTO agent_sessions (...) VALUES (%s, %s, %s, %s, %s, %s)
         if "INSERT INTO AGENT_SESSIONS" in query_norm:
@@ -281,6 +295,25 @@ def block_paid_llm_network(request, monkeypatch):
         return real_getaddrinfo(host, *args, **kwargs)
 
     monkeypatch.setattr(socket, "getaddrinfo", guarded)
+
+
+@pytest.fixture(autouse=True)
+def reset_egress_state(tmp_path_factory, monkeypatch):
+    """Zera o portão ``sem_sessao`` e o vínculo de portão entre testes (v18.5-egress-gate).
+
+    A cópia local do portão ``sem_sessao`` vai para um diretório temporário (nunca para ``outputs/`` do repositório).
+    """
+    from src import config as app_config
+    from src.egress import gate as egress_gate
+
+    # Testes que recarregam `src.config` com o ambiente limpo não podem deixar o k indefinido para os demais.
+    monkeypatch.setattr(app_config, "LOCALITY_MIN_GROUP_SIZE", 10)
+    egress_gate.fallback_output_dir = tmp_path_factory.mktemp("egress_sem_sessao")
+    egress_gate.reset_fallback_gate()
+    egress_gate.bind_gate_for_tests(None)
+    yield
+    egress_gate.reset_fallback_gate()
+    egress_gate.bind_gate_for_tests(None)
 
 
 _ROUTING_ENV_PREFIXES = ("RESEARCHER", "DEVELOPER", "REVIEWER", "SUMMARIZER", "VALIDATOR", "BASE", "PLANNER")

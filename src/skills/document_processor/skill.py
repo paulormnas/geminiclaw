@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Any, Dict
 
 from src.agent_runtime.context import get_agent_context_optional
+from src.egress.classification import classify_path, ensure_not_research_data
+from src.egress.fragments import ContentOrigin
 from src.logger import get_logger
 from src.skills.base import BaseSkill
 from src.skills.document_processor.enrichment import ProjectMeta
@@ -66,6 +68,19 @@ def _resolve_ingest_path(file_path: str) -> str:
     return str(resolved)
 
 
+def _result_content(result: Dict[str, Any]) -> str:
+    """Trecho de documento como dado não confiável; trecho de arquivo de dados leva a marca de dado de pesquisa.
+
+    A origem vem da classificação da fonte (design §6): o conteúdo de ``dado_de_pesquisa`` é retido para destinos
+    sem dados brutos.
+    """
+    source = str(result.get("source_path") or result.get("filename") or "")
+    if source and classify_path(source) is ContentOrigin.DADO_DE_PESQUISA:
+        # Ferramentas do host não levam conteúdo de dado de pesquisa ao prompt (marcas em linha não valem aqui).
+        return f"[conteúdo de arquivo de dados omitido: {source}]"
+    return _untrusted("trecho_de_documento", result.get("content"), _CONTENT_LIMIT)
+
+
 def _all_projects(action: str) -> None:
     """Auditoria: ``todos_os_projetos`` cruza a fronteira de projeto e é registrado a cada uso."""
     ctx = get_agent_context_optional()
@@ -106,6 +121,8 @@ class DocumentProcessorSkill(BaseSkill):
     """Skill de processamento de documentos do usuário."""
 
     name = "document_processor"
+
+    egress_origin = ContentOrigin.DOCUMENTO
     description = (
         "Processa documentos fornecidos pelo usuário (PDF, CSV, XLSX, TXT, MD, DOCX, PPTX) "
         "e os indexa para consulta durante pesquisas. "
@@ -168,6 +185,8 @@ class DocumentProcessorSkill(BaseSkill):
             
             try:
                 resolved = Path(_resolve_ingest_path(file_path))
+                # v18.5-egress-gate: dados de pesquisa entram só pela ingestão de input_context/ (ADR 019 §3.6).
+                ensure_not_research_data(resolved)
                 _, projeto = _session_project()
                 outcome = await index_file(
                     self.indexer, self.extractor_registry, resolved, root=resolved.parent,
@@ -200,7 +219,7 @@ class DocumentProcessorSkill(BaseSkill):
                 safe = [
                     {
                         **r,
-                        "content": _untrusted("trecho_de_documento", r.get("content"), _CONTENT_LIMIT),
+                        "content": _result_content(r),
                         "titulo": _untrusted("titulo_de_documento", r.get("titulo"), _TITLE_LIMIT),
                     }
                     for r in results

@@ -109,6 +109,21 @@ def allocation_banner_lines(routing: "SessionRouting") -> list[str]:
     return lines
 
 
+def mixed_profile_warning(routing: "SessionRouting") -> str | None:
+    """Aviso do banner quando o perfil mistura papéis com e sem ``aceita_dados_brutos`` (ADR 019 §3.8).
+
+    Nesse perfil a filtragem entre papéis é frequente: as saídas dos papéis com dados brutos são filtradas antes de ir
+    aos papéis sem dados brutos. Devolve ``None`` se o perfil é homogêneo.
+    """
+    raw: list[str] = []
+    filtered: list[str] = []
+    for role in routing.papeis:
+        (raw if allocation_for(routing, role).aceita_dados_brutos else filtered).append(role)
+    if not raw or not filtered:
+        return None
+    return f"⚠ Perfil misto: saídas de {', '.join(raw)} serão filtradas antes de ir a {', '.join(filtered)}"
+
+
 def roles_for_model(routing: "SessionRouting", provider_name: str, model_name: str) -> tuple[str, ...]:
     """Papéis do mapa cujo modelo resolvido é ``provider_name``/``model_name`` (provedor sem sublinhado/caixa)."""
     wanted = provider_name.replace("_", "").lower()
@@ -201,6 +216,7 @@ __all__ = [
     "allocation_for",
     "build_allocation_profile",
     "current_allocation",
+    "mixed_profile_warning",
     "new_version_tracker",
     "record_call_version",
     "refresh_ollama_versions",

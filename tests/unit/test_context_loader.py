@@ -231,12 +231,32 @@ class TestImageProcessing:
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = mock_response
 
-        with patch("google.genai.Client", return_value=mock_client):
+        # v18.5-egress-gate: a visão passa por `authorize_vision`; aqui o arquivo é liberado pelo portão.
+        with patch("google.genai.Client", return_value=mock_client), \
+             patch("src.egress.gate.EgressGate.authorize_vision", return_value=None) as authorize:
             bundle = ContextLoader(context_dir).load()
 
+        authorize.assert_called_once()
         assert len(bundle.images) == 1
         assert bundle.images[0].provider == "gemini"
         assert "estrutura celular" in bundle.images[0].description
+
+    def test_gemini_vision_recusada_para_imagem_de_pesquisa_nao_compartilhavel(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Cenário "Imagem de pesquisa a terceiro": a recusa vira erro de extração e nada é enviado."""
+        monkeypatch.setenv("OCR_PROVIDER", "gemini")
+        context_dir = tmp_path / "input_context"
+        context_dir.mkdir()
+        (context_dir / "microscopia.jpg").write_bytes(b"fake-jpg-bytes")
+        mock_client = MagicMock()
+
+        with patch("google.genai.Client", return_value=mock_client):
+            bundle = ContextLoader(context_dir).load()
+
+        mock_client.models.generate_content.assert_not_called()
+        assert bundle.images[0].description == ""
+        assert "recusado" in bundle.images[0].extraction_errors[0]
 
     def test_ocr_local_indisponivel_registra_erro_sem_crash(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("OCR_PROVIDER", "local")

@@ -3,17 +3,32 @@ import json
 import pathlib
 import re
 import time
-from typing import List, Optional
+from dataclasses import dataclass
+from typing import Any, List, Optional
 
 from src import config
 from src.config import get_env
 from src.logger import get_logger
+from src.provenance.errors import ProvenanceError
+from src.provenance.hashing import HashCache
+from src.provenance.ledger import get_ledger
+from src.provenance.records import (
+    collect_inputs,
+    collect_outputs,
+    inicio_body,
+    read_metrics,
+    snapshot_dir_state,
+    status_of,
+    termino_body,
+)
 from src.reserved_files import is_reserved_name
 from src.skills.base import BaseSkill, SkillResult
 from src.skills.code.manifest import WorkspaceManifest
 from src.skills.code.sandbox import _SAFE_NAME_RE, NETWORK_UNDECLARED_MESSAGE, PythonSandbox, SandboxResult
 
 logger = get_logger(__name__)
+
+PROVENANCE_BEGIN_ERROR = "registro de início indisponível; execução não iniciada"
 
 # Roadmap V15.2 / Spec G2 — bibliotecas cuja presença no código indica um script
 # científico/de dados, para o qual scientific_helpers.py é injetado automaticamente.
@@ -27,9 +42,48 @@ def _uses_scientific_libraries(code: str) -> bool:
     return any(marker in code for marker in _SCIENTIFIC_LIBRARY_MARKERS)
 
 
+_hash_cache: HashCache | None = None
+
+
+def _provenance_hash_cache() -> HashCache:
+    """Cache de hash de arquivos grandes do processo (``PROVENANCE_HASH_CACHE_*``)."""
+    global _hash_cache
+    if _hash_cache is None or str(_hash_cache.path) != str(config.PROVENANCE_HASH_CACHE_PATH):
+        _hash_cache = HashCache(config.PROVENANCE_HASH_CACHE_PATH, config.PROVENANCE_HASH_CACHE_MIN_BYTES)
+    return _hash_cache
+
+
 def _load_scientific_helpers_source() -> str:
     """Lê o código-fonte de scientific_helpers.py para injeção no sandbox."""
     return _SCIENTIFIC_HELPERS_PATH.read_text(encoding="utf-8")
+
+@dataclass
+class _Provenance:
+    """Estado do registro de proveniência de uma chamada da skill."""
+
+    ledger: Any
+    began: Any
+    inicio: dict
+    project_id: Optional[str]
+    subtask_id: Optional[str]
+    session_id: str
+    task_name: str
+    output_root: pathlib.Path
+    finished: bool = False
+    record: Any = None
+    pending: bool = False
+
+    @property
+    def exec_id(self) -> str:
+        return self.began.exec_id
+
+    def metadata(self) -> dict:
+        """Campos de proveniência do ``SkillResult`` (``exec_id`` alimenta as referências numéricas)."""
+        meta: dict = {"exec_id": self.exec_id, "provenance_pending": self.pending}
+        if self.record is not None:
+            meta["record_hash"] = self.record.record_hash
+        return meta
+
 
 class CodeSkill(BaseSkill):
     """Skill para execução de código Python em sandbox seguro."""
@@ -243,6 +297,120 @@ class CodeSkill(BaseSkill):
                 return f"Código contém padrão proibido: {pattern}"
         return None
 
+    async def _provenance_begin(
+        self,
+        code: str,
+        extra_files: Optional[dict],
+        packages: List[str],
+        assets: Optional[List[dict]],
+        session_id: str,
+        task_name: str,
+        session_dir: pathlib.Path,
+    ) -> "_Provenance | SkillResult":
+        """Grava o ``inicio`` (fail-fast): sem o registro a execução não começa (design §4)."""
+        from src.agent_runtime.context import get_agent_context_optional
+
+        ctx = get_agent_context_optional()
+        project_id = ctx.project_id if ctx is not None else None
+        subtask_id = ctx.subtask_id if ctx is not None else None
+        output_root = session_dir.parent
+        ledger = get_ledger()
+        try:
+            inputs = await asyncio.to_thread(
+                collect_inputs,
+                output_root=output_root,
+                session_id=session_id,
+                task_name=task_name,
+                prior_dirs=self._readable_prior_dirs(),
+                cache=_provenance_hash_cache(),
+            )
+            body = inicio_body(
+                code=code,
+                extra_files=extra_files,
+                inputs=inputs,
+                packages=packages,
+                assets=list(assets or []),
+                image=str(getattr(self.sandbox, "image", "") or ""),
+            )
+            began = await asyncio.to_thread(
+                ledger.begin,
+                project_id=project_id,
+                session_id=session_id,
+                subtask_id=subtask_id,
+                task_name=task_name,
+                body=body,
+                output_dir=output_root,
+            )
+        except Exception as exc:  # noqa: BLE001 — banco fora do ar, tabela ausente ou corpo inválido: nada executa
+            logger.error("Registro de início da execução indisponível", extra={"error": str(exc)[:300]})
+            return SkillResult(
+                success=False,
+                output="",
+                error=f"{PROVENANCE_BEGIN_ERROR}: {exc}",
+                metadata={"fase_falha": "infra", "provenance_unavailable": True},
+            )
+        return _Provenance(ledger, began, body, project_id, subtask_id, session_id, task_name, output_root)
+
+    async def _provenance_finish(
+        self,
+        provenance: "_Provenance",
+        result: Optional[SandboxResult],
+        error: Optional[BaseException],
+        task_dir_before: dict,
+        extra_files: Optional[dict],
+    ) -> Optional[SkillResult]:
+        """Grava o ``termino``. Devolve um ``SkillResult`` de falha só quando nem o registro nem o arquivo local
+        aceitaram o término (um resultado sem registro não pode virar ``Resultado`` no grafo)."""
+        provenance.finished = True
+        try:
+            outputs = await asyncio.to_thread(
+                collect_outputs,
+                output_root=provenance.output_root,
+                session_id=provenance.session_id,
+                task_name=provenance.task_name,
+                before=task_dir_before,
+                ignore_names={"script.py", *(extra_files or {})},
+                cache=_provenance_hash_cache(),
+            )
+            metrics = await asyncio.to_thread(
+                read_metrics, provenance.output_root / provenance.session_id / provenance.task_name
+            )
+            body = termino_body(
+                inicio=provenance.inicio,
+                inicio_hash=provenance.began.record.record_hash,
+                status=status_of(result, error),
+                result=result,
+                outputs=outputs,
+                metrics=metrics,
+                error=error,
+            )
+            finished = await asyncio.to_thread(
+                provenance.ledger.finish,
+                exec_id=provenance.began.exec_id,
+                chain_id=provenance.began.chain_id,
+                session_id=provenance.session_id,
+                subtask_id=provenance.subtask_id,
+                task_name=provenance.task_name,
+                body=body,
+                output_dir=provenance.output_root,
+            )
+        except ProvenanceError as exc:
+            logger.error("Término da execução não registrado", extra={"error": str(exc)[:300]})
+            return SkillResult(
+                success=False, output="", error=str(exc), metadata=provenance.metadata()
+            )
+        except Exception as exc:  # noqa: BLE001 — falha ao montar o término: sem registro confiável, a execução falha
+            logger.error("Término da execução não montado", extra={"error": str(exc)[:300]})
+            return SkillResult(
+                success=False,
+                output="",
+                error=f"término não registrado nem guardado localmente: {exc}",
+                metadata=provenance.metadata(),
+            )
+        provenance.record = finished.record
+        provenance.pending = finished.pending
+        return None
+
     async def run(
         self, 
         code: str, 
@@ -323,21 +491,31 @@ class CodeSkill(BaseSkill):
         # Artefatos antes da execução (para calcular novos artefatos depois)
         artifacts_before = set(manifest.get_artifacts_available())
 
+        # Roadmap V15.2 / Spec G2 — injeta scientific_helpers.py quando o código usa bibliotecas
+        # científicas/de dados, permitindo save_experiment_artifacts().
+        extra_files = None
+        if _uses_scientific_libraries(code):
+            extra_files = {"scientific_helpers.py": _load_scientific_helpers_source()}
+
+        # v18.5-execution-provenance — registro de início ANTES de qualquer container (fail-fast, design §4).
+        provenance = await self._provenance_begin(
+            code, extra_files, requested_packages, assets, session_id, task_name, session_dir
+        )
+        if isinstance(provenance, SkillResult):
+            return provenance
+        task_dir_before = snapshot_dir_state(session_dir / task_name)
+
         # 3. Executar no sandbox
+        result: Optional[SandboxResult] = None
         try:
             # Nota: PythonSandbox.run é síncrono; a chamada abaixo o executa em thread.
-            # Roadmap V15.2 / Spec G2 — injeta scientific_helpers.py quando o código
-            # usa bibliotecas científicas/de dados, permitindo save_experiment_artifacts().
-            extra_files = None
-            if _uses_scientific_libraries(code):
-                extra_files = {"scientific_helpers.py": _load_scientific_helpers_source()}
 
             # O sandbox usa o SDK síncrono do daemon de containers e pode levar minutos
             # (instalação de pacotes + execução): rodar direto na corrotina congelaria o
             # orquestrador e os demais agentes do processo. Vai para uma thread para manter
             # o event loop livre.
             _started = time.monotonic()
-            result: SandboxResult = await asyncio.to_thread(
+            result = await asyncio.to_thread(
                 self.sandbox.run,
                 code=code,
                 session_id=session_id,
@@ -349,6 +527,11 @@ class CodeSkill(BaseSkill):
                 needs_network=bool(needs_network),
                 prior_dirs=self._readable_prior_dirs(),
             )
+
+            # v18.5-execution-provenance — término registrado logo após o sandbox, antes de qualquer outro passo.
+            finish_error = await self._provenance_finish(provenance, result, None, task_dir_before, extra_files)
+            if finish_error is not None:
+                return finish_error
 
             success = not result.timed_out and result.exit_code == 0
             run_info = self._run_info(result)
@@ -392,6 +575,7 @@ class CodeSkill(BaseSkill):
                     artifacts=new_artifacts,
                     summary=summary,
                     code_file=code_filename,
+                    exec_id=provenance.exec_id,
                     params_path=params_path,
                     metrics_path=metrics_path,
                     seed_used=seed_used,
@@ -442,6 +626,7 @@ class CodeSkill(BaseSkill):
                     code_file=code_filename,
                     task_name=task_name,
                     run_info=run_info,
+                    exec_id=provenance.exec_id,
                 )
 
             if result.install_failed:
@@ -455,6 +640,7 @@ class CodeSkill(BaseSkill):
                         "timed_out": result.timed_out,
                         **self._phase_metadata(result),
                         **egress_meta,
+                        **provenance.metadata(),
                     },
                 )
 
@@ -468,6 +654,7 @@ class CodeSkill(BaseSkill):
                         "timed_out": True,
                         **self._phase_metadata(result),
                         **egress_meta,
+                        **provenance.metadata(),
                     }
                 )
 
@@ -489,11 +676,17 @@ class CodeSkill(BaseSkill):
                     "packages_installed": result.packages_installed,
                     **self._phase_metadata(result),
                     **egress_meta,
+                    **provenance.metadata(),
                 }
             )
 
         except Exception as e:
             logger.error(f"Erro na CodeSkill: {str(e)}")
+            # v18.5-execution-provenance — o término é gravado em qualquer desfecho (design §4).
+            if not provenance.finished:
+                finish_error = await self._provenance_finish(provenance, result, e, task_dir_before, extra_files)
+                if finish_error is not None:
+                    return finish_error
             # Registrar falha no manifest mesmo em caso de exceção inesperada
             try:
                 manifest.record_step(
@@ -507,13 +700,15 @@ class CodeSkill(BaseSkill):
                         "error_location": "",
                     },
                     code_file=code_filename,
+                    exec_id=provenance.exec_id,
                 )
             except Exception:
                 pass
             return SkillResult(
                 success=False,
                 output="",
-                error=f"Erro ao executar código: {str(e)}"
+                error=f"Erro ao executar código: {str(e)}",
+                metadata=provenance.metadata(),
             )
 
 

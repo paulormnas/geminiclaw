@@ -61,6 +61,8 @@ class AgentContext:
             documentada.
         project_id: Projeto de pesquisa da sessão (v17-input-document-index); restringe por padrão a busca e a
             lista de documentos. ``None`` fora de sessões de projeto.
+        subtask_id: ID da subtarefa em execução (``AgentTask.subtask_id``); liga cada execução do sandbox ao
+            ``Experimento`` no registro de proveniência (v18.5-execution-provenance).
         extra: Metadados adicionais não cobertos pelos campos acima (``project_meta``: ``ProjectMeta`` do projeto,
             usado no cabeçalho enriquecido da ingestão de artefatos).
     """
@@ -78,6 +80,7 @@ class AgentContext:
     ask_researcher: Optional[AskResearcherCallback] = None
     consult_researcher: Optional[ConsultResearcherCallback] = None
     project_id: Optional[str] = None
+    subtask_id: Optional[str] = None
     extra: dict[str, Any] = field(default_factory=dict)
 
 

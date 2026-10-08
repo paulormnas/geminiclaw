@@ -35,7 +35,8 @@ class TestDdl:
         sql = (ROOT / "scripts" / "init_db.sql").read_text(encoding="utf-8")
         assert "CREATE TABLE IF NOT EXISTS similarity_queue" in sql
         assert "CREATE INDEX IF NOT EXISTS idx_simq_pendente ON similarity_queue (status, prioridade DESC)" in sql
-        trecho = sql[sql.index("similarity_queue") :]
+        # Só o bloco da fila: as seções seguintes do arquivo (outras tabelas) têm DDL e gatilhos próprios.
+        trecho = sql[sql.index("similarity_queue") :].split("\n-- ====")[0]
         assert "DROP " not in trecho.upper() and "DELETE " not in trecho.upper()
 
 

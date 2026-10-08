@@ -26,28 +26,7 @@ from src.config import (
     PLAN_REJECTION_STALL_LIMIT,
     SESSION_MAX_TASK_RETRIES,
 )
-from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
-from src.plan_normalizer import normalize_plan
-from src.egress.fragments import taint_if
-from src.egress.gate import EgressGate, any_role_raw, bind_gate, role_tainted
-from src.egress.persisted import resumo_marca
-from src.llm.allocation import build_allocation_profile
-from src.llm.session import SessionRouting, bind_session_routing, build_session_routing, get_session_routing
-from src.session import SessionManager
-from src.output_manager import OutputManager, generate_session_slug
-from src.autonomous_loop import AutonomousLoop
-from src.utils.json_parser import extract_json
-from src.rate_limiter import AdaptiveRateLimiter
-from src.llm.metering import bind_execution, bound_execution_id
-from src.telemetry import get_telemetry
-from src.agents.validator_agent import ValidatorAgent
-from src.agent_runtime.context import AgentContext
-from src.agent_runtime.runtime import AgentRuntime
-from src.context_loader import ContextLoader, ContextBundle
-from src.llm.vision import VisionConfigError
-from src.research_data.manifest import ManifestError
-from src.human_gate import HumanGate
-from src.usage import UsageBudget, UsageTracker
+from src.context_loader import ContextBundle, ContextLoader
 from src.continuity import (
     ESTADO_FECHADO,
     ESTADO_INTERROMPIDO,
@@ -56,7 +35,7 @@ from src.continuity import (
     ResumeConflictError,
     ResumeState,
 )
-from src.egress.fragments import mark_research_data, taint_if
+from src.egress.fragments import taint_if
 from src.egress.gate import EgressGate, any_role_raw, bind_gate, role_tainted
 from src.egress.persisted import resumo_marca
 from src.heartbeat import SessionHeartbeat
@@ -66,11 +45,13 @@ from src.knowledge.suggestions import SuggestionError
 from src.llm.allocation import build_allocation_profile
 from src.llm.metering import bind_execution, bound_execution_id
 from src.llm.session import SessionRouting, bind_session_routing, build_session_routing, get_session_routing
+from src.llm.vision import VisionConfigError
 from src.logger import get_logger
 from src.output_manager import OutputManager, generate_session_slug
 from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
 from src.plan_normalizer import normalize_plan
 from src.rate_limiter import AdaptiveRateLimiter
+from src.research_data.manifest import ManifestError
 from src.session import SessionManager
 from src.telemetry import get_telemetry
 from src.usage import UsageBudget, UsageTracker
@@ -244,6 +225,8 @@ class Orchestrator:
         # Modo efetivo por sessão mestra: tarefas criadas sem `mode` (ex.: o planejamento do Researcher)
         # herdam o modo da sessão em vez do padrão global (que é `assisted` e bloquearia em stdin).
         self._session_modes: dict[str, str] = {}
+        # v18.5-execution-provenance: avisos de ponta divergente na retomada, por sessão (vão ao relatório).
+        self.provenance_warnings: dict[str, list[str]] = {}
         # V15.5/G9 — Bloco de texto do ContextBundle ativo, injetado no plano inicial do Researcher
         self._current_context_block: str = ""
         # Bloco do Problema por sessão mestra (evita vazar entre requisições concorrentes).
@@ -624,11 +607,62 @@ class Orchestrator:
             )
             if resume is not None:
                 recorder.seed(list(resume.completed.values()))
+            recorder.provenance_provider = self._provenance_provider(session_id, project_id)
         except Exception as exc:  # noqa: BLE001 - sem checkpoint a pesquisa continua (aviso explícito)
             logger.warning("Checkpoint da sessão não iniciado", extra={"error": type(exc).__name__})
             return None
         self._recorders[session_id] = recorder
         return recorder
+
+    def _provenance_provider(self, session_id: str, project_id: str | None) -> "Callable[[], tuple[Any, list[str]]]":
+        """Ponta da cadeia de execuções e términos pendentes da sessão, para cada gravação do checkpoint."""
+        from src.provenance.ledger import chain_id_for, get_ledger
+
+        chain = chain_id_for(project_id, session_id)
+
+        def provider() -> tuple[Any, list[str]]:
+            ledger = get_ledger()
+            return ledger.known_tip(chain), ledger.pending_exec_ids(session_id, self.output_manager.base_dir)
+
+        return provider
+
+    def resume_provenance_divergence(self, source_session_id: str) -> tuple[str, int] | None:
+        """Mensagem e ``seq`` se a ponta do checkpoint da sessão de origem não existe na cadeia (design §8).
+
+        Sem ponta no checkpoint, com a ponta íntegra ou com o registro indisponível, devolve ``None``.
+        """
+        from src.continuity import CheckpointError, read_checkpoint
+        from src.provenance.ledger import get_ledger
+
+        try:
+            checkpoint, _ = read_checkpoint(
+                self.output_manager.base_dir / source_session_id, expected_session_id=source_session_id
+            )
+            tip = checkpoint.provenance_chain_tip
+            if not tip or get_ledger().check_tip(tip) != "divergente":
+                return None
+        except (CheckpointError, OSError):
+            return None
+        message = (
+            f"a ponta da cadeia de execuções do checkpoint da sessão '{source_session_id}' "
+            f"(seq {tip['seq']}) não existe na cadeia; rode `geminiclaw provenance verify`."
+        )
+        return message, int(tip["seq"])
+
+    def _note_resume_provenance(self, session_id: str, source_session_id: str) -> None:
+        """Divergência da ponta na retomada: aviso para o relatório e evento ``proveniencia_divergente``."""
+        found = self.resume_provenance_divergence(source_session_id)
+        if found is None:
+            return
+        message, seq = found
+        self.provenance_warnings.setdefault(session_id, []).append(message)
+        try:
+            get_telemetry().record_agent_event(
+                execution_id=session_id, session_id=session_id, agent_id="orchestrator",
+                event_type="proveniencia_divergente", payload={"origem": source_session_id, "seq": seq},
+            )
+        except Exception:  # noqa: BLE001 - telemetria nunca derruba a retomada
+            logger.warning("Evento proveniencia_divergente não registrado")
 
     def _start_heartbeat(self, session_id: str) -> SessionHeartbeat:
         """Batimento da sessão em thread dedicada (não depende do laço de eventos)."""
@@ -1060,6 +1094,8 @@ class Orchestrator:
             self._resume_planning.add(master_session.id)
         recorder = self._start_recorder(master_session.id, project_id, continues_id, prompt, effective_mode,
                                         effective_budget, resume)
+        if resume is not None:
+            self._note_resume_provenance(master_session.id, resume.source_session_id)
         if resume is not None and recorder is None:
             # Retomada sem checkpoint inicial deixaria a origem "continuada" por uma sessão irretomável.
             self.session_manager.update(
@@ -1318,6 +1354,7 @@ class Orchestrator:
                 "agent_runs": self._session_agent_run_counts.get(master_session.id, 0),
                 "planning_runs": self._session_planning_run_counts.get(master_session.id, 0),
                 "report_path": "relatorio_final.md",
+                "provenance_chain_tip": self._session_chain_tip(master_session.id),
             }
             (session_dir / "session_metadata.json").write_text(
                 json.dumps(session_metadata, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
@@ -1328,6 +1365,14 @@ class Orchestrator:
         result.session_id = master_session.id
         return result
 
+    def _session_chain_tip(self, session_id: str) -> dict[str, Any] | None:
+        """Ponta da cadeia de execuções da sessão (``session_metadata.json``); ``None`` sem execuções."""
+        from src.provenance.ledger import chain_id_for, get_ledger
+
+        try:
+            return get_ledger().known_tip(chain_id_for(self._session_project_id(session_id), session_id))
+        except Exception:  # noqa: BLE001 - metadado opcional
+            return None
     def _record_research_data_markings(self, bundle: ContextBundle, session_id: str) -> None:
         """Grava ``payload["research_data_markings"]`` (classe efetiva, marcação, motivo, hash e origem por arquivo)."""
         if bundle.total_files == 0 and not bundle.markings:
@@ -1853,6 +1898,7 @@ class Orchestrator:
             if effective_session_id in self._resumes
             else (),
             project_id=self._session_project_id(effective_session_id),
+            subtask_id=task.subtask_id,
             extra={"project_meta": self._project_metas[effective_session_id]}
             if effective_session_id in self._project_metas
             else {},

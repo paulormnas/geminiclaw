@@ -2279,6 +2279,7 @@ class AutonomousLoop:
             data = replace(data, narrativa_indisponivel=True)
 
         markdown = render_report_markdown(data, narrative)
+        markdown = await self._append_provenance_section(markdown, master_session_id)
         try:
             session_dir.mkdir(parents=True, exist_ok=True)
             (session_dir / "relatorio_final.md").write_text(markdown, encoding="utf-8")
@@ -2289,6 +2290,28 @@ class AutonomousLoop:
         # Falha da chamada ao agente continua sendo falha; narrativa indisponível não é.
         summary_result.response = {"text": markdown}
         return summary_result
+
+    async def _append_provenance_section(self, markdown: str, master_session_id: str) -> str:
+        """Acrescenta ao relatório a seção determinística de proveniência (orquestrador, sem LLM; design §8).
+
+        Também acrescenta à cadeia os términos pendentes e exporta o segmento da sessão. Nunca levanta.
+        """
+        from src.provenance.ledger import get_ledger
+        from src.provenance.report import SECTION_TITLE, provenance_section
+
+        try:
+            divergences = list(getattr(self.orchestrator, "provenance_warnings", {}).get(master_session_id, []))
+            body = await asyncio.to_thread(
+                provenance_section,
+                get_ledger(),
+                master_session_id,
+                self.orchestrator.output_manager.base_dir,
+                divergences=divergences,
+            )
+        except Exception as exc:  # noqa: BLE001 - a seção nunca impede o relatório
+            logger.warning("Seção de proveniência não gerada", extra={"error": type(exc).__name__})
+            body = f"Não foi possível gerar a seção de proveniência ({type(exc).__name__})."
+        return f"{markdown.rstrip()}\n\n## {SECTION_TITLE}\n{body}\n"
 
     async def _build_report_data(
         self,

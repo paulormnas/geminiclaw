@@ -40,6 +40,9 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 
 #: Tabelas PostgreSQL a serem truncadas (ordem respeita FK constraints).
+#: ``execution_records`` (registro de execuções encadeado por hash, v18.5-execution-provenance) NÃO entra aqui de
+#: propósito: a tabela é somente-acréscimo (os gatilhos recusam ``TRUNCATE``) e apagar a cadeia de um projeto é uma
+#: operação destrutiva à parte, com confirmação própria.
 POSTGRES_TABLES: list[str] = [
     "subtask_metrics",
     "agent_events",

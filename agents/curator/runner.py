@@ -37,8 +37,7 @@ from src.knowledge.curator_tools import CuratorLimits, CuratorToolkit, wrap_data
 from src.knowledge.graph_store import GraphStore, Node
 from src.knowledge.semantic_index import SemanticIndex
 from src.knowledge.similarity_queue import SimilarityQueue
-from src.knowledge.suggestions import Suggestion
-from src.knowledge.suggestions import SuggestionError
+from src.knowledge.suggestions import Suggestion, SuggestionError
 from src.knowledge.suggestions import suggest_paths as suggest_paths_for_session
 from src.llm.base import LLMProvider
 from src.llm.metering import record_llm_call

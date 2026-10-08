@@ -1,13 +1,15 @@
-import pytest
-import respx
-import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
-from src.skills.search_deep.skill import DeepSearchSkill
-from src.skills.search_deep.indexer import VectorIndexer
+
+import pytest
+import respx
+
 from src.skills.search_deep.cache import DeepSearchCache
 from src.skills.search_deep.crawler import DomainCrawler
+from src.skills.search_deep.indexer import VectorIndexer
+from src.skills.search_deep.skill import DeepSearchSkill
+
 
 @pytest.fixture
 def memory_indexer():

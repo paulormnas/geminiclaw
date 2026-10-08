@@ -4,13 +4,12 @@ Valida que os eventos estruturados exigidos pelo roadmap_v2 S8 são emitidos
 corretamente pelas skills sem dependência de Docker ou API Gemini.
 """
 
-import pytest
 import logging
-import os
 from unittest.mock import MagicMock, patch
 
-from src.skills.base import BaseSkill, SkillResult
+import pytest
 
+from src.skills.base import BaseSkill, SkillResult
 
 # ---------------------------------------------------------------------------
 # Helpers

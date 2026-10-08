@@ -1,8 +1,9 @@
+
 import pytest
-import asyncio
-from typing import List, Dict, Any
-from src.skills.search_deep.indexer import VectorIndexer
+
 from src.skills.search_deep.crawler import CrawledPage
+from src.skills.search_deep.indexer import VectorIndexer
+
 
 @pytest.fixture
 def indexer():

@@ -1,9 +1,12 @@
-import pytest
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 from src.autonomous_loop import AutonomousLoop
 from src.orchestrator import AgentResult, AgentTask, Orchestrator
 from src.telemetry import get_telemetry
-from datetime import datetime, timezone
+
 
 @pytest.mark.asyncio
 async def test_subtask_metrics_lifecycle():

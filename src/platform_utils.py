@@ -1,5 +1,6 @@
 import sys
 
+
 def is_mac() -> bool:
     """Verifica se o sistema operacional atual é Mac OS (Darwin)."""
     return sys.platform == "darwin"

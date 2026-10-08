@@ -1,4 +1,5 @@
-from agents.summarizer.agent import root_agent, AGENT_NAME
+from agents.summarizer.agent import AGENT_NAME, root_agent
+
 
 def test_summarizer_agent_initialization():
     """Testa se o agente summarizer foi inicializado corretamente."""

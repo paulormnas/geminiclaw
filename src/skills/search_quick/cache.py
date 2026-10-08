@@ -1,9 +1,9 @@
 import hashlib
 import time
-from typing import Dict, List, Optional, Any, Generic, TypeVar
-from src.logger import get_logger
+from typing import Any, Dict, Generic, Optional, TypeVar
+
 from src.config import SEARCH_CACHE_TTL_SECONDS
-from .scraper import SearchResult
+from src.logger import get_logger
 
 logger = get_logger(__name__)
 

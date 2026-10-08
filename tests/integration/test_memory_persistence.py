@@ -1,7 +1,9 @@
+
 import pytest
-import os
+
 from src.session import SessionManager
 from src.skills.memory.skill import MemorySkill
+
 
 @pytest.fixture
 def session_manager(tmp_path):

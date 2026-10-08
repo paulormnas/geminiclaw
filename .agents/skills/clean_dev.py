@@ -30,8 +30,8 @@ from typing import Any
 # Garante que src/ está no path ao executar o script diretamente
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.logger import get_logger
 from src.db import get_connection
+from src.logger import get_logger
 
 logger = get_logger(__name__)
 

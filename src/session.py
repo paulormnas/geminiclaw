@@ -5,8 +5,8 @@ As sessões são armazenadas na tabela ``agent_sessions`` criada pelo
 ``scripts/init_db.sql``.
 """
 
-import json
 import datetime
+import json
 import uuid
 from dataclasses import dataclass
 from typing import Any, Optional

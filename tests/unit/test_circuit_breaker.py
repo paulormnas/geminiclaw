@@ -17,9 +17,9 @@ Cobre:
            CIRCUIT_BREAKER_STALL_CYCLES ciclos sem mudança de sucessos nem de erros.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # V12.5.1 — Detecção de progresso zero (comportamento substituído por V18 para
@@ -34,8 +34,8 @@ async def test_persistent_task_failure_is_abandoned_not_session_aborted():
     breaker de progresso zero (V12.5.1), que abortava a sessão inteira. O
     restante do DAG ('tarefa_ok', independente) e a sessão continuam
     normalmente."""
-    from src.orchestrator import AgentTask, AgentResult
     from src.autonomous_loop import AutonomousLoop
+    from src.orchestrator import AgentResult, AgentTask
     from src.usage import UsageBudget
 
     # Planner sempre retorna o mesmo plano com as mesmas 2 tarefas independentes
@@ -103,8 +103,8 @@ async def test_persistent_task_failure_is_abandoned_not_session_aborted():
 async def test_circuit_breaker_nao_aborta_com_progresso_real():
     """Se o progresso muda entre ciclos (nova subtarefa bem-sucedida),
     o loop deve continuar normalmente."""
-    from src.orchestrator import AgentTask, AgentResult
     from src.autonomous_loop import AutonomousLoop
+    from src.orchestrator import AgentResult, AgentTask
 
     ciclo = [0]
 

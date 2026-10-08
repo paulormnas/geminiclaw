@@ -4,13 +4,14 @@ import pathlib
 import re
 import time
 from typing import List, Optional
+
 from src import config
 from src.config import get_env
-from src.skills.base import BaseSkill, SkillResult
-from src.reserved_files import is_reserved_name
-from src.skills.code.sandbox import _SAFE_NAME_RE, NETWORK_UNDECLARED_MESSAGE, PythonSandbox, SandboxResult
-from src.skills.code.manifest import WorkspaceManifest
 from src.logger import get_logger
+from src.reserved_files import is_reserved_name
+from src.skills.base import BaseSkill, SkillResult
+from src.skills.code.manifest import WorkspaceManifest
+from src.skills.code.sandbox import _SAFE_NAME_RE, NETWORK_UNDECLARED_MESSAGE, PythonSandbox, SandboxResult
 
 logger = get_logger(__name__)
 
@@ -35,7 +36,8 @@ class CodeSkill(BaseSkill):
     
     name = "python_interpreter"
     description = (
-        "Use esta skill para executar código Python e realizar análise de dados. Forneça o código completo como string. "
+        "Use esta skill para executar código Python e realizar análise de dados. "
+        "Forneça o código completo como string. "
         "Para instalar pacotes adicionais, use EXCLUSIVAMENTE o parâmetro 'packages' — "
         "instalação via 'subprocess'/'pip' dentro do código não é suportada (a instalação de "
         "pacotes acontece no próprio sandbox, fora do código gerado). "
@@ -74,7 +76,10 @@ class CodeSkill(BaseSkill):
                     "type": "object",
                     "properties": {
                         "url": {"type": "string", "description": "URL http(s) pública do ativo."},
-                        "sha256": {"type": "string", "description": "sha256 esperado (opcional, recomendado); sem ele a URL precisa ser https."},
+                        "sha256": {
+                            "type": "string",
+                            "description": "sha256 esperado (opcional, recomendado); sem ele a URL precisa ser https.",
+                        },
                         "destino": {
                             "type": "string",
                             "description": "Nome simples do arquivo; o ativo fica em /assets/<destino>.",
@@ -183,7 +188,13 @@ class CodeSkill(BaseSkill):
         }
 
     def _persist_streams(
-        self, session_dir: pathlib.Path, session_id: str, task_name: str, step: int, result: SandboxResult, success: bool
+        self,
+        session_dir: pathlib.Path,
+        session_id: str,
+        task_name: str,
+        step: int,
+        result: SandboxResult,
+        success: bool,
     ) -> dict:
         """Grava a saída integral (``step_NN.stdout.txt``/``.stderr.txt``) no nó, antes de devolvê-la ao modelo.
 
@@ -267,7 +278,13 @@ class CodeSkill(BaseSkill):
 
         # 1.1 session_id e task_name viram pastas do host (e o bind mount do sandbox)
         for label, value in (("session_id", session_id), ("task_name", task_name)):
-            if not isinstance(value, str) or not _SAFE_NAME_RE.fullmatch(value) or ".." in value or value == "." or is_reserved_name(value):
+            if (
+                not isinstance(value, str)
+                or not _SAFE_NAME_RE.fullmatch(value)
+                or ".." in value
+                or value == "."
+                or is_reserved_name(value)
+            ):
                 return SkillResult(
                     success=False,
                     output="",

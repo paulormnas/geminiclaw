@@ -9,7 +9,6 @@ Suporta três modos via variável de ambiente TRIAGE_MODE:
 - hybrid    : heurísticas primeiro; fallback para LLM quando confiança < threshold
 """
 
-import re
 from typing import Literal
 
 from src.logger import get_logger

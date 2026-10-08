@@ -1,22 +1,24 @@
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Dict, List, Literal, Optional
+import io
 import json
 import os
-import docker
-import docker.errors
 import pathlib
 import re
 import shutil
 import stat
 import sys
+import tarfile
 import threading
 import time
-import io
-import tarfile
 import uuid
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Dict, List, Literal, Optional
+
+import docker
+import docker.errors
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
+
 from src import config
 from src.llm.retry import RETRY_BACKOFFS_SECONDS, emit_connection_retry, is_retryable_status
 from src.logger import get_logger

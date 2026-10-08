@@ -1,18 +1,17 @@
 """Testes unitários do pipeline de contexto `input_context/` (Roadmap V15.5 / Spec G9)."""
 
 import json
-import shutil
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.context_loader import (
-    ContextLoader,
     ContextBundle,
-    ProcessedDocument,
+    ContextLoader,
     DatasetSummary,
     ImageContext,
+    ProcessedDocument,
 )
 
 

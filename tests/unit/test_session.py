@@ -3,11 +3,12 @@
 Usa unittest.mock para simular get_connection sem precisar de banco real.
 """
 
-import pytest
 import json
-from unittest.mock import MagicMock, patch, call
-from src.session import SessionManager, Session
+from unittest.mock import MagicMock, patch
 
+import pytest
+
+from src.session import Session, SessionManager
 
 _SENTINEL = object()  # Sentinela para distinguir fetchone_result=None do padrão
 

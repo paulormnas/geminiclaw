@@ -1,8 +1,9 @@
 """Testes unitários para LongTermMemory (PostgreSQL via mock)."""
 
-import pytest
-import json
 from unittest.mock import MagicMock, patch
+
+import pytest
+
 from src.skills.memory.long_term import LongTermMemory
 
 

@@ -1,9 +1,10 @@
 """Testes unitários para src/skills/search_deep/cache.py (PostgreSQL via mock)."""
 
-import pytest
 import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from src.skills.search_deep.cache import DeepSearchCache
 

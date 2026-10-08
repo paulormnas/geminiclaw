@@ -1,8 +1,11 @@
-import pytest
-from unittest.mock import AsyncMock, patch
 import os
-from src.skills.search_quick.skill import QuickSearchSkill
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
 from src.skills.search_quick.scraper import SearchResult
+from src.skills.search_quick.skill import QuickSearchSkill
+
 
 @pytest.fixture
 def mock_search_results():

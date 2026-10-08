@@ -3,10 +3,11 @@
 Substitui a versão anterior que dependia de sqlite_utils.
 """
 
-import pytest
 import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from src.skills.search_deep.cache import DeepSearchCache
 

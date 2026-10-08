@@ -9,9 +9,9 @@ from pathlib import Path
 import pytest
 
 from src.report.base_converter import ReportConverterFactory
-from src.report.latex_converter import LaTeXConverter
-from src.report.html_converter import HTMLConverter
 from src.report.docx_converter import DOCXConverter
+from src.report.html_converter import HTMLConverter
+from src.report.latex_converter import LaTeXConverter
 
 SAMPLE_MARKDOWN = """# Relatório de Teste
 

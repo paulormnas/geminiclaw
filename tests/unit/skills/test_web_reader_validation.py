@@ -6,10 +6,9 @@ Cobre:
   V12.4.3: robots.txt 200 com bloqueio explícito é respeitado.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-import httpx
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # V12.4.1 — Validação de schema de URL

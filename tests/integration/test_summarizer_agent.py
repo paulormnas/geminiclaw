@@ -7,14 +7,14 @@ geração de session_metadata.json ao final da sessão, e o comando
 
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.orchestrator import Orchestrator, AgentTask, AgentResult
 from src.autonomous_loop import AutonomousLoop
-from src.session import Session
 from src.cli import convert_report
+from src.orchestrator import AgentResult, AgentTask, Orchestrator
+from src.session import Session
 
 
 def _make_session(session_id: str, payload: dict | None = None) -> Session:

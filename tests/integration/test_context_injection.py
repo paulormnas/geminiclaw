@@ -7,14 +7,12 @@ anterior falho é incluído quando pertinente.
 from __future__ import annotations
 
 import pathlib
-import textwrap
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.skills.code.manifest import WorkspaceManifest
 from src.llm.context_injection import build_workspace_context_block
-
+from src.skills.code.manifest import WorkspaceManifest
 
 # ---------------------------------------------------------------------------
 # Helpers

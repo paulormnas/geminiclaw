@@ -1,7 +1,10 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from src.skills.search_deep.indexer import VectorIndexer
+
 from src.skills.search_deep.crawler import CrawledPage
+from src.skills.search_deep.indexer import VectorIndexer
+
 
 @pytest.fixture
 def indexer():

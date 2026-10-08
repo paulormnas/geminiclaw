@@ -1,9 +1,10 @@
 """Testes unitários para src/llm_cache.py (PostgreSQL via mock)."""
 
-import pytest
 import os
 import time
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from src.llm_cache import LLMResponseCache
 

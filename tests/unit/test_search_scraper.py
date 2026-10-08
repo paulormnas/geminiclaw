@@ -1,7 +1,9 @@
+import httpx
 import pytest
 import respx
-import httpx
-from src.skills.search_quick.scraper import DuckDuckGoScraper, SearchResult
+
+from src.skills.search_quick.scraper import DuckDuckGoScraper
+
 
 @pytest.fixture
 def scraper():

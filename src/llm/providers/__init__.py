@@ -42,9 +42,8 @@ def _create_openai_compatible(settings: ProviderSettings):
 
 
 def _create_openai(settings: ProviderSettings):
-    from src.llm.providers.openai import OpenAIProvider
-
     from src import config
+    from src.llm.providers.openai import OpenAIProvider
 
     return OpenAIProvider(
         api_key=settings.api_key,

@@ -1,12 +1,13 @@
 import asyncio
-import httpx
 import json
-import os
-from pathlib import Path
+from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import httpx
 from bs4 import BeautifulSoup
-from dataclasses import dataclass, asdict
-from typing import List, Dict, Any, Optional
+
 from src.logger import get_logger
 
 logger = get_logger(__name__)

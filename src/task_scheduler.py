@@ -1,5 +1,7 @@
 from collections import deque
+
 from src.orchestrator import AgentTask
+
 
 class TaskScheduler:
     """Valida um plano de execução garantindo que não existam dependências cíclicas."""

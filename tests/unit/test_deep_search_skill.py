@@ -1,7 +1,9 @@
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+
 from src.skills.search_deep.skill import DeepSearchSkill
-from src.skills.base import SkillResult
+
 
 @pytest.fixture
 def mock_indexer():

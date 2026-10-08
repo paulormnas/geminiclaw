@@ -1,6 +1,8 @@
 import pytest
-from src.skills.base import BaseSkill, SkillResult
+
 from src.skills import SkillRegistry
+from src.skills.base import BaseSkill, SkillResult
+
 
 class MockSkill(BaseSkill):
     def __init__(self, name: str, description: str):

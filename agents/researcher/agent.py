@@ -9,7 +9,7 @@ O Researcher é responsável por:
 """
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
 from agents.base.agent import (

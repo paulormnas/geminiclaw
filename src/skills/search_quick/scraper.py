@@ -1,8 +1,10 @@
-import httpx
 import asyncio
-from bs4 import BeautifulSoup
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
+
+import httpx
+from bs4 import BeautifulSoup
+
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -22,7 +24,10 @@ class DuckDuckGoScraper:
     def __init__(self, timeout: int = 10):
         self.timeout = timeout
         self.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            ),
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.5",
         }
@@ -41,7 +46,9 @@ class DuckDuckGoScraper:
         
         for attempt in range(3):
             try:
-                async with httpx.AsyncClient(headers=self.headers, timeout=self.timeout, follow_redirects=True) as client:
+                async with httpx.AsyncClient(
+                    headers=self.headers, timeout=self.timeout, follow_redirects=True
+                ) as client:
                     response = await client.get(self.SEARCH_URL, params=params)
                     response.raise_for_status()
                     return self._parse_results(response.text, max_results)

@@ -2316,7 +2316,8 @@ class AutonomousLoop:
         except Exception as exc:  # noqa: BLE001 - a seção nunca impede o relatório
             logger.warning("Seção de proveniência não gerada", extra={"error": type(exc).__name__})
             body = f"Não foi possível gerar a seção de proveniência ({type(exc).__name__})."
-        return f"{markdown.rstrip()}\n\n<!-- provenance-chain:begin -->\n## {SECTION_TITLE}\n{body}\n<!-- provenance-chain:end -->\n"
+        block = f"<!-- provenance-chain:begin -->\n## {SECTION_TITLE}\n{body}\n<!-- provenance-chain:end -->"
+        return f"{markdown.rstrip()}\n\n{block}\n"
 
     async def _build_reference_catalog(self, master_session_id: str, session_dir: Path) -> str:
         """Catálogo de referências numéricas da sessão (v18.5-numeric-references, design §7.1). Nunca levanta."""
@@ -2340,7 +2341,7 @@ class AutonomousLoop:
             return "CATÁLOGO DE REFERÊNCIAS: indisponível nesta sessão."
 
     def _graph_for_report(self) -> Any:
-        """Grafo para unidades e insumos citados no relatório, ou ``None`` (sem grafo as citações de insumo não resolvem)."""
+        """Grafo para unidades e insumos citados no relatório, ou ``None`` (sem ele, ``src`` de insumo não resolve)."""
         try:
             return self.orchestrator._open_knowledge_store()
         except Exception:  # noqa: BLE001

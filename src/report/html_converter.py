@@ -32,7 +32,9 @@ pre { padding: 1rem; overflow-x: auto; border-radius: 4px; }
 code { padding: 0.15rem 0.3rem; border-radius: 3px; }
 blockquote { border-left: 4px solid #ccc; margin-left: 0; padding-left: 1rem; color: #555; }
 :root { --mark-bg: #fff3b0; --mark-fg: #5c4400; --origin-fg: #1f5f99; }
-mark.nao-verificado, mark.literal { background: var(--mark-bg); color: var(--mark-fg); font-weight: 600; padding: 0 0.2rem; border-radius: 3px; }
+mark.nao-verificado, mark.literal {
+    background: var(--mark-bg); color: var(--mark-fg); font-weight: 600; padding: 0 0.2rem; border-radius: 3px;
+}
 sup.origem a { color: var(--origin-fg); text-decoration: none; font-family: "Helvetica Neue", Arial, sans-serif; }
 
 @media (prefers-color-scheme: dark) {
@@ -92,7 +94,8 @@ class HTMLConverter(ReportConverter):
         import markdown as md
 
         markdown_text = Path(markdown_path).read_text(encoding="utf-8")
-        body_html = _decorate_marks(md.markdown(strip_markup_helpers(markdown_text), extensions=["tables", "fenced_code"]))
+        rendered = md.markdown(strip_markup_helpers(markdown_text), extensions=["tables", "fenced_code"])
+        body_html = _decorate_marks(rendered)
 
         title = "Relatório Científico"
         for line in markdown_text.splitlines():

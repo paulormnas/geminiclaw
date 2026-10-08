@@ -113,7 +113,7 @@ async def search(query: str) -> str:
 
         result = _format_results(results)
 
-        # v18.5-numeric-references: o que o sistema recebeu fica em fontes_busca.jsonl (conferência de {{src:<url>#..}}).
+        # v18.5-numeric-references: as fontes recebidas vão para fontes_busca.jsonl (conferência de {{src:<url>#..}}).
         _record_sources(query, results)
 
         # 3. Armazena no cache

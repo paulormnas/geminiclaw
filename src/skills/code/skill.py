@@ -182,6 +182,33 @@ class CodeSkill(BaseSkill):
             "nota_rede": result.nota_rede,
         }
 
+    def _persist_streams(
+        self, session_dir: pathlib.Path, session_id: str, task_name: str, step: int, result: SandboxResult, success: bool
+    ) -> dict:
+        """Grava a saída integral (``step_NN.stdout.txt``/``.stderr.txt``) no nó, antes de devolvê-la ao modelo.
+
+        O filtro de egresso (v18.5-egress-gate) cita o caminho nos avisos de retenção e de elisão. Devolve os campos do
+        ``metadata`` da skill (``integral_path``, ``egress_source``); sem escrita possível, devolve só a origem.
+        """
+        base = session_dir / task_name
+        shown = "stdout" if success else "stderr"
+        paths: dict[str, str] = {}
+        try:
+            base.mkdir(parents=True, exist_ok=True)
+            for kind, text in (("stdout", result.stdout), ("stderr", result.stderr)):
+                if not text:
+                    continue
+                name = f"step_{step:02d}.{kind}.txt"
+                (base / name).write_text(text, encoding="utf-8")
+                paths[kind] = (pathlib.Path(self.output_dir) / session_id / task_name / name).as_posix()
+        except OSError as exc:
+            logger.warning("Não foi possível gravar a saída integral da execução", extra={"error": str(exc)})
+        meta: dict = {"egress_source": f"step_{step:02d}:{shown}"}
+        chosen = paths.get(shown) or paths.get("stdout") or paths.get("stderr")
+        if chosen:
+            meta["integral_path"] = chosen
+        return meta
+
     @staticmethod
     def _readable_prior_dirs() -> List[pathlib.Path]:
         """Saídas de sessões anteriores da cadeia de continuidade (``AgentContext.readable_dirs``), se houver."""
@@ -308,6 +335,7 @@ class CodeSkill(BaseSkill):
 
             success = not result.timed_out and result.exit_code == 0
             run_info = self._run_info(result)
+            egress_meta = self._persist_streams(session_dir, session_id, task_name, step_number, result, success)
             self._record_sandbox_run(session_id, task_name, result, int((time.monotonic() - _started) * 1000))
 
             # V13.3.2 — Detectar novos artefatos e atualizar manifest
@@ -409,6 +437,7 @@ class CodeSkill(BaseSkill):
                         "install_failed": True,
                         "timed_out": result.timed_out,
                         **self._phase_metadata(result),
+                        **egress_meta,
                     },
                 )
 
@@ -417,7 +446,12 @@ class CodeSkill(BaseSkill):
                     success=False,
                     output=result.stdout,
                     error="Timeout atingido durante a execução.",
-                    metadata={"exit_code": result.exit_code, "timed_out": True, **self._phase_metadata(result)}
+                    metadata={
+                        "exit_code": result.exit_code,
+                        "timed_out": True,
+                        **self._phase_metadata(result),
+                        **egress_meta,
+                    }
                 )
 
             error = None
@@ -437,6 +471,7 @@ class CodeSkill(BaseSkill):
                     "manifest_step": step_number,
                     "packages_installed": result.packages_installed,
                     **self._phase_metadata(result),
+                    **egress_meta,
                 }
             )
 

@@ -17,6 +17,7 @@ from typing import Any, Optional
 
 from src.agent_runtime.context import get_agent_context_optional
 from src.config import SESSION_DEFAULT_MODE
+from src.egress.fragments import ContentOrigin
 from src.skills.base import BaseSkill, SkillResult
 from src.logger import get_logger
 from src.research_consult import DECISOES_RESERVADAS, assumption_text
@@ -28,6 +29,9 @@ class HumanFeedbackSkill(BaseSkill):
     """Skill que permite ao Researcher/Developer consultar o pesquisador humano."""
 
     name = "ask_researcher"
+
+    egress_origin = ContentOrigin.INSTRUCAO
+    egress_tainted = True  # resposta do pesquisador humano ou do Researcher consultor (fail-closed)
     description = (
         "Use esta ferramenta para perguntar ao pesquisador humano QUANDO houver uma "
         "ambiguidade genuinamente bloqueante no contexto disponível — DEPOIS de investigar "

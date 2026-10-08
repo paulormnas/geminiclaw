@@ -897,12 +897,16 @@ def print_session_banner(
         for line in role_lines:
             print(f"    {line}")
         # v18.5-model-catalog-locality — bloco "Alocação": trust, localidade e dados brutos por papel.
-        from src.llm.allocation import allocation_banner_lines, allocation_catalog_line
+        from src.llm.allocation import allocation_banner_lines, allocation_catalog_line, mixed_profile_warning
 
         print(f"  {DIM}Alocação{RESET}")
         print(f"    {allocation_catalog_line(llm_routing)}")
         for line in allocation_banner_lines(llm_routing):
             print(f"    {line}")
+        # v18.5-egress-gate — perfil que mistura papéis com e sem dados brutos: a filtragem entre papéis é frequente.
+        mixed = mixed_profile_warning(llm_routing)
+        if mixed:
+            print(f"    {YELLOW}{mixed}{RESET}")
 
     if mode == SessionMode.AUTO.value:
         print(f"  {YELLOW}⚠ Modo autônomo ativo — sem consulta ao pesquisador{RESET}")

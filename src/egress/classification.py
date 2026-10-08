@@ -56,6 +56,24 @@ def classify_path(path: Path | str, *, output_roots: Iterable[Path] | None = Non
     return ContentOrigin.DADO_DE_PESQUISA if _in_data_directory(candidate, roots) else ContentOrigin.DOCUMENTO
 
 
+# Agregados escritos pelos helpers científicos: saída de execução (filtrada), não dado de pesquisa.
+AGGREGATE_OUTPUT_NAMES: frozenset[str] = frozenset({"metrics.json", "params.json"})
+
+
+def artifact_origin(path: Path | str) -> ContentOrigin:
+    """Origem do conteúdo de um artefato produzido por execução: dado de pesquisa (tabular, JSON, imagem) ou saída.
+
+    ``metrics.json`` e ``params.json`` são agregados (saída de execução); demais arquivos de dados dos diretórios de
+    saída são ``dado_de_pesquisa``; texto e logs são ``saida_execucao``.
+    """
+    candidate = Path(path)
+    if candidate.name in AGGREGATE_OUTPUT_NAMES:
+        return ContentOrigin.SAIDA_EXECUCAO
+    if candidate.suffix.lower() in DATA_EXTENSIONS:
+        return ContentOrigin.DADO_DE_PESQUISA
+    return ContentOrigin.SAIDA_EXECUCAO
+
+
 def ensure_not_research_data(path: Path | str, *, compartilhavel: bool = False) -> None:
     """Recusa o arquivo se ele é ``dado_de_pesquisa`` não compartilhável (design §6).
 

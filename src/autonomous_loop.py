@@ -30,6 +30,9 @@ from src.telemetry import get_telemetry
 from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
 from src.knowledge.hypothesis_cycle import SolutionStatus
 from src.knowledge.suggestions import SuggestionError
+from src.egress.fragments import mark_execution_output, taint_if
+from src.egress.gate import role_tainted
+from src.egress.persisted import resumed_text_tainted, resumo_marca
 from src.usage import UsageBudget, UsageTracker, StopReason
 from src.continuity import (
     ESTADO_FECHADO,
@@ -165,12 +168,15 @@ class AutonomousLoop:
                 if safe_artifact_path(rel)
             ]
             summary = clean_free_text(state.resultado_resumo).replace("#", "")[:1000]
+            # v18.5-egress-gate — a marca gravada na produção vale na retomada, mesmo com outro catálogo; texto sem
+            # marca (legado) segue a regra do perfil da sessão que o produziu (design §7).
             output = SubtaskOutput(
                 task_name=name,
                 agent_id=clean_free_text(state.agent_id)[:64] or "developer",
                 status="success",
                 text_summary=f"[dado da sessão {resume.source_session_id}, concluída] {summary}".strip(),
                 artifacts=artifacts,
+                tainted=resumed_text_tainted(state, resume.source_session_id, self.orchestrator.session_manager),
             )
             self._short_term_memory.write(
                 session_id=master_session_id,
@@ -318,8 +324,10 @@ class AutonomousLoop:
             from src.llm.metering import record_llm_call
 
             _t0 = _time.monotonic()
+            from src.egress.fragments import ContentOrigin, PromptFragment, labeled
+
             response = await provider.generate(
-                messages=[{"role": "user", "content": triage_prompt}],
+                messages=[labeled("user", PromptFragment(triage_prompt, ContentOrigin.INSTRUCAO, source="triagem"))],
                 max_tokens=10
             )
             record_llm_call(provider, response, int((_time.monotonic() - _t0) * 1000), "triage")
@@ -1114,7 +1122,9 @@ class AutonomousLoop:
 
                 # V2: Constrói prefixo de contexto
                 context_prefix = self._build_context_prefix(master_session_id, task.depends_on)
-                task_prompt = context_prefix + task.prompt if context_prefix else task.prompt
+                # v18.5-egress-gate — prompt escrito por modelo que aceita dados brutos leva a marca de contaminação.
+                own_prompt = taint_if(task.prompt, task.prompt_tainted)
+                task_prompt = context_prefix + own_prompt if context_prefix else own_prompt
 
                 if context_prefix:
                     logger.info(
@@ -1270,7 +1280,7 @@ class AutonomousLoop:
                         error_context = (
                             f"\n\n[TENTATIVA ANTERIOR FALHOU]\n"
                             f"Tentativa: {attempt_number}/{self._usage_tracker.budget.max_task_retries}\n"
-                            f"Erro: {result.error or 'Erro desconhecido'}\n"
+                            f"Erro: {mark_execution_output(str(result.error or 'Erro desconhecido'), 'tentativa')}\n"
                             f"Instrução: Tente uma abordagem diferente para resolver o problema.\n"
                         )
                         enriched_task = AgentTask(
@@ -1315,6 +1325,7 @@ class AutonomousLoop:
                         status=cp_status,
                         tentativas=self._usage_tracker.task_attempts(retry_key),
                         resumo=cp_text,
+                        marca=resumo_marca(role_tainted(task.agent_id), task.agent_id),
                         artefatos=list_task_artifacts(session_out_dir, task.task_name),
                         causa_falha="infraestrutura"
                         if (not success and getattr(last_result, "error_category", None))
@@ -2207,7 +2218,8 @@ class AutonomousLoop:
                     pass
         if not context_parts:
             for res in results:
-                context_parts.append(f"### Resultado do Agente {res.agent_id}\n{res.response.get('text', '')}")
+                body = taint_if(str(res.response.get("text", "")), role_tainted(res.agent_id))
+                context_parts.append(f"### Resultado do Agente {res.agent_id}\n{body}")
 
         session_dir = self.orchestrator.output_manager.base_dir / master_session_id
         data = await self._build_report_data(
@@ -2218,7 +2230,7 @@ class AutonomousLoop:
             f"Escreva a narrativa do relatório da tarefa: '{prompt}'\n\n"
             "RESULTADOS DAS SUBTAREFAS:\n\n" + "\n\n".join(context_parts) + "\n\n"
             "DADOS DO RELATÓRIO (JSON, medidos pelo orquestrador; copie os números daqui):\n"
-            f"{report_data_json(data)}\n\n"
+            f"{mark_execution_output(report_data_json(data), 'report_data')}\n\n"
             "Responda SOMENTE com o JSON de narrativa descrito nas suas instruções."
         )
         summary_result = None

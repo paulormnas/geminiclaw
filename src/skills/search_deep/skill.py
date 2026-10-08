@@ -1,4 +1,5 @@
 from typing import Any, Dict, List, Optional
+from src.egress.fragments import ContentOrigin
 from src.skills.base import BaseSkill, SkillResult
 from .indexer import VectorIndexer
 from .cache import DeepSearchCache
@@ -10,6 +11,8 @@ class DeepSearchSkill(BaseSkill):
     """Skill para busca profunda em bases de conhecimento indexadas localmente."""
 
     name = "deep_search"
+
+    egress_origin = ContentOrigin.DOCUMENTO
     description = (
         "Use esta skill para buscar em profundidade dentro de fontes indexadas e confiáveis. "
         "Forneça uma query em linguagem natural. Opcionalmente filtre por domínio. "

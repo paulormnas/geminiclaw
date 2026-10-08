@@ -3,9 +3,16 @@
 Implementa compressão em 2 camadas: priorização por tipo e sumarização via LLM.
 """
 
-import os
-import json
-from typing import List, Dict, Optional, Any, Tuple
+from typing import Any, Dict, List, Optional
+
+from src.egress.fragments import (
+    ContentOrigin,
+    PromptFragment,
+    dumps_messages,
+    labeled,
+    message_to_fragments,
+    truncate_message,
+)
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -22,7 +29,7 @@ PRIORITY = {
 def estimate_tokens(text: Any) -> int:
     """Estimativa rápida de tokens. Aproximação: 1 token ≈ 4 chars."""
     if isinstance(text, (dict, list)):
-        text = json.dumps(text, ensure_ascii=False)
+        text = dumps_messages(text)
     return len(str(text)) // 4
 
 def _get_priority(message: Dict[str, Any]) -> int:
@@ -77,11 +84,9 @@ def _truncate_by_priority(messages: List[Dict[str, Any]], budget: int) -> List[D
     last_msg_tokens = estimate_tokens(str(last_msg))
     
     if last_msg_tokens > budget:
-        # Se a última mensagem sozinha estoura o budget, trunca ela (bruto)
-        content = last_msg.get("content", "")
-        if isinstance(content, str):
-            last_msg["content"] = content[:budget * 4] + "... [truncado]"
-        return [last_msg]
+        # Se a última mensagem sozinha estoura o budget, trunca ela (bruto), mantendo a origem dos trechos
+        # que sobram (v18.5-egress-gate: a camada de saída lê os trechos, não o ``content``).
+        return [truncate_message(last_msg, budget * 4)]
 
     current_budget = budget - last_msg_tokens
     
@@ -147,23 +152,39 @@ async def _summarize_old_context(
         # Usamos o provider passado para gerar o resumo
         # Nota: Idealmente usar um modelo rápido/barato para isso
         import time as _time
+
         from src.llm.metering import record_llm_call
 
         _t0 = _time.monotonic()
+        # O histórico vai como trechos que mantêm a origem de cada mensagem: a camada de saída reaplica as regras
+        # de egresso ao destino do resumo (v18.5-egress-gate, ADR 019 §3.8).
+        history_fragments: list[PromptFragment] = [
+            PromptFragment("Histórico a sumarizar:", ContentOrigin.INSTRUCAO, source="compressao")
+        ]
+        for old in old_messages:
+            label = f"[{old.get('role', 'user')}{' ' + old['name'] if old.get('name') else ''}]"
+            history_fragments.append(PromptFragment(label, ContentOrigin.INSTRUCAO, source="compressao"))
+            history_fragments.extend(message_to_fragments(old))
         summary_resp = await provider.generate(
             messages=[
-                {"role": "system", "content": summary_prompt},
-                {"role": "user", "content": f"Histórico a sumarizar:\n{json.dumps(old_messages, ensure_ascii=False)}"}
+                labeled("system", PromptFragment(summary_prompt, ContentOrigin.INSTRUCAO, source="compressao")),
+                labeled("user", *history_fragments),
             ],
             max_tokens=500
         )
         record_llm_call(provider, summary_resp, int((_time.monotonic() - _t0) * 1000), "context_compression")
         
         summary_text = summary_resp.text or "Histórico anterior processado."
-        summary_msg = {
-            "role": "system", 
-            "content": f"[RESUMO DO HISTÓRICO ANTERIOR]: {summary_text}"
-        }
+        summary_msg = labeled(
+            "system",
+            PromptFragment(
+                f"[RESUMO DO HISTÓRICO ANTERIOR]: {summary_text}",
+                ContentOrigin.INSTRUCAO,
+                tainted=bool(getattr(summary_resp, "tainted", False)),
+                produced_by=getattr(summary_resp, "produced_by", None) or None,
+                source="resumo_compressao",
+            ),
+        )
         
         return [summary_msg] + recent_messages
     except Exception as e:

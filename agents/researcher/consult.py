@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
 
+from src.egress.fragments import ContentOrigin, PromptFragment, labeled, tool_result_fragment
+from src.egress.gate import external_destination, get_gate, role_tainted, use_caller_role
 from src.llm.base import LLMProvider
 from src.llm.metering import record_llm_call
 from src.logger import get_logger
@@ -271,6 +273,13 @@ class _ConsultRun:
 
     def _refuse(self, ferramenta: str, texto: str, motivo: str) -> None:
         """Registra uma recusa sem guardar o texto completo (que justamente continha dado)."""
+        # v18.5-egress-gate (tarefa 7.6): a recusa da guarda também entra no registro de egresso.
+        try:
+            canal = "busca" if ferramenta == TOOL_QUICK_SEARCH else "leitura_web"
+            with use_caller_role("researcher"):
+                get_gate().record_refusal(external_destination(canal, "consultor"), "consulta", texto, motivo)
+        except Exception as exc:  # noqa: BLE001 — a recusa vale mesmo se o registro falhar
+            logger.warning("Recusa da guarda de consulta não registrada em egress_log", extra={"erro": str(exc)})
         self.recusas.append(
             {
                 "ferramenta": ferramenta,
@@ -290,7 +299,8 @@ class _ConsultRun:
             return f"Busca recusada pela guarda de consulta (motivo: {verdict.motivo}). Reformule sem dados do projeto."
         try:
             limit = max(1, min(int(max_results or 5), MAX_RESULTS_CAP))
-            result = await self.search_skill.run(query=query, max_results=limit)
+            with use_caller_role("researcher"):  # busca do consultor: papel Researcher (marca de contaminação dele)
+                result = await self.search_skill.run(query=query, max_results=limit)
         except Exception as exc:  # falha de rede/backend vira resposta ao modelo, não erro da consulta
             self.buscas.append({"query": query, "backend": None, "erro": str(exc)[:100]})
             return f"Erro na busca: {exc}"
@@ -320,7 +330,10 @@ class _ConsultRun:
             return "Leitura recusada: host não permitido para esta consulta."
         self.leituras.append(url)
         try:
-            result = await self.reader_skill.run(url=url, max_chars=max(1, min(int(max_chars or 4000), MAX_CHARS_CAP)))
+            with use_caller_role("researcher"):
+                result = await self.reader_skill.run(
+                    url=url, max_chars=max(1, min(int(max_chars or 4000), MAX_CHARS_CAP))
+                )
         except Exception as exc:
             return f"Erro na leitura: {exc}"
         if not result.success:
@@ -384,19 +397,25 @@ async def run_consult(
         allowed_hosts=allowed_hosts,
         restrict_reads_to_searched_hosts=restrict_reads_to_searched_hosts,
     )
+    # A pergunta e o contexto vêm do agente que consulta: contaminados se o modelo dele aceita dados brutos.
     messages: list[dict[str, Any]] = [
-        {
-            "role": "user",
-            "content": build_consult_prompt(
-                question=question,
-                context=context,
-                why_cant_proceed=why_cant_proceed,
-                options=options or [],
-                agent_role=agent_role,
-                subtask_name=subtask_name,
-                plan_summary=plan_summary,
+        labeled(
+            "user",
+            PromptFragment(
+                build_consult_prompt(
+                    question=question,
+                    context=context,
+                    why_cant_proceed=why_cant_proceed,
+                    options=options or [],
+                    agent_role=agent_role,
+                    subtask_name=subtask_name,
+                    plan_summary=plan_summary,
+                ),
+                ContentOrigin.INSTRUCAO,
+                tainted=role_tainted(agent_role),
+                source="consulta",
             ),
-        }
+        )
     ]
     tokens = 0
     format_failures = 0
@@ -418,7 +437,14 @@ async def run_consult(
                 out = await state.execute(call.name, call.arguments) if tools else (
                     f"Erro: ferramenta '{call.name}' não disponível para o consultor."
                 )
-                messages.append({"role": "tool", "tool_call_id": call.id, "name": call.name, "content": out})
+                messages.append(
+                    labeled(
+                        "tool",
+                        tool_result_fragment(call.name, out, call.arguments),
+                        tool_call_id=call.id,
+                        name=call.name,
+                    )
+                )
             continue
 
         parsed = extract_json(response.text or "")

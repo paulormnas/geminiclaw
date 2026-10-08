@@ -32,10 +32,11 @@ from src.config import (
 )
 from src.context_loader import ContextBundle, ContextLoader
 from src.infrastructure import ensure_infrastructure
-from src.orchestrator import Orchestrator, OrchestratorResult, AgentResult
-from src.context_loader import ContextLoader, ContextBundle
 from src.llm.vision import VisionConfigError
+from src.logger import get_logger
+from src.orchestrator import AgentResult, Orchestrator, OrchestratorResult
 from src.research_data.manifest import ManifestError
+from src.session import SessionManager
 from src.usage import UsageBudget
 from src.utils.terminal import BANNER, BOLD, CYAN, DIM, GREEN, MAGENTA, RED, RESET, STATUS_ICONS, VERSION, YELLOW
 

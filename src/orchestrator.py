@@ -26,28 +26,7 @@ from src.config import (
     PLAN_REJECTION_STALL_LIMIT,
     SESSION_MAX_TASK_RETRIES,
 )
-from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
-from src.plan_normalizer import normalize_plan
-from src.egress.fragments import taint_if
-from src.egress.gate import EgressGate, any_role_raw, bind_gate, role_tainted
-from src.egress.persisted import resumo_marca
-from src.llm.allocation import build_allocation_profile
-from src.llm.session import SessionRouting, bind_session_routing, build_session_routing, get_session_routing
-from src.session import SessionManager
-from src.output_manager import OutputManager, generate_session_slug
-from src.autonomous_loop import AutonomousLoop
-from src.utils.json_parser import extract_json
-from src.rate_limiter import AdaptiveRateLimiter
-from src.llm.metering import bind_execution, bound_execution_id
-from src.telemetry import get_telemetry
-from src.agents.validator_agent import ValidatorAgent
-from src.agent_runtime.context import AgentContext
-from src.agent_runtime.runtime import AgentRuntime
-from src.context_loader import ContextLoader, ContextBundle
-from src.llm.vision import VisionConfigError
-from src.research_data.manifest import ManifestError
-from src.human_gate import HumanGate
-from src.usage import UsageBudget, UsageTracker
+from src.context_loader import ContextBundle, ContextLoader
 from src.continuity import (
     ESTADO_FECHADO,
     ESTADO_INTERROMPIDO,
@@ -56,7 +35,7 @@ from src.continuity import (
     ResumeConflictError,
     ResumeState,
 )
-from src.egress.fragments import mark_research_data, taint_if
+from src.egress.fragments import taint_if
 from src.egress.gate import EgressGate, any_role_raw, bind_gate, role_tainted
 from src.egress.persisted import resumo_marca
 from src.heartbeat import SessionHeartbeat
@@ -66,11 +45,13 @@ from src.knowledge.suggestions import SuggestionError
 from src.llm.allocation import build_allocation_profile
 from src.llm.metering import bind_execution, bound_execution_id
 from src.llm.session import SessionRouting, bind_session_routing, build_session_routing, get_session_routing
+from src.llm.vision import VisionConfigError
 from src.logger import get_logger
 from src.output_manager import OutputManager, generate_session_slug
 from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
 from src.plan_normalizer import normalize_plan
 from src.rate_limiter import AdaptiveRateLimiter
+from src.research_data.manifest import ManifestError
 from src.session import SessionManager
 from src.telemetry import get_telemetry
 from src.usage import UsageBudget, UsageTracker

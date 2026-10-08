@@ -117,8 +117,8 @@ def test_a4_memoria_escrita_pelo_orquestrador_leva_tag_explicita():
 
 
 def test_a4_resultado_de_subtarefa_na_memoria_curta_vai_marcado(gate, third_party):
-    from src.egress.persisted import tags_tainted
     from src.egress.fragments import taint_if
+    from src.egress.persisted import tags_tainted
 
     assert tags_tainted(["subtask_result", "egress:tainted"])
     prompt = "Contexto: " + taint_if("acurácia 0.93", tags_tainted(["egress:tainted"]))

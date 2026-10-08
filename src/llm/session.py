@@ -101,7 +101,7 @@ class SessionRouting:
             or entry.aceita_dados_brutos != primary.aceita_dados_brutos
         ):
             logger.warning(
-                "GOOGLE_FALLBACK_MODEL ignorado: precisa estar no catálogo com o mesmo trust, localidade e dados brutos",
+                "GOOGLE_FALLBACK_MODEL ignorado: exige mesmo trust, localidade e aceitação de dados brutos",
                 extra={"fallback": fallback_id, "model": resolved_id},
             )
             return None

@@ -44,8 +44,9 @@ Consequência: com `packages`, código gerado roda com internet e com os artefat
   montados já na instalação. Além disso, código de instalação (ex.: `setup.py` de um pacote
   sem wheel) é código arbitrário; ele poderia deixar um processo residente esperando os dados.
   Com containers separados, nada da preparação sobrevive até a execução.
-- **Ordem dentro da preparação:** `fetch_assets` roda **antes** de `install`, e o host verifica
-  e move os ativos para o cache (§3) antes de a instalação começar. Assim o código de
+- **Ordem dentro da preparação:** `fetch_assets` roda **antes** de `install`, em **containers
+  distintos** (revisão M6): o de download é encerrado e removido antes de o host verificar e mover os
+  ativos para o cache (§3), e o de instalação só monta `/deps`. Assim o código de
   instalação nunca tem acesso aos arquivos baixados. Os nomes das fases seguem o ADR 019 §5;
   a numeração do ADR descreve as fases, não impõe ordem entre as duas que têm rede.
 - **Sem pacotes nem ativos:** só o container de execução é criado (comportamento e custo
@@ -56,7 +57,8 @@ Consequência: com `packages`, código gerado roda com internet e com os artefat
 ### 2. Fase `install`
 
 - Comando fixo, montado pelo sandbox (não pela skill nem pelo LLM):
-  `uv pip install --no-cache-dir --python /app/.venv/bin/python --target /deps <pacotes>`.
+  `uv pip install --no-config --only-binary :all: --no-cache --link-mode=copy --python /opt/sandbox-venv/bin/python
+  --target /deps <pacotes>` (o venv da imagem é `/opt/sandbox-venv`, ADR 018; não `/app/.venv`).
   O parâmetro `setup_commands` (lista livre de comandos) é **substituído** por
   `packages: list[str]`; cada nome é validado contra a gramática de requisito do PEP 508
   (sem URLs diretas, sem `-e`, sem opções iniciadas por `-`). A lista de nomes da stdlib
@@ -83,7 +85,9 @@ Declaração (parâmetro novo `assets` da skill):
 
 - `destino` é um nome simples (sem `/`, sem `..`); o ativo aparece em `/assets/<destino>`.
 - Um script **fixo do projeto** (`src/skills/code/fetch_assets.py`, somente stdlib) é injetado
-  por `put_archive` e executado no container de preparação. Ele aceita apenas `http`/`https`,
+  pelo host em um diretório de controle (`SANDBOX_WORK_DIR/<run_id>/control`), montado `ro` em
+  `/control` na preparação, e executado de lá (revisão A2: com a raiz somente leitura `put_archive`
+  só funciona em pontos de montagem). Ele Ele aceita apenas `http`/`https`,
   resolve o nome antes de conectar e recusa loopback, faixas privadas, link-local e
   `169.254.169.254` (mesmas regras do `web_reader`, `v16-in-process-agents` design §4), revalida
   a cada redirecionamento, respeita `SANDBOX_ASSET_MAX_BYTES` e grava em `/staging/<destino>`.
@@ -113,7 +117,8 @@ Declaração (parâmetro novo `assets` da skill):
   | `/prior/<sessão>` | diretórios legíveis de sessões anteriores (`AgentContext.readable_dirs`, `v18-research-continuity`), quando existirem | `ro` |
 
 - **Entrega de dados:** `SANDBOX_INPUT_DELIVERY=mount` (padrão) monta `input_snapshot/` somente
-  leitura; `copy` cria `/inputs` no container e copia os arquivos por `put_archive`, até
+  leitura; `copy` cria `/inputs` como `Mount` tmpfs (tamanho `SANDBOX_COPY_MAX_BYTES`, modo 0555) e copia os
+  arquivos por `put_archive`, até
   `SANDBOX_COPY_MAX_BYTES` (acima disso, erro acionável sugerindo `mount`). `copy` serve para
   ambientes em que o caminho do host não é montável (ex.: modo container dos agentes sem
   `HOST_PROJECT_PATH`). A escolha é informada no resultado.
@@ -150,6 +155,9 @@ Para `v17-structural-fact-ingestion` §3, a falha é `causa_falha="abordagem"` c
 
 A fase `execute` só roda com rede quando **todas** as condições valem:
 
+0. o classificador de insumos **autoriza a rede explicitamente** (`InputClassifier.network_allowed()`),
+   verificado antes de todas as outras regras. Sem manifesto, nenhuma execução tem rede, nem a que
+   não tem insumos (`all([])` é verdadeiro e não pode valer como autorização; revisão A1);
 1. a chamada pede rede explicitamente (parâmetro `needs_network=true` da skill);
 2. todo arquivo de `/inputs` está marcado `compartilhavel`, segundo o classificador de
    insumos (`InputClassifier.is_shareable(path) -> bool`);
@@ -202,11 +210,14 @@ são lidos por `v18.5-execution-provenance`; esta mudança não grava registro a
 |---|---|---|
 | `SANDBOX_INSTALL_TIMEOUT_SECONDS` | 300 | Timeout da fase `install` |
 | `SANDBOX_FETCH_TIMEOUT_SECONDS` | 600 | Timeout da fase `fetch_assets` |
-| `SANDBOX_ASSET_MAX_BYTES` | 2147483648 | Tamanho máximo por ativo |
+| `SANDBOX_ASSET_MAX_BYTES` | 536870912 | Tamanho máximo por ativo |
+| `SANDBOX_ASSET_TOTAL_MAX_BYTES` | 2147483648 | Teto somado dos ativos baixados por execução |
+| `SANDBOX_MIN_FREE_BYTES` | 1073741824 | Espaço livre mínimo no disco para iniciar a execução (erro explícito) |
 | `SANDBOX_ASSET_CACHE_DIR` | `store/assets` | Cache de ativos por sha256 |
 | `SANDBOX_WORK_DIR` | `store/sandbox_work` | Diretórios temporários por execução (`deps`, `staging`), removidos ao fim |
 | `SANDBOX_INPUT_DELIVERY` | `mount` | `mount` ou `copy` |
-| `SANDBOX_COPY_MAX_BYTES` | 536870912 | Limite do modo `copy` |
+| `SANDBOX_OUTPUT_MAX_BYTES` | 1048576 | Limite de stdout e de stderr do script devolvidos ao orquestrador (cada) |
+| `SANDBOX_COPY_MAX_BYTES` | 67108864 | Limite do modo `copy` (o tmpfs conta na memória do container) |
 
 ## Análise de impacto (6 eixos)
 
@@ -256,3 +267,71 @@ container de preparação desta mudança (ver questão 4).
    limite de tamanho, ou por idade?
 4. Cache de pacotes entre execuções no container de preparação (`UV_CACHE_DIR` persistente
    montado só na fase `install`): incluir nesta mudança ou deixar para depois?
+
+## Achados da revisão de segurança (PR #111)
+
+Registro das correções e dos riscos aceitos decorrentes da revisão do Analista de Segurança.
+
+- **A1 (alta) — rede sem insumos:** a exceção do §6 passou a exigir `network_allowed()` do classificador
+  antes de qualquer outra regra; sem insumos e com o classificador padrão, a execução roda sem rede.
+  *Rede dedicada para a preparação:* avaliada e **não adotada aqui**. Uma rede de containers própria
+  não filtra destinos por si só: restringir a saída aos índices de pacotes exige regras de firewall no
+  host (iptables/nftables) ou proxy, fora do escopo sem tocar em Dockerfile/compose e sem validação no
+  Pi. Fica como risco aceito (ver Riscos) para uma mudança futura.
+- **A2 (alta) — `put_archive` com raiz somente leitura:** o daemon só aceita `put_archive` em pontos de
+  montagem. `/inputs` (modo `copy`) passou de `HostConfig.Tmpfs` para `Mount(type="tmpfs")`; script e spec
+  do fetch passaram para o diretório de controle `/control` (`ro`). O script e a spec do sandbox de
+  execução continuam em `/outputs` (bind mount). Limitação: `Mount` tmpfs do SDK não expõe
+  `noexec/nosuid/nodev` nem uid/gid; `/inputs` fica com dono root e modo 0555 (somente leitura para o
+  usuário do sandbox). **Não validado com container real** (depende da bateria de integração).
+- **M1 (média) — disco do Pi:** padrão por ativo reduzido para 512 MiB; teto somado por execução
+  (`SANDBOX_ASSET_TOTAL_MAX_BYTES`, 2 GiB, aplicado no script de download); `shutil.disk_usage` checado
+  antes de criar a preparação/execução (`SANDBOX_MIN_FREE_BYTES`, falha explícita `sandbox_disk_low`).
+  **Risco aceito pendente (5.5.1):** sem cota de disco para os bind mounts `/outputs` e `/deps`; o
+  script ainda pode encher o disco durante a execução.
+- **M2 (média) — tmpfs e memória:** no modo `copy`, `SANDBOX_COPY_MAX_BYTES + SANDBOX_TMPFS_SIZE` precisa
+  ser menor que o limite de memória do container (o tmpfs conta na memória); caso contrário a execução é
+  recusada antes de criar o container. Padrão de `SANDBOX_COPY_MAX_BYTES` reduzido para 64 MiB. Com os
+  padrões atuais (`/tmp` de 256m e memória de 256m) o modo `copy` exige ajustar um dos limites.
+- **M3 (média) — saída do script:** o `exec_run` bufferiza toda a saída na RAM do orquestrador. O script
+  passa a rodar por um lançador fixo do projeto (`python -I -c <lançador>`) que limita stdout e stderr a
+  `SANDBOX_OUTPUT_MAX_BYTES` (1 MiB) cada, mantendo o início e o fim (o traceback fica no fim) com um
+  marcador do trecho omitido, e propaga o código de saída (morte por sinal vira 128+sinal: 137 segue
+  indicando OOM). O comportamento do lançador é testado localmente (subprocesso), não só com cliente simulado.
+- **M4 (média) — varredura nos caminhos de erro:** `kill` + varredura (symlinks para fora, FIFOs, nomes
+  reservados) também rodam no `finally` de `run`, não só no caminho normal; stdout/stderr são decodificados
+  com `errors="replace"` (bytes inválidos não viram falha de infraestrutura).
+- **M5 (média) — origem de `/prior`:** cada sessão anterior precisa ser exatamente `<saída>/<sessão>`
+  (profundidade 1, nunca a raiz de todas as sessões nem uma subpasta), diferente da sessão atual e sem
+  repetição; qualquer violação recusa a execução antes de criar containers.
+- **M6 (média) — TOCTOU na verificação dos ativos:** a preparação passou a usar um container por fase; o de
+  `fetch_assets` recebe `kill` + `remove` antes da verificação no host (nenhum processo dele troca o
+  arquivo durante o hash), e o de `install` só monta `/deps` (nunca vê `/staging` nem `/control`). No host,
+  o arquivo é movido para um nome privado do cache e o hash é calculado sobre o arquivo já movido, com
+  `O_NOFOLLOW`; em `EXDEV` (staging e cache em sistemas de arquivos diferentes) copia sem seguir symlink e
+  renomeia. Custo: um container a mais (1–3 s) quando há `assets` baixados **e** `packages`.
+- **M7 (média) — integridade do download:** ativo **sem** `sha256` declarado exige URL `https` (sem hash, a
+  integridade só vem do TLS); com hash declarado `http` continua aceito porque o host verifica o hash. Um
+  redirecionamento de `https` para `http` é recusado em qualquer caso. **Risco aceito:** o `uv` da fase
+  `install` não tem filtro de IP interno (a validação de destino do §3 vale só para o script de download);
+  ele fala apenas com o PyPI fixo, mas um índice comprometido ou um redirecionamento do PyPI poderia levar
+  a um destino interno. Mitiga-se com a rede dedicada para a preparação (ver A1), ainda não adotada.
+- **B1 (baixa) — comando de instalação:** acrescentados `--no-cache` e `--link-mode=copy` (o `UV_CACHE_DIR`
+  fica em tmpfs e não deve acumular); o design agora descreve também `--only-binary :all:` (nada de
+  `setup.py`/backends de build com rede ligada) e `--no-config` (o `uv` ignora `uv.toml`/`pyproject.toml`
+  do diretório corrente), e o interpretador `/opt/sandbox-venv` do ADR 018. Na lista de riscos, a opção
+  `SANDBOX_INSTALL_ONLY_BINARY` deixa de existir: `--only-binary` é sempre aplicado.
+- **B2 (baixa) — não regulares:** `list_input_files` e `check_mount_source` recusam FIFOs, sockets e
+  dispositivos (`stat.S_ISREG`; `check_mount_source` aceita também diretórios, que é o que `/prior` monta).
+- **B6 (baixa) — fase da exceção:** uma exceção depois da criação do container de execução (exec, injeção do
+  script, introspecção) vira `fase_falha="execute"` (com `infra_error` preenchido); até lá segue `infra`.
+- **B7 (baixa) — origem em acertos de cache:** o primeiro download de um conteúdo grava o sidecar
+  `SANDBOX_ASSET_CACHE_DIR/<sha256>.json` (`url`, `destino`, `baixado_em`; nunca sobrescrito). Um acerto de
+  cache registra `origem="cache"` e `url_original` (a URL do sidecar), ao lado da `url` declarada na chamada.
+- **B3 (baixa) — diretórios de trabalho órfãos:** a varredura de `SANDBOX_WORK_DIR/<run_id>` deixados por
+  um encerramento abrupto (SIGKILL, queda de energia) **não foi implementada**: exige decidir um limite de
+  idade seguro para não apagar a execução de outro processo; o `finally` de `run` cobre os desfechos normais.
+  Os pontos B4, B5 e B8 do parecer ficam apenas **documentados**, sem alteração de código nesta mudança.
+- **Questão em aberto 2 (sha256 opcional):** mantida como assumida (aceitar ativo sem hash, registrando
+  `hash_declarado=false`), agora com a exigência de `https` (M7). **Exige decisão do pesquisador** se o hash
+  deve ser obrigatório sempre.

@@ -18,15 +18,15 @@ inclusive quando a execução declara `packages` ou `assets`, exceto no caso do 
 - **THEN** apenas o container da fase `execute` é criado, sem rede
 
 ### Requirement: Preparação com rede e sem dados
-O sistema SHALL executar as fases `install` e `fetch_assets` em container separado do da fase
-`execute`, com rede e **sem** montar `input_snapshot/`, o diretório de saída da subtarefa ou
+O sistema SHALL executar as fases `install` e `fetch_assets`, cada uma em container separado do da
+fase `execute` (e um do outro), com rede e **sem** montar `input_snapshot/`, o diretório de saída da subtarefa ou
 diretórios de sessões anteriores, e SHALL remover esse container antes de iniciar a fase
 `execute`.
 
 #### Scenario: Montagens da preparação
 - **GIVEN** uma execução com `packages` e `assets`
 - **WHEN** o container de preparação é criado
-- **THEN** suas únicas montagens são o diretório temporário de dependências e a área de download da execução
+- **THEN** o container de download só monta a área de download (`/staging`, gravável) e o diretório de controle (`/control`, somente leitura), e o de instalação só monta o diretório de dependências
 - **AND** nenhuma variável de ambiente do host além de `HOME`, `UV_CACHE_DIR` e `PATH` é repassada
 
 #### Scenario: Container de preparação removido antes da execução
@@ -63,8 +63,12 @@ leitura em `/assets/<destino>` na fase `execute`.
 - **THEN** o resultado tem `fase_falha="fetch_assets"` com os dois hashes na mensagem, e o script não roda
 
 #### Scenario: Ativo sem hash declarado
-- **WHEN** um ativo é declarado com `sha256=null`
+- **WHEN** um ativo com URL `https` é declarado com `sha256=null`
 - **THEN** o ativo é baixado, o hash calculado é registrado em `ativos` com `hash_declarado=false`
+
+#### Scenario: Ativo sem hash em URL http
+- **WHEN** um ativo com URL `http` é declarado sem `sha256`
+- **THEN** a execução é recusada informando que sem sha256 a URL precisa ser `https`
 
 #### Scenario: Ativo já em cache
 - **GIVEN** um ativo com `sha256` declarado já presente em `SANDBOX_ASSET_CACHE_DIR`
@@ -110,8 +114,9 @@ repetir URL nem trechos do `stderr`.
 - **THEN** `download_nao_declarado=False` e o erro segue o fluxo normal
 
 ### Requirement: Exceção de rede para entradas compartilháveis
-O sistema MAY executar a fase `execute` com rede somente quando a chamada pedir
-`needs_network=true`, todos os arquivos de `/inputs` estiverem marcados `compartilhavel` e
+O sistema MAY executar a fase `execute` com rede somente quando o classificador de insumos a
+autorizar explicitamente (verificado antes de qualquer outra regra, inclusive sem insumos), a
+chamada pedir `needs_network=true`, todos os arquivos de `/inputs` estiverem marcados `compartilhavel` e
 nenhum dado produzido por execução estiver visível ao script; nos demais casos SHALL executar
 sem rede e informar a condição que falhou.
 
@@ -127,7 +132,7 @@ sem rede e informar a condição que falhou.
 
 #### Scenario: Classificador padrão
 - **GIVEN** que `v18.5-research-data-ingestion` ainda não está implementada
-- **WHEN** qualquer execução pede `needs_network=true`
+- **WHEN** qualquer execução pede `needs_network=true`, com ou sem insumos
 - **THEN** a fase `execute` roda sem rede
 
 ### Requirement: Resultado estruturado do sandbox

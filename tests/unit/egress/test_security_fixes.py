@@ -146,3 +146,24 @@ def test_m2_extremos_em_qualquer_posicao_do_nome(linha, exato):
 def test_m2_agregado_com_nome_composto_segue_a_regra_de_k():
     saida = filters.filter_execution_output("n=3\nmean accuracy (test): 0.93", _ctx())
     assert "0.93" not in saida and "n<k" in saida
+
+
+def test_m3_continuacao_multilinha_da_mensagem_e_mascarada():
+    texto = (
+        "Traceback (most recent call last):\n"
+        '  File "a.py", line 3, in <module>\n'
+        "ValueError: linha com 'segredo' invalida\n"
+        "valores: 12.5 e 'outro' 99\n"
+        "mais um 3.14\n"
+        "\n"
+        "texto normal 7.5"
+    )
+    saida = filters.filter_execution_output(texto, _ctx())
+    for vazado in ("segredo", "12.5", "'outro'", "99", "3.14"):
+        assert vazado not in saida
+    assert "texto normal 7.5" in saida  # depois da linha em branco já não é mensagem
+
+
+def test_m3_excecao_sem_traceback_tambem_mascara_a_continuacao():
+    saida = filters.filter_execution_output("KeyError: 'abc'\n  detalhe 4.25", _ctx())
+    assert "4.25" not in saida and "abc" not in saida

@@ -200,14 +200,20 @@ def _mask_exception_line(line: str, ctx: FilterContext, *, final: bool) -> str:
     return line[:start] + _mask_exception_message(match.group("msg"), ctx)
 
 
+_CHAIN_MARKERS = ("During handling of the above exception", "The above exception was the direct cause")
+
+
 def filter_tracebacks(text: str, ctx: FilterContext) -> str:
-    """Mantém tipo, arquivo, linha e forma da mensagem; literais da mensagem viram marcadores tipados."""
+    """Mantém tipo, arquivo, linha e forma da mensagem; literais da mensagem (inclusive a continuação multilinha)
+    viram marcadores tipados."""
     if "Error" not in text and "Exception" not in text and _TB_HEADER not in text and "Warning" not in text:
         return text
     out: list[str] = []
     in_traceback = False
+    in_message = False  # linhas após `Tipo: mensagem` até a linha em branco continuam a mensagem
     for line in text.split("\n"):
         if _TB_HEADER in line:
+            in_traceback = in_message = False
             in_traceback = True
             out.append(line)
         elif in_traceback:
@@ -215,9 +221,17 @@ def filter_tracebacks(text: str, ctx: FilterContext) -> str:
                 out.append(line)  # linhas `File "...", line N, in f` e a linha de código ecoada
             else:
                 in_traceback = False
+                in_message = True
                 out.append(_mask_exception_line(line, ctx, final=True))
+        elif in_message and line.strip() and not line.startswith(_CHAIN_MARKERS):
+            out.append(_mask_exception_message(line, ctx))
         else:
-            out.append(_mask_exception_line(line, ctx, final=False) if _EXC_SEARCH_RE.search(line) else line)
+            in_message = False
+            if _EXC_SEARCH_RE.search(line):
+                out.append(_mask_exception_line(line, ctx, final=False))
+                in_message = True
+            else:
+                out.append(line)
     return "\n".join(out)
 
 

@@ -388,10 +388,10 @@ def _py_files(*roots):
 
 def test_nenhum_ponto_de_chamada_envia_sem_gated_provider():
     """Toda chamada `generate(` fora dos provedores usa um provedor obtido do roteador (sempre `GatedProvider`),
-    e só o roteador e o health check criam provedores diretamente."""
+    e só o roteador e o health check criam provedores diretamente; `scripts/` também (M1)."""
     ofensores = []
     criadores = []
-    for path in _py_files("src", "agents"):
+    for path in _py_files("src", "agents", "scripts"):
         rel = path.relative_to(_ROOT).as_posix()
         text = path.read_text(encoding="utf-8")
         if any(rel.startswith(allowed) for allowed in _ALLOWED_CALL_FILES):
@@ -401,12 +401,31 @@ def test_nenhum_ponto_de_chamada_envia_sem_gated_provider():
             ofensores.append(rel)
         if rel == "src/context_loader.py":
             assert "authorize_vision" in text
-        if re.search(r"\bcreate_provider\(", text) and rel not in {
-            "src/model_router.py", "src/llm/availability.py", "src/llm/registry.py",
-        }:
-            criadores.append(rel)
+        if re.search(r"\bcreate_provider\(", text):
+            if rel in {"src/model_router.py", "src/llm/availability.py", "src/llm/registry.py"}:
+                continue
+            if "GatedProvider(" not in text:  # fora do roteador, o provedor criado tem de ser envolvido
+                criadores.append(rel)
     assert not ofensores, f"chamada direta a generate_content fora da camada: {ofensores}"
-    assert not criadores, f"provedores criados fora do roteador: {criadores}"
+    assert not criadores, f"provedores criados fora do roteador e sem GatedProvider: {criadores}"
+
+
+def test_health_check_do_catalogo_nunca_gera_texto():
+    """`availability.py` cria o provedor sem camada porque só chama `check_availability`/`health_check`."""
+    text = (_ROOT / "src/llm/availability.py").read_text(encoding="utf-8")
+    assert not _PROVIDER_CALL.search(text)
+    for path in (_ROOT / "src/llm/providers").glob("*.py"):
+        body = path.read_text(encoding="utf-8")
+        if "async def check_availability" in body:
+            check = body.split("async def check_availability", 1)[1].split("\n    async def ", 1)[0]
+            assert ".generate(" not in check, path.name
+
+
+def test_juiz_do_benchmark_usa_provedor_envolvido():
+    from scripts.benchmark import comm_judge as mod
+
+    provider = mod.routed_provider_factory("ollama", "qwen3:8b")
+    assert isinstance(provider, GatedProvider) and provider.dest.papel == "juiz"
 
 
 def test_roteador_devolve_sempre_provedor_envolvido():

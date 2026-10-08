@@ -265,16 +265,20 @@ TAINT_CLOSE = "\u27e6/T\u27e7"  # ⟦/T⟧
 DATA_CLOSE = "\u27e6/D\u27e7"  # ⟦/D⟧
 _DATA_OPEN_PREFIX = "\u27e6D:"  # ⟦D:
 _MARK_CHARS = "\u27e6\u27e7"
-_KIND_ORIGIN = {"D": ContentOrigin.DADO_DE_PESQUISA, "S": ContentOrigin.SAIDA_EXECUCAO}
+_KIND_ORIGIN = {
+    "D": ContentOrigin.DADO_DE_PESQUISA,
+    "S": ContentOrigin.SAIDA_EXECUCAO,
+    "A": ContentOrigin.ESQUEMA_AGREGADO,  # nomes de artefatos (regra §3.5)
+}
 _MARKED_RE = re.compile(
     re.escape(TAINT_OPEN) + r"(?P<t>.*?)" + re.escape(TAINT_CLOSE)
-    + r"|\u27e6(?P<k>[DS]):(?P<src>[^\u27e7]*)\u27e7(?P<body>.*?)\u27e6/(?P=k)\u27e7",
+    + r"|\u27e6(?P<k>[ADS]):(?P<src>[^\u27e7]*)\u27e7(?P<body>.*?)\u27e6/(?P=k)\u27e7",
     re.DOTALL,
 )
 _ANY_MARK_RE = re.compile(
-    re.escape(TAINT_OPEN) + "|" + re.escape(TAINT_CLOSE) + r"|\u27e6/[DS]\u27e7|\u27e6[DS]:[^\u27e7]*\u27e7"
+    re.escape(TAINT_OPEN) + "|" + re.escape(TAINT_CLOSE) + r"|\u27e6/[ADS]\u27e7|\u27e6[ADS]:[^\u27e7]*\u27e7"
 )
-_OPEN_MARK_RE = re.compile(re.escape(TAINT_OPEN) + r"|\u27e6[DS]:[^\u27e7]*\u27e7")
+_OPEN_MARK_RE = re.compile(re.escape(TAINT_OPEN) + r"|\u27e6[ADS]:[^\u27e7]*\u27e7")
 
 
 def strip_marks(text: str) -> str:
@@ -312,6 +316,11 @@ def _mark_origin(text: str, kind: str, source: str) -> str:
 def mark_research_data(text: str, source: str) -> str:
     """Envolve ``text`` na marca de dado de pesquisa de ``source`` (ex.: ``input_context/``)."""
     return _mark_origin(text, "D", source)
+
+
+def mark_artifact_names(text: str) -> str:
+    """Envolve linhas ``  - nome`` de artefatos: o gate aplica a regra de nomes (§3.5) a elas."""
+    return _mark_origin(text, "A", ARTIFACT_NAMES_SOURCE)
 
 
 def mark_execution_output(text: str, source: str) -> str:

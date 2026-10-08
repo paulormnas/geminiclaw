@@ -9,14 +9,18 @@ from src.logger import get_logger
 
 logger = get_logger(__name__)
 
-def _writer_tags(tags: Optional[List[str]]) -> List[str]:
-    """Tags da memória com a marca de contaminação quando o agente que escreve usa modelo com dados brutos."""
-    from src.agent_runtime.context import get_agent_context_optional
+def _writer_tags(tags: Optional[List[str]], tainted: Optional[bool] = None) -> List[str]:
+    """Tags da memória com a marca de contaminação.
+
+    ``tainted`` explícito (escritas do orquestrador originadas de saída de modelo ou de execução) manda; sem ele vale o
+    papel do agente corrente; sem agente e sem declaração, o lado seguro (contaminado): fora de um agente o texto
+    pode ter vindo de um modelo, então a ausência de declaração nunca significa "limpo". Uma tag já presente é mantida.
+    """
     from src.egress.gate import caller_tainted
 
-    if get_agent_context_optional() is None:  # escrita programática (sem modelo): sem marca
-        return list(tags or [])
-    return with_taint_tag(tags, caller_tainted())
+    if tainted is None:
+        tainted = caller_tainted()  # sem contexto de agente: True
+    return with_taint_tag(tags, tainted or tags_tainted(tags))
 
 
 class MemorySkill(BaseSkill):
@@ -116,7 +120,7 @@ class MemorySkill(BaseSkill):
         if not key or not value:
             return SkillResult(success=False, output="", error="key e value são obrigatórios")
 
-        self.short_term.write(session_id, key, value, source, _writer_tags(tags))
+        self.short_term.write(session_id, key, value, source, _writer_tags(tags, kwargs.get("tainted")))
         logger.info(
             "Memória gravada em curto prazo",
             extra={"event": "memory_written", "store": "short_term", "key": key, "session_id": session_id},
@@ -133,7 +137,7 @@ class MemorySkill(BaseSkill):
         if not key or not value:
             return SkillResult(success=False, output="", error="key e value são obrigatórios")
 
-        self.long_term.write(key, value, source, importance, _writer_tags(tags))
+        self.long_term.write(key, value, source, importance, _writer_tags(tags, kwargs.get("tainted")))
         logger.info(
             "Memória gravada em longo prazo",
             extra={"event": "memory_written", "store": "long_term", "key": key},

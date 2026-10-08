@@ -62,15 +62,17 @@ class SubtaskOutput:
         
         if self.artifacts:
             lines.append("**Artefatos Gerados:**")
-            for art in self.artifacts:
-                name = art.get("name", "arquivo")
-                path = art.get("path", "")
-                lines.append(f"- `{name}` em `{path}`")
+            from src.egress.fragments import mark_artifact_names
+
+            names = [f"- `{art.get('name', 'arquivo')}` em `{art.get('path', '')}`" for art in self.artifacts]
+            lines.append(mark_artifact_names("\n".join(names)))
 
         if self.artifact_aliases:
             lines.append("**Arquivos produzidos (esperado → real):**")
-            for expected, real in self.artifact_aliases.items():
-                lines.append(f"- {expected} → {real}")
+            from src.egress.fragments import mark_artifact_names
+
+            aliases = [f"- {expected} → {real}" for expected, real in self.artifact_aliases.items()]
+            lines.append(mark_artifact_names("\n".join(aliases)))
 
         return "\n".join(lines)
 

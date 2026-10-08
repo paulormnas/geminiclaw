@@ -123,7 +123,8 @@ def test_escrita_de_memoria_por_agente_com_dados_brutos_leva_a_tag(monkeypatch):
     from src.agent_runtime.context import AgentContext, bind_agent_context, current_context
     from src.skills.memory.skill import _writer_tags
 
-    assert _writer_tags(["a"]) == ["a"]  # sem agente (escrita programática): sem marca
+    assert TAINT_TAG in _writer_tags(["a"])  # sem agente e sem declaração: o lado seguro
+    assert _writer_tags(["a"], tainted=False) == ["a"]  # declaração explícita de texto limpo
     token = current_context.set(None)
     try:
         bind_agent_context(AgentContext(session_id="s", agent_session_id="s-a", agent_id="developer", mode="auto",

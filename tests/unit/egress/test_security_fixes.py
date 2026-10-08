@@ -72,3 +72,55 @@ def test_a3_entrada_adversarial_termina_rapido(texto):
 def test_a3_linha_longa_e_omitida_com_marcador():
     saida = filters.filter_execution_output("ok\n" + "9" * 5000 + "\nfim", _ctx())
     assert "linha longa omitida: 5000 caracteres" in saida and "9999" not in saida
+
+
+def test_a4_nomes_de_artefatos_no_contexto_de_dependencias_passam_pela_regra_de_nomes():
+    from src.subtask_output import SubtaskOutput
+
+    from .conftest import make_dest
+
+    saida = SubtaskOutput(
+        task_name="t", agent_id="developer", status="success", text_summary="ok", tainted=False,
+        artifacts=[{"name": "curva_12.537.png", "path": "t/curva_12.537.png"}],
+        artifact_aliases={"x.png": "curva_7.25.png"},
+    )
+    msg = labeled("user", PromptFragment(saida.to_context_string(), ContentOrigin.INSTRUCAO))
+    fora = _gate().prepare_llm([msg], None, make_dest(raw=False)).messages[0]["content"]
+    assert "12.537" not in fora and "7.25" not in fora and "<num padrão=dd.ddd>" in fora
+    dentro = _gate().prepare_llm([msg], None, make_dest(raw=True)).messages[0]["content"]
+    assert "12.537" in dentro and "7.25" in dentro
+
+
+def test_a4_artefatos_da_retentativa_sao_nomes_sanitizados():
+    from src.egress.fragments import mark_artifact_names
+
+    from .conftest import make_dest
+
+    contexto = "[ARTEFATOS]\n" + mark_artifact_names("  - r_3.14.csv\n  - ok.csv")
+    fora = _gate().prepare_llm(
+        [labeled("user", PromptFragment(contexto, ContentOrigin.INSTRUCAO))], None, make_dest(raw=False)
+    ).messages[0]["content"]
+    assert "r_<num padrão=d.dd>.csv" in fora and "ok.csv" in fora
+
+
+def test_a4_memoria_escrita_pelo_orquestrador_leva_tag_explicita():
+    from src.egress.persisted import TAINT_TAG
+    from src.skills.memory.skill import MemorySkill, _writer_tags
+
+    assert TAINT_TAG in _writer_tags(["code_pattern"])  # sem declaração: contaminado
+    assert TAINT_TAG in _writer_tags(["x", TAINT_TAG], tainted=False)  # tag existente nunca é removida
+    assert _writer_tags(["x"], tainted=False) == ["x"]
+    skill = MemorySkill()
+    skill._handle_remember("s-a4", key="retry", value='{"previous_error": "ValueError: 12,5"}', tainted=True)
+    entry = skill.short_term.read("s-a4", "retry")
+    assert TAINT_TAG in entry.tags
+
+
+def test_a4_resultado_de_subtarefa_na_memoria_curta_vai_marcado(gate, third_party):
+    from src.egress.persisted import tags_tainted
+    from src.egress.fragments import taint_if
+
+    assert tags_tainted(["subtask_result", "egress:tainted"])
+    prompt = "Contexto: " + taint_if("acurácia 0.93", tags_tainted(["egress:tainted"]))
+    out = gate.prepare_llm([labeled("user", PromptFragment(prompt, ContentOrigin.INSTRUCAO))], None, third_party)
+    assert "<num padrão=d.dd>" in out.messages[0]["content"]

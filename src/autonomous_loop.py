@@ -30,9 +30,9 @@ from src.telemetry import get_telemetry
 from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
 from src.knowledge.hypothesis_cycle import SolutionStatus
 from src.knowledge.suggestions import SuggestionError
-from src.egress.fragments import mark_execution_output, taint_if
+from src.egress.fragments import mark_artifact_names, mark_execution_output, taint_if
 from src.egress.gate import role_tainted
-from src.egress.persisted import resumed_text_tainted, resumo_marca
+from src.egress.persisted import resumed_text_tainted, resumo_marca, tags_tainted, with_taint_tag
 from src.usage import UsageBudget, UsageTracker, StopReason
 from src.continuity import (
     ESTADO_FECHADO,
@@ -183,7 +183,7 @@ class AutonomousLoop:
                 key=f"result:{name}",
                 value=output.to_json(),
                 source=output.agent_id,
-                tags=["subtask_result", name, "structured", "resumed"],
+                tags=with_taint_tag(["subtask_result", name, "structured", "resumed"], output.tainted is not False),
             )
 
     async def run(
@@ -575,7 +575,7 @@ class AutonomousLoop:
                     parts.append(output.to_context_string())
                 except Exception:
                     # Fallback para texto bruto se não for JSON válido (compatibilidade)
-                    parts.append(f"### Resultado de `{task_name}`\n{entry.value}")
+                    parts.append(f"### Resultado de `{task_name}`\n{taint_if(entry.value, tags_tainted(entry.tags))}")
             else:
                 logger.debug(
                     "Contexto não encontrado na memória de curto prazo",
@@ -1227,7 +1227,9 @@ class AutonomousLoop:
                                 key=f"result:{task.task_name}",
                                 value=output.to_json(),
                                 source=task.agent_id,
-                                tags=["subtask_result", task.task_name, "structured"],
+                                tags=with_taint_tag(
+                                    ["subtask_result", task.task_name, "structured"], output.tainted is not False
+                                ),
                             )
                             
                             if task.agent_id == "code":
@@ -1243,7 +1245,7 @@ class AutonomousLoop:
                         if artifacts_on_disk:
                             artifact_context = (
                                 f"\n\n[ARTEFATOS PARCIAIS EXISTENTES EM DISCO]\n"
-                                + "\n".join(f"  - {a}" for a in artifacts_on_disk)
+                                + mark_artifact_names("\n".join(f"  - {a}" for a in artifacts_on_disk))
                                 + "\nEsses artefatos são válidos. Não os recrie. Continue a partir deles.\n"
                             )
 
@@ -1263,7 +1265,8 @@ class AutonomousLoop:
                                 action="remember",
                                 session_id=master_session_id,
                                 key=f"retry_context_{task.task_name}_{attempt + 1}",
-                                value=json.dumps(memory_context)
+                                value=json.dumps(memory_context),
+                                tainted=True,  # previous_error é saída de execução: nunca stderr cru sem marca
                             )
 
                         # V18/usage-limits — retentativas da MESMA tarefa (task_name) são
@@ -2101,7 +2104,8 @@ class AutonomousLoop:
                         session_id=master_session_id,
                         key=key,
                         value=json.dumps(extracted),
-                        tags=["code_pattern", domain]
+                        tags=["code_pattern", domain],
+                        tainted=role_tainted(extraction_task.agent_id),
                     )
                     logger.info("Padrão de código extraído e salvo na memória", extra={"key": key})
 

@@ -250,7 +250,10 @@ SEARCH_CACHE_TTL_SECONDS = int(get_env("SEARCH_CACHE_TTL_SECONDS", default="3600
 INPUT_CONTEXT_DIR = get_env("INPUT_CONTEXT_DIR", default="./input_context")
 # Acima deste total estimado de tokens, a CLI avisa o pesquisador antes de prosseguir.
 CONTEXT_TOKEN_WARNING_THRESHOLD = int(get_env("CONTEXT_TOKEN_WARNING_THRESHOLD", default="100000"))
-# Estratégia de OCR para imagens: 'local' (pytesseract) ou 'gemini' (Gemini Vision).
+# Descrição de imagens por modelo de visão (v18.5-research-data-ingestion): ``provedor/modelo``, entrada do catálogo
+# de modelos. Vazio = sem visão (OCR local).
+VISION_MODEL = get_env("VISION_MODEL", default="")
+# Obsoleto: ``gemini`` vira alias de ``VISION_MODEL=google/gemini-3.8-flash`` (com aviso); ``local`` = sem visão.
 OCR_PROVIDER = get_env("OCR_PROVIDER", default="local")
 
 # Docker settings

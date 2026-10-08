@@ -32,9 +32,10 @@ from src.config import (
 )
 from src.context_loader import ContextBundle, ContextLoader
 from src.infrastructure import ensure_infrastructure
-from src.logger import get_logger
-from src.orchestrator import AgentResult, Orchestrator, OrchestratorResult
-from src.session import SessionManager
+from src.orchestrator import Orchestrator, OrchestratorResult, AgentResult
+from src.context_loader import ContextLoader, ContextBundle
+from src.llm.vision import VisionConfigError
+from src.research_data.manifest import ManifestError
 from src.usage import UsageBudget
 from src.utils.terminal import BANNER, BOLD, CYAN, DIM, GREEN, MAGENTA, RED, RESET, STATUS_ICONS, VERSION, YELLOW
 
@@ -546,7 +547,13 @@ def load_context_with_confirmation(context_dir: str | None = None) -> ContextBun
     Returns:
         O `ContextBundle` carregado, ou None se o pesquisador optou por não continuar.
     """
-    bundle = ContextLoader(context_dir).load()
+    try:
+        bundle = ContextLoader(context_dir).load()
+    except (ManifestError, VisionConfigError) as e:
+        # v18.5-research-data-ingestion: manifesto inválido ou visão mal configurada impedem a sessão.
+        print(f"\n  {STATUS_ICONS['error']} {RED}input_context/: {e}{RESET}\n")
+        logger.error("Contexto de entrada inválido", extra={"error": str(e)})
+        return None
 
     if bundle.total_files == 0:
         print(f"  {DIM}📂 Nenhum contexto encontrado em input_context/.{RESET}")
@@ -556,6 +563,8 @@ def load_context_with_confirmation(context_dir: str | None = None) -> ContextBun
         f"  {GREEN}📂 Contexto carregado:{RESET} {bundle.total_files} arquivo(s) "
         f"({bundle.total_tokens_estimated} tokens estimados)"
     )
+    for warning in bundle.manifest_warnings:
+        print(f"  {YELLOW}⚠ {warning}{RESET}")
 
     if bundle.total_tokens_estimated > CONTEXT_TOKEN_WARNING_THRESHOLD:
         print(
@@ -849,11 +858,26 @@ def run_embeddings_reindex(collection: str | None, auto_confirm: bool) -> None:
     print()
 
 
+def data_banner_lines(bundle: ContextBundle | None) -> list[str]:
+    """Linhas do banner sobre os dados de entrada: contagens por classe e arquivos compartilháveis com o motivo."""
+    if bundle is None or not bundle.markings:
+        return []
+    counts = bundle.marking_counts()
+    lines = [
+        f"Dados: {counts['pesquisa']} de pesquisa · {counts['compartilhaveis']} compartilháveis · "
+        f"{counts['documentos']} documentos"
+    ]
+    for marking in bundle.shareable_markings():
+        lines.append(f"  compartilhável: {marking.caminho} — {marking.motivo}")
+    return lines
+
+
 def print_session_banner(
     mode: str,
     context_dir: str = "input_context",
     budget: UsageBudget | None = None,
     llm_routing: "SessionRouting | None" = None,
+    context_bundle: ContextBundle | None = None,
 ) -> None:
     """Exibe o banner de inicialização de sessão (Roadmap V15.6 / Spec G10).
 
@@ -895,6 +919,9 @@ def print_session_banner(
         f"{DIM}│{RESET}  Pressione Ctrl+C para suspender │  -h para ajuda\n"
         f"{DIM}└──────────────────────────────────────────────────────────────┘{RESET}"
     )
+
+    for line in data_banner_lines(context_bundle):
+        print(f"  {DIM}{line}{RESET}")
 
     # Roadmap V18 / Spec usage-limits — orçamento efetivo exibido no início da sessão.
     effective_budget = budget or UsageBudget.from_config()
@@ -1160,7 +1187,9 @@ async def interactive_mode(
     """
     print(BANNER)
     print(f"  {DIM}Modo interativo. Digite 'sair' para encerrar.{RESET}\n")
-    print_session_banner(mode or SESSION_DEFAULT_MODE, budget=budget, llm_routing=llm_routing)
+    print_session_banner(
+        mode or SESSION_DEFAULT_MODE, budget=budget, llm_routing=llm_routing, context_bundle=context_bundle
+    )
 
     while True:
         try:
@@ -1527,7 +1556,7 @@ def main() -> None:
 
     if args.prompt:
         # Modo direto: executa o prompt e sai
-        print_session_banner(mode, budget=budget, llm_routing=llm_routing)
+        print_session_banner(mode, budget=budget, llm_routing=llm_routing, context_bundle=context_bundle)
         accepted = asyncio.run(
             execute_prompt(
                 orchestrator,

@@ -3,14 +3,14 @@
 """
 
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.cli import clear_context, load_context_with_confirmation
 from src.context_loader import ContextLoader
 from src.orchestrator import AgentResult, AgentTask, Orchestrator
 from src.session import Session
-from src.cli import load_context_with_confirmation, clear_context
 
 
 def _make_session(agent_id: str, session_id: str, payload: dict | None = None) -> Session:

@@ -1,6 +1,8 @@
 import pytest
+
 from src.skills.memory.short_term import ShortTermMemory
 from src.skills.memory.skill import MemorySkill
+
 
 @pytest.fixture
 def memory():

@@ -7,8 +7,9 @@ e ao logger estruturado para rastreamento de operações.
 """
 
 import os
-from typing import Any, List, Callable, Dict, Optional
 from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Optional
+
 
 @dataclass
 class Agent:
@@ -316,8 +317,8 @@ def _get_agent_instruction(base_instruction: str) -> str:
 
     # --- Documentos do usuário indexados ---
     try:
-        from src.skills.document_processor.indexer import DocumentIndexer
         from src.agent_runtime.context import get_agent_context_optional
+        from src.skills.document_processor.indexer import DocumentIndexer
 
         indexer = DocumentIndexer()
         ctx = get_agent_context_optional()
@@ -358,7 +359,6 @@ def _get_agent_instruction(base_instruction: str) -> str:
 
     # --- Informações de hardware (Pi 5 / plataforma atual) ---
     try:
-        import platform
         import shutil
 
         hw_lines: list[str] = []

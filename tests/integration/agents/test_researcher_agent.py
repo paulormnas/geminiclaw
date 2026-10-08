@@ -1,11 +1,11 @@
 """Testes de integração para o Researcher Agent com capacidades de planejamento (Roadmap V14.3)."""
 
-import pytest
 import json
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 
-from agents.researcher.agent import plan, replan, root_agent
-from src.llm.base import LLMResponse, ToolCall
+import pytest
+
+from agents.researcher.agent import plan, replan
 from src.skills.base import SkillResult
 
 

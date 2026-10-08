@@ -9,7 +9,7 @@ Integrado ao WorkspaceManifest para reutilização de artefatos entre etapas.
 
 import json
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Optional
 
 from agents.base.agent import (
     Agent,
@@ -23,7 +23,6 @@ from agents.base.tools import flag_for_curator, read_artifact, write_artifact
 from src.logger import get_logger
 from src.prompts import render_instruction
 from src.skills import registry
-from src.skills.code.manifest import WorkspaceManifest
 
 logger = get_logger(__name__)
 

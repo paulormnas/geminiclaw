@@ -5,11 +5,10 @@ ao Gemini CLI durante uma sessão do agente researcher.
 """
 
 import time
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
-from src.logger import get_logger
 from src.config import SEARCH_CACHE_TTL_SECONDS
+from src.logger import get_logger
 
 logger = get_logger(__name__)
 

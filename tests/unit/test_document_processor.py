@@ -1,7 +1,9 @@
 import pytest
+
+from src.skills.document_processor.chunker import DocumentChunker
 from src.skills.document_processor.extractors.base import ExtractedDocument
 from src.skills.document_processor.extractors.registry import ExtractorRegistry
-from src.skills.document_processor.chunker import DocumentChunker
+
 
 @pytest.fixture
 def mock_text_file(tmp_path):

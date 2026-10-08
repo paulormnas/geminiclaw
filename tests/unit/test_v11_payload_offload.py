@@ -8,14 +8,11 @@ from __future__ import annotations
 
 import gzip
 import json
-import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.telemetry import TelemetryCollector, _PAYLOAD_INLINE_LIMIT
-
+from src.telemetry import _PAYLOAD_INLINE_LIMIT, TelemetryCollector
 
 # ---------------------------------------------------------------------------
 # Helper

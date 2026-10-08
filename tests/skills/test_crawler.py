@@ -1,8 +1,9 @@
+
 import pytest
 import respx
-import httpx
-from datetime import datetime
-from src.skills.search_deep.crawler import DomainCrawler, CrawledPage
+
+from src.skills.search_deep.crawler import DomainCrawler
+
 
 @pytest.fixture
 def crawler(tmp_path):

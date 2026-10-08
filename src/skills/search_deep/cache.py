@@ -8,7 +8,7 @@ pelo ``scripts/init_db.sql``.
 import hashlib
 import json
 from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 from src.db import get_connection
 

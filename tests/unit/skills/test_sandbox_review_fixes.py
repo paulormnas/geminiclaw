@@ -9,7 +9,6 @@ import pytest
 from test_sandbox_phases import _FetchDaemon
 from test_sandbox_slim import FakeDaemon, _run, make_sandbox  # noqa: F401 — fixture reexportada
 
-
 # --- A1: a rede exige autorização explícita do classificador ---------------------------------------
 
 @pytest.mark.unit

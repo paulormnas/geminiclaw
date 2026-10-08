@@ -13,9 +13,9 @@ from src.knowledge import opportunities
 from src.knowledge.suggestions import (
     FILENAME,
     SUGGESTION_TYPES,
+    SuggestionError,
     SuggestionStore,
     build_candidates,
-    SuggestionError,
     suggest_paths,
 )
 from tests.support.controlled_embedding_provider import pair_vectors

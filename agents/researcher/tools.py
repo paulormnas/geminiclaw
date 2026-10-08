@@ -10,8 +10,8 @@ subprocesso de fornecedor").
 
 from typing import Optional
 
-from src.logger import get_logger
 from agents.researcher.cache import SearchCache
+from src.logger import get_logger
 from src.skills.search_quick.skill import QuickSearchSkill
 
 logger = get_logger(__name__)

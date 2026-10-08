@@ -11,8 +11,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.orchestrator import AgentTask, AgentResult
 from src.autonomous_loop import AutonomousLoop
+from src.orchestrator import AgentResult, AgentTask
 from src.skills.memory.short_term import ShortTermMemory
 
 

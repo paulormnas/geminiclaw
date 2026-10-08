@@ -6,12 +6,11 @@ Cobre exemplos reais de saídas problemáticas que LLMs costumam produzir.
 import pytest
 
 from src.utils.json_parser import (
-    extract_json,
-    _strip_markdown_fences,
     _extract_balanced,
     _sanitize,
+    _strip_markdown_fences,
+    extract_json,
 )
-
 
 # ---------------------------------------------------------------------------
 # extract_json — caminho feliz

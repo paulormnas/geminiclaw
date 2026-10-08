@@ -1,5 +1,6 @@
-import pytest
 import httpx
+import pytest
+
 from src.utils.qdrant import get_qdrant_client
 
 

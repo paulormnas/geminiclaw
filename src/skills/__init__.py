@@ -1,8 +1,10 @@
-from typing import Dict, List, Optional, Any, Callable
+from typing import Any, Callable, Dict, List, Optional
+
 from src.egress.fragments import ContentOrigin, ToolOutput
 
 from .base import BaseSkill
 from .search_quick.skill import QuickSearchSkill
+
 try:
     from .search_deep.skill import DeepSearchSkill
     _HAS_DEEP_SEARCH = True
@@ -10,9 +12,10 @@ except (ImportError, ModuleNotFoundError):
     _HAS_DEEP_SEARCH = False
 
 from .code.skill import CodeSkill
+from .human_feedback.skill import HumanFeedbackSkill
 from .memory.skill import MemorySkill
 from .web_reader.skill import WebReaderSkill
-from .human_feedback.skill import HumanFeedbackSkill
+
 try:
     from .document_processor.skill import DocumentProcessorSkill
     _HAS_DOC_PROCESSOR = True
@@ -127,12 +130,12 @@ def _safe_register(skill_class, enabled: bool = True):
         get_logger(__name__).error(f"Falha ao registrar skill {skill_class.__name__}: {e}")
 
 from src.config import (
-    SKILL_DEEP_SEARCH_ENABLED,
-    SKILL_WEB_READER_ENABLED,
     SKILL_CODE_ENABLED,
-    SKILL_MEMORY_ENABLED,
+    SKILL_DEEP_SEARCH_ENABLED,
     SKILL_DOCUMENT_PROCESSOR_ENABLED,
     SKILL_HUMAN_FEEDBACK_ENABLED,
+    SKILL_MEMORY_ENABLED,
+    SKILL_WEB_READER_ENABLED,
 )
 
 _safe_register(QuickSearchSkill)
@@ -145,4 +148,15 @@ if _HAS_DOC_PROCESSOR:
     _safe_register(DocumentProcessorSkill, enabled=SKILL_DOCUMENT_PROCESSOR_ENABLED)
 _safe_register(HumanFeedbackSkill, enabled=SKILL_HUMAN_FEEDBACK_ENABLED)
 
-__all__ = ["BaseSkill", "SkillRegistry", "registry", "QuickSearchSkill", "DeepSearchSkill", "CodeSkill", "MemorySkill", "WebReaderSkill", "DocumentProcessorSkill", "HumanFeedbackSkill"]
+__all__ = [
+    "BaseSkill",
+    "SkillRegistry",
+    "registry",
+    "QuickSearchSkill",
+    "DeepSearchSkill",
+    "CodeSkill",
+    "MemorySkill",
+    "WebReaderSkill",
+    "DocumentProcessorSkill",
+    "HumanFeedbackSkill",
+]

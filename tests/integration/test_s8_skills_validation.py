@@ -10,19 +10,18 @@ Cenários cobertos:
 4. Verificação de log events em cenário realista encadeado
 """
 
-import pytest
-import asyncio
+import json
 import logging
 import os
-import json
-import tempfile
 import shutil
-import docker
+import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import docker
+import pytest
 
 from src.skills.base import SkillResult
 from src.skills.memory.skill import MemorySkill
-
 
 # ---------------------------------------------------------------------------
 # Helpers de verificação de disponibilidade

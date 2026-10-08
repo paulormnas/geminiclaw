@@ -1,6 +1,5 @@
 import asyncio
 import time
-from typing import Optional
 
 from src.logger import get_logger
 

@@ -1,19 +1,19 @@
-import os
-import json
 import asyncio
-import traceback
+import json
+import os
 import pathlib
-from typing import Any, List, Dict, Callable, Optional, AsyncGenerator
+import traceback
 from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Optional
 
 from src.agent_runtime.context import get_agent_context_optional
 from src.egress.fragments import ContentOrigin, PromptFragment, dumps_messages, labeled, tool_result_fragment
-from src.llm.base import LLMProvider, ToolCall, LLMResponse
-from src.llm.metering import bound_execution_id, provider_name, record_llm_call
-from src.llm.pricing import estimate_cost
-from src.llm.factory import get_provider
+from src.llm.base import LLMProvider, LLMResponse
 from src.llm.context_compression import compress_messages
 from src.llm.context_injection import build_workspace_context_fragments
+from src.llm.factory import get_provider
+from src.llm.metering import bound_execution_id, provider_name, record_llm_call
+from src.llm.pricing import estimate_cost
 from src.logger import get_logger
 from src.telemetry import get_telemetry
 
@@ -396,7 +396,6 @@ async def run_agent_loop(
                         # V14: Injeção automática de metadados se exigidos pela ferramenta
                         if hasattr(tool_func, "parameters_schema") and tool_func.parameters_schema:
                             required = tool_func.parameters_schema.get("required", [])
-                            properties = tool_func.parameters_schema.get("properties", {})
                             
                             # Injetar SESSION_ID se não fornecido
                             if "session_id" in required and "session_id" not in tool_call.arguments:
@@ -539,7 +538,9 @@ async def run_agent_loop(
                     tools=None,  # sem ferramentas para forçar resposta direta
                     system=instruction,
                 )
-                record_llm_call(provider, recovery_response, int((_time.monotonic() - _t_rec) * 1000), _agent_id, _task_name)
+                record_llm_call(
+                    provider, recovery_response, int((_time.monotonic() - _t_rec) * 1000), _agent_id, _task_name
+                )
                 if recovery_response.text:
                     final_response = recovery_response.text
                     logger.info(

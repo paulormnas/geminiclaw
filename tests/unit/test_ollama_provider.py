@@ -1,9 +1,10 @@
+
+import httpx
 import pytest
 import respx
-import httpx
-import json
+
 from src.llm.providers.ollama import OllamaProvider
-from src.llm.base import ToolCall
+
 
 @pytest.mark.asyncio
 async def test_ollama_generate_success():

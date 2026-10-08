@@ -4,20 +4,17 @@ Implementa a lógica de triage (simples vs complexo),
 decomposição de tarefas em subtarefas e loop de retentativas.
 """
 
+import asyncio
+import hashlib
+import json
 import os
 import re
-import json
-import hashlib
-import asyncio
 import time
 import uuid
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-from typing import Any, TYPE_CHECKING, List, Dict, Optional
-from src.logger import get_logger
-from src.skills.memory.short_term import ShortTermMemory
-from src.triage import TriageClassifier, TriageDecision
-from src.health import PiHealthMonitor
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
 from src.config import (
     CIRCUIT_BREAKER_STALL_CYCLES,
     LIMIT_GRACE_SECONDS,
@@ -26,14 +23,6 @@ from src.config import (
     MAX_SUBTASKS_PER_TASK,
     SESSION_MAX_TASK_RETRIES,
 )
-from src.telemetry import get_telemetry
-from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
-from src.knowledge.hypothesis_cycle import SolutionStatus
-from src.knowledge.suggestions import SuggestionError
-from src.egress.fragments import mark_artifact_names, mark_execution_output, taint_if
-from src.egress.gate import role_tainted
-from src.egress.persisted import resumed_text_tainted, resumo_marca, tags_tainted, with_taint_tag
-from src.usage import UsageBudget, UsageTracker, StopReason
 from src.continuity import (
     ESTADO_FECHADO,
     ST_ABANDONADA,
@@ -43,10 +32,22 @@ from src.continuity import (
     list_task_artifacts,
     plan_entry,
 )
+from src.egress.fragments import mark_artifact_names, mark_execution_output, taint_if
+from src.egress.gate import role_tainted
+from src.egress.persisted import resumed_text_tainted, resumo_marca, tags_tainted, with_taint_tag
+from src.health import PiHealthMonitor
+from src.knowledge.hypothesis_cycle import SolutionStatus
+from src.knowledge.suggestions import SuggestionError
+from src.logger import get_logger
+from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
+from src.skills.memory.short_term import ShortTermMemory
+from src.telemetry import get_telemetry
+from src.triage import TriageClassifier
+from src.usage import StopReason, UsageBudget, UsageTracker
 
 if TYPE_CHECKING:
     from src.exploration import ExplorationSession, ExplorationStop
-    from src.orchestrator import Orchestrator, AgentTask, AgentResult, OrchestratorResult
+    from src.orchestrator import AgentResult, AgentTask, Orchestrator, OrchestratorResult
 
 logger = get_logger(__name__)
 
@@ -321,6 +322,7 @@ class AutonomousLoop:
             )
 
             import time as _time
+
             from src.llm.metering import record_llm_call
 
             _t0 = _time.monotonic()
@@ -404,11 +406,11 @@ class AutonomousLoop:
             True se o pesquisador optou por suspender a sessão; False caso contrário.
         """
         from src.config import (
-            OPERATIONAL_THRESHOLDS,
-            SESSION_MAX_TOKENS,
-            SESSION_MAX_MINUTES,
             MAX_AGENT_RUNS_PER_SESSION,
             OPERATIONAL_THRESHOLD_WAIT_SECONDS,
+            OPERATIONAL_THRESHOLDS,
+            SESSION_MAX_MINUTES,
+            SESSION_MAX_TOKENS,
         )
 
         telemetry = get_telemetry()
@@ -438,7 +440,8 @@ class AutonomousLoop:
             triggered.append(f"Custo estimado: ${total_cost:.2f} (limite ${OPERATIONAL_THRESHOLDS['cost_usd']:.2f})")
         if duration_pct >= OPERATIONAL_THRESHOLDS["session_duration_pct"]:
             triggered.append(
-                f"Duração da sessão: {duration_pct*100:.0f}% do limite ({duration_min:.0f}min/{SESSION_MAX_MINUTES:.0f}min)"
+                f"Duração da sessão: {duration_pct*100:.0f}% do limite "
+                f"({duration_min:.0f}min/{SESSION_MAX_MINUTES:.0f}min)"
             )
         planning_counts = getattr(self.orchestrator, "_session_planning_run_counts", None)
         planning_runs = planning_counts.get(master_session_id, 0) if isinstance(planning_counts, dict) else 0
@@ -460,7 +463,7 @@ class AutonomousLoop:
             # Nos modos semi/auto, apenas registra em log — nunca bloqueia (Spec G5).
             return False
 
-        from src.utils.terminal import RESET, BOLD, YELLOW
+        from src.utils.terminal import BOLD, RESET, YELLOW
 
         print(f"\n{YELLOW}{BOLD}⚠ Limite(s) operacional(is) atingido(s):{RESET}")
         for item in triggered:
@@ -519,7 +522,7 @@ class AutonomousLoop:
         }
 
         if self._session_mode == "assisted":
-            from src.utils.terminal import RESET, BOLD, YELLOW, CYAN
+            from src.utils.terminal import BOLD, CYAN, RESET, YELLOW
 
             print(
                 f"\n{YELLOW}{BOLD}⚠ DivergenceReport — subtarefa '{task.task_name}' falhou "
@@ -733,7 +736,7 @@ class AutonomousLoop:
 
     async def _run_complex_path(self, prompt: str, master_session_id: str) -> "OrchestratorResult":
         """Executa a tarefa via caminho complexo (Planner -> Loop de Subtarefas em DAG)."""
-        from src.orchestrator import AgentTask, OrchestratorResult, AgentResult
+        from src.orchestrator import AgentResult, AgentTask, OrchestratorResult
         from src.task_scheduler import TaskScheduler
 
         # V18/usage-limits — rede de segurança: `_run_complex_path` é chamado
@@ -1122,7 +1125,9 @@ class AutonomousLoop:
                         dag_state[task.task_name]["future"].set_result(None)
                     return
 
-                logger.info(f"Iniciando subtarefa {index+1}/{len(tasks)}: {task.agent_id} [{task.task_name or 'sem nome'}]")
+                logger.info(
+                    f"Iniciando subtarefa {index+1}/{len(tasks)}: {task.agent_id} [{task.task_name or 'sem nome'}]"
+                )
 
                 # V2: Constrói prefixo de contexto
                 context_prefix = self._build_context_prefix(master_session_id, task.depends_on)
@@ -1212,7 +1217,10 @@ class AutonomousLoop:
                                 success = False
                                 result.status = "error"
                                 result.error = f"Falha na revisão: {', '.join(review.get('issues', []))}"
-                                logger.warning(f"Subtarefa {task.task_name} reprovada na revisão", extra={"issues": review.get("issues")})
+                                logger.warning(
+                                    f"Subtarefa {task.task_name} reprovada na revisão",
+                                    extra={"issues": review.get("issues")},
+                                )
                             else:
                                 logger.info(f"Subtarefa {task.task_name} aprovada na revisão")
 
@@ -1240,7 +1248,9 @@ class AutonomousLoop:
                                 await self._extract_code_patterns(result, master_session_id)
                         break
                     else:
-                        logger.warning(f"Tentativa {attempt+1} de {task.task_name} falhou", extra={"error": result.error})
+                        logger.warning(
+                            f"Tentativa {attempt+1} de {task.task_name} falhou", extra={"error": result.error}
+                        )
                         attempt_errors.append(result.error or "Erro desconhecido")
 
                         # V13.5.1: Orquestrador lista artefatos reais antes de cada retry.
@@ -1248,7 +1258,7 @@ class AutonomousLoop:
                         artifact_context = ""
                         if artifacts_on_disk:
                             artifact_context = (
-                                f"\n\n[ARTEFATOS PARCIAIS EXISTENTES EM DISCO]\n"
+                                "\n\n[ARTEFATOS PARCIAIS EXISTENTES EM DISCO]\n"
                                 + mark_artifact_names("\n".join(f"  - {a}" for a in artifacts_on_disk))
                                 + "\nEsses artefatos são válidos. Não os recrie. Continue a partir deles.\n"
                             )
@@ -1581,7 +1591,8 @@ class AutonomousLoop:
                 cb_msg = (
                     "Execução interrompida: nenhum progresso detectado entre ciclos consecutivos.\n"
                     f"Subtarefas falhas: {failed_tasks}.\n"
-                    f"Erros persistentes: {[dag_state[t]['error'] for t in failed_tasks if dag_state[t]['status'] == 'failed']}.\n"
+                    "Erros persistentes: "
+                    f"{[dag_state[t]['error'] for t in failed_tasks if dag_state[t]['status'] == 'failed']}.\n"
                     "Considere revisar o prompt ou as dependências do ambiente."
                 )
                 logger.warning(
@@ -1631,8 +1642,8 @@ class AutonomousLoop:
             # Isso garante que o próximo ciclo de planejamento não re-use respostas cacheadas
             # que originaram as falhas.
             try:
-                from src.llm_cache import LLMResponseCache
                 from src.llm.session import get_session_routing
+                from src.llm_cache import LLMResponseCache
                 _model = get_session_routing().resolution("researcher").id
                 _cache = LLMResponseCache()
                 for failed_task_obj in tasks:
@@ -1652,8 +1663,9 @@ class AutonomousLoop:
                 f"STATUS DA EXECUÇÃO ANTERIOR:\n"
                 f"- Tarefas concluídas com sucesso: {', '.join(succeeded_tasks) if succeeded_tasks else 'Nenhuma'}\n"
                 f"- Falhas encontradas:\n" + "\n".join(errors) + "\n\n"
-                f"Instrução: Crie um plano de recuperação focado em resolver as falhas e completar os objetivos restantes, "
-                f"sem refazer as tarefas que já tiveram sucesso."
+                "Instrução: Crie um plano de recuperação focado em resolver as falhas e completar os "
+                "objetivos restantes, "
+                "sem refazer as tarefas que já tiveram sucesso."
             )
 
 
@@ -1672,7 +1684,8 @@ class AutonomousLoop:
         self._short_term_memory.clear(master_session_id)
         
         help_msg = (
-            f"Limite de tentativas de recuperação atingido. A execução falhou com os seguintes erros:\n{execution_feedback}\n\n"
+            "Limite de tentativas de recuperação atingido. "
+            f"A execução falhou com os seguintes erros:\n{execution_feedback}\n\n"
             f"Por favor, revise a solicitação ou forneça orientações adicionais."
         )
         
@@ -2020,9 +2033,14 @@ class AutonomousLoop:
                                 pass
                                 
                         if lessons:
-                            injection = "\n\n[PADRÕES DE CÓDIGO CONHECIDOS PARA ESTE DOMÍNIO]\n" + "\n".join(lessons) + "\n"
+                            injection = (
+                                "\n\n[PADRÕES DE CÓDIGO CONHECIDOS PARA ESTE DOMÍNIO]\n" + "\n".join(lessons) + "\n"
+                            )
                             task.prompt = task.prompt + injection
-                            logger.info("Padrões de código injetados", extra={"domain": inferred_domain, "count": len(lessons)})
+                            logger.info(
+                                "Padrões de código injetados",
+                                extra={"domain": inferred_domain, "count": len(lessons)},
+                            )
                             
         return task
 
@@ -2031,9 +2049,9 @@ class AutonomousLoop:
         if result.status != "success":
             return
             
-        import os
-        import json
         import hashlib
+        import json
+        import os
         
         # O manifest.json no novo formato (V13.3) fica em outputs/<session_id>/manifest.json
         # Aqui <session_id> de fato do container code costuma ser master_session_id + "_" + task_name
@@ -2053,7 +2071,8 @@ class AutonomousLoop:
             pass
             
         # O manifest costuma estar em outputs/<master_session_id>_task_name/manifest.json 
-        # Vamos apenas injetar os últimos logs de execução ou o que houver no result em vez de procurar o arquivo se for difícil.
+        # Vamos apenas injetar os últimos logs de execução ou o que houver no result
+        # em vez de procurar o arquivo se for difícil.
         # Mas V13.6.1 exige "Histórico: {manifest_steps}".
         # O V13.5.2 usava outputs/{master_session_id}/manifest.json. Vou usar esse.
         manifest_path = os.path.join(output_dir, master_session_id, "manifest.json")
@@ -2126,8 +2145,6 @@ class AutonomousLoop:
         Returns:
             Dicionário com o status da revisão e feedback.
         """
-        from src.orchestrator import AgentTask
-        from src.utils.json_parser import extract_json
 
         # V14.2: Reviewer executado via corrotina ValidatorAgent (sem container Docker)
         output_manager = self.orchestrator.output_manager

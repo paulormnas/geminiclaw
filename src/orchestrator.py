@@ -6,44 +6,27 @@ sandbox de código, acionado pela skill de código.
 """
 
 import asyncio
-import os
 import json
 import threading
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
-from src.logger import get_logger
+from src.agent_runtime.context import AgentContext
+from src.agent_runtime.runtime import AgentRuntime
+from src.agents.validator_agent import ValidatorAgent
+from src.autonomous_loop import AutonomousLoop
 from src.config import (
-    GEMINI_REQUESTS_PER_MINUTE,
     GEMINI_RATE_LIMIT_COOLDOWN_SECONDS,
+    GEMINI_REQUESTS_PER_MINUTE,
     MAX_AGENT_RUNS_PER_SESSION,
-    OLLAMA_ENABLE_THINKING,
     MAX_PLANNING_ITERATIONS,
     MAX_PLANNING_RUNS_PER_SESSION,
+    OLLAMA_ENABLE_THINKING,
     PLAN_NORMALIZER_ENABLED,
     PLAN_REJECTION_STALL_LIMIT,
     SESSION_MAX_TASK_RETRIES,
 )
-from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
-from src.plan_normalizer import normalize_plan
-from src.egress.fragments import mark_research_data, taint_if
-from src.egress.gate import EgressGate, any_role_raw, bind_gate, role_tainted
-from src.egress.persisted import resumo_marca
-from src.llm.allocation import build_allocation_profile
-from src.llm.session import SessionRouting, bind_session_routing, build_session_routing, get_session_routing
-from src.session import SessionManager
-from src.output_manager import OutputManager, generate_session_slug
-from src.autonomous_loop import AutonomousLoop
-from src.utils.json_parser import extract_json
-from src.rate_limiter import AdaptiveRateLimiter
-from src.llm.metering import bind_execution, bound_execution_id
-from src.telemetry import get_telemetry
-from src.agents.validator_agent import ValidatorAgent
-from src.agent_runtime.context import AgentContext
-from src.agent_runtime.runtime import AgentRuntime
-from src.context_loader import ContextLoader, ContextBundle
-from src.human_gate import HumanGate
-from src.usage import UsageBudget, UsageTracker
+from src.context_loader import ContextBundle, ContextLoader
 from src.continuity import (
     ESTADO_FECHADO,
     ESTADO_INTERROMPIDO,
@@ -52,9 +35,25 @@ from src.continuity import (
     ResumeConflictError,
     ResumeState,
 )
+from src.egress.fragments import mark_research_data, taint_if
+from src.egress.gate import EgressGate, any_role_raw, bind_gate, role_tainted
+from src.egress.persisted import resumo_marca
 from src.heartbeat import SessionHeartbeat
+from src.human_gate import HumanGate
 from src.knowledge.hypotheses import PlanExtras, split_plan
 from src.knowledge.suggestions import SuggestionError
+from src.llm.allocation import build_allocation_profile
+from src.llm.metering import bind_execution, bound_execution_id
+from src.llm.session import SessionRouting, bind_session_routing, build_session_routing, get_session_routing
+from src.logger import get_logger
+from src.output_manager import OutputManager, generate_session_slug
+from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
+from src.plan_normalizer import normalize_plan
+from src.rate_limiter import AdaptiveRateLimiter
+from src.session import SessionManager
+from src.telemetry import get_telemetry
+from src.usage import UsageBudget, UsageTracker
+from src.utils.json_parser import extract_json
 
 if TYPE_CHECKING:
     from agents.curator.runner import Curator
@@ -950,11 +949,12 @@ class Orchestrator:
         Returns:
             O resultado final da orquestração.
         """
-        import time
         import json
-        from src.history import ExecutionHistory
+        import time
         from datetime import datetime
+
         from src.config import SESSION_DEFAULT_MODE
+        from src.history import ExecutionHistory
 
         started_at = time.time()
         start_date = datetime.utcnow().isoformat() + "Z"
@@ -1354,7 +1354,8 @@ class Orchestrator:
             A resposta do pesquisador (ou reaproveitada de uma pergunta similar anterior).
         """
         import asyncio as _asyncio
-        from src.utils.terminal import RESET, BOLD, YELLOW, CYAN, DIM
+
+        from src.utils.terminal import BOLD, CYAN, DIM, RESET, YELLOW
 
         session_key = master_session_id or task.task_name or "unknown"
 
@@ -1392,6 +1393,7 @@ class Orchestrator:
         (do pesquisador ou do consultor) são reaproveitadas; suposições e pendências não.
         """
         import difflib
+
         from src.config import ASK_RESEARCHER_DEDUP_SIMILARITY
         from src.research_consult import RESPONDIDO_PESQUISADOR, RESPONDIDO_RESEARCHER
 
@@ -2103,8 +2105,8 @@ class Orchestrator:
                     for t in current_plan_data
                 )[:3000]
                 tasks = []
-                from datetime import datetime, timezone
                 import uuid
+                from datetime import datetime, timezone
                 now_iso = datetime.now(timezone.utc).isoformat()
                 for t in current_plan_data:
                     tasks.append(AgentTask(

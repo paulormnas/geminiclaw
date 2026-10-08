@@ -1,8 +1,10 @@
-import pytest
-import asyncio
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
-from src.skills.search_deep.crawler import DomainCrawler, CrawledPage
+
+import pytest
+
+from src.skills.search_deep.crawler import CrawledPage, DomainCrawler
+
 
 @pytest.fixture
 def crawler():

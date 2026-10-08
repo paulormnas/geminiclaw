@@ -4,11 +4,11 @@ Valida a geração do JWT e a troca pelo Installation Token,
 sem realizar chamadas reais à API do GitHub.
 """
 import importlib
-import pytest
 import sys
-import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Adicionar o diretório da skill ao path para permitir o import de github_app_auth
 skill_dir = str(Path(__file__).parent.parent.parent / ".agents" / "skills")
@@ -16,11 +16,9 @@ if skill_dir not in sys.path:
     sys.path.append(skill_dir)
 
 import github_app_auth as mod
-
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

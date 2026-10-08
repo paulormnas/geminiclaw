@@ -8,13 +8,13 @@ Valida:
 - Validação de corrected_plan no orchestrator (parsing do Validator)
 """
 
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
 
-from src.orchestrator import AgentTask, AgentResult, OrchestratorResult
-from src.autonomous_loop import AutonomousLoop, _CONTEXT_MAX_CHARS
+from src.autonomous_loop import _CONTEXT_MAX_CHARS, AutonomousLoop
+from src.orchestrator import AgentTask
 from src.skills.memory.short_term import ShortTermMemory
-
 
 # ---------------------------------------------------------------------------
 # Helpers

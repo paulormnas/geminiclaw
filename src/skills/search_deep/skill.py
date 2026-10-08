@@ -1,9 +1,11 @@
-from typing import Any, Dict, List, Optional
+from typing import Optional
+
 from src.egress.fragments import ContentOrigin
-from src.skills.base import BaseSkill, SkillResult
-from .indexer import VectorIndexer
-from .cache import DeepSearchCache
 from src.logger import get_logger
+from src.skills.base import BaseSkill, SkillResult
+
+from .cache import DeepSearchCache
+from .indexer import VectorIndexer
 
 logger = get_logger(__name__)
 

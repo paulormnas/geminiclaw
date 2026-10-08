@@ -4,13 +4,9 @@ V13.1.3 — Valida que o campo session_id da tool python_interpreter é
 sempre sobrescrito com o valor canônico de SESSION_ID do ambiente,
 independentemente do que o LLM gerar como argumento.
 """
-import json
-import os
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest_asyncio
-
+import pytest
 
 # ---------------------------------------------------------------------------
 # Helpers

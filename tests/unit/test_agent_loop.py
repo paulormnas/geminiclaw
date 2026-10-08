@@ -1,8 +1,10 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
-import asyncio
-from unittest.mock import MagicMock, patch, AsyncMock
-from src.llm.agent_loop import run_agent_loop, AgentState
+
+from src.llm.agent_loop import AgentState, run_agent_loop
 from src.llm.base import LLMResponse, ToolCall
+
 
 @pytest.mark.unit
 @pytest.mark.asyncio

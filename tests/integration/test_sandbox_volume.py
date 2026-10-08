@@ -1,9 +1,9 @@
-import os
+
 import pytest
-import docker
-import pathlib
+
 from src import config
 from src.skills.code.sandbox import PythonSandbox
+
 
 def _geminiclaw_image_exists() -> bool:
     """Verifica se a imagem do sandbox (SANDBOX_IMAGE) está disponível localmente."""

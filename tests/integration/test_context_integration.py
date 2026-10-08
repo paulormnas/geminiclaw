@@ -4,12 +4,12 @@ Valida o fluxo completo de compartilhamento de contexto dentro do
 AutonomousLoop sem depender de containers Docker ou API real.
 """
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock
 
-from src.orchestrator import AgentTask, AgentResult, OrchestratorResult
 from src.autonomous_loop import AutonomousLoop
-
+from src.orchestrator import AgentResult, AgentTask
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -2,8 +2,9 @@
 """
 
 import json
-from dataclasses import dataclass, field, asdict
-from typing import Any, List, Dict, Optional
+from dataclasses import asdict, dataclass, field
+from typing import Any, Dict, List, Optional
+
 
 @dataclass
 class SubtaskOutput:
@@ -77,7 +78,13 @@ class SubtaskOutput:
         return "\n".join(lines)
 
     @classmethod
-    def from_agent_result(cls, task_name: str, agent_id: str, result: Any, review_data: Optional[Dict[str, Any]] = None) -> "SubtaskOutput":
+    def from_agent_result(
+        cls,
+        task_name: str,
+        agent_id: str,
+        result: Any,
+        review_data: Optional[Dict[str, Any]] = None,
+    ) -> "SubtaskOutput":
         """Cria um SubtaskOutput a partir do resultado de um agente e dados de revisão."""
         from src.egress.gate import role_tainted
         from src.utils.json_parser import extract_json

@@ -4,8 +4,10 @@ Usa mock de get_connection para as operações de longo prazo.
 Curto prazo (ShortTermMemory) é in-memory e não precisa de mock.
 """
 
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
+
 from src.skills.memory.skill import MemorySkill
 
 
@@ -25,7 +27,6 @@ def _make_ctx(fetchone=None, fetchall=None):
 
 def _make_lt_row(key="user_city", value="São Paulo", importance=0.9):
     """Cria uma row mock da tabela long_term_memory."""
-    import json
     return {
         "id": "uuid-1",
         "key": key,

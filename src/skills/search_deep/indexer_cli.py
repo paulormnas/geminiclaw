@@ -1,9 +1,11 @@
-import asyncio
-import sys
 import argparse
+import asyncio
+
+from src.config import get_env
+
 from .crawler import DomainCrawler
 from .indexer import VectorIndexer
-from src.config import get_env
+
 
 async def run_crawl():
     domains_str = get_env("DEEP_SEARCH_DOMAINS", "")

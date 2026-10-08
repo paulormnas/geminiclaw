@@ -5,13 +5,14 @@ real nunca levanta exceção (traduz falhas e timeouts em ``AgentResult``), ent�
 falha usam resultados com ``status`` ``error``/``timeout``.
 """
 
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch, ANY
 
 from src.orchestrator import (
-    Orchestrator,
-    AgentTask,
     AgentResult,
+    AgentTask,
+    Orchestrator,
     OrchestratorResult,
 )
 from src.session import Session

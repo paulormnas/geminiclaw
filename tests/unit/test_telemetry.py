@@ -6,13 +6,11 @@ Verifica inserções no buffer, flush no banco (mocked) e queries de análise.
 from __future__ import annotations
 
 import asyncio
-import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.telemetry import TelemetryCollector, _Buffer, get_telemetry
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -267,7 +265,7 @@ class TestFlush:
         assert col._buffer.total() > 0
 
         ctx, _ = _make_conn_ctx()
-        with patch("src.telemetry.TelemetryCollector._write_snapshot") as mock_write:
+        with patch("src.telemetry.TelemetryCollector._write_snapshot"):
             asyncio.run(col.flush())
 
         assert col._buffer.total() == 0

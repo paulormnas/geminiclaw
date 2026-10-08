@@ -1,11 +1,15 @@
 import os
+
 os.environ["GEMINI_API_KEY"] = "dummy"
+
+import time
+from unittest.mock import MagicMock, patch
 
 import docker.errors
 import pytest
-import time
-from unittest.mock import MagicMock, patch
-from src.skills.code.sandbox import PythonSandbox, SandboxResult, _is_docker_connection_error
+
+from src.skills.code.sandbox import PythonSandbox, _is_docker_connection_error
+
 
 @pytest.fixture
 def mock_docker_client():

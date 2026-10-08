@@ -1,7 +1,9 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from src.skills.search_deep.skill import DeepSearchSkill
-from src.skills.base import SkillResult
+
 
 @pytest.mark.unit
 @pytest.mark.asyncio

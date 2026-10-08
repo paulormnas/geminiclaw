@@ -9,6 +9,7 @@ Para rodar:
 """
 
 import os
+
 import pytest
 
 
@@ -52,13 +53,13 @@ class TestPoolIntegration:
 
     def test_get_pool_cria_pool_real(self):
         """get_pool() deve criar e retornar um pool funcional."""
-        from src.db import get_pool, close_pool
+        from src.db import get_pool
         pool = get_pool()
         assert pool is not None
 
     def test_get_connection_executa_query(self):
         """get_connection() deve permitir executar uma query simples."""
-        from src.db import get_connection, close_pool
+        from src.db import get_connection
         with get_connection() as conn:
             row = conn.execute("SELECT 1 AS valor").fetchone()
         assert row is not None

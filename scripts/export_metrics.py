@@ -22,7 +22,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -31,8 +30,8 @@ from typing import Any
 # Garante que o src/ está no path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.logger import get_logger
 from src.db import get_connection, get_pool
+from src.logger import get_logger
 
 logger = get_logger(__name__)
 

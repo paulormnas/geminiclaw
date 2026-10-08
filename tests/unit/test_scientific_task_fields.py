@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.orchestrator import AgentTask, AgentResult, Orchestrator
+from src.orchestrator import AgentResult, AgentTask, Orchestrator
 
 
 @pytest.mark.unit

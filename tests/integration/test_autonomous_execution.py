@@ -3,19 +3,17 @@
 Valida o ciclo completo do AutonomousLoop com o triage heurístico (Etapa V3).
 """
 
-import asyncio
 import json
-
-import pytest
-import tempfile
 import os
 import shutil
+import tempfile
 from unittest.mock import AsyncMock, patch
 
-from src.orchestrator import Orchestrator, AgentTask, AgentResult
-from src.session import SessionManager
-from src.db import get_connection
+import pytest
+
+from src.orchestrator import AgentResult, AgentTask, Orchestrator
 from src.output_manager import OutputManager
+from src.session import SessionManager
 
 # Narrativa JSON válida do Summarizer (v16-pipeline-robustness §6)
 NARRATIVE = json.dumps({

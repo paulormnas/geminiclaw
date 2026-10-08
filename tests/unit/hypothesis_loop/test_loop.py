@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from src.exploration import ExplorationSession
-from src.knowledge.suggestions import SuggestionError
 from src.knowledge.hypothesis_cycle import ApprovalDecision, SolutionStatus
+from src.knowledge.suggestions import SuggestionError
 from tests.support.exploration_world import APPROVED, REJECTED, LoopHarness, hyp, plan, task
 
 pytestmark = pytest.mark.unit

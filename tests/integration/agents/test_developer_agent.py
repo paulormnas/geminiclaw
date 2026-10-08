@@ -1,11 +1,11 @@
 """Testes de integração para o Developer Agent (Roadmap V14.4)."""
 
-import pytest
 import json
-from pathlib import Path
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from agents.developer.agent import root_agent, handle_request_filter, _build_developer_instruction
+import pytest
+
+from agents.developer.agent import _build_developer_instruction, handle_request_filter
 from src.autonomous_loop import AutonomousLoop
 from src.orchestrator import AgentTask
 

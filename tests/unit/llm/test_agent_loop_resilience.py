@@ -9,13 +9,12 @@ Cobre os mecanismos:
            é removida da lista de tools disponíveis.
 """
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch, call
 
-from src.llm.agent_loop import run_agent_loop, ErrorTracker
+from src.llm.agent_loop import ErrorTracker, run_agent_loop
 from src.llm.base import LLMResponse, ToolCall
-
 
 # ---------------------------------------------------------------------------
 # Helpers

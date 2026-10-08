@@ -1,11 +1,11 @@
-import os
-from typing import List, Optional, Any
+from typing import List, Optional
+
 from src.egress.fragments import ContentOrigin
-from src.skills.base import BaseSkill, SkillResult
-from src.skills.memory.short_term import ShortTermMemory
-from src.skills.memory.long_term import LongTermMemory, LongTermMemoryEntry
 from src.egress.persisted import tags_tainted, with_taint_tag
 from src.logger import get_logger
+from src.skills.base import BaseSkill, SkillResult
+from src.skills.memory.long_term import LongTermMemory
+from src.skills.memory.short_term import ShortTermMemory
 
 logger = get_logger(__name__)
 
@@ -151,7 +151,11 @@ class MemorySkill(BaseSkill):
         
         entry = self.short_term.read(session_id, key)
         if not entry:
-            return SkillResult(success=True, output=f"Nenhuma memória de curto prazo encontrada para '{key}'", metadata={"found": False})
+            return SkillResult(
+                success=True,
+                output=f"Nenhuma memória de curto prazo encontrada para '{key}'",
+                metadata={"found": False},
+            )
         
         return SkillResult(
             success=True, output=entry.value,
@@ -191,7 +195,9 @@ class MemorySkill(BaseSkill):
         
         entries = self.short_term.search(session_id, tags)
         if not entries:
-            return SkillResult(success=True, output=f"Nenhuma memória encontrada com as tags {tags}", metadata={"found": False})
+            return SkillResult(
+                success=True, output=f"Nenhuma memória encontrada com as tags {tags}", metadata={"found": False}
+            )
         
         output = f"Memórias encontradas ({len(entries)}):\n"
         for entry in entries:
@@ -199,7 +205,11 @@ class MemorySkill(BaseSkill):
             
         return SkillResult(
             success=True, output=output,
-            metadata={"found": True, "count": len(entries), "egress_tainted": any(tags_tainted(e.tags) for e in entries)},
+            metadata={
+                "found": True,
+                "count": len(entries),
+                "egress_tainted": any(tags_tainted(e.tags) for e in entries),
+            },
         )
 
     def _handle_remember_forever(self, session_id: str, **kwargs) -> SkillResult:
@@ -211,7 +221,9 @@ class MemorySkill(BaseSkill):
 
         st_entry = self.short_term.read(session_id, key)
         if not st_entry:
-            return SkillResult(success=False, output="", error=f"Memória de curto prazo '{key}' não encontrada na sessão")
+            return SkillResult(
+                success=False, output="", error=f"Memória de curto prazo '{key}' não encontrada na sessão"
+            )
 
         self.long_term.write(st_entry.key, st_entry.value, st_entry.source, importance, st_entry.tags)
         logger.info(

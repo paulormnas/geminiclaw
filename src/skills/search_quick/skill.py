@@ -1,14 +1,15 @@
 import os
-from typing import List, Optional
-from src.logger import get_logger
+from typing import Optional
+
 from src.egress.fragments import ContentOrigin
 from src.egress.gate import EgressRefused, caller_tainted, external_destination, get_gate
+from src.logger import get_logger
 
 from ..base import BaseSkill, SkillResult
-from .scraper import DuckDuckGoScraper, SearchResult
-from .ddg_lite import DuckDuckGoLiteScraper
 from .brave import BraveSearchClient
 from .cache import SearchCache
+from .ddg_lite import DuckDuckGoLiteScraper
+from .scraper import DuckDuckGoScraper
 
 logger = get_logger(__name__)
 

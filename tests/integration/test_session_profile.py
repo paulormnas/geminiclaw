@@ -8,15 +8,14 @@ Cobre:
 - Exibição do modo na listagem `geminiclaw sessions`.
 """
 
-import os
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.orchestrator import AgentResult, AgentTask, Orchestrator
 from src.autonomous_loop import AutonomousLoop
-from src.session import Session
 from src.cli import show_sessions
+from src.orchestrator import AgentResult, AgentTask, Orchestrator
+from src.session import Session
 
 
 def _make_session(agent_id: str, session_id: str, payload: dict | None = None) -> Session:

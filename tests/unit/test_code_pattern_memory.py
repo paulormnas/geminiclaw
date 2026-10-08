@@ -1,10 +1,12 @@
-import pytest
 import json
 import os
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from src.autonomous_loop import AutonomousLoop
-from src.orchestrator import AgentTask, AgentResult
+from src.orchestrator import AgentResult, AgentTask
+
 
 @pytest.fixture
 def mock_orchestrator():

@@ -1,8 +1,10 @@
 import os
-import pytest
+
 import docker
+import pytest
+
 from agents.base.agent import root_agent
-from src.skills import registry
+
 
 def is_docker_available():
     try:

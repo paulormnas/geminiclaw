@@ -1,7 +1,8 @@
-import os
-import pytest
-from unittest.mock import patch
 import importlib
+import os
+from unittest.mock import patch
+
+import pytest
 
 # Define uma chave fictícia temporária para permitir a importação inicial sem erro e sem poluir globalmente
 with patch.dict(os.environ, {"GEMINI_API_KEY": "dummy_initial_key"}):

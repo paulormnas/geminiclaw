@@ -8,9 +8,8 @@ import argparse
 import asyncio
 import signal
 import sys
-import os
 from pathlib import Path
-from typing import TYPE_CHECKING, NoReturn, Any
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.llm.session import SessionRouting
@@ -22,25 +21,22 @@ root_path = str(Path(__file__).parent.parent)
 if root_path not in sys.path:
     sys.path.insert(0, root_path)
 
-from src.logger import get_logger
 from src.config import (
     AGENT_TIMEOUT_SECONDS,
     APP_NAME,
-    SessionMode,
-    SESSION_DEFAULT_MODE,
-    INPUT_CONTEXT_DIR,
     CONTEXT_TOKEN_WARNING_THRESHOLD,
+    INPUT_CONTEXT_DIR,
     OUTPUT_BASE_DIR,
+    SESSION_DEFAULT_MODE,
+    SessionMode,
 )
-from src.session import SessionManager
+from src.context_loader import ContextBundle, ContextLoader
 from src.infrastructure import ensure_infrastructure
-from src.orchestrator import Orchestrator, OrchestratorResult, AgentResult
-from src.context_loader import ContextLoader, ContextBundle
+from src.logger import get_logger
+from src.orchestrator import AgentResult, Orchestrator, OrchestratorResult
+from src.session import SessionManager
 from src.usage import UsageBudget
-from src.utils.terminal import (
-    RESET, BOLD, DIM, GREEN, RED, YELLOW, CYAN, MAGENTA,
-    STATUS_ICONS, BANNER, VERSION
-)
+from src.utils.terminal import BANNER, BOLD, CYAN, DIM, GREEN, MAGENTA, RED, RESET, STATUS_ICONS, VERSION, YELLOW
 
 logger = get_logger(__name__)
 
@@ -334,8 +330,9 @@ def format_result(result: OrchestratorResult) -> str:
 
 def show_history() -> None:
     """Exibe o histórico recente de execuções."""
-    from src.history import ExecutionHistory
     from datetime import datetime
+
+    from src.history import ExecutionHistory
     
     history = ExecutionHistory()
     records = history.list_recent(limit=10)
@@ -360,7 +357,10 @@ def show_history() -> None:
         prompt_trunc = r.prompt[:40] + "..." if len(r.prompt) > 40 else r.prompt
         dur = f"{r.duration_seconds:.1f}s" if r.duration_seconds else "??"
         
-        print(f"  {DIM}{r.id[:8]}{RESET} | {date_str} | [{status_color}{r.status.upper()}{RESET}] | ⏱  {dur} | {prompt_trunc}")
+        print(
+            f"  {DIM}{r.id[:8]}{RESET} | {date_str} | [{status_color}{r.status.upper()}{RESET}] | "
+            f"⏱  {dur} | {prompt_trunc}"
+        )
         
     _sep = "─" * 80
     print(f"{BOLD}{_sep}{RESET}\n")
@@ -477,8 +477,9 @@ def show_session_logs(session_id: str) -> None:
     Args:
         session_id: ID (slug) da sessão.
     """
-    from src.output_manager import OutputManager
     import json
+
+    from src.output_manager import OutputManager
     
     om = OutputManager()
     logs_dir = om.get_logs_dir(session_id)
@@ -519,9 +520,12 @@ def show_session_logs(session_id: str) -> None:
         msg = entry.get("message", "")
         
         color = DIM
-        if level == "ERROR": color = RED
-        elif level == "WARNING": color = YELLOW
-        elif level == "INFO": color = GREEN
+        if level == "ERROR":
+            color = RED
+        elif level == "WARNING":
+            color = YELLOW
+        elif level == "INFO":
+            color = GREEN
         
         agent_color = CYAN if agent == "orchestrator" else MAGENTA
         
@@ -589,7 +593,10 @@ def clear_context(context_dir: str | None = None) -> None:
         print(f"\n  {DIM}input_context/ já está vazio.{RESET}\n")
         return
 
-    print(f"\n  {YELLOW}⚠ Isso removerá {len(files) + len(dirs)} item(ns) de input_context/ (README.md é preservado).{RESET}")
+    print(
+        f"\n  {YELLOW}⚠ Isso removerá {len(files) + len(dirs)} item(ns) de input_context/ "
+        f"(README.md é preservado).{RESET}"
+    )
     answer = input("  Confirmar limpeza? [s/N] ").strip().lower()
     if answer not in ("s", "sim", "y", "yes"):
         print(f"  {DIM}Operação cancelada.{RESET}\n")
@@ -753,7 +760,10 @@ def convert_report(session_id: str, format: str) -> None:
         converter.convert(markdown_path, output_path)
     except Exception as e:
         print(f"\n  {RED}❌ Falha ao converter relatório: {e}{RESET}\n")
-        logger.error("Falha ao converter relatório", extra={"session_id": session_id, "format": format, "error": str(e)})
+        logger.error(
+            "Falha ao converter relatório",
+            extra={"session_id": session_id, "format": format, "error": str(e)},
+        )
         return
 
     print(f"\n  {GREEN}✅ Relatório convertido: {output_path}{RESET}\n")
@@ -974,7 +984,10 @@ def show_sessions(docker_client: Any | None = None) -> list[dict[str, Any]]:
         status = getattr(c, "status", "unknown")
         status_color = GREEN if status == "running" else YELLOW
 
-        print(f"  {CYAN}{session_id:<24}{RESET} {DIM}{cid:<14}{RESET} {agent_id:<12} {session_mode:<10} {image_name:<24} [{status_color}{status}{RESET}]")
+        print(
+            f"  {CYAN}{session_id:<24}{RESET} {DIM}{cid:<14}{RESET} {agent_id:<12} "
+            f"{session_mode:<10} {image_name:<24} [{status_color}{status}{RESET}]"
+        )
         active_info.append({
             "session_id": session_id,
             "container_id": cid,
@@ -1360,8 +1373,9 @@ def main() -> None:
         print(f"  {GREEN}✅ Cleanup concluído ({removed} sandbox(es) removido(s)).{RESET}\n")
         # V11.1.2 — Flush de telemetria antes de encerrar via SIGINT
         try:
-            from src.telemetry import get_telemetry
             import asyncio as _asyncio
+
+            from src.telemetry import get_telemetry
             _tel = get_telemetry()
             _asyncio.run(_tel.flush())
             logger.info("Flush de telemetria concluído (SIGINT).")

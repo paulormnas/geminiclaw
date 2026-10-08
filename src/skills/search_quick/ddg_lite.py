@@ -1,8 +1,11 @@
-import httpx
 import asyncio
-from bs4 import BeautifulSoup
 from typing import List
+
+import httpx
+from bs4 import BeautifulSoup
+
 from src.logger import get_logger
+
 from .scraper import SearchResult
 
 logger = get_logger(__name__)
@@ -15,7 +18,10 @@ class DuckDuckGoLiteScraper:
     def __init__(self, timeout: int = 10):
         self.timeout = timeout
         self.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            ),
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Content-Type": "application/x-www-form-urlencoded"
         }
@@ -26,7 +32,9 @@ class DuckDuckGoLiteScraper:
         for attempt in range(3):
             try:
                 # DDG Lite frequentemente usa POST na home form
-                async with httpx.AsyncClient(headers=self.headers, timeout=self.timeout, follow_redirects=True) as client:
+                async with httpx.AsyncClient(
+                    headers=self.headers, timeout=self.timeout, follow_redirects=True
+                ) as client:
                     response = await client.post(self.SEARCH_URL, data=data)
                     response.raise_for_status()
                     return self._parse_results(response.text, max_results)

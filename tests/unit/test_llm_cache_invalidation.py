@@ -8,12 +8,11 @@ Cobre os cenários:
   5. Invalidação de entrada inexistente não lança erro (V12.1.3).
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-import time
-from unittest.mock import MagicMock, patch, call
 
 from src.llm_cache import LLMResponseCache
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -1,7 +1,9 @@
 """Testes unitários para src/history.py (PostgreSQL via mock)."""
 
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
+
 from src.history import ExecutionHistory
 
 

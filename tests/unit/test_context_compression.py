@@ -1,6 +1,9 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 from src.llm.context_compression import compress_messages, estimate_tokens
+
 
 @pytest.mark.unit
 class TestContextCompression:

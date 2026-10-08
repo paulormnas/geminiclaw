@@ -80,3 +80,16 @@ line-length = 120
 # Ampliar gradualmente conforme o débito de lint existente for resolvido.
 select = ["E", "F", "I"]
 
+[tool.ruff.lint.per-file-ignores]
+# Testes: literais longos (payloads, HTML, assinaturas) e imports após bootstrap de sys.path.
+"tests/**" = ["E501", "E402"]
+# Prompts de agentes são texto corrido em strings; reformatar alteraria o prompt.
+"agents/**/agent.py" = ["E501", "E402"]
+# Imports intencionalmente após a inserção do repositório em sys.path ou adiados por ciclo de importação.
+"src/cli.py" = ["E402"]
+"src/config.py" = ["E402"]
+"src/skills/__init__.py" = ["E402"]
+"scripts/migrate_v11.py" = ["E402"]
+# Reexportam o submódulo do agente.
+"agents/*/__init__.py" = ["F401"]
+

@@ -1,8 +1,11 @@
+import io
 import json
 import logging
+
 import pytest
-import io
-from src.logger import get_logger, JsonFormatter
+
+from src.logger import JsonFormatter, get_logger
+
 
 @pytest.fixture
 def log_capture_stream():

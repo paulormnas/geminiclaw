@@ -1,12 +1,13 @@
 import asyncio
 import json
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+
 from src.autonomous_loop import AutonomousLoop
-from src.orchestrator import AgentResult, AgentTask, OrchestratorResult
-from src.telemetry import TelemetryCollector
+from src.orchestrator import AgentResult, AgentTask
 from src.usage import StopReason, UsageBudget, UsageTracker
+
 
 def _narrative(resumo: str = "Summary") -> str:
     """Narrativa JSON válida do Summarizer (v16-pipeline-robustness §6)."""

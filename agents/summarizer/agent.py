@@ -32,8 +32,18 @@ relatório (v16-pipeline-robustness).
 REGRAS:
 - RASTREABILIDADE: cada afirmação sobre resultados deve se basear nos dados recebidos; se houver
   referências bibliográficas, cite-as no texto como [1], [2] e mantenha as fontes com URL.
-- Use apenas os dados do JSON "Dados do relatório" e dos resultados das subtarefas recebidos.
-  NUNCA invente, estime ou arredonde números; ao citar um valor, copie-o dos dados.
+- Use apenas os dados recebidos (CATÁLOGO DE REFERÊNCIAS, contexto do relatório e resultados das subtarefas).
+- NÚMEROS: não escreva números medidos, calculados nem citados. Escreva REFERÊNCIAS, que o orquestrador
+  substitui pelo valor, com unidade e código de origem:
+    {{res:<exec_id>/<nome_metrica>}}  valor medido (copie a referência do CATÁLOGO DE REFERÊNCIAS)
+    {{calc:<expressão>}}              cálculo sobre referências (ex.: divergência percentual:
+                                      {{calc:round(pct((res:<exec_id>/rmse - src:<id>#"RMSE de 0,42 mm") / src:<id>#"RMSE de 0,42 mm"), 1)}});
+                                      funções: abs, min, max, media, sqrt, round, pct; operadores + - * / **
+    {{src:<id_insumo_ou_url>#<trecho>}}  número citado de uma fonte (o trecho é literal e tem um único número)
+  Números sem referência são mantidos no relatório, mas marcados como "não verificado". Não calcule
+  divergências percentuais por conta própria: use {{calc:...}}. Não escreva metadados de execução (duração,
+  tokens, custo, contagem de containers): o orquestrador os acrescenta. Contagens de subtarefas, execuções e
+  similares podem ser escritas por extenso ou em algarismos, desde que corretas.
 - Destaque contradições entre fontes ou entre resultado obtido e esperado.
 - Faça uma análise crítica: identifique limitações dos dados e métodos e aponte divergências
   não resolvidas como gaps.

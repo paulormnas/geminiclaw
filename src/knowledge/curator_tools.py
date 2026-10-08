@@ -68,6 +68,13 @@ _MAX_VALUE_CHARS = 500
 _MAX_AUDIT_REASON = 300
 _FILTER_KEYS = ("dataset_ids", "no_execucao")
 _STATUS_DISCOVERY = ("contestada", "substituida")
+# Campos de texto que podem citar números: cada um passa pela conferência das referências numéricas.
+_NUMERIC_TEXT_FIELDS = frozenset(
+    {
+        "enunciado", "condicoes", "justificativa", "diferenca", "condicoes_extra", "ponto_de_parada",
+        "proximo_passo_sugerido",
+    }
+)
 _QUEUE_OVERFETCH = 5
 
 
@@ -245,6 +252,9 @@ class CuratorToolkit:
         self._served: set[int] = set()
         self._created: set[str] = set()  # nós criados nesta execução (não servem de base para substituir/contestar)
         self._started = datetime.now(timezone.utc).isoformat()
+        # v18.5-numeric-references: resolvedor das referências {{res|calc|src}} do texto escrito (injetável em testes).
+        self.numeric_resolver: Any = None
+        self._numeric_warnings: list[str] = []
 
     # ------------------------------------------------------------------ utilitários
 
@@ -259,7 +269,58 @@ class CuratorToolkit:
         limit = max_chars or self.limits.max_text_chars
         if len(cleaned) > limit:
             raise CuratorToolError(f"'{name}' longo demais (máximo {limit} caracteres); resuma.")
+        if name in _NUMERIC_TEXT_FIELDS:
+            self._check_numeric_refs(name, cleaned)
         return cleaned
+
+    def _resolver(self) -> Any:
+        """Resolvedor de referências numéricas (padrão: registro de execuções, grafo e sessões do projeto)."""
+        if self.numeric_resolver is None:
+            from src.numeric_refs.resolver import ReferenceResolver
+            from src.provenance.ledger import get_ledger
+
+            self.numeric_resolver = ReferenceResolver(
+                ledger=get_ledger(),
+                output_dir=Path(config.OUTPUT_BASE_DIR),
+                graph=self.store,
+                session_ids=[self.session_id],
+            )
+        return self.numeric_resolver
+
+    def _check_numeric_refs(self, name: str, text: str) -> None:
+        """Referência malformada ou que não resolve é recusada; número sem referência é aceito com aviso.
+
+        Raises:
+            CuratorToolError: Lista as referências com problema e o motivo (o grafo só guarda referências resolvíveis).
+        """
+        from src.numeric_refs.syntax import find_malformed, find_references
+        from src.numeric_refs.verifier import verify_numbers
+
+        problems = [f"{i.trecho[:60]!r} ({i.motivo})" for i in find_malformed(text)]
+        refs = find_references(text)
+        if refs:
+            resolver = self._resolver()
+            for ref in refs:
+                resolved = resolver.resolve(ref)
+                if not resolved.ok:
+                    problems.append(f"{ref.raw[:80]!r} não resolve: {resolved.motivo}")
+        if problems:
+            raise CuratorToolError(
+                f"'{name}' tem referências numéricas inválidas: " + "; ".join(problems[:5])
+                + ". Corrija a referência ou remova o número."
+            )
+        outcome = verify_numbers(text, protected_spans=[r.span for r in refs])
+        if outcome.nao_verificados:
+            shown = ", ".join(repr(u.texto) for u in outcome.nao_verificados[:5])
+            self._numeric_warnings.append(
+                f"'{name}': números sem referência serão exibidos como [não verificado]: {shown}. "
+                "Prefira {{res:<exec_id>/<métrica>}}, {{calc:...}} ou {{src:...}}."
+            )
+
+    def _take_warnings(self) -> dict[str, Any]:
+        """Avisos de números sem referência da chamada corrente (vazio se não houver)."""
+        warnings, self._numeric_warnings = self._numeric_warnings, []
+        return {"avisos": warnings} if warnings else {}
 
     @staticmethod
     def _id(name: str, value: Any) -> str:
@@ -787,7 +848,10 @@ class CuratorToolkit:
         self._finish_discovery(new_id, tipo)
         self.stats.criados += 1
         self._audit("create_discovery", id=new_id, tipo=tipo, sobre=sobre, evidencias=evidencias, variacao_de=variacao)
-        return {"ok": True, "id": new_id, "ligada_a": linked, "nos_consultados": len(node_props["nos_consultados"])}
+        return {
+            "ok": True, "id": new_id, "ligada_a": linked, "nos_consultados": len(node_props["nos_consultados"]),
+            **self._take_warnings(),
+        }
 
     def _gate_verdict(
         self, tipo: str, sobre_nodes: list[Node], filtro: dict[str, Any] | None
@@ -859,7 +923,7 @@ class CuratorToolkit:
         self._finish_discovery(id, str(node.properties.get("tipo")))
         self.stats.reforcados += 1
         self._audit("reinforce_discovery", id=id, novas=fresh)
-        return {"ok": True, "id": id, "evidencias_novas": len(fresh)}
+        return {"ok": True, "id": id, "evidencias_novas": len(fresh), **self._take_warnings()}
 
     def set_discovery_status(
         self,
@@ -1001,7 +1065,7 @@ class CuratorToolkit:
             self._edge(new_id, "SUGERE", target.id)
         self.stats.criados += 1
         self._audit("create_opportunity", id=new_id, origem=origem.id, problema=problema.id)
-        return {"ok": True, "id": new_id, "status": "documentada"}
+        return {"ok": True, "id": new_id, "status": "documentada", **self._take_warnings()}
 
     def _rejected_paraphrase(self, enunciado: str, justificativa: str) -> str | None:
         """ID de uma ``Oportunidade`` rejeitada semanticamente equivalente (>= ``SIM_DUPLICATE_MIN``), se houver.
@@ -1084,7 +1148,7 @@ class CuratorToolkit:
             self._link_related(new_id, review, variacao)
         self.stats.criados += 1
         self._audit("register_open_path", id=new_id, ancora=anchor.id, experimento=last.id)
-        return {"ok": True, "id": new_id}
+        return {"ok": True, "id": new_id, **self._take_warnings()}
 
     def _neighbors_out(self, node_id: str, rel: str) -> list[Node]:
         sub = self.store.neighbors(node_id, [rel], direction="out", depth=1)

@@ -77,7 +77,11 @@ ou entender exatamente por que os resultados divergem.
    `from scientific_helpers import save_experiment_artifacts` quando o script usa numpy/pandas/sklearn)
    para salvar `metrics.json` e `params.json` em `/outputs/`. Informe também `datasets=[...]`
    (nomes dos arquivos de `input_snapshot/` que o script leu, só o nome, sem caminho) e
-   `baselines={"metrica": valor}` quando houver valor de referência para a métrica.
+   `baselines={"metrica": valor}` quando houver valor de referência para a métrica, e
+   `unidades={"metrica": "mm"}` com a unidade de cada métrica que tiver uma. Calcule cada métrica a
+   partir dos dados: NUNCA escreva valores de métrica como literais no código (ex.: `{"acc": 0.95}`);
+   esse tipo de métrica é sinalizado no relatório como `[literal no código]`. Nomes de métrica usam só
+   letras, dígitos, `_`, `.` e `-`, começando por letra ou `_` (ex.: `acuracia_final`, não `acurácia final`).
 3. **CONTROLE DE SEED**: todo script que usa aleatoriedade DEVE incluir `np.random.seed(SEED)` e
    `random.seed(SEED)` no início, com `SEED = 42` como padrão salvo em `params.json`.
 4. **HONESTIDADE DE RESULTADOS**: se o resultado divergir do esperado (ex: do artigo de referência),

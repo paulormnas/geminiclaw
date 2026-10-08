@@ -50,6 +50,19 @@ def _format_results(results: list[dict]) -> str:
     return "\n\n".join(blocks)
 
 
+def _record_sources(query: str, results: list[dict]) -> None:
+    """Registra as fontes devolvidas ao Researcher em ``outputs/<sessão>/fontes_busca.jsonl`` (nunca levanta)."""
+    try:
+        from src.agent_runtime.context import get_agent_context_optional
+        from src.numeric_refs.sources import record_search_sources
+
+        ctx = get_agent_context_optional()
+        if ctx is not None:
+            record_search_sources(ctx.output_dir, query, results)
+    except Exception as exc:  # noqa: BLE001 - o registro de fontes nunca derruba a busca
+        logger.warning("Fontes da busca não registradas", extra={"error": type(exc).__name__})
+
+
 async def search(query: str) -> str:
     """Busca informações técnicas usando a skill ``search_quick``.
 
@@ -99,6 +112,9 @@ async def search(query: str) -> str:
             return "Nenhum resultado encontrado para a busca."
 
         result = _format_results(results)
+
+        # v18.5-numeric-references: o que o sistema recebeu fica em fontes_busca.jsonl (conferência de {{src:<url>#..}}).
+        _record_sources(query, results)
 
         # 3. Armazena no cache
         _search_cache.set(query, result)

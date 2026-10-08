@@ -13,6 +13,7 @@ import time
 import uuid
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from src.config import (
@@ -2220,6 +2221,7 @@ class AutonomousLoop:
         Returns:
             AgentResult do Summarizer com o relatório renderizado em ``response["text"]``.
         """
+        from src.numeric_refs.catalog import report_context_without_numbers
         from src.orchestrator import AgentTask
         from src.report.artifact_reader import ArtifactReader
         from src.report.report_model import (
@@ -2251,11 +2253,15 @@ class AutonomousLoop:
             prompt, master_session_id, ArtifactReader(session_dir), stop_reason
         )
 
+        # v18.5-numeric-references: o Summarizer recebe referências para copiar, não números.
+        catalog = await self._build_reference_catalog(master_session_id, session_dir)
         base_prompt = (
             f"Escreva a narrativa do relatório da tarefa: '{prompt}'\n\n"
             "RESULTADOS DAS SUBTAREFAS:\n\n" + "\n\n".join(context_parts) + "\n\n"
-            "DADOS DO RELATÓRIO (JSON, medidos pelo orquestrador; copie os números daqui):\n"
-            f"{mark_execution_output(report_data_json(data), 'report_data')}\n\n"
+            f"{mark_execution_output(catalog, 'catalogo_de_referencias')}\n\n"
+            "CONTEXTO DO RELATÓRIO (JSON; os números de execução e a tabela de resultados são escritos pelo "
+            "orquestrador):\n"
+            f"{mark_execution_output(report_context_without_numbers(data.to_dict()), 'report_data')}\n\n"
             "Responda SOMENTE com o JSON de narrativa descrito nas suas instruções."
         )
         summary_result = None
@@ -2280,9 +2286,8 @@ class AutonomousLoop:
 
         markdown = render_report_markdown(data, narrative)
         markdown = await self._append_provenance_section(markdown, master_session_id)
+        markdown = await self._finalize_report(markdown, master_session_id, session_dir)
         try:
-            session_dir.mkdir(parents=True, exist_ok=True)
-            (session_dir / "relatorio_final.md").write_text(markdown, encoding="utf-8")
             (session_dir / "report_data.json").write_text(report_data_json(data), encoding="utf-8")
         except OSError as exc:
             logger.error("Falha ao gravar o relatório final", extra={"error": str(exc)})
@@ -2311,7 +2316,105 @@ class AutonomousLoop:
         except Exception as exc:  # noqa: BLE001 - a seção nunca impede o relatório
             logger.warning("Seção de proveniência não gerada", extra={"error": type(exc).__name__})
             body = f"Não foi possível gerar a seção de proveniência ({type(exc).__name__})."
-        return f"{markdown.rstrip()}\n\n## {SECTION_TITLE}\n{body}\n"
+        return f"{markdown.rstrip()}\n\n<!-- provenance-chain:begin -->\n## {SECTION_TITLE}\n{body}\n<!-- provenance-chain:end -->\n"
+
+    async def _build_reference_catalog(self, master_session_id: str, session_dir: Path) -> str:
+        """Catálogo de referências numéricas da sessão (v18.5-numeric-references, design §7.1). Nunca levanta."""
+        from src.numeric_refs.catalog import build_reference_catalog
+        from src.provenance.ledger import get_ledger
+        from src.report.artifact_reader import ArtifactReader
+
+        try:
+            return await asyncio.to_thread(
+                build_reference_catalog,
+                session_id=master_session_id,
+                session_dir=session_dir,
+                ledger=get_ledger(),
+                metrics_by_task=ArtifactReader(session_dir).read_subtask_metrics(),
+                graph=self._graph_for_report(),
+                project_id=self.orchestrator._session_project_id(master_session_id),
+                session_ids=self._report_session_ids(master_session_id),
+            )
+        except Exception as exc:  # noqa: BLE001 - sem catálogo o Summarizer segue; os números ficarão não verificados
+            logger.warning("Catálogo de referências indisponível", extra={"error": type(exc).__name__})
+            return "CATÁLOGO DE REFERÊNCIAS: indisponível nesta sessão."
+
+    def _graph_for_report(self) -> Any:
+        """Grafo para unidades e insumos citados no relatório, ou ``None`` (sem grafo as citações de insumo não resolvem)."""
+        try:
+            return self.orchestrator._open_knowledge_store()
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _report_session_ids(self, master_session_id: str) -> list[str]:
+        """Sessão atual e as da cadeia de continuidade (insumos e fontes de busca do projeto)."""
+        resume = getattr(self.orchestrator, "_resumes", {}).get(master_session_id)
+        previous = [Path(d).name for d in getattr(resume, "readable_dirs", ())] if resume is not None else []
+        return [master_session_id, *previous]
+
+    async def _finalize_report(self, source_markdown: str, master_session_id: str, session_dir: Path) -> str:
+        """Grava ``relatorio_final.fonte.md`` e roda o pipeline (resolve, renderiza, verifica números, seções).
+
+        Se o pipeline falhar, o erro é registrado e o relatório entregue é o texto fonte com um aviso explícito de que
+        não passou pela verificação de números.
+        """
+        from src.numeric_refs.literal_metrics import read_literal_metrics
+        from src.numeric_refs.resolver import ReferenceResolver
+        from src.provenance.ledger import get_ledger
+        from src.report.pipeline import SOURCE_FILE, ReportState, build_default_pipeline
+
+        try:
+            session_dir.mkdir(parents=True, exist_ok=True)
+            (session_dir / SOURCE_FILE).write_text(source_markdown, encoding="utf-8")
+        except OSError as exc:
+            logger.error("Falha ao gravar o relatório fonte", extra={"error": str(exc)})
+        try:
+            resolver = ReferenceResolver(
+                ledger=get_ledger(),
+                output_dir=session_dir.parent,
+                graph=self._graph_for_report(),
+                session_ids=self._report_session_ids(master_session_id),
+                literal_metrics=read_literal_metrics(session_dir),
+            )
+            state = ReportState(
+                session_id=master_session_id,
+                session_dir=session_dir,
+                source_text=source_markdown,
+                text=source_markdown,
+                resolver=resolver,
+                counts=await asyncio.to_thread(self._report_counts, master_session_id, session_dir),
+            )
+            await asyncio.to_thread(build_default_pipeline().build, state)
+            return (session_dir / "relatorio_final.md").read_text(encoding="utf-8")
+        except Exception as exc:  # noqa: BLE001 - falha explícita, relatório fonte preservado
+            logger.error("Pipeline do relatório falhou", extra={"error": type(exc).__name__, "detalhe": str(exc)[:300]})
+            notice = (
+                "> **Aviso:** o pipeline de verificação de números falhou "
+                f"({type(exc).__name__}); este relatório NÃO foi verificado. O texto fonte está em "
+                "`relatorio_final.fonte.md`.\n\n"
+            )
+            try:
+                (session_dir / "relatorio_final.md").write_text(notice + source_markdown, encoding="utf-8")
+            except OSError:
+                pass
+            return notice + source_markdown
+
+    def _report_counts(self, master_session_id: str, session_dir: Path) -> dict[str, int]:
+        """Contagens do orquestrador para a exclusão X8 do verificador (subtarefas, execuções, insumos...)."""
+        from src.provenance.ledger import get_ledger
+        from src.provenance.store import TIPO_INICIO, TIPO_TERMINO
+
+        counts: dict[str, int] = {"sessao": 1}
+        try:
+            records = get_ledger().store.by_session(master_session_id)
+            counts["execucao"] = sum(1 for r in records if r.tipo == TIPO_INICIO)
+            counts["subtarefa"] = len({r.task_name for r in records if r.tipo == TIPO_TERMINO})
+        except Exception:  # noqa: BLE001 - sem registro, as contagens ficam ausentes (números marcados)
+            pass
+        snapshot = session_dir / "input_snapshot"
+        if snapshot.is_dir():
+            counts["insumo"] = sum(1 for p in snapshot.iterdir() if p.is_file())
+        return counts
 
     async def _build_report_data(
         self,

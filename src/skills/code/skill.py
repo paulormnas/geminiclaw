@@ -3,12 +3,13 @@ import json
 import pathlib
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
 from src import config
 from src.config import get_env
 from src.logger import get_logger
+from src.numeric_refs.literal_metrics import LiteralFinding, scan_code, write_findings
 from src.provenance.errors import ProvenanceError
 from src.provenance.hashing import HashCache
 from src.provenance.ledger import get_ledger
@@ -72,6 +73,8 @@ class _Provenance:
     finished: bool = False
     record: Any = None
     pending: bool = False
+    # v18.5-numeric-references: métricas gravadas como literais no código executado (heurística; nunca bloqueia).
+    literal_findings: list[LiteralFinding] = field(default_factory=list)
 
     @property
     def exec_id(self) -> str:
@@ -349,7 +352,15 @@ class CodeSkill(BaseSkill):
                 error=f"{PROVENANCE_BEGIN_ERROR}: {exc}",
                 metadata={"fase_falha": "infra", "provenance_unavailable": True},
             )
-        return _Provenance(ledger, began, body, project_id, subtask_id, session_id, task_name, output_root)
+        findings: list[LiteralFinding] = []
+        if config.NUMREF_STATIC_CHECK_ENABLED:
+            try:
+                findings = scan_code(code)
+            except Exception as exc:  # noqa: BLE001 - a verificação estática nunca impede a execução
+                logger.warning("Verificação estática de métricas falhou", extra={"error": type(exc).__name__})
+        return _Provenance(
+            ledger, began, body, project_id, subtask_id, session_id, task_name, output_root, literal_findings=findings
+        )
 
     async def _provenance_finish(
         self,
@@ -409,6 +420,12 @@ class CodeSkill(BaseSkill):
             )
         provenance.record = finished.record
         provenance.pending = finished.pending
+        write_findings(
+            provenance.output_root / provenance.session_id / provenance.task_name,
+            provenance.began.exec_id,
+            str(provenance.inicio.get("hash_codigo")),
+            provenance.literal_findings,
+        )
         return None
 
     async def run(

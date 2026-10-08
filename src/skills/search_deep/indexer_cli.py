@@ -24,7 +24,7 @@ async def run_crawl():
         print(f"Crawl concluído: {len(pages)} páginas coletadas.")
         
         if pages:
-            print(f"Iniciando indexação no Qdrant...")
+            print("Iniciando indexação no Qdrant...")
             await indexer.index_pages(pages)
             print("Indexação concluída com sucesso.")
         else:
@@ -36,7 +36,7 @@ async def run_crawl():
 def run_stats():
     indexer = VectorIndexer()
     stats = indexer.get_stats()
-    print(f"Estatísticas do índice Deep Search:")
+    print("Estatísticas do índice Deep Search:")
     print(f"  Pontos (chunks): {stats['points_count']}")
     print(f"  Status: {stats['status']}")
 

@@ -275,7 +275,11 @@ class LongTermMemory:
         if not memories:
             return ""
 
+        from src.egress.fragments import taint_if
+        from src.egress.persisted import tags_tainted
+
         summary = "Memórias de longo prazo relevantes:\n"
         for m in memories:
-            summary += f"- {m.key}: {m.value}\n"
+            # v18.5-egress-gate: memória escrita por modelo com dados brutos leva a marca (tag egress:tainted).
+            summary += f"- {taint_if(f'{m.key}: {m.value}', tags_tainted(m.tags))}\n"
         return summary

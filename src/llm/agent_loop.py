@@ -7,12 +7,13 @@ from typing import Any, List, Dict, Callable, Optional, AsyncGenerator
 from dataclasses import dataclass, field
 
 from src.agent_runtime.context import get_agent_context_optional
+from src.egress.fragments import ContentOrigin, PromptFragment, dumps_messages, labeled, tool_result_fragment
 from src.llm.base import LLMProvider, ToolCall, LLMResponse
-from src.llm.metering import bound_execution_id, record_llm_call
+from src.llm.metering import bound_execution_id, provider_name, record_llm_call
 from src.llm.pricing import estimate_cost
 from src.llm.factory import get_provider
 from src.llm.context_compression import compress_messages
-from src.llm.context_injection import build_workspace_context_block
+from src.llm.context_injection import build_workspace_context_fragments
 from src.logger import get_logger
 from src.telemetry import get_telemetry
 
@@ -59,6 +60,20 @@ def _task_env() -> Dict[str, str]:
         "PROVIDER_NAME": "unknown",
         "MODEL_ID": "unknown",
     }
+
+def _label_history_message(message: Dict[str, Any], produced_tainted: bool) -> Dict[str, Any]:
+    """Rotula uma mensagem de histórico sem rótulo: assistente = produto deste modelo; demais = instrução."""
+    content = message.get("content")
+    if "_fragments" in message or not isinstance(content, str) or not content:
+        return message
+    tainted = message.get("role") == "assistant" and produced_tainted
+    labeled_message = labeled(
+        message.get("role", "user"),
+        PromptFragment(content, ContentOrigin.INSTRUCAO, tainted=tainted, source="historico"),
+    )
+    labeled_message.update({k: v for k, v in message.items() if k not in labeled_message})
+    return labeled_message
+
 
 @dataclass
 class AgentState:
@@ -182,16 +197,19 @@ async def run_agent_loop(
         except Exception as e:
             logger.error(f"Erro no before_callback: {e}")
 
-    # Prepara mensagens iniciais
+    # v18.5-egress-gate — o produto deste modelo é contaminado se ele aceita dados brutos (ADR 019 §3.8).
+    produced_tainted = bool(getattr(provider, "tainted_output", False))
+
+    # Prepara mensagens iniciais (rotuladas por origem; o EgressGate expande as marcas em linha do texto)
     messages = []
     if instruction:
-        messages.append({"role": "system", "content": instruction})
-    
-    # Adiciona histórico se houver
-    messages.extend(history)
-    
+        messages.append(labeled("system", PromptFragment(instruction, ContentOrigin.INSTRUCAO, source="system")))
+
+    # Adiciona histórico se houver (mensagem sem rótulo é rotulada aqui: assistente = produto deste modelo)
+    messages.extend(_label_history_message(m, produced_tainted) for m in history)
+
     # Adiciona prompt atual
-    messages.append({"role": "user", "content": prompt})
+    messages.append(labeled("user", PromptFragment(prompt, ContentOrigin.INSTRUCAO, source="prompt")))
     
     final_response = ""
     iterations = 0
@@ -217,14 +235,15 @@ async def run_agent_loop(
             try:
                 _session_dir = pathlib.Path(_env_output_base) / _env_session_id
                 _max_lines = int(os.environ.get("MAX_CODE_CONTEXT_LINES", "150"))
-                _ctx_block = build_workspace_context_block(
+                _ctx_fragments = build_workspace_context_fragments(
                     session_dir=_session_dir,
                     session_id=_env_session_id,
                     task_name=_env_task_name,
                     max_code_context_lines=_max_lines,
+                    code_tainted=produced_tainted,
                 )
                 # Inserir como mensagem de sistema imediatamente antes desta iteração
-                messages.append({"role": "user", "content": _ctx_block})
+                messages.append(labeled("user", *_ctx_fragments))
                 logger.debug(
                     "V13.4.1: Bloco de contexto do workspace injetado",
                     extra={"session_id": _env_session_id, "iteration": iterations},
@@ -293,13 +312,13 @@ async def run_agent_loop(
 
         # V5.7 — Telemetria: llm_response (token usage)
         # V11.2.1 — Corrigido: lê usage do dict padronizado em vez de getattr direto
-        _prompt_tokens = response.usage.get("prompt_tokens", 0) or len(json.dumps(compressed_messages)) // 4
+        _prompt_tokens = response.usage.get("prompt_tokens", 0) or len(dumps_messages(compressed_messages)) // 4
         _completion_tokens = response.usage.get("completion_tokens", 0) or len(response.text or "") // 4
         # V16 — no runtime em processo, o provedor é explícito (parâmetro `provider`,
         # resolvido por papel via ModelRouter); deriva o nome a partir da própria
         # instância em vez de uma variável global (não confiável com múltiplos papéis
         # concorrentes). Mantém fallback em os.environ para chamadas fora do AgentRuntime.
-        _provider_name = type(provider).__name__.removesuffix("Provider").lower() or _task["PROVIDER_NAME"] or "unknown"
+        _provider_name = provider_name(provider) or _task["PROVIDER_NAME"] or "unknown"
         _model_name = provider.model_name or _task["MODEL_ID"] or "unknown"
         # v18.5-model-catalog-locality — versão efetiva servida (rastreia troca de versão na sessão).
         from src.llm.allocation import record_call_version
@@ -438,7 +457,9 @@ async def run_agent_loop(
                         alert_msg = error_tracker.get_message(
                             tool_call.name, error_type, error_tracker._count
                         )
-                        messages.append({"role": "user", "content": alert_msg})
+                        messages.append(
+                            labeled("user", PromptFragment(alert_msg, ContentOrigin.INSTRUCAO, source="sistema"))
+                        )
                         logger.warning(
                             "ErrorTracker: alerta de erros repetitivos injetado",
                             extra={"tool": tool_call.name, "error_type": error_type, "count": error_tracker._count},
@@ -473,13 +494,15 @@ async def run_agent_loop(
                     except Exception:
                         pass
             
-            # Adiciona o resultado da ferramenta ao histórico
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tool_call.id,
-                "name": tool_call.name,
-                "content": result
-            })
+            # Adiciona o resultado da ferramenta ao histórico, rotulado pela origem do conteúdo
+            messages.append(
+                labeled(
+                    "tool",
+                    tool_result_fragment(tool_call.name, result, tool_call.arguments),
+                    tool_call_id=tool_call.id,
+                    name=tool_call.name,
+                )
+            )
 
     # 6. Callback 'after'
     if after_callback:
@@ -508,7 +531,7 @@ async def run_agent_loop(
                 "Por favor, EXECUTE a tarefa agora e fornecer um resultado concreto ou abordagem alternativa "
                 "sem usar ferramentas que estão falhando."
             )
-            messages.append({"role": "user", "content": recovery_msg})
+            messages.append(labeled("user", PromptFragment(recovery_msg, ContentOrigin.INSTRUCAO, source="sistema")))
             try:
                 _t_rec = _time.monotonic()
                 recovery_response = await provider.generate(

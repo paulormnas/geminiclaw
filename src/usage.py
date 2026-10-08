@@ -31,6 +31,7 @@ class StopReason(str, Enum):
     CONNECTION = "limite_conexao"
     RUNS = "limite_execucoes"
     MODEL_VERSION = "versao_modelo"  # v18.5-model-catalog-locality (LLM_ROUTING=strict)
+    EGRESS = "limite_egresso"  # v18.5-egress-gate (volume de saídas de execução enviadas fora do nó)
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,9 @@ class UsageBudget:
         closing_reserve_pct: Fração de ``max_tokens`` reservada para o
             fechamento (checkpoint + consolidação final) após o limite de
             exploração ser atingido.
+        max_egress_bytes: Limite de volume, por sessão, dos bytes de saídas de execução (após o filtro) enviados a
+            destinos fora do nó (v18.5-egress-gate, design §9). O modo sem limite e a opção ``--max-egress-bytes``
+            são da ``v18.5-operation-metrics``, que lê este campo para desligar o limite num único ponto.
     """
 
     max_tokens: int
@@ -56,6 +60,7 @@ class UsageBudget:
     max_task_retries: int
     max_connection_retries: int
     closing_reserve_pct: float
+    max_egress_bytes: int = 2_000_000
 
     def __post_init__(self) -> None:
         """Valida a consistência do orçamento.
@@ -73,6 +78,8 @@ class UsageBudget:
             raise ValueError("max_connection_retries deve ser positivo.")
         if not (0.0 <= self.closing_reserve_pct < 1.0):
             raise ValueError("closing_reserve_pct deve estar no intervalo [0, 1).")
+        if self.max_egress_bytes <= 0:
+            raise ValueError("max_egress_bytes deve ser positivo.")
 
     @property
     def exploration_token_ceiling(self) -> int:
@@ -96,6 +103,7 @@ class UsageBudget:
             "max_connection_retries": self.max_connection_retries,
             "closing_reserve_pct": self.closing_reserve_pct,
             "exploration_token_ceiling": self.exploration_token_ceiling,
+            "max_egress_bytes": self.max_egress_bytes,
         }
 
     @classmethod
@@ -107,6 +115,7 @@ class UsageBudget:
         max_task_retries: int | None = None,
         max_connection_retries: int | None = None,
         closing_reserve_pct: float | None = None,
+        max_egress_bytes: int | None = None,
     ) -> "UsageBudget":
         """Constrói o orçamento a partir dos defaults de ``src/config.py``.
 
@@ -119,6 +128,7 @@ class UsageBudget:
             max_task_retries: Override para ``SESSION_MAX_TASK_RETRIES``.
             max_connection_retries: Override para ``SESSION_MAX_CONNECTION_RETRIES``.
             closing_reserve_pct: Override para ``SESSION_CLOSING_RESERVE_PCT``.
+            max_egress_bytes: Override para ``EGRESS_SESSION_MAX_BYTES``.
 
         Returns:
             Um novo `UsageBudget` com os valores efetivos da sessão.
@@ -145,6 +155,9 @@ class UsageBudget:
                 if closing_reserve_pct is not None
                 else _config.SESSION_CLOSING_RESERVE_PCT
             ),
+            max_egress_bytes=(
+                max_egress_bytes if max_egress_bytes is not None else _config.EGRESS_SESSION_MAX_BYTES
+            ),
         )
 
 
@@ -163,6 +176,9 @@ class LimitStatus:
     connection_retries_exhausted: bool
     # Parada solicitada por outra fonte além do orçamento (ex.: versão do modelo em strict).
     pending_stop: StopReason | None = None
+    # v18.5-egress-gate: volume de saídas de execução enviadas fora do nó (bytes) e se o limite foi atingido.
+    egress_bytes: int = 0
+    egress_exhausted: bool = False
 
     @property
     def should_close(self) -> bool:
@@ -171,6 +187,7 @@ class LimitStatus:
             self.tokens_exhausted
             or self.time_exhausted
             or self.connection_retries_exhausted
+            or self.egress_exhausted
             or self.pending_stop is not None
         )
 
@@ -178,8 +195,8 @@ class LimitStatus:
     def stop_reason(self) -> StopReason | None:
         """Motivo de parada correspondente.
 
-        Segue a prioridade tokens > tempo > conexão, coerente com a ordem de
-        avaliação em `UsageTracker.check`.
+        Segue a prioridade tokens > tempo > conexão > egresso, coerente com a
+        ordem de avaliação em `UsageTracker.check`.
         """
         if self.tokens_exhausted:
             return StopReason.TOKENS
@@ -187,6 +204,8 @@ class LimitStatus:
             return StopReason.TIME
         if self.connection_retries_exhausted:
             return StopReason.CONNECTION
+        if self.egress_exhausted:
+            return StopReason.EGRESS
         return self.pending_stop
 
 
@@ -221,6 +240,20 @@ def _default_connection_retry_reader(execution_id: str) -> int:
     return get_telemetry().get_connection_retry_count(execution_id)
 
 
+def _default_egress_reader(execution_id: str) -> int:
+    """Lê o volume de egresso de saídas de execução da sessão a partir do registro de egresso.
+
+    Args:
+        execution_id: ID da execução (igual ao ID da sessão mestra).
+
+    Returns:
+        Soma de ``bytes_saida_execucao_novos`` em ``egress_log``.
+    """
+    from src.egress.log import egress_bytes_for_session
+
+    return egress_bytes_for_session(execution_id)
+
+
 class UsageTracker:
     """Acumula o consumo de uma sessão e verifica os limites do `UsageBudget`.
 
@@ -239,6 +272,7 @@ class UsageTracker:
         *,
         token_reader: Callable[[], int] | None = None,
         connection_retry_reader: Callable[[], int] | None = None,
+        egress_reader: Callable[[], int] | None = None,
         clock: Callable[[], float] | None = None,
         pending_stop: Callable[[], StopReason | None] | None = None,
     ) -> None:
@@ -253,6 +287,8 @@ class UsageTracker:
             connection_retry_reader: Função sem argumentos que retorna o
                 total de retentativas de conexão até agora. Injetável para
                 testes; por padrão lê a telemetria via `execution_id`.
+            egress_reader: Função sem argumentos que retorna o volume de egresso de saídas de execução da sessão
+                (bytes). Injetável para testes; por padrão lê ``egress_log`` via `execution_id` (v18.5-egress-gate).
             clock: Função sem argumentos que retorna um timestamp monotônico
                 em segundos. Injetável para testes de limite de tempo.
             pending_stop: Função sem argumentos que devolve um motivo de parada pedido por outra fonte (versão do
@@ -266,6 +302,7 @@ class UsageTracker:
         self._connection_retry_reader = connection_retry_reader or (
             lambda: _default_connection_retry_reader(execution_id)
         )
+        self._egress_reader = egress_reader or (lambda: _default_egress_reader(execution_id))
         self._pending_stop = pending_stop
         self._task_retry_counts: dict[str, int] = {}
         self._abandoned_tasks: set[str] = set()
@@ -375,6 +412,9 @@ class UsageTracker:
         )
         connection_exhausted = connection_retries >= self.budget.max_connection_retries
 
+        egress_bytes = self._egress_reader()
+        egress_exhausted = egress_bytes >= self.budget.max_egress_bytes
+
         status = LimitStatus(
             tokens_used=tokens_used,
             tokens_pct=tokens_pct,
@@ -386,6 +426,8 @@ class UsageTracker:
             connection_retries_pct=connection_pct,
             connection_retries_exhausted=connection_exhausted,
             pending_stop=self._pending_stop() if self._pending_stop is not None else None,
+            egress_bytes=egress_bytes,
+            egress_exhausted=egress_exhausted,
         )
 
         if status.should_close:
@@ -400,6 +442,7 @@ class UsageTracker:
                     "minutes_elapsed": minutes_elapsed,
                     "max_minutes": self.budget.max_minutes,
                     "connection_retries": connection_retries,
+                    "egress_bytes": egress_bytes,
                 },
             )
         return status

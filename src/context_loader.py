@@ -473,11 +473,23 @@ class ContextLoader:
         try:
             from google import genai
             from src.config import GEMINI_API_KEY
+            from src.egress.gate import Destination, EgressRefused, get_gate
+
+            # v18.5-egress-gate (ADR 019 §3.5): visão é saída externa; imagem de pesquisa só vai a destino com dados
+            # brutos ou se o arquivo for compartilhável (a marcação vem da ingestão, v18.5-research-data-ingestion).
+            destination = Destination(
+                canal="visao", provedor="google", modelo=_GEMINI_VISION_MODEL, trust="third_party",
+                localidade="fora_do_no", aceita_dados_brutos=False, papel="ingestao",
+            )
+            try:
+                get_gate().authorize_vision(path, False, destination)
+            except EgressRefused as e:
+                return ImageContext(source_path=path, description="", provider="gemini", extraction_errors=[str(e)])
 
             client = genai.Client(api_key=GEMINI_API_KEY)
             image_bytes = path.read_bytes()
             response = client.models.generate_content(
-                model="gemini-3.8-flash",
+                model=_GEMINI_VISION_MODEL,
                 contents=[
                     "Descreva o conteúdo desta imagem em detalhes (gráficos, tabelas, texto visível, "
                     "estruturas de microscopia, etc.) para uso como contexto científico.",
@@ -495,6 +507,9 @@ class ContextLoader:
             )
         except Exception as e:
             return ImageContext(source_path=path, description="", provider="gemini", extraction_errors=[str(e)])
+
+
+_GEMINI_VISION_MODEL = "gemini-3.8-flash"
 
 
 def _mime_type_for(path: Path) -> str:

@@ -20,6 +20,7 @@ from typing import Any, Callable
 from urllib.parse import urlparse
 
 from src import config
+from src.egress.fragments import ContentOrigin, PromptFragment, labeled
 from src.llm.pricing import estimate_cost, get_price
 from src.utils.json_parser import extract_json
 
@@ -393,7 +394,8 @@ def _generate(provider: Any, prompt: str) -> Any:
     import asyncio
 
     return asyncio.run(provider.generate(
-        messages=[{"role": "user", "content": prompt}],
+        # O prompt do juiz é texto de agentes (já redigido pela guarda): trecho contaminado, para a camada de saída.
+        messages=[labeled("user", PromptFragment(prompt, ContentOrigin.INSTRUCAO, tainted=True, source="juiz"))],
         system="Você é um avaliador independente de perguntas feitas por agentes de pesquisa. " + RUBRIC,
         temperature=0.0, max_tokens=600,
     ))
@@ -420,6 +422,7 @@ def routed_provider_factory(provider: str, model: str) -> Any:
     Raises:
         JudgeUnavailable: Modelo fora do catálogo, recusado pela política ou endpoint inseguro.
     """
+    from src.egress.gate import Destination, GatedProvider
     from src.llm.catalog import CatalogError
     from src.llm.endpoints import EndpointError
     from src.llm.registry import create_provider
@@ -440,7 +443,14 @@ def routed_provider_factory(provider: str, model: str) -> Any:
             "(defina LLM_DATA_POLICY=third_party_allowed para usá-lo)."
         )
     try:
-        return create_provider(provider, model)
+        # Todo envio do juiz passa pela camada de saída (v18.5-egress-gate): registrado e filtrado pelo destino.
+        return GatedProvider(
+            create_provider(provider, model),
+            Destination(
+                canal="llm", provedor=entry.provedor, modelo=entry.modelo, trust=entry.trust,
+                localidade=entry.localidade, aceita_dados_brutos=entry.aceita_dados_brutos, papel="juiz",
+            ),
+        )
     except EndpointError as exc:
         raise JudgeUnavailable(str(exc)) from exc
 

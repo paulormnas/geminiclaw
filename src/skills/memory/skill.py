@@ -1,16 +1,34 @@
 import os
 from typing import List, Optional, Any
+from src.egress.fragments import ContentOrigin
 from src.skills.base import BaseSkill, SkillResult
 from src.skills.memory.short_term import ShortTermMemory
 from src.skills.memory.long_term import LongTermMemory, LongTermMemoryEntry
+from src.egress.persisted import tags_tainted, with_taint_tag
 from src.logger import get_logger
 
 logger = get_logger(__name__)
+
+def _writer_tags(tags: Optional[List[str]], tainted: Optional[bool] = None) -> List[str]:
+    """Tags da memória com a marca de contaminação.
+
+    ``tainted`` explícito (escritas do orquestrador originadas de saída de modelo ou de execução) manda; sem ele vale o
+    papel do agente corrente; sem agente e sem declaração, o lado seguro (contaminado): fora de um agente o texto
+    pode ter vindo de um modelo, então a ausência de declaração nunca significa "limpo". Uma tag já presente é mantida.
+    """
+    from src.egress.gate import caller_tainted
+
+    if tainted is None:
+        tainted = caller_tainted()  # sem contexto de agente: True
+    return with_taint_tag(tags, tainted or tags_tainted(tags))
+
 
 class MemorySkill(BaseSkill):
     """Skill para gerenciamento de memória de curto e longo prazo."""
     
     name = "memory"
+    
+    egress_origin = ContentOrigin.GRAFO
     description = (
         "Gerencia memórias do agente. Ações:\n"
         "- 'remember': registra na memória de curto prazo (sessão atual).\n"
@@ -102,7 +120,7 @@ class MemorySkill(BaseSkill):
         if not key or not value:
             return SkillResult(success=False, output="", error="key e value são obrigatórios")
 
-        self.short_term.write(session_id, key, value, source, tags)
+        self.short_term.write(session_id, key, value, source, _writer_tags(tags, kwargs.get("tainted")))
         logger.info(
             "Memória gravada em curto prazo",
             extra={"event": "memory_written", "store": "short_term", "key": key, "session_id": session_id},
@@ -119,7 +137,7 @@ class MemorySkill(BaseSkill):
         if not key or not value:
             return SkillResult(success=False, output="", error="key e value são obrigatórios")
 
-        self.long_term.write(key, value, source, importance, tags)
+        self.long_term.write(key, value, source, importance, _writer_tags(tags, kwargs.get("tainted")))
         logger.info(
             "Memória gravada em longo prazo",
             extra={"event": "memory_written", "store": "long_term", "key": key},
@@ -135,7 +153,10 @@ class MemorySkill(BaseSkill):
         if not entry:
             return SkillResult(success=True, output=f"Nenhuma memória de curto prazo encontrada para '{key}'", metadata={"found": False})
         
-        return SkillResult(success=True, output=entry.value, metadata={"found": True, "entry": entry.__dict__})
+        return SkillResult(
+            success=True, output=entry.value,
+            metadata={"found": True, "entry": entry.__dict__, "egress_tainted": tags_tainted(entry.tags)},
+        )
 
     def _handle_retrieve(self, session_id: Optional[str], **kwargs) -> SkillResult:
         key = kwargs.get("key")
@@ -146,12 +167,20 @@ class MemorySkill(BaseSkill):
         if session_id:
             entry = self.short_term.read(session_id, key)
             if entry:
-                return SkillResult(success=True, output=entry.value, metadata={"found": True, "source": "short_term", "entry": entry.__dict__})
+                return SkillResult(
+                    success=True, output=entry.value,
+                    metadata={"found": True, "source": "short_term", "entry": entry.__dict__,
+                              "egress_tainted": tags_tainted(entry.tags)},
+                )
         
         # Tenta longo prazo
         lt_entry = self.long_term.read(key)
         if lt_entry:
-            return SkillResult(success=True, output=lt_entry.value, metadata={"found": True, "source": "long_term", "entry": lt_entry.__dict__})
+            return SkillResult(
+                success=True, output=lt_entry.value,
+                metadata={"found": True, "source": "long_term", "entry": lt_entry.__dict__,
+                          "egress_tainted": tags_tainted(lt_entry.tags)},
+            )
         
         return SkillResult(success=True, output=f"Nenhuma memória encontrada para '{key}'", metadata={"found": False})
 
@@ -168,7 +197,10 @@ class MemorySkill(BaseSkill):
         for entry in entries:
             output += f"- {entry.key}: {entry.value}\n"
             
-        return SkillResult(success=True, output=output, metadata={"found": True, "count": len(entries)})
+        return SkillResult(
+            success=True, output=output,
+            metadata={"found": True, "count": len(entries), "egress_tainted": any(tags_tainted(e.tags) for e in entries)},
+        )
 
     def _handle_remember_forever(self, session_id: str, **kwargs) -> SkillResult:
         key = kwargs.get("key")

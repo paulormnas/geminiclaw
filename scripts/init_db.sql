@@ -306,3 +306,31 @@ CREATE TABLE IF NOT EXISTS similarity_queue (
 );
 
 CREATE INDEX IF NOT EXISTS idx_simq_pendente ON similarity_queue (status, prioridade DESC);
+
+-- =============================================================
+-- Registro de egresso (V18.5 / ADR 019 §3.5 e §8, openspec/changes/v18.5-egress-gate).
+-- Uma linha por envio externo (LLM, visão, busca, leitura web), inclusive recusas e destinos no_no.
+-- O conteúdo enviado não é gravado aqui (fica em outputs/<sessão>/egress/envios.jsonl.gz).
+-- Idempotente: não apaga nem altera dados existentes.
+-- =============================================================
+CREATE TABLE IF NOT EXISTS egress_log (
+    id TEXT PRIMARY KEY,                       -- egr_<uuid4>
+    session_id TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    canal TEXT NOT NULL,                       -- llm | visao | busca | leitura_web
+    papel TEXT,
+    provedor TEXT NOT NULL,
+    modelo TEXT,
+    versao_efetiva TEXT,
+    trust TEXT,
+    localidade TEXT NOT NULL,                  -- no_no | fora_do_no
+    aceita_dados_brutos BOOLEAN NOT NULL,
+    bytes_enviados INTEGER NOT NULL,
+    bytes_saida_execucao_novos INTEGER NOT NULL DEFAULT 0,
+    fragmentos JSONB NOT NULL,                 -- [{origem, tainted, compartilhavel, source, bytes, sha256, novo, intervencoes}]
+    intervencoes JSONB NOT NULL DEFAULT '{}',  -- contagem por tipo
+    recusado BOOLEAN NOT NULL DEFAULT FALSE,
+    motivo_recusa TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_egress_session ON egress_log (session_id);

@@ -219,6 +219,8 @@ class SubtaskState:
         resultado_resumo: Resumo textual do resultado (dado de pesquisa, limitado).
         descricao: Descrição curta do que a subtarefa faz (para o replanejamento).
         causa_falha: ``infraestrutura``/``abordagem``/``ambigua`` quando ``status="falhou"``.
+        resultado_marca: Marca gravada junto ao resumo (v18.5-egress-gate, design §7): ``{"origem", "tainted",
+            "produzido_por"}``; ``None`` em checkpoint anterior à V18.5 (vale a regra de texto legado).
     """
 
     task_name: str
@@ -232,10 +234,11 @@ class SubtaskState:
     resultado_resumo: str = ""
     descricao: str = ""
     causa_falha: str | None = None
+    resultado_marca: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serializa para o JSON do checkpoint."""
-        return {
+        data: dict[str, Any] = {
             "task_name": self.task_name,
             "subtask_id": self.subtask_id,
             "agent_id": self.agent_id,
@@ -248,6 +251,9 @@ class SubtaskState:
             "descricao": self.descricao,
             "causa_falha": self.causa_falha,
         }
+        if self.resultado_marca is not None:
+            data["resultado_marca"] = dict(self.resultado_marca)
+        return data
 
     @classmethod
     def from_dict(cls, data: object) -> "SubtaskState":
@@ -280,6 +286,15 @@ class SubtaskState:
         causa = data.get("causa_falha")
         if causa is not None and causa not in CAUSAS_FALHA:
             raise CheckpointError("subtarefa com causa_falha inválida.")
+        marca = data.get("resultado_marca")
+        if marca is not None:
+            from src.egress.persisted import read_mark
+
+            try:
+                read_mark(marca)
+            except ValueError as exc:
+                raise CheckpointError("subtarefa com resultado_marca inválida.") from exc
+            marca = {k: marca[k] for k in ("origem", "tainted", "produzido_por") if k in marca}
         return cls(
             task_name=str(name),
             subtask_id=_opt_id(data.get("subtask_id"), "subtask_id"),
@@ -292,6 +307,7 @@ class SubtaskState:
             resultado_resumo=_text(data, "resultado_resumo", MAX_SUMMARY_CHARS),
             descricao=_text(data, "descricao", MAX_DESCRIPTION_CHARS),
             causa_falha=causa,
+            resultado_marca=marca,
         )
 
 
@@ -841,6 +857,7 @@ class CheckpointRecorder:
         resumo: str = "",
         artefatos: Iterable[str] | None = None,
         causa_falha: str | None = None,
+        marca: Mapping[str, Any] | None = None,
     ) -> bool:
         """Fim da subtarefa (``concluida``, ``falhou`` ou ``abandonada``) com tentativas, artefatos e resumo."""
         if status not in (ST_CONCLUIDA, ST_FALHOU, ST_ABANDONADA, ST_PENDENTE):
@@ -853,6 +870,8 @@ class CheckpointRecorder:
             state.status = status
             state.tentativas = max(int(tentativas), state.tentativas)
             state.resultado_resumo = " ".join(str(resumo or "").split())[:MAX_SUMMARY_CHARS]
+            if marca is not None:  # a marca do texto vai junto com o texto (v18.5-egress-gate)
+                state.resultado_marca = dict(marca)
             if artefatos is not None:
                 state.artefatos = [a for a in artefatos if safe_artifact_path(a)][:MAX_ARTIFACTS_PER_SUBTASK]
             state.causa_falha = causa_falha if causa_falha in CAUSAS_FALHA else None

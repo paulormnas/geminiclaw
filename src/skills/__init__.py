@@ -1,4 +1,6 @@
 from typing import Dict, List, Optional, Any, Callable
+from src.egress.fragments import ContentOrigin, ToolOutput
+
 from .base import BaseSkill
 from .search_quick.skill import QuickSearchSkill
 try:
@@ -71,9 +73,20 @@ class SkillRegistry:
                 # Usamos a assinatura real da skill
                 async def skill_tool(**kwargs) -> str:
                     result = await s.run_with_logging(**kwargs)
-                    if result.success:
-                        return f"Resultado de {s.name}: {result.output}"
-                    return f"Erro em {s.name}: {result.error}"
+                    text = (
+                        f"Resultado de {s.name}: {result.output}"
+                        if result.success
+                        else f"Erro em {s.name}: {result.error}"
+                    )
+                    meta = result.metadata or {}
+                    origin = meta.get("egress_origin") or s.egress_origin
+                    return ToolOutput(
+                        text,
+                        origin=ContentOrigin(origin),
+                        source=meta.get("egress_source"),
+                        integral_path=meta.get("integral_path"),
+                        tainted=bool(meta.get("egress_tainted", s.egress_tainted)),
+                    )
 
                 # Injetamos o nome e a descrição da skill na função
                 skill_tool.__name__ = s.name

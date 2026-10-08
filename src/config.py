@@ -403,13 +403,13 @@ RESEARCHER_CONSULT_TIMEOUT_SECONDS = float(get_env("RESEARCHER_CONSULT_TIMEOUT_S
 # Tamanho máximo do texto enviado a um buscador público (guarda de consulta).
 RESEARCHER_CONSULT_QUERY_MAX_CHARS = int(get_env("RESEARCHER_CONSULT_QUERY_MAX_CHARS", default="120"))
 # Hosts (sufixos de domínio, separados por vírgula) que `web_reader` pode ler nas consultas.
-# Vazio = sem lista (padrão); a allowlist ligada por padrão depende da `v18.5-egress-gate`.
+# Vazio = sem lista estática (padrão); a allowlist por consulta é a de hosts vistos na busca (abaixo).
 RESEARCHER_CONSULT_ALLOWED_HOSTS = tuple(
     h.strip().lower() for h in (get_env("RESEARCHER_CONSULT_ALLOWED_HOSTS", default="") or "").split(",") if h.strip()
 )
-# Se verdadeiro, `web_reader` só lê hosts que apareceram em resultado de `quick_search` da mesma
-# consulta (fecha o canal de saída por URL pós-injeção). Padrão desligado.
-RESEARCHER_CONSULT_READ_ONLY_SEARCHED_HOSTS = get_env_bool("RESEARCHER_CONSULT_READ_ONLY_SEARCHED_HOSTS", default=False)
+# Allowlist de hosts por consulta (v18.5-egress-gate, tarefa 7.6): `web_reader` só lê hosts que apareceram em resultado
+# de `quick_search` da mesma consulta (fecha o canal de saída por URL pós-injeção). Padrão LIGADO.
+RESEARCHER_CONSULT_READ_ONLY_SEARCHED_HOSTS = get_env_bool("RESEARCHER_CONSULT_READ_ONLY_SEARCHED_HOSTS", default=True)
 
 # LLM Response Cache
 LLM_CACHE_ENABLED = get_env_bool("LLM_CACHE_ENABLED", default=True)
@@ -557,6 +557,48 @@ DOMAIN_REINDEX_BATCH = int(get_env("DOMAIN_REINDEX_BATCH", default="200"))
 # Tamanho máximo (caracteres) de um termo livre de vocabulário que vira candidato. Termos
 # maiores são recusados: texto de agente não deve voltar ao prompt de outro sem limite.
 VOCAB_TERM_MAX_CHARS = int(get_env("VOCAB_TERM_MAX_CHARS", default="120"))
+
+# v18.5-egress-gate (ADR 019 §3) — camada única de saída com filtro de egresso.
+def _optional_positive_int(key: str) -> int | None:
+    """Lê um inteiro positivo opcional do ambiente; ausente/vazio -> ``None``; inválido falha de forma acionável."""
+    raw = (os.environ.get(key) or "").strip()
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except ValueError:
+        raise RuntimeError(f"{key} inválida: '{raw}'. Informe um inteiro positivo (ex.: {key}=10).") from None
+    if value <= 0:
+        raise RuntimeError(f"{key} inválida: '{raw}'. Informe um inteiro positivo (ex.: {key}=10).")
+    return value
+
+
+# Tamanho mínimo de grupo (k) das estatísticas impressas enviadas a modelos sem dados brutos. O valor é
+# decisão do pesquisador (não há default no código); sem valor, a sessão não inicia (ver o requisito abaixo).
+LOCALITY_MIN_GROUP_SIZE: int | None = _optional_positive_int("LOCALITY_MIN_GROUP_SIZE")
+# Saídas de execução não tabulares acima deste tamanho (caracteres) vão com início, fim e marcador de elisão.
+EGRESS_OUTPUT_MAX_CHARS = int(get_env("EGRESS_OUTPUT_MAX_CHARS", default="4000"))
+# Limite de volume (bytes) de saídas de execução, após o filtro, enviadas a destinos fora do nó por sessão.
+EGRESS_SESSION_MAX_BYTES = int(get_env("EGRESS_SESSION_MAX_BYTES", default="2000000"))
+# Linhas consecutivas com o mesmo número de campos que caracterizam um bloco tabular; também o limite
+# (exclusivo) de elementos numéricos de uma lista para retê-la.
+EGRESS_TABLE_MIN_ROWS = int(get_env("EGRESS_TABLE_MIN_ROWS", default="3"))
+
+
+def require_locality_min_group_size() -> int:
+    """Devolve ``LOCALITY_MIN_GROUP_SIZE`` ou falha de forma acionável quando não foi definido.
+
+    Raises:
+        RuntimeError: Se a variável não está definida (decisão do pesquisador; ver ``.env.example``).
+    """
+    if LOCALITY_MIN_GROUP_SIZE is None:
+        raise RuntimeError(
+            "LOCALITY_MIN_GROUP_SIZE não definida: o filtro de egresso precisa do tamanho mínimo de grupo (k) das "
+            "estatísticas enviadas a modelos sem dados brutos (ADR 019 §3). Defina no .env, por exemplo "
+            "LOCALITY_MIN_GROUP_SIZE=10 (veja .env.example)."
+        )
+    return LOCALITY_MIN_GROUP_SIZE
+
 
 # Identificador estável deste computador (fator de independência, ADR 015 §9).
 # Gerado uma vez e persistido em ~/.config/geminiclaw/node_id (ou $XDG_CONFIG_HOME).

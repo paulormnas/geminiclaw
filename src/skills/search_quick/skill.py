@@ -1,6 +1,9 @@
 import os
 from typing import List, Optional
 from src.logger import get_logger
+from src.egress.fragments import ContentOrigin
+from src.egress.gate import EgressRefused, caller_tainted, external_destination, get_gate
+
 from ..base import BaseSkill, SkillResult
 from .scraper import DuckDuckGoScraper, SearchResult
 from .ddg_lite import DuckDuckGoLiteScraper
@@ -13,6 +16,8 @@ class QuickSearchSkill(BaseSkill):
     """Skill de busca rápida que utiliza múltiplos backends com fallback."""
     
     name = "quick_search"
+    
+    egress_origin = ContentOrigin.DOCUMENTO
     description = (
         "Use esta skill para buscar informações atuais na internet de forma rápida. "
         "Forneça uma query específica. Retorna títulos, URLs e resumos dos primeiros resultados."
@@ -49,6 +54,13 @@ class QuickSearchSkill(BaseSkill):
             
         self.cache = SearchCache(ttl=cache_ttl)
 
+    def _primary_backend(self) -> str:
+        """Primeiro backend da estratégia que existe (o primeiro a receber a consulta)."""
+        for name in self.strategy:
+            if name.strip() in self.backends:
+                return name.strip()
+        return "desconhecido"
+
     async def run(self, query: str, max_results: int = 5, **kwargs) -> SkillResult:
         """Executa a busca, verificando o cache e tentando os backends em cascata.
 
@@ -72,6 +84,16 @@ class QuickSearchSkill(BaseSkill):
                     metadata={"source": "cache"}
                 )
 
+            # v18.5-egress-gate — a consulta sai do nó (ADR 019 §3.5): números de papel contaminado viram marcadores e
+            # o envio é registrado; consulta sem termos é recusada. O cache local acima não é egresso.
+            gate = get_gate()
+            try:
+                outgoing = gate.check_query(
+                    query, caller_tainted(), external_destination("busca", self._primary_backend())
+                )
+            except EgressRefused as exc:
+                return SkillResult(success=False, output=[], error=str(exc))
+
             # 2. Tentar backends em ordem (fallback)
             results = []
             errors = []
@@ -84,7 +106,10 @@ class QuickSearchSkill(BaseSkill):
                     
                 try:
                     logger.info(f"Tentando busca rápida com backend: {backend_name}")
-                    results = await backend.search(query, max_results=max_results)
+                    if backend_name.strip() != self._primary_backend():
+                        # Cada tentativa em outro backend é um envio: também registrada.
+                        gate.check_query(outgoing, False, external_destination("busca", backend_name.strip()))
+                    results = await backend.search(outgoing, max_results=max_results)
                     if results:
                         successful_backend = backend_name
                         break
@@ -103,6 +128,7 @@ class QuickSearchSkill(BaseSkill):
                 
             # 3. Armazenar no cache
             self.cache.set(query, results)
+            gate.note_search_urls(getattr(r, "url", "") for r in results)
             
             return SkillResult(
                 success=True,

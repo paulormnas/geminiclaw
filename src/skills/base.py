@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 from dataclasses import dataclass, field
+from src.egress.fragments import ContentOrigin
 from src.logger import get_logger
 
 _base_logger = get_logger(__name__)
@@ -20,6 +21,11 @@ class BaseSkill(ABC):
     name: str
     description: str
     parameters_schema: Dict[str, Any] = field(default_factory=dict)
+    # v18.5-egress-gate: origem do conteúdo que a skill devolve ao modelo (a ferramenta desconhecida é tratada como
+    # saída de execução, o tratamento mais restritivo). Uma skill pode refinar por resultado via
+    # ``SkillResult.metadata["egress_origin"]`` e ``["egress_source"]``.
+    egress_origin: ContentOrigin = ContentOrigin.SAIDA_EXECUCAO
+    egress_tainted: bool = False
 
     @abstractmethod
     async def run(self, **kwargs) -> SkillResult:

@@ -30,6 +30,8 @@ from typing import Any, Callable
 
 from agents.curator.agent import AGENT_INSTRUCTION
 from src import config
+from src.egress.fragments import ContentOrigin, PromptFragment, labeled
+from src.egress.gate import any_role_raw
 from src.knowledge.curator_flags import FlagStore
 from src.knowledge.curator_tools import CuratorLimits, CuratorToolkit, wrap_data
 from src.knowledge.graph_store import GraphStore, Node
@@ -277,7 +279,12 @@ class Curator:
             }
             for name, fn in domain.items()
         ]
-        messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
+        # v18.5-egress-gate — o resumo da sessão e as leituras do grafo podem trazer texto de agentes (marca do nó):
+        # contaminado se algum papel da sessão aceita dados brutos (regra de texto legado, ADR 019 §3.8).
+        graph_tainted = any_role_raw()
+        messages: list[dict[str, Any]] = [
+            labeled("user", PromptFragment(prompt, ContentOrigin.INSTRUCAO, tainted=graph_tainted, source="curador"))
+        ]
         while True:
             remaining = config.CURATOR_MAX_TOKENS_PER_RUN - report.tokens
             if remaining <= 0:
@@ -303,7 +310,16 @@ class Curator:
                     return
                 report.tool_calls += 1
                 content = await self._call(toolkit, domain, call.name, call.arguments)
-                messages.append({"role": "tool", "tool_call_id": call.id, "name": call.name, "content": content})
+                messages.append(
+                    labeled(
+                        "tool",
+                        PromptFragment(
+                            content, ContentOrigin.GRAFO, tainted=graph_tainted, source=f"ferramenta:{call.name}"
+                        ),
+                        tool_call_id=call.id,
+                        name=call.name,
+                    )
+                )
 
     def _domain_tools_list(self) -> list[Callable[..., Any]]:
         if self._domain_tools is not None:

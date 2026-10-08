@@ -21,7 +21,7 @@ def test_get_provider_delega_ao_researcher(monkeypatch):
 
     provider = get_provider()
 
-    assert isinstance(provider, OllamaProvider)
+    assert isinstance(provider.inner, OllamaProvider)
     assert provider.model_name == "qwen3:8b"
     assert provider is ModelRouter.get_provider("researcher")
 

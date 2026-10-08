@@ -15,6 +15,7 @@ import asyncio
 import unicodedata
 from typing import Any, Callable
 
+from src.egress.fragments import ContentOrigin
 from src.knowledge.domain_search import MAX_RESULTS, DomainHit, DomainSearch
 from src.knowledge.semantic_index import DOMAIN_LEVELS
 from src.logger import get_logger
@@ -106,6 +107,8 @@ class DomainSearchSkill(BaseSkill):
     """Skill somente leitura de busca de domínios."""
 
     name = "buscar_dominio"
+
+    egress_origin = ContentOrigin.GRAFO
     description = _DESCRIPTION
     parameters_schema = {
         "type": "object",

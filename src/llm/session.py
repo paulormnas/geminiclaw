@@ -91,9 +91,17 @@ class SessionRouting:
         fallback_id = f"google/{configured}"
         entry = self.catalogo.modelos.get(fallback_id)
         primary = self.catalogo.modelos.get(resolved_id)
-        if entry is None or primary is None or entry.trust != primary.trust:
+        if (
+            entry is None
+            or primary is None
+            or entry.trust != primary.trust
+            # v18.5-egress-gate: o prompt já foi filtrado para o destino do principal; o fallback não pode ter
+            # localidade nem aceitação de dados brutos diferentes (mandaria dado bruto a modelo que não o aceita).
+            or entry.localidade != primary.localidade
+            or entry.aceita_dados_brutos != primary.aceita_dados_brutos
+        ):
             logger.warning(
-                "GOOGLE_FALLBACK_MODEL ignorado: precisa estar no catálogo com o mesmo trust",
+                "GOOGLE_FALLBACK_MODEL ignorado: exige mesmo trust, localidade e aceitação de dados brutos",
                 extra={"fallback": fallback_id, "model": resolved_id},
             )
             return None

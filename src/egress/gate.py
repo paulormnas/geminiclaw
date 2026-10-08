@@ -568,7 +568,13 @@ class EgressGate:
         parsed = urlparse(url)
         if parsed.query and parse_qsl(parsed.query, keep_blank_values=True):
             return True
-        return any(re.fullmatch(r"[-+]?\d+(?:[.,]\d+)?", segment) for segment in parsed.path.split("/") if segment)
+        if re.search(r"\d", parsed.fragment or ""):
+            return True
+        # Qualquer segmento do caminho com dígito (numérico ou alfanumérico, ex.: "m12-537"); rótulos de host com
+        # dois ou mais dígitos (canal por DNS).
+        if any(re.search(r"\d", segment) for segment in parsed.path.split("/") if segment):
+            return True
+        return any(len(re.findall(r"\d", label)) >= 2 for label in (parsed.hostname or "").split("."))
 
 
 # --------------------------------------------------------------------------------------------------------------

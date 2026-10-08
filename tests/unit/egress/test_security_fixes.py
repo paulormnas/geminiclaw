@@ -222,3 +222,50 @@ def test_m5_symlink_para_dentro_de_dados_e_resolvido(tmp_path):
     inverso = dados / "link.txt"
     inverso.symlink_to(fora / "x.txt")
     assert classify_path(inverso, output_roots=[]) is ContentOrigin.DADO_DE_PESQUISA
+
+
+@pytest.mark.asyncio
+async def test_b1_check_url_vem_antes_da_resolucao_dns(monkeypatch):
+    """A resolução de DNS também é saída: a URL é verificada antes de `resolve_and_check_host`."""
+    from src.egress.gate import bind_gate_for_tests
+    from src.skills.web_reader import skill as wr
+
+    ordem = []
+    gate = _gate()
+    original = gate.check_url
+
+    def espiao(*a, **k):
+        ordem.append("gate")
+        return original(*a, **k)
+
+    gate.check_url = espiao
+
+    async def dns(host):
+        ordem.append("dns")
+        return "bloqueado no teste"
+
+    monkeypatch.setattr(wr, "resolve_and_check_host", dns)
+    bind_gate_for_tests(gate)
+    skill = wr.WebReaderSkill()
+    skill.cache = type("C", (), {"get": lambda self, u: None, "set": lambda self, u, v: None})()
+    await skill.run(url="https://exemplo.org/artigo")
+    assert ordem == ["gate", "dns"]
+
+    ordem.clear()
+    resultado = await skill.run(url="https://exemplo.org/medida/m12-537")  # papel sem contexto = contaminado
+    assert ordem == ["gate"] and "recusada" in resultado.error  # recusada antes de qualquer DNS
+
+
+@pytest.mark.parametrize("url", ["https://e.org/a/m12-537", "https://e.org/x/v37/y", "https://e.org/p#12.5",
+                                 "https://12-537.e.org/p"])
+def test_b1_segmentos_alfanumericos_com_digitos_sao_dado_embutido(url):
+    from src.egress.gate import EgressGate
+
+    assert EgressGate._url_embeds_data(url) is True
+
+
+@pytest.mark.parametrize("url", ["https://e.org/artigo", "https://docs.python.org/guia/", "https://e.org/a-b/c"])
+def test_b1_url_sem_digitos_passa(url):
+    from src.egress.gate import EgressGate
+
+    assert EgressGate._url_embeds_data(url) is False

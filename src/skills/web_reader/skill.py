@@ -341,17 +341,17 @@ class WebReaderSkill(BaseSkill):
         if not hostname:
             return SkillResult(success=False, output="", error="URL sem host válido.")
 
-        block_reason = await resolve_and_check_host(hostname)
-        if block_reason is not None:
-            logger.warning("WebReader: acesso bloqueado a rede interna", extra={"url": url, "reason": block_reason})
-            return SkillResult(success=False, output="", error=f"Acesso bloqueado: {block_reason}")
-
         # v18.5-egress-gate — a URL escolhida pelo modelo sai do nó (ADR 019 §3.5): registrada; URL com dado
         # embutido, construída por papel contaminado, é recusada. O texto lido volta como `documento` delimitado.
         try:
             get_gate().check_url(url, caller_tainted(), external_destination("leitura_web", hostname))
         except EgressRefused as exc:
             return SkillResult(success=False, output="", error=str(exc))
+
+        block_reason = await resolve_and_check_host(hostname)
+        if block_reason is not None:
+            logger.warning("WebReader: acesso bloqueado a rede interna", extra={"url": url, "reason": block_reason})
+            return SkillResult(success=False, output="", error=f"Acesso bloqueado: {block_reason}")
 
         # Verifica robots.txt
         can_fetch = await self._can_fetch(url)

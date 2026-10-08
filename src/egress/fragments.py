@@ -279,7 +279,12 @@ _OPEN_MARK_RE = re.compile(re.escape(TAINT_OPEN) + r"|\u27e6[DS]:[^\u27e7]*\u27e
 
 def strip_marks(text: str) -> str:
     """Remove as marcas em linha (o texto interno é preservado)."""
-    return _ANY_MARK_RE.sub("", text)
+    # Até o ponto fixo: uma passada só deixaria "⟦⟦/T⟧/T⟧" virar uma marca válida (forjável).
+    while True:
+        cleaned = _ANY_MARK_RE.sub("", text)
+        if cleaned == text:
+            return cleaned
+        text = cleaned
 
 
 strip_taint_marks = strip_marks

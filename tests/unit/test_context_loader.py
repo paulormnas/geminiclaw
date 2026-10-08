@@ -238,7 +238,8 @@ class TestImageProcessing:
 
         authorize.assert_called_once()
         assert len(bundle.images) == 1
-        assert bundle.images[0].provider == "gemini"
+        # OCR_PROVIDER=gemini é alias obsoleto de VISION_MODEL=google/gemini-3.8-flash.
+        assert bundle.images[0].provider == "google/gemini-3.8-flash"
         assert "estrutura celular" in bundle.images[0].description
 
     def test_gemini_vision_recusada_para_imagem_de_pesquisa_nao_compartilhavel(
@@ -254,9 +255,10 @@ class TestImageProcessing:
         with patch("google.genai.Client", return_value=mock_client):
             bundle = ContextLoader(context_dir).load()
 
+        # Recusa não é erro da sessão: nada é enviado, o OCR local assume e a recusa fica registrada no bundle.
         mock_client.models.generate_content.assert_not_called()
-        assert bundle.images[0].description == ""
-        assert "recusado" in bundle.images[0].extraction_errors[0]
+        assert bundle.images[0].provider == "local"
+        assert "recusad" in bundle.images[0].extraction_errors[0]
 
     def test_ocr_local_indisponivel_registra_erro_sem_crash(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("OCR_PROVIDER", "local")
@@ -387,10 +389,13 @@ class TestContextBundleRendering:
 
         text = bundle.to_prompt_context()
 
+        # `to_prompt_context()` devolve só a versão segura: sem amostras, estatísticas exatas nem texto de imagem.
         assert "Hipótese X." in text
         assert "d.csv" in text
-        assert "Gráfico de barras." in text
+        assert "i.png" in text
         assert "modelo.pkl" in text
+        assert "Gráfico de barras." not in text
+        assert '"x"' not in text
 
     def test_to_dict_serializa_paths_como_string(self, tmp_path: Path) -> None:
         bundle = ContextBundle(raw_files=[tmp_path / "x.bin"])

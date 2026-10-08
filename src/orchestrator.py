@@ -26,7 +26,7 @@ from src.config import (
 )
 from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
 from src.plan_normalizer import normalize_plan
-from src.egress.fragments import mark_research_data, taint_if
+from src.egress.fragments import taint_if
 from src.egress.gate import EgressGate, any_role_raw, bind_gate, role_tainted
 from src.egress.persisted import resumo_marca
 from src.llm.allocation import build_allocation_profile
@@ -42,6 +42,8 @@ from src.agents.validator_agent import ValidatorAgent
 from src.agent_runtime.context import AgentContext
 from src.agent_runtime.runtime import AgentRuntime
 from src.context_loader import ContextLoader, ContextBundle
+from src.llm.vision import VisionConfigError
+from src.research_data.manifest import ManifestError
 from src.human_gate import HumanGate
 from src.usage import UsageBudget, UsageTracker
 from src.continuity import (
@@ -1076,12 +1078,22 @@ class Orchestrator:
         bundle = context_bundle
         input_index_report: dict[str, Any] | None = None
         if bundle is None and not agent_tasks:
-            bundle = ContextLoader().load()
+            try:
+                bundle = ContextLoader().load()
+            except (ManifestError, VisionConfigError):
+                # v18.5-research-data-ingestion: manifesto inválido ou visão mal configurada impedem a sessão.
+                self.session_manager.update(
+                    master_session.id, status="closed", payload={**master_session.payload, "motivo_parada": "erro"}
+                )
+                raise
         if bundle is not None:
             egress_gate.add_known_identifiers(_context_identifiers(bundle))
-            self._current_context_block = bundle.to_prompt_context()
+            # Trechos rotulados (esquema agregado, documento, dado de pesquisa): o EgressGate decide o que cada
+            # destino recebe (v18.5-research-data-ingestion).
+            self._current_context_block = bundle.to_marked_context()
             self.output_manager.init_session(master_session.id)
             self._snapshot_input_context(bundle, master_session.id)
+            self._record_research_data_markings(bundle, master_session.id)
             if ingestor is not None:
                 await self._safe_ingest(ingestor.inputs)
                 # v17-input-document-index — insumos na busca semântica antes do planejamento (sem LLM).
@@ -1297,6 +1309,19 @@ class Orchestrator:
         result.session_id = master_session.id
         return result
 
+    def _record_research_data_markings(self, bundle: ContextBundle, session_id: str) -> None:
+        """Grava ``payload["research_data_markings"]`` (classe efetiva, marcação, motivo, hash e origem por arquivo)."""
+        if bundle.total_files == 0 and not bundle.markings:
+            return
+        try:
+            current = self.session_manager.get(session_id)
+            if current is not None:
+                self.session_manager.update(
+                    session_id, payload={**current.payload, "research_data_markings": bundle.research_data_markings()}
+                )
+        except Exception as exc:  # noqa: BLE001 - o registro não derruba a sessão; o relatório mostra "nenhum arquivo"
+            logger.warning("Marcações dos dados de entrada não gravadas", extra={"error": type(exc).__name__})
+
     def _snapshot_input_context(self, bundle: ContextBundle, session_id: str) -> None:
         """Copia os arquivos de ``input_context/`` usados para ``outputs/<session_id>/input_snapshot/``
         (Roadmap V15.5 / Spec G9), garantindo rastreabilidade imutável da sessão.
@@ -1315,6 +1340,9 @@ class Orchestrator:
             + [d.source_path for d in bundle.images]
             + bundle.raw_files
         )
+        # O manifesto vai junto: a classificação usada fica rastreável com os arquivos (v18.5-research-data-ingestion).
+        if bundle.manifest is not None and bundle.manifest.source is not None:
+            source_paths.append(bundle.manifest.source)
         for src_path in source_paths:
             try:
                 shutil.copy2(src_path, snapshot_dir / src_path.name)
@@ -1979,13 +2007,8 @@ class Orchestrator:
             else:
                 # V15.5/G9 — Injeta o contexto pré-curado de input_context/ apenas no
                 # plano inicial (nunca em replans, para não repetir payload grande).
-                # O bloco de input_context/ é dado de pesquisa: retido para modelos sem dados brutos (fail-closed) até a
-                # ingestão com resumos agregados (v18.5-research-data-ingestion).
-                context_block = (
-                    f"\n\n{mark_research_data(self._current_context_block, 'input_context/')}\n"
-                    if self._current_context_block
-                    else ""
-                )
+                # O bloco já vem com marcas em linha por trecho (esquema agregado, documento, dado de pesquisa).
+                context_block = f"\n\n{self._current_context_block}\n" if self._current_context_block else ""
                 planner_prompt = (
                     f"MODO: PLAN\n\n"
                     f"Crie um plano de execução (DAG) para a seguinte tarefa:\n{prompt}\n"

@@ -116,7 +116,7 @@ Linhas: 1 204 | Colunas: 3
 
 - Nova configuração `VISION_MODEL=provedor/modelo`, que deve ser entrada do catálogo; vazio =
   sem visão (OCR local, como o padrão atual `OCR_PROVIDER=local`). `OCR_PROVIDER=gemini` vira
-  alias de `VISION_MODEL=google/gemini-2.0-flash` com `WARNING` de obsolescência.
+  alias de `VISION_MODEL=google/gemini-3.8-flash` com `WARNING` de obsolescência.
 - `src/llm/vision.py`: `describe_image(path, prompt, destination) -> str`, com implementação
   para `google` (código atual movido de `context_loader.py:472-488`) e `ollama` (campo `images`
   de `/api/chat`, o que permite visão `no_no`). Outros provedores: erro "provedor sem suporte a

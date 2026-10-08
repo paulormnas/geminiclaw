@@ -2,15 +2,20 @@
 
 Regra padrão desta mudança: arquivos com extensões tabulares, de planilha, JSON/JSONL e imagem em ``input_context/``,
 ``input_snapshot/`` e nos diretórios de saída das execuções são ``dado_de_pesquisa``; os demais são ``documento``.
-A ``v18.5-research-data-ingestion`` estende a classificação com as marcações do manifesto (``compartilhavel``).
+A ``v18.5-research-data-ingestion`` estende a classificação com as marcações do manifesto
+(``input_context/dados.yaml``): ``classify_path(..., manifest=...)`` aplica a marcação explícita e, sem ela, a regra
+padrão por extensão do manifesto (``src.research_data.manifest.default_origin``).
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
 
 from src.egress.fragments import ContentOrigin
+
+if TYPE_CHECKING:
+    from src.research_data.manifest import ResearchDataManifest
 
 DATA_EXTENSIONS: frozenset[str] = frozenset(
     {
@@ -39,6 +44,14 @@ def _in_data_directory(path: Path) -> bool:
     return any(part in DATA_DIRECTORY_NAMES for part in path.parts)
 
 
+def _inside(path: Path, base_dir: Path) -> bool:
+    try:
+        path.relative_to(base_dir)
+    except ValueError:
+        return False
+    return True
+
+
 def _under_output_roots(path: Path, output_roots: Iterable[Path]) -> bool:
     return any(path == root or root in path.parents for root in output_roots)
 
@@ -48,6 +61,7 @@ def classify_path(
     *,
     output_roots: Iterable[Path] | None = None,
     documents: Iterable[Path | str] = (),
+    manifest: "ResearchDataManifest | None" = None,
 ) -> ContentOrigin:
     """Origem do conteúdo de ``path``.
 
@@ -60,12 +74,16 @@ def classify_path(
         path: Caminho do arquivo (existente ou não).
         output_roots: Raízes dos diretórios de saída das execuções (padrão: ``OUTPUT_BASE_DIR``).
         documents: Arquivos marcados explicitamente como documento.
+        manifest: Manifesto de ``input_context/``; para arquivos dentro do seu diretório vale a marcação explícita
+            ou, sem ela, a regra padrão do manifesto (design da ingestão §2), no lugar do padrão negar.
     """
     candidate = Path(path)
     try:
         resolved = candidate.resolve()
     except OSError:
         resolved = candidate
+    if manifest is not None and _inside(candidate, manifest.base_dir):
+        return manifest.marking_for(candidate).classe
     marked = set()
     for doc in documents:
         try:
@@ -103,7 +121,11 @@ def artifact_origin(path: Path | str) -> ContentOrigin:
 
 
 def ensure_not_research_data(
-    path: Path | str, *, compartilhavel: bool = False, documents: Iterable[Path | str] = ()
+    path: Path | str,
+    *,
+    compartilhavel: bool = False,
+    documents: Iterable[Path | str] = (),
+    manifest: "ResearchDataManifest | None" = None,
 ) -> None:
     """Recusa o arquivo se ele é ``dado_de_pesquisa`` não compartilhável (design §6).
 
@@ -112,7 +134,7 @@ def ensure_not_research_data(
     """
     if compartilhavel:
         return
-    if classify_path(path, documents=documents) is ContentOrigin.DADO_DE_PESQUISA:
+    if classify_path(path, documents=documents, manifest=manifest) is ContentOrigin.DADO_DE_PESQUISA:
         raise ResearchDataRefused(
             "dados de pesquisa entram só pela ingestão de input_context/; o código no sandbox pode lê-los"
         )

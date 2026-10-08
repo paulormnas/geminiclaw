@@ -66,6 +66,8 @@ class ReportData:
     artifacts: list[str] = field(default_factory=list)
     references: list[dict[str, Any]] = field(default_factory=list)
     narrativa_indisponivel: bool = False
+    # v18.5-research-data-ingestion: marcações dos arquivos de input_context/ (payload["research_data_markings"]).
+    research_data: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """Serializa para ``report_data.json``."""
@@ -152,6 +154,7 @@ def build_report_data(
     divergence_reports: list[dict[str, Any]] | None = None,
     artifacts: list[str] | None = None,
     references: list[dict[str, Any]] | None = None,
+    research_data: list[dict[str, Any]] | None = None,
 ) -> ReportData:
     """Reúne os dados do relatório. Divergências incluem as notas de ``metrics.json``."""
     divergences = list(divergence_reports or [])
@@ -169,6 +172,7 @@ def build_report_data(
         interactions=list(interactions or []),
         artifacts=list(artifacts or []),
         references=list(references or []),
+        research_data=list(research_data or []),
     )
 
 
@@ -202,6 +206,29 @@ def _interactions_section(data: ReportData) -> str:
     return "\n".join(blocks)
 
 
+def _cell(value: Any) -> str:
+    """Texto de uma célula de tabela Markdown: sem quebras de linha e com ``|`` escapado."""
+    text = str(value) if value not in (None, "") else "—"
+    return text.replace("\n", " ").replace("|", "\\|")
+
+
+def _research_data_section(data: ReportData) -> str:
+    """Marcações dos dados de entrada, geradas do payload da sessão (sem LLM)."""
+    if not data.research_data:
+        return "Nenhum arquivo em `input_context/` nesta sessão."
+    lines = [
+        "| Arquivo | Classe | Marcação | Motivo | Origem |",
+        "|---|---|---|---|---|",
+    ]
+    for item in data.research_data:
+        cells = (
+            item.get("caminho"), item.get("classe_efetiva"), item.get("marcacao"), item.get("motivo"),
+            item.get("origem"),
+        )
+        lines.append("| " + " | ".join(_cell(c) for c in cells) + " |")
+    return "\n".join(lines)
+
+
 def _divergence_section(data: ReportData, narrative: Narrative) -> str:
     facts = []
     for d in data.divergences:
@@ -230,7 +257,7 @@ def _metadata_section(data: ReportData, narrative: Narrative) -> str:
 
 
 def render_report_markdown(data: ReportData, narrative: Narrative) -> str:
-    """Renderiza ``relatorio_final.md`` de forma determinística (nove seções fixas, nesta ordem)."""
+    """Renderiza ``relatorio_final.md`` de forma determinística (dez seções fixas, nesta ordem)."""
     refs = ""
     if data.references:
         refs = "\n\n### Referências\n" + "\n".join(
@@ -246,6 +273,7 @@ def render_report_markdown(data: ReportData, narrative: Narrative) -> str:
         f"## Decisões do Pesquisador\n{_interactions_section(data)}",
         f"## Limitações Identificadas\n{narrative.limitacoes}",
         f"## Próximos Passos Sugeridos\n{narrative.proximos_passos}{refs}",
+        f"## Dados de Entrada e Marcações\n{_research_data_section(data)}",
         f"## Metadados de Execução\n{_metadata_section(data, narrative)}",
     ]
     return "\n\n".join(sections) + "\n"

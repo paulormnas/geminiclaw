@@ -41,8 +41,10 @@ respeita o `SessionMode`, e oportunidades só são investigadas com decisão hum
   decisões, respostas a sugestões), `agents/curator/agent.py` (`suggest_paths`),
   `src/knowledge/hypotheses.py` (novo), `src/knowledge/ingestion.py` (substitui regra
   provisória), `src/cli.py`, `src/config.py`.
-- **Schema do grafo:** novo valor `sem_caminhos_promissores` em `Sessao.motivo_parada`.
+- **Schema do grafo:** novos valores `sem_caminhos_promissores`, `planos_rejeitados` e `limite_ciclos` em
+  `Sessao.motivo_parada` (ADR 015 §8).
 
 ## Aprovações necessárias
 
-- Novo valor de enumeração no schema do grafo — aprovação explícita.
+- Novos valores de enumeração no schema do grafo (`sem_caminhos_promissores`, `planos_rejeitados`, `limite_ciclos`) —
+  aprovados explicitamente (os dois últimos em 2026-10-08; ADR 015 §8).

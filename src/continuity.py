@@ -64,8 +64,8 @@ INTERRUPTION_CATEGORY = "interrupcao_inesperada"
 # Motivos de parada que permitem retomar sem perguntar; ``solucao_encontrada`` pede confirmação.
 MOTIVOS_RETOMAVEIS = frozenset(
     {
-        "limite_tokens", "limite_tempo", "limite_retentativas", "limite_conexao", "limite_execucoes",
-        "versao_modelo", "limite_egresso", "interrompida",
+        "limite_tokens", "limite_tempo", "limite_retentativas", "limite_conexao", "limite_execucoes", "limite_ciclos",
+        "versao_modelo", "interrompida",
     }
 )
 MOTIVO_RESOLVIDA = "solucao_encontrada"
@@ -1033,6 +1033,12 @@ def evaluate_resumability(
     if motivo == MOTIVO_RESOLVIDA:
         return Resumability(
             RESUME_CONFIRM, "a pesquisa foi dada como resolvida (solucao_encontrada); continuar explorando?"
+        )
+    if motivo == "planos_rejeitados":
+        return Resumability(
+            RESUME_CONFIRM,
+            "a exploração parou por planos consecutivos rejeitados (planos_rejeitados); retomar repete o mesmo "
+            "planejamento — continuar mesmo assim?",
         )
     if motivo == "erro":
         return Resumability(

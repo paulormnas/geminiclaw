@@ -91,4 +91,10 @@ solução, não haver caminhos promissores ou atingir um limite de uso.
 
 #### Scenario: Planos rejeitados em sequência
 - **WHEN** o Validator rejeita `MAX_PLAN_RETRIES` planos consecutivos
-- **THEN** a sessão fecha registrando o motivo, com checkpoint
+- **THEN** a sessão fecha com `motivo_parada="planos_rejeitados"`, com checkpoint
+- **AND** retomar essa sessão exige confirmação do pesquisador
+
+#### Scenario: Teto de ciclos
+- **WHEN** a exploração atinge `MAX_EXPLORATION_CYCLES` ciclos
+- **THEN** a sessão fecha com `motivo_parada="limite_ciclos"`, com checkpoint
+- **AND** retomar essa sessão não exige confirmação

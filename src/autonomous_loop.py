@@ -792,14 +792,18 @@ class AutonomousLoop:
             if exploring:
                 if cycle_no >= MAX_EXPLORATION_CYCLES:
                     logger.warning("Teto de ciclos de exploração atingido", extra={"cycles": cycle_no})
+                    from src.exploration import ExplorationStop
+
                     return await self._close_exploration(
-                        StopReason.RUNS, master_session_id, prompt, list(cumulative_tasks.values()),
+                        ExplorationStop.CYCLES, master_session_id, prompt, list(cumulative_tasks.values()),
                         cumulative_dag, final_results,
                     )
                 if rejected_plans >= max_plan_retries:
                     logger.error("Planos consecutivos rejeitados: exploração encerrada", extra={"n": rejected_plans})
+                    from src.exploration import ExplorationStop
+
                     return await self._close_exploration(
-                        StopReason.RETRIES, master_session_id, prompt, list(cumulative_tasks.values()),
+                        ExplorationStop.REJECTED_PLANS, master_session_id, prompt, list(cumulative_tasks.values()),
                         cumulative_dag, final_results,
                     )
                 plan_attempt = cycle_no

@@ -224,7 +224,7 @@ class EgressGate:
             EgressLogError: Falha ao gravar o registro (o envio não ocorre).
             EgressRefused: Mensagem com conteúdo não textual e sem rótulo.
         """
-        block_id = secrets.token_hex(4)
+        block_id = secrets.token_hex(8)
         limit_reached = self.limit_reached
         interventions: Counter = Counter()
         records: list[dict[str, Any]] = []
@@ -339,7 +339,9 @@ class EgressGate:
                 iv[filters.IV_COMPARTILHAVEL] += 1
                 return text, False
             iv[filters.IV_DADO_RETIDO] += 1
-            return f"[dado de pesquisa retido: {frag.source or 'origem desconhecida'}, {_bytes(text)} bytes]", True
+            # A fonte pode ser controlada por quem nomeou o arquivo: sem quebras de linha nem delimitadores.
+            fonte = _clean_source(frag.source or "origem desconhecida")
+            return f"[dado de pesquisa retido: {fonte}, {_bytes(text)} bytes]", True
         if origin is ContentOrigin.SAIDA_EXECUCAO:
             context = FilterContext(
                 k=self.min_group_size,

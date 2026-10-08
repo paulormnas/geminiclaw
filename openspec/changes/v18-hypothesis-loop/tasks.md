@@ -21,7 +21,8 @@
 ## 5. Ciclo e parada
 - [x] 5.1 Reescrever o laço do `AutonomousLoop._run_complex_path` conforme o design; novo significado de `MAX_PLAN_RETRIES`.
 - [x] 5.2 Critérios "solução encontrada" (com confirmação no `assisted`) e "sem caminhos promissores".
-- [x] 5.3 **Aprovação:** valor `sem_caminhos_promissores` em `Sessao.motivo_parada`.
+- [x] 5.3 **Aprovação:** valores `sem_caminhos_promissores`, `planos_rejeitados` e `limite_ciclos` em `Sessao.motivo_parada` (ADR 015 §8).
+- [x] 5.4 Retomada: `limite_ciclos` direta; `planos_rejeitados` com confirmação (`src/continuity.py`).
 
 ## 6. Testes
 - [x] 6.1 `assisted`: hipótese do Researcher não executa sem aprovação; hipótese do pesquisador executa.

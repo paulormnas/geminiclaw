@@ -128,6 +128,8 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
                 enum=(
                     "solucao_encontrada",
                     "sem_caminhos_promissores",  # v18-hypothesis-loop
+                    "planos_rejeitados",  # v18-hypothesis-loop
+                    "limite_ciclos",  # v18-hypothesis-loop
                     "limite_tokens",
                     "limite_tempo",
                     "limite_retentativas",

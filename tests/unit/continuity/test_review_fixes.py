@@ -473,3 +473,10 @@ def test_consultas_de_continuacao_e_projeto_no_session_manager(mock_db_connectio
     sm.update("a", status="active")
     row_state = sm.get("a")
     assert row_state.status == "active" and sm.heartbeat("a") is True
+
+
+def test_motivos_da_exploracao_tem_retomada_propria():
+    """v18-hypothesis-loop: teto de ciclos retoma direto; planos rejeitados exigem confirmação do pesquisador."""
+    cp = Checkpoint(session_id="s", motivo_parada=None)
+    assert evaluate_resumability("closed", cp, "limite_ciclos").decision == "ok"
+    assert evaluate_resumability("closed", cp, "planos_rejeitados").decision == "confirmar"

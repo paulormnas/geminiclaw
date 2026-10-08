@@ -139,6 +139,8 @@ sem aprovação, em nenhum modo.
 - **Sem caminhos promissores:** o Researcher não propõe hipótese nova, não há hipótese
   aprovada pendente e o Curator não tem sugestões → `motivo_parada="sem_caminhos_promissores"`
   (novo valor de enumeração).
+- **Planos rejeitados:** `MAX_PLAN_RETRIES` planos consecutivos rejeitados → `motivo_parada="planos_rejeitados"`.
+- **Teto de ciclos:** `MAX_EXPLORATION_CYCLES` atingido → `motivo_parada="limite_ciclos"`.
 - **Limite de uso:** `v18-usage-limits`.
 
 Em todos os casos, o fechamento grava checkpoint e registra caminhos sem conclusão.
@@ -150,7 +152,7 @@ Em todos os casos, o fechamento grava checkpoint e registra caminhos sem conclus
 | Orquestrador & Loop | Ciclo contínuo com critérios de parada; `MAX_PLAN_RETRIES` com novo significado. |
 | Agentes & Prompts | Formato do plano com hipóteses, decisões e respostas; `suggest_paths` do Curator. |
 | Sandboxes & Containers | Nenhum. |
-| Persistência | `Hipotese`, `Decisao` e arestas de raciocínio; novo valor em `motivo_parada`. |
+| Persistência | `Hipotese`, `Decisao` e arestas de raciocínio; novos valores em `motivo_parada`. |
 | Segurança | Oportunidades e hipóteses de agentes sob decisão humana conforme o modo. |
 | Testes & Telemetria | Contagem de ciclos, hipóteses, sugestões aceitas/recusadas por sessão. |
 
@@ -172,11 +174,13 @@ foram tomadas na implementação e precisam ser ratificadas ou corrigidas na spe
    confirmado** (`ExplorationSession`). Sem isso (e com `HYPOTHESIS_LOOP_ENABLED=false`) vale o laço de ciclo único da V17,
    com `MAX_PLAN_RETRIES` contando todos os ciclos. Com o ciclo, `MAX_PLAN_RETRIES` conta só os planos consecutivos
    rejeitados (um plano aprovado zera a contagem).
-2. **Motivo de parada dos planos rejeitados.** A spec manda "fechar registrando o motivo"; sem valor novo de enumeração
-   (só `sem_caminhos_promissores` foi aprovado), usou-se `limite_retentativas`. O teto de ciclos
-   (`MAX_EXPLORATION_CYCLES`, default 20, à prova de laço infinito) usa `limite_execucoes`. Falha ao gravar o plano no
-   grafo fecha com `erro`, assim como falha ao sugerir caminhos (Curator) ou ao consultar caminhos em aberto: vazio por
-   falha nunca vira `sem_caminhos_promissores` (fail-fast, AGENTS.md §1.6). Todos gravam checkpoint.
+2. **Motivo de parada dos planos rejeitados e do teto de ciclos.** *Ratificada com correção (2026-10-08).* A
+   implementação reaproveitara `limite_retentativas` e `limite_execucoes`; o pesquisador exigiu confirmar antes se não
+   havia motivo mais adequado, e havia (os nomes já significam outros limites e a retomada diverge). Adotados dois
+   valores novos: `planos_rejeitados` (retomada com confirmação) e `limite_ciclos` (retomada direta); ver ADR 015 §8.
+   Falha ao gravar o plano no grafo fecha com `erro`, assim como falha ao sugerir caminhos (Curator) ou ao consultar
+   caminhos em aberto: vazio por falha nunca vira `sem_caminhos_promissores` (fail-fast, AGENTS.md §1.6). Todos gravam
+   checkpoint.
 3. **Origem da hipótese nunca vem do LLM.** `pesquisador` só existe para nós criados pelo pesquisador; a hipótese nova
    nasce `researcher`, `curator` (sugestão aceita) ou `oportunidade` (oportunidade **aprovada**). O campo `origem` do plano
    é ignorado. Hipótese `abandonada` (rejeitada) não volta, nem por `id` nem por enunciado equivalente.

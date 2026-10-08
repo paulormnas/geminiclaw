@@ -88,8 +88,9 @@ Nós criados pelo Curator têm ainda `justificativa_criacao` (por que o nó é s
 via aresta `NO_DOMINIO` (um projeto interdisciplinar pode ter vários).
 
 **`Sessao`** — `modo` (`assisted` / `semi` / `auto`), `inicio`, `fim`, `motivo_parada`
-(`solucao_encontrada` / `limite_tokens` / `limite_tempo` / `limite_retentativas` /
-`limite_conexao` / `erro` / `interrompida`), `consumo` (tokens, tempo, retentativas).
+(`solucao_encontrada` / `sem_caminhos_promissores` / `planos_rejeitados` / `limite_ciclos` /
+`limite_tokens` / `limite_tempo` / `limite_retentativas` / `limite_conexao` / `limite_execucoes` /
+`erro` / `interrompida`), `consumo` (tokens, tempo, retentativas).
 
 **`Insumo`** — `tipo` (`artigo` / `dataset` / `protocolo` / `outro`), `titulo`, `hash_conteudo`,
 `caminho` (em `input_snapshot/`).
@@ -757,6 +758,30 @@ fixo, sem LLM, reservando o Curator para alterações.
 
 **Arquiteto:** incorporado (§11): visualizar é um comando fixo e somente-leitura; alterar é
 sempre com o Curator.
+
+### 8. Motivos de parada da exploração (emenda de 2026-10-08) — **decidido**
+
+A mudança `v18-hypothesis-loop` precisava registrar dois encerramentos que não tinham motivo próprio: os
+`MAX_PLAN_RETRIES` planos consecutivos rejeitados pelo Validator e o teto `MAX_EXPLORATION_CYCLES` de ciclos. A
+implementação reaproveitou `limite_retentativas` e `limite_execucoes`. O pesquisador condicionou o reaproveitamento a
+não existir outro motivo adequado; a conferência mostrou que existe, por três razões:
+
+- **Os nomes já significam outra coisa.** `limite_execucoes` é o teto de execuções de agente
+  (`MAX_AGENT_RUNS_PER_SESSION`) e `limite_retentativas` é o esgotamento de tentativas por tarefa
+  (`v18-usage-limits`). Reusá-los tornaria `Sessao.motivo_parada` ambíguo na trilha de auditoria (ADR 019).
+- **A retomada diverge.** Os dois valores reaproveitados são retomáveis sem perguntar (`v18-research-continuity`);
+  planos rejeitados repetem o mesmo planejamento ao retomar.
+- **Proveniência.** O motivo de parada faz parte do registro auditável da sessão.
+
+**Decisão (aprovada pelo pesquisador em 2026-10-08):** dois valores novos de enumeração em `Sessao.motivo_parada`,
+além de `sem_caminhos_promissores` (já aprovado):
+
+| Valor | Quando | Retomada |
+|---|---|---|
+| `planos_rejeitados` | `MAX_PLAN_RETRIES` planos consecutivos rejeitados | exige confirmação do pesquisador |
+| `limite_ciclos` | `MAX_EXPLORATION_CYCLES` atingido | direta (teto de orçamento) |
+
+`limite_retentativas` e `limite_execucoes` voltam ao significado original.
 
 ---
 

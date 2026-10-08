@@ -59,7 +59,8 @@ class ExplorationStop(str, Enum):
 
     SOLUTION = "solucao_encontrada"
     NO_PATHS = "sem_caminhos_promissores"
-    CYCLES = "limite_execucoes"  # teto de ciclos (MAX_EXPLORATION_CYCLES)
+    CYCLES = "limite_ciclos"  # teto de ciclos (MAX_EXPLORATION_CYCLES)
+    REJECTED_PLANS = "planos_rejeitados"  # MAX_PLAN_RETRIES planos consecutivos rejeitados
     ERROR = "erro"
 
 

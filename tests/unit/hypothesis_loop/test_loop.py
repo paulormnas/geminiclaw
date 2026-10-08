@@ -217,7 +217,7 @@ async def test_planos_rejeitados_em_sequencia_fecham_com_checkpoint(tmp_path):
             patch("src.orchestrator.MAX_PLANNING_ITERATIONS", 1):
         await h.run()
     assert h.ran == [] and h.plan_calls == 2  # uma execução de planejamento por plano rejeitado
-    assert h.stop_reason == "limite_retentativas"
+    assert h.stop_reason == "planos_rejeitados"
     assert h.checkpoint().estado == "fechado"
 
 
@@ -239,7 +239,7 @@ async def test_teto_de_ciclos_de_exploracao_e_a_prova_de_laco_infinito(tmp_path)
     h = LoopHarness(tmp_path, plans=plans)
     with patch("src.autonomous_loop.MAX_EXPLORATION_CYCLES", 3):
         await h.run()
-    assert h.stop_reason == "limite_execucoes" and h.plan_calls == 3
+    assert h.stop_reason == "limite_ciclos" and h.plan_calls == 3
     assert h.checkpoint().estado == "fechado"
 
 

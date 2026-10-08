@@ -4,7 +4,7 @@
 - [x] 0.1 `v18.5-model-catalog-locality` implementada (perfil de alocação e `aceita_dados_brutos` efetivo).
 - [x] 0.2 Aprovação explícita do pesquisador para a tabela `egress_log` (aprovada).
 - [x] 0.3 Valor de `LOCALITY_MIN_GROUP_SIZE` definido pelo pesquisador (10, em `.env.example`; a configuração segue falhando de forma acionável se ausente).
-- [x] 0.4 Revisão do Analista de Segurança sobre este design.
+- [ ] 0.4 Revisão do Analista de Segurança sobre este design. *(Achados do PR #113 corrigidos; aguardando a ratificação da revisão.)*
 - [x] 0.5 Confirmar com `v18.5-operation-metrics` a divisão do limite de egresso (design §9): esta mudança entrega `max_egress_bytes`, o motivo de parada e a retenção; o modo sem limite e `--max-egress-bytes` ficam na `operation-metrics`.
 
 ## 1. Fundamentos

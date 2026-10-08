@@ -35,25 +35,53 @@ def _output_roots() -> list[Path]:
     return [Path(config.OUTPUT_BASE_DIR).resolve()]
 
 
-def _in_data_directory(path: Path, output_roots: Iterable[Path]) -> bool:
-    if any(part in DATA_DIRECTORY_NAMES for part in path.parts):
-        return True
-    resolved = path.resolve()
-    return any(resolved == root or root in resolved.parents for root in output_roots)
+def _in_data_directory(path: Path) -> bool:
+    return any(part in DATA_DIRECTORY_NAMES for part in path.parts)
 
 
-def classify_path(path: Path | str, *, output_roots: Iterable[Path] | None = None) -> ContentOrigin:
-    """Origem do conteúdo de ``path``: ``dado_de_pesquisa`` para dados em diretórios de dados, senão ``documento``.
+def _under_output_roots(path: Path, output_roots: Iterable[Path]) -> bool:
+    return any(path == root or root in path.parents for root in output_roots)
+
+
+def classify_path(
+    path: Path | str,
+    *,
+    output_roots: Iterable[Path] | None = None,
+    documents: Iterable[Path | str] = (),
+) -> ContentOrigin:
+    """Origem do conteúdo de ``path``.
+
+    Padrão **negar**: tudo em ``input_context/`` e ``input_snapshot/`` é ``dado_de_pesquisa``, qualquer que seja a
+    extensão, exceto os arquivos listados em ``documents`` (documentos explicitamente marcados, ex.: pelo manifesto da
+    ingestão). Nos diretórios de saída das execuções vale a regra de extensões de dados. Symlinks são resolvidos: o
+    caminho léxico e o destino são ambos avaliados, e basta um deles cair em diretório de dados.
 
     Args:
-        path: Caminho do arquivo (existente ou não; só o nome e a localização contam).
+        path: Caminho do arquivo (existente ou não).
         output_roots: Raízes dos diretórios de saída das execuções (padrão: ``OUTPUT_BASE_DIR``).
+        documents: Arquivos marcados explicitamente como documento.
     """
     candidate = Path(path)
-    if candidate.suffix.lower() not in DATA_EXTENSIONS:
+    try:
+        resolved = candidate.resolve()
+    except OSError:
+        resolved = candidate
+    marked = set()
+    for doc in documents:
+        try:
+            marked.add(Path(doc).resolve())
+        except OSError:
+            continue
+    if resolved in marked:
         return ContentOrigin.DOCUMENTO
-    roots = list(output_roots) if output_roots is not None else _output_roots()
-    return ContentOrigin.DADO_DE_PESQUISA if _in_data_directory(candidate, roots) else ContentOrigin.DOCUMENTO
+    variants = {candidate, resolved}
+    if any(_in_data_directory(v) for v in variants):
+        return ContentOrigin.DADO_DE_PESQUISA
+    roots = [r.resolve() for r in output_roots] if output_roots is not None else _output_roots()
+    is_data_ext = any(v.suffix.lower() in DATA_EXTENSIONS for v in variants)
+    if is_data_ext and any(_under_output_roots(v, roots) for v in variants):
+        return ContentOrigin.DADO_DE_PESQUISA
+    return ContentOrigin.DOCUMENTO
 
 
 # Agregados escritos pelos helpers científicos: saída de execução (filtrada), não dado de pesquisa.
@@ -74,7 +102,9 @@ def artifact_origin(path: Path | str) -> ContentOrigin:
     return ContentOrigin.SAIDA_EXECUCAO
 
 
-def ensure_not_research_data(path: Path | str, *, compartilhavel: bool = False) -> None:
+def ensure_not_research_data(
+    path: Path | str, *, compartilhavel: bool = False, documents: Iterable[Path | str] = ()
+) -> None:
     """Recusa o arquivo se ele é ``dado_de_pesquisa`` não compartilhável (design §6).
 
     Raises:
@@ -82,7 +112,7 @@ def ensure_not_research_data(path: Path | str, *, compartilhavel: bool = False) 
     """
     if compartilhavel:
         return
-    if classify_path(path) is ContentOrigin.DADO_DE_PESQUISA:
+    if classify_path(path, documents=documents) is ContentOrigin.DADO_DE_PESQUISA:
         raise ResearchDataRefused(
             "dados de pesquisa entram só pela ingestão de input_context/; o código no sandbox pode lê-los"
         )

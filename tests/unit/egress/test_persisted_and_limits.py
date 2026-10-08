@@ -352,7 +352,8 @@ def test_classificacao_de_caminhos(tmp_path):
     assert classify_path("input_context/medicoes.csv") is ContentOrigin.DADO_DE_PESQUISA
     assert classify_path("outputs/s/t/saida.parquet") is ContentOrigin.DADO_DE_PESQUISA
     assert classify_path("input_snapshot/imagem.PNG") is ContentOrigin.DADO_DE_PESQUISA
-    assert classify_path("input_context/artigo.pdf") is ContentOrigin.DOCUMENTO
+    assert classify_path("input_context/artigo.pdf") is ContentOrigin.DADO_DE_PESQUISA  # padrão negar
+    assert classify_path("input_context/artigo.pdf", documents=["input_context/artigo.pdf"]) is ContentOrigin.DOCUMENTO
     assert classify_path("/fora/tabela.csv", output_roots=[]) is ContentOrigin.DOCUMENTO
     with pytest.raises(ResearchDataRefused):
         ensure_not_research_data("input_snapshot/x.json")

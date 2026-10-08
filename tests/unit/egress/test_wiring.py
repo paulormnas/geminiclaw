@@ -178,7 +178,7 @@ def test_resultados_do_document_processor_saem_rotulados_pela_fonte():
     from src.skills.document_processor.skill import _result_content
 
     dado = _result_content({"content": "a,b\n1,2", "source_path": "input_snapshot/medicoes.csv"})
-    documento = _result_content({"content": "texto do artigo", "source_path": "input_snapshot/artigo.pdf"})
+    documento = _result_content({"content": "texto do artigo", "source_path": "artifacts/artigo.pdf"})
     assert dado == "[conteúdo de arquivo de dados omitido: input_snapshot/medicoes.csv]" and "omitido" not in documento
 
 

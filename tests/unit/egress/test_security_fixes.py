@@ -189,3 +189,36 @@ def test_m4_gate_respeita_known_identifiers_da_sessao():
     msg = labeled("assistant", PromptFragment("usei medida_3 e v37", ContentOrigin.INSTRUCAO, tainted=True))
     out = gate.prepare_llm([msg], None, make_dest(raw=False)).messages[0]["content"]
     assert out == "usei medida_3 e v<num padrão=dd>"
+
+
+def test_m5_padrao_negar_em_diretorios_de_dados(tmp_path):
+    from src.egress.classification import classify_path
+
+    for nome in ("notas.txt", "caderno.md", "tabela.dat", "sem_extensao", "foto.heic", "dump.sqlite"):
+        assert classify_path(tmp_path / "input_context" / nome, output_roots=[]) is ContentOrigin.DADO_DE_PESQUISA
+        assert classify_path(tmp_path / "input_snapshot" / nome, output_roots=[]) is ContentOrigin.DADO_DE_PESQUISA
+
+
+def test_m5_documento_so_se_explicitamente_marcado(tmp_path):
+    from src.egress.classification import classify_path
+
+    artigo = tmp_path / "input_context" / "artigo.pdf"
+    assert classify_path(artigo, output_roots=[]) is ContentOrigin.DADO_DE_PESQUISA
+    assert classify_path(artigo, output_roots=[], documents=[artigo]) is ContentOrigin.DOCUMENTO
+
+
+def test_m5_symlink_para_dentro_de_dados_e_resolvido(tmp_path):
+    from src.egress.classification import classify_path
+
+    dados = tmp_path / "input_context"
+    dados.mkdir()
+    (dados / "medidas.csv").write_text("1,2")
+    fora = tmp_path / "artifacts"
+    fora.mkdir()
+    link = fora / "relatorio.txt"  # nome inocente apontando para o dado
+    link.symlink_to(dados / "medidas.csv")
+    assert classify_path(link, output_roots=[]) is ContentOrigin.DADO_DE_PESQUISA
+    # e o inverso: link dentro de input_context apontando para fora continua sendo dado (lado seguro)
+    inverso = dados / "link.txt"
+    inverso.symlink_to(fora / "x.txt")
+    assert classify_path(inverso, output_roots=[]) is ContentOrigin.DADO_DE_PESQUISA

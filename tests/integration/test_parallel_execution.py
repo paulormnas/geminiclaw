@@ -103,7 +103,7 @@ async def test_parallel_execution_failure_cancels_dependent(mock_orchestrator):
         
     mock_orchestrator._run_planning_loop.side_effect = mock_planning
     
-    result = await loop._run_complex_path("Test Prompt", "session_123")
+    await loop._run_complex_path("Test Prompt", "session_123")
     
     # O plano original tinha 3 tarefas. Task_1 falhou, Task_2 sucedeu, Task_3 cancelada (não executada)
     assert "start_task_1" in execution_order

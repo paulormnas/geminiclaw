@@ -29,8 +29,6 @@ async def test_deep_search_integration(tmp_path, memory_indexer, memory_cache):
     """
 
     # Prepara o mock do cache: primeiro get() dá miss, set() grava, segundo get() dá hit
-    results_store = {}
-
     def _make_conn_ctx(fetchone_val=None):
         mock_cursor = MagicMock()
         mock_cursor.fetchone.return_value = fetchone_val

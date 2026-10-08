@@ -47,9 +47,6 @@ def test_deep_search_cache_set_get(cache):
 
 def test_deep_search_cache_miss_sem_filtro(cache):
     """get() com filtros diferentes deve dar miss (hash diferente)."""
-    results = [{"url": "http://test.com", "score": 0.99}]
-    filters = {"domain": "test.com"}
-
     # Hash gerado com filtros — busca sem filtros gera hash diferente, não acha nada
     ctx, _ = _make_ctx(fetchone=None)
     with patch("src.skills.search_deep.cache.get_connection", return_value=ctx):

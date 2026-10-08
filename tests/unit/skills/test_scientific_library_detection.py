@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.skills.code.skill import _uses_scientific_libraries, _load_scientific_helpers_source
+from src.skills.code.skill import _load_scientific_helpers_source, _uses_scientific_libraries
 
 
 @pytest.mark.unit

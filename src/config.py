@@ -1,6 +1,7 @@
 import os
 from enum import Enum
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # Carrega o arquivo .env se existir
@@ -334,7 +335,9 @@ SANDBOX_PIDS_LIMIT = int(get_env("SANDBOX_PIDS_LIMIT", default="256"))
 SANDBOX_TMPFS_SIZE = get_env("SANDBOX_TMPFS_SIZE", default="256m")
 SANDBOX_INSTALL_LOG_TAIL_LINES = int(get_env("SANDBOX_INSTALL_LOG_TAIL_LINES", default="40"))
 # v18.5-sandbox-phases — fases de rede e dados do sandbox (ADR 019 §5).
-SANDBOX_INSTALL_TIMEOUT_SECONDS = int(get_env("SANDBOX_INSTALL_TIMEOUT_SECONDS", default=str(CODE_SANDBOX_SETUP_TIMEOUT_SECONDS)))
+SANDBOX_INSTALL_TIMEOUT_SECONDS = int(
+    get_env("SANDBOX_INSTALL_TIMEOUT_SECONDS", default=str(CODE_SANDBOX_SETUP_TIMEOUT_SECONDS))
+)
 SANDBOX_FETCH_TIMEOUT_SECONDS = int(get_env("SANDBOX_FETCH_TIMEOUT_SECONDS", default="600"))
 SANDBOX_ASSET_MAX_BYTES = int(get_env("SANDBOX_ASSET_MAX_BYTES", default="536870912"))  # 512 MiB por ativo
 # 2 GiB por execução
@@ -617,6 +620,7 @@ else:
 
 
 from src.logger import get_logger
+
 logger = get_logger(__name__)
 
 for directory in [OUTPUT_BASE_DIR, LOGS_BASE_DIR]:

@@ -1,4 +1,5 @@
 from qdrant_client import QdrantClient
+
 from src.config import QDRANT_URL
 from src.logger import get_logger
 

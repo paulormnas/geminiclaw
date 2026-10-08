@@ -26,7 +26,6 @@ from __future__ import annotations
 import asyncio
 import gzip
 import json
-import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -34,8 +33,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
-from src.logger import get_logger
 from src.db import get_connection
+from src.logger import get_logger
 
 logger = get_logger(__name__)
 

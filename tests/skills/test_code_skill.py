@@ -1,10 +1,11 @@
-import pytest
-import os
 import pathlib
+
 import docker
+import pytest
+
 from src import config
 from src.skills.code.skill import CodeSkill
-from src.skills.code.sandbox import PythonSandbox
+
 
 def is_docker_available():
     try:

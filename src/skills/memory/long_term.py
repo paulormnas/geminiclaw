@@ -5,14 +5,14 @@ As entradas são armazenadas na tabela ``long_term_memory`` criada
 pelo ``scripts/init_db.sql``.
 """
 
-import json
 import datetime
+import json
 import uuid
 from dataclasses import dataclass, field
-from typing import List, Optional, Any
+from typing import Any, List, Optional
 
-from src.logger import get_logger
 from src.db import get_connection
+from src.logger import get_logger
 
 logger = get_logger(__name__)
 

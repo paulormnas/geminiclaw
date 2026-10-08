@@ -4,7 +4,6 @@ Responsável por validar se o resultado de uma subtarefa atende aos critérios
 de validação e artefatos esperados definidos no plano.
 """
 
-import asyncio
 from agents.base.agent import Agent, _load_session_context, _persist_session_context, _setup_skills
 from src.prompts import render_instruction
 

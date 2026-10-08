@@ -1,8 +1,11 @@
-import os
-import httpx
 import asyncio
+import os
 from typing import List
+
+import httpx
+
 from src.logger import get_logger
+
 from .scraper import SearchResult
 
 logger = get_logger(__name__)

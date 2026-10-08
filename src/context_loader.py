@@ -335,10 +335,11 @@ class ContextLoader:
     def _ocr_scanned_pdf(self, path: Path) -> tuple[str, list[str]]:
         """Renderiza páginas de um PDF escaneado e aplica OCR local via pytesseract."""
         try:
+            import io
+
             import pymupdf as fitz
             import pytesseract
             from PIL import Image
-            import io
         except ImportError as e:
             return "", [f"OCR indisponível para PDF escaneado: dependência ausente ({e})"]
 
@@ -441,6 +442,7 @@ class ContextLoader:
 
     def _process_image(self, path: Path) -> ImageContext:
         import os
+
         from src.config import OCR_PROVIDER
 
         # Lê a variável de ambiente diretamente (não o valor cacheado em src.config no
@@ -472,6 +474,7 @@ class ContextLoader:
     def _describe_image_via_gemini(self, path: Path) -> ImageContext:
         try:
             from google import genai
+
             from src.config import GEMINI_API_KEY
             from src.egress.gate import Destination, EgressRefused, get_gate
 

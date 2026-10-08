@@ -1,7 +1,10 @@
-import pytest
 import time
-from unittest.mock import patch
-from src.skills.search_quick.cache import SearchCache, SearchResult
+
+import pytest
+
+from src.skills.search_quick.cache import SearchCache
+from src.skills.search_quick.scraper import SearchResult
+
 
 @pytest.fixture
 def cache():

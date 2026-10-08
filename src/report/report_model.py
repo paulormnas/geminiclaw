@@ -225,7 +225,9 @@ def _metadata_section(data: ReportData, narrative: Narrative) -> str:
     ]
     if m.stop_reason:
         lines.append(f"- **Motivo de parada**: {m.stop_reason}")
-    lines.append(f"- **Nível de Confiança Consolidado**: {narrative.confianca_nivel} — {narrative.confianca_justificativa}")
+    lines.append(
+        f"- **Nível de Confiança Consolidado**: {narrative.confianca_nivel} — {narrative.confianca_justificativa}"
+    )
     return "\n".join(lines)
 
 

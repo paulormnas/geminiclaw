@@ -6,12 +6,12 @@ Cobre a flag --mode, o help completo e o banner de inicialização de sessão.
 import pytest
 
 from src.cli import (
+    FULL_HELP_TEXT,
     build_parser,
     print_full_help,
     print_session_banner,
-    FULL_HELP_TEXT,
 )
-from src.config import SessionMode, SESSION_DEFAULT_MODE
+from src.config import SESSION_DEFAULT_MODE, SessionMode
 
 
 @pytest.mark.unit

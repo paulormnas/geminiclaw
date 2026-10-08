@@ -117,7 +117,6 @@ async def _summarize_old_context(
     """Divide o contexto e sumariza a parte descartada."""
     # Mantém os últimos 40% do budget para mensagens brutas (mensagens recentes)
     recent_budget = int(budget * 0.4)
-    old_budget = budget - recent_budget
     
     # Divide mensagens
     recent_messages = []

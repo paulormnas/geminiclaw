@@ -10,10 +10,10 @@ As tabelas ``llm_cache`` e ``llm_cache_stats`` são criadas pelo
 
 import hashlib
 import time
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
-from src.logger import get_logger
 from src.db import get_connection
+from src.logger import get_logger
 
 logger = get_logger(__name__)
 

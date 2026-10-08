@@ -1,6 +1,8 @@
+
 import pytest
-import os
+
 from src.skills.search_quick.skill import QuickSearchSkill
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio

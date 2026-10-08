@@ -18,9 +18,9 @@ from typing import Any, Optional
 from src.agent_runtime.context import get_agent_context_optional
 from src.config import SESSION_DEFAULT_MODE
 from src.egress.fragments import ContentOrigin
-from src.skills.base import BaseSkill, SkillResult
 from src.logger import get_logger
 from src.research_consult import DECISOES_RESERVADAS, assumption_text
+from src.skills.base import BaseSkill, SkillResult
 
 logger = get_logger(__name__)
 

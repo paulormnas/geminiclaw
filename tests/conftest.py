@@ -1,5 +1,6 @@
 import json
 import os
+
 import pytest
 
 # Define variáveis de ambiente necessárias para a importação do src.config nos testes unitários
@@ -29,6 +30,7 @@ os.environ["QDRANT_URL"] = ":memory:"
 os.environ["QDRANT_CHECK_COMPATIBILITY"] = "false"
 
 from unittest.mock import MagicMock, patch
+
 
 @pytest.fixture(autouse=True)
 def mock_embedding_provider(monkeypatch):

@@ -1,8 +1,8 @@
 import os
 from typing import List
 
-from src.skills.document_processor.extractors.base import BaseExtractor, ExtractedDocument
 from src.logger import get_logger
+from src.skills.document_processor.extractors.base import BaseExtractor, ExtractedDocument
 
 logger = get_logger(__name__)
 

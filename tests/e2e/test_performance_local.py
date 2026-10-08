@@ -6,12 +6,14 @@ utilizando exclusivamente recursos locais do Raspberry Pi 5.
 
 Requer: Ollama rodando em localhost:11434 com qwen3.5:4b disponível.
 """
-import pytest
-import asyncio
 import os
+
 import httpx
+import pytest
+
 from src.orchestrator import Orchestrator
 from src.session import SessionManager
+
 
 async def _ollama_available():
     """Verifica se o Ollama está respondendo em localhost."""

@@ -1,8 +1,8 @@
-import pytest
-import httpx
-import asyncio
-import os
 from pathlib import Path
+
+import httpx
+import pytest
+
 # tests/conftest.py força QDRANT_URL=":memory:"; este teste verifica o servidor real do compose.
 QDRANT_HEALTH_URL = "http://localhost:6333/healthz"
 

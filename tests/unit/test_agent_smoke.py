@@ -1,8 +1,8 @@
-import pytest
-import asyncio
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import MagicMock, patch
 
-from agents.base.agent import root_agent, AGENT_NAME, Agent
+import pytest
+
+from agents.base.agent import AGENT_NAME, Agent, root_agent
 
 
 @pytest.mark.unit

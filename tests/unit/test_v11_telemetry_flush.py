@@ -11,8 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.telemetry import TelemetryCollector, _Buffer
-
+from src.telemetry import TelemetryCollector
 
 # ---------------------------------------------------------------------------
 # Helpers

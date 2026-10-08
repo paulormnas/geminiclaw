@@ -9,10 +9,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.orchestrator import Orchestrator, AgentTask, AgentResult
 from src.autonomous_loop import AutonomousLoop
-from src.session import Session
 from src.cli import resume_session
+from src.orchestrator import AgentResult, AgentTask, Orchestrator
+from src.session import Session
 
 
 def _make_session(session_id: str, payload: dict | None = None, status: str = "active") -> Session:

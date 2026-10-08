@@ -5,22 +5,20 @@ e comportamento do handler de SIGINT.
 """
 
 import signal
-import sys
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.cli import (
+    BANNER,
+    EXIT_COMMANDS,
+    STATUS_ICONS,
+    VERSION,
     build_parser,
     format_agent_result,
     format_result,
-    STATUS_ICONS,
-    EXIT_COMMANDS,
-    VERSION,
-    BANNER,
 )
 from src.orchestrator import AgentResult, OrchestratorResult
-
 
 # ─── Helpers ────────────────────────────────────────────────────────
 

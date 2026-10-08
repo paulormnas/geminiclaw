@@ -1,12 +1,11 @@
 import os
-from typing import Optional
 
+from src.logger import get_logger
 from src.skills.document_processor.extractors.base import BaseExtractor, ExtractedDocument
-from src.skills.document_processor.extractors.text_extractor import TextExtractor
 from src.skills.document_processor.extractors.csv_extractor import CsvExtractor
 from src.skills.document_processor.extractors.docling_extractor import DoclingExtractor
 from src.skills.document_processor.extractors.fallback_extractor import FallbackExtractor
-from src.logger import get_logger
+from src.skills.document_processor.extractors.text_extractor import TextExtractor
 
 logger = get_logger(__name__)
 
@@ -48,7 +47,11 @@ class ExtractorRegistry:
         filename = os.path.basename(file_path)
         format_str = file_path.lower().split('.')[-1]
         
-        error_msg = f"Nenhum extrator conseguiu processar o arquivo. Erros: {'; '.join(errors)}" if errors else "Formato não suportado."
+        error_msg = (
+            f"Nenhum extrator conseguiu processar o arquivo. Erros: {'; '.join(errors)}"
+            if errors
+            else "Formato não suportado."
+        )
         logger.error(error_msg, extra={"file_path": file_path})
         
         return ExtractedDocument(

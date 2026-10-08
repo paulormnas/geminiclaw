@@ -6,13 +6,12 @@ pelo ``scripts/init_db.sql``.
 """
 
 import uuid
-import json
 from dataclasses import dataclass
-from typing import List, Optional
 from datetime import datetime
+from typing import List, Optional
 
-from src.logger import get_logger
 from src.db import get_connection
+from src.logger import get_logger
 
 logger = get_logger(__name__)
 

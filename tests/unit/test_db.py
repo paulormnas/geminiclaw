@@ -3,8 +3,9 @@
 Usa mock para não exigir um PostgreSQL real.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, PropertyMock
 
 
 @pytest.mark.unit

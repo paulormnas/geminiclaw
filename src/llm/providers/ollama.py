@@ -2,7 +2,9 @@ import asyncio
 import json
 import os
 import time
+
 import httpx
+
 from src.llm.base import LLMProvider, LLMResponse, ToolCall
 from src.llm.retry import RETRY_BACKOFFS_SECONDS, emit_connection_retry, is_retryable_status
 from src.llm.versions import UNKNOWN_VERSION, normalize_version
@@ -99,7 +101,10 @@ class OllamaProvider(LLMProvider):
         payload["messages"] = final_messages
 
         try:
-            logger.debug("Enviando requisição ao Ollama", extra={"model": self._model, "tools_count": len(tools) if tools else 0})
+            logger.debug(
+                "Enviando requisição ao Ollama",
+                extra={"model": self._model, "tools_count": len(tools) if tools else 0},
+            )
             # V18/usage-limits — retentativa limitada em erro de conexão/timeout/5xx,
             # emitindo o evento connection_retry na telemetria a cada retentativa.
             response = None

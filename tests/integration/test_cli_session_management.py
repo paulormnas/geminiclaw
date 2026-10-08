@@ -7,11 +7,11 @@ Cobre:
 """
 
 import signal
-import sys
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
-from src.cli import show_sessions, stop_sessions, build_parser, main
+from src.cli import build_parser, main, show_sessions, stop_sessions
 
 
 def _make_mock_container(

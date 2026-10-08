@@ -1,8 +1,11 @@
-import pytest
 import os
-from src.orchestrator import Orchestrator, AgentTask, AgentResult
-from src.session import SessionManager
+
+import pytest
+
+from src.orchestrator import Orchestrator
 from src.output_manager import OutputManager
+from src.session import SessionManager
+
 
 @pytest.fixture
 def orchestrator():

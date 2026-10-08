@@ -8,7 +8,6 @@ Verifica:
 
 from __future__ import annotations
 
-
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -16,7 +15,6 @@ import pytest
 # Importa diretamente do módulo base para evitar acionar o __init__.py do pacote
 # llm (que carrega o config e exige GEMINI_API_KEY desde a importação).
 from src.llm.base import LLMResponse, ToolCall
-
 
 # ---------------------------------------------------------------------------
 # V11.2.1 — Extração de tokens via response.usage dict

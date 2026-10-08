@@ -1,9 +1,9 @@
-import os
-import logging
-import json
 import datetime
+import json
+import logging
+import os
 from pathlib import Path
-from typing import Any
+
 
 class JsonFormatter(logging.Formatter):
     """Formatador de logs em JSON estruturado."""

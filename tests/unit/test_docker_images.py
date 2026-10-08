@@ -5,10 +5,11 @@ Os agentes rodam como processo local (ADR 014); a única imagem de execução é
 para o Raspberry Pi 5 (ADR 018: imagem enxuta, abaixo de 1 GB).
 """
 
-import pytest
 import docker
+import pytest
 
 from src import config
+
 
 def get_image_size_mb(image_name: str) -> float | None:
     """Retorna o tamanho da imagem em MB, ou None se não existir."""

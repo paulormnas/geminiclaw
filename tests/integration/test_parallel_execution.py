@@ -1,11 +1,12 @@
-import pytest
 import asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
-from src.orchestrator import Orchestrator, AgentTask, AgentResult
+import pytest
+
 from src.autonomous_loop import AutonomousLoop
+from src.orchestrator import AgentResult, AgentTask, Orchestrator
 from src.output_manager import OutputManager
-from src.session import SessionManager
+
 
 @pytest.fixture
 def mock_orchestrator(tmp_path):

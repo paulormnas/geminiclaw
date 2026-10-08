@@ -65,7 +65,7 @@ INTERRUPTION_CATEGORY = "interrupcao_inesperada"
 MOTIVOS_RETOMAVEIS = frozenset(
     {
         "limite_tokens", "limite_tempo", "limite_retentativas", "limite_conexao", "limite_execucoes", "limite_ciclos",
-        "versao_modelo", "interrompida",
+        "limite_egresso", "versao_modelo", "interrompida",
     }
 )
 MOTIVO_RESOLVIDA = "solucao_encontrada"

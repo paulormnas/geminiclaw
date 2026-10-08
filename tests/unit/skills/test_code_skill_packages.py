@@ -5,8 +5,8 @@ from unittest.mock import patch
 
 import pytest
 
-from src.skills.code.skill import CodeSkill
 from src.skills.code.sandbox import SandboxResult
+from src.skills.code.skill import CodeSkill
 
 
 class _RecordingSandbox:

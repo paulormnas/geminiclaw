@@ -1,10 +1,10 @@
 """Testes unitários para o ValidatorAgent (Roadmap V14.2)."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
-from pathlib import Path
 
-from src.agents.validator_agent import ValidatorAgent, ValidationResult, ReviewResult
+import pytest
+
+from src.agents.validator_agent import ValidatorAgent
 from src.llm.base import LLMResponse
 
 

@@ -9,6 +9,7 @@ Cenários:
 """
 import json
 import pathlib
+
 import pytest
 
 from src.skills.code.manifest import WorkspaceManifest

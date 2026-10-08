@@ -149,9 +149,9 @@ def rounded_range(literal: str) -> str | None:
 
 _TB_HEADER = "Traceback (most recent call last):"
 _EXC_SEARCH_RE = re.compile(
-    r"(?P<type>\b[A-Za-z_][\w.]*(?:Error|Exception|Warning|Exit|Interrupt))(?P<sep>:[ \t]*)(?P<msg>\S.*)$"
+    r"(?P<type>\b[A-Za-z_][\w.]{0,80}(?:Error|Exception|Warning|Exit|Interrupt))(?P<sep>:[ \t]*)(?P<msg>\S.*)$"
 )
-_TB_FINAL_RE = re.compile(r"^(?P<type>[A-Za-z_][\w.]*)(?P<sep>:[ \t]*)(?P<msg>.*)$")
+_TB_FINAL_RE = re.compile(r"^(?P<type>[A-Za-z_][\w.]{0,80})(?P<sep>:[ \t]*)(?P<msg>.*)$")
 _QUOTED_RE = re.compile(r"(?<!\w)(?P<q>['\"])(?P<s>(?:\\.|(?!(?P=q)).)*?)(?P=q)(?!\w)")
 _STR_PATTERN_MAX = 32
 
@@ -239,7 +239,7 @@ def _fields(line: str) -> list[str]:
     return [f for f in _FIELD_SPLIT_RE.split(line.strip()) if f != ""]
 
 
-_KEYVALUE_RE = re.compile(r"^\s*[A-Za-z_%][\w .%/\-]*\s*[:=]\s*\S.*$")
+_KEYVALUE_RE = re.compile(r"^\s{0,16}[A-Za-z_%][\w .%/\-]{0,63}\s{0,8}[:=]\s{0,8}\S")
 
 
 def _is_keyvalue_line(line: str) -> bool:
@@ -544,7 +544,7 @@ _AGGREGATE_TOKENS = frozenset(
      "avg", "average"}
 )
 _STAT_RE = re.compile(
-    r"(?P<name>\d{1,3}%|[A-Za-z_][\w%]*)(?P<sep>\s*[:=]\s*)"
+    r"(?P<name>\d{1,3}%|[A-Za-z_][\w%]{0,63})(?P<sep>\s*[:=]\s*)"
     r"(?P<val>[-+]?(?:\d+(?:[.,]\d+)?|\.\d+)(?:[eE][-+]?\d+)?%?)(?!\w)(?!\.\d)"
 )
 _N_RE = re.compile(
@@ -650,10 +650,34 @@ def elide_long_output(text: str, ctx: FilterContext) -> str:
 # Pipeline e artefatos
 # --------------------------------------------------------------------------------------------------------------
 
+# Limites aplicados ANTES de qualquer regex (contenção no Pi 5 e contra ReDoS por entrada adversarial).
+MAX_LINE_CHARS = 2000
+MAX_INPUT_CHARS = 400_000
+
+
+def bound_input(text: str, ctx: FilterContext) -> str:
+    """Limita o tamanho da entrada e de cada linha antes das regexes; o excedente fica só na saída integral."""
+    if len(text) > MAX_INPUT_CHARS:
+        half = MAX_INPUT_CHARS // 2
+        omitted = len(text) - 2 * half
+        ctx.note(IV_ELISAO)
+        text = f"{text[:half]}\n[... {omitted} caracteres omitidos; {ctx.where} ...]\n{text[-half:]}"
+    if any(len(line) > MAX_LINE_CHARS for line in text.split("\n")):
+        lines = []
+        for line in text.split("\n"):
+            if len(line) > MAX_LINE_CHARS:
+                ctx.note(IV_ELISAO)
+                line = f"[... linha longa omitida: {len(line)} caracteres; {ctx.where} ...]"
+            lines.append(line)
+        text = "\n".join(lines)
+    return text
+
+
 def filter_execution_output(text: str, ctx: FilterContext) -> str:
     """Filtro de saída de execução: tracebacks, despejos tabulares e estatísticas, e elisão por tamanho."""
     if not text:
         return text
+    text = bound_input(text, ctx)
     text = filter_tracebacks(text, ctx)
     lines = filter_describe(text.split("\n"), ctx)
     lines = filter_footer_tables(lines, ctx)

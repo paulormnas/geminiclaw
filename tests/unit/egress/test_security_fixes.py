@@ -45,3 +45,30 @@ def test_a2_marca_forjada_em_texto_de_modelo_nao_vale():
     frag = PromptFragment("x ⟦D:fonte⟧y⟦/D⟧", ContentOrigin.INSTRUCAO, produced_by="developer")
     out = _gate().prepare_llm([labeled("assistant", frag)], None, make_dest(raw=False)).messages[0]["content"]
     assert out == "x y" and "retido" not in out
+
+
+def _ctx():
+    return filters.FilterContext(k=10, output_max_chars=4000, table_min_rows=3, integral_path="p")
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        " " * 100_000 + "x",  # espaços (quadrático em _KEYVALUE_RE)
+        "a" * 100_000 + ": 1",  # nome longo (quadrático em _STAT_RE)
+        "Error" * 20_000 + ": 1",  # tipo de exceção longo
+        ("a b " * 250_000),  # 1 MiB em uma linha
+        ("mean " * 1000 + "\n") * 200,  # 1 MiB em muitas linhas
+        "1." * 500_000,  # dígitos e pontos
+    ],
+)
+def test_a3_entrada_adversarial_termina_rapido(texto):
+    inicio = time.monotonic()
+    saida = filters.filter_execution_output(texto, _ctx())
+    assert time.monotonic() - inicio < 2.0
+    assert len(saida) < 410_000
+
+
+def test_a3_linha_longa_e_omitida_com_marcador():
+    saida = filters.filter_execution_output("ok\n" + "9" * 5000 + "\nfim", _ctx())
+    assert "linha longa omitida: 5000 caracteres" in saida and "9999" not in saida

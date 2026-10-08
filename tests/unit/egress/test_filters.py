@@ -197,7 +197,7 @@ def test_log_de_treino():
 
 def test_linha_unica_gigante_tambem_e_elidida():
     out = filter_execution_output("x" * 10000, _ctx(max_chars=1000))
-    assert "caracteres omitidos" in out and len(out) < 1300
+    assert "omitida" in out and len(out) < 1300
 
 
 # --- Números literais e artefatos --------------------------------------------------------------------------

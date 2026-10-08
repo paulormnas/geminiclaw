@@ -59,6 +59,10 @@ REGRAS DE DESENVOLVIMENTO E EXECUÇÃO:
    Se um artefato (ex: 'dados.csv', 'dataset.parquet', 'modelo.pkl') já foi criado no step anterior,
    leia-o diretamente de `/outputs/` (ex: `pd.read_csv('/outputs/dados.csv')`).
    NUNCA recrie ou refaça transformações já salvas por steps anteriores.
+2b. **IMPRIMA AGREGADOS, NÃO DADOS** (ADR 019 §3.4): imprima só agregados (contagens, médias, desvios, formas,
+   nomes de colunas). Nunca imprima linhas, registros, `head()`, `print(df)` ou valores individuais: a saída é
+   filtrada e o conteúdo retido não chega a você. Para inspecionar formato, imprima `df.dtypes`, `df.shape` e
+   descritores (separador, codificação).
 3. **SALVE TODOS OS ARTEFATOS**: Todos os arquivos finais gerados (PNG, CSV, JSON, MD) DEVEM ser salvos em `/outputs/`.
 4. **IDIOMA**: Responda sempre em português brasileiro de forma técnica e concisa.
 

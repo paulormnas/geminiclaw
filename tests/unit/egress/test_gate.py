@@ -31,17 +31,14 @@ def test_falha_no_registro(gate, memory_log, third_party):
         gate.prepare_llm([_msg("user", _frag("oi", ContentOrigin.INSTRUCAO))], None, third_party)
 
 
-def test_falha_do_banco_vira_erro_acionavel(monkeypatch, tmp_path, third_party):
+def test_falha_do_banco_vira_erro_acionavel(tmp_path, third_party):
     """Cenário "Falha no registro" com o `EgressLog` real: banco indisponível."""
-    from src import db
+    from unittest.mock import patch
 
-    def broken():
-        raise ConnectionError("sem banco")
-
-    monkeypatch.setattr(db, "get_connection", broken)
     gate = EgressGate("s1", log=EgressLog("s1", tmp_path), min_group_size=10)
-    with pytest.raises(EgressLogError) as info:
-        gate.prepare_llm([_msg("user", _frag("oi", ContentOrigin.INSTRUCAO))], None, third_party)
+    with patch("src.db.get_connection", side_effect=ConnectionError("sem banco")):
+        with pytest.raises(EgressLogError) as info:
+            gate.prepare_llm([_msg("user", _frag("oi", ContentOrigin.INSTRUCAO))], None, third_party)
     assert "o envio não foi feito" in str(info.value) and "v18_5_egress_log.sql" in str(info.value)
 
 

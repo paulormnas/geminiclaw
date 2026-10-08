@@ -69,6 +69,7 @@ def mock_db_connection(request):
     if (
         "test_db.py" in path
         or "test_db_integration.py" in path
+        or "test_egress_log_integration.py" in path
         or f"{os.sep}tests{os.sep}integration{os.sep}knowledge{os.sep}" in path
     ):
         yield
@@ -297,10 +298,17 @@ def block_paid_llm_network(request, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def reset_egress_state():
-    """Zera o portão ``sem_sessao`` e o vínculo de portão entre testes (v18.5-egress-gate)."""
+def reset_egress_state(tmp_path_factory, monkeypatch):
+    """Zera o portão ``sem_sessao`` e o vínculo de portão entre testes (v18.5-egress-gate).
+
+    A cópia local do portão ``sem_sessao`` vai para um diretório temporário (nunca para ``outputs/`` do repositório).
+    """
+    from src import config as app_config
     from src.egress import gate as egress_gate
 
+    # Testes que recarregam `src.config` com o ambiente limpo não podem deixar o k indefinido para os demais.
+    monkeypatch.setattr(app_config, "LOCALITY_MIN_GROUP_SIZE", 10)
+    egress_gate.fallback_output_dir = tmp_path_factory.mktemp("egress_sem_sessao")
     egress_gate.reset_fallback_gate()
     egress_gate.bind_gate_for_tests(None)
     yield

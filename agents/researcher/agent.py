@@ -20,6 +20,7 @@ from agents.base.agent import (
     _setup_skills,
 )
 from agents.base.tools import flag_for_curator, read_artifact, write_artifact
+from src.egress.fragments import mark_research_data
 from src.knowledge.problem import ProblemDraft, ProblemDraftError, parse_problem_draft
 from src.logger import get_logger
 from src.prompts import render_instruction
@@ -365,7 +366,10 @@ async def draft_problem(
 
     context_text = ""
     if context is not None:
-        context_text = _truncate(context.to_prompt_context(), _DRAFT_CONTEXT_MAX_CHARS)
+        # O contexto de input_context/ é dado de pesquisa: retido para modelos sem dados brutos (v18.5-egress-gate).
+        context_text = mark_research_data(
+            _truncate(context.to_prompt_context(), _DRAFT_CONTEXT_MAX_CHARS), "input_context/"
+        )
     base_prompt = (
         "MODO: DRAFT_PROBLEM\n\n"
         f"Projeto: {getattr(projeto, 'titulo', '')}\n"

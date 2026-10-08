@@ -7,6 +7,8 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from bs4 import BeautifulSoup
 
+from src.egress.fragments import ContentOrigin
+from src.egress.gate import EgressRefused, caller_tainted, external_destination, get_gate
 from src.logger import get_logger
 from src.skills.base import BaseSkill, SkillResult
 from src.skills.search_quick.cache import SearchCache
@@ -224,6 +226,8 @@ class WebReaderSkill(BaseSkill):
     """
     
     name = "web_reader"
+    
+    egress_origin = ContentOrigin.DOCUMENTO
     description = "Use para ler o conteúdo completo de uma URL. Retorna texto extraído da página."
     parameters_schema = {
         "type": "object",
@@ -336,10 +340,18 @@ class WebReaderSkill(BaseSkill):
         hostname = urlparse(url).hostname
         if not hostname:
             return SkillResult(success=False, output="", error="URL sem host válido.")
+
         block_reason = await resolve_and_check_host(hostname)
         if block_reason is not None:
             logger.warning("WebReader: acesso bloqueado a rede interna", extra={"url": url, "reason": block_reason})
             return SkillResult(success=False, output="", error=f"Acesso bloqueado: {block_reason}")
+
+        # v18.5-egress-gate — a URL escolhida pelo modelo sai do nó (ADR 019 §3.5): registrada; URL com dado
+        # embutido, construída por papel contaminado, é recusada. O texto lido volta como `documento` delimitado.
+        try:
+            get_gate().check_url(url, caller_tainted(), external_destination("leitura_web", hostname))
+        except EgressRefused as exc:
+            return SkillResult(success=False, output="", error=str(exc))
 
         # Verifica robots.txt
         can_fetch = await self._can_fetch(url)

@@ -94,6 +94,7 @@ class TestUsageBudgetDerived:
             "max_connection_retries": 5,
             "closing_reserve_pct": 0.05,
             "exploration_token_ceiling": 95_000,
+            "max_egress_bytes": 2_000_000,
         }
 
     def test_budget_e_imutavel(self):

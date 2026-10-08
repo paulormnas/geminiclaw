@@ -14,6 +14,7 @@ from __future__ import annotations
 import copy
 import dataclasses
 import hashlib
+import ipaddress
 import re
 import secrets
 import threading
@@ -82,6 +83,7 @@ class PreparedPayload:
     messages: list[dict[str, Any]]
     system: str | None
     record_id: str
+    bytes_enviados: int = 0
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -310,7 +312,7 @@ class EgressGate:
         with self._lock:
             self._sent.update(pending_keys)
             self._new_bytes += new_exec_bytes
-        return PreparedPayload(messages=rendered, system=system_out, record_id=record.id)
+        return PreparedPayload(messages=rendered, system=system_out, record_id=record.id, bytes_enviados=total_bytes)
 
     def _transform(self, frag: PromptFragment, dest: Destination, iv: Counter) -> tuple[str, bool]:
         """Texto do trecho para o destino e se ele foi trocado por inteiro por um aviso."""
@@ -474,6 +476,48 @@ class EgressGate:
         self._record_simple(dest, "url", url, interventions, tainted=tainted)
         return url
 
+    def record_fallback(self, dest: Destination, actual_model: str, bytes_enviados: int) -> None:
+        """Registra o reenvio ao modelo de fallback do provedor (outro modelo que o do destino registrado).
+
+        Verifica no catálogo que o modelo efetivo tem a mesma localidade e a mesma aceitação de dados brutos do destino
+        usado para filtrar o prompt; se não tem (ou não está no catálogo), o registro é gravado e o envio é declarado
+        recusado, porque o conteúdo foi filtrado para outro destino.
+
+        Raises:
+            EgressRefused: Modelo efetivo fora do catálogo ou com regras de dados diferentes das do destino.
+        """
+        from src.llm.session import get_session_routing
+
+        entry = get_session_routing().catalogo.modelos.get(f"{dest.provedor}/{actual_model}")
+        mismatch = (
+            entry is None
+            or entry.localidade != dest.localidade
+            or entry.aceita_dados_brutos != dest.aceita_dados_brutos
+        )
+        interventions: Counter = Counter({filters.IV_FALLBACK: 1})
+        record = EgressRecord(
+            session_id=self.session_id,
+            canal=dest.canal,
+            papel=dest.papel,
+            provedor=dest.provedor,
+            modelo=actual_model,
+            versao_efetiva=dest.versao_efetiva,
+            trust=entry.trust if entry is not None else dest.trust,
+            localidade=entry.localidade if entry is not None else dest.localidade,
+            aceita_dados_brutos=entry.aceita_dados_brutos if entry is not None else dest.aceita_dados_brutos,
+            bytes_enviados=bytes_enviados,
+            fragmentos=[],
+            intervencoes=dict(interventions),
+            recusado=mismatch,
+            motivo_recusa="modelo de fallback fora do catálogo ou com regras de dados diferentes" if mismatch else None,
+        )
+        self.log.write(record, {"fallback_de": dest.modelo, "para": actual_model})
+        if mismatch:
+            raise EgressRefused(
+                f"O modelo de fallback '{actual_model}' não está no catálogo com a mesma localidade e aceitação de "
+                f"dados brutos de '{dest.modelo}'; a resposta foi descartada (ver egress_log)."
+            )
+
     def record_refusal(self, dest: Destination, kind: str, content: str, motivo: str) -> None:
         """Registra uma recusa feita por outra guarda (ex.: guarda de consulta do consultor) em ``egress_log``.
 
@@ -574,7 +618,13 @@ class EgressGate:
         # dois ou mais dígitos (canal por DNS).
         if any(re.search(r"\d", segment) for segment in parsed.path.split("/") if segment):
             return True
-        return any(len(re.findall(r"\d", label)) >= 2 for label in (parsed.hostname or "").split("."))
+        host = parsed.hostname or ""
+        try:
+            ipaddress.ip_address(host)
+            return False  # IP literal: não carrega dado (e é tratado pela proteção contra rede interna)
+        except ValueError:
+            pass
+        return any(len(re.findall(r"\d", label)) >= 2 for label in host.split("."))
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -627,6 +677,10 @@ class GatedProvider(LLMProvider):
             max_tokens=max_tokens,
             **kwargs,
         )
+        actual = self.inner.model_name
+        if actual and dest.modelo and actual != dest.modelo:
+            # Troca de modelo dentro do provedor (ex.: fallback do Google no 429): também é envio e é registrada.
+            self._gate_getter().record_fallback(dest, actual, prepared.bytes_enviados)
         return dataclasses.replace(response, tainted=dest.aceita_dados_brutos, produced_by=dest.papel or "")
 
     async def generate_stream(self, messages: list[dict], system: str | None = None) -> AsyncIterator[str]:  # type: ignore[override]

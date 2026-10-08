@@ -30,6 +30,7 @@ IV_COMPARTILHAVEL = "compartilhavel_liberado"
 IV_SEM_ORIGEM = "fragmento_sem_origem"
 IV_CONSULTA_RECUSADA = "consulta_recusada"
 IV_LIMITE_EGRESSO = "saida_retida_limite_egresso"
+IV_FALLBACK = "modelo_de_fallback"
 
 # Nomes de tipo que são esquema, não valor (podem ficar em mensagens de exceção entre aspas).
 _TYPE_NAMES = frozenset(

@@ -21,7 +21,7 @@ pytestmark = pytest.mark.unit
 class FakeInner:
     """Provedor interno que guarda o que recebeu e responde em sequência."""
 
-    model_name = "fake"
+    model_name = None  # sem modelo efetivo declarado: nenhuma troca de modelo a registrar
 
     def __init__(self, responses):
         self.responses = list(responses)
@@ -454,7 +454,7 @@ def test_provedor_envolvido_repassa_atributos_do_interno():
     inner = FakeInner([])
     inner.fetch_digest = lambda: "sha"
     provider = GatedProvider(inner, make_dest(raw=False))
-    assert provider.fetch_digest() == "sha" and provider.model_name == "fake"
+    assert provider.fetch_digest() == "sha" and provider.model_name is None
     assert provider.tainted_output is False
 
 

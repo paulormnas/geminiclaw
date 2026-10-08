@@ -269,3 +269,75 @@ def test_b1_url_sem_digitos_passa(url):
     from src.egress.gate import EgressGate
 
     assert EgressGate._url_embeds_data(url) is False
+
+
+class _FallbackInner:
+    """Provedor cujo modelo efetivo difere do registrado (fallback no limite de requisições)."""
+
+    def __init__(self, efetivo):
+        self.model_name = efetivo
+
+    async def generate(self, messages, tools=None, system=None, temperature=0.7, max_tokens=4096, **kw):
+        from src.llm.base import LLMResponse
+
+        return LLMResponse(text="ok")
+
+
+@pytest.mark.asyncio
+async def test_b2_fallback_de_modelo_e_registrado_e_verificado(monkeypatch):
+    from src.egress.gate import EgressRefused, GatedProvider, bind_gate_for_tests
+    from src.llm.catalog import ModelEntry
+
+    from .conftest import MemoryLog, make_dest
+
+    memoria = MemoryLog()
+    from src.egress.gate import EgressGate
+
+    gate = EgressGate("s", log=memoria, min_group_size=10)
+    bind_gate_for_tests(gate)
+    dest = make_dest(raw=False, provider="google", model="principal")
+    catalogo = {
+        "google/igual": ModelEntry(id="google/igual", provedor="google", modelo="igual", trust="third_party",
+                                   ferramentas=True, saida_estruturada=True, janela_contexto=1, familia_modelo="g",
+                                   localidade="fora_do_no", aceita_dados_brutos=False),
+        "google/permissivo": ModelEntry(id="google/permissivo", provedor="google", modelo="permissivo",
+                                        trust="third_party", ferramentas=True, saida_estruturada=True,
+                                        janela_contexto=1, familia_modelo="g", localidade="fora_do_no",
+                                        aceita_dados_brutos=True),
+    }
+    routing = type("R", (), {"catalogo": type("C", (), {"modelos": catalogo})()})()
+    monkeypatch.setattr("src.llm.session.get_session_routing", lambda: routing)
+
+    msg = labeled("user", PromptFragment("oi", ContentOrigin.INSTRUCAO))
+    await GatedProvider(_FallbackInner("igual"), dest).generate(messages=[msg])
+    fallback = memoria.records[-1]
+    assert fallback.modelo == "igual" and fallback.intervencoes == {"modelo_de_fallback": 1} and not fallback.recusado
+
+    with pytest.raises(EgressRefused):  # regras de dados diferentes das do destino filtrado
+        await GatedProvider(_FallbackInner("permissivo"), dest).generate(messages=[msg])
+    assert memoria.records[-1].recusado is True
+    with pytest.raises(EgressRefused):  # fora do catálogo
+        await GatedProvider(_FallbackInner("desconhecido"), dest).generate(messages=[msg])
+
+
+def test_b2_fallback_do_catalogo_exige_mesma_localidade_e_dados_brutos(monkeypatch):
+    from src.llm.session import build_offline_routing
+
+    monkeypatch.setattr("src.config.LLM_DATA_POLICY", "third_party_allowed")
+    monkeypatch.setattr("src.config.GEMINI_API_KEY", "AIza-ficticia")
+    routing = build_offline_routing()
+    principal = next(i for i in routing.catalogo.modelos if i.startswith("google/"))
+    outro = routing.catalogo.modelos[principal]
+    import dataclasses
+
+    candidato = dataclasses.replace(outro, id="google/fb-teste", modelo="fb-teste", aceita_dados_brutos=True)
+    modelos = {**routing.catalogo.modelos, "google/fb-teste": candidato}
+    routing2 = dataclasses.replace(routing, catalogo=dataclasses.replace(routing.catalogo, modelos=modelos))
+    monkeypatch.setattr("src.config.GOOGLE_FALLBACK_MODEL", "fb-teste")
+    assert routing2.fallback_for(principal) is None  # aceita_dados_brutos diferente
+
+
+def test_b1_ip_literal_nao_e_dado_embutido():
+    from src.egress.gate import EgressGate
+
+    assert EgressGate._url_embeds_data("http://127.0.0.1:8080/x") is False

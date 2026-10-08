@@ -14,8 +14,10 @@ import contextvars
 from typing import Optional
 
 from src.agent_runtime.context import get_agent_context_optional
+from src.llm.allocation import record_call_version
 from src.llm.base import LLMProvider, LLMResponse
 from src.llm.pricing import estimate_cost
+from src.llm.versions import normalize_version
 from src.telemetry import get_telemetry
 
 _bound: contextvars.ContextVar[Optional[tuple[str, str]]] = contextvars.ContextVar("bound_execution", default=None)
@@ -57,6 +59,8 @@ def record_llm_call(
     prompt_tokens = usage.get("prompt_tokens", 0) or 0
     completion_tokens = usage.get("completion_tokens", 0) or 0
     name, model = provider_name(provider), provider.model_name or "unknown"
+    # v18.5-model-catalog-locality — versão efetiva servida (rastreia troca de versão na sessão).
+    versao = record_call_version(name, model, normalize_version(getattr(response, "versao_efetiva", None)))
     get_telemetry().record_token_usage(
         execution_id=execution_id,
         session_id=session_id,
@@ -70,4 +74,5 @@ def record_llm_call(
         estimated_cost_usd=estimate_cost(
             name, model, prompt_tokens, completion_tokens, usage.get("cached_tokens", 0) or 0
         ),
+        versao_efetiva=versao,
     )

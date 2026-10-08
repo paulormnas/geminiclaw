@@ -26,6 +26,7 @@ import anthropic
 
 from src.llm.base import LLMProvider, LLMResponse, ToolCall
 from src.llm.retry import RETRY_BACKOFFS_SECONDS, emit_connection_retry, is_retryable_status
+from src.llm.versions import normalize_version
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -312,6 +313,7 @@ class AnthropicProvider(LLMProvider):
             thought="\n".join(thoughts) or None,
             tool_calls=tool_calls,
             finish_reason=finish_reason,
+            versao_efetiva=normalize_version(getattr(response, "model", None)),
             usage={
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,

@@ -10,7 +10,7 @@ credencial/endpoint e lista de permissão), para não fazer rede em chamadas sí
 from __future__ import annotations
 
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -36,6 +36,7 @@ from src.llm.routing import (
     validate_policy,
     validate_routing_mode,
 )
+from src.llm.versions import VersionTracker
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -50,6 +51,8 @@ class SessionRouting:
     catalogo: Catalog
     papeis: Mapping[str, RoleResolution]
     disponiveis: Mapping[str, Availability]
+    # Versão efetiva por modelo e eventos de troca da sessão (v18.5-model-catalog-locality, design §4).
+    versions: VersionTracker = field(default_factory=VersionTracker, compare=False, repr=False)
 
     def resolution(self, papel: str) -> RoleResolution:
         """Resolução do papel (aplica ``aliases_papel``; papel desconhecido -> ``ValueError``)."""
@@ -115,6 +118,7 @@ class SessionRouting:
                 "versao": self.catalogo.versao,
                 "hash": self.catalogo.hash,
                 "local": self.catalogo.local,
+                "local_hash": self.catalogo.local_hash,
             },
             "papeis": {
                 role: {"id": res.id, "trust": res.trust, "origem": res.origem}
@@ -192,7 +196,9 @@ def _resolve(
     disponiveis: Mapping[str, Availability],
 ) -> SessionRouting:
     papeis = resolve_session(catalog, disponiveis, politica, pins, modo)
-    return SessionRouting(politica, modo, catalog, papeis, dict(disponiveis))
+    return SessionRouting(
+        politica, modo, catalog, papeis, dict(disponiveis), VersionTracker(strict=modo == ROUTING_STRICT)
+    )
 
 
 async def build_session_routing(
@@ -224,7 +230,11 @@ async def build_session_routing(
         timeout=config.LLM_HEALTH_CHECK_TIMEOUT_SECONDS,
         provider_factory=provider_factory,
     )
-    return _resolve(catalog, pins, politica, modo, disponiveis)
+    routing = _resolve(catalog, pins, politica, modo, disponiveis)
+    from src.llm.allocation import seed_ollama_versions
+
+    await seed_ollama_versions(routing, provider_factory)
+    return routing
 
 
 def build_offline_routing(

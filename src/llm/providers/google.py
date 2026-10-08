@@ -26,6 +26,7 @@ from google.genai import types as genai_types
 from src.config import GEMINI_API_KEY
 from src.llm.base import LLMProvider, LLMResponse, ToolCall
 from src.llm.retry import RETRY_BACKOFFS_SECONDS, emit_connection_retry, is_retryable_error
+from src.llm.versions import normalize_version
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -280,6 +281,7 @@ class GoogleProvider(LLMProvider):
                 "ttft_ms": None,
             },
             provider_data={"parts": stored} if stored else None,
+            versao_efetiva=normalize_version(getattr(response, "model_version", None)),
         )
 
     async def generate_stream(self, messages: list[dict], system: str | None = None):

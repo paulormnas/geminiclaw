@@ -7,7 +7,13 @@
 # usado no Raspberry Pi (Developer, Summarizer e Base no Gemini; Researcher, Validator e Reviewer
 # no Claude), com modelos Ollama ao final de cada lista para que a sessão funcione sob
 # `LLM_DATA_POLICY=self_hosted_only` (padrão).
-versao: 1
+#
+# Campos de localidade (v18.5-model-catalog-locality, ADR 019 §1): `localidade` (`no_no` | `fora_do_no`, padrão
+# `fora_do_no`), `aceita_dados_brutos` (padrão `false`; `no_no` implica `true`; `true` só com `trust: self_hosted`)
+# e `familia_modelo` (obrigatório, `^[a-z0-9][a-z0-9_-]*$`). São declarações do operador, nunca inferidas do endpoint.
+# Uma posição de `preferencia` pode ser uma lista de ids (empate); o Validator desempata por família diferente da
+# dos papéis autores (ADR 019 §6).
+versao: 2
 
 modelos:
   - id: google/gemini-3.8-flash
@@ -16,48 +22,58 @@ modelos:
     ferramentas: true
     saida_estruturada: true
     janela_contexto: 1048576
+    familia_modelo: gemini
   - id: google/gemini-3.7-flash
     provedor: google
     trust: third_party
     ferramentas: true
     saida_estruturada: true
     janela_contexto: 1048576
+    familia_modelo: gemini
   - id: google/gemini-3.5-flash-lite
     provedor: google
     trust: third_party
     ferramentas: true
     saida_estruturada: true
     janela_contexto: 1048576
+    familia_modelo: gemini
   - id: google/gemini-3.1-flash-lite
     provedor: google
     trust: third_party
     ferramentas: true
     saida_estruturada: true
     janela_contexto: 1048576
+    familia_modelo: gemini
   - id: anthropic/claude-sonnet-5-5
     provedor: anthropic
     trust: third_party
     ferramentas: true
     saida_estruturada: true
     janela_contexto: 1048576
+    familia_modelo: claude
   - id: openai/gpt-6-luna
     provedor: openai
     trust: third_party
     ferramentas: true
     saida_estruturada: true
     janela_contexto: 1048576
+    familia_modelo: gpt
   - id: ollama/qwen3:8b
     provedor: ollama
     trust: self_hosted
+    localidade: no_no
     ferramentas: true
     saida_estruturada: true
     janela_contexto: 40960
+    familia_modelo: qwen
   - id: ollama/qwen3.5:4b
     provedor: ollama
     trust: self_hosted
+    localidade: no_no
     ferramentas: true
     saida_estruturada: true
     janela_contexto: 32768
+    familia_modelo: qwen
 
 papeis:
   researcher:

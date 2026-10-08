@@ -167,8 +167,12 @@ CREATE TABLE IF NOT EXISTS token_usage (
     timestamp TIMESTAMPTZ NOT NULL,
     context_window_used INTEGER,
     context_window_max INTEGER,
-    was_compressed BOOLEAN DEFAULT FALSE
+    was_compressed BOOLEAN DEFAULT FALSE,
+    versao_efetiva TEXT
 );
+
+-- v18.5: bancos anteriores recebem a coluna por scripts/migrations/v18_5_model_version.sql
+ALTER TABLE token_usage ADD COLUMN IF NOT EXISTS versao_efetiva TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_tokens_execution ON token_usage (execution_id);
 

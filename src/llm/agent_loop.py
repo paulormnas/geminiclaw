@@ -301,6 +301,13 @@ async def run_agent_loop(
         # concorrentes). Mantém fallback em os.environ para chamadas fora do AgentRuntime.
         _provider_name = type(provider).__name__.removesuffix("Provider").lower() or _task["PROVIDER_NAME"] or "unknown"
         _model_name = provider.model_name or _task["MODEL_ID"] or "unknown"
+        # v18.5-model-catalog-locality — versão efetiva servida (rastreia troca de versão na sessão).
+        from src.llm.allocation import record_call_version
+        from src.llm.versions import normalize_version
+
+        _versao_efetiva = record_call_version(
+            _provider_name, _model_name, normalize_version(getattr(response, "versao_efetiva", None))
+        )
         _telemetry.record_token_usage(
             execution_id=_exec_id,
             session_id=_session_id,
@@ -318,6 +325,7 @@ async def run_agent_loop(
             context_window_used=_prompt_tokens + _completion_tokens,
             context_window_max=max_ctx,
             was_compressed=was_compressed,
+            versao_efetiva=_versao_efetiva,
         )
         
         # Adiciona resposta do assistente ao histórico

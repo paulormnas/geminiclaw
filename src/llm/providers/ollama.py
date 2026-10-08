@@ -2,9 +2,21 @@ import asyncio, json, os, time
 import httpx
 from src.llm.base import LLMProvider, LLMResponse, ToolCall
 from src.llm.retry import RETRY_BACKOFFS_SECONDS, emit_connection_retry, is_retryable_status
+from src.llm.versions import UNKNOWN_VERSION, normalize_version
 from src.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+# Último digest conhecido por (endpoint, modelo): o Ollama não devolve o digest em /api/chat, então ele é lido de
+# /api/tags no início da sessão e a cada checkpoint (v18.5-model-catalog-locality, design §4); cada resposta usa o
+# último digest conhecido. Compartilhado entre instâncias do provedor (health check e runtime).
+_known_digests: dict[tuple[str, str], str] = {}
+
+
+def clear_known_digests() -> None:
+    """Esquece os digests conhecidos (uso em testes)."""
+    _known_digests.clear()
 
 
 def _health_timeout() -> float:
@@ -158,6 +170,7 @@ class OllamaProvider(LLMProvider):
                     "total_tokens": data.get("prompt_eval_count", 0) + data.get("eval_count", 0),
                     "ttft_ms": _ttft_ms,
                 },
+                versao_efetiva=_known_digests.get((self._base_url, self._model), UNKNOWN_VERSION),
             )
         except Exception as e:
             logger.error(f"Erro na requisição ao Ollama: {str(e)}")
@@ -170,12 +183,43 @@ class OllamaProvider(LLMProvider):
         if response.text:
             yield response.text
 
+    async def aclose(self) -> None:
+        """Fecha o cliente HTTP (para instâncias efêmeras, como a leitura de digest)."""
+        await self._client.aclose()
+
     async def health_check(self) -> bool:
         try:
             r = await self._client.get("/api/tags", timeout=_health_timeout())
             return r.status_code == 200
         except Exception:
             return False
+
+    async def fetch_digest(self) -> str | None:
+        """Lê o ``digest`` do modelo em ``GET /api/tags`` e o guarda como o último conhecido.
+
+        Devolve ``desconhecida`` (sem inventar valor) se o modelo não está instalado ou o campo vem vazio ou não
+        textual. Se o servidor não responde (falha transitória), devolve ``None`` e **mantém** o digest já conhecido:
+        falha de leitura não é troca de versão.
+        """
+        try:
+            r = await self._client.get("/api/tags", timeout=_health_timeout())
+            r.raise_for_status()
+            models = r.json().get("models", [])
+        except Exception as exc:  # noqa: BLE001 — a versão é telemetria: nunca derruba a sessão
+            logger.warning(
+                "Não foi possível ler o digest do modelo Ollama",
+                extra={"model": self._model, "erro": type(exc).__name__},
+            )
+            return None
+        else:
+            wanted = {self._model, self._model if ":" in self._model else f"{self._model}:latest"}
+            digest = UNKNOWN_VERSION
+            for entry in models:
+                if isinstance(entry, dict) and (entry.get("name") or entry.get("model")) in wanted:
+                    digest = normalize_version(entry.get("digest"))
+                    break
+        _known_digests[(self._base_url, self._model)] = digest
+        return digest
 
     async def check_availability(self) -> str | None:
         """Confere que o **modelo** está instalado em ``/api/tags`` (não basta o servidor responder)."""

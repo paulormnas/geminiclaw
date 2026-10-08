@@ -1,5 +1,7 @@
 # Tarefas: v17-evidence-verdict
 
+**Estado (2026-10-08):** Implementada e validada — PR #62. Arquivar após a consolidação em `openspec/specs/`.
+
 ## 1. Módulo
 - [x] 1.1 `src/knowledge/verdict.py`: `Criterion`, `Attempt`, `VerdictParams`, `EvidenceBreakdown`, `VerdictResult`, `compute_verdict`.
 - [x] 1.2 Parâmetros em `src/config.py` e `.env.example`.

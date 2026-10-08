@@ -1,5 +1,7 @@
 # Tarefas: v18.5-numeric-references
 
+**Estado (2026-10-08):** Não iniciada — nenhum código mergeado.
+
 Pré-requisito: `v18.5-execution-provenance` implementada (registros e consulta por `exec_id`).
 
 ## 1. Sintaxe e resolução

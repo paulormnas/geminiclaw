@@ -1,9 +1,20 @@
 # ADR 012 — Agente Curator e Ciclo de Exploração Contínua
 
-**Status:** Aprovado em 2026-10-01 pelo pesquisador responsável — implementação pendente (agente ainda não implementado)
+**Status:** Aceito — implementado (Curator, ciclo de hipóteses, continuidade, limites de uso); validação em AGE real pendente (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-08)
 **Data:** 2026-09-28
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **ADRs relacionados:** ADR 007 (papéis), ADR 009 (conhecimento experimental), ADR 010 (propósito), ADR 014 (agentes em processo)
+
+
+## Estado da implementação (2026-10-08)
+
+| Mudança OpenSpec | Estado | PR |
+|---|---|---|
+| [`v17-curator-agent`](../../openspec/changes/v17-curator-agent/proposal.md) | Implementada, com pendências | #106 |
+| [`v18-researcher-consult`](../../openspec/changes/v18-researcher-consult/proposal.md) | Implementada, com pendências | #97 |
+| [`v18-research-continuity`](../../openspec/changes/v18-research-continuity/proposal.md) | Implementada, com pendências | #108 |
+| [`v18-hypothesis-loop`](../../openspec/changes/v18-hypothesis-loop/proposal.md) | Implementada, com pendências | #109, #115 |
+| [`v18-usage-limits`](../../openspec/changes/v18-usage-limits/proposal.md) | Implementada, com pendências | #68 |
 
 ---
 

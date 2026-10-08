@@ -1,5 +1,7 @@
 # Tarefas: v18.5-research-data-ingestion
 
+**Estado (2026-10-08):** Não iniciada — nenhum código mergeado.
+
 ## 0. Pré-requisitos
 - [ ] 0.1 `v18.5-egress-gate` implementada (`PromptFragment`, `EgressGate`, `classify_path`, `LOCALITY_MIN_GROUP_SIZE` definido).
 

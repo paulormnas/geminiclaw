@@ -1,5 +1,7 @@
 # Tarefas: v16-agent-communication-eval
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #98. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## 0. Pré-requisitos
 - [x] 0.1 `v16-pipeline-robustness` mergeada (comparador, eventos `plan_normalized`, `sandbox_run`,
   `subtask_review` com `attempt`/`signature`/`resolved_artifacts`).

@@ -1,5 +1,7 @@
 # Tarefas: v18.5-execution-provenance
 
+**Estado (2026-10-08):** Não iniciada — nenhum código mergeado.
+
 ## 0. Pré-requisitos
 - [ ] 0.1 **Aprovação explícita do pesquisador** para a tabela `execution_records`, as propriedades novas no grafo e a mudança no workflow de limpeza (proposal, "Aprovações necessárias").
 - [ ] 0.2 **Revisão do Analista de Segurança** do modelo de ameaça (design §10).

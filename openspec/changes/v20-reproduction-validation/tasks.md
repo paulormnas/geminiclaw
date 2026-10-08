@@ -1,5 +1,7 @@
 # Tarefas: v20-reproduction-validation
 
+**Estado (2026-10-08):** Não iniciada — nenhum código mergeado.
+
 ## 0. Pré-requisitos
 - [ ] 0.1 `v20-federated-records`, `v20-remote-knowledge-intake` e `v18.5-sandbox-phases` concluídas.
 - [ ] 0.2 Respostas às questões do design §8.

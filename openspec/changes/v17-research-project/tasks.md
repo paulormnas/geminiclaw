@@ -1,5 +1,7 @@
 # Tarefas: v17-research-project
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #103. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## 1. Projeto
 - [x] 1.1 `src/knowledge/projects.py` (`create_project`, `list_projects`, `get_project`, `get_active_problem`).
 - [x] 1.2 CLI `project new|list|show|use` e opção `--project`; projeto padrão persistido.

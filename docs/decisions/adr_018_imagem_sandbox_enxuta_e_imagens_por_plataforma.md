@@ -1,6 +1,6 @@
 # ADR 018 — Imagem Enxuta do Sandbox de Código e Seleção de Imagens por Plataforma
 
-**Status:** Aprovado em 2026-10-01 pelo pesquisador responsável — direção aprovada; implementação pendente, exceto o item 4 e a limpeza da infraestrutura de agentes (verificação abaixo). As questões "Em aberto" de cada item serão decididas na spec
+**Status:** Parcialmente implementado — imagem enxuta do sandbox e Qdrant oficial mergeados; seleção de imagens por plataforma pendente (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-08)
 **Data:** 2026-09-29
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Relacionados:** ADR 014 (agentes em processo; sandbox como único uso de container), ADR 003 §2 (sandbox de código), ADR 016 (imagem do PostgreSQL), ADR 005 (persistência)
@@ -28,6 +28,14 @@
 > oficial `qdrant/qdrant:v1.19.1` roda no Raspberry Pi 5 com o kernel padrão (páginas de 16K), o
 > `Dockerfile.qdrant` foi removido e o Qdrant deixou de ser compilado. Os demais itens seguem
 > como ideias em aberto.
+
+
+## Estado da implementação (2026-10-08)
+
+| Mudança OpenSpec | Estado | PR |
+|---|---|---|
+| [`v16-sandbox-slim-image`](../../openspec/changes/v16-sandbox-slim-image/proposal.md) | Implementada, com pendências | #99 |
+| [`v16-platform-images`](../../openspec/changes/v16-platform-images/proposal.md) | Não iniciada | — |
 
 ---
 

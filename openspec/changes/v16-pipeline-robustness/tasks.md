@@ -1,5 +1,7 @@
 # Tarefas: v16-pipeline-robustness
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #95. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## 0. Pré-requisitos
 - [x] 0.1 Questões do design §10 respondidas em 2026-10-05 (1 e 2 mantidas como especificadas).
 - [x] 0.2 Worktree `.worktrees/feat-v16-pipeline-robustness`; um PR por bloco (1, 2, 3, 4, 5)

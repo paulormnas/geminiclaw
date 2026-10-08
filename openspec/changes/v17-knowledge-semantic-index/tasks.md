@@ -1,5 +1,7 @@
 # Tarefas: v17-knowledge-semantic-index
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #100. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## 1. Índice
 - [x] 1.1 `estado_vetorizacao` em `schema.py` para os rótulos vetorizados.
 - [x] 1.2 `src/knowledge/semantic_index.py`: `canonical_text`, `upsert`, `reconcile`, `similar`.

@@ -1,5 +1,7 @@
 # Tarefas: v17-structural-fact-ingestion
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #105. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## 1. Contratos
 - [x] 1.1 `save_experiment_artifacts`: parâmetros `datasets` e `baselines` (retrocompatíveis).
 - [x] 1.2 Plano do Researcher: campo opcional `approach`; `AgentTask.approach`; parser aceita planos sem o campo.

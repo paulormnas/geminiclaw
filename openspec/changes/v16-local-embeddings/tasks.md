@@ -1,5 +1,7 @@
 # Tarefas: v16-local-embeddings
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #66. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## 1. Provedor local
 - [x] 1.1 Verificar wheel ARM64 do `fastembed` e do `onnxruntime` na versão a fixar.
 - [x] 1.2 Criar `src/embeddings/base.py` (`EmbeddingInfo`, `EmbeddingProvider`, `text_hash`, `embedding_payload`, `get_embedding_provider`).

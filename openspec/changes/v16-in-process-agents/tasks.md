@@ -1,5 +1,7 @@
 # Tarefas: v16-in-process-agents
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #65, #80. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## Fase 1 — Runtime em processo
 
 ### 1. Contexto por tarefa

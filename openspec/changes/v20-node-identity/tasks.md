@@ -1,5 +1,7 @@
 # Tarefas: v20-node-identity
 
+**Estado (2026-10-08):** Não iniciada — nenhum código mergeado.
+
 ## 0. Pré-requisitos
 - [ ] 0.1 V16 a V19 concluídas e validadas; respostas às questões em aberto do design §9.
 

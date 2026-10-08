@@ -1,5 +1,7 @@
 # Tarefas: v20-federation-transport
 
+**Estado (2026-10-08):** Não iniciada — nenhum código mergeado.
+
 ## 0. Pré-requisitos
 - [ ] 0.1 `v20-node-identity` e `v20-federated-records` concluídas.
 - [ ] 0.2 Decisão do pesquisador sobre a tecnologia e as questões do design §9.

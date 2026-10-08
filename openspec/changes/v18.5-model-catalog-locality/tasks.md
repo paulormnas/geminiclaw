@@ -1,5 +1,7 @@
 # Tarefas: v18.5-model-catalog-locality
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #112. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## 0. Pré-requisitos
 - [x] 0.1 Confirmar que `v16-model-catalog-router` (catálogo e roteador do ADR 017) está implementada em `dev`; se não estiver, parar e avisar o pesquisador.
 - [x] 0.2 Obter aprovação explícita do pesquisador para a coluna `token_usage.versao_efetiva`.

@@ -99,8 +99,13 @@ nunca pula:
    suposição.
 6. **Manutenção.** Decisão nova do pesquisador que afete uma spec ainda não implementada é
    aplicada nela antes da implementação, com nota de data. Ao fim de cada mudança, conferir que
-   ela foi arquivada (`openspec/changes/archive/`) e que `openspec/specs/` foi consolidado;
-   atualizar o status do ADR (Aprovado → Aceito) quando a implementação estiver completa.
+   ela foi arquivada (`openspec/changes/archive/`) e que `openspec/specs/` foi consolidado.
+7. **Confirmação e status dos ADRs.** Ao receber do desenvolvedor a mudança implementada, confirmar
+   que o código cumpre a spec (ou registrar a pendência) e atualizar, em seguida, o status de cada
+   ADR de origem e o índice `docs/decisions/README.md`: `Aprovado` (nenhuma mudança mergeada) →
+   `Parcialmente implementado` (parte mergeada) → `Aceito` (todas as mudanças do ADR mergeadas;
+   validação em ambiente real pendente fica registrada no texto do ADR). Manter a tabela "Estado da
+   implementação" do ADR, com a mudança, o estado e o PR. Nunca deixar status que o código não sustenta.
 
 ---
 

@@ -1,5 +1,7 @@
 # Tarefas: v17-graph-cli
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #107. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## 1. Visualização
 - [x] 1.1 `src/knowledge/graph_views.py` com renderizadores `text`, `table`, `json`, `mermaid`.
 - [x] 1.2 `geminiclaw graph show` com filtros e truncamento (`GRAPH_SHOW_MAX_NODES`).

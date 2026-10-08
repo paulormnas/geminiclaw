@@ -1,5 +1,7 @@
 # Tarefas: v18.5-operation-metrics
 
+**Estado (2026-10-08):** Não iniciada — nenhum código mergeado.
+
 > Pré-requisitos: V18 concluída (`v18-usage-limits`, `v18-research-continuity`,
 > `v18-hypothesis-loop`). Os grupos de métricas de `v18.5-egress-gate`,
 > `v18.5-execution-provenance`, `v18.5-numeric-references` e `v18.5-claim-verification` podem

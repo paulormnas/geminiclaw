@@ -1,5 +1,7 @@
 # Tarefas: v16-platform-images
 
+**Estado (2026-10-08):** Não iniciada — nenhum código mergeado.
+
 ## 0. Pré-requisitos
 - [ ] 0.1 `v16-sandbox-slim-image` concluída (Dockerfile do sandbox em `containers/sandbox/`).
 - [ ] 0.2 Aprovação do pesquisador: remoção de `scripts/build_images.sh` e `src/platform_utils.py`, alteração do `AGENTS.md` §6, respostas às questões em aberto do design §7.

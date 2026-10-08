@@ -1,5 +1,7 @@
 # Tarefas: v18-hypothesis-loop
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #109, #115. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## 1. Plano e gravação
 - [x] 1.1 Formato do plano com `hipoteses`, `decisoes`, `respostas_sugestoes`, `hypothesis_ref`; parser retrocompatível.
 - [x] 1.2 Instrução do Researcher: formular hipóteses, registrar decisões com alternativas descartadas, responder a sugestões.

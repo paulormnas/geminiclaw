@@ -1,5 +1,7 @@
 # Tarefas: v18.5-egress-gate
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #113. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## 0. Pré-requisitos
 - [x] 0.1 `v18.5-model-catalog-locality` implementada (perfil de alocação e `aceita_dados_brutos` efetivo).
 - [x] 0.2 Aprovação explícita do pesquisador para a tabela `egress_log` (aprovada).

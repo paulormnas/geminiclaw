@@ -18,6 +18,7 @@ Este documento é o **ponto de entrada e fonte primária de governança** para a
 7. **Zero Secrets em Código:** Credenciais e chaves de API vêm exclusivamente de variáveis de ambiente gerenciadas em `.env` e `src/config.py`. Nunca versionar `.env`, `*.db` ou arquivos de log.
 8. **Gerenciamento Exclusivo com `uv`:** Nunca usar `pip`, `pip3`, `pipenv` ou `poetry`. Sempre `uv add`, `uv sync`, `uv run`.
 9. **Testes Antes de Commit:** Nunca commitar com testes falhando. Executar `uv run pytest -m "unit or integration" -v` antes de cada commit.
+10. **Status de Desenvolvimento Sempre Refletido:** Antes de implementar, o desenvolvedor revisa a mudança OpenSpec e a confronta com o estado real do código (a spec pode estar desatualizada). Ao implementar, reflete no mesmo PR o estado em `tasks.md` (caixas e linha `**Estado (data):**`). Depois do PR, a implementação é confirmada com o Arquiteto de Soluções, que atualiza o status dos ADRs de origem e o índice `docs/decisions/README.md` (Aprovado → Parcialmente implementado → Aceito). Nenhum ADR ou OpenSpec fica com status que o código não sustenta.
 
 ---
 
@@ -26,15 +27,16 @@ Este documento é o **ponto de entrada e fonte primária de governança** para a
 Para qualquer nova funcionalidade, refatoração relevante ou correção estrutural:
 
 ```
-[1. Arquiteto de Soluções] ──→ [2. Analista de Segurança] ──→ [3. Devs Core/Agentes] ──→ [4. Tester / QA] ──→ [5. Pull Request]
-  (Impacto, ADR & OpenSpec)       (Modelagem & Hardening)       (Worktree & Código)        (pytest & Docker)       (Revisão & Merge)
+[1. Arquiteto de Soluções] ──→ [2. Analista de Segurança] ──→ [3. Devs Core/Agentes] ──→ [4. Tester / QA] ──→ [5. Pull Request] ──→ [6. Arquiteto de Soluções]
+  (Impacto, ADR & OpenSpec)       (Modelagem & Hardening)       (Revisa spec, código, status)  (pytest & Docker)       (Revisão & Merge)       (Confirma e atualiza ADRs)
 ```
 
 1. **Arquiteto de Soluções:** Entende o domínio de orquestração de agentes, avalia impactos nos 6 eixos, registra o ADR em `docs/decisions/` e descreve cada mudança em OpenSpec (`openspec/changes/<id>/`: `proposal.md`, `design.md`, `tasks.md` e `specs/`), conforme [`stage-spec.md`](.agents/workflows/stage-spec.md). Nada é implementado sem a mudança OpenSpec aprovada pelo usuário.
 2. **Analista de Segurança:** Avalia a arquitetura e as mudanças OpenSpec (`proposal.md` e `design.md`) contra ameaças de escape de sandbox, vazamento de segredos, injeção de prompt, saída de dados de pesquisa e contenção de recursos no Pi 5.
-3. **Desenvolvedor (Core / Agentes):** Cria a worktree exclusiva, implementa a mudança OpenSpec na ordem de `tasks.md`, respeitando Clean Code/Architecture, e escreve ao menos um teste por cenário da spec.
+3. **Desenvolvedor (Core / Agentes):** Revisa a mudança OpenSpec e a confronta com o código antes de começar, cria a worktree exclusiva, implementa na ordem de `tasks.md`, respeitando Clean Code/Architecture, escreve ao menos um teste por cenário da spec e reflete o estado do desenvolvimento em `tasks.md` (caixas e linha `**Estado (data):**`) no próprio PR.
 4. **Tester / QA:** Valida os cenários da spec e os critérios de aceite com testes unitários, de integração e benchmarks, homologa o fechamento de Não Conformidades.
 5. **Pull Request:** Abre o PR detalhado no GitHub apontando para `dev` via GitHub App, citando a mudança OpenSpec; após o merge, a mudança é arquivada em `openspec/changes/archive/`.
+6. **Arquiteto de Soluções (confirmação):** Confirma que a implementação cumpre a spec (ou registra o que ficou pendente), atualiza o status dos ADRs de origem (`Aprovado` → `Parcialmente implementado` → `Aceito`, com a tabela "Estado da implementação" do ADR) e o índice `docs/decisions/README.md`, em PR de documentação próprio ou no próprio PR da mudança.
 
 > **Nota:** Para etapas futuras que incluam frontend (dashboard de monitoramento, UI de controle), os papéis de **Designer de Produto** e **Desenvolvedor Frontend** serão ativados conforme o roadmap do projeto.
 

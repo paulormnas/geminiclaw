@@ -1,9 +1,23 @@
 # ADR 015 — Modelo de Dados do Grafo de Conhecimento e Ligação com Embeddings
 
-**Status:** Aprovado em 2026-10-01 pelo pesquisador responsável — questões discutidas e decididas; valores iniciais a calibrar com dados reais; implementação pendente (armazenamento e veredito prontos)
+**Status:** Parcialmente implementado — modelo de V17/V18 mergeado; entidades de V18.5, V19 e V20 pendentes; valores iniciais a calibrar com dados reais (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-08)
 **Data:** 2026-09-28
 **Autores:** Arquiteto de Soluções (GeminiClaw), com revisão do pesquisador responsável
 **ADRs relacionados:** ADR 009 (camada de conhecimento), ADR 010 (propósito), ADR 011 (embeddings locais), ADR 012 (Curator), ADR 013 (federação), ADR 014 (execução no host)
+
+
+## Estado da implementação (2026-10-08)
+
+| Mudança OpenSpec | Estado | PR |
+|---|---|---|
+| [`v17-graph-store`](../../openspec/changes/v17-graph-store/proposal.md) | Implementada, com pendências | #64, #71 |
+| [`v17-controlled-vocabulary`](../../openspec/changes/v17-controlled-vocabulary/proposal.md) | Implementada, com pendências | #96 |
+| [`v17-research-project`](../../openspec/changes/v17-research-project/proposal.md) | Implementada, com pendências | #103 |
+| [`v17-graph-cli`](../../openspec/changes/v17-graph-cli/proposal.md) | Implementada, com pendências | #107 |
+| [`v18-hypothesis-loop`](../../openspec/changes/v18-hypothesis-loop/proposal.md) | Implementada, com pendências | #109, #115 |
+| [`v18.5-claim-verification`](../../openspec/changes/v18.5-claim-verification/proposal.md) | Não iniciada | — |
+| [`v18.5-execution-provenance`](../../openspec/changes/v18.5-execution-provenance/proposal.md) | Não iniciada | — |
+| [`v20-federated-records`](../../openspec/changes/v20-federated-records/proposal.md) | Não iniciada | — |
 
 ---
 

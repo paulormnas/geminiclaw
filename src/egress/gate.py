@@ -352,7 +352,7 @@ class EgressGate:
             text = prefix + filters.filter_execution_output(text[len(prefix):], context)
             iv.update(context.interventions)
         if frag.tainted:
-            text, count = filters.mask_numbers(text)
+            text, count = filters.mask_numbers(text, self.known_identifiers)
             if count:
                 iv[filters.IV_NUMERO] += count
         return text, False

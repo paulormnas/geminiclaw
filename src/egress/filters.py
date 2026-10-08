@@ -85,8 +85,21 @@ def number_marker(literal: str) -> str:
     return f"<num padrão={number_pattern(literal)}>"
 
 
-def mask_numbers(text: str) -> tuple[str, int]:
-    """Troca números literais isolados por ``<num padrão=...>``; mantém referências, marcadores e identificadores.
+# Identificadores com dígitos ("v37", "x_12.5", "sensor42"): o prefixo de letra não protege o número.
+_IDENT_DIGITS_RE = re.compile(r"(?<![\w.])[^\W\d]\w*\d\w*(?:[.,]\d+)*")
+_DIGIT_RUN_RE = re.compile(r"\d+(?:[.,]\d+)*")
+# Nomes estruturais do orquestrador/código que levam contador e não carregam valor: preservados.
+_SAFE_IDENT_RE = re.compile(
+    r"^(?:(?:step|exec|task|epoch|fold|run|cycle|iter|lote|etapa|sess|session|id|sub|subtask)[_-]?\d+|[A-Za-z]\d)$",
+    re.IGNORECASE,
+)
+
+
+def mask_numbers(text: str, known_identifiers: frozenset[str] = frozenset()) -> tuple[str, int]:
+    """Troca números literais por ``<num padrão=...>``; mantém referências, marcadores e identificadores conhecidos.
+
+    Dígitos colados a letras ("v37", "x_12.5") são trocados, exceto se o identificador inteiro é conhecido da sessão
+    (``known_identifiers``) ou é um nome estrutural (``step_02``, ``exec_1234``, ``x1``).
 
     Returns:
         ``(texto, quantidade de números trocados)``.
@@ -101,7 +114,20 @@ def mask_numbers(text: str) -> tuple[str, int]:
             count += 1
             return number_marker(match.group(0))
 
-        return _NUM_RE.sub(repl, piece)
+        def ident(match: re.Match[str]) -> str:
+            nonlocal count
+            token = match.group(0)
+            if token in known_identifiers or _SAFE_IDENT_RE.match(token):
+                return token
+
+            def digits(run: re.Match[str]) -> str:
+                nonlocal count
+                count += 1
+                return number_marker(run.group(0))
+
+            return _DIGIT_RUN_RE.sub(digits, token)
+
+        return _NUM_RE.sub(repl, _IDENT_DIGITS_RE.sub(ident, piece))
 
     out: list[str] = []
     pos = 0

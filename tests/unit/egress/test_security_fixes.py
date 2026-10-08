@@ -167,3 +167,25 @@ def test_m3_continuacao_multilinha_da_mensagem_e_mascarada():
 def test_m3_excecao_sem_traceback_tambem_mascara_a_continuacao():
     saida = filters.filter_execution_output("KeyError: 'abc'\n  detalhe 4.25", _ctx())
     assert "4.25" not in saida and "abc" not in saida
+
+
+@pytest.mark.parametrize("texto", ["v37", "x_12.5", "sensor42", "run_7_mV2", "lote_a99"])
+def test_m4_prefixo_de_letra_nao_contorna_a_mascara(texto):
+    saida, n = filters.mask_numbers(f"valor {texto} fim")
+    assert not any(c.isdigit() for c in saida.replace("fim", "")) and n >= 1
+
+
+def test_m4_identificadores_estruturais_e_conhecidos_sao_preservados():
+    texto = "step_02 exec_1234 x1 v2 coluna_7"
+    assert filters.mask_numbers(texto, frozenset({"coluna_7"})) == (texto, 0)
+    assert filters.mask_numbers("coluna_7")[0] == "coluna_<num padrão=d>"
+
+
+def test_m4_gate_respeita_known_identifiers_da_sessao():
+    from .conftest import make_dest
+
+    gate = _gate()
+    gate.add_known_identifiers(["medida_3"])
+    msg = labeled("assistant", PromptFragment("usei medida_3 e v37", ContentOrigin.INSTRUCAO, tainted=True))
+    out = gate.prepare_llm([msg], None, make_dest(raw=False)).messages[0]["content"]
+    assert out == "usei medida_3 e v<num padrão=dd>"

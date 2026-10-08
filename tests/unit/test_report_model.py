@@ -23,7 +23,7 @@ pytestmark = pytest.mark.unit
 SECTIONS = [
     "## Resumo Executivo", "## Contexto e Objetivo", "## Metodologia", "## Resultados",
     "## Análise das Divergências", "## Decisões do Pesquisador", "## Limitações Identificadas",
-    "## Próximos Passos Sugeridos", "## Metadados de Execução",
+    "## Próximos Passos Sugeridos", "## Dados de Entrada e Marcações", "## Metadados de Execução",
 ]
 
 

@@ -396,11 +396,14 @@ def test_nenhum_ponto_de_chamada_envia_sem_gated_provider():
         text = path.read_text(encoding="utf-8")
         if any(rel.startswith(allowed) for allowed in _ALLOWED_CALL_FILES):
             continue
-        # `genai.Client` / `generate_content` só nos provedores, exceto a visão (autorizada por `authorize_vision`).
-        if "generate_content(" in text and rel != "src/context_loader.py":
+        # `genai.Client` / `generate_content` só nos provedores, exceto a visão: `src/llm/vision.py` executa a chamada
+        # e o `ContextLoader` a autoriza com `authorize_vision` antes.
+        if "generate_content(" in text and rel != "src/llm/vision.py":
             ofensores.append(rel)
         if rel == "src/context_loader.py":
             assert "authorize_vision" in text
+        if rel == "src/llm/vision.py":
+            assert "authorize_vision" in (_ROOT / "src/context_loader.py").read_text(encoding="utf-8")
         if re.search(r"\bcreate_provider\(", text):
             if rel in {"src/model_router.py", "src/llm/availability.py", "src/llm/registry.py"}:
                 continue

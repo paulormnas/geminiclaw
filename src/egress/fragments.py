@@ -259,6 +259,8 @@ def public_message(message: dict[str, Any]) -> dict[str, Any]:
 #   ⟦T⟧...⟦/T⟧          texto contaminado (produzido por modelo com aceita_dados_brutos)
 #   ⟦D:<fonte>⟧...⟦/D⟧  dado de pesquisa (ex.: bloco de input_context/)
 #   ⟦S:<fonte>⟧...⟦/S⟧  saída de execução (ex.: metrics.json na síntese)
+#   ⟦F:<origem>|<marcas>|<fonte>⟧...⟦/F⟧  trecho completo (origem e marcas ``t`` contaminado / ``c`` compartilhável),
+#                       usado pela ingestão de ``input_context/`` (v18.5-research-data-ingestion)
 
 TAINT_OPEN = "\u27e6T\u27e7"  # ⟦T⟧
 TAINT_CLOSE = "\u27e6/T\u27e7"  # ⟦/T⟧
@@ -272,13 +274,13 @@ _KIND_ORIGIN = {
 }
 _MARKED_RE = re.compile(
     re.escape(TAINT_OPEN) + r"(?P<t>.*?)" + re.escape(TAINT_CLOSE)
-    + r"|\u27e6(?P<k>[ADS]):(?P<src>[^\u27e7]*)\u27e7(?P<body>.*?)\u27e6/(?P=k)\u27e7",
+    + r"|\u27e6(?P<k>[ADSF]):(?P<src>[^\u27e7]*)\u27e7(?P<body>.*?)\u27e6/(?P=k)\u27e7",
     re.DOTALL,
 )
 _ANY_MARK_RE = re.compile(
-    re.escape(TAINT_OPEN) + "|" + re.escape(TAINT_CLOSE) + r"|\u27e6/[ADS]\u27e7|\u27e6[ADS]:[^\u27e7]*\u27e7"
+    re.escape(TAINT_OPEN) + "|" + re.escape(TAINT_CLOSE) + r"|\u27e6/[ADSF]\u27e7|\u27e6[ADSF]:[^\u27e7]*\u27e7"
 )
-_OPEN_MARK_RE = re.compile(re.escape(TAINT_OPEN) + r"|\u27e6[ADS]:[^\u27e7]*\u27e7")
+_OPEN_MARK_RE = re.compile(re.escape(TAINT_OPEN) + r"|\u27e6[ADSF]:[^\u27e7]*\u27e7")
 
 
 def strip_marks(text: str) -> str:
@@ -328,6 +330,35 @@ def mark_execution_output(text: str, source: str) -> str:
     return _mark_origin(text, "S", source)
 
 
+def mark_fragment(frag: PromptFragment) -> str:
+    """Marca em linha que preserva origem, contaminação e ``compartilhavel`` de ``frag`` por concatenações de strings.
+
+    A origem e as marcas vêm de valores controlados pelo código; só a fonte pode vir de nome de arquivo e é limpa.
+    """
+    if not frag.text:
+        return frag.text
+    flags = ("t" if frag.tainted else "") + ("c" if frag.compartilhavel else "")
+    source = "".join(c for c in (frag.source or "") if c not in _MARK_CHARS and c not in "\r\n")[:200]
+    return f"\u27e6F:{frag.origin.value}|{flags}|{source}\u27e7{strip_marks(frag.text)}\u27e6/F\u27e7"
+
+
+def _full_mark_changes(source: str) -> dict[str, Any]:
+    """Alterações de um trecho ``⟦F:...⟧``; origem desconhecida cai no tratamento mais restritivo (dado de pesquisa)."""
+    origin_value, _, rest = source.partition("|")
+    flags, _, name = rest.partition("|")
+    try:
+        origin = ContentOrigin(origin_value)
+    except ValueError:
+        origin = ContentOrigin.DADO_DE_PESQUISA
+        flags = ""
+    return {
+        "origin": origin,
+        "tainted": "t" in flags,
+        "compartilhavel": "c" in flags and origin is ContentOrigin.DADO_DE_PESQUISA,
+        "source": name or None,
+    }
+
+
 def expand_marks(text: str, base: PromptFragment) -> list[PromptFragment]:
     """Divide ``text`` em trechos conforme as marcas em linha, herdando de ``base`` o que a marca não altera.
 
@@ -346,6 +377,10 @@ def expand_marks(text: str, base: PromptFragment) -> list[PromptFragment]:
         add(text[pos : match.start()])
         if match.group("t") is not None:
             add(match.group("t"), tainted=True)
+        elif match.group("k") == "F":
+            changes = _full_mark_changes(match.group("src"))
+            changes["source"] = changes["source"] or base.source
+            add(match.group("body"), **changes)
         else:
             add(match.group("body"), origin=_KIND_ORIGIN[match.group("k")], source=match.group("src") or base.source)
         pos = match.end()
@@ -359,6 +394,10 @@ def expand_marks(text: str, base: PromptFragment) -> list[PromptFragment]:
         token = opened.group(0)
         if token == TAINT_OPEN:
             add(rest, tainted=True)
+        elif token[1] == "F":
+            changes = _full_mark_changes(token[3:-1])
+            changes["source"] = changes["source"] or base.source
+            add(rest, **changes)
         else:
             add(rest, origin=_KIND_ORIGIN[token[1]], source=token[3:-1] or base.source)
     return pieces

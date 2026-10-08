@@ -2352,4 +2352,5 @@ class AutonomousLoop:
             interactions=payload.get("researcher_interactions", []),
             divergence_reports=payload.get("divergence_reports", []),
             artifacts=artifacts,
+            research_data=payload.get("research_data_markings", []),
         )

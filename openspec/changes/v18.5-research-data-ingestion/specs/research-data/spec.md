@@ -91,7 +91,7 @@ SHALL usar OCR local e registrar a recusa no bundle, sem interromper a sessão. 
 imagem ou PDF escaneado que seja dado de pesquisa SHALL ser trecho `dado_de_pesquisa`.
 
 #### Scenario: Imagem de pesquisa com visão de terceiro
-- **GIVEN** `VISION_MODEL=google/gemini-2.0-flash` e uma imagem não compartilhável
+- **GIVEN** `VISION_MODEL=google/gemini-3.8-flash` e uma imagem não compartilhável
 - **WHEN** o contexto é carregado
 - **THEN** nenhuma imagem é enviada ao Google, o OCR local é usado e `extraction_errors` registra a recusa
 
@@ -102,7 +102,7 @@ imagem ou PDF escaneado que seja dado de pesquisa SHALL ser trecho `dado_de_pesq
 
 #### Scenario: Alias obsoleto
 - **WHEN** `OCR_PROVIDER=gemini` está configurado e `VISION_MODEL` não
-- **THEN** o sistema usa `google/gemini-2.0-flash` como `VISION_MODEL` e emite `WARNING` de obsolescência
+- **THEN** o sistema usa `google/gemini-3.8-flash` como `VISION_MODEL` e emite `WARNING` de obsolescência
 
 ### Requirement: Marcações registradas na sessão e no relatório
 O sistema SHALL gravar em `payload["research_data_markings"]` a classe efetiva, a marcação, o

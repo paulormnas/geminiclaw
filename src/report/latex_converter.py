@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from src.report.base_converter import ReportConverter
+from src.report.base_converter import MARKS_RE, ORIGIN_ANCHOR_RE, ReportConverter, strip_markup_helpers
 
 _LATEX_SPECIAL_CHARS = {
     "\\": r"\textbackslash{}",
@@ -47,7 +47,9 @@ def _convert_emphasis(text: str) -> str:
     """Converte **negrito**, *itálico* e `código` para LaTeX, escapando o restante."""
     tokens: list[str] = []
     pos = 0
-    pattern = re.compile(r"\*\*(.+?)\*\*|`([^`]+)`|\*(.+?)\*")
+    pattern = re.compile(
+        r"\*\*(.+?)\*\*|`([^`]+)`|\*(.+?)\*|" + ORIGIN_ANCHOR_RE.pattern + "|" + MARKS_RE.pattern
+    )
     for match in pattern.finditer(text):
         tokens.append(_escape_latex(text[pos:match.start()]))
         if match.group(1) is not None:
@@ -56,6 +58,15 @@ def _convert_emphasis(text: str) -> str:
             tokens.append(r"\texttt{" + _escape_latex(match.group(2)) + "}")
         elif match.group(3) is not None:
             tokens.append(r"\textit{" + _escape_latex(match.group(3)) + "}")
+        elif match.group(4) is not None:
+            tokens.append(r"\hypertarget{origem-" + match.group(4) + "}{}")
+        elif match.group(5) is not None:
+            code = f"{match.group(5)}{match.group(6)}"
+            tokens.append(r"\textsuperscript{\hyperlink{origem-" + code + "}{" + code + "}}")
+        elif match.group(0) == "[não verificado]":
+            tokens.append(r"\colorbox{yellow}{\textbf{não verificado}}")
+        else:
+            tokens.append(r"\colorbox{yellow}{\textbf{literal no código}}")
         pos = match.end()
     tokens.append(_escape_latex(text[pos:]))
     return "".join(tokens)
@@ -89,7 +100,7 @@ def _convert_table(lines: list[str]) -> str:
 
 def markdown_to_latex_body(markdown_text: str) -> str:
     """Converte o corpo de um documento Markdown para LaTeX (sem preâmbulo)."""
-    lines = markdown_text.splitlines()
+    lines = strip_markup_helpers(markdown_text).splitlines()
     out: list[str] = []
     i = 0
     while i < len(lines):
@@ -164,6 +175,7 @@ _LATEX_PREAMBLE = r"""\documentclass{article}
 \usepackage[T1]{fontenc}
 \usepackage{booktabs}
 \usepackage{listings}
+\usepackage{xcolor}
 \usepackage{hyperref}
 \title{%s}
 \date{}

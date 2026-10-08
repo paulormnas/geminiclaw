@@ -214,3 +214,35 @@ def test_status_de_cada_desfecho():
     assert status_of(None) == "erro_orquestrador"
     assert status_of(_ok_result(), RuntimeError("x")) == "erro_orquestrador"
     assert status_of(SandboxResult(stdout="", stderr="Pacotes inválidos", exit_code=-1)) == "erro_sandbox"
+
+
+@pytest.mark.asyncio
+async def test_metrica_literal_e_sinalizada_sem_bloquear_a_execucao(skill, agent_context):
+    """Numeric-references / Scenario: Dicionário literal — a execução segue e ``metricas_literais.json`` é gravado."""
+    skill.sandbox = FakeSandbox(files={"metrics.json": METRICS})
+    code = 'save_experiment_artifacts("t", {}, {"acc": 0.95})'
+    result = await skill.run(code=code, session_id="s1", task_name="treinar")
+    assert result.success
+    path = Path(skill.output_dir) / "s1" / "treinar" / "metricas_literais.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["exec_id"] == result.metadata["exec_id"] and len(data["hash_codigo"]) == 64
+    assert data["achados"] == [{"metrica": "acc", "linha": 1, "padrao": "P1"}]
+
+
+@pytest.mark.asyncio
+async def test_metrica_calculada_nao_gera_arquivo(skill, agent_context):
+    skill.sandbox = FakeSandbox(files={"metrics.json": METRICS})
+    result = await skill.run(
+        code='metrics = {"acc": accuracy_score(y, y_hat)}\nsave_experiment_artifacts("t", {}, metrics)',
+        session_id="s1",
+        task_name="treinar",
+    )
+    assert result.success and not (Path(skill.output_dir) / "s1" / "treinar" / "metricas_literais.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_verificacao_estatica_pode_ser_desligada(skill, agent_context, monkeypatch):
+    monkeypatch.setattr("src.config.NUMREF_STATIC_CHECK_ENABLED", False)
+    skill.sandbox = FakeSandbox(files={"metrics.json": METRICS})
+    await skill.run(code='save_experiment_artifacts("t", {}, {"acc": 0.95})', session_id="s1", task_name="treinar")
+    assert not (Path(skill.output_dir) / "s1" / "treinar" / "metricas_literais.json").exists()

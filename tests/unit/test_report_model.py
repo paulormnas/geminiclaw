@@ -166,7 +166,9 @@ async def test_summarizer_nao_recebe_ferramentas_e_o_prompt_traz_os_dados(tmp_pa
     loop, orch = _loop(tmp_path, [narrative_json()])
     await _synth(loop)
     task = orch._execute_agent.call_args.args[0]
-    assert task.agent_id == "summarizer" and "DADOS DO RELATÓRIO" in task.prompt
+    assert task.agent_id == "summarizer" and "CONTEXTO DO RELATÓRIO" in task.prompt
+    # v18.5-numeric-references: o Summarizer recebe o catálogo de referências, não os números.
+    assert "CATÁLOGO DE REFERÊNCIAS" in task.prompt
 
 
 def test_sandbox_run_emite_evento_sem_o_conteudo_do_script():

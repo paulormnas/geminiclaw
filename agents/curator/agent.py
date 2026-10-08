@@ -79,6 +79,12 @@ descartada (com o motivo).
 - Justificar: todo nó criado registra `justificativa_criacao` e `nos_consultados` (as ferramentas registram os nós \
 consultados), permitindo auditar a decisão de criar.
 
+Números e referências: cite valores por REFERÊNCIA em `enunciado`, `condicoes` e `justificativa`, nunca por número \
+digitado: `{{res:<exec_id>/<métrica>}}` (valor medido), `{{calc:<expressão sobre res:/src:>}}` (cálculo) e \
+`{{src:<insumo_ou_url>#<trecho literal>}}` (fonte citada). As ferramentas de escrita RECUSAM referências malformadas \
+ou que não resolvem (corrija-as); um número sem referência é aceito, mas volta um aviso e será exibido como \
+[não verificado]. Não escreva veredito nem confiança no texto: são propriedades calculadas.
+
 O veredito é calculado sem LLM (`verdict_breakdown`): você interpreta, não calcula. Descoberta "funciona" ou \
 "nao_funciona" só existe com veredito calculado compatível; na faixa insuficiente use lição de caminho, condicional \
 ou nada. Se as evidências se dividem por condição (ex.: por dataset), prefira descobertas condicionais com \

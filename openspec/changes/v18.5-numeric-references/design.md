@@ -409,3 +409,15 @@ A marca continua legível no Markdown puro.
   diz que a verificação é heurística.
 - **Texto canônico no grafo com referências a execuções de outro nó** (federação, V20): fora do
   escopo; a resolução é local ao projeto.
+
+## Decisões e desvios da implementação (2026-10-08)
+
+- **Referência ao trecho de origem:** fica em `proveniencia_numerica.json` (design §2.3), sem propriedade nova no grafo
+  (decisão do pesquisador conforme a proposta).
+- **Relatório:** a síntese já separava narrativa e tabelas (v16); o texto fonte é a montagem do orquestrador
+  (`render_report_markdown`) e o Summarizer continua devolvendo JSON de narrativa, agora com referências. As seções
+  medidas ficam entre marcadores X2 e `report-results`, `researcher-decisions` e `input-data` entram na lista fechada
+  de seções registradas do verificador.
+- **Catálogo:** substitui o JSON de métricas no prompt; o JSON de contexto segue sem `results` nem `metadata`.
+- **Falha do pipeline:** o relatório entregue é o texto fonte com um aviso explícito de que não foi verificado.
+- **Nomes de métrica com ponto** (`param.k`) são nomes, não acesso a atributo: `(res:...).atributo` é nó proibido.

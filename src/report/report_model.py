@@ -258,6 +258,11 @@ def _metadata_section(data: ReportData, narrative: Narrative) -> str:
     return "\n".join(lines)
 
 
+def _orchestrator_block(name: str, body: str) -> str:
+    """Delimita um bloco escrito pelo orquestrador (dados medidos): o verificador de números não o marca (X2)."""
+    return f"<!-- {name}:begin -->\n{body}\n<!-- {name}:end -->"
+
+
 def render_report_markdown(data: ReportData, narrative: Narrative) -> str:
     """Renderiza ``relatorio_final.md`` de forma determinística (dez seções fixas, nesta ordem)."""
     refs = ""
@@ -270,13 +275,13 @@ def render_report_markdown(data: ReportData, narrative: Narrative) -> str:
         f"## Resumo Executivo\n{narrative.resumo_executivo}",
         f"## Contexto e Objetivo\n**Solicitação:** {data.request}\n\n{narrative.contexto_e_objetivo}",
         f"## Metodologia\n{narrative.metodologia}",
-        f"## Resultados\n{_results_table(data)}",
+        f"## Resultados\n{_orchestrator_block('report-results', _results_table(data))}",
         f"## Análise das Divergências\n{_divergence_section(data, narrative)}",
-        f"## Decisões do Pesquisador\n{_interactions_section(data)}",
+        f"## Decisões do Pesquisador\n{_orchestrator_block('researcher-decisions', _interactions_section(data))}",
         f"## Limitações Identificadas\n{narrative.limitacoes}",
         f"## Próximos Passos Sugeridos\n{narrative.proximos_passos}{refs}",
-        f"## Dados de Entrada e Marcações\n{_research_data_section(data)}",
-        f"## Metadados de Execução\n{_metadata_section(data, narrative)}",
+        f"## Dados de Entrada e Marcações\n{_orchestrator_block('input-data', _research_data_section(data))}",
+        f"## Metadados de Execução\n{_orchestrator_block('execution-metadata', _metadata_section(data, narrative))}",
     ]
     return "\n\n".join(sections) + "\n"
 

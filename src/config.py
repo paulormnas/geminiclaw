@@ -590,6 +590,16 @@ EGRESS_SESSION_MAX_BYTES = int(get_env("EGRESS_SESSION_MAX_BYTES", default="2000
 # (exclusivo) de elementos numéricos de uma lista para retê-la.
 EGRESS_TABLE_MIN_ROWS = int(get_env("EGRESS_TABLE_MIN_ROWS", default="3"))
 
+# --- Referências numéricas rastreáveis (v18.5-numeric-references, ADR 019 §2) ---
+NUMREF_DISPLAY_MAX_SIG_DIGITS = int(get_env("NUMREF_DISPLAY_MAX_SIG_DIGITS", default="6"))
+NUMREF_CALC_SIG_DIGITS = int(get_env("NUMREF_CALC_SIG_DIGITS", default="4"))
+NUMREF_CALC_MAX_CHARS = int(get_env("NUMREF_CALC_MAX_CHARS", default="400"))
+NUMREF_CALC_MAX_NODES = int(get_env("NUMREF_CALC_MAX_NODES", default="64"))
+NUMREF_CALC_MAX_POW = int(get_env("NUMREF_CALC_MAX_POW", default="4"))
+NUMREF_YEAR_MIN = int(get_env("NUMREF_YEAR_MIN", default="1900"))
+NUMREF_YEAR_MAX = int(get_env("NUMREF_YEAR_MAX", default="2100"))
+NUMREF_STATIC_CHECK_ENABLED = get_env_bool("NUMREF_STATIC_CHECK_ENABLED", default=True)
+
 # --- Registro de execuções encadeado por hash (v18.5-execution-provenance, ADR 019 §4) ---
 # Cache SQLite dos hashes de arquivos grandes (chave: caminho, dispositivo, inode, tamanho, mtime_ns).
 PROVENANCE_HASH_CACHE_PATH = get_env("PROVENANCE_HASH_CACHE_PATH", default="store/hash_cache.db")

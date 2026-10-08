@@ -5,9 +5,10 @@ HTML estático com CSS acadêmico embutido, responsivo e legível para impressã
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
-from src.report.base_converter import ReportConverter
+from src.report.base_converter import MARKS_RE, ReportConverter, strip_markup_helpers
 
 _PRINT_CSS = """
 :root { color-scheme: light dark; }
@@ -30,17 +31,24 @@ code, pre { font-family: "SFMono-Regular", Consolas, monospace; background: #f5f
 pre { padding: 1rem; overflow-x: auto; border-radius: 4px; }
 code { padding: 0.15rem 0.3rem; border-radius: 3px; }
 blockquote { border-left: 4px solid #ccc; margin-left: 0; padding-left: 1rem; color: #555; }
+:root { --mark-bg: #fff3b0; --mark-fg: #5c4400; --origin-fg: #1f5f99; }
+mark.nao-verificado, mark.literal {
+    background: var(--mark-bg); color: var(--mark-fg); font-weight: 600; padding: 0 0.2rem; border-radius: 3px;
+}
+sup.origem a { color: var(--origin-fg); text-decoration: none; font-family: "Helvetica Neue", Arial, sans-serif; }
 
 @media (prefers-color-scheme: dark) {
     body { background: #1a1a1a; color: #e8e8e8; }
     th { background: #2a2a2a; }
     code, pre { background: #262626; }
     blockquote { color: #aaa; }
+    :root { --mark-bg: #5c4a00; --mark-fg: #ffe9a0; --origin-fg: #8fc4f5; }
 }
 
 @media print {
     body { max-width: 100%; color: #000; background: #fff; }
     a { color: #000; text-decoration: underline; }
+    mark.nao-verificado, mark.literal { background: none; color: #000; border: 1px solid #000; }
 }
 """
 
@@ -59,6 +67,26 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 """
 
 
+_CODE_BLOCK_RE = re.compile(r"(<pre\b.*?</pre>|<code\b.*?</code>)", re.DOTALL | re.IGNORECASE)
+
+
+def _decorate_marks(html: str) -> str:
+    """Troca as marcas de origem por links para o apêndice e destaca as demais, fora de ``<code>``/``<pre>``."""
+
+    def replace(match: re.Match) -> str:
+        if match.group(1):
+            code = f"{match.group(1)}{match.group(2)}"
+            return f'<sup class="origem"><a href="#origem-{code}">{code}</a></sup>'
+        if match.group(0) == "[não verificado]":
+            return '<mark class="nao-verificado">não verificado</mark>'
+        return '<mark class="literal">literal no código</mark>'
+
+    return "".join(
+        chunk if _CODE_BLOCK_RE.fullmatch(chunk) else MARKS_RE.sub(replace, chunk)
+        for chunk in _CODE_BLOCK_RE.split(html)
+    )
+
+
 class HTMLConverter(ReportConverter):
     """Converte ``relatorio_final.md`` para um HTML estático autocontido."""
 
@@ -66,7 +94,8 @@ class HTMLConverter(ReportConverter):
         import markdown as md
 
         markdown_text = Path(markdown_path).read_text(encoding="utf-8")
-        body_html = md.markdown(markdown_text, extensions=["tables", "fenced_code"])
+        rendered = md.markdown(strip_markup_helpers(markdown_text), extensions=["tables", "fenced_code"])
+        body_html = _decorate_marks(rendered)
 
         title = "Relatório Científico"
         for line in markdown_text.splitlines():

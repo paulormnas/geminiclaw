@@ -124,3 +124,25 @@ def test_a4_resultado_de_subtarefa_na_memoria_curta_vai_marcado(gate, third_part
     prompt = "Contexto: " + taint_if("acurácia 0.93", tags_tainted(["egress:tainted"]))
     out = gate.prepare_llm([labeled("user", PromptFragment(prompt, ContentOrigin.INSTRUCAO))], None, third_party)
     assert "<num padrão=d.dd>" in out.messages[0]["content"]
+
+
+@pytest.mark.parametrize(
+    "linha,exato",
+    [
+        ("val_max: 12.537", "12.537"),
+        ("Max value (mV): 12.537", "12.537"),
+        ("temperatura máxima = 12.537", "12.537"),
+        ("valor mínimo: 12.537", "12.537"),
+        ("loss_min_epoch: 12.537", "12.537"),
+        ("n=500, mean: 4.2 max: 12.537", "12.537"),
+        ("P95 latency (ms): 12.537", "12.537"),
+    ],
+)
+def test_m2_extremos_em_qualquer_posicao_do_nome(linha, exato):
+    saida = filters.filter_execution_output(linha, _ctx())
+    assert exato not in saida and "[10, 20)" in saida
+
+
+def test_m2_agregado_com_nome_composto_segue_a_regra_de_k():
+    saida = filters.filter_execution_output("n=3\nmean accuracy (test): 0.93", _ctx())
+    assert "0.93" not in saida and "n<k" in saida

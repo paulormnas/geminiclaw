@@ -537,14 +537,17 @@ def filter_generic_tables(lines: list[str], ctx: FilterContext) -> list[str]:
 
 _EXTREME_TOKENS = frozenset(
     {"min", "max", "minimo", "maximo", "mínimo", "máximo", "minimum", "maximum", "median", "mediana", "q1", "q2",
+     "minima", "maxima", "mínima", "máxima", "mín", "máx", "range", "amplitude",
      "q3", "quantile", "quantil", "percentil", "percentile"}
 )
 _AGGREGATE_TOKENS = frozenset(
     {"mean", "media", "média", "std", "stdev", "desvio", "var", "variance", "variancia", "variância", "sum", "soma",
      "avg", "average"}
 )
+_NAME_TOKEN_RE = re.compile(r"[^\W_]+(?:%)?", re.UNICODE)
 _STAT_RE = re.compile(
-    r"(?P<name>\d{1,3}%|[A-Za-z_][\w%]{0,63})(?P<sep>\s*[:=]\s*)"
+    # O nome vai do início da linha (ou de um delimitador) até o separador, com espaços e parênteses (limitado a 64).
+    r"(?:^|(?<=[\s,;|]))(?P<name>[^,;|:=\n]{1,64}?)(?P<sep>\s{0,8}[:=]\s{0,8})"
     r"(?P<val>[-+]?(?:\d+(?:[.,]\d+)?|\.\d+)(?:[eE][-+]?\d+)?%?)(?!\w)(?!\.\d)"
 )
 _N_RE = re.compile(
@@ -554,11 +557,9 @@ _PERCENTILE_NAME_RE = re.compile(r"^(?:p\d{1,3}|q[0-4]|\d{1,3}%)$", re.IGNORECAS
 
 
 def _stat_kind(name: str) -> str | None:
-    lowered = name.lower()
-    if _PERCENTILE_NAME_RE.match(lowered):
-        return "extreme"
-    tokens = [t for t in re.split(r"[_\s]+", lowered) if t]
-    if tokens and tokens[-1] in _EXTREME_TOKENS:
+    # Tokens em qualquer posição do nome ("val_max", "Max value (mV)", "temperatura máxima"); extremo vence agregado.
+    tokens = [t for t in _NAME_TOKEN_RE.findall(name.lower()) if t]
+    if any(t in _EXTREME_TOKENS or _PERCENTILE_NAME_RE.match(t) for t in tokens):
         return "extreme"
     if any(t in _AGGREGATE_TOKENS for t in tokens):
         return "aggregate"

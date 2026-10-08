@@ -1,5 +1,7 @@
 # Tarefas: v18-research-continuity
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #108. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## 1. Checkpoint
 - [x] 1.1 `src/continuity.py`: modelo do checkpoint, gravação atômica com `.bak`, leitura com validação de versão.
 - [x] 1.2 Chamadas de gravação nos momentos do design (plano, subtarefas, abandono, Curator, fechamento).

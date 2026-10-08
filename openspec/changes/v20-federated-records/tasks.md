@@ -1,5 +1,7 @@
 # Tarefas: v20-federated-records
 
+**Estado (2026-10-08):** Não iniciada — nenhum código mergeado.
+
 ## 0. Pré-requisitos
 - [ ] 0.1 `v20-node-identity` e V18.5 concluídas.
 - [ ] 0.2 Aprovação da tabela `federation_records` e da política de publicação (design §3); respostas às questões do design §8.

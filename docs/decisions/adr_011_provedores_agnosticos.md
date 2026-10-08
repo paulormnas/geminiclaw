@@ -1,10 +1,20 @@
 # ADR 011 — Provedores Agnósticos: Registro de Provedores LLM e de Embeddings
 
-**Status:** Aceito em 2026-10-01 (aprovado pelo pesquisador responsável; decisão implementada, texto atualizado na mesma data). A seleção de modelos por papel segue pelo catálogo do ADR 017, ainda pendente
+**Status:** Aceito — implementado (registro de provedores, Anthropic/OpenAI, embeddings locais e catálogo por papel) (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-08)
 **Data:** 2026-09-28 (revisado em 2026-10-01)
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Substitui:** ADR 006 (a partir de 2026-10-01)
 **ADRs relacionados:** ADR 007 (Model Router por papel), ADR 009 (conhecimento), ADR 013 (federação), ADR 017 (catálogo e roteador), ADR 019 (localidade dos dados)
+
+
+## Estado da implementação (2026-10-08)
+
+| Mudança OpenSpec | Estado | PR |
+|---|---|---|
+| [`v16-provider-registry`](../../openspec/changes/v16-provider-registry/proposal.md) | Implementada, com pendências | #59 |
+| [`v16-anthropic-provider`](../../openspec/changes/v16-anthropic-provider/proposal.md) | Implementada, com pendências | #79 |
+| [`v16-local-embeddings`](../../openspec/changes/v16-local-embeddings/proposal.md) | Implementada, com pendências | #66 |
+| [`v16-model-catalog-router`](../../openspec/changes/v16-model-catalog-router/proposal.md) | Implementada, com pendências | #102 |
 
 ---
 

@@ -1,6 +1,6 @@
 # ADR 017 — Catálogo de Modelos e Roteador de Provedores por Papel
 
-**Status:** Aprovado em 2026-10-01 pelo pesquisador responsável — implementação pendente (sem `catalog.yaml` nem `resolve()` ainda; spec descrita em `openspec/changes/v16-model-catalog-router`, aguardando aprovação)
+**Status:** Aceito — implementado (catálogo, roteador por papel, localidade e versão efetiva) (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-08)
 **Data:** 2026-09-29
 **Relacionados:** ADR 007 (papéis e Model Router), ADR 011 (registro de provedores), limites de uso da V18 (PR #68)
 **Revisa:** o Model Router do ADR 007 (mapeamento fixo papel → provedor/modelo por variável de ambiente)
@@ -14,6 +14,14 @@
 >   listá-los no catálogo.
 > - **Decidido em 2026-10-01:** o Validator deixou de exigir `trust: self_hosted` (§2). Hoje ele
 >   roda em modelos de nuvem (Gemini, Claude); modelos locais continuam elegíveis pela preferência.
+
+
+## Estado da implementação (2026-10-08)
+
+| Mudança OpenSpec | Estado | PR |
+|---|---|---|
+| [`v16-model-catalog-router`](../../openspec/changes/v16-model-catalog-router/proposal.md) | Implementada, com pendências | #102 |
+| [`v18.5-model-catalog-locality`](../../openspec/changes/v18.5-model-catalog-locality/proposal.md) | Implementada, com pendências | #112 |
 
 ## Contexto
 

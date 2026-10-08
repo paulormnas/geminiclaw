@@ -1,5 +1,7 @@
 # Tarefas: v16-provider-registry
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #59. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## 1. Registro
 - [x] 1.1 Criar `src/llm/registry.py` com `ProviderSettings`, `register_provider`, `create_provider`, `available_providers`.
 - [x] 1.2 Registrar `ollama` (alias `local`) e `google` em `src/llm/providers/__init__.py` com imports preguiçosos.

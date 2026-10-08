@@ -1,5 +1,7 @@
 # Tarefas: v18.5-claim-verification
 
+**Estado (2026-10-08):** Não iniciada — nenhum código mergeado.
+
 Pré-requisitos: `v18.5-numeric-references` (parser, valores resolvidos, `ReportPipeline`) e
 `v18.5-model-catalog-locality` (alocação e desempate do `validator`). **Aprovação do schema do
 grafo** (nó `Afirmacao` e relações) antes da tarefa 1.3.

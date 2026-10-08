@@ -1,6 +1,6 @@
 # ADR 013 — Federação: Rede Pública de Conhecimento entre Nós (Princípios)
 
-**Status:** Aprovado em 2026-10-01 pelo pesquisador responsável — princípios aprovados; implementação pendente (última etapa, V20)
+**Status:** Aprovado em 2026-10-01 pelo pesquisador responsável — princípios aprovados; implementação não iniciada (V20) (atualizado em 2026-10-08)
 
 > **Aprovação 2026-10-01:** os princípios §1 a §6 foram aprovados. As "Questões em Aberto" abaixo
 > passam a ser tratadas nas mudanças OpenSpec da V20 (`v20-node-identity`,
@@ -11,6 +11,17 @@
 **Data:** 2026-09-28
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **ADRs relacionados:** ADR 004 (IPC local), ADR 009 (conhecimento), ADR 010 (propósito), ADR 011 (embeddings)
+
+
+## Estado da implementação (2026-10-08)
+
+| Mudança OpenSpec | Estado | PR |
+|---|---|---|
+| [`v20-node-identity`](../../openspec/changes/v20-node-identity/proposal.md) | Não iniciada | — |
+| [`v20-federation-transport`](../../openspec/changes/v20-federation-transport/proposal.md) | Não iniciada | — |
+| [`v20-federated-records`](../../openspec/changes/v20-federated-records/proposal.md) | Não iniciada | — |
+| [`v20-remote-knowledge-intake`](../../openspec/changes/v20-remote-knowledge-intake/proposal.md) | Não iniciada | — |
+| [`v20-reproduction-validation`](../../openspec/changes/v20-reproduction-validation/proposal.md) | Não iniciada | — |
 
 ---
 

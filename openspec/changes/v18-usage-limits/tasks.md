@@ -1,5 +1,7 @@
 # Tarefas: v18-usage-limits
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #68. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## 1. Orçamento e contabilização
 - [x] 1.1 `src/usage.py` com `UsageBudget`, `UsageTracker`, `LimitStatus`.
 - [x] 1.2 Configurações e aliases em `src/config.py`; `.env.example`.

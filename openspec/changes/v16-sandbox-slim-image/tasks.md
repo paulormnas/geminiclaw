@@ -1,5 +1,7 @@
 # Tarefas: v16-sandbox-slim-image
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #99. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## 0. Pré-requisitos
 - [x] 0.1 Aprovação explícita do pesquisador: novo Dockerfile do sandbox, remoção de `containers/Dockerfile`, ajuste de texto dos ADRs 014 §2 e 003 §2, respostas às questões em aberto do design §8.
 - [ ] 0.2 Liberar espaço em disco antes de construir imagens (o hook local bloqueia comandos de Docker com menos de 10 GB livres).

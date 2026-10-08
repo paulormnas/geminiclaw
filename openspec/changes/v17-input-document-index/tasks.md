@@ -1,5 +1,7 @@
 # Tarefas: v17-input-document-index
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #110. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## 0. Pré-requisitos
 - [x] 0.1 `v17-research-project` e `v17-structural-fact-ingestion` concluídas (`projeto_id`, `Insumo`).
 - [x] 0.2 Respostas do pesquisador às questões em aberto do design §9 (metadados, momento, avaliação, datasets).

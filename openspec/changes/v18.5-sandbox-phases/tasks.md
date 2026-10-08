@@ -1,5 +1,7 @@
 # Tarefas: v18.5-sandbox-phases
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #111. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## 0. Pré-requisitos
 - [x] 0.1 **Aprovação explícita do pesquisador** para as mudanças de comportamento dos containers do sandbox (proposal, "Aprovações necessárias").
 - [x] 0.2 **Revisão do Analista de Segurança** do design (rede da preparação, montagens, usuário não-root). Achados A1, A2, M1–M7, B1, B2, B6 e B7 aplicados (seção 7); B3, B4, B5 e B8 não alteram código.

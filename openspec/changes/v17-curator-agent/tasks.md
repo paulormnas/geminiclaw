@@ -1,5 +1,7 @@
 # Tarefas: v17-curator-agent
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #106. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## 1. Schema (requer aprovação explícita)
 - [x] 1.1 **Aprovação:** `Abordagem.status` (`ativa`|`fundida`), relação `FUNDIDA_EM`, `Descoberta.filtro_condicoes` (aprovado pelo pesquisador em 2026-10-06; extensão aditiva do schema, sem DDL relacional — o rótulo `FUNDIDA_EM` é criado por `scripts/migrate_v17_knowledge.py`, idempotente).
 

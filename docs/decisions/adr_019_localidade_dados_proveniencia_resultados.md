@@ -1,10 +1,24 @@
 # ADR 019 — Localidade dos Dados de Pesquisa e Proveniência dos Resultados
 
-**Status:** Aprovado em 2026-10-01 pelo pesquisador responsável — implementação pendente (spec por spec, nas mudanças `v18.5-*`)
+**Status:** Parcialmente implementado — localidade no catálogo, fases do sandbox e camada de saída mergeadas; proveniência, referências numéricas, verificação de afirmações, métricas e ingestão de dados pendentes (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-08)
 **Data:** 2026-09-29
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** implementação depois da V18 (incluindo as mudanças em andamento dos ADRs 017 e 018) e **antes da V19** (`roadmaps/roadmap_V19.md`); é também pré-requisito da federação (V20, ADR 013)
 **ADRs relacionados:** ADR 009 e 015 (conhecimento), ADR 010 (propósito), ADR 011 (embeddings locais), ADR 012 (Curator), ADR 013 (federação), ADR 014 (sandbox), ADR 017 (catálogo e roteador), ADR 018 (imagem do sandbox)
+
+
+## Estado da implementação (2026-10-08)
+
+| Mudança OpenSpec | Estado | PR |
+|---|---|---|
+| [`v18.5-model-catalog-locality`](../../openspec/changes/v18.5-model-catalog-locality/proposal.md) | Implementada, com pendências | #112 |
+| [`v18.5-sandbox-phases`](../../openspec/changes/v18.5-sandbox-phases/proposal.md) | Implementada, com pendências | #111 |
+| [`v18.5-egress-gate`](../../openspec/changes/v18.5-egress-gate/proposal.md) | Implementada, com pendências | #113 |
+| [`v18.5-execution-provenance`](../../openspec/changes/v18.5-execution-provenance/proposal.md) | Não iniciada | — |
+| [`v18.5-numeric-references`](../../openspec/changes/v18.5-numeric-references/proposal.md) | Não iniciada | — |
+| [`v18.5-claim-verification`](../../openspec/changes/v18.5-claim-verification/proposal.md) | Não iniciada | — |
+| [`v18.5-operation-metrics`](../../openspec/changes/v18.5-operation-metrics/proposal.md) | Não iniciada | — |
+| [`v18.5-research-data-ingestion`](../../openspec/changes/v18.5-research-data-ingestion/proposal.md) | Não iniciada | — |
 
 ---
 

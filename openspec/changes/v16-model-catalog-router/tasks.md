@@ -1,5 +1,7 @@
 # Tarefas: v16-model-catalog-router
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #102. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## 0. Pré-requisitos
 - [x] 0.1 Obter do pesquisador a aprovação da remoção de `LLM_PROVIDER`/`LLM_MODEL`/`DEFAULT_MODEL`, do padrão `self_hosted_only` e as respostas às questões em aberto do design §10. (Aprovação dada pelo usuário ao mandar iniciar a tarefa em 2026-10-06; as questões do §10 foram adiadas e o PR adota o default proposto em cada uma.)
 - [x] 0.2 `uv add pyyaml` (dependência direta; hoje só transitiva).

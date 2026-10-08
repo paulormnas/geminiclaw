@@ -1,10 +1,21 @@
 # ADR 009 — Camada de Conhecimento Experimental: Grafo (Apache AGE) + Vetorial (Qdrant)
 
-**Status:** Aprovado em 2026-10-01 pelo pesquisador responsável — implementação pendente (armazenamento do grafo e veredito de evidência já implementados; nenhum agente grava no grafo ainda)
+**Status:** Aceito — implementado nas mudanças V17/V18 (grafo, veredito, ingestão estrutural, Curator, CLI); validação em Apache AGE/Qdrant reais pendente (bateria final no Pi 5) (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-08)
 **Data:** 2026-09-28
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** a definir (sequência pós-V15)
 **ADRs relacionados:** ADR 001 (propósito — em revisão), ADR 005 (persistência)
+
+
+## Estado da implementação (2026-10-08)
+
+| Mudança OpenSpec | Estado | PR |
+|---|---|---|
+| [`v17-graph-store`](../../openspec/changes/v17-graph-store/proposal.md) | Implementada, com pendências | #64, #71 |
+| [`v17-evidence-verdict`](../../openspec/changes/v17-evidence-verdict/proposal.md) | Implementada | #62 |
+| [`v17-structural-fact-ingestion`](../../openspec/changes/v17-structural-fact-ingestion/proposal.md) | Implementada, com pendências | #105 |
+| [`v17-knowledge-semantic-index`](../../openspec/changes/v17-knowledge-semantic-index/proposal.md) | Implementada, com pendências | #100 |
+| [`v17-curator-agent`](../../openspec/changes/v17-curator-agent/proposal.md) | Implementada, com pendências | #106 |
 
 ---
 

@@ -57,6 +57,12 @@ Antes de implementar ou refatorar qualquer módulo, agente, skill ou componente,
 
 Alinhe qualquer solução técnica ou correção de bug com estas fontes antes da implementação.
 
+### Revisar a spec e refletir o status (obrigatório)
+
+- **Antes de codar:** releia `proposal.md`, `design.md`, `tasks.md` e a spec da mudança e confronte com o código atual (`git log`, `src/`). Se `tasks.md` estiver desatualizado ou a spec divergir do código, registre a divergência e avise o Arquiteto antes de seguir.
+- **Durante e ao fechar:** marque as caixas de `tasks.md` apenas para o que o código e os testes comprovam; mantenha a linha `**Estado (AAAA-MM-DD):**` do topo (`Não iniciada` / `Parcialmente implementada` / `Implementada, com pendências` / `Implementada`). Itens que dependem de ambiente real (AGE, Qdrant, Pi 5) ficam abertos com a razão escrita.
+- **Depois do PR:** peça ao Arquiteto de Soluções a confirmação da implementação. Quem atualiza o status dos ADRs e o `docs/decisions/README.md` é o Arquiteto, não o desenvolvedor.
+
 ### Implementando a partir de uma mudança OpenSpec
 
 - Implemente o que a spec pede, na ordem de `tasks.md`; não amplie o escopo. Funcionalidade

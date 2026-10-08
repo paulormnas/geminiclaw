@@ -1,5 +1,7 @@
 # Tarefas: v16-anthropic-provider
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #79. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## 1. Contrato e configuração
 - [x] 1.1 `LLMResponse.provider_data` e sua inclusão em `to_message()` só quando presente.
 - [x] 1.2 `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_EFFORT` e `ANTHROPIC_REFUSAL_FALLBACK` em `src/config.py` e `.env.example`.

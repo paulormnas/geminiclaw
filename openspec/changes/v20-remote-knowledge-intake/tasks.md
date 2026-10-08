@@ -1,5 +1,7 @@
 # Tarefas: v20-remote-knowledge-intake
 
+**Estado (2026-10-08):** Não iniciada — nenhum código mergeado.
+
 ## 0. Pré-requisitos
 - [ ] 0.1 `v20-federated-records`, `v20-federation-transport` e `v17-knowledge-semantic-index` concluídas.
 - [ ] 0.2 Aprovação do schema (`federation_trust`, `triagem`) e respostas às questões do design §10.

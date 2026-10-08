@@ -1,5 +1,7 @@
 # Tarefas: v16-research-assistant-prompts
 
+**Estado (2026-10-08):** Implementada, com pendências — PR #63. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+
 ## 1. Nome centralizado
 - [x] 1.1 `APP_NAME` em `src/config.py` e `.env.example`.
 - [x] 1.2 Criar `src/prompts.py::render_instruction`.

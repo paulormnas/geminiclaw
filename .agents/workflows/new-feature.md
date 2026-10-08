@@ -200,7 +200,8 @@ anything without my approval.
 - [ ] Todos os testes unitários e de integração passam
 - [ ] Cobertura mínima atingida nos módulos afetados
 - [ ] ADR criado (se decisão arquitetural relevante)
-- [ ] Mudança OpenSpec aprovada antes da implementação, `tasks.md` marcado e cada cenário coberto por teste
+- [ ] Mudança OpenSpec aprovada antes da implementação, `tasks.md` marcado (caixas e linha `**Estado**`) e cada cenário coberto por teste
+- [ ] Implementação confirmada com o Arquiteto de Soluções, que atualizou o status dos ADRs de origem e o `docs/decisions/README.md`
 - [ ] Mudança arquivada em `openspec/changes/archive/` e `openspec/specs/` consolidado
 - [ ] Commits seguem Conventional Commits
 - [ ] PR aprovado e merged em `dev`

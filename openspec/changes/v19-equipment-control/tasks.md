@@ -1,5 +1,7 @@
 # Tarefas: v19-equipment-control
 
+**Estado (2026-10-08):** Não iniciada — nenhum código mergeado.
+
 ## 0. Pré-requisitos
 - [ ] 0.1 V18.5 concluída (`v18.5-egress-gate`, `v18.5-execution-provenance`) e `v18-researcher-consult` no `dev`.
 - [ ] 0.2 Respostas do pesquisador às questões em aberto do design §10.

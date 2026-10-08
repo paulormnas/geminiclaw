@@ -416,12 +416,14 @@ class EgressGate:
     def _expand(frag: PromptFragment) -> list[PromptFragment]:
         """Trechos de ``frag`` conforme as marcas em linha.
 
-        As marcas só podem tornar o tratamento mais restritivo (contaminação, dado de pesquisa, saída de execução),
-        nunca mais brando; por isso uma marca forjada em conteúdo observado é inofensiva. Trechos já
-        ``dado_de_pesquisa`` não são reclassificados (uma marca de saída os afrouxaria).
+        Marcas só valem em texto montado pelo orquestrador (instrução sem produtor de modelo). Em conteúdo de origem
+        não confiável (saída de execução, documento, grafo, dado de pesquisa, resultado de ferramenta) e em texto
+        produzido por modelo, marcas são removidas sem efeito: uma marca forjada não pode dividir uma tabela nem
+        reclassificar o trecho.
         """
-        if frag.origin is ContentOrigin.DADO_DE_PESQUISA:
-            return [frag]
+        if frag.origin is not ContentOrigin.INSTRUCAO or frag.produced_by:
+            clean = strip_taint_marks(frag.text)
+            return [dataclasses.replace(frag, text=clean)]
         return expand_marks(frag.text, frag) or [dataclasses.replace(frag, text="")]
 
     @staticmethod

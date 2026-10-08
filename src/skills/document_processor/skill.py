@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 from src.agent_runtime.context import get_agent_context_optional
 from src.egress.classification import classify_path, ensure_not_research_data
-from src.egress.fragments import ContentOrigin, mark_research_data
+from src.egress.fragments import ContentOrigin
 from src.logger import get_logger
 from src.skills.base import BaseSkill
 from src.skills.document_processor.enrichment import ProjectMeta
@@ -74,11 +74,11 @@ def _result_content(result: Dict[str, Any]) -> str:
     A origem vem da classificação da fonte (design §6): o conteúdo de ``dado_de_pesquisa`` é retido para destinos
     sem dados brutos.
     """
-    wrapped = _untrusted("trecho_de_documento", result.get("content"), _CONTENT_LIMIT)
     source = str(result.get("source_path") or result.get("filename") or "")
     if source and classify_path(source) is ContentOrigin.DADO_DE_PESQUISA:
-        return mark_research_data(wrapped, source)
-    return wrapped
+        # Ferramentas do host não levam conteúdo de dado de pesquisa ao prompt (marcas em linha não valem aqui).
+        return f"[conteúdo de arquivo de dados omitido: {source}]"
+    return _untrusted("trecho_de_documento", result.get("content"), _CONTENT_LIMIT)
 
 
 def _all_projects(action: str) -> None:

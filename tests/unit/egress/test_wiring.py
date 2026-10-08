@@ -179,7 +179,7 @@ def test_resultados_do_document_processor_saem_rotulados_pela_fonte():
 
     dado = _result_content({"content": "a,b\n1,2", "source_path": "input_snapshot/medicoes.csv"})
     documento = _result_content({"content": "texto do artigo", "source_path": "input_snapshot/artigo.pdf"})
-    assert dado.startswith("⟦D:input_snapshot/medicoes.csv⟧") and "⟦" not in documento
+    assert dado == "[conteúdo de arquivo de dados omitido: input_snapshot/medicoes.csv]" and "omitido" not in documento
 
 
 def test_artefato_de_dados_no_bloco_do_workspace(tmp_path):

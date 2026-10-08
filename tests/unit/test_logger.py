@@ -14,7 +14,6 @@ def log_capture_stream():
 def test_json_formatter_valid_json():
     """Testa se o JsonFormatter produz um JSON válido."""
     formatter = JsonFormatter()
-    logger = logging.getLogger("test_json")
     record = logging.LogRecord(
         name="test_json",
         level=logging.INFO,

@@ -76,7 +76,7 @@ class TestPoolIntegration:
     def test_close_pool_permite_reconexao(self):
         """Após close_pool(), uma nova chamada a get_pool() deve funcionar."""
         from src import db as db_module
-        pool1 = db_module.get_pool()
+        db_module.get_pool()
         db_module.close_pool()
         assert db_module._pool is None
         pool2 = db_module.get_pool()

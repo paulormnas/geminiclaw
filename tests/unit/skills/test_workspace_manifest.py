@@ -21,7 +21,7 @@ from src.skills.code.manifest import WorkspaceManifest
 def test_manifest_created_in_new_directory(tmp_path: pathlib.Path) -> None:
     """O manifest.json deve ser criado automaticamente no __init__."""
     session_dir = tmp_path / "outputs" / "sess_001"
-    manifest = WorkspaceManifest(
+    WorkspaceManifest(
         session_dir=session_dir,
         session_id="sess_001",
         task_name="eda_iris",
@@ -165,8 +165,6 @@ def test_atomic_write_does_not_corrupt_on_failure(
 
     # Simular falha no os.replace (após escrever tmp)
     import os as _os
-
-    original_replace = _os.replace
 
     def broken_replace(src, dst):
         # Remove o tmp para simular falha de I/O

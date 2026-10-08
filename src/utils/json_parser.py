@@ -136,7 +136,6 @@ def _extract_balanced(text: str) -> str | None:
         encontrado.
     """
     open_chars = {"{": "}", "[": "]"}
-    close_chars = set(open_chars.values())
 
     start = -1
     open_char: str | None = None

@@ -305,7 +305,7 @@ def export_all(execution_id: str, output_dir: Path) -> None:
     print(f"   token_usage:        {n_tokens:>5} linhas")
     print(f"   hardware_snapshots: {n_hw:>5} linhas")
     print(f"   subtask_metrics:    {n_subtasks:>5} linhas")
-    print(f"   derived_metrics:    exportadas")
+    print("   derived_metrics:    exportadas")
     print(f"\n   Diretório: {target.resolve()}")
 
 

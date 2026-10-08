@@ -5,14 +5,12 @@ from src.skills.memory.skill import MemorySkill
 
 @pytest.fixture
 def session_manager(tmp_path):
-    sessions_db = tmp_path / "sessions.db"
-    memory_db = tmp_path / "memory.db"
     return SessionManager()
 
 @pytest.mark.asyncio
 async def test_persistence_between_sessions(session_manager):
     # 1. Cria Sessão A e registra memória de longo prazo
-    session_a = session_manager.create("agent_test")
+    session_manager.create("agent_test")
     
     skill = MemorySkill()
     await skill.run("memorize", key="user_name", value="Paulo", importance=1.0)

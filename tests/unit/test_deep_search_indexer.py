@@ -15,8 +15,6 @@ def indexer():
         idx = VectorIndexer(url=":memory:")
         return idx, mock_client
 
-from unittest.mock import patch, MagicMock
-
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_indexer_chunking():

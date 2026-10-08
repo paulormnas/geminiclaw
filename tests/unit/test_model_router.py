@@ -40,7 +40,7 @@ def test_model_router_default_roles_sob_a_politica_padrao(monkeypatch):
         assert cfg.model == "qwen3:8b", role
 
     provider = ModelRouter.get_provider("validator")
-    assert isinstance(provider, OllamaProvider)
+    assert isinstance(provider.inner, OllamaProvider)
     assert provider.model_name == "qwen3:8b"
 
 
@@ -52,9 +52,9 @@ def test_model_router_com_nuvem_liberada(nuvem_liberada):
 
     assert get_role_model_config("researcher").provider == "google"
     researcher = ModelRouter.get_provider("researcher")
-    assert isinstance(researcher, GoogleProvider)
+    assert isinstance(researcher.inner, GoogleProvider)
     assert researcher.model_name == "gemini-3.8-flash"
-    assert isinstance(ModelRouter.get_provider("developer"), GoogleProvider)
+    assert isinstance(ModelRouter.get_provider("developer").inner, GoogleProvider)
     # O Validator cai no Ollama: o Claude não tem chave.
     assert get_role_model_config("validator").provider == "ollama"
 
@@ -69,7 +69,7 @@ def test_model_router_pin_por_variavel_de_ambiente(monkeypatch):
     assert (cfg.provider, cfg.model) == ("ollama", "qwen3.5:4b")
 
     provider = ModelRouter.get_provider("validator")
-    assert isinstance(provider, OllamaProvider)
+    assert isinstance(provider.inner, OllamaProvider)
     assert provider.model_name == "qwen3.5:4b"
 
 
@@ -145,7 +145,7 @@ def test_model_router_usa_provedor_registrado_sem_editar_o_roteador(monkeypatch,
 
     provider = ModelRouter.get_provider("validator")
 
-    assert isinstance(provider, _FakeProvider)
+    assert isinstance(provider.inner, _FakeProvider)
     assert provider.model_name == "fake-model"
 
 

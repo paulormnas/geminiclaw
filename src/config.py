@@ -584,6 +584,12 @@ EGRESS_SESSION_MAX_BYTES = int(get_env("EGRESS_SESSION_MAX_BYTES", default="2000
 # (exclusivo) de elementos numéricos de uma lista para retê-la.
 EGRESS_TABLE_MIN_ROWS = int(get_env("EGRESS_TABLE_MIN_ROWS", default="3"))
 
+# --- Registro de execuções encadeado por hash (v18.5-execution-provenance, ADR 019 §4) ---
+# Cache SQLite dos hashes de arquivos grandes (chave: caminho, dispositivo, inode, tamanho, mtime_ns).
+PROVENANCE_HASH_CACHE_PATH = get_env("PROVENANCE_HASH_CACHE_PATH", default="store/hash_cache.db")
+# Tamanho mínimo (bytes) para um arquivo usar o cache de hash.
+PROVENANCE_HASH_CACHE_MIN_BYTES = int(get_env("PROVENANCE_HASH_CACHE_MIN_BYTES", default="8388608"))
+
 
 def require_locality_min_group_size() -> int:
     """Devolve ``LOCALITY_MIN_GROUP_SIZE`` ou falha de forma acionável quando não foi definido.

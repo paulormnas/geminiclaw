@@ -342,6 +342,20 @@ def normalize_config(parameters: object, *, _depth: int = 0) -> dict[str, Any]:
     return kept
 
 
+class ProvenancePending(RuntimeError):
+    """O término da execução da subtarefa ainda não entrou na cadeia: a ingestão é adiada (fila de pendências)."""
+
+
+def _recorded_number(text: str | None) -> float | None:
+    """Número do texto registrado no término (``repr(float)``); ``nan``/``inf`` e textos inválidos: ``None``."""
+    if text is None:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
 def hash_params(parameters: object) -> str | None:
     """SHA-256 do JSON canônico (chaves ordenadas) de ``params.json["parameters"]``."""
     if not isinstance(parameters, dict):
@@ -607,15 +621,18 @@ class _Writer:
 
         params = ev.params or {}
         parameters = params.get("parameters") if isinstance(params.get("parameters"), dict) else {}
+        prov = self._provenance(session_dir, subtarefa_id)
         existing = self._find("Experimento", {"subtarefa_id": subtarefa_id})
         if existing is not None:
             exp_id = existing.id
         else:
             props = self._experiment_props(session_dir, sub, ev, status, subtarefa_id, project_node, parameters)
+            if prov is not None:
+                props.update(self._provenance_props(prov))
             exp_id = self._create("Experimento", props, ACTOR_ORQUESTRADOR)
 
         self._edge(exp_id, "EXECUTADO_EM", session_node)
-        self._results(exp_id, sub, ev)
+        self._results(exp_id, sub, ev, prov, session_dir)
         self._datasets(session_dir, exp_id, project_node, ev)
         if sub.approach:
             abordagem_id = self.abordagem(sub.approach, sub.task_name)
@@ -629,6 +646,63 @@ class _Writer:
         if hipotese_id is not None:
             self._edge(exp_id, "TESTA", hipotese_id, fato=False)
         return exp_id
+
+    def _provenance(self, session_dir: Path, subtarefa_id: str) -> Any:
+        """Proveniência registrada da subtarefa (v18.5-execution-provenance, design §9), ou ``None``.
+
+        Término ainda pendente (banco fora do ar durante a execução): tenta acrescentá-lo à cadeia e, se não der,
+        adia a ingestão levantando :class:`ProvenancePending` (o evento fica em ``knowledge_pending.jsonl``).
+        Registro indisponível ou subtarefa sem execução registrada: ``None`` (a ingestão segue pelos arquivos).
+        """
+        from src.provenance.errors import ProvenanceUnavailable
+        from src.provenance.ledger import get_ledger
+
+        ledger = get_ledger()
+        session_id, output_dir = session_dir.name, session_dir.parent
+        if ledger.pending_for_subtask(session_id, subtarefa_id, output_dir):
+            ledger.flush_pending(session_id, output_dir)
+            if ledger.pending_for_subtask(session_id, subtarefa_id, output_dir):
+                raise ProvenancePending("término da execução ainda fora da cadeia; ingestão adiada")
+        try:
+            return ledger.derive_experiment_fields(subtarefa_id)
+        except ProvenanceUnavailable as exc:
+            logger.warning(
+                "Registro de execuções indisponível; ingestão pelos arquivos", extra={"erro": str(exc)[:200]}
+            )
+            return None
+
+    @staticmethod
+    def _provenance_props(prov: Any) -> dict[str, Any]:
+        """Campos do ``Experimento`` copiados do ``termino`` principal (e não dos arquivos)."""
+        props: dict[str, Any] = {"exec_id": prov.exec_id, "exec_ids": list(prov.exec_ids)}
+        if prov.hash_codigo:
+            props["hash_codigo"] = prov.hash_codigo
+        if prov.hash_params:
+            props["hash_params"] = prov.hash_params
+        if prov.seed is not None:
+            props["seed"] = prov.seed
+        env = prov.ambiente
+        ambiente: dict[str, Any] = {}
+        if env.get("python"):
+            ambiente["python"] = _clean(str(env["python"]), 50)
+        image = env.get("imagem")
+        if isinstance(image, dict) and image.get("nome"):
+            ambiente["imagem_sandbox"] = _clean(str(image["nome"]), 200)
+            if image.get("id"):
+                ambiente["imagem_id"] = _clean(str(image["id"]), 100)
+        packages = env.get("pacotes")
+        if isinstance(packages, dict):
+            ambiente["pacotes"] = [_clean(f"{k}=={v}", 100) for k, v in sorted(packages.items())[:100]]
+        assets = env.get("ativos")
+        if isinstance(assets, list):
+            ambiente["ativos"] = [
+                {"url": _clean(str(a.get("url", "")), 300), "sha256": a.get("sha256"), "destino": a.get("destino")}
+                for a in assets[:50]
+                if isinstance(a, dict)
+            ]
+        if ambiente:
+            props["ambiente"] = ambiente
+        return props
 
     @staticmethod
     def _experiment_status(sub: SubtaskInput, metrics: dict[str, Any] | None) -> str:
@@ -694,11 +768,24 @@ class _Writer:
             ambiente["pacotes"] = [_clean(p, 100) for p in pacotes[:100] if isinstance(p, str)]
         return ambiente
 
-    def _results(self, exp_id: str, sub: SubtaskInput, ev: Any) -> None:
-        """Um ``Resultado`` por métrica numérica de ``metrics.json`` + ``PRODUZIU`` + ``MEDE``."""
+    def _results(
+        self, exp_id: str, sub: SubtaskInput, ev: Any, prov: Any = None, session_dir: Path | None = None
+    ) -> None:
+        """Um ``Resultado`` por métrica numérica de ``metrics.json`` + ``PRODUZIU`` + ``MEDE``.
+
+        Com proveniência registrada, o ``valor`` vem do ``termino`` (``corpo.metricas``) e o ``metrics.json`` em disco
+        precisa ter o hash registrado; se divergir, **nenhum** ``Resultado`` é criado e o evento
+        ``proveniencia_inconsistente`` é registrado (design §9).
+        """
         metrics = ev.metrics.get("metrics") if ev.metrics else None
         if not isinstance(metrics, dict):
             return
+        recorded: dict[str, str] | None = None
+        if prov is not None:
+            if not self._metrics_match_record(prov, session_dir, sub.task_name):
+                return
+            recorded = prov.metricas
+            metrics = {name: metrics[name] for name in metrics if name in recorded}
         baselines = ev.metrics.get("baselines")
         baselines = baselines if isinstance(baselines, dict) else {}
         existing = {
@@ -711,6 +798,8 @@ class _Writer:
         evaluated = set(evaluated_metric_names(sub.validation_criteria, metrics))
         for raw_name in list(metrics)[:MAX_METRICS]:
             value = finite_number(metrics[raw_name])
+            if recorded is not None:
+                value = finite_number(_recorded_number(recorded.get(str(raw_name))))
             nome = _clean(raw_name, MAX_NAME_CHARS)
             if value is None or not nome:
                 continue
@@ -722,6 +811,10 @@ class _Writer:
                     "status_validacao": self._status_validacao(sub, str(raw_name), evaluated),
                     "caminho_metrics": f"{self.ctx.session_id}/{ev.metrics_path or ''}",
                 }
+                if prov is not None:
+                    props["exec_id"] = prov.exec_id
+                    if prov.hash_metrics:
+                        props["hash_metrics"] = prov.hash_metrics
                 baseline = finite_number(baselines.get(raw_name))
                 if baseline is not None:
                     props["baseline"] = baseline
@@ -729,6 +822,35 @@ class _Writer:
                 existing[nome] = resultado_id
             self._edge(exp_id, "PRODUZIU", resultado_id)
             self._mede(resultado_id, nome)
+
+    def _metrics_match_record(self, prov: Any, session_dir: Path | None, task_name: str) -> bool:
+        """``metrics.json`` em disco com o hash do término; senão registra ``proveniencia_inconsistente``."""
+        from src.provenance.hashing import sha256_file
+
+        path = (session_dir / task_name / "metrics.json") if session_dir is not None else None
+        try:
+            on_disk = sha256_file(path) if path is not None and path.is_file() else None
+        except OSError:
+            on_disk = None
+        if prov.hash_metrics and on_disk == prov.hash_metrics:
+            return True
+        logger.warning(
+            "metrics.json diverge do hash registrado; Resultado não criado",
+            extra={"extra": {"exec_id": prov.exec_id, "subtarefa": task_name}},
+        )
+        try:
+            from src.telemetry import get_telemetry
+
+            get_telemetry().record_agent_event(
+                execution_id=self.ctx.session_id,
+                session_id=self.ctx.session_id,
+                agent_id="orchestrator",
+                event_type="proveniencia_inconsistente",
+                payload={"exec_id": prov.exec_id, "task_name": task_name},
+            )
+        except Exception:  # noqa: BLE001 - telemetria nunca derruba a ingestão
+            logger.warning("Evento proveniencia_inconsistente não registrado")
+        return False
 
     @staticmethod
     def _status_validacao(sub: SubtaskInput, raw_name: str, evaluated: set[str]) -> str:

@@ -334,3 +334,42 @@ CREATE TABLE IF NOT EXISTS egress_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_egress_session ON egress_log (session_id);
+
+-- =============================================================
+-- Registro de execuções encadeado por hash (V18.5 / ADR 019 §4, openspec/changes/v18.5-execution-provenance).
+-- Somente-acréscimo: os gatilhos recusam UPDATE, DELETE e TRUNCATE. Idempotente.
+-- =============================================================
+CREATE TABLE IF NOT EXISTS execution_records (
+    project_id    TEXT        NOT NULL,        -- projeto (ou "sem_projeto:<sessão>" quando a sessão não tem projeto)
+    seq           BIGINT      NOT NULL,        -- consecutivo por projeto, a partir de 1
+    exec_id       TEXT        NOT NULL,        -- exec_<uuid4>
+    tipo          TEXT        NOT NULL CHECK (tipo IN ('inicio', 'termino')),
+    session_id    TEXT        NOT NULL,
+    subtask_id    TEXT,
+    task_name     TEXT        NOT NULL,
+    registrado_em TEXT        NOT NULL,        -- o mesmo texto que entra no hash
+    prev_hash     CHAR(64)    NOT NULL,        -- record_hash do registro anterior do projeto (64 zeros no primeiro)
+    record_hash   CHAR(64)    NOT NULL,
+    corpo         JSONB       NOT NULL,
+    PRIMARY KEY (project_id, seq),
+    UNIQUE (exec_id, tipo)
+);
+
+CREATE INDEX IF NOT EXISTS idx_exec_records_session ON execution_records (session_id);
+CREATE INDEX IF NOT EXISTS idx_exec_records_subtask ON execution_records (subtask_id);
+
+CREATE OR REPLACE FUNCTION execution_records_append_only() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'execution_records é somente-acréscimo (% recusado)', TG_OP
+        USING ERRCODE = 'restrict_violation';
+END;
+$$;
+
+CREATE OR REPLACE TRIGGER execution_records_no_update_delete
+    BEFORE UPDATE OR DELETE ON execution_records
+    FOR EACH ROW EXECUTE FUNCTION execution_records_append_only();
+
+CREATE OR REPLACE TRIGGER execution_records_no_truncate
+    BEFORE TRUNCATE ON execution_records
+    FOR EACH STATEMENT EXECUTE FUNCTION execution_records_append_only();

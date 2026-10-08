@@ -75,6 +75,7 @@ class WorkspaceManifest:
         divergence_detected: Optional[bool] = None,
         task_name: Optional[str] = None,
         run_info: Optional[Dict[str, Any]] = None,
+        exec_id: Optional[str] = None,
     ) -> None:
         """Registra o resultado de um step de execução.
 
@@ -97,6 +98,7 @@ class WorkspaceManifest:
                 step ao experimento; v17-structural-fact-ingestion).
             run_info: Saída estruturada do sandbox (``exit_code``, ``oom_killed``,
                 ``exception_type``, ``timed_out``, ``infra_error``, ``imagem_sandbox``, ``pacotes``).
+            exec_id: Identificador da execução no registro de proveniência (v18.5-execution-provenance).
 
         Raises:
             ValueError: Se ``status`` não for ``"success"`` ou ``"failed"``.
@@ -120,6 +122,8 @@ class WorkspaceManifest:
         }
         if code_file:
             step_entry["code_file"] = code_file
+        if exec_id:
+            step_entry["exec_id"] = exec_id
         if task_name:
             step_entry["task_name"] = task_name
         if run_info:

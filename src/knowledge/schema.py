@@ -219,6 +219,9 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             "seed": PropertySchema(),
             "hash_codigo": PropertySchema(),
             "ambiente": PropertySchema(),
+            # v18.5-execution-provenance: execuções registradas (a principal e todas, na ordem da cadeia).
+            "exec_id": PropertySchema(),
+            "exec_ids": PropertySchema(),
             "caminho_artefatos": PropertySchema(required=True),
             "no_execucao": PropertySchema(required=True),
             "dataset_ids": PropertySchema(),
@@ -235,6 +238,9 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
                 required=True, enum=("validado", "divergente_documentado", "nao_validado")
             ),
             "caminho_metrics": PropertySchema(required=True),
+            # v18.5-execution-provenance: execução de origem e hash do metrics.json registrado no término.
+            "exec_id": PropertySchema(),
+            "hash_metrics": PropertySchema(),
         },
     ),
     "Decisao": NodeSchema(

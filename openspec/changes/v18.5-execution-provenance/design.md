@@ -302,3 +302,28 @@ Para §9.3 do ADR 015, o `status`/`fase_falha` do `termino` alimentam a classifi
    (ex.: enviar `chain_tip.json` por e-mail ao pesquisador) já nesta versão?
 3. Divergência entre a ponta do checkpoint e a cadeia na retomada: aviso (proposto) ou
    bloqueio da retomada até um `verify` limpo?
+
+## Decisões (2026-10-08) e desvios da implementação
+
+Questões em aberto, decididas conforme a proposta (aprovação do pesquisador):
+
+1. **Apagar a cadeia:** a tabela fica estritamente somente-acréscimo; nenhum comando de apagamento nesta mudança (só o
+   `DROP` manual de quem controla o banco). A limpeza de desenvolvimento não toca `execution_records`.
+2. **Ancoragem externa:** o relatório só exibe a ponta (e a exportação grava `chain_tip.json`); nenhum envio automático.
+3. **Ponta divergente na retomada:** aviso (banner da CLI, evento `proveniencia_divergente`, linha no relatório), sem
+   bloquear a retomada.
+
+Desvios e escolhas de implementação:
+
+- **Cadeia sem projeto.** Sessões sem `project_id` (contorno `RESEARCH_PROJECT_GRAPH_OPTIONAL`/`sem_grafo` e chamadas
+  programáticas) usam a cadeia `sem_projeto:<sessão>` em vez de recusar a execução; o relatório e o `verify` mostram o
+  escopo. Evita que a queda do grafo impeça qualquer execução, sem inventar um projeto no grafo.
+- **Ponta do checkpoint.** `provenance_chain_tip` vem da última ponta acrescentada **por este processo**
+  (`ExecutionLedger.known_tip`, sem consulta ao banco a cada gravação); `verify` e a retomada a conferem contra a
+  cadeia (`ExecutionLedger.check_tip`).
+- **Arquivos reescritos.** `verify` considera o último escritor de cada caminho: um `metrics.json` reescrito por uma
+  retentativa na mesma pasta não acusa `alterado` o `termino` anterior (estado `substituido`).
+- **Armazenamento injetável.** `LedgerStore` (PostgreSQL em produção, memória nos testes) mantém o fluxo de acréscimo
+  idêntico; o lock `pg_advisory_xact_lock(19019, hashtext(project_id))` e o `INSERT` ficam na mesma transação.
+- **Resultado do `verify` na seção do relatório.** Exportação e acréscimo de pendências ocorrem na síntese final
+  (`_synthesize_results`), que é o ponto comum do fechamento normal e do por limite.

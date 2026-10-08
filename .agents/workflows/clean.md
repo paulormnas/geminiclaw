@@ -34,8 +34,10 @@ uv run python .agents/skills/clean_dev.py --dry-run
 
 ## 2. Limpeza completa
 
-Remove logs, artefatos de output, trunca todas as tabelas PostgreSQL e
-deleta todas as coleções Qdrant:
+Remove logs, artefatos de output, trunca as tabelas PostgreSQL listadas em `POSTGRES_TABLES` e
+deleta todas as coleções Qdrant. A tabela `execution_records` (registro de execuções encadeado por hash,
+somente-acréscimo) **não é limpa**: seus gatilhos recusam `TRUNCATE` e apagar a cadeia de um projeto é uma operação
+destrutiva à parte, com confirmação própria:
 
 ```bash
 uv run python .agents/skills/clean_dev.py

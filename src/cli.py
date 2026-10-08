@@ -63,6 +63,8 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
   geminiclaw clear-context
   geminiclaw history
   geminiclaw embeddings reindex [--collection <nome>] [--yes]
+  geminiclaw provenance verify <projeto>|--session <id> [--full] [--json] | --from-export <dir>
+  geminiclaw provenance export --session <id>
   geminiclaw project new --titulo <t> --objetivo <o> [--dominio <termo>]|list [--status <s>]|show <id>|use <id>
   geminiclaw --project <id> "<tarefa>"
   geminiclaw graph show [--project <id>] [--label <r>] [--dominio <t>] [--status <s>] [--depth N]
@@ -680,6 +682,9 @@ async def _run_resume(
             f"  {DIM}Consumo acumulado da cadeia: {prep.accumulated['tokens']:.0f} tokens, "
             f"{prep.accumulated['minutos']:.1f} min (esta sessão tem orçamento novo).{RESET}"
         )
+    divergence = orchestrator.resume_provenance_divergence(prep.state.source_session_id)
+    if divergence is not None:
+        print(f"  {YELLOW}⚠ Proveniência: {divergence[0]}{RESET}")
     print(
         f"\n  {DIM}Retomando a sessão {prep.state.source_session_id} a partir do checkpoint "
         f"({len(prep.state.completed)} subtarefa(s) concluída(s) não serão reexecutadas); "
@@ -1317,6 +1322,12 @@ def main() -> None:
 
     if len(sys.argv) >= 2 and sys.argv[1] == "vocab":
         sys.exit(_handle_vocab_command(sys.argv[2:]))
+
+    # V18.5 (v18.5-execution-provenance) — 'geminiclaw provenance verify|export'.
+    if len(sys.argv) >= 2 and sys.argv[1] == "provenance":
+        from src.cli_provenance import run as run_provenance
+
+        sys.exit(run_provenance(sys.argv[2:]))
 
     # V18 (v18-hypothesis-loop) — decisão do pesquisador sobre oportunidades documentadas.
     if len(sys.argv) >= 2 and sys.argv[1] == "opportunities":

@@ -333,6 +333,9 @@ class Checkpoint:
     sinalizacoes_pendentes: int = 0
     curator_pendente: bool = False
     detalhe_parada: str = ""
+    # v18.5-execution-provenance: ponta da cadeia de execuções do projeto e términos ainda fora da cadeia.
+    provenance_chain_tip: dict[str, Any] | None = None
+    provenance_pending: list[str] = field(default_factory=list)
 
     def find(self, task_name: str) -> SubtaskState | None:
         """Subtarefa pelo nome, ou ``None``."""
@@ -363,6 +366,8 @@ class Checkpoint:
             "sinalizacoes_pendentes": self.sinalizacoes_pendentes,
             "curator_pendente": self.curator_pendente,
             "detalhe_parada": self.detalhe_parada,
+            "provenance_chain_tip": dict(self.provenance_chain_tip) if self.provenance_chain_tip else None,
+            "provenance_pending": list(self.provenance_pending),
         }
 
     @classmethod
@@ -453,7 +458,28 @@ class Checkpoint:
             sinalizacoes_pendentes=pendentes,
             curator_pendente=curator,
             detalhe_parada=_text(data, "detalhe_parada", 200),
+            provenance_chain_tip=_chain_tip(data.get("provenance_chain_tip")),
+            provenance_pending=_id_list(data.get("provenance_pending"), "provenance_pending", MAX_IDS),
         )
+
+
+_HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _chain_tip(value: object) -> dict[str, Any] | None:
+    """Ponta da cadeia de execuções gravada no checkpoint (dado não confiável): ``{project_id, seq, record_hash}``."""
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise CheckpointError("provenance_chain_tip inválida.")
+    project_id, seq, digest = value.get("project_id"), value.get("seq"), value.get("record_hash")
+    if not isinstance(project_id, str) or not 0 < len(project_id) <= 200 or any(c in project_id for c in "\r\n\x00"):
+        raise CheckpointError("provenance_chain_tip.project_id inválido.")
+    if not isinstance(seq, int) or isinstance(seq, bool) or seq < 1:
+        raise CheckpointError("provenance_chain_tip.seq inválido.")
+    if not isinstance(digest, str) or not _HEX64_RE.match(digest):
+        raise CheckpointError("provenance_chain_tip.record_hash inválido.")
+    return {"project_id": project_id, "seq": seq, "record_hash": digest}
 
 
 def _hypotheses(value: object) -> list[dict[str, Any]]:
@@ -713,6 +739,8 @@ class CheckpointRecorder:
         self._cp = checkpoint
         self._lock = threading.RLock()
         self.failures = 0
+        # v18.5-execution-provenance: lê a ponta da cadeia (sem consultar o banco) a cada gravação do checkpoint.
+        self.provenance_provider: Any = None
 
     @classmethod
     def start(
@@ -759,9 +787,22 @@ class CheckpointRecorder:
 
     # -- gravação -----------------------------------------------------------
 
+    def _refresh_provenance(self) -> None:
+        provider = self.provenance_provider
+        if provider is None:
+            return
+        try:
+            tip, pending = provider()
+            if tip is not None:
+                self._cp.provenance_chain_tip = _chain_tip(tip)
+            self._cp.provenance_pending = [str(p) for p in pending][:MAX_IDS]
+        except Exception as exc:  # noqa: BLE001 - a proveniência nunca impede a gravação do checkpoint
+            logger.warning("Ponta da cadeia de execuções não lida", extra={"extra": {"erro": type(exc).__name__}})
+
     def _flush(self) -> bool:
         with self._lock:
             self._cp.atualizado_em = _now()
+            self._refresh_provenance()
             try:
                 write_checkpoint(self.session_dir, self._cp)
                 return True

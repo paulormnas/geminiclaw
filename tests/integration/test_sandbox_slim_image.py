@@ -1,7 +1,7 @@
 """Cenários da v16-sandbox-slim-image que exigem a imagem real (Mac e Raspberry Pi 5).
 
 Pulados quando não há daemon de containers ou quando a imagem ``SANDBOX_IMAGE`` não foi construída
-(``bash scripts/build_images.sh``). Os pacotes sob demanda exigem rede do daemon.
+(``uv run python -m scripts.platform_images ensure --imagens sandbox``). Os pacotes sob demanda exigem rede do daemon.
 """
 
 import os
@@ -29,7 +29,7 @@ pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(
         not _image_available(),
-        reason="Daemon de containers inacessível ou imagem do sandbox ausente (bash scripts/build_images.sh).",
+        reason="Daemon de containers inacessível ou imagem do sandbox ausente (uv run python -m scripts.platform_images ensure --imagens sandbox).",
     ),
 ]
 

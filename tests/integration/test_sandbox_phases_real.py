@@ -1,7 +1,7 @@
 """Cenários da v18.5-sandbox-phases que exigem a imagem real (capacidade code-sandbox).
 
 Pulados quando não há daemon de containers ou quando a imagem ``SANDBOX_IMAGE`` não foi construída
-(``bash scripts/build_images.sh``). Os pacotes sob demanda exigem rede do daemon. Os cenários de ativos
+(``uv run python -m scripts.platform_images ensure --imagens sandbox``). Os pacotes sob demanda exigem rede do daemon. Os cenários de ativos
 com servidor HTTP local exigem ``SANDBOX_TEST_HOST_ALIAS`` (nome pelo qual o container alcança o host,
 ex.: ``host.docker.internal`` no Mac); esse nome é liberado do bloqueio de IPs internos só nestes testes,
 pelo parâmetro ``allow_private_asset_hosts`` do sandbox.
@@ -40,7 +40,7 @@ pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(
         not _image_available(),
-        reason="Daemon de containers inacessível ou imagem do sandbox ausente (bash scripts/build_images.sh).",
+        reason="Daemon de containers inacessível ou imagem do sandbox ausente (uv run python -m scripts.platform_images ensure --imagens sandbox).",
     ),
 ]
 

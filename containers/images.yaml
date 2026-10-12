@@ -1,0 +1,34 @@
+# Manifesto das imagens do projeto (v16-platform-images, design §1). Lido por src/platform_images.py e por
+# `uv run python -m scripts.platform_images {detect,plan,ensure}`. Esquema estrito: chave desconhecida é erro.
+#
+# obter: build   -> construída localmente a partir de `dockerfile` (tag em `tag_env`, padrão `tag_padrao`)
+#        pull    -> baixada de `referencia_padrao` (substituível por `referencia_env`)
+#        compose -> construída pelo próprio `docker compose up`; o utilitário só confere suporte e validação
+# validada_em: identificadores de plataforma (src/platform_info.py) onde a imagem foi validada de verdade; a lista
+# cresce por PR, depois de uma validação real (como foi feito com o Qdrant no Pi 5).
+versao: 1
+imagens:
+  sandbox:
+    obter: build
+    dockerfile: containers/sandbox/Dockerfile
+    tag_env: SANDBOX_IMAGE
+    tag_padrao: code-sandbox:latest
+    arquiteturas: [arm64, amd64]
+    validada_em: []
+  postgres:
+    obter: compose
+    dockerfile: containers/Dockerfile.postgres
+    arquiteturas: [arm64, amd64]
+    validada_em: [linux/arm64/pi5/16k]
+  qdrant:
+    obter: pull
+    referencia_env: QDRANT_IMAGE
+    referencia_padrao: qdrant/qdrant:v1.19.1
+    arquiteturas: [arm64, amd64]
+    validada_em: [linux/arm64/pi5/16k]
+  ollama:
+    obter: pull
+    referencia_padrao: ollama/ollama:latest
+    arquiteturas: [arm64, amd64]
+    opcional: true
+    validada_em: []

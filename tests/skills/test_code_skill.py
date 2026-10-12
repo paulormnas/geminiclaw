@@ -25,7 +25,7 @@ def _geminiclaw_image_exists() -> bool:
 
 _SKIP_SANDBOX = pytest.mark.skipif(
     not is_docker_available() or not _geminiclaw_image_exists(),
-    reason="Docker daemon inacessível ou imagem do sandbox não encontrada (execute 'bash scripts/build_images.sh')."
+    reason="Docker daemon inacessível ou imagem do sandbox não encontrada (execute 'uv run python -m scripts.platform_images ensure --imagens sandbox')."
 )
 
 @pytest.mark.integration

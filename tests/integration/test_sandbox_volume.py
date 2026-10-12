@@ -18,7 +18,7 @@ _SKIP_NO_IMAGE = pytest.mark.skipif(
     not _geminiclaw_image_exists(),
     reason=(
         "Imagem do sandbox não encontrada. "
-        "Execute 'bash scripts/build_images.sh' antes de rodar estes testes."
+        "Execute 'uv run python -m scripts.platform_images ensure --imagens sandbox' antes de rodar estes testes."
     ),
 )
 

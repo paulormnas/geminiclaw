@@ -3,7 +3,7 @@
 # (src/, agents/), extras do projeto nem SDKs de provedores LLM. Pacotes fora do conjunto básico
 # são instalados sob demanda em /deps, sem root, pelo próprio sandbox.
 #
-# Contexto de build: raiz do repositório (ver scripts/build_images.sh). Sem --platform fixo:
+# Contexto de build: raiz do repositório (ver scripts/platform_images.py). Sem --platform fixo:
 # constrói na arquitetura do host (a seleção de imagens por plataforma é da v16-platform-images).
 FROM python:3.11-slim-bookworm
 

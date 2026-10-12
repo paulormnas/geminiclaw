@@ -251,11 +251,11 @@ volumes:
 
 ### Sandbox de código
 
-O único container de execução é o **sandbox**, criado sob demanda pela skill de código (`src/skills/code/sandbox.py`) a partir da imagem `SANDBOX_IMAGE` (padrão `code-sandbox:latest`, construída por `bash scripts/build_images.sh` a partir de `containers/sandbox/Dockerfile`). A imagem é mínima (Python, `uv` e o conjunto científico básico); pacotes extras pedidos em `packages` são instalados sem root em `/deps` e o script roda sem rede (ADR 018). O container roda sem privilégios (UID do orquestrador, sem capacidades, raiz somente leitura), com limites de memória, CPU e processos; os artefatos voltam pela pasta da subtarefa montada em `/outputs`, e o container é removido ao fim.
+O único container de execução é o **sandbox**, criado sob demanda pela skill de código (`src/skills/code/sandbox.py`) a partir da imagem `SANDBOX_IMAGE` (padrão `code-sandbox:latest`, obtida por `uv run python -m scripts.platform_images ensure --imagens sandbox`, que a constrói a partir de `containers/sandbox/Dockerfile` na arquitetura do daemon). A imagem é mínima (Python, `uv` e o conjunto científico básico); pacotes extras pedidos em `packages` são instalados sem root em `/deps` e o script roda sem rede (ADR 018). O container roda sem privilégios (UID do orquestrador, sem capacidades, raiz somente leitura), com limites de memória, CPU e processos; os artefatos voltam pela pasta da subtarefa montada em `/outputs`, e o container é removido ao fim.
 
 ```bash
-# Construir a imagem do sandbox (ARM64 / Raspberry Pi 5)
-bash scripts/build_images.sh
+# Obter a imagem do sandbox (constrói na arquitetura do daemon; ARM64 no Raspberry Pi 5)
+uv run python -m scripts.platform_images ensure --imagens sandbox
 
 # Listar e encerrar sandboxes ativos
 geminiclaw sessions
@@ -292,8 +292,9 @@ uv sync --extra google
 # Instalar tudo (Deep Search + Google)
 uv sync --all-extras
 
-# Após clonar o projeto ou modificar o Dockerfile do sandbox, construa a imagem localmente:
-./scripts/build_images.sh
+# Após clonar o projeto ou modificar o Dockerfile do sandbox, obtenha as imagens localmente
+# (detecta a plataforma, confere a arquitetura e grava store/platform.json):
+uv run python -m scripts.platform_images ensure
 
 # Rodar todos os testes unitários
 uv run pytest -m unit -v

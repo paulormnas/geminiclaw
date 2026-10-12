@@ -273,7 +273,14 @@ class ExplorationSession:
 
     @staticmethod
     def _is_bound(task: Any) -> bool:
-        """Subtarefa que testa hipótese (precisa de ``hypothesis_ref`` resolvível no formato novo)."""
+        """Subtarefa que testa hipótese (precisa de ``hypothesis_ref`` resolvível no formato novo).
+
+        Tipos preparatórios (``eda``, ``synthesis``) nunca testam hipótese, mesmo que o modelo preencha ``approach``:
+        o Gemini 3.8 flash o preenche em todas as subtarefas, e exigir hipótese da EDA retirava o plano inteiro (tudo
+        depende dela), fechando a sessão como ``sem_caminhos_promissores`` sem executar nada.
+        """
+        if getattr(task, "task_type", None) in PREPARATORY_TASK_TYPES:
+            return False
         if getattr(task, "approach", None):
             return True
         return getattr(task, "agent_id", "") == "developer" and getattr(task, "task_type", None) not in (

@@ -467,3 +467,26 @@ async def test_com_limite_os_mesmos_tokens_fecham_por_limite_tokens(tmp_path):
     with patch("src.usage._default_token_reader", return_value=10**12):
         await h.run(budget=UsageBudget.from_config(max_tokens=1000))
     assert h.stop_reason == "limite_tokens"
+
+
+@pytest.mark.asyncio
+async def test_eda_e_sintese_com_abordagem_preenchida_nao_exigem_hipotese(tmp_path):
+    """Regressão do benchmark de 2026-10-12: o modelo preenche `approach` em TODAS as subtarefas; a EDA e a síntese
+    (tipos preparatórios) não podem ser retiradas por 'sem_hipotese', senão tudo que depende delas some."""
+    abordagem = {"nome": "Pipeline", "tipo": "pipeline"}
+    eda = task("eda", None, task_type="eda", approach=abordagem)
+    treino = task("treino", "h1", depends_on=["eda"], approach=abordagem)
+    sintese = task("sintese", None, task_type="synthesis", approach=abordagem, depends_on=["treino"])
+    h = LoopHarness(tmp_path, plans=[plan([eda, treino, sintese], [hyp("h1")]), plan([eda, treino, sintese])])
+    await h.run()
+    assert h.ran[:3] == ["eda", "treino", "sintese"]
+
+
+@pytest.mark.asyncio
+async def test_subtarefa_experimental_sem_hipotese_continua_retirada(tmp_path):
+    """A regra #109 segue valendo: model_impl sem `hypothesis_ref` é retirada (e quem depende dela)."""
+    solta = task("treino_solto", None, approach={"nome": "X", "tipo": "algoritmo"})
+    depois = task("depois", "h1", depends_on=["treino_solto"])
+    h = LoopHarness(tmp_path, plans=[plan([solta, depois], [hyp("h1")])])
+    await h.run()
+    assert "treino_solto" not in h.ran and "depois" not in h.ran

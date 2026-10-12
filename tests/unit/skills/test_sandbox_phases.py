@@ -263,9 +263,11 @@ def test_entrega_por_copia(make_sandbox, tmp_path, monkeypatch):
 
     assert result.modo_entrega == "copy"
     assert all(v["bind"] != "/inputs" for v in daemon.run_kwargs["volumes"].values())
-    assert "/inputs" not in daemon.run_kwargs["tmpfs"]
-    mount = next(m for m in daemon.run_kwargs["mounts"] if m["Target"] == "/inputs")
-    assert mount["Type"] == "tmpfs"
+    option = daemon.run_kwargs["tmpfs"]["/inputs"]  # tmpfs do usuário do sandbox; entrega por tar, sem root
+    assert "size=" in option and f"uid={os.getuid()}" in option and "mode=0755" in option
+    assert all(m["Target"] != "/inputs" for m in daemon.run_kwargs.get("mounts", []))
+    (cmd, kwargs), = daemon.inputs_exec
+    assert cmd[:3] == ["tar", "-x", "-C"] and "user" not in kwargs  # nenhuma chamada como root
     _path, data = next(a for a in daemon.put_archives if a[0] == "/inputs")
     with tarfile.open(fileobj=io.BytesIO(data)) as tar:
         assert tar.extractfile("dados.csv").read() == (snap / "dados.csv").read_bytes()

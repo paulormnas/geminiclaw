@@ -4,6 +4,7 @@ import os
 import pathlib
 import re
 import shutil
+import socket
 import stat
 import sys
 import tarfile
@@ -566,6 +567,37 @@ class PythonSandbox:
                     tar.addfile(info, handle)
         return out.getvalue()
 
+    def _deliver_inputs(self, container, data: bytes) -> None:
+        """Entrega o tar dos insumos em ``/inputs`` (tmpfs do usuário do sandbox) e os torna somente leitura.
+
+        ``put_archive`` NÃO funciona em pontos de montagem ``tmpfs`` (o daemon grava na camada do container, que o
+        tmpfs esconde: verificado no Raspberry Pi 5, a chamada devolve ``True`` e o diretório fica vazio). O ``/inputs``
+        é um tmpfs com ``uid``/``gid`` do usuário do sandbox, então o ``tar`` roda sem root (nenhuma chamada como
+        root); depois, ``chmod -R a-w`` tira a escrita (é uma cópia em memória: o snapshot do host não é afetado).
+
+        Raises:
+            RuntimeError: ``tar`` ou ``chmod`` terminaram com erro.
+        """
+        api = self.client.api
+        exec_id = api.exec_create(
+            container.id, ["tar", "-x", "-C", SANDBOX_INPUTS_DIR, "-f", "-"], stdin=True
+        )["Id"]
+        stream = api.exec_start(exec_id, socket=True)
+        raw = getattr(stream, "_sock", stream)
+        try:
+            raw.sendall(data)
+            raw.shutdown(socket.SHUT_WR)
+            while raw.recv(4096):  # espera o fim do exec (EOF)
+                pass
+        finally:
+            stream.close()
+        exit_code = api.exec_inspect(exec_id).get("ExitCode")
+        if exit_code != 0:
+            raise RuntimeError(f"falha ao entregar os insumos em {SANDBOX_INPUTS_DIR} (tar saiu com {exit_code})")
+        locked = container.exec_run(["chmod", "-R", "a-w", SANDBOX_INPUTS_DIR])
+        if locked.exit_code != 0:
+            raise RuntimeError(f"falha ao proteger {SANDBOX_INPUTS_DIR} contra escrita (chmod {locked.exit_code})")
+
     def _ensure_image(self) -> ImageInfo:
         """Garante que a imagem do sandbox existe localmente (nunca faz ``pull``) e a descreve.
 
@@ -603,6 +635,7 @@ class PythonSandbox:
         task_name: str,
         working_dir: str,
         mounts: Optional[list] = None,
+        extra_tmpfs: Optional[Dict[str, str]] = None,
     ):
         """Cria um container ocioso do sandbox (usuário do orquestrador, sem capacidades), com retentativa.
 
@@ -634,7 +667,7 @@ class PythonSandbox:
                     cap_drop=["ALL"],
                     security_opt=["no-new-privileges:true"],
                     read_only=True,
-                    tmpfs={"/tmp": f"size={self.tmpfs_size},noexec,nosuid,nodev"},
+                    tmpfs={"/tmp": f"size={self.tmpfs_size},noexec,nosuid,nodev", **(extra_tmpfs or {})},
                     network_disabled=not network,
                     environment=environment,
                     volumes=volumes,
@@ -747,7 +780,7 @@ class PythonSandbox:
     def _write_fetch_control(self, control_dir: pathlib.Path, downloads: List[AssetSpec]) -> None:
         """Escreve no host o script fixo e a spec do download (montados ``ro`` em ``/control`` na preparação).
 
-        Com a raiz somente leitura, ``put_archive`` só funciona em pontos de montagem; o script e a spec
+        Com a raiz somente leitura, ``put_archive`` só funciona em montagens de bind/volume; o script e a spec
         não vão para ``/tmp`` nem para ``/staging`` (onde o código baixado poderia sobrescrevê-los).
         """
         spec = {
@@ -1070,20 +1103,13 @@ class PythonSandbox:
                 volumes[str(snapshot_dir.resolve())] = {"bind": SANDBOX_INPUTS_DIR, "mode": "ro"}
             for prior in prior_mounts:
                 volumes[str(prior)] = {"bind": f"{SANDBOX_PRIOR_DIR}/{prior.name}", "mode": "ro"}
-            mounts = []
+            extra_tmpfs: Dict[str, str] = {}
             if input_files and res.modo_entrega == "copy":
-                # tmpfs como Mount (e não HostConfig.Tmpfs): com a raiz somente leitura o daemon só aceita
-                # put_archive em pontos de montagem. Modo 0555: o usuário do sandbox só lê.
-                mounts.append(
-                    docker.types.Mount(
-                        target=SANDBOX_INPUTS_DIR,
-                        source=None,
-                        type="tmpfs",
-                        tmpfs_size=self.copy_max_bytes,
-                        tmpfs_mode=0o555,
-                    )
+                # tmpfs do usuário do sandbox (uid/gid): ``_deliver_inputs`` grava sem root e depois tira a escrita.
+                extra_tmpfs[SANDBOX_INPUTS_DIR] = (
+                    f"size={self.copy_max_bytes},noexec,nosuid,nodev,uid={os.getuid()},gid={os.getgid()},mode=0755"
                 )
-            mounts += [
+            mounts = [
                 docker.types.Mount(
                     target=f"{SANDBOX_ASSETS_DIR}/{rec.destino}",
                     source=str((self.asset_cache_dir / rec.sha256).resolve()),
@@ -1098,6 +1124,7 @@ class PythonSandbox:
                 network=network,
                 volumes=volumes,
                 mounts=mounts,
+                extra_tmpfs=extra_tmpfs,
                 environment={
                     "HOME": "/tmp",
                     "MPLCONFIGDIR": "/tmp",
@@ -1118,7 +1145,7 @@ class PythonSandbox:
 
             phase_start = _now()
             if input_files and res.modo_entrega == "copy":
-                container.put_archive(SANDBOX_INPUTS_DIR, self._create_inputs_tar(snapshot_dir, input_files))
+                self._deliver_inputs(container, self._create_inputs_tar(snapshot_dir, input_files))
             self._introspect(container, res)
 
             # Injetar o script (e arquivos extras) só depois da preparação: o código de instalação

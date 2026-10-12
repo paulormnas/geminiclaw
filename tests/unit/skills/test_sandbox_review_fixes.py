@@ -54,8 +54,8 @@ def test_a1_classificador_que_autoriza_sem_insumos_libera_a_rede(make_sandbox, t
 # --- A2: put_archive só em pontos de montagem (raiz somente leitura) ----------------------------------
 
 @pytest.mark.unit
-def test_a2_copy_usa_mount_tmpfs_com_tamanho_e_modo(make_sandbox, tmp_path, monkeypatch):
-    """/inputs em modo copy é um ``Mount`` tmpfs (aceita put_archive com a raiz ro), não HostConfig.Tmpfs."""
+def test_a2_copy_usa_tmpfs_do_usuario_com_tamanho_e_modo(make_sandbox, tmp_path, monkeypatch):
+    """/inputs em modo copy é um tmpfs do usuário do sandbox (``put_archive`` não grava em tmpfs): o ``tar`` entrega."""
     monkeypatch.setenv("SANDBOX_INPUT_DELIVERY", "copy")
     monkeypatch.setenv("SANDBOX_COPY_MAX_BYTES", "1048576")
     snap = tmp_path / "out" / "s" / "input_snapshot"
@@ -64,11 +64,10 @@ def test_a2_copy_usa_mount_tmpfs_com_tamanho_e_modo(make_sandbox, tmp_path, monk
     daemon = FakeDaemon()
     _run(make_sandbox(daemon, memory_limit="1g"), tmp_path)
 
-    mount = next(m for m in daemon.run_kwargs["mounts"] if m["Target"] == "/inputs")
-    assert mount["Type"] == "tmpfs"
-    assert mount["TmpfsOptions"] == {"SizeBytes": 1048576, "Mode": 0o555}
-    assert "/inputs" not in daemon.run_kwargs["tmpfs"]
+    option = daemon.run_kwargs["tmpfs"]["/inputs"]
+    assert option.startswith("size=1048576,") and "mode=0755" in option and "noexec" in option
     assert any(path == "/inputs" for path, _data in daemon.put_archives)
+    assert any(c[0][:2] == ["chmod", "-R"] for c in daemon.exec_calls)  # depois da entrega, sem escrita
 
 
 @pytest.mark.unit

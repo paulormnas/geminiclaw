@@ -182,6 +182,8 @@ def test_inputs_somente_leitura(tmp_path: Path, monkeypatch) -> None:
 
 def test_entrega_por_copia(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("SANDBOX_INPUT_DELIVERY", "copy")
+    monkeypatch.setenv("SANDBOX_COPY_MAX_BYTES", str(16 * 1024 * 1024))  # o tmpfs conta na memória do container
+    monkeypatch.setenv("SANDBOX_TMPFS_SIZE", "32m")
     _snapshot(tmp_path)
     result = _run(_sandbox(tmp_path), tmp_path, "print(open('/inputs/dados.csv').read())")
     assert result.exit_code == 0, result.stderr
@@ -242,7 +244,7 @@ def test_needs_network_sem_insumos_continua_sem_rede(tmp_path: Path) -> None:
 
 
 def test_modo_copy_com_raiz_somente_leitura(tmp_path: Path, monkeypatch) -> None:
-    """A2: put_archive em /inputs (Mount tmpfs) funciona com a raiz ro; o script lê e não consegue gravar lá."""
+    """A2: a entrega por tar em /inputs (tmpfs) funciona com a raiz ro; o script lê e não consegue gravar lá."""
     monkeypatch.setenv("SANDBOX_INPUT_DELIVERY", "copy")
     monkeypatch.setenv("SANDBOX_COPY_MAX_BYTES", str(16 * 1024 * 1024))
     monkeypatch.setenv("SANDBOX_TMPFS_SIZE", "32m")

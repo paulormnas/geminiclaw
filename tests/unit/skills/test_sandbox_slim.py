@@ -42,6 +42,11 @@ class FakeDaemon:
         self.container.kill.side_effect = lambda *a, **k: self.calls.append("kill")
         self.container.remove.side_effect = lambda *a, **k: self.calls.append("remove")
         self.client.containers.run.side_effect = self._containers_run
+        # Entrega de insumos por `tar -x` sem root (tmpfs não aceita put_archive): o socket simulado registra o tar.
+        self.client.api.exec_create.side_effect = lambda cid, cmd, **kw: self._exec_create(cmd, kw)
+        self.client.api.exec_start.side_effect = lambda exec_id, **kw: self._exec_start()
+        self.client.api.exec_inspect.return_value = {"ExitCode": 0}
+        self.inputs_exec: list[tuple] = []
         image = MagicMock()
         image.id = "sha256:abc123"
         image.attrs = {"RepoDigests": ["code-sandbox@sha256:def456"]}
@@ -55,6 +60,33 @@ class FakeDaemon:
                 self.control_files = {f.name: f.read_text() for f in Path(host).iterdir()}
         self.calls.append(f"run:{kwargs['labels']['geminiclaw.role']}")
         return self.container
+
+    def _exec_create(self, cmd, kwargs):
+        self.inputs_exec.append((cmd, kwargs))
+        return {"Id": "exec-inputs"}
+
+    def _exec_start(self):
+        daemon = self
+        received: list[bytes] = []
+
+        class _Sock:
+            def sendall(self, data):
+                received.append(bytes(data))
+
+            def shutdown(self, how):
+                daemon.put_archives.append(("/inputs", b"".join(received)))
+                daemon.calls.append("deliver_inputs")
+
+            def recv(self, n):
+                return b""
+
+        class _Stream:
+            _sock = _Sock()
+
+            def close(self):
+                pass
+
+        return _Stream()
 
     def _put_archive(self, path, data):
         self.calls.append("put_archive")

@@ -23,6 +23,7 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
+from scripts.benchmark import footprint
 from scripts.benchmark.resources import ResourceSampler
 from scripts.benchmark.scoring import score_session, session_outcome
 
@@ -165,16 +166,60 @@ def _save_log(name: str, log: str) -> str:
     return str(path)
 
 
+def anomalies(result: dict) -> list[str]:
+    """Problemas de infraestrutura/código numa combinação (não a baixa qualidade do modelo): interrompem o benchmark.
+
+    Um modelo que não conclui a tarefa é resultado; processo que cai, estoura o prazo, perde o roteamento pedido,
+    não grava a sessão ou deixa um grupo de métricas em erro é defeito a corrigir antes de gastar mais tokens.
+    """
+    if result.get("status") == "skipped":
+        return []
+    problems: list[str] = []
+    status = str(result.get("status"))
+    if status != "exit 0":
+        problems.append(f"processo terminou com '{status}'")
+    if "Traceback (most recent call last)" in (result.get("log_tail") or ""):
+        problems.append("traceback no fim do log")
+    if not result.get("session"):
+        problems.append("nenhuma sessão gravada")
+    if result.get("routing_check") and not result["routing_check"].get("ok", True):
+        problems.append("roteamento diferente do pedido: " + "; ".join(result["routing_check"]["divergences"]))
+    metrics = result.get("operation_metrics")
+    if result.get("session") and metrics is None:
+        problems.append("operation_metrics ausente na sessão")
+    for group, values in (metrics or {}).items():
+        if isinstance(values, dict) and values.get("estado") == "erro":
+            problems.append(f"grupo de métricas '{group}' em erro: {values.get('mensagem', '')[:160]}")
+    if result.get("seed_error"):
+        problems.append(f"semeadura do projeto falhou: {result['seed_error']}")
+    return problems
+
+
 def run_combination(
     combo: dict, task: str, env_base: dict[str, str], timeout: int, output_dir: Path, extra_env: dict | None = None
 ) -> dict:
     env = build_env(env_base, combo["roles"], {**(extra_env or {}), **combo.get("env", {})})
+    project_args: list[str] = []
+    project_id = None
+    seed_error = None
+    if not combo.get("sem_projeto"):
+        try:  # um projeto com Problema confirmado por combinação (a sessão em modo auto exige)
+            from scripts.benchmark.seed_project import seed_project
+
+            project_id = seed_project(combo["name"])
+            project_args = ["--project", project_id]
+        except Exception as exc:  # noqa: BLE001 - registrado; a combinação não roda sem projeto
+            seed_error = f"{type(exc).__name__}: {exc}"
+    before = footprint.snapshot()
     started_wall = time.time()
     start = time.monotonic()
     proc = subprocess.Popen(
-        [sys.executable, "main.py", "--mode", "auto", task],
+        [sys.executable, "main.py", "--mode", "auto", *project_args, task],
         env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-    )
+    ) if seed_error is None else None
+    if proc is None:
+        return {"name": combo["name"], "roles": combo["roles"], "status": "seed_error", "seed_error": seed_error,
+                "wall_seconds": 0.0, "resources": {}, "log_tail": ""}
     sampler = ResourceSampler(root_pid=proc.pid, interval=1.0)
     sampler.start()
     timed_out = False
@@ -193,8 +238,14 @@ def run_combination(
         "wall_seconds": round(elapsed, 1), "resources": sampler.summary(), "log_tail": (log or "")[-1500:],
         "log_file": _save_log(combo["name"], log or ""),
     }
+    result["project_id"] = project_id
+    result["footprint_delta"] = footprint.delta(before, footprint.snapshot())
+    if project_id:
+        result["project_graph"] = footprint.project_graph(project_id)
     session = newest_session(output_dir, started_wall - 1)
     if session is not None:
+        result["operation_metrics"] = footprint.session_operation_metrics(session.name)
+        result["embedding_events"] = footprint.embedding_events(session.name)
         outcome = session_outcome(session)
         usage = outcome.get("token_usage") or db_token_usage(session.name)  # sessão abortada: sem metadata
         result.update(session=session.name, outcome=outcome, score=score_session(session),
@@ -254,6 +305,8 @@ def main() -> None:
     parser.add_argument("--results", type=Path, required=True)
     parser.add_argument("--only", nargs="*", default=None)
     parser.add_argument("--recompute", action="store_true", help="refaz os tokens do banco e sai (sem rodar nada)")
+    parser.add_argument("--fail-fast", action="store_true",
+                        help="interrompe (código 3) na primeira combinação com defeito de infraestrutura/código")
     parser.add_argument("--eval-comm", action="store_true",
                         help="avalia a comunicação entre agentes das sessões já executadas, depois da execução")
     parser.add_argument("--eval-judge", action="store_true",
@@ -303,6 +356,10 @@ def main() -> None:
                 spent[provider] = spent.get(provider, 0.0) + cost
         args.results.write_text(json.dumps(results, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
         print(f"[benchmark] {combo['name']}: {results[-1]['status']}", flush=True)
+        problems = anomalies(results[-1])
+        if problems and args.fail_fast:
+            print(f"[benchmark] INTERROMPIDO em {combo['name']}: " + " | ".join(problems), flush=True)
+            sys.exit(3)
 
     from scripts.benchmark.interactions import knowledge_footprint
 

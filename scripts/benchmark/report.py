@@ -65,6 +65,64 @@ def render_interactions(results: list[dict]) -> str:
     return "\n\n".join(blocks)
 
 
+def render_knowledge(results: list[dict]) -> str:
+    """Memória de conhecimento por combinação: vetores (Qdrant), grafo do projeto e linhas gravadas no Postgres."""
+    header = (
+        "| Combinação | Vetores novos (Qdrant) | Nós do projeto | Arestas do projeto | Nós por rótulo | "
+        "Execuções registradas | Registros de egresso | Auditoria do grafo |\n|---|---|---|---|---|---|---|---|"
+    )
+    rows = [header]
+    for r in results:
+        if r.get("status") == "skipped" or "footprint_delta" not in r:
+            continue
+        delta, graph = r["footprint_delta"], r.get("project_graph") or {}
+        tables = delta.get("tabelas", {})
+        vectors = delta.get("qdrant", {})
+        detail = ", ".join(f"{k}: {v:+d}" for k, v in vectors.items())
+        vectors_cell = f"{sum(vectors.values())} ({detail})" if vectors else "0"
+        labels = ", ".join(f"{k} {v}" for k, v in (graph.get("nos_por_rotulo") or {}).items()) or "-"
+        rows.append(
+            f"| {r['name']} | {vectors_cell} | {graph.get('total_nos', '-')} | {graph.get('total_arestas', '-')} | "
+            f"{labels} | {tables.get('execution_records', 0)} | {tables.get('egress_log', 0)} | "
+            f"{tables.get('knowledge_audit', 0)} |"
+        )
+    return "\n".join(rows)
+
+
+def render_operation(results: list[dict]) -> str:
+    """Métricas de operação (v18.5-operation-metrics) por combinação: egresso, proveniência, verificação e custo."""
+    header = (
+        "| Combinação | Egresso (bytes) | Chamadas de busca | Cadeia de execuções | Números res/calc/src | "
+        "Não verificados | Afirmações (suportada/total) | Planos reprovados | Custo (USD) | CPU média (%) |\n"
+        "|---|---|---|---|---|---|---|---|---|---|"
+    )
+    rows = [header]
+    for r in results:
+        metrics = r.get("operation_metrics")
+        if r.get("status") == "skipped" or not metrics:
+            continue
+
+        def get(group: str, key: str, default: str = "-") -> object:
+            values = metrics.get(group) or {}
+            return default if values.get("estado") != "disponivel" or key not in values else values[key]
+
+        origins = get("proveniencia", "numeros_por_origem", None)
+        claims = get("verificacao", "afirmacoes_por_status", None)
+        chain = get("proveniencia", "cadeia", None)
+        node = (metrics.get("custo_recursos") or {}).get("no") or {}
+        claims_cell = f"{claims.get('suportada', 0)}/{sum(claims.values())}" if claims else "-"
+        rows.append(
+            f"| {r['name']} | {get('egresso', 'bytes_total')} | {get('egresso', 'consultas_busca')} | "
+            f"{(chain or {}).get('resultado', '-')} | "
+            f"{'/'.join(str(origins[k]) for k in ('res', 'calc', 'src')) if origins else '-'} | "
+            f"{get('proveniencia', 'numeros_nao_verificados')} | "
+            f"{claims_cell} | "
+            f"{get('verificacao', 'ciclos_rejeicao_plano')} | {get('custo_recursos', 'custo_usd_total')} | "
+            f"{node.get('cpu_pct_medio', '-')} |"
+        )
+    return "\n".join(rows)
+
+
 def _pct(value: float | None) -> str:
     return "n/d" if value is None else f"{value * 100:.0f}%"
 
@@ -109,6 +167,12 @@ if __name__ == "__main__":
     print(render(loaded))
     print()
     print(render_interactions(loaded))
+    if any(r.get("footprint_delta") for r in loaded):
+        print()
+        print(render_knowledge(loaded))
+    if any(r.get("operation_metrics") for r in loaded):
+        print()
+        print(render_operation(loaded))
     if any(r.get("comm_eval") for r in loaded):
         print()
         print(render_communication(loaded))

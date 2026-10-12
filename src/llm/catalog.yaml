@@ -51,6 +51,20 @@ modelos:
     saida_estruturada: true
     janela_contexto: 1048576
     familia_modelo: gpt
+  - id: openai/gpt-5.6-terra
+    provedor: openai
+    trust: third_party
+    ferramentas: true
+    saida_estruturada: true
+    janela_contexto: 1100000
+    familia_modelo: gpt
+  - id: anthropic/claude-haiku-5-5
+    provedor: anthropic
+    trust: third_party
+    ferramentas: true
+    saida_estruturada: true
+    janela_contexto: 1048576
+    familia_modelo: claude
   - id: ollama/qwen3:8b
     provedor: ollama
     trust: self_hosted

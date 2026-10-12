@@ -416,9 +416,13 @@ class AutonomousLoop:
             MAX_AGENT_RUNS_PER_SESSION,
             OPERATIONAL_THRESHOLD_WAIT_SECONDS,
             OPERATIONAL_THRESHOLDS,
-            SESSION_MAX_MINUTES,
-            SESSION_MAX_TOKENS,
         )
+
+        # v18.5-operation-metrics §6: percentuais do orçamento efetivo (inclui overrides da CLI); no modo sem
+        # limite os avisos de tokens, tempo e custo não existem (os avisos periódicos os substituem).
+        budget = self._usage_tracker.budget
+        session_max_tokens = budget.max_tokens
+        session_max_minutes = budget.max_minutes
 
         telemetry = get_telemetry()
         token_summary = telemetry.get_token_summary(master_session_id)
@@ -426,7 +430,7 @@ class AutonomousLoop:
         total_tokens = sum(r.get("total_tokens") or 0 for r in rows)
         total_cost = sum(r.get("total_cost_usd") or 0 for r in rows)
 
-        token_pct = (total_tokens / SESSION_MAX_TOKENS) if SESSION_MAX_TOKENS else 0.0
+        token_pct = (total_tokens / session_max_tokens) if session_max_tokens else 0.0
         run_counts = getattr(self.orchestrator, "_session_agent_run_counts", None)
         agent_runs = run_counts.get(master_session_id, 0) if isinstance(run_counts, dict) else 0
         run_limit = MAX_AGENT_RUNS_PER_SESSION
@@ -437,18 +441,18 @@ class AutonomousLoop:
         agent_runs_pct = (agent_runs / run_limit) if run_limit else 0.0
         duration_min = (time.time() - getattr(self, "_session_started_at", time.time())) / 60
         # V18/usage-limits — avisos da Spec G5 agora são percentuais dos limites reais
-        # do UsageBudget (SESSION_MAX_MINUTES), não mais minutos absolutos.
-        duration_pct = (duration_min / SESSION_MAX_MINUTES) if SESSION_MAX_MINUTES else 0.0
+        # do UsageBudget (session_max_minutes), não mais minutos absolutos.
+        duration_pct = (duration_min / session_max_minutes) if session_max_minutes else 0.0
 
         triggered: list[str] = []
-        if token_pct >= OPERATIONAL_THRESHOLDS["token_usage_pct"]:
-            triggered.append(f"Uso de tokens: {token_pct*100:.0f}% do limite ({total_tokens}/{SESSION_MAX_TOKENS})")
-        if total_cost >= OPERATIONAL_THRESHOLDS["cost_usd"]:
+        if not budget.unlimited and token_pct >= OPERATIONAL_THRESHOLDS["token_usage_pct"]:
+            triggered.append(f"Uso de tokens: {token_pct*100:.0f}% do limite ({total_tokens}/{session_max_tokens})")
+        if not budget.unlimited and total_cost >= OPERATIONAL_THRESHOLDS["cost_usd"]:
             triggered.append(f"Custo estimado: ${total_cost:.2f} (limite ${OPERATIONAL_THRESHOLDS['cost_usd']:.2f})")
-        if duration_pct >= OPERATIONAL_THRESHOLDS["session_duration_pct"]:
+        if not budget.unlimited and duration_pct >= OPERATIONAL_THRESHOLDS["session_duration_pct"]:
             triggered.append(
                 f"Duração da sessão: {duration_pct*100:.0f}% do limite "
-                f"({duration_min:.0f}min/{SESSION_MAX_MINUTES:.0f}min)"
+                f"({duration_min:.0f}min/{session_max_minutes:.0f}min)"
             )
         planning_counts = getattr(self.orchestrator, "_session_planning_run_counts", None)
         planning_runs = planning_counts.get(master_session_id, 0) if isinstance(planning_counts, dict) else 0
@@ -1428,10 +1432,13 @@ class AutonomousLoop:
             # terminar; se estourar, as demais são canceladas e a sessão fecha por
             # limite de tempo (design §3).
             coroutines = [_execute_task_in_dag(t, i) for i, t in enumerate(tasks)]
-            remaining_seconds = max(
-                0.0, (self._usage_tracker.budget.max_minutes * 60) - (self._usage_tracker.elapsed_minutes() * 60)
-            )
-            gather_timeout = remaining_seconds + LIMIT_GRACE_SECONDS
+            if self._usage_tracker.budget.max_minutes is None:  # modo sem limite: nenhum prazo de ciclo
+                gather_timeout = None
+            else:
+                remaining_seconds = max(
+                    0.0, (self._usage_tracker.budget.max_minutes * 60) - (self._usage_tracker.elapsed_minutes() * 60)
+                )
+                gather_timeout = remaining_seconds + LIMIT_GRACE_SECONDS
             try:
                 await asyncio.wait_for(asyncio.gather(*coroutines), timeout=gather_timeout)
             except asyncio.TimeoutError:

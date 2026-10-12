@@ -192,3 +192,70 @@ class TestPropertyMap:
         body = run.call_args.args[0]
         assert "$props.id" in body and "$props.titulo" in body
         assert "$props)" not in body
+
+
+@pytest.mark.unit
+class TestNeighborsSemConsultaDeComprimentoVariavel:
+    """O ``*1..N`` do AGE custa ~0,25 s por consulta no Pi 5 (benchmark de 2026-10-12): só saltos simples."""
+
+    @staticmethod
+    def _vertex(node_id: str, label: str = "Dominio") -> dict:
+        return {"label": label, "properties": {"id": node_id}}
+
+    def _store_with_graph(self, edges: list[tuple[str, str, str]]):
+        """Grafo simulado: cada consulta devolve as arestas adjacentes ao ``$id`` pedido."""
+        store = _make_store()
+        calls: list[str] = []
+
+        def fake_rows(cypher, params, columns):
+            calls.append(cypher)
+            current = params["id"]
+            rows = []
+            for src, rel, dst in edges:
+                touches = (
+                    ("-[rel" in cypher and "]->" in cypher and src == current)
+                    or ("<-[rel" in cypher and dst == current)
+                    or ("-[rel" in cypher and "]-(x)" in cypher and "<-" not in cypher and current in (src, dst))
+                )
+                if touches:
+                    rows.append({"a": self._vertex(src), "rel": {"label": rel, "properties": {}}, "b": self._vertex(dst)})
+            return rows
+
+        store._run_cypher_rows = fake_rows  # type: ignore[method-assign]  # noqa: SLF001
+        store._node_from_agtype = lambda v: Node(id=v["properties"]["id"], label=v["label"], properties=v["properties"])  # type: ignore[method-assign]  # noqa: SLF001, E501
+        return store, calls
+
+    def test_nenhuma_consulta_usa_comprimento_variavel(self):
+        store, calls = self._store_with_graph([("a", "SUBAREA_DE", "b"), ("b", "SUBAREA_DE", "c")])
+        store.neighbors("a", ["SUBAREA_DE"], direction="out", depth=3)
+        assert calls and not any("*" in c for c in calls)
+
+    def test_profundidade_1_devolve_so_o_primeiro_salto(self):
+        store, calls = self._store_with_graph([("a", "SUBAREA_DE", "b"), ("b", "SUBAREA_DE", "c")])
+        sub = store.neighbors("a", ["SUBAREA_DE"], direction="out", depth=1)
+        assert {(e.src_id, e.dst_id) for e in sub.edges} == {("a", "b")}
+        assert {n.id for n in sub.nodes} == {"a", "b"} and len(calls) == 1
+
+    def test_profundidade_3_percorre_em_niveis_e_para_quando_nao_ha_mais_nos(self):
+        store, calls = self._store_with_graph([("a", "SUBAREA_DE", "b"), ("b", "SUBAREA_DE", "c")])
+        sub = store.neighbors("a", ["SUBAREA_DE"], direction="out", depth=3)
+        assert {(e.src_id, e.dst_id) for e in sub.edges} == {("a", "b"), ("b", "c")}
+        assert {n.id for n in sub.nodes} == {"a", "b", "c"}
+        assert len(calls) == 3  # a, b e c (c sem saída encerra)
+
+    def test_ciclo_nao_repete_consultas(self):
+        store, calls = self._store_with_graph([("a", "RELACIONADA_A", "b"), ("b", "RELACIONADA_A", "a")])
+        sub = store.neighbors("a", ["RELACIONADA_A"], direction="out", depth=5)
+        assert len(sub.edges) == 2 and len(calls) == 2
+
+    def test_sem_vizinhos_devolve_subgrafo_vazio(self):
+        store, _ = self._store_with_graph([])
+        sub = store.neighbors("a", None, direction="both", depth=2)
+        assert sub.nodes == [] and sub.edges == []
+
+    def test_direcao_invalida_e_relacao_fora_do_schema_continuam_recusadas(self):
+        store, _ = self._store_with_graph([])
+        with pytest.raises(ValueError):
+            store.neighbors("a", None, direction="lado")
+        with pytest.raises(DisallowedRelationError):
+            store.neighbors("a", ["NAO_EXISTE"])

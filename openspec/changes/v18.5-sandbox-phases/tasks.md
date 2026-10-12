@@ -1,6 +1,6 @@
 # Tarefas: v18.5-sandbox-phases
 
-**Estado (2026-10-08):** Implementada, com pendências — PR #111. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
+**Estado (2026-10-12):** integração real executada no Pi 5 (24 passaram, 2 ignorados). Achado e corrigido: o modo de entrega `copy` nunca entregava os insumos (`put_archive` não grava em tmpfs); agora é `tar` sem root no tmpfs do usuário. **Estado anterior (2026-10-08):** Implementada, com pendências — PR #111. Os itens abertos abaixo são validação em ambiente real (AGE/Qdrant/Pi 5, adiada para a bateria final) e débitos documentados.
 
 ## 0. Pré-requisitos
 - [x] 0.1 **Aprovação explícita do pesquisador** para as mudanças de comportamento dos containers do sandbox (proposal, "Aprovações necessárias").
@@ -37,22 +37,22 @@
 ## 5. Testes
 - [x] 5.1 Unit: validação de pacotes, `destino`, URLs bloqueadas, assinaturas de rede, condições da exceção de rede (com classificador falso e verdadeiro).
 - [x] 5.2 Unit: argumentos passados ao cliente Docker por fase (rede, montagens, usuário, ambiente) com cliente simulado.
-- [ ] 5.3 Integration: script sem rede não resolve DNS; com `packages` o script continua sem rede. _(escrito em `tests/integration/test_sandbox_phases_real.py`; não executado: bateria de integração ao final)_
-- [ ] 5.4 Integration: pacote inexistente → `fase_falha="install"`, script não roda. _(escrito em `tests/integration/test_sandbox_phases_real.py`; não executado: bateria de integração ao final)_
-- [ ] 5.5 Integration: hash divergente; ativo sem hash; ativo em cache sem container de preparação (servidor HTTP local de teste liberado apenas no teste, via lista de permissão injetada). _(escrito em `tests/integration/test_sandbox_phases_real.py`; não executado: bateria de integração ao final)_
-- [ ] 5.6 Integration: `/inputs` somente leitura; modo `copy`; symlink recusado. _(escrito em `tests/integration/test_sandbox_phases_real.py`; não executado: bateria de integração ao final)_
-- [ ] 5.7 Integration: arquivos em `/outputs` pertencem ao UID do host, sem `chmod 777`. _(escrito em `tests/integration/test_sandbox_phases_real.py`; não executado: bateria de integração ao final)_
-- [ ] 5.8 Integration: duas execuções paralelas levam menos que a soma. _(escrito em `tests/integration/test_sandbox_phases_real.py`; não executado: bateria de integração ao final)_
+- [x] 5.3 Integration: script sem rede não resolve DNS; com `packages` o script continua sem rede. _(executado no Pi 5 em 2026-10-12: `tests/integration/test_sandbox_phases_real.py`)_
+- [x] 5.4 Integration: pacote inexistente → `fase_falha="install"`, script não roda. _(executado no Pi 5 em 2026-10-12: `tests/integration/test_sandbox_phases_real.py`)_
+- [x] 5.5 Integration: hash divergente; ativo sem hash; ativo em cache sem container de preparação (servidor HTTP local de teste liberado apenas no teste, via lista de permissão injetada). _(executado no Pi 5 em 2026-10-12: `tests/integration/test_sandbox_phases_real.py`)_
+- [x] 5.6 Integration: `/inputs` somente leitura; modo `copy`; symlink recusado. _(executado no Pi 5 em 2026-10-12: `tests/integration/test_sandbox_phases_real.py`)_
+- [x] 5.7 Integration: arquivos em `/outputs` pertencem ao UID do host, sem `chmod 777`. _(executado no Pi 5 em 2026-10-12: `tests/integration/test_sandbox_phases_real.py`)_
+- [x] 5.8 Integration: duas execuções paralelas levam menos que a soma. _(executado no Pi 5 em 2026-10-12: `tests/integration/test_sandbox_phases_real.py`)_
 - [x] 5.9 Atualizar `tests/unit/skills/test_sandbox.py`, `tests/unit/skills/test_sandbox_archive.py`, `tests/skills/test_code_skill.py` e `tests/integration/test_sandbox_volume.py` para o novo contrato.
 
 ## 5.5 Pendências herdadas da revisão de segurança do PR #99 (v16-sandbox-slim-image)
 - [ ] 5.5.1 Cota de disco para os bind mounts `/outputs` e `/deps` (hoje só o `/tmp` em `tmpfs` tem limite; um script ou instalação pode encher o disco do Pi). Motivo: depende de decisão do mecanismo (quota de sistema de arquivos, `ulimit fsize` ou monitor) e de validação no Pi. **RISCO ACEITO PENDENTE** (revisão de segurança M1): mitigado só pela checagem de espaço livre antes de iniciar (`SANDBOX_MIN_FREE_BYTES`), pelo teto por ativo (512 MiB) e pelo teto somado (2 GiB); não limita o que o script grava durante a execução.
-- [ ] 5.5.2 Teste de integração real de FIFO/arquivo especial criado em `/outputs` (a varredura `_purge_special_files` só tem teste unitário no host). Motivo: precisa de container e imagem reais. _(escrito em `tests/integration/test_sandbox_phases_real.py`; não executado: bateria de integração ao final)_
+- [x] 5.5.2 Teste de integração real de FIFO/arquivo especial criado em `/outputs` (a varredura `_purge_special_files` só tem teste unitário no host). Motivo: precisa de container e imagem reais. _(executado no Pi 5 em 2026-10-12)_
 - [x] 5.5.3 Fechar o residual de instalação com rede vendo `/outputs` (containers separados por fase) e documentar que `/deps` sombreia versões do lock com hash (`PYTHONPATH=/deps` precede o venv).
 
 ## 6. Fechamento
 - [ ] 6.1 Medição no Pi 5: tempo por fase com e sem pacotes (registrar no PR).
-- [ ] 6.2 Ruff, `uv run pytest -m "unit or integration"`.
+- [x] 6.2 Ruff, `uv run pytest -m "unit or integration"`.
 - [ ] 6.3 Revisão nos 7 eixos, PR para `dev`.
 
 ## 7. Achados da revisão de segurança (PR #111)
@@ -66,5 +66,5 @@
 - [x] 7.8 M6: container de download encerrado antes do hash; hash sobre o arquivo já movido com `O_NOFOLLOW`; cópia + rename em `EXDEV`; instalação em container próprio.
 - [x] 7.9 M7: ativo sem sha256 exige `https`; redirect `https` para `http` recusado; risco do `uv` sem filtro de IP interno registrado.
 - [x] 7.10 B1 (`--no-cache`, `--link-mode=copy`, design atualizado), B2 (não regulares), B6 (fase corrente), B7 (sidecar de origem); teste de `asyncio.to_thread` na skill.
-- [ ] 7.11 B3 (varredura de `SANDBOX_WORK_DIR` órfão no startup): não implementada (ver design). B4, B5 e B8: só documentados.
-- [ ] 7.12 Questão em aberto 2 (sha256 opcional): **decisão do pesquisador pendente** (assumida opcional + `https`).
+- [x] 7.11 B3 (varredura de `SANDBOX_WORK_DIR` órfão no startup): implementada em 2026-10-12 (`sweep_orphan_work_dirs`, `SANDBOX_WORK_ORPHAN_MAX_HOURS`=24 h, só `<32 hex>` diretórios reais; chamada em `ensure_infrastructure`). B4, B5 e B8: só documentados.
+- [x] 7.12 Questão em aberto 2 (sha256 opcional): decisão do pesquisador registrada (sessões anteriores): opcional + `https`.

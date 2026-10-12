@@ -334,6 +334,9 @@ CODE_SANDBOX_SETUP_TIMEOUT_SECONDS = int(get_env("CODE_SANDBOX_SETUP_TIMEOUT_SEC
 SANDBOX_IMAGE = get_env("SANDBOX_IMAGE", default="code-sandbox:latest")
 # Diretórios temporários por execução (ex.: /deps dos pacotes instalados sob demanda).
 SANDBOX_WORK_DIR = get_env("SANDBOX_WORK_DIR", default="store/sandbox_work")
+# Diretórios de trabalho de execuções do sandbox mais velhos que isto são órfãos (encerramento abrupto) e a partida
+# os remove. Deve ficar bem acima do maior tempo de execução do sandbox, para nunca apagar execução em andamento.
+SANDBOX_WORK_ORPHAN_MAX_HOURS = float(get_env("SANDBOX_WORK_ORPHAN_MAX_HOURS", default="24"))
 SANDBOX_PIDS_LIMIT = int(get_env("SANDBOX_PIDS_LIMIT", default="256"))
 SANDBOX_TMPFS_SIZE = get_env("SANDBOX_TMPFS_SIZE", default="256m")
 SANDBOX_INSTALL_LOG_TAIL_LINES = int(get_env("SANDBOX_INSTALL_LOG_TAIL_LINES", default="40"))

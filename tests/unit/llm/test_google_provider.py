@@ -14,8 +14,8 @@ from google.genai import types as genai_types
 from src.llm import registry
 from src.llm.providers.google import GoogleProvider
 
-MODEL = "gemini-3.8-flash"
-FALLBACK = "gemini-3.7-flash"
+MODEL = "gemini-3.5-flash"
+FALLBACK = "gemini-3.8-flash"
 
 
 @pytest.fixture(autouse=True)

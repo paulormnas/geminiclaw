@@ -59,8 +59,9 @@ class TestSynthesizeResultsInjectsRealData:
 
         await loop._synthesize_results("Treinar modelo", results, "sess_1")
 
-        sent_prompt = mock_orchestrator._execute_agent.call_args[0][0].prompt
-        assert "0.87" in sent_prompt
+        sent_prompt = mock_orchestrator._execute_agent.call_args_list[0][0][0].prompt  # a 1ª chamada; as seguintes são reenvios
+        # v18.5-numeric-references: o Summarizer recebe referências, nunca o valor numérico da execução.
+        assert "0.87" not in sent_prompt
         assert "Onde está o dataset?" in sent_prompt
 
 

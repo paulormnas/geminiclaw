@@ -4,7 +4,7 @@ Escritos e NÃO executados no PR da mudança (sem PostgreSQL neste ambiente). Re
 ``DATABASE_URL``; são pulados automaticamente sem ele. A tabela é somente-acréscimo: cada teste usa um projeto novo
 (UUID) e as linhas de teste ficam no banco de teste (a limpeza desativa os gatilhos só dentro da fixture).
 
-Para rodar (com o banco do projeto no ar), selecione o diretório ``tests/integration/provenance`` com o marcador de
+Para rodar (com o banco do projeto no ar), selecione o diretório ``tests/integration/provenance_pg`` com o marcador de
 integração do pytest.
 """
 

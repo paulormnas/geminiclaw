@@ -90,7 +90,7 @@ GEMINI_API_KEY = get_env("GEMINI_API_KEY")
 # Modelo usado quando o principal do Google atinge o limite de requisições (HTTP 429). Vazio desliga o fallback.
 # Só é aceito se estiver no catálogo com o mesmo `trust` e atender aos requisitos do papel; desligado em
 # LLM_ROUTING=strict.
-GOOGLE_FALLBACK_MODEL = get_env("GOOGLE_FALLBACK_MODEL", default="gemini-3.7-flash")
+GOOGLE_FALLBACK_MODEL = get_env("GOOGLE_FALLBACK_MODEL", default="gemini-3.8-flash")
 
 # Provedor openai_compatible (V16) — servidores que falam o protocolo /v1/chat/completions
 # (llama.cpp server, vLLM, LM Studio, serviços hospedados compatíveis). ADR 017 §8: variáveis

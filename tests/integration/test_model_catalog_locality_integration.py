@@ -56,6 +56,8 @@ async def test_digest_real_do_ollama():
 
 def _postgres_url() -> str:
     url = os.environ.get("DATABASE_URL", "")
+    if "test_geminiclaw" in url:  # URL fictícia do tests/conftest.py: não há banco real
+        return ""
     return url if url.startswith("postgresql://") else ""
 
 

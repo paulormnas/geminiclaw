@@ -167,10 +167,10 @@ async def test_429_nao_troca_o_modelo_resolvido(nuvem):
 @pytest.mark.asyncio
 async def test_fallback_do_google_so_com_catalogo_trust_e_flexivel(nuvem, monkeypatch):
     routing = await build_session_routing()
-    primary = "google/gemini-3.8-flash"
+    primary = "google/gemini-3.5-flash-lite"
 
-    monkeypatch.setattr("src.config.GOOGLE_FALLBACK_MODEL", "gemini-3.7-flash")
-    assert routing.fallback_for(primary) == "gemini-3.7-flash"
+    monkeypatch.setattr("src.config.GOOGLE_FALLBACK_MODEL", "gemini-3.8-flash")
+    assert routing.fallback_for(primary) == "gemini-3.8-flash"
 
     monkeypatch.setattr("src.config.GOOGLE_FALLBACK_MODEL", "gemini-9-inexistente")
     assert routing.fallback_for(primary) is None
@@ -178,7 +178,7 @@ async def test_fallback_do_google_so_com_catalogo_trust_e_flexivel(nuvem, monkey
     monkeypatch.setattr("src.config.GOOGLE_FALLBACK_MODEL", "")
     assert routing.fallback_for(primary) is None
 
-    monkeypatch.setattr("src.config.GOOGLE_FALLBACK_MODEL", "gemini-3.7-flash")
+    monkeypatch.setattr("src.config.GOOGLE_FALLBACK_MODEL", "gemini-3.8-flash")
     assert routing.fallback_for("anthropic/claude-sonnet-5-5") is None
     strict = await _build_strict(monkeypatch)
     assert strict.fallback_for(primary) is None

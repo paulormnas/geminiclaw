@@ -39,7 +39,7 @@
 - [x] 4.6 Derivação do `Experimento` com retentativas; `get_metric` inexistente levanta erro.
 
 ## 5. Testes de integração (PostgreSQL)
-- [x] 5.1 Gatilhos recusam `UPDATE`, `DELETE` e `TRUNCATE`. *(Escrito em `tests/integration/provenance/`; não executado: sem PostgreSQL neste ambiente.)*
+- [x] 5.1 Gatilhos recusam `UPDATE`, `DELETE` e `TRUNCATE`. *(Escrito em `tests/integration/provenance_pg/`; não executado: sem PostgreSQL neste ambiente.)*
 - [x] 5.2 Ida e volta pelo JSONB preserva o hash. *(Idem 5.1.)*
 - [x] 5.3 Concorrência: 8 execuções em duas sessões/processos → `seq` 1..16 sem bifurcação. *(Idem 5.1.)*
 - [x] 5.4 Banco indisponível no início → nenhum container criado. *(Idem 5.1.)*

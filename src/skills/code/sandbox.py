@@ -579,8 +579,9 @@ class PythonSandbox:
             image = self.client.images.get(self.image)
         except docker.errors.ImageNotFound as exc:
             raise SandboxImageNotFoundError(
-                f"Imagem do sandbox '{self.image}' não encontrada localmente. Construa-a com "
-                "`bash scripts/build_images.sh` (ou ajuste SANDBOX_IMAGE para uma imagem existente)."
+                f"Imagem do sandbox '{self.image}' não encontrada localmente. Obtenha-a com "
+                "`uv run python -m scripts.platform_images ensure --imagens sandbox` "
+                "(ou ajuste SANDBOX_IMAGE para uma imagem existente)."
             ) from exc
         image_id = getattr(image, "id", "")
         attrs = getattr(image, "attrs", None)

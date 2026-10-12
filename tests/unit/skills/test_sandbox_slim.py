@@ -130,7 +130,7 @@ def test_imagem_ausente(make_sandbox, tmp_path):
 
     assert result.exit_code == -1
     assert "code-sandbox:latest" in result.stderr
-    assert "scripts/build_images.sh" in result.stderr
+    assert "scripts.platform_images ensure --imagens sandbox" in result.stderr
     daemon.client.images.pull.assert_not_called()
     daemon.client.containers.run.assert_not_called()
 

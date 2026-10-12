@@ -214,7 +214,7 @@ client.containers.run(
 - Imagem: `containers/Dockerfile` (`python:3.11-slim-bookworm`); será enxugada e endurecida (ADR 018).
 - Usuário non-root e rede separada da execução do script: metas do ADR 018 (hoje pendentes).
 - Portas dos serviços: `127.0.0.1` em produção (o `docker-compose.yml` tem um TODO para o Qdrant).
-- Build da imagem: `bash scripts/build_images.sh`.
+- Imagens: `uv run python -m scripts.platform_images {detect,plan,ensure}` (manifesto em `containers/images.yaml`).
 
 ---
 

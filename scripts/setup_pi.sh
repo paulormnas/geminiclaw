@@ -12,9 +12,6 @@ echo -e "${CYAN}==============================================${NC}"
 echo -e "${CYAN}   Setup GeminiClaw (Raspberry Pi 5)          ${NC}"
 echo -e "${CYAN}==============================================${NC}"
 
-# Imagem do Qdrant (mesma variável e padrão do docker-compose.yml)
-QDRANT_IMAGE="${QDRANT_IMAGE:-qdrant/qdrant:v1.19.1}"
-
 # Detectar OS
 OS_NAME=$(uname -s)
 if [ "$OS_NAME" == "Darwin" ]; then
@@ -27,9 +24,9 @@ if [ "$OS_NAME" == "Darwin" ]; then
         docker network inspect geminiclaw-net &>/dev/null || docker network create geminiclaw-net >/dev/null
         echo -e "${GREEN}[*] Rede Docker configurada.${NC}"
         
-        echo -e "${GREEN}[*] Fazendo pull das imagens base...${NC}"
-        docker pull python:3.11-slim
-        docker pull "$QDRANT_IMAGE"
+        echo -e "${GREEN}[*] Obtendo as imagens do projeto (sandbox e Qdrant) para a arquitetura do daemon...${NC}"
+        uv run --project "$(dirname "$0")/.." python -m scripts.platform_images ensure --yes \
+            || echo -e "${YELLOW}[!] Falha ao obter as imagens; rode: uv run python -m scripts.platform_images ensure${NC}"
     else
         echo -e "${RED}[!] Docker não encontrado no macOS. Instale o Docker Desktop.${NC}"
     fi
@@ -117,8 +114,13 @@ else
     echo -e "${GREEN}[*] docker-compose-plugin já está instalado.${NC}"
 fi
 
-echo -e "${GREEN}[*] Preparando containers (Pre-pull)...${NC}"
-docker pull "$QDRANT_IMAGE" || echo -e "${YELLOW}[!] Falha ao fazer pull da imagem ${QDRANT_IMAGE}.${NC}"
+echo -e "${GREEN}[*] Obtendo as imagens do projeto (sandbox e Qdrant) para a arquitetura do daemon...${NC}"
+if command -v uv &> /dev/null; then
+    uv run --project "$(dirname "$0")/.." python -m scripts.platform_images ensure --yes \
+        || echo -e "${YELLOW}[!] Falha ao obter as imagens; rode: uv run python -m scripts.platform_images ensure${NC}"
+else
+    echo -e "${YELLOW}[!] uv não encontrado; depois de instalá-lo rode: uv run python -m scripts.platform_images ensure${NC}"
+fi
 
 # Roadmap V16 / ADR 011 §3 — pré-download do modelo de embeddings local
 # (FastEmbed/ONNX) para que o Pi 5 possa rodar com EMBEDDING_OFFLINE=true

@@ -82,10 +82,32 @@ def check_container_daemon() -> bool:
     return True
 
 
+def check_sandbox_image_for_session() -> None:
+    """Confere a imagem do sandbox (existe e tem a arquitetura do daemon) antes de a sessão começar.
+
+    Só se aplica com a skill de código habilitada. Daemon inacessível não bloqueia (já é avisado por
+    ``check_container_daemon``).
+
+    Raises:
+        PlatformImageError: Imagem ausente ou de outra arquitetura; a mensagem traz o comando de ``ensure``.
+    """
+    if not SKILL_CODE_ENABLED:
+        return
+    from src.platform_images import check_sandbox_image, reset_warning_state
+
+    reset_warning_state()
+    check_sandbox_image()
+
+
 def ensure_infrastructure() -> None:
-    """Executa as checagens da partida e imprime o resultado."""
+    """Executa as checagens da partida e imprime o resultado.
+
+    Raises:
+        PlatformImageError: A imagem do sandbox falta ou tem arquitetura diferente (a sessão não começa).
+    """
     print(f"\n{BOLD}🔍 Verificando infraestrutura do ambiente...{RESET}")
     check_container_daemon()
+    check_sandbox_image_for_session()
     check_postgres()
     check_qdrant()
     print(f"{BOLD}✅ Verificação concluída.{RESET}\n")

@@ -17,8 +17,8 @@ uv sync
 # Subir serviços essenciais (PostgreSQL e Qdrant)
 docker compose up -d
 
-# Garantir que a imagem do sandbox de código está construída
-bash scripts/build_images.sh
+# Garantir que a imagem do sandbox de código existe na arquitetura do daemon
+uv run python -m scripts.platform_images ensure --imagens sandbox
 ```
 
 ---

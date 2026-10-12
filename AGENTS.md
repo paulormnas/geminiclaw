@@ -116,8 +116,10 @@ uv run geminiclaw "Sua tarefa aqui"
 # Executar em modo interativo (REPL)
 uv run geminiclaw
 
-# Construir a imagem do sandbox de código (ARM64 / Raspberry Pi 5)
-bash scripts/build_images.sh
+# Detectar a plataforma, planejar e obter as imagens (sandbox, Qdrant) para a arquitetura do daemon
+uv run python -m scripts.platform_images detect
+uv run python -m scripts.platform_images plan
+uv run python -m scripts.platform_images ensure --imagens sandbox
 
 # Rodar todos os testes
 uv run pytest

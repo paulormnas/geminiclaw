@@ -31,7 +31,7 @@ def test_docker_image_sizes():
 
     sandbox_size = get_image_size_mb(sandbox_image)
     if sandbox_size is None:
-        pytest.skip(f"Imagem {sandbox_image} não encontrada. Execute scripts/build_images.sh")
+        pytest.skip(f"Imagem {sandbox_image} não encontrada. Execute scripts.platform_images ensure --imagens sandbox")
 
     # Limite da v16-sandbox-slim-image (design: estimativa abaixo de 1 GB; medir no Pi 5)
     MAX_SANDBOX_MB = 1024.0

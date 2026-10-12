@@ -14,3 +14,10 @@ tests/
 roadmaps/
 scripts/
 *.md
+.worktrees/
+openspec/
+docs/
+src/
+agents/
+input_context/
+outputs_test/

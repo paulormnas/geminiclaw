@@ -68,12 +68,15 @@ class TestWriteArtifactPathTraversal:
 
     async def test_absolute_path_filename_confined(self, tmp_path: Path) -> None:
         ctx = _bind_context(tmp_path)
+        # Caminho absoluto fora da sessão, num diretório de teste (o teste nunca lê arquivos do sistema).
+        outside = tmp_path / "fora_da_sessao" / "alvo.txt"
+        outside.parent.mkdir()
 
-        await write_artifact("/etc/shadow", "x")
+        await write_artifact(str(outside), "x")
 
         artifacts_dir = (ctx.output_dir / "artifacts").resolve()
-        assert (artifacts_dir / "shadow").exists()
-        assert not Path("/etc/shadow").exists() or Path("/etc/shadow").read_text(errors="ignore") != "x"
+        assert (artifacts_dir / "alvo.txt").exists()
+        assert not outside.exists()
 
     async def test_dot_dot_filename_rejected(self, tmp_path: Path) -> None:
         _bind_context(tmp_path)

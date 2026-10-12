@@ -112,3 +112,8 @@ def test_matriz_do_benchmark_de_2026_10_e_valida() -> None:
     for combo in matrix["combinations"]:
         for spec in combo["roles"].values():
             assert spec in catalog.modelos, f"{combo['name']}: {spec} fora do catálogo"
+
+
+def test_zero_subtarefas_executadas_e_anomalia() -> None:
+    assert any("nenhuma subtarefa executada" in p for p in anomalies(_ok_result(outcome={"subtasks": 0})))
+    assert not any("nenhuma subtarefa" in p for p in anomalies(_ok_result(outcome={"subtasks": 4})))

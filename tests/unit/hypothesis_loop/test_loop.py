@@ -405,7 +405,8 @@ async def test_telemetria_do_ciclo_leva_so_contagens_sem_texto_de_pesquisa(tmp_p
     cycle = next(p for t, p in events if t == "hypothesis_cycle")
     assert cycle["hipoteses_criadas"] == 1 and cycle["executadas"] == 1 and cycle["formato"] == "novo"
     assert segredo not in repr(events)
-    assert all(isinstance(v, (int, str)) for _, p in events for v in p.values())
+    assert all(isinstance(v, (int, str)) or (isinstance(v, dict) and all(isinstance(n, int) for n in v.values()))
+               for _, p in events for v in p.values())  # retiradas_por_motivo: código -> contagem, nunca texto
 
 
 @pytest.mark.asyncio

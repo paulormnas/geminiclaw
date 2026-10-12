@@ -182,6 +182,8 @@ def anomalies(result: dict) -> list[str]:
         problems.append("traceback no fim do log")
     if not result.get("session"):
         problems.append("nenhuma sessão gravada")
+    elif (result.get("outcome") or {}).get("subtasks") == 0:
+        problems.append("nenhuma subtarefa executada (o pipeline não rodou; ver retiradas_por_motivo e plans/)")
     if result.get("routing_check") and not result["routing_check"].get("ok", True):
         problems.append("roteamento diferente do pedido: " + "; ".join(result["routing_check"]["divergences"]))
     metrics = result.get("operation_metrics")

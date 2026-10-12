@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from collections import Counter
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
@@ -373,6 +374,8 @@ class ExplorationSession:
                 **report.counts(),
                 **selection.counts(),
                 "subtarefas_retiradas": len(dropped),
+                # Motivo (código) -> quantas subtarefas: sem isto, "tudo retirado" se confunde com "sem caminhos".
+                "retiradas_por_motivo": dict(sorted(Counter(dropped.values()).items())),
                 "formato": "novo" if extras.novo_formato else ("legado" if legacy else "sem_hipoteses"),
                 "ciclo": self.cycles + 1,
             },

@@ -413,3 +413,38 @@ async def test_g5_usa_o_orcamento_efetivo_e_cala_no_modo_sem_limite() -> None:
         tel.return_value.get_token_summary.return_value = heavy
         await loop._check_operational_thresholds("sess")
     assert not any(c.args and "operacional" in c.args[0] for c in log.warning.call_args_list)
+
+
+# -- gate humano (v18-usage-limits X.1) ----------------------------------------------------------------------------
+
+
+def test_confirmacao_passa_pelo_gate_humano_e_fica_registrada() -> None:
+    from src.human_gate import HumanGate
+
+    gate = HumanGate()
+    confirm_unlimited(_unlimited(), "cli", input_fn=lambda _p: "sem limite", isatty=lambda: True, gate=gate)
+    (request,) = gate._requests.values()  # noqa: SLF001
+    assert request.decisao == "ativar_modo_sem_limite" and request.estado == "autorizada"
+    assert request.resolvido_por.value == "terminal"
+
+
+def test_resposta_de_ask_researcher_ou_agente_nunca_autoriza() -> None:
+    from src.human_gate import HumanGate, Source
+
+    gate = HumanGate()
+    request = gate.request("ativar_modo_sem_limite", "cli")
+    for source in (Source.ASK_RESEARCHER, Source.RESEARCHER_CONSULT, Source.AGENT, Source.DOCUMENT):
+        gate.answer(request.id, source=source, approved=True)
+    assert gate.authorized(request.id) is False and gate.get(request.id).respostas_ignoradas == 4
+
+
+def test_gate_que_nao_autoriza_impede_o_modo(monkeypatch) -> None:
+    from src.human_gate import HumanGate
+
+    class DenyingGate(HumanGate):
+        def authorized(self, request_id: int) -> bool:
+            return False
+
+    with pytest.raises(UnlimitedModeError, match="gate"):
+        confirm_unlimited(_unlimited(), "cli", input_fn=lambda _p: "sem limite", isatty=lambda: True,
+                          gate=DenyingGate())

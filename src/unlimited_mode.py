@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from src.exploration import ExplorationStop
+from src.human_gate import HumanGate, Source, default_gate
 from src.logger import get_logger
 from src.usage import UsageBudget
 
@@ -70,6 +71,7 @@ def confirm_unlimited(
     *,
     input_fn: Callable[[str], str] = input,
     isatty: Callable[[], bool] | None = None,
+    gate: "HumanGate | None" = None,
     interval_minutes: float | None = None,
     token_step: int | None = None,
     now: Callable[[], datetime] | None = None,
@@ -81,6 +83,8 @@ def confirm_unlimited(
         origin: ``cli`` ou ``projeto``.
         input_fn: Leitura da resposta (injetável em testes).
         isatty: Indica se há terminal interativo (padrão: ``sys.stdin.isatty``).
+        gate: ``HumanGate`` das decisões reservadas (padrão: o do processo); a confirmação digitada no terminal é a
+            única origem que o autoriza (v18-usage-limits X.1).
         interval_minutes: Cadência dos avisos por tempo (padrão: ``UNLIMITED_NOTICE_INTERVAL_MINUTES``).
         token_step: Cadência dos avisos por tokens (padrão: ``UNLIMITED_NOTICE_TOKEN_STEP``).
         now: Relógio (injetável em testes).
@@ -121,6 +125,12 @@ def confirm_unlimited(
             f'Confirmação diferente de "{CONFIRMATION_PHRASE}"; a sessão não foi iniciada e o modo não cai para o '
             "limitado sem o seu pedido."
         )
+    # Gate de decisão reservada (X.1): a resposta de ask_researcher, do consultor ou de um agente nunca autoriza.
+    active_gate = gate or default_gate()
+    request = active_gate.request("ativar_modo_sem_limite", origin)
+    active_gate.answer(request.id, source=Source.TERMINAL, approved=True)
+    if not active_gate.authorized(request.id):
+        raise UnlimitedModeError("O gate de decisões reservadas não autorizou o modo sem limite; a sessão não iniciou.")
     stamp = (now or (lambda: datetime.now(UTC)))().isoformat()
     return UnlimitedActivation(origem=origin, confirmado_em=stamp)
 

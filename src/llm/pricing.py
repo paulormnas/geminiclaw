@@ -26,6 +26,10 @@ class Price:
     input: float
     output: float
     cached_input: float | None = None  # None = mesmo preço da entrada
+    # Faixa de prompt longo (ex.: Claude Haiku 5.5 cobra mais caro acima de 100K tokens de entrada): quando
+    # ``prompt_tokens`` passa de ``long_threshold`` vale ``long_price`` (a chamada inteira).
+    long_threshold: int | None = None
+    long_price: "Price | None" = None
 
 
 # Fontes: ai.google.dev/gemini-api/docs/pricing (Gemini 3.8 com preço promocional até
@@ -37,6 +41,12 @@ PRICES: dict[str, Price] = {
     "google/gemini-3.1-flash-lite": Price(0.25, 1.50, 0.025),
     "anthropic/claude-sonnet-5-5": Price(2.0, 10.0, 0.20),
     "openai/gpt-6-luna": Price(0.10, 0.50),
+    # Fontes secundárias (a página oficial não foi consultada): Terra US$ 2 / 12; Haiku 5.5 US$ 0,10 / 0,50 até 100K
+    # tokens de entrada e US$ 0,50 / 2,50 acima. Confira a página do provedor antes de usar como cobrança.
+    "openai/gpt-5.6-terra": Price(2.0, 12.0),
+    "anthropic/claude-haiku-5-5": Price(
+        0.10, 0.50, 0.01, long_threshold=100_000, long_price=Price(0.50, 2.50, 0.05)
+    ),
 }
 
 _warned: set[str] = set()
@@ -72,6 +82,8 @@ def estimate_cost(
             _warned.add(key)
             logger.warning("Preço desconhecido; configure LLM_PRICING_OVERRIDES", extra={"model": key})
         return None
+    if price.long_price is not None and price.long_threshold is not None and prompt_tokens > price.long_threshold:
+        price = price.long_price
     cached = min(max(cached_tokens, 0), prompt_tokens)
     cached_rate = price.input if price.cached_input is None else price.cached_input
     fresh_cost = (prompt_tokens - cached) * price.input

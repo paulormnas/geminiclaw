@@ -41,7 +41,7 @@ _FALLBACK_BETA_HEADER = "server-side-fallback-2026-07-01"
 # Recursos que dependem do modelo. Modelos fora destas listas (ex.: Haiku 4.5) rejeitam os parâmetros
 # com HTTP 400, então o provedor simplesmente não os envia.
 _EFFORT_MODEL_PREFIXES = ("claude-fable", "claude-mythos", "claude-opus-5", "claude-opus-4-8", "claude-opus-4-7",
-                          "claude-opus-4-6", "claude-sonnet-5", "claude-sonnet-4-6")
+                          "claude-opus-4-6", "claude-sonnet-5", "claude-sonnet-4-6", "claude-haiku-5")
 _FALLBACK_MODEL_PREFIXES = ("claude-fable", "claude-opus-5", "claude-sonnet-5-5")
 
 

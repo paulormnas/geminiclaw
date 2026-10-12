@@ -58,6 +58,7 @@ from src.knowledge.projects import validate_project_id
 from src.knowledge.provenance import Actor
 from src.knowledge.vocabulary import VocabularyError, resolve_metric
 from src.logger import get_logger
+from src.metrics_file import metrics_of
 
 logger = get_logger(__name__)
 
@@ -777,8 +778,8 @@ class _Writer:
         precisa ter o hash registrado; se divergir, **nenhum** ``Resultado`` é criado e o evento
         ``proveniencia_inconsistente`` é registrado (design §9).
         """
-        metrics = ev.metrics.get("metrics") if ev.metrics else None
-        if not isinstance(metrics, dict):
+        metrics = metrics_of(ev.metrics) if ev.metrics else None
+        if not metrics:
             return
         recorded: dict[str, str] | None = None
         if prov is not None:

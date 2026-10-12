@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from src.logger import get_logger
+from src.metrics_file import metrics_of
 from src.numeric_refs import calc as calc_module
 from src.numeric_refs import syntax
 from src.numeric_refs.numbers import find_numbers, parse_digits
@@ -122,7 +123,7 @@ class ReferenceResolver:
             container = data.get("parameters") if isinstance(data, dict) else None
             name = target.nome[len(syntax.PARAM_PREFIX) :]
         else:
-            container = data.get("metrics") if isinstance(data, dict) else None
+            container = metrics_of(data)
             name = target.nome
         value = container.get(name) if isinstance(container, dict) else None
         if isinstance(value, bool) or not isinstance(value, (int, float)):

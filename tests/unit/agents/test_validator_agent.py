@@ -381,3 +381,20 @@ def test_instrucao_de_schema_lista_hypothesis_ref_e_approach_como_campos_validos
 
     assert "hypothesis_ref" in SCHEMA_INSTRUCTION and "approach" in SCHEMA_INSTRUCTION
     assert "NUNCA são motivo de reprovação" in SCHEMA_INSTRUCTION
+
+
+def test_metrics_json_plano_vale_como_metricas_do_contrato():
+    """Regressão do benchmark de 2026-10-12: `{"accuracy": 0.9}` sem o objeto `metrics` reprovava com 'a métrica não
+    está em metrics.json' e derrubava a sessão pelo disjuntor de zero progresso."""
+    from src.agents.validator_agent import _evaluate_metric_criteria, _metric_criteria, metrics_of
+
+    flat = {"accuracy": 0.96, "cv_accuracy": 0.95, "seed": 42, "parameters": {"k": 1}, "ok": True, "nota": "x"}
+    assert metrics_of(flat) == {"accuracy": 0.96, "cv_accuracy": 0.95}
+    nested = {"metrics": {"accuracy": 0.9}, "accuracy": 0.1}
+    assert metrics_of(nested) == {"accuracy": 0.9}  # o contrato vence
+    assert metrics_of([1, 2]) == {} and metrics_of({"metrics": 3, "accuracy": 0.5}) == {"accuracy": 0.5}
+
+    criteria = _metric_criteria(["Acurácia no conjunto de teste >= 0.95"])
+    ok, detail = _evaluate_metric_criteria(criteria, metrics_of(flat))[0]
+    assert ok is True and "0.96" in detail
+    assert _evaluate_metric_criteria(criteria, metrics_of({"f1": 0.9}))[0][0] is False

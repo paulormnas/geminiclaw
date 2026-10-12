@@ -1729,6 +1729,7 @@ class AutonomousLoop:
                 )
                 final_results.append(cb_result)
                 self._short_term_memory.clear(master_session_id)
+                await self.record_operation_metrics(master_session_id, parcial=False)  # também na parada por erro
                 succeeded = sum(1 for r in final_results if r.status == "success")
                 failed_count = len(final_results) - succeeded
                 return OrchestratorResult(

@@ -31,6 +31,7 @@ from src.knowledge.normalization import normalize_metric_name
 from src.llm.base import LLMProvider
 from src.llm.metering import record_llm_call
 from src.logger import get_logger
+from src.metrics_file import metrics_of
 from src.model_router import ModelRouter
 from src.utils.json_parser import extract_json
 
@@ -582,7 +583,7 @@ class ValidatorAgent:
                     issues=[],
                 )
 
-            evaluations = _evaluate_metric_criteria(metric_criteria, metrics_data.get("metrics", {}))
+            evaluations = _evaluate_metric_criteria(metric_criteria, metrics_of(metrics_data))
             metric_feedback = " ".join(detail for _, detail in evaluations)
             failed = [detail for ok, detail in evaluations if not ok]
             if failed:

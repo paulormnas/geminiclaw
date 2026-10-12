@@ -12,6 +12,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from src.metrics_file import metrics_of
+
 
 class ArtifactReader:
     """Lê os artefatos estruturados de uma sessão (``outputs/<session_id>/``)."""
@@ -77,7 +79,7 @@ class ArtifactReader:
 
         lines = ["| Subtarefa | Métricas | Seed | Divergência |", "|---|---|---|---|"]
         for task_name, data in sorted(metrics_by_task.items()):
-            metrics = data.get("metrics", {})
+            metrics = metrics_of(data)
             seed = data.get("seed", "—")
             divergence = data.get("divergence_note") or "—"
             lines.append(f"| {task_name} | {json.dumps(metrics, ensure_ascii=False)} | {seed} | {divergence} |")

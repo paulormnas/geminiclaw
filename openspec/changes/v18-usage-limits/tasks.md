@@ -41,4 +41,4 @@
 - [x] 6.1 Ruff, testes.
 - [ ] 6.2 Revisão nos 7 eixos, PR.
 
-- [ ] X.1 **Gate humano** (de `v17-curator-agent` 6.99): ligar `ativar_modo_sem_limite` ao `HumanGate` (`src/human_gate.py`, origem `Source.TERMINAL`/`Source.CLI`) quando o modo existir; a resposta de `ask_researcher`/consultor nunca autoriza; teste de integração do ponto de decisão.
+- [x] X.1 (2026-10-12: `confirm_unlimited` registra `ativar_modo_sem_limite` no `HumanGate` e só a origem terminal autoriza; testes de que `ask_researcher`, consultor, agente e documento nunca autorizam) **Gate humano** (de `v17-curator-agent` 6.99): ligar `ativar_modo_sem_limite` ao `HumanGate` (`src/human_gate.py`, origem `Source.TERMINAL`/`Source.CLI`) quando o modo existir; a resposta de `ask_researcher`/consultor nunca autoriza; teste de integração do ponto de decisão.

@@ -49,7 +49,7 @@
 - [ ] 8.1 Validar com **Apache AGE real**: `update_edge`, `FUNDIDA_EM`, auditoria de arestas e as consultas do `KnowledgeService`.
 - [ ] 8.2 **Benchmark do `KnowledgeService` no Raspberry Pi 5** (~200 tentativas): mede o ganho do memo de leituras; considerar atualização incremental.
 - [ ] 8.3 Rodar `scripts/migrate_v17_knowledge.py` nos ambientes já migrados (cria o rótulo `FUNDIDA_EM`).
-- [ ] 8.4 Dividir `src/knowledge/curator_tools.py` (leitura, escrita, orçamento) em módulos.
-- [ ] 8.5 Comando humano para reverter fusão/substituição (hoje: `update_node` com autoria `pesquisador`).
+- [x] 8.4 Dividir `src/knowledge/curator_tools.py` em módulos (2026-10-12): `curator_common` (constantes, limites, utilitários), `curator_base` (estado, validação, auditoria, revisão de duplicatas), `curator_reads`, `curator_writes`; `curator_tools` monta o `CuratorToolkit` por herança e reexporta a API pública.
+- [x] 8.5 Comando humano para reverter fusão/substituição (2026-10-12): `geminiclaw graph revert merge|substitution <id>` (`src/knowledge/reversals.py`): volta o nó a `ativa`, contesta a aresta `FUNDIDA_EM`/`SUBSTITUI` (nada é apagado) e o serviço ignora arestas contestadas ao resolver a canônica.
 - [ ] 8.6 `VARIANTE_DE` entre `Descoberta`s (hoje `SEMELHANTE_A` + `diferenca`): extensão de schema a aprovar.
 - [ ] 8.7 Fechar a limitação residual de `read_query` (provar que todo nó casado é do projeto da sessão: reescrita do Cypher ou views por projeto no AGE).

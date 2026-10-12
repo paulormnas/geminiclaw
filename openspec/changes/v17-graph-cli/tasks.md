@@ -42,7 +42,7 @@
 - [ ] 6.5 `HumanConfirmation` é construível por qualquer código Python do mesmo processo; a guarda estática é regex e
   cai com `getattr`/`importlib`. A fronteira real é o sandbox/processo (ADR 014), não a guarda. Avaliar assinatura/canal
   fora do processo se o modelo de ameaça mudar.
-- [ ] 6.6 O prompt do `HumanGate` da Oportunidade corta a descrição em 400 caracteres (a tela principal da proposta é
+- [x] 6.6 (2026-10-12: limite do prompt subiu para 4000 caracteres) O prompt do `HumanGate` da Oportunidade cortava a descrição em 400 caracteres (a tela principal da proposta é
   íntegra); exibir a operação completa no prompt.
 - [ ] 6.7 A reversão grava `None` em campos que antes não existiam (equivalente a "sem valor" no store em memória);
   confirmar no AGE real (junto com 6.1).

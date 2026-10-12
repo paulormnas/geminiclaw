@@ -42,6 +42,8 @@ from src.knowledge.graph_views import (
 from src.knowledge.problem import ProblemDraftError
 
 _ANSWER_APPLY, _ANSWER_CANCEL, _ANSWER_ADJUST = CONFIRM_WORD, "cancelar", "ajustar"
+# v17-graph-cli 6.6: o prompt da decisão reservada mostra a operação completa (antes cortava em 400 caracteres).
+_DECISION_PROMPT_CHARS = 4000
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -62,6 +64,14 @@ def _build_parser() -> argparse.ArgumentParser:
     edit = sub.add_parser("edit", help="Pede ao Curator uma alteração; você confirma antes de aplicar.")
     edit.add_argument("pedido", help="O que alterar, em linguagem natural.")
     edit.add_argument("--project", default=None, metavar="ID")
+    revert = sub.add_parser(
+        "revert", help="Reverte uma fusão de abordagens ou uma substituição de descoberta (decisão do pesquisador)."
+    )
+    revert.add_argument(
+        "kind", choices=("merge", "substitution"), help="merge = abordagem fundida; substitution = descoberta trocada."
+    )
+    revert.add_argument("node_id")
+    revert.add_argument("--project", default=None, metavar="ID")
     return parser
 
 
@@ -135,6 +145,8 @@ def handle_graph_command(
     try:
         if args.action == "edit":
             return _edit(args, store, config_dir, out, input_fn, interactive, provider_factory, index, gate)
+        if args.action == "revert":
+            return _revert(args, store, config_dir, out, input_fn, interactive)
         project_id = _resolve_project(args.project, config_dir)
         if store is None:
             from src.knowledge.factory import open_raw_graph_store
@@ -176,12 +188,49 @@ def _authorize_decisions(plan: Plan, gate: HumanGate, input_fn: Callable[[str], 
     """
     for item in plan.decisions:
         request = gate.request(item.decision or "", item.node_id)
-        target = sanitize_text(item.description, 400)
+        target = sanitize_text(item.description, _DECISION_PROMPT_CHARS)
         reply = _ask(input_fn, f"Autoriza a decisão '{item.decision}' (operação {item.index})?\n  {target}\n[s/N] ")
         gate.answer(request.id, source=Source.TERMINAL, approved=reply is not None and reply.lower() in ("s", "sim"))
         if not gate.authorized(request.id):
             return False
     return True
+
+
+def _revert(
+    args: argparse.Namespace,
+    store: Any | None,
+    config_dir: Path | None,
+    out: Callable[[str], Any],
+    input_fn: Callable[[str], str],
+    interactive: bool | None,
+) -> int:
+    """``graph revert merge|substitution <id>``: decisão do pesquisador, sem LLM, com confirmação digitada."""
+    from src.knowledge.reversals import ReversalError, revert_merge, revert_substitution
+
+    if not (_is_interactive() if interactive is None else interactive):
+        out("Erro: `graph revert` exige um terminal interativo: a confirmação é do pesquisador. Nada foi alterado.")
+        return 1
+    project_id = _resolve_project(args.project, config_dir)
+    if store is None:
+        from src.knowledge.factory import open_graph_store
+
+        store = open_graph_store()
+    projects.get_project(store, project_id)
+    node = store.get_node(args.node_id)
+    what = "fusão da abordagem" if args.kind == "merge" else "substituição da descoberta"
+    label = sanitize_text((node.properties.get("nome") or node.properties.get("enunciado") or "") if node else "", 200)
+    reply = _ask(input_fn, f"Reverter a {what} {args.node_id} ({label})? Nada é apagado. [s/N] ")
+    if reply is None or reply.lower() not in ("s", "sim"):
+        out("Reversão cancelada. Nada foi alterado.")
+        return 0
+    try:
+        revert = revert_merge if args.kind == "merge" else revert_substitution
+        revert(store, args.node_id, project_id)
+    except ReversalError as exc:
+        out(f"Erro: {sanitize_text(exc, 400)} Nada foi alterado.")
+        return 1
+    out(f"Revertida: {what} {args.node_id} voltou a 'ativa' (autoria 'pesquisador', com auditoria).")
+    return 0
 
 
 def _edit(

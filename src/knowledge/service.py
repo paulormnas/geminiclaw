@@ -186,6 +186,17 @@ class KnowledgeService:
         by_id = {n.id: n for n in sub.nodes}
         return [by_id[e.src_id] for e in sub.edges if e.dst_id == node_id and e.rel_type == rel and e.src_id in by_id]
 
+    def _in_active(self, node_id: str, rel: str) -> list[Node]:
+        """Nós com aresta ``rel`` ativa até ``node_id`` (arestas ``contestada``, p.ex. fusão revertida, não contam)."""
+        sub = self._sub(node_id, rel, "in")
+        by_id = {n.id: n for n in sub.nodes}
+        return [
+            by_id[e.src_id]
+            for e in sub.edges
+            if e.dst_id == node_id and e.rel_type == rel and e.src_id in by_id
+            and e.properties.get("status") != "contestada"
+        ]
+
     def _out_edges(self, node_id: str, rel: str) -> list[Edge]:
         sub = self._sub(node_id, rel, "out")
         return [e for e in sub.edges if e.src_id == node_id and e.rel_type == rel]
@@ -208,7 +219,7 @@ class KnowledgeService:
         while frontier:
             nxt: list[str] = []
             for current in frontier:
-                for other in self._in(current, "FUNDIDA_EM"):
+                for other in self._in_active(current, "FUNDIDA_EM"):
                     if other.id not in found:
                         found.add(other.id)
                         nxt.append(other.id)

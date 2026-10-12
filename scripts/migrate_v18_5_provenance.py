@@ -29,14 +29,16 @@ _MIGRATION_SQL_PATH = Path(__file__).parent / "migrations" / "v18_5_001_executio
 
 
 def table_exists(conn) -> bool:
-    """Informa se ``execution_records`` já existe no schema corrente."""
-    row = conn.execute("SELECT to_regclass('execution_records') AS name").fetchone()
+    """Informa se ``execution_records`` já existe no schema ``public``."""
+    row = conn.execute("SELECT to_regclass('public.execution_records') AS name").fetchone()
     return bool(row and row["name"])
 
 
 def apply_migration(conn) -> bool:
     """Aplica o SQL da migração; devolve ``True`` se a tabela foi criada agora."""
     existed = table_exists(conn)
+    # O pool põe ag_catalog (Apache AGE) à frente no search_path: sem isto a tabela nasceria nesse schema.
+    conn.execute("SET LOCAL search_path TO public")
     conn.execute(_MIGRATION_SQL_PATH.read_text(encoding="utf-8"))
     return not existed
 

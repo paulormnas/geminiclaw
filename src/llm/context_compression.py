@@ -37,7 +37,51 @@ def _get_priority(message: Dict[str, Any]) -> int:
     role = message.get("role", "user")
     return PRIORITY.get(role, 50)
 
-async def compress_messages(
+def _tool_call_ids(message: Dict[str, Any]) -> list[str]:
+    """IDs das chamadas de ferramenta de uma mensagem do assistente (vazio nas demais)."""
+    if message.get("role") != "assistant":
+        return []
+    return [str(tc.get("id")) for tc in (message.get("tool_calls") or []) if isinstance(tc, dict) and tc.get("id")]
+
+
+def _blocks(messages: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
+    """Agrupa o histórico em blocos atômicos: o assistente com ``tool_calls`` e as respostas de ferramenta que o seguem.
+
+    Descartar só uma das pontas deixa uma resposta de ferramenta sem a chamada (a API Responses e o chat da OpenAI
+    recusam com 400, "No tool call found for function call output"; observado no benchmark de 2026-10-12).
+    """
+    blocks: List[List[Dict[str, Any]]] = []
+    for message in messages:
+        if message.get("role") == "tool" and blocks and _tool_call_ids(blocks[-1][0]):
+            blocks[-1].append(message)
+        else:
+            blocks.append([message])
+    return blocks
+
+
+def drop_orphan_tool_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Remove respostas sem a chamada correspondente e chamadas sem resposta (rede de segurança)."""
+    open_ids: set[str] = set()
+    answered: set[str] = set()
+    for message in messages:
+        open_ids.update(_tool_call_ids(message))
+        if message.get("role") == "tool" and str(message.get("tool_call_id")) in open_ids:
+            answered.add(str(message.get("tool_call_id")))
+    kept: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for message in messages:
+        ids = _tool_call_ids(message)
+        if ids:
+            if not all(i in answered for i in ids):
+                continue  # chamada sem resposta (ou meio-respondida): sai o bloco inteiro
+            seen.update(ids)
+        elif message.get("role") == "tool" and str(message.get("tool_call_id")) not in seen:
+            continue
+        kept.append(message)
+    return kept or messages[-1:]
+
+
+async def _compress_messages(
     messages: List[Dict[str, Any]],
     max_tokens: int,
     system: Optional[str] = None,
@@ -59,8 +103,8 @@ async def compress_messages(
     safety_margin = max_tokens // 5
     budget = max_tokens - system_tokens - safety_margin
 
-    if budget <= 10: # Budget muito baixo, mantém apenas a última
-        return [messages[-1]]
+    if budget <= 10: # Budget muito baixo, mantém apenas a última (com a chamada de ferramenta que ela responde)
+        return _blocks(messages)[-1]
 
     # Separa mensagens por prioridade
     total_tokens = sum(estimate_tokens(m) for m in messages)
@@ -75,39 +119,49 @@ async def compress_messages(
     # Caso contrário, fallback para truncagem inteligente
     return _truncate_by_priority(messages, budget)
 
-def _truncate_by_priority(messages: List[Dict[str, Any]], budget: int) -> List[Dict[str, Any]]:
-    """Truncagem inteligente baseada em prioridade de trás para frente."""
-    kept = []
-    
-    # Sempre mantemos a última mensagem
-    last_msg = dict(messages[-1]) # Cópia para não alterar original
-    last_msg_tokens = estimate_tokens(str(last_msg))
-    
-    if last_msg_tokens > budget:
-        # Se a última mensagem sozinha estoura o budget, trunca ela (bruto), mantendo a origem dos trechos
-        # que sobram (v18.5-egress-gate: a camada de saída lê os trechos, não o ``content``).
-        return [truncate_message(last_msg, budget * 4)]
+async def compress_messages(
+    messages: List[Dict[str, Any]],
+    max_tokens: int,
+    system: Optional[str] = None,
+    provider: Any = None,
+) -> List[Dict[str, Any]]:
+    """Trunca ou sumariza o histórico preservando informação crítica e os pares chamada/resposta de ferramenta."""
+    result = await _compress_messages(messages, max_tokens, system, provider)
+    return result if result is messages else drop_orphan_tool_messages(result)
 
-    current_budget = budget - last_msg_tokens
-    
+
+def _truncate_by_priority(messages: List[Dict[str, Any]], budget: int) -> List[Dict[str, Any]]:
+    """Truncagem inteligente baseada em prioridade de trás para frente, em blocos atômicos de chamada de ferramenta."""
+    blocks = _blocks(messages)
+    last_block = [dict(m) for m in blocks[-1]]  # cópia para não alterar o original
+    last_tokens = sum(estimate_tokens(str(m)) for m in last_block)
+
+    if last_tokens > budget:
+        # Se o último bloco sozinho estoura o budget, trunca a última mensagem dele (bruto), mantendo a origem dos
+        # trechos que sobram (v18.5-egress-gate: a camada de saída lê os trechos, não o ``content``).
+        other = sum(estimate_tokens(str(m)) for m in last_block[:-1])
+        return last_block[:-1] + [truncate_message(last_block[-1], max(budget - other, 1) * 4)]
+
+    current_budget = budget - last_tokens
+    kept: List[List[Dict[str, Any]]] = []
+
     # Percorre o resto do histórico (inverso)
-    for msg in reversed(messages[:-1]):
-        tokens = estimate_tokens(str(msg))
-        priority = _get_priority(msg)
-        
+    for block in reversed(blocks[:-1]):
+        tokens = sum(estimate_tokens(str(m)) for m in block)
+        priority = _get_priority(block[0])
+
         # Heurística: se for baixa prioridade e o budget está acabando, descarta antes
         if priority <= 30 and current_budget < (budget * 0.3):
             continue
-            
+
         if current_budget - tokens >= 0:
-            kept.insert(0, msg)
+            kept.insert(0, block)
             current_budget -= tokens
         else:
-            # Se for alta prioridade (user), tentamos manter mesmo que estoure um pouco?
-            # Não, limite é limite.
-            break
-            
-    return kept + [last_msg]
+            break  # limite é limite
+
+    return [m for block in kept for m in block] + last_block
+
 
 async def _summarize_old_context(
     messages: List[Dict[str, Any]], 

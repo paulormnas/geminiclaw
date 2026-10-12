@@ -26,4 +26,4 @@
 
 ## 5. Pendências (adiadas)
 - [ ] 5.1 Validar no Pi, com Apache AGE real, as propriedades de mapa (`criterio_sucesso`, `caracteristicas_dados`), `find_nodes` por `projeto_id`/`status` e `project_subgraph` (quando o projeto estiver mais estável).
-- [ ] 5.2 `geminiclaw project confirm <id>` para confirmar o problema sem iniciar uma sessão (mudança própria).
+- [x] 5.2 `geminiclaw project confirm <id>` para confirmar o problema sem iniciar uma sessão (2026-10-12: reusa `ensure_confirmed_problem`, com o mesmo gate humano).

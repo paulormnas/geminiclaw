@@ -14,12 +14,61 @@ from src.knowledge.errors import GraphStoreError
 from src.knowledge.problem import ProblemDraftError
 
 
+def _default_drafter() -> Callable[..., Any]:
+    """Redator do rascunho: o papel ``researcher`` pelo roteador de modelos (ADR 017), resolvido uma vez."""
+    import asyncio
+
+    from agents.researcher.agent import draft_problem
+    from src.llm.session import bind_session_routing, build_session_routing
+
+    bind_session_routing(asyncio.run(build_session_routing()))
+    return draft_problem
+
+
+def _confirm_problem(
+    store: Any,
+    projeto_id: str,
+    *,
+    drafter: Callable[..., Any] | None,
+    interactive: bool | None,
+    input_fn: Callable[[str], str],
+    output_fn: Callable[[str], Any],
+) -> int:
+    """``geminiclaw project confirm <id>``: mesmo fluxo da sessão (rascunho, edição, gate, confirmação)."""
+    import asyncio
+
+    from src.project_session import ProjectFlowError, ensure_confirmed_problem, is_interactive
+
+    detail = projects.get_project(store, projeto_id)
+    if detail.problema is not None:
+        title = detail.problema.properties.get("titulo")
+        output_fn(f"O projeto {detail.projeto_id} já tem um Problema confirmado: {title}")
+        return 0
+    try:
+        confirmed = asyncio.run(
+            ensure_confirmed_problem(
+                store, detail.projeto_id, detail.objetivo, None,
+                drafter=drafter or _default_drafter(),
+                interactive=is_interactive() if interactive is None else interactive,
+                input_fn=input_fn, output_fn=output_fn,
+            )
+        )
+    except ProjectFlowError as exc:
+        output_fn(f"Erro: {exc}")
+        return 1
+    output_fn(f"Problema do projeto {confirmed.projeto_id} confirmado.")
+    return 0
+
+
 def handle_project_command(
     argv: list[str],
     store: Any | None = None,
     *,
     config_dir: Path | None = None,
     output_fn: Callable[[str], Any] = print,
+    input_fn: Callable[[str], str] = input,
+    drafter: Callable[..., Any] | None = None,
+    interactive: bool | None = None,
 ) -> int:
     """Trata ``geminiclaw project new|list|show|use``.
 
@@ -28,6 +77,9 @@ def handle_project_command(
         store: ``GraphStore`` a usar (padrão: o grafo de produção); injetável em testes.
         config_dir: Diretório do projeto padrão (padrão: ``~/.config/geminiclaw``).
         output_fn: Saída de texto.
+        input_fn: Leitura interativa (``project confirm``).
+        drafter: Redator do rascunho do Problema (testes injetam um dublê; padrão: papel ``researcher``).
+        interactive: Força o estado interativo (testes); padrão: ``stdin`` e ``stdout`` são TTY.
 
     Returns:
         Código de saída (0 em sucesso).
@@ -50,6 +102,9 @@ def handle_project_command(
     unl_group = unl_p.add_mutually_exclusive_group(required=True)
     unl_group.add_argument("--on", action="store_true")
     unl_group.add_argument("--off", action="store_true")
+    sub.add_parser(
+        "confirm", help="Redige o rascunho do Problema e o confirma, sem iniciar uma sessão (exige terminal)."
+    ).add_argument("projeto_id")
     try:
         args = parser.parse_args(argv)
     except SystemExit as exc:
@@ -86,6 +141,11 @@ def handle_project_command(
             detail = projects.get_project(store, args.projeto_id)
             projects.set_default_project(detail.projeto_id, config_dir)
             output_fn(f"Projeto padrão: {detail.projeto_id} ({detail.titulo})")
+        elif args.action == "confirm":
+            return _confirm_problem(
+                store, args.projeto_id, drafter=drafter, interactive=interactive, input_fn=input_fn,
+                output_fn=output_fn,
+            )
         elif args.action == "unlimited":
             pid = projects.set_unlimited_mode(store, args.projeto_id, bool(args.on))
             output_fn(

@@ -67,6 +67,7 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
   geminiclaw claims list [--project <id>] [--session <id>] [--status <s>] [--json]
   geminiclaw claims resolve <afirmacao_id> --decisao mantida|descartada --motivo "<texto>"
   geminiclaw project new --titulo <t> --objetivo <o> [--dominio <termo>]|list [--status <s>]|show <id>|use <id>
+  geminiclaw project confirm <id>   (confirma o Problema do projeto sem iniciar uma sessão)
   geminiclaw project unlimited <id> --on|--off   (marca o projeto para o modo sem limite; cada sessão ainda confirma)
   geminiclaw --project <id> "<tarefa>"
   geminiclaw --unlimited "<tarefa>"   (sem limite de tokens, tempo, custo e egresso; pede confirmação digitada)

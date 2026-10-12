@@ -249,3 +249,47 @@ class TestOrquestrador:
         payloads = [c.kwargs.get("payload", {}) for c in sm.update.call_args_list]
         assert any(p.get("project_id") == "01890000-0000-7000-8000-000000000001" for p in payloads)
         assert orch._project_blocks == {sess.id: "CTX"}
+
+
+# -- geminiclaw project confirm (v17-research-project 5.2) --------------------------------------------------------------
+
+
+def test_project_confirm_confirma_sem_iniciar_sessao(store, pid):
+    out: list[str] = []
+    drafter = make_drafter(make_draft())
+    code = handle_project_command(["confirm", pid], store, output_fn=out.append, input_fn=scripted("c", "m", "c"),
+                                  drafter=drafter, interactive=True)
+    assert code == 0 and "confirmado" in out[-1]
+    assert projects.get_project(store, pid).problema is not None
+    assert drafter.await_args.args[0] == "Obj"  # o objetivo do projeto é o prompt do rascunho
+
+
+def test_project_confirm_sem_terminal_falha_com_mensagem_acionavel(store, pid):
+    out: list[str] = []
+    code = handle_project_command(["confirm", pid], store, output_fn=out.append, input_fn=scripted(),
+                                  drafter=make_drafter(make_draft()), interactive=False)
+    assert code == 1 and "não é interativa" in out[-1]
+    assert projects.get_project(store, pid).problema is None
+
+
+def test_project_confirm_cancelado_nao_confirma(store, pid):
+    out: list[str] = []
+    code = handle_project_command(["confirm", pid], store, output_fn=out.append, input_fn=scripted("q"),
+                                  drafter=make_drafter(make_draft()), interactive=True)
+    assert code == 1 and "cancelada" in out[-1]
+    assert projects.get_project(store, pid).problema is None
+
+
+def test_project_confirm_projeto_ja_confirmado_nao_pergunta(store, pid):
+    handle_project_command(["confirm", pid], store, output_fn=lambda _m: None, input_fn=scripted("c", "m", "c"),
+                           drafter=make_drafter(make_draft()), interactive=True)
+    out: list[str] = []
+    code = handle_project_command(["confirm", pid], store, output_fn=out.append, input_fn=scripted(),
+                                  drafter=make_drafter(make_draft()), interactive=True)
+    assert code == 0 and "já tem um Problema confirmado" in out[-1]
+
+
+def test_project_confirm_projeto_inexistente(store):
+    out: list[str] = []
+    code = handle_project_command(["confirm", "01890000-0000-7000-8000-000000000099"], store, output_fn=out.append)
+    assert code == 1 and "não encontrado" in out[-1]

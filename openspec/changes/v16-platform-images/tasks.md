@@ -43,7 +43,7 @@ Questões em aberto do design §7 resolvidas pela proposta: utilitário explíci
 - [x] 6.3 Plano: `ok`, arquitetura divergente → `build`, `nao_validada` sem efeitos.
 - [x] 6.4 `ensure` com cliente simulado: build nativo, arquitetura divergente após `pull`, sem suporte.
 - [x] 6.5 Início de sessão: imagem ausente, plataforma não validada.
-- [ ] 6.6 Integração: `ensure --imagens sandbox --yes` no Mac e no Pi 5.
+- [x] 6.6 Integração: `ensure --imagens sandbox --yes` no Pi 5 (2026-10-12: build nativo `linux/arm64` em 60 s, 539 MB, `store/platform.json` gravado; 27 testes de integração do sandbox passaram). *Mac: não executado.* Achado: o cliente Python do daemon não aplica o `.dockerignore` e enviou 6 GB de contexto; o manifesto ganhou `contexto`. O modo de entrega `copy` do sandbox falha no Pi (ver `v18.5-sandbox-phases`).
 
 ## 7. Fechamento
 - [x] 7.1 `uv run ruff check .`; `uv run pytest -m "unit or integration" -v`.

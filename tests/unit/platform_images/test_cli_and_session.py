@@ -66,9 +66,14 @@ def test_plan_com_ollama_e_json() -> None:
     assert code == 0 and "ollama" in names
 
 
-def test_plan_estrito_devolve_2_quando_ha_nao_validada() -> None:
-    code, out = _run(["plan", "--imagens", "sandbox", "--estrito"])
-    assert code == 2 and "nao_validada" in out  # o sandbox ainda não tem plataforma validada
+def test_plan_estrito_devolve_2_quando_ha_nao_validada(monkeypatch) -> None:
+    from src.platform_info import detect_platform
+
+    other = detect_platform(system="Linux", machine="x86_64", page_size=4096,
+                            daemon_info={"OSType": "linux", "Architecture": "x86_64"})
+    monkeypatch.setattr("scripts.platform_images.current_platform", lambda _client: other)
+    code, out = _run(["plan", "--imagens", "sandbox", "--estrito"], FakeClient("x86_64"))
+    assert code == 2 and "nao_validada" in out  # amd64 ainda não foi validado para o sandbox
 
 
 def test_plan_estrito_ok_quando_tudo_validado() -> None:
@@ -118,7 +123,12 @@ def test_arquitetura_errada_impede_a_sessao_citando_as_duas(sandbox_ref) -> None
     assert ENSURE_COMMAND in str(exc.value)
 
 
-def test_plataforma_nao_validada_gera_um_unico_warning(sandbox_ref, caplog) -> None:
+def test_plataforma_nao_validada_gera_um_unico_warning(sandbox_ref, caplog, monkeypatch) -> None:
+    from src.platform_info import detect_platform
+
+    other = detect_platform(system="Linux", machine="aarch64", page_size=4096,
+                            daemon_info={"OSType": "linux", "Architecture": "aarch64"})
+    monkeypatch.setattr("src.platform_images.current_platform", lambda _client: other)  # arm64 genérico
     client = FakeClient("aarch64", {sandbox_ref: "arm64"})
     with caplog.at_level(logging.WARNING):
         check_sandbox_image(client)

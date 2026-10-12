@@ -15,7 +15,7 @@ imagens:
     tag_padrao: code-sandbox:latest
     contexto: [containers/sandbox]       # só o necessário ao Dockerfile; o cliente Python não aplica .dockerignore
     arquiteturas: [arm64, amd64]
-    validada_em: []
+    validada_em: [linux/arm64/pi5/16k]   # 2026-10-12: ensure + integração do sandbox (modo mount) no Pi 5
   postgres:
     obter: compose
     dockerfile: containers/Dockerfile.postgres

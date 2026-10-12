@@ -183,7 +183,7 @@ def test_build_nativo_registra_o_resultado(tmp_path) -> None:
     entry = saved["imagens"]["sandbox"]
     assert entry["referencia"] == sandbox.reference and entry["arquitetura"] == "arm64" and entry["id"]
     assert saved["plataforma"]["id"] == "linux/arm64/pi5/16k" and saved["manifesto_versao"] == 1
-    assert entry["validada"] is False and result.avisos
+    assert entry["validada"] is True and result.avisos == []  # o Pi 5 de 16K está validado para o sandbox
 
 
 def test_arquitetura_divergente_apos_pull_falha_citando_as_duas(tmp_path) -> None:

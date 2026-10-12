@@ -160,11 +160,15 @@ def verify_chain(records: list[StoredRecord], *, genesis: bool) -> tuple[list[di
 def _check_files(
     records: list[StoredRecord], output_root: Path, cache: HashCache | None, full: bool, only_session: str | None
 ) -> list[dict[str, Any]]:
+    # O arquivo em disco corresponde à referência MAIS RECENTE do caminho, seja saída (gravada por uma execução) ou
+    # entrada (ex.: o ``script.py`` da subtarefa, sobrescrito a cada tentativa): as anteriores ficam "substituídas".
+    # Sem isto, toda retentativa marcava a cadeia como divergente (benchmark de 2026-10-12).
     last_writer: dict[str, int] = {}
     for rec in records:
         if rec.tipo == TIPO_TERMINO:
-            for item in rec.corpo.get("saidas") or []:
-                last_writer[str(item.get("caminho"))] = rec.seq
+            for key in ("saidas", "entradas"):
+                for item in rec.corpo.get(key) or []:
+                    last_writer[str(item.get("caminho"))] = rec.seq
     results: list[dict[str, Any]] = []
     for rec in records:
         if rec.tipo != TIPO_TERMINO or (only_session and rec.session_id != only_session):

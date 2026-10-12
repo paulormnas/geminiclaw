@@ -93,6 +93,29 @@ def test_arquivo_reescrito_por_execucao_posterior_nao_e_alteracao(tmp_path):
     assert report.exit_code == EXIT_OK and states == ["ok", "substituido"] and path.exists()
 
 
+def _with_input(tmp_path: Path, ledger, content: str):
+    """Execução que registra um arquivo de ENTRADA real em disco (ex.: o ``script.py`` da subtarefa)."""
+    out_dir = tmp_path / "outputs" / "s1" / "tarefa"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "script.py"
+    path.write_text(content, encoding="utf-8")
+    entrada = {"caminho": "s1/tarefa/script.py", "sha256": sha256_file(path), "tamanho": path.stat().st_size}
+    run_one(ledger, termino_over={"entradas": [entrada]})
+    return path
+
+
+def test_script_reescrito_pela_retentativa_nao_marca_a_cadeia_como_divergente(tmp_path):
+    """Regressão do benchmark de 2026-10-12: cada retentativa sobrescreve ``script.py`` (entrada); só a referência
+    mais recente vale contra o disco, as anteriores ficam substituídas."""
+    ledger = make_ledger(tmp_path)
+    _with_input(tmp_path, ledger, "print(1)\n")
+    path = _with_input(tmp_path, ledger, "print(2)\n")
+    report = verify_project(ledger.store, "proj", tmp_path / "outputs")
+    assert report.integra and sorted(a["estado"] for a in report.arquivos) == ["ok", "substituido"]
+    path.write_text("print('adulterado')\n", encoding="utf-8")  # a última referência continua sendo conferida
+    assert not verify_project(ledger.store, "proj", tmp_path / "outputs").integra
+
+
 def test_orfa_sem_termino_apos_queda(tmp_path):
     """Scenario: Execução órfã após queda — aparece em ``orfas`` e o código de saída continua 0."""
     ledger = make_ledger(tmp_path)

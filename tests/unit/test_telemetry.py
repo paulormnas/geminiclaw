@@ -509,3 +509,17 @@ class TestMigracaoVersaoEfetiva:
         # token_usage (CREATE TABLE) + ALTER ... IF NOT EXISTS + egress_log (v18.5-egress-gate, mesma coluna)
         assert sql.count("versao_efetiva TEXT") == 3
         assert "ADD COLUMN IF NOT EXISTS versao_efetiva TEXT" in sql
+
+
+def test_snapshot_remove_bytes_nul_dos_parametros_de_texto():
+    """O PostgreSQL recusa NUL em campos de texto; a saída de um sandbox com NUL derrubava o lote de telemetria."""
+    from unittest.mock import MagicMock
+
+    from src.telemetry import _NulSafeConnection, _strip_nul
+
+    assert _strip_nul("a\x00b") == "ab" and _strip_nul(("x\x00", 3, None)) == ("x", 3, None)
+    raw = MagicMock()
+    _NulSafeConnection(raw).execute("INSERT ...", ("saida\x00ruim", 7))
+    assert raw.execute.call_args.args[1] == ("saidaruim", 7)
+    _NulSafeConnection(raw).execute("SELECT 1")
+    assert raw.execute.call_args.args[1] is None

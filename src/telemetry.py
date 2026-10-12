@@ -147,6 +147,28 @@ class _TokenUsageRow:
     versao_efetiva: Optional[str] = "desconhecida"
 
 
+def _strip_nul(value: Any) -> Any:
+    """Remove NUL (0x00) de textos: o PostgreSQL recusa e o lote de telemetria inteiro se perdia."""
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, (tuple, list)):
+        return type(value)(_strip_nul(v) for v in value)
+    return value
+
+
+class _NulSafeConnection:
+    """Envolve a conexão do snapshot: todo parâmetro textual passa por :func:`_strip_nul` antes de ir ao banco."""
+
+    def __init__(self, conn: Any) -> None:
+        self._conn = conn
+
+    def execute(self, query: Any, params: Any = None, **kwargs: Any) -> Any:
+        return self._conn.execute(query, _strip_nul(params) if params is not None else None, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._conn, name)
+
+
 @dataclass
 class _HardwareSnapshotRow:
     """Linha a ser inserida na tabela hardware_snapshots."""
@@ -638,7 +660,8 @@ class TelemetryCollector:
     def _write_snapshot(self, snapshot: _Buffer) -> None:
         """Grava um snapshot do buffer no banco (executado em thread separada)."""
         try:
-            with get_connection() as conn:
+            with get_connection() as raw_conn:
+                conn = _NulSafeConnection(raw_conn)
                 # agent_events
                 for row in snapshot.agent_events:
                     conn.execute(

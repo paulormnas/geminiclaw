@@ -321,7 +321,8 @@ class PostgresStore:
             with conn.transaction():
                 conn.execute("SELECT pg_advisory_xact_lock(%s, hashtext(%s))", (LOCK_CLASSID, project_id))
                 tip = conn.execute(
-                    "SELECT seq, record_hash FROM public.execution_records WHERE project_id = %s ORDER BY seq DESC LIMIT 1",
+                    "SELECT seq, record_hash FROM public.execution_records WHERE project_id = %s "
+                    "ORDER BY seq DESC LIMIT 1",
                     (project_id,),
                 ).fetchone()
                 seq = int(tip["seq"]) + 1 if tip else 1

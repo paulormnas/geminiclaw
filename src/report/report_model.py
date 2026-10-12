@@ -11,6 +11,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from src.metrics_file import metrics_of
 from src.utils.json_parser import extract_json
 
 NARRATIVE_FIELDS = (
@@ -131,7 +132,7 @@ def build_results(metrics_by_task: dict[str, dict[str, Any]], sources: dict[str,
     """Monta a tabela de resultados a partir dos ``metrics.json`` lidos do disco."""
     rows: list[ResultRow] = []
     for task_name, data in sorted(metrics_by_task.items()):
-        metrics = data.get("metrics") or {}
+        metrics = metrics_of(data)
         expected = data.get("expected") or data.get("expected_metrics") or {}
         source = (sources or {}).get(task_name, f"{task_name}/metrics.json")
         for metric, value in metrics.items():

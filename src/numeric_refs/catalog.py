@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from src.metrics_file import metrics_of
 from src.numeric_refs.sources import read_search_sources
 from src.provenance.errors import ProvenanceUnavailable
 from src.provenance.ledger import ExecutionLedger
@@ -63,7 +64,7 @@ def build_reference_catalog(
             lines.append("  (sem execução registrada com sucesso: não há referência {{res}} para esta subtarefa)")
             continue
         units = data.get("unidades") if isinstance(data.get("unidades"), dict) else {}
-        metrics = data.get("metrics") if isinstance(data.get("metrics"), dict) else {}
+        metrics = metrics_of(data)
         recorded = record.corpo.get("metricas") or {}
         for name in list(metrics)[:MAX_METRICS_PER_TASK]:
             if name not in recorded:

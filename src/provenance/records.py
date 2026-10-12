@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from src.logger import get_logger
+from src.metrics_file import metrics_of
 from src.provenance.canonical import json_sha256, metric_text, sha256_text
 from src.provenance.hashing import HashCache, hash_file, sha256_file
 
@@ -190,8 +191,8 @@ def read_metrics(task_dir: Path) -> ReadMetrics:
             loaded = json.loads(metrics_file.read_text(encoding="utf-8"))
             if isinstance(loaded, dict):
                 metrics_data = loaded
-                raw_metrics = loaded.get("metrics")
-                if isinstance(raw_metrics, dict):
+                raw_metrics = metrics_of(loaded)
+                if raw_metrics:
                     for name, value in raw_metrics.items():
                         text = metric_text(value)
                         if text is not None:

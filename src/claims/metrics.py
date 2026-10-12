@@ -14,6 +14,7 @@ class ClaimVerificationReader:
     """Lê ``afirmacoes.json`` da sessão: afirmações por status e ciclos de correção por conclusão."""
 
     group = GROUP
+    producer = "v18.5-claim-verification"
 
     def __init__(self, output_dir: Path | str) -> None:
         self.output_dir = Path(output_dir)

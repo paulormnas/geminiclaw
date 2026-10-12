@@ -9,6 +9,7 @@ import pytest
 from src.exploration import ExplorationSession
 from src.knowledge.hypothesis_cycle import ApprovalDecision, SolutionStatus
 from src.knowledge.suggestions import SuggestionError
+from src.usage import UsageBudget
 from tests.support.exploration_world import APPROVED, REJECTED, LoopHarness, hyp, plan, task
 
 pytestmark = pytest.mark.unit
@@ -424,3 +425,44 @@ async def test_hipotese_abandonada_pelo_pesquisador_nao_reexecuta_por_id(tmp_pat
     h.plans = [p, p]
     await h.run()
     assert h.ran == [] and h.stop_reason == "sem_caminhos_promissores"
+
+
+# -- v18.5-operation-metrics: modo sem limite (cenários 8.2 e 8.3) ----------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_sem_limite_fecha_por_sem_caminhos_promissores(tmp_path):
+    """Scenario: o modo sem limite não remove os critérios de término por resultado."""
+    first = plan([task("t1")], [hyp("h1")])
+    h = LoopHarness(tmp_path, plans=[first, first])
+    await h.run(budget=UsageBudget.from_config(unlimited=True))
+    assert h.stop_reason == "sem_caminhos_promissores"
+    assert h.checkpoint().motivo_parada == "sem_caminhos_promissores"
+
+
+@pytest.mark.asyncio
+async def test_sem_limite_fecha_por_solucao_encontrada(tmp_path):
+    h = LoopHarness(tmp_path, plans=[plan([task("t1")], [hyp("h1")])],
+                    confirmer=lambda s: pytest.fail("auto não pergunta"))
+    h.extra_patches.append(_solution())
+    await h.run(budget=UsageBudget.from_config(unlimited=True))
+    assert h.stop_reason == "solucao_encontrada"
+
+
+@pytest.mark.asyncio
+async def test_sem_limite_nao_fecha_por_tokens_nem_tempo(tmp_path):
+    """Scenario: tokens e tempo muito acima dos defaults não fecham a sessão sem limite."""
+    first = plan([task("t1")], [hyp("h1")])
+    h = LoopHarness(tmp_path, plans=[first, first])
+    with patch("src.usage._default_token_reader", return_value=10**12):
+        await h.run(budget=UsageBudget.from_config(unlimited=True))
+    assert h.stop_reason == "sem_caminhos_promissores"  # e não limite_tokens
+
+
+@pytest.mark.asyncio
+async def test_com_limite_os_mesmos_tokens_fecham_por_limite_tokens(tmp_path):
+    first = plan([task("t1")], [hyp("h1")])
+    h = LoopHarness(tmp_path, plans=[first, first])
+    with patch("src.usage._default_token_reader", return_value=10**12):
+        await h.run(budget=UsageBudget.from_config(max_tokens=1000))
+    assert h.stop_reason == "limite_tokens"

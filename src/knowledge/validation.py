@@ -270,6 +270,8 @@ HUMAN_ONLY_TRANSITIONS: dict[str, tuple[str, str]] = {"Problema": ("status", "co
 AGENT_ALLOWED_VALUES: dict[str, dict[str, tuple[str, ...] | None]] = {
     "Dominio": {"status": ("candidato",), "motivo_decisao": None},
     "Metrica": {"status": ("candidato",), "motivo_decisao": None},
+    # v18.5-operation-metrics: a marcação do modo sem limite é decisão do pesquisador (agentes: nenhum valor).
+    "Projeto": {"modo_sem_limite": None, "modo_sem_limite_decidido_em": None, "modo_sem_limite_decidido_por": None},
     "Oportunidade": {
         "status": ("documentada",),
         "decidido_por": None,

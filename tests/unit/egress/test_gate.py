@@ -251,6 +251,28 @@ def test_limite_atingido_retem_saidas_novas_no_fechamento(memory_log, third_part
     assert memory_log.records[-1].bytes_saida_execucao_novos == 0
 
 
+def test_modo_sem_limite_registra_o_volume_mas_nao_retem_saidas(memory_log, third_party):
+    """v18.5-operation-metrics 8.7: sem limite de volume, saídas novas seguem; o volume continua registrado."""
+    gate = EgressGate("s", log=memory_log, min_group_size=10, session_max_bytes=None, unlimited_volume=True,
+                      output_max_chars=50000)
+    primeira = _exec_msg(("x" * 99 + "\n") * 100)
+    gate.prepare_llm([primeira], None, third_party)
+    assert not gate.limit_reached and gate.new_output_bytes >= 10000
+    nova = _exec_msg("saida nova depois do volume alto")
+    out = gate.prepare_llm([primeira, nova], None, third_party)
+    assert "saida nova depois do volume alto" in out.messages[1]["content"]
+    assert RETENTION_LIMIT_NOTICE not in out.messages[1]["content"]
+    assert filters.IV_LIMITE_EGRESSO not in memory_log.records[-1].intervencoes
+    assert memory_log.records[-1].bytes_saida_execucao_novos > 0  # o volume segue registrado
+
+
+def test_modo_sem_limite_nao_afrouxa_a_retencao_de_despejo_tabular(memory_log, third_party):
+    gate = EgressGate("s", log=memory_log, min_group_size=10, unlimited_volume=True)
+    despejo = _exec_msg("\n".join(f"{i},{i * 2},{i * 3},{i * 4}" for i in range(500)))
+    out = gate.prepare_llm([despejo], None, third_party)
+    assert "\n".join(f"{i},{i * 2},{i * 3},{i * 4}" for i in range(100)) not in out.messages[0]["content"]
+
+
 def test_registro_com_falha_nao_marca_o_trecho_como_enviado(memory_log, third_party):
     gate = EgressGate("s", log=memory_log, min_group_size=10)
     memory_log.fail = True

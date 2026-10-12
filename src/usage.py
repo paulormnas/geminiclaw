@@ -12,6 +12,7 @@ Ver ``openspec/changes/v18-usage-limits/design.md`` para o desenho completo.
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -32,6 +33,38 @@ class StopReason(str, Enum):
     RUNS = "limite_execucoes"
     MODEL_VERSION = "versao_modelo"  # v18.5-model-catalog-locality (LLM_ROUTING=strict)
     EGRESS = "limite_egresso"  # v18.5-egress-gate (volume de saídas de execução enviadas fora do nó)
+    INTERRUPTED = "interrompida_pesquisador"  # v18.5-operation-metrics (1º Ctrl+C: fechamento sem perda de avanço)
+
+
+# v18.5-operation-metrics §2.6: o 1º Ctrl+C pede o fechamento gracioso da sessão em andamento. O pedido é um sinalizador
+# do processo (o handler de SIGINT roda na thread principal); o laço o consulta nos mesmos pontos dos limites.
+_INTERRUPT_REQUESTED = threading.Event()
+_SESSION_ACTIVE = threading.Event()
+
+
+def request_interrupt() -> None:
+    """Registra o pedido do pesquisador para fechar a sessão ativa com checkpoint."""
+    _INTERRUPT_REQUESTED.set()
+
+
+def interrupt_requested() -> bool:
+    """True se o pesquisador já pediu a interrupção graciosa da sessão corrente."""
+    return _INTERRUPT_REQUESTED.is_set()
+
+
+def clear_interrupt() -> None:
+    """Limpa o pedido de interrupção (início de uma nova sessão)."""
+    _INTERRUPT_REQUESTED.clear()
+
+
+def set_session_active(active: bool) -> None:
+    """Marca se há sessão em andamento (só então o 1º Ctrl+C é gracioso)."""
+    (_SESSION_ACTIVE.set if active else _SESSION_ACTIVE.clear)()
+
+
+def session_active() -> bool:
+    """True se há uma sessão do laço autônomo em andamento neste processo."""
+    return _SESSION_ACTIVE.is_set()
 
 
 @dataclass(frozen=True)

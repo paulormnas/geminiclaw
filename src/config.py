@@ -393,6 +393,14 @@ OPERATIONAL_THRESHOLDS: dict[str, float] = {
 MAX_SESSION_TOKENS = SESSION_MAX_TOKENS
 # Tempo que a CLI aguarda a resposta do pesquisador ao aviso de limite antes de continuar.
 OPERATIONAL_THRESHOLD_WAIT_SECONDS = int(get_env("OPERATIONAL_THRESHOLD_WAIT_SECONDS", default="30"))
+
+# v18.5-operation-metrics: avisos periódicos do modo sem limite (sem como desligá-los: valores <= 0 falham).
+UNLIMITED_NOTICE_INTERVAL_MINUTES = float(get_env("UNLIMITED_NOTICE_INTERVAL_MINUTES", default="15"))
+UNLIMITED_NOTICE_TOKEN_STEP = int(get_env("UNLIMITED_NOTICE_TOKEN_STEP", default="500000"))
+if UNLIMITED_NOTICE_INTERVAL_MINUTES <= 0:
+    raise ValueError("UNLIMITED_NOTICE_INTERVAL_MINUTES deve ser positivo (os avisos não se desligam).")
+if UNLIMITED_NOTICE_TOKEN_STEP <= 0:
+    raise ValueError("UNLIMITED_NOTICE_TOKEN_STEP deve ser positivo (os avisos não se desligam).")
 # Similaridade textual mínima (0-1, via difflib) para considerar duas perguntas ao
 # pesquisador "a mesma dúvida" e reutilizar a resposta anterior sem perguntar de novo.
 ASK_RESEARCHER_DEDUP_SIMILARITY = float(get_env("ASK_RESEARCHER_DEDUP_SIMILARITY", default="0.85"))

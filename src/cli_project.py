@@ -42,6 +42,14 @@ def handle_project_command(
     list_p.add_argument("--status", choices=["ativo", "pausado", "concluido"], default=None)
     sub.add_parser("show", help="Exibe um projeto.").add_argument("projeto_id")
     sub.add_parser("use", help="Define o projeto padrão das próximas sessões.").add_argument("projeto_id")
+    unl_p = sub.add_parser(
+        "unlimited",
+        help="Marca (--on) ou desmarca (--off) o projeto para o modo sem limite (a execução pede confirmação).",
+    )
+    unl_p.add_argument("projeto_id")
+    unl_group = unl_p.add_mutually_exclusive_group(required=True)
+    unl_group.add_argument("--on", action="store_true")
+    unl_group.add_argument("--off", action="store_true")
     try:
         args = parser.parse_args(argv)
     except SystemExit as exc:
@@ -78,6 +86,12 @@ def handle_project_command(
             detail = projects.get_project(store, args.projeto_id)
             projects.set_default_project(detail.projeto_id, config_dir)
             output_fn(f"Projeto padrão: {detail.projeto_id} ({detail.titulo})")
+        elif args.action == "unlimited":
+            pid = projects.set_unlimited_mode(store, args.projeto_id, bool(args.on))
+            output_fn(
+                f"Projeto {pid}: modo sem limite {'MARCADO' if args.on else 'desmarcado'}."
+                + (" Cada sessão ainda pedirá a confirmação digitada." if args.on else "")
+            )
     except (GraphStoreError, ProblemDraftError, RuntimeError, OSError) as exc:
         output_fn(f"Erro: {exc}")
         return 1

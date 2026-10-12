@@ -205,7 +205,7 @@ def test_inventario_de_comandos():
 
     parser = _build_parser()
     actions = parser._subparsers._group_actions[0].choices  # noqa: SLF001
-    assert set(actions) == {"show", "node", "edit"}
+    assert set(actions) == {"show", "node", "edit", "revert"}  # revert: decisão do pesquisador (v17 8.5)
     flags = {opt for p in actions.values() for a in p._actions for opt in a.option_strings}  # noqa: SLF001
     for forbidden in ("--query", "--cypher", "--sql", "--yes", "-y", "--force", "--no-confirm", "--run"):
         assert forbidden not in flags

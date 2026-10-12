@@ -114,6 +114,13 @@ def test_matriz_do_benchmark_de_2026_10_e_valida() -> None:
             assert spec in catalog.modelos, f"{combo['name']}: {spec} fora do catálogo"
 
 
+def test_sessao_fechada_por_limite_e_anomalia_mas_conclusao_normal_nao() -> None:
+    assert any("limite_tokens" in p for p in anomalies(_ok_result(stop_reason="limite_tokens")))
+    assert any("erro" in p for p in anomalies(_ok_result(stop_reason="erro")))
+    for normal in ("solucao_encontrada", "sem_caminhos_promissores", None):
+        assert not any("antes de concluir" in p for p in anomalies(_ok_result(stop_reason=normal)))
+
+
 def test_zero_subtarefas_executadas_e_anomalia() -> None:
     assert any("nenhuma subtarefa executada" in p for p in anomalies(_ok_result(outcome={"subtasks": 0})))
     assert not any("nenhuma subtarefa" in p for p in anomalies(_ok_result(outcome={"subtasks": 4})))

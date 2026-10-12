@@ -166,6 +166,14 @@ def _save_log(name: str, log: str) -> str:
     return str(path)
 
 
+def _stop_reason(session_dir: Path) -> str | None:
+    """``motivo_parada`` do ``checkpoint.json`` da sessão, ou ``None`` se ausente/ilegível."""
+    try:
+        return json.loads((session_dir / "checkpoint.json").read_text(encoding="utf-8")).get("motivo_parada")
+    except (OSError, ValueError):
+        return None
+
+
 def anomalies(result: dict) -> list[str]:
     """Problemas de infraestrutura/código numa combinação (não a baixa qualidade do modelo): interrompem o benchmark.
 
@@ -180,6 +188,12 @@ def anomalies(result: dict) -> list[str]:
         problems.append(f"processo terminou com '{status}'")
     if "Traceback (most recent call last)" in (result.get("log_tail") or ""):
         problems.append("traceback no fim do log")
+    stop = result.get("stop_reason")
+    if stop and (str(stop).startswith("limite_") or stop in ("erro", "interrompida", "interrompida_pesquisador")):
+        problems.append(
+            f"sessão fechada por '{stop}' antes de concluir: a comparação entre modelos exige sessões completas "
+            "(ajuste o orçamento da matriz)"
+        )
     if not result.get("session"):
         problems.append("nenhuma sessão gravada")
     elif (result.get("outcome") or {}).get("subtasks") == 0:
@@ -246,6 +260,7 @@ def run_combination(
         result["project_graph"] = footprint.project_graph(project_id)
     session = newest_session(output_dir, started_wall - 1)
     if session is not None:
+        result["stop_reason"] = _stop_reason(session)
         result["operation_metrics"] = footprint.session_operation_metrics(session.name)
         result["embedding_events"] = footprint.embedding_events(session.name)
         outcome = session_outcome(session)

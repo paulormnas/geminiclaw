@@ -44,10 +44,15 @@ def snapshot() -> dict[str, Any]:
         tables: dict[str, int] = {}
         with get_connection() as conn:
             for table in TABLES:
-                try:
-                    tables[table] = int(conn.execute(f"SELECT count(*) AS n FROM public.{table}").fetchone()["n"])
-                except Exception:  # noqa: BLE001 - tabela ausente (migração não aplicada)
-                    conn.rollback()
+                # Tabelas criadas por migrações do pool (ex.: knowledge_audit) podem estar em ag_catalog, que o
+                # search_path do pool põe à frente de public.
+                for schema in ("public", "ag_catalog"):
+                    try:
+                        count = conn.execute(f"SELECT count(*) AS n FROM {schema}.{table}").fetchone()["n"]
+                        tables[table] = int(count)
+                        break
+                    except Exception:  # noqa: BLE001 - tabela ausente neste schema
+                        conn.rollback()
             out["tabelas"] = tables
             conn.execute("LOAD 'age'")
             conn.execute('SET search_path = ag_catalog, "$user", public')

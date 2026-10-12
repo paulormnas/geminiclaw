@@ -373,3 +373,11 @@ async def test_review_result_sem_criterio_quantitativo_nao_exige_metrics_json(tm
 
     assert result.is_approved is True
     mock_validator_provider.generate.assert_called_once()
+
+def test_instrucao_de_schema_lista_hypothesis_ref_e_approach_como_campos_validos():
+    """Regressão do benchmark de 2026-10-12: com 'estritamente', o Luna reprovava planos por `approach` e
+    `hypothesis_ref`, campos que o próprio orquestrador pede ao Researcher."""
+    from src.agents.validator_agent import SCHEMA_INSTRUCTION
+
+    assert "hypothesis_ref" in SCHEMA_INSTRUCTION and "approach" in SCHEMA_INSTRUCTION
+    assert "NUNCA são motivo de reprovação" in SCHEMA_INSTRUCTION

@@ -70,6 +70,9 @@ SCHEMA_INSTRUCTION = """Cada subtarefa no plano DEVE ser um objeto JSON contendo
   para task_type 'reproduction' ou 'validation', ao menos 1 critério deve conter um threshold numérico)
 - "expected_artifacts": list[str] (arquivos esperados a serem gerados em /outputs/)
 - "depends_on": list[str] (nomes de tarefas das quais esta depende)
+- campos OPCIONAIS do orquestrador, que fazem parte do formato e NUNCA são motivo de reprovação:
+  "hypothesis_ref" (referência 'h1', 'h2'... à hipótese que a subtarefa testa), "approach" (objeto com 'nome' e
+  'tipo' da abordagem) e "preferred_model".
 """
 
 # Roadmap V15.2 / Spec G2 — parsing de critérios quantitativos contra metrics.json real.

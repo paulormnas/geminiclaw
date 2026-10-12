@@ -7,15 +7,15 @@ from src.knowledge import schema
 
 @pytest.mark.unit
 class TestNodeSchemas:
-    def test_tem_13_tipos_de_no(self):
-        """O ADR 015 §3 define exatamente 13 tipos de nó."""
-        assert len(schema.NODE_SCHEMAS) == 13
+    def test_tem_14_tipos_de_no(self):
+        """O ADR 015 §3 define 13 tipos de nó; v18.5-claim-verification acrescenta ``Afirmacao``."""
+        assert len(schema.NODE_SCHEMAS) == 14
 
     def test_rotulos_esperados_presentes(self):
         esperados = {
             "Projeto", "Sessao", "Insumo", "Problema", "Hipotese", "Abordagem",
             "Experimento", "Resultado", "Decisao", "Descoberta", "Oportunidade",
-            "Dominio", "Metrica",
+            "Dominio", "Metrica", "Afirmacao",
         }
         assert set(schema.NODE_SCHEMAS) == esperados
 

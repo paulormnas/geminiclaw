@@ -14,16 +14,28 @@ from typing import Literal, NamedTuple
 ORIGIN_CODE_RE = re.compile(r"\[(R|C|S)(\d+)\]")
 UNVERIFIED_RE = re.compile(r"\[não verificado\]")
 LITERAL_RE = re.compile(r"\[literal no código\]")
-MARKS_RE = re.compile(f"{ORIGIN_CODE_RE.pattern}|{UNVERIFIED_RE.pattern}|{LITERAL_RE.pattern}")
+# v18.5-claim-verification (design §9): marca de status de afirmação, ``[A3 · parcial]``. Fica por último em
+# ``MARKS_RE`` para não deslocar os grupos de ``ORIGIN_CODE_RE`` (1 e 2); a marca usa os seguintes (3: código,
+# 4: status).
+CLAIM_STATUSES = ("parcial", "refutada", "contestada", "não verificável", "pendente")
+CLAIM_MARK_RE = re.compile(r"\[A(\d+) · (" + "|".join(CLAIM_STATUSES) + r")\]")
+MARKS_RE = re.compile(
+    f"{ORIGIN_CODE_RE.pattern}|{UNVERIFIED_RE.pattern}|{LITERAL_RE.pattern}|{CLAIM_MARK_RE.pattern}"
+)
 ORIGIN_ANCHOR_RE = re.compile(r'<a id="origem-([RCS]\d+)"></a>')
 HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 
 
 class Mark(NamedTuple):
-    """Trecho de texto: puro (``text``), código de origem, ``[não verificado]`` ou ``[literal no código]``."""
+    """Trecho de texto: puro, código de origem, ``[não verificado]``, ``[literal no código]`` ou marca de afirmação."""
 
-    kind: Literal["text", "origin", "unverified", "literal"]
-    value: str  # texto puro, ou o código (``R1``) para ``origin``
+    kind: Literal["text", "origin", "unverified", "literal", "claim"]
+    value: str  # texto puro, o código (``R1``) para ``origin`` ou a marca inteira (``A3 · parcial``) para ``claim``
+
+
+def claim_status_slug(status: str) -> str:
+    """Classe CSS do status (``não verificável`` → ``nao-verificavel``)."""
+    return status.replace("ã", "a").replace("á", "a").replace("í", "i").replace(" ", "-")
 
 
 def strip_markup_helpers(markdown: str) -> str:
@@ -40,6 +52,8 @@ def split_marks(text: str) -> list[Mark]:
             parts.append(Mark("text", text[pos : match.start()]))
         if match.group(1):
             parts.append(Mark("origin", f"{match.group(1)}{match.group(2)}"))
+        elif match.group(3):
+            parts.append(Mark("claim", match.group(0)[1:-1]))
         elif match.group(0) == "[não verificado]":
             parts.append(Mark("unverified", "não verificado"))
         else:

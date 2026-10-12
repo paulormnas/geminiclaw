@@ -336,6 +336,8 @@ class Checkpoint:
     # v18.5-execution-provenance: ponta da cadeia de execuções do projeto e términos ainda fora da cadeia.
     provenance_chain_tip: dict[str, Any] | None = None
     provenance_pending: list[str] = field(default_factory=list)
+    # v18.5-claim-verification (design §11): afirmações ``pendente``, verificadas na retomada.
+    afirmacoes_pendentes: list[dict[str, str]] = field(default_factory=list)
 
     def find(self, task_name: str) -> SubtaskState | None:
         """Subtarefa pelo nome, ou ``None``."""
@@ -368,6 +370,7 @@ class Checkpoint:
             "detalhe_parada": self.detalhe_parada,
             "provenance_chain_tip": dict(self.provenance_chain_tip) if self.provenance_chain_tip else None,
             "provenance_pending": list(self.provenance_pending),
+            "afirmacoes_pendentes": [dict(p) for p in self.afirmacoes_pendentes],
         }
 
     @classmethod
@@ -460,6 +463,7 @@ class Checkpoint:
             detalhe_parada=_text(data, "detalhe_parada", 200),
             provenance_chain_tip=_chain_tip(data.get("provenance_chain_tip")),
             provenance_pending=_id_list(data.get("provenance_pending"), "provenance_pending", MAX_IDS),
+            afirmacoes_pendentes=_claims_pending(data.get("afirmacoes_pendentes")),
         )
 
 
@@ -480,6 +484,30 @@ def _chain_tip(value: object) -> dict[str, Any] | None:
     if not isinstance(digest, str) or not _HEX64_RE.match(digest):
         raise CheckpointError("provenance_chain_tip.record_hash inválido.")
     return {"project_id": project_id, "seq": seq, "record_hash": digest}
+
+
+def _claims_pending(value: object) -> list[dict[str, str]]:
+    """Afirmações pendentes do checkpoint (dado não confiável): ``{afirmacao_id, session_id, conclusao_id}``."""
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > MAX_IDS:
+        raise CheckpointError(f"afirmacoes_pendentes deve ser uma lista de até {MAX_IDS} itens.")
+    out: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            raise CheckpointError("afirmacoes_pendentes: item inválido.")
+        claim_id = _opt_id(item.get("afirmacao_id"), "afirmacoes_pendentes.afirmacao_id")
+        session = validate_session_id(item.get("session_id"))
+        conclusion = item.get("conclusao_id")
+        if (
+            claim_id is None
+            or not isinstance(conclusion, str)
+            or not 0 < len(conclusion) <= 200
+            or any(c in conclusion for c in "\r\n\x00")
+        ):
+            raise CheckpointError("afirmacoes_pendentes: item inválido.")
+        out.append({"afirmacao_id": claim_id, "session_id": session, "conclusao_id": conclusion})
+    return out
 
 
 def _hypotheses(value: object) -> list[dict[str, Any]]:
@@ -741,6 +769,8 @@ class CheckpointRecorder:
         self.failures = 0
         # v18.5-execution-provenance: lê a ponta da cadeia (sem consultar o banco) a cada gravação do checkpoint.
         self.provenance_provider: Any = None
+        # v18.5-claim-verification: lê as afirmações pendentes (de ``afirmacoes.json``) a cada gravação.
+        self.claims_provider: Any = None
 
     @classmethod
     def start(
@@ -799,10 +829,20 @@ class CheckpointRecorder:
         except Exception as exc:  # noqa: BLE001 - a proveniência nunca impede a gravação do checkpoint
             logger.warning("Ponta da cadeia de execuções não lida", extra={"extra": {"erro": type(exc).__name__}})
 
+    def _refresh_claims(self) -> None:
+        provider = self.claims_provider
+        if provider is None:
+            return
+        try:
+            self._cp.afirmacoes_pendentes = _claims_pending(provider())
+        except Exception as exc:  # noqa: BLE001 - as pendências nunca impedem a gravação do checkpoint
+            logger.warning("Afirmações pendentes não lidas", extra={"extra": {"erro": type(exc).__name__}})
+
     def _flush(self) -> bool:
         with self._lock:
             self._cp.atualizado_em = _now()
             self._refresh_provenance()
+            self._refresh_claims()
             try:
                 write_checkpoint(self.session_dir, self._cp)
                 return True

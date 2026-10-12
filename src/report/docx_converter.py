@@ -18,6 +18,21 @@ _NUMBERED_RE = re.compile(r"^\s*\d+\.\s+(.*)$")
 _BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
 
 
+def _claim_highlights() -> dict:
+    from docx.enum.text import WD_COLOR_INDEX
+
+    return {
+        "parcial": WD_COLOR_INDEX.TURQUOISE,
+        "refutada": WD_COLOR_INDEX.RED,
+        "contestada": WD_COLOR_INDEX.VIOLET,
+        "não verificável": WD_COLOR_INDEX.GRAY_25,
+        "pendente": WD_COLOR_INDEX.BRIGHT_GREEN,
+    }
+
+
+_CLAIM_HIGHLIGHT = _claim_highlights()
+
+
 def _add_marked_runs(paragraph, text: str, bold: bool = False) -> None:
     """Acrescenta ``text`` ao parágrafo, com as marcas do relatório (origem sobrescrita, não verificado em realce)."""
     from docx.enum.text import WD_COLOR_INDEX
@@ -28,6 +43,10 @@ def _add_marked_runs(paragraph, text: str, bold: bool = False) -> None:
                 paragraph.add_run(mark.value).bold = bold or None
         elif mark.kind == "origin":
             paragraph.add_run(mark.value).font.superscript = True
+        elif mark.kind == "claim":
+            run = paragraph.add_run(f"[{mark.value}]")
+            run.bold = True
+            run.font.highlight_color = _CLAIM_HIGHLIGHT.get(mark.value.split(" · ", 1)[1], WD_COLOR_INDEX.GRAY_25)
         else:
             run = paragraph.add_run(mark.value)
             run.bold = True

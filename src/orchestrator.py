@@ -59,6 +59,7 @@ from src.utils.json_parser import extract_json
 
 if TYPE_CHECKING:
     from agents.curator.runner import Curator
+    from src.claims.runtime import ClaimRuntime
     from src.exploration import ExplorationSession
     from src.knowledge.graph_store import GraphStore
     from src.knowledge.ingestion import FactIngestor
@@ -373,13 +374,62 @@ class Orchestrator:
         except Exception:  # noqa: BLE001 - sem leitura de consumo, segue (o orçamento do Curator é próprio)
             return True
 
+    # -- v18.5-claim-verification ---------------------------------------------------------------------------
+
+    def claim_runtime(self) -> "ClaimRuntime":
+        """Serviços de verificação de afirmações (orçamento, grafo, Validator); um por orquestrador."""
+        runtime = getattr(self, "_claim_runtime", None)
+        if runtime is None:
+            from src.claims.runtime import ClaimRuntime
+
+            runtime = ClaimRuntime(
+                self.output_manager.base_dir,
+                graph_getter=self._open_knowledge_store,
+                tracker_getter=lambda sid: self._usage_trackers.get(sid),
+                validator=self.validator,
+                project_getter=self._claim_project_id,
+            )
+            self._claim_runtime = runtime
+        return runtime
+
+    def _claim_project_id(self, session_id: str) -> str | None:
+        ingestor = self._ingestors.get(session_id)
+        return ingestor.ctx.project_id if ingestor is not None else None
+
+    async def verify_curated_discoveries(self, session_id: str, report: Any) -> None:
+        """Verifica as descobertas criadas ou reforçadas pelo Curator na execução (design §3). Nunca levanta."""
+        touched = list(getattr(report, "descobertas_tocadas", None) or [])
+        if not touched:
+            return
+        try:
+            await self.claim_runtime().verify_discoveries(session_id, touched)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - a verificação nunca derruba a sessão
+            logger.warning("Verificação das descobertas falhou", extra={"error": type(exc).__name__})
+
+    async def resume_claims_pending(self, session_id: str) -> list[Any]:
+        """Verifica, antes do primeiro planejamento, as afirmações pendentes das sessões anteriores (design §11)."""
+        resume = self._resumes.get(session_id)
+        pending = list(getattr(getattr(resume, "checkpoint", None), "afirmacoes_pendentes", None) or [])
+        if not pending:
+            return []
+        try:
+            return await self.claim_runtime().verify_previous_pending(session_id, pending)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Reverificação das afirmações pendentes falhou", extra={"error": type(exc).__name__})
+            return []
+
     async def curator_consolidate(self, session_id: str) -> None:
         """Checkpoint de consolidação (fim de cada ciclo de planejamento). Nunca levanta."""
         curator = self.get_curator(session_id)
         if curator is None or not self._curator_budget_left(session_id, closing=False):
             return
         try:
-            await curator.consolidate()
+            report = await curator.consolidate()
+            await self.verify_curated_discoveries(session_id, report)
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - a falha do Curator nunca derruba a sessão
@@ -403,6 +453,7 @@ class Orchestrator:
             reason = (session.payload if session is not None else {}).get("motivo_parada")
             report = await curator.close_session(reason if isinstance(reason, str) else None)
             pending = not getattr(report, "ok", True)
+            await self.verify_curated_discoveries(session_id, report)
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001
@@ -608,6 +659,7 @@ class Orchestrator:
             if resume is not None:
                 recorder.seed(list(resume.completed.values()))
             recorder.provenance_provider = self._provenance_provider(session_id, project_id)
+            recorder.claims_provider = lambda: self.claim_runtime().pending_for_checkpoint(session_id)
         except Exception as exc:  # noqa: BLE001 - sem checkpoint a pesquisa continua (aviso explícito)
             logger.warning("Checkpoint da sessão não iniciado", extra={"error": type(exc).__name__})
             return None

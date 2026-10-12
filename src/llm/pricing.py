@@ -28,12 +28,11 @@ class Price:
     cached_input: float | None = None  # None = mesmo preço da entrada
 
 
-# Fontes: ai.google.dev/gemini-api/docs/pricing (Gemini 3.8 e 3.7 com preço promocional até
+# Fontes: ai.google.dev/gemini-api/docs/pricing (Gemini 3.8 com preço promocional até
 # 2026-12-31; a partir de 2027-01-01 dobra), developers.openai.com/api/docs/models e a tabela de
 # modelos da Anthropic. Modelos de maior porte ficam de fora de propósito.
 PRICES: dict[str, Price] = {
     "google/gemini-3.8-flash": Price(0.75, 3.75, 0.075),
-    "google/gemini-3.7-flash": Price(0.75, 3.75, 0.075),
     "google/gemini-3.5-flash-lite": Price(0.30, 2.50, 0.03),
     "google/gemini-3.1-flash-lite": Price(0.25, 1.50, 0.025),
     "anthropic/claude-sonnet-5-5": Price(2.0, 10.0, 0.20),

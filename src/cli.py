@@ -63,6 +63,8 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
   geminiclaw embeddings reindex [--collection <nome>] [--yes]
   geminiclaw provenance verify <projeto>|--session <id> [--full] [--json] | --from-export <dir>
   geminiclaw provenance export --session <id>
+  geminiclaw claims list [--project <id>] [--session <id>] [--status <s>] [--json]
+  geminiclaw claims resolve <afirmacao_id> --decisao mantida|descartada --motivo "<texto>"
   geminiclaw project new --titulo <t> --objetivo <o> [--dominio <termo>]|list [--status <s>]|show <id>|use <id>
   geminiclaw --project <id> "<tarefa>"
   geminiclaw graph show [--project <id>] [--label <r>] [--dominio <t>] [--status <s>] [--depth N]
@@ -1371,6 +1373,12 @@ def main() -> None:
         from src.cli_provenance import run as run_provenance
 
         sys.exit(run_provenance(sys.argv[2:]))
+
+    # V18.5 (v18.5-claim-verification) — 'geminiclaw claims list|resolve'.
+    if len(sys.argv) >= 2 and sys.argv[1] == "claims":
+        from src.cli_claims import run as run_claims
+
+        sys.exit(run_claims(sys.argv[2:]))
 
     # V18 (v18-hypothesis-loop) — decisão do pesquisador sobre oportunidades documentadas.
     if len(sys.argv) >= 2 and sys.argv[1] == "opportunities":

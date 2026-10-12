@@ -90,7 +90,7 @@ GEMINI_API_KEY = get_env("GEMINI_API_KEY")
 # Modelo usado quando o principal do Google atinge o limite de requisições (HTTP 429). Vazio desliga o fallback.
 # Só é aceito se estiver no catálogo com o mesmo `trust` e atender aos requisitos do papel; desligado em
 # LLM_ROUTING=strict.
-GOOGLE_FALLBACK_MODEL = get_env("GOOGLE_FALLBACK_MODEL", default="gemini-3.7-flash")
+GOOGLE_FALLBACK_MODEL = get_env("GOOGLE_FALLBACK_MODEL", default="gemini-3.8-flash")
 
 # Provedor openai_compatible (V16) — servidores que falam o protocolo /v1/chat/completions
 # (llama.cpp server, vLLM, LM Studio, serviços hospedados compatíveis). ADR 017 §8: variáveis
@@ -599,6 +599,28 @@ NUMREF_CALC_MAX_POW = int(get_env("NUMREF_CALC_MAX_POW", default="4"))
 NUMREF_YEAR_MIN = int(get_env("NUMREF_YEAR_MIN", default="1900"))
 NUMREF_YEAR_MAX = int(get_env("NUMREF_YEAR_MAX", default="2100"))
 NUMREF_STATIC_CHECK_ENABLED = get_env_bool("NUMREF_STATIC_CHECK_ENABLED", default=True)
+
+# --- Verificação das conclusões por afirmações (v18.5-claim-verification, ADR 019 §6) ---
+CLAIM_VERIFY_ENABLED = get_env_bool("CLAIM_VERIFY_ENABLED", default=True)
+# Seções do relatório cujas conclusões são conferidas (títulos separados por vírgula; sem numeração).
+CLAIM_VERIFY_SECTIONS = tuple(
+    s.strip()
+    for s in get_env(
+        "CLAIM_VERIFY_SECTIONS",
+        default="Resumo Executivo,Resultados,Análise das Divergências,Limitações Identificadas",
+    ).split(",")
+    if s.strip()
+)
+# Tamanho máximo (caracteres) do pacote de evidência de uma chamada; acima disso a conclusão é dividida em lotes.
+CLAIM_EVIDENCE_MAX_CHARS = int(get_env("CLAIM_EVIDENCE_MAX_CHARS", default="12000"))
+# Tolerância relativa de "aproximadamente", "próximo de" e "cerca de" na conferência determinística.
+CLAIM_APPROX_REL_TOL = float(get_env("CLAIM_APPROX_REL_TOL", default="0.05"))
+# Ciclos de correção do relatório pelo Summarizer (0 desliga).
+CLAIM_REVISION_MAX_CYCLES = int(get_env("CLAIM_REVISION_MAX_CYCLES", default="1"))
+if CLAIM_EVIDENCE_MAX_CHARS <= 0 or CLAIM_APPROX_REL_TOL < 0 or CLAIM_REVISION_MAX_CYCLES < 0:
+    raise ValueError(
+        "CLAIM_EVIDENCE_MAX_CHARS deve ser > 0 e CLAIM_APPROX_REL_TOL e CLAIM_REVISION_MAX_CYCLES, >= 0."
+    )
 
 # --- Registro de execuções encadeado por hash (v18.5-execution-provenance, ADR 019 §4) ---
 # Cache SQLite dos hashes de arquivos grandes (chave: caminho, dispositivo, inode, tamanho, mtime_ns).

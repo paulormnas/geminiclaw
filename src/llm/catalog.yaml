@@ -23,13 +23,6 @@ modelos:
     saida_estruturada: true
     janela_contexto: 1048576
     familia_modelo: gemini
-  - id: google/gemini-3.7-flash
-    provedor: google
-    trust: third_party
-    ferramentas: true
-    saida_estruturada: true
-    janela_contexto: 1048576
-    familia_modelo: gemini
   - id: google/gemini-3.5-flash-lite
     provedor: google
     trust: third_party

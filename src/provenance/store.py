@@ -297,7 +297,7 @@ class PostgresStore:
             return
 
         def check(conn):  # noqa: ANN001, ANN202
-            conn.execute("SELECT 1 FROM execution_records LIMIT 1")
+            conn.execute("SELECT 1 FROM public.execution_records LIMIT 1")
 
         self._run(check)
         self._ready = True
@@ -321,7 +321,8 @@ class PostgresStore:
             with conn.transaction():
                 conn.execute("SELECT pg_advisory_xact_lock(%s, hashtext(%s))", (LOCK_CLASSID, project_id))
                 tip = conn.execute(
-                    "SELECT seq, record_hash FROM execution_records WHERE project_id = %s ORDER BY seq DESC LIMIT 1",
+                    "SELECT seq, record_hash FROM public.execution_records WHERE project_id = %s "
+                    "ORDER BY seq DESC LIMIT 1",
                     (project_id,),
                 ).fetchone()
                 seq = int(tip["seq"]) + 1 if tip else 1
@@ -333,7 +334,7 @@ class PostgresStore:
                 )
                 try:
                     conn.execute(
-                        f"INSERT INTO execution_records ({_COLUMNS}) VALUES ({', '.join(['%s'] * 11)})",
+                        f"INSERT INTO public.execution_records ({_COLUMNS}) VALUES ({', '.join(['%s'] * 11)})",
                         (
                             record.project_id, record.seq, record.exec_id, record.tipo, record.session_id,
                             record.subtask_id, record.task_name, record.registrado_em, record.prev_hash,
@@ -349,7 +350,7 @@ class PostgresStore:
     def get(self, exec_id: str, tipo: str) -> StoredRecord | None:
         def query(conn):  # noqa: ANN001, ANN202
             row = conn.execute(
-                f"SELECT {_COLUMNS} FROM execution_records WHERE exec_id = %s AND tipo = %s", (exec_id, tipo)
+                f"SELECT {_COLUMNS} FROM public.execution_records WHERE exec_id = %s AND tipo = %s", (exec_id, tipo)
             ).fetchone()
             return _from_row(row) if row else None
 
@@ -358,7 +359,7 @@ class PostgresStore:
     def tip(self, project_id: str) -> StoredRecord | None:
         def query(conn):  # noqa: ANN001, ANN202
             row = conn.execute(
-                f"SELECT {_COLUMNS} FROM execution_records WHERE project_id = %s ORDER BY seq DESC LIMIT 1",
+                f"SELECT {_COLUMNS} FROM public.execution_records WHERE project_id = %s ORDER BY seq DESC LIMIT 1",
                 (project_id,),
             ).fetchone()
             return _from_row(row) if row else None
@@ -368,7 +369,7 @@ class PostgresStore:
     def at(self, project_id: str, seq: int) -> StoredRecord | None:
         def query(conn):  # noqa: ANN001, ANN202
             row = conn.execute(
-                f"SELECT {_COLUMNS} FROM execution_records WHERE project_id = %s AND seq = %s", (project_id, seq)
+                f"SELECT {_COLUMNS} FROM public.execution_records WHERE project_id = %s AND seq = %s", (project_id, seq)
             ).fetchone()
             return _from_row(row) if row else None
 
@@ -377,7 +378,7 @@ class PostgresStore:
     def records(self, project_id: str) -> list[StoredRecord]:
         def query(conn):  # noqa: ANN001, ANN202
             rows = conn.execute(
-                f"SELECT {_COLUMNS} FROM execution_records WHERE project_id = %s ORDER BY seq", (project_id,)
+                f"SELECT {_COLUMNS} FROM public.execution_records WHERE project_id = %s ORDER BY seq", (project_id,)
             ).fetchall()
             return [_from_row(r) for r in rows]
 
@@ -386,7 +387,7 @@ class PostgresStore:
     def by_session(self, session_id: str) -> list[StoredRecord]:
         def query(conn):  # noqa: ANN001, ANN202
             rows = conn.execute(
-                f"SELECT {_COLUMNS} FROM execution_records WHERE session_id = %s ORDER BY project_id, seq",
+                f"SELECT {_COLUMNS} FROM public.execution_records WHERE session_id = %s ORDER BY project_id, seq",
                 (session_id,),
             ).fetchall()
             return [_from_row(r) for r in rows]
@@ -396,7 +397,7 @@ class PostgresStore:
     def by_subtask(self, subtask_id: str) -> list[StoredRecord]:
         def query(conn):  # noqa: ANN001, ANN202
             rows = conn.execute(
-                f"SELECT {_COLUMNS} FROM execution_records WHERE subtask_id = %s ORDER BY project_id, seq",
+                f"SELECT {_COLUMNS} FROM public.execution_records WHERE subtask_id = %s ORDER BY project_id, seq",
                 (subtask_id,),
             ).fetchall()
             return [_from_row(r) for r in rows]
@@ -406,7 +407,7 @@ class PostgresStore:
     def projects_of_session(self, session_id: str) -> list[str]:
         def query(conn):  # noqa: ANN001, ANN202
             rows = conn.execute(
-                "SELECT DISTINCT project_id FROM execution_records WHERE session_id = %s ORDER BY project_id",
+                "SELECT DISTINCT project_id FROM public.execution_records WHERE session_id = %s ORDER BY project_id",
                 (session_id,),
             ).fetchall()
             return [r["project_id"] for r in rows]

@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from src import config
 from src.config import (
     CIRCUIT_BREAKER_STALL_CYCLES,
     LIMIT_GRACE_SECONDS,
@@ -40,6 +41,7 @@ from src.health import PiHealthMonitor
 from src.knowledge.hypothesis_cycle import SolutionStatus
 from src.knowledge.suggestions import SuggestionError
 from src.logger import get_logger
+from src.model_router import ModelRouter
 from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
 from src.skills.memory.short_term import ShortTermMemory
 from src.telemetry import get_telemetry
@@ -117,6 +119,8 @@ class AutonomousLoop:
         # Definidos em `run()`, quando o budget efetivo (defaults de config + overrides
         # de CLI) é conhecido.
         self._usage_tracker: "UsageTracker | None" = None
+        # v18.5-claim-verification: afirmações pendentes de sessões anteriores verificadas nesta execução.
+        self._claims_previous: list[Any] = []
 
 
     @staticmethod
@@ -238,6 +242,8 @@ class AutonomousLoop:
         resume = self._resume(master_session_id)
         if resume is not None:
             await self.orchestrator.resume_curator_pending(master_session_id)
+            # v18.5-claim-verification (design §11): pendentes das sessões anteriores, antes do primeiro planejamento.
+            self._claims_previous = await self.orchestrator.resume_claims_pending(master_session_id)
 
         # 1. Triage: Simples vs Complexo
         is_complex = True if resume is not None else await self._is_complex_triage(prompt, master_session_id)
@@ -2362,7 +2368,7 @@ class AutonomousLoop:
         from src.numeric_refs.literal_metrics import read_literal_metrics
         from src.numeric_refs.resolver import ReferenceResolver
         from src.provenance.ledger import get_ledger
-        from src.report.pipeline import SOURCE_FILE, ReportState, build_default_pipeline
+        from src.report.pipeline import SOURCE_FILE, ReportState
 
         try:
             session_dir.mkdir(parents=True, exist_ok=True)
@@ -2377,15 +2383,27 @@ class AutonomousLoop:
                 session_ids=self._report_session_ids(master_session_id),
                 literal_metrics=read_literal_metrics(session_dir),
             )
-            state = ReportState(
-                session_id=master_session_id,
-                session_dir=session_dir,
-                source_text=source_markdown,
-                text=source_markdown,
-                resolver=resolver,
-                counts=await asyncio.to_thread(self._report_counts, master_session_id, session_dir),
-            )
-            await asyncio.to_thread(build_default_pipeline().build, state)
+            counts = await asyncio.to_thread(self._report_counts, master_session_id, session_dir)
+            source = source_markdown
+            for cycle in range(config.CLAIM_REVISION_MAX_CYCLES + 1):
+                state = ReportState(
+                    session_id=master_session_id,
+                    session_dir=session_dir,
+                    source_text=source,
+                    text=source,
+                    resolver=resolver,
+                    counts=dict(counts),
+                )
+                state.extras["claims_previous"] = list(self._claims_previous)
+                await asyncio.to_thread(self._claims_pipeline().build, state)
+                revised = await self._revise_report_source(master_session_id, session_dir, state, source, cycle)
+                if revised is None:
+                    break
+                source = revised
+                try:
+                    (session_dir / SOURCE_FILE).write_text(source, encoding="utf-8")
+                except OSError as exc:
+                    logger.error("Falha ao gravar o relatório fonte revisado", extra={"error": str(exc)})
             return (session_dir / "relatorio_final.md").read_text(encoding="utf-8")
         except Exception as exc:  # noqa: BLE001 - falha explícita, relatório fonte preservado
             logger.error("Pipeline do relatório falhou", extra={"error": type(exc).__name__, "detalhe": str(exc)[:300]})
@@ -2399,6 +2417,63 @@ class AutonomousLoop:
             except OSError:
                 pass
             return notice + source_markdown
+
+    def _claims_pipeline(self) -> Any:
+        """Pipeline do relatório com o estágio ``claims`` (v18.5-claim-verification), no laço de eventos atual."""
+        from src.claims.report import ClaimsRunner, register_claims
+        from src.report.pipeline import build_default_pipeline
+
+        pipeline = build_default_pipeline()
+        if config.CLAIM_VERIFY_ENABLED:
+            runtime = self.orchestrator.claim_runtime()
+            register_claims(
+                pipeline,
+                ClaimsRunner(
+                    loop=asyncio.get_running_loop(),
+                    make_service=lambda state: runtime.make_service(state.session_id),
+                ),
+            )
+        return pipeline
+
+    async def _revise_report_source(
+        self, master_session_id: str, session_dir: Path, state: Any, source: str, cycle: int
+    ) -> Optional[str]:
+        """Um ciclo de correção (design §8): devolve o texto fonte revisado, ou ``None`` se não há o que corrigir.
+
+        Só ``refutada_deterministica`` e ``parcial`` voltam ao Summarizer; ``contestada`` vai ao pesquisador. Falha do
+        Summarizer não interrompe o relatório: as afirmações seguem como estão, com o aviso no log.
+        """
+        data = state.extras.get("claims")
+        if not config.CLAIM_VERIFY_ENABLED or not data or cycle >= config.CLAIM_REVISION_MAX_CYCLES:
+            return None
+        from src.claims.revision import apply_revisions, request_revisions, revision_targets
+        from src.claims.store import ClaimStore
+
+        store: ClaimStore = data["store"]
+        sections = tuple(config.CLAIM_VERIFY_SECTIONS)
+        items = revision_targets(store, source, sections)
+        if not items or self.orchestrator.claim_runtime().budget_exhausted(master_session_id):
+            return None
+        try:
+            provider = ModelRouter.get_provider("summarizer")
+            replacements = await request_revisions(provider, items, role_tainted("summarizer"))
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - o relatório segue com as marcas, sem a correção
+            logger.warning("Ciclo de correção do relatório falhou", extra={"error": type(exc).__name__})
+            return None
+        if not replacements:
+            return None
+        revised = apply_revisions(source, replacements, sections)
+        if revised == source:
+            return None
+        fresh = ClaimStore.load(session_dir, master_session_id)
+        for conclusao_id in replacements:
+            entry = fresh.conclusoes.get(conclusao_id)
+            if entry is not None:
+                entry["ciclos"] = int(entry.get("ciclos") or 0) + 1
+        fresh.save()
+        return revised
 
     def _report_counts(self, master_session_id: str, session_dir: Path) -> dict[str, int]:
         """Contagens do orquestrador para a exclusão X8 do verificador (subtarefas, execuções, insumos...)."""

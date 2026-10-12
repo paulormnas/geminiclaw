@@ -251,6 +251,8 @@ class CuratorToolkit:
         self._batch: dict[int, QueueItem] = {}
         self._served: set[int] = set()
         self._created: set[str] = set()  # nós criados nesta execução (não servem de base para substituir/contestar)
+        # v18.5-claim-verification: descobertas criadas ou reforçadas nesta execução (as que o orquestrador verifica).
+        self.touched_discoveries: list[str] = []
         self._started = datetime.now(timezone.utc).isoformat()
         # v18.5-numeric-references: resolvedor das referências {{res|calc|src}} do texto escrito (injetável em testes).
         self.numeric_resolver: Any = None
@@ -843,6 +845,7 @@ class CuratorToolkit:
             node_props["filtro_condicoes"] = filtro
         new_id = self.store.create_node("Descoberta", node_props, actor=self.actor)
         self._created.add(new_id)
+        self.touched_discoveries.append(new_id)
         self._wire_discovery(new_id, sobre, evidencias)
         linked = self._link_related(new_id, review, variacao) if review.relacionados else []
         self._finish_discovery(new_id, tipo)
@@ -922,6 +925,8 @@ class CuratorToolkit:
         self.store.update_node(id, changes, actor=self.actor)
         self._finish_discovery(id, str(node.properties.get("tipo")))
         self.stats.reforcados += 1
+        if id not in self.touched_discoveries:
+            self.touched_discoveries.append(id)
         self._audit("reinforce_discovery", id=id, novas=fresh)
         return {"ok": True, "id": id, "evidencias_novas": len(fresh), **self._take_warnings()}
 

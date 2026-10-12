@@ -67,7 +67,7 @@ def provenance_ledger(request, tmp_path_factory):
     from src.provenance.ledger import ExecutionLedger, set_ledger
     from src.provenance.store import MemoryStore
 
-    if f"{os.sep}tests{os.sep}integration{os.sep}provenance{os.sep}" in request.node.fspath.strpath:
+    if f"{os.sep}tests{os.sep}integration{os.sep}provenance_pg{os.sep}" in request.node.fspath.strpath:
         yield None
         return
     ledger = ExecutionLedger(MemoryStore(), tmp_path_factory.mktemp("prov_outputs"))
@@ -91,7 +91,8 @@ def mock_db_connection(request):
         "test_db.py" in path
         or "test_db_integration.py" in path
         or "test_egress_log_integration.py" in path
-        or f"{os.sep}tests{os.sep}integration{os.sep}provenance{os.sep}" in path
+        or "test_input_document_index_pg.py" in path
+        or f"{os.sep}tests{os.sep}integration{os.sep}provenance_pg{os.sep}" in path
         or f"{os.sep}tests{os.sep}integration{os.sep}knowledge{os.sep}" in path
     ):
         yield

@@ -136,8 +136,42 @@ def test_plano_sem_daemon_falha_com_mensagem_clara() -> None:
 # -- ensure (6.4) --------------------------------------------------------------------------------------------------
 
 
+def _fake_project(root: Path) -> Path:
+    (root / "containers" / "sandbox").mkdir(parents=True)
+    (root / "containers" / "sandbox" / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    (root / ".venv").mkdir()
+    (root / ".venv" / "enorme.bin").write_text("x", encoding="utf-8")
+    return root
+
+
+def test_contexto_do_build_so_leva_o_necessario(tmp_path) -> None:
+    from src.platform_images import build_context
+
+    sandbox = load_manifest(MANIFEST_PATH)["sandbox"]
+    assert sandbox.contexto == ("containers/sandbox",)
+    root = _fake_project(tmp_path / "proj")
+    with build_context(sandbox, root) as ctx:
+        assert ctx != root and (ctx / "containers" / "sandbox" / "Dockerfile").is_file()
+        assert not (ctx / ".venv").exists()
+        kept = ctx
+    assert not kept.exists()  # contexto temporário removido
+
+
+def test_contexto_fora_do_projeto_ou_ausente_e_recusado(tmp_path) -> None:
+    from dataclasses import replace
+
+    from src.platform_images import build_context
+
+    sandbox = load_manifest(MANIFEST_PATH)["sandbox"]
+    root = _fake_project(tmp_path / "proj")
+    for bad in ("../fora", "nao/existe"):
+        with pytest.raises(PlatformImageError), build_context(replace(sandbox, contexto=(bad,)), root):
+            pass
+
+
 def test_build_nativo_registra_o_resultado(tmp_path) -> None:
     sandbox = load_manifest(MANIFEST_PATH)["sandbox"]
+    _fake_project(tmp_path)
     client = FakeClient("aarch64")
     platform_file = tmp_path / "store" / "platform.json"
     result = ensure_images([sandbox], _info(), client, assume_yes=True, project_root=tmp_path,

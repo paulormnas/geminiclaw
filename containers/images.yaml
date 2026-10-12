@@ -13,6 +13,7 @@ imagens:
     dockerfile: containers/sandbox/Dockerfile
     tag_env: SANDBOX_IMAGE
     tag_padrao: code-sandbox:latest
+    contexto: [containers/sandbox]       # só o necessário ao Dockerfile; o cliente Python não aplica .dockerignore
     arquiteturas: [arm64, amd64]
     validada_em: []
   postgres:

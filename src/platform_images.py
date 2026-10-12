@@ -8,10 +8,12 @@ Arquitetura fora das suportadas interrompe sem tentar emulação. O cliente de c
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import shutil
 import tempfile
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,7 +35,7 @@ ENSURE_COMMAND = "uv run python -m scripts.platform_images ensure --imagens sand
 OBTER_VALUES = ("pull", "build", "compose")
 _ALLOWED_KEYS = {
     "obter", "dockerfile", "tag_env", "tag_padrao", "referencia_env", "referencia_padrao", "arquiteturas",
-    "validada_em", "opcional",
+    "validada_em", "opcional", "contexto",
 }
 _REQUIRED_BY_OBTER = {
     "build": ("dockerfile", "tag_env", "tag_padrao"),
@@ -71,6 +73,7 @@ class ImageSpec:
     referencia_env: str | None = None
     referencia_padrao: str | None = None
     opcional: bool = False
+    contexto: tuple[str, ...] = ()  # caminhos (relativos à raiz) enviados ao build; vazio = a raiz inteira
 
     @property
     def reference(self) -> str:
@@ -136,6 +139,7 @@ def parse_manifest(data: Any) -> dict[str, ImageSpec]:
             referencia_env=raw.get("referencia_env"),
             referencia_padrao=raw.get("referencia_padrao"),
             opcional=bool(raw.get("opcional", False)),
+            contexto=_as_str_tuple(name, "contexto", raw["contexto"]) if "contexto" in raw else (),
         )
     return result
 
@@ -314,9 +318,11 @@ def ensure_images(
             if item.estado == STATE_PULL:
                 image = client.images.pull(item.referencia, platform=target)
             else:  # build
-                image, _logs = client.images.build(
-                    path=str(project_root), dockerfile=spec.dockerfile, tag=item.referencia, platform=target, rm=True
-                )
+                with build_context(spec, project_root) as context_dir:
+                    image, _logs = client.images.build(
+                        path=str(context_dir), dockerfile=spec.dockerfile, tag=item.referencia, platform=target,
+                        rm=True,
+                    )
         except PlatformImageError:
             raise
         except Exception as exc:  # noqa: BLE001 - qualquer falha do daemon vira erro acionável
@@ -335,6 +341,30 @@ def ensure_images(
     if platform_file is not None:
         write_platform_file(result, platform_file)
     return result
+
+
+@contextlib.contextmanager
+def build_context(spec: ImageSpec, project_root: Path) -> Iterator[Path]:
+    """Diretório de contexto do build: a raiz, ou uma cópia só com os caminhos de ``contexto`` do manifesto.
+
+    Enviar a raiz inteira levaria ao daemon o ``.venv``, ``.worktrees`` e demais diretórios (vários GB no Pi); o
+    cliente Python não aplica o ``.dockerignore`` como o ``docker build``.
+    """
+    if not spec.contexto:
+        yield project_root
+        return
+    with tempfile.TemporaryDirectory(prefix=f"ctx-{spec.nome}-") as tmp:
+        for rel in spec.contexto:
+            source = (project_root / rel).resolve()
+            if not source.exists() or project_root.resolve() not in (source, *source.parents):
+                raise PlatformImageError(f"Contexto de build '{rel}' da imagem '{spec.nome}' não existe no projeto.")
+            target = Path(tmp) / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if source.is_dir():
+                shutil.copytree(source, target, ignore=shutil.ignore_patterns("__pycache__"))
+            else:
+                shutil.copy2(source, target)
+        yield Path(tmp)
 
 
 def write_platform_file(result: EnsureResult, path: Path = PLATFORM_FILE) -> None:

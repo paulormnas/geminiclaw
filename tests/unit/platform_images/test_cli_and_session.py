@@ -78,6 +78,7 @@ def test_plan_estrito_ok_quando_tudo_validado() -> None:
 
 
 def test_ensure_constroi_e_grava(tmp_path) -> None:
+    (tmp_path / "containers" / "sandbox").mkdir(parents=True)
     client = FakeClient("aarch64")
     code, out = _run(["ensure", "--imagens", "sandbox", "--yes"], client, platform_file=tmp_path / "platform.json",
                      project_root=tmp_path)

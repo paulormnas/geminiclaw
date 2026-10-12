@@ -2011,6 +2011,19 @@ class Orchestrator:
 
         return result
 
+    def _save_raw_plan(self, session_id: str, iteration: int, raw_plan: str) -> None:
+        """Grava a resposta bruta do Researcher em ``outputs/<sessão>/plans/plano_<n>.txt`` (auditoria do plano).
+
+        Sem ela, uma sessão que retira todas as subtarefas não deixa como saber o que o modelo propôs. Limitada a
+        200 mil caracteres; falha de disco nunca derruba o planejamento.
+        """
+        try:
+            directory = self.output_manager.base_dir / session_id / "plans"
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory / f"plano_{iteration}.txt").write_text(raw_plan[:200_000], encoding="utf-8")
+        except OSError as exc:
+            logger.warning("Plano bruto não gravado", extra={"error": str(exc)})
+
     def _record_plan_normalized(self, master_session_id: str, iteration: int, normalized: Any) -> None:
         """Registra os reparos do normalizador (observabilidade nunca derruba o planejamento)."""
         try:
@@ -2160,6 +2173,7 @@ class Orchestrator:
             
             # Tenta extrair JSON da resposta
             raw_plan = planner_result.response.get("text", "")
+            self._save_raw_plan(master_session_id, iteration + 1, raw_plan)
             plan_data = extract_json(raw_plan)
             extras = PlanExtras()
             if exploration is not None and plan_data is not None:

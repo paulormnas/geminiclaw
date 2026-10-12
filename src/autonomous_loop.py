@@ -2066,9 +2066,14 @@ class AutonomousLoop:
                     extra={"error": str(e)},
                 )
                 consolidation_pending = True
-        else:
+        elif not tokens_available_for_closing:
             logger.warning(
                 "Reserva de tokens esgotada — consolidação final adiada (consolidation_pending)",
+                extra={"master_session_id": master_session_id},
+            )
+        else:
+            logger.info(
+                "Nenhuma subtarefa concluída nem resultado a consolidar; consolidação final dispensada",
                 extra={"master_session_id": master_session_id},
             )
 

@@ -348,6 +348,57 @@ def get_project(store: GraphStore, projeto_id: str) -> ProjectDetail:
 
 
 # ---------------------------------------------------------------------------
+# Modo sem limite (v18.5-operation-metrics §2.2): marcação do projeto, só pelo pesquisador
+# ---------------------------------------------------------------------------
+
+
+def is_unlimited_marked(store: GraphStore, projeto_id: str) -> bool:
+    """True se o projeto está marcado com ``modo_sem_limite`` (a execução ainda exige confirmação digitada)."""
+    node = _find_project_node(store, projeto_id)
+    return node.properties.get("modo_sem_limite") is True
+
+
+def set_unlimited_mode(
+    store: GraphStore,
+    projeto_id: str,
+    enabled: bool,
+    *,
+    decided_by: Actor = PESQUISADOR,
+    decided_at: str | None = None,
+) -> str:
+    """Liga ou desliga a marcação ``modo_sem_limite`` do projeto (comando determinístico, auditado).
+
+    Args:
+        store: Grafo.
+        projeto_id: Projeto.
+        enabled: Valor da marcação.
+        decided_by: Autor; só ``pesquisador`` é aceito (a marcação nunca vem de agente).
+        decided_at: Instante ISO-8601 (padrão: agora, UTC).
+
+    Returns:
+        O id do projeto.
+
+    Raises:
+        ProjectError: Projeto inexistente ou autor diferente de ``pesquisador``.
+    """
+    from datetime import UTC, datetime
+
+    if decided_by.kind != "pesquisador":
+        raise ProjectError("Só o pesquisador pode marcar o projeto como modo sem limite.")
+    node = _find_project_node(store, projeto_id)
+    store.update_node(
+        node.id,
+        {
+            "modo_sem_limite": bool(enabled),
+            "modo_sem_limite_decidido_em": decided_at or datetime.now(UTC).isoformat(),
+            "modo_sem_limite_decidido_por": decided_by.kind,
+        },
+        actor=decided_by,
+    )
+    return str(node.properties["projeto_id"])
+
+
+# ---------------------------------------------------------------------------
 # Confirmação do Problema (somente pelo pesquisador)
 # ---------------------------------------------------------------------------
 

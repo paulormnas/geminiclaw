@@ -1080,6 +1080,76 @@ class TelemetryCollector:
             logger.error("Erro ao consultar subtask metrics", extra={"error": str(e)})
             return []
 
+    def get_usage_by_task(self, execution_id: str) -> list[dict[str, Any]]:
+        """Tokens e custo por tarefa e agente (v18.5-operation-metrics §1.1).
+
+        O custo é ``None`` quando nenhuma chamada do grupo informou custo (nunca somado como zero);
+        ``calls_sem_custo`` conta as chamadas sem custo informado.
+
+        Raises:
+            Exception: Falha de leitura do banco (o leitor de métricas a traduz em grupo ``erro``).
+        """
+        with get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT task_name, agent_id,
+                       SUM(total_tokens)       AS tokens,
+                       SUM(estimated_cost_usd) AS cost_usd,
+                       COUNT(*)                AS calls,
+                       SUM(CASE WHEN estimated_cost_usd IS NULL THEN 1 ELSE 0 END) AS calls_sem_custo
+                FROM token_usage
+                WHERE execution_id = %s
+                GROUP BY task_name, agent_id
+                ORDER BY tokens DESC
+                """,
+                (execution_id,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_average_cpu(self, execution_id: str) -> float | None:
+        """Média de ``cpu_usage_pct`` dos snapshots de hardware da execução (``None`` sem snapshots).
+
+        Raises:
+            Exception: Falha de leitura do banco.
+        """
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT AVG(cpu_usage_pct) AS avg_cpu FROM hardware_snapshots WHERE execution_id = %s",
+                (execution_id,),
+            ).fetchone()
+        value = row["avg_cpu"] if row else None
+        return float(value) if value is not None else None
+
+    def get_events(self, execution_id: str, event_type: str) -> list[dict[str, Any]]:
+        """Eventos ``agent_events`` de um tipo, em ordem cronológica (``timestamp``, ``agent_id``, ``payload``).
+
+        Raises:
+            Exception: Falha de leitura do banco.
+        """
+        with get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT timestamp, agent_id, task_name, payload_json AS payload
+                FROM agent_events
+                WHERE execution_id = %s AND event_type = %s
+                ORDER BY timestamp ASC
+                """,
+                (execution_id, event_type),
+            ).fetchall()
+        events = []
+        for row in rows:
+            item = dict(row)
+            stamp = item.get("timestamp")
+            item["timestamp"] = stamp.isoformat() if hasattr(stamp, "isoformat") else stamp
+            payload = item.get("payload")
+            if isinstance(payload, str):
+                try:
+                    item["payload"] = json.loads(payload)
+                except ValueError:
+                    item["payload"] = {}
+            events.append(item)
+        return events
+
     def get_connection_retry_count(self, execution_id: str) -> int:
         """Retorna o total de retentativas de conexão registradas para uma execução.
 

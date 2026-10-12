@@ -119,6 +119,10 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             "titulo": PropertySchema(required=True),
             "objetivo": PropertySchema(required=True),
             "status": PropertySchema(required=True, enum=("ativo", "pausado", "concluido")),
+            # v18.5-operation-metrics: marcação do modo sem limite (só o pesquisador; cada execução ainda confirma).
+            "modo_sem_limite": PropertySchema(),
+            "modo_sem_limite_decidido_em": PropertySchema(),
+            "modo_sem_limite_decidido_por": PropertySchema(),
         },
     ),
     "Sessao": NodeSchema(
@@ -138,6 +142,8 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
                     "limite_retentativas",
                     "limite_conexao",
                     "limite_execucoes",
+                    "limite_egresso",  # v18.5-operation-metrics
+                    "interrompida_pesquisador",  # v18.5-operation-metrics (1º Ctrl+C)
                     "versao_modelo",  # v18.5-model-catalog-locality (strict: versão do modelo mudou ou desconhecida)
                     "erro",
                     "interrompida",

@@ -68,6 +68,7 @@ class NumericProvenanceReader:
     """Leitor do grupo ``proveniencia`` de ``v18.5-operation-metrics`` (produtor: ``v18.5-numeric-references``)."""
 
     group = GROUP
+    producer = "v18.5-numeric-references"
 
     def __init__(self, output_dir: Path | str) -> None:
         self.output_dir = Path(output_dir)

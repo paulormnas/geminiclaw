@@ -12,6 +12,7 @@ Ver ``openspec/changes/v18-usage-limits/design.md`` para o desenho completo.
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -32,6 +33,38 @@ class StopReason(str, Enum):
     RUNS = "limite_execucoes"
     MODEL_VERSION = "versao_modelo"  # v18.5-model-catalog-locality (LLM_ROUTING=strict)
     EGRESS = "limite_egresso"  # v18.5-egress-gate (volume de saídas de execução enviadas fora do nó)
+    INTERRUPTED = "interrompida_pesquisador"  # v18.5-operation-metrics (1º Ctrl+C: fechamento sem perda de avanço)
+
+
+# v18.5-operation-metrics §2.6: o 1º Ctrl+C pede o fechamento gracioso da sessão em andamento. O pedido é um sinalizador
+# do processo (o handler de SIGINT roda na thread principal); o laço o consulta nos mesmos pontos dos limites.
+_INTERRUPT_REQUESTED = threading.Event()
+_SESSION_ACTIVE = threading.Event()
+
+
+def request_interrupt() -> None:
+    """Registra o pedido do pesquisador para fechar a sessão ativa com checkpoint."""
+    _INTERRUPT_REQUESTED.set()
+
+
+def interrupt_requested() -> bool:
+    """True se o pesquisador já pediu a interrupção graciosa da sessão corrente."""
+    return _INTERRUPT_REQUESTED.is_set()
+
+
+def clear_interrupt() -> None:
+    """Limpa o pedido de interrupção (início de uma nova sessão)."""
+    _INTERRUPT_REQUESTED.clear()
+
+
+def set_session_active(active: bool) -> None:
+    """Marca se há sessão em andamento (só então o 1º Ctrl+C é gracioso)."""
+    (_SESSION_ACTIVE.set if active else _SESSION_ACTIVE.clear)()
+
+
+def session_active() -> bool:
+    """True se há uma sessão do laço autônomo em andamento neste processo."""
+    return _SESSION_ACTIVE.is_set()
 
 
 @dataclass(frozen=True)
@@ -53,14 +86,18 @@ class UsageBudget:
         max_egress_bytes: Limite de volume, por sessão, dos bytes de saídas de execução (após o filtro) enviados a
             destinos fora do nó (v18.5-egress-gate, design §9). O modo sem limite e a opção ``--max-egress-bytes``
             são da ``v18.5-operation-metrics``, que lê este campo para desligar o limite num único ponto.
+        unlimited: Modo sem limite (v18.5-operation-metrics, design §2): tokens, tempo e egresso não interrompem a
+            sessão. Exige ``max_tokens``, ``max_minutes`` e ``max_egress_bytes`` ``None``; as retentativas continuam
+            limitadas. Só a CLI (com confirmação do pesquisador) o ativa; nenhuma variável de ambiente o faz.
     """
 
-    max_tokens: int
-    max_minutes: float
+    max_tokens: int | None
+    max_minutes: float | None
     max_task_retries: int
     max_connection_retries: int
     closing_reserve_pct: float
-    max_egress_bytes: int = 2_000_000
+    max_egress_bytes: int | None = 2_000_000
+    unlimited: bool = False
 
     def __post_init__(self) -> None:
         """Valida a consistência do orçamento.
@@ -68,26 +105,32 @@ class UsageBudget:
         Raises:
             ValueError: Se algum valor estiver fora do intervalo válido.
         """
-        if self.max_tokens <= 0:
-            raise ValueError("max_tokens deve ser positivo.")
-        if self.max_minutes <= 0:
-            raise ValueError("max_minutes deve ser positivo.")
+        if self.unlimited:
+            if self.max_tokens is not None or self.max_minutes is not None or self.max_egress_bytes is not None:
+                raise ValueError("No modo sem limite, max_tokens, max_minutes e max_egress_bytes devem ser None.")
+        else:
+            if self.max_tokens is None or self.max_tokens <= 0:
+                raise ValueError("max_tokens deve ser positivo.")
+            if self.max_minutes is None or self.max_minutes <= 0:
+                raise ValueError("max_minutes deve ser positivo.")
+            if self.max_egress_bytes is None or self.max_egress_bytes <= 0:
+                raise ValueError("max_egress_bytes deve ser positivo.")
         if self.max_task_retries <= 0:
             raise ValueError("max_task_retries deve ser positivo.")
         if self.max_connection_retries <= 0:
             raise ValueError("max_connection_retries deve ser positivo.")
         if not (0.0 <= self.closing_reserve_pct < 1.0):
             raise ValueError("closing_reserve_pct deve estar no intervalo [0, 1).")
-        if self.max_egress_bytes <= 0:
-            raise ValueError("max_egress_bytes deve ser positivo.")
 
     @property
-    def exploration_token_ceiling(self) -> int:
+    def exploration_token_ceiling(self) -> int | None:
         """Tokens disponíveis para exploração, descontada a reserva de fechamento.
 
         Returns:
-            ``max_tokens × (1 − closing_reserve_pct)``, truncado para inteiro.
+            ``max_tokens × (1 − closing_reserve_pct)``, truncado para inteiro; ``None`` no modo sem limite.
         """
+        if self.max_tokens is None:
+            return None
         return int(self.max_tokens * (1 - self.closing_reserve_pct))
 
     def to_payload(self) -> dict:
@@ -104,6 +147,7 @@ class UsageBudget:
             "closing_reserve_pct": self.closing_reserve_pct,
             "exploration_token_ceiling": self.exploration_token_ceiling,
             "max_egress_bytes": self.max_egress_bytes,
+            "unlimited": self.unlimited,
         }
 
     @classmethod
@@ -116,6 +160,7 @@ class UsageBudget:
         max_connection_retries: int | None = None,
         closing_reserve_pct: float | None = None,
         max_egress_bytes: int | None = None,
+        unlimited: bool = False,
     ) -> "UsageBudget":
         """Constrói o orçamento a partir dos defaults de ``src/config.py``.
 
@@ -129,12 +174,38 @@ class UsageBudget:
             max_connection_retries: Override para ``SESSION_MAX_CONNECTION_RETRIES``.
             closing_reserve_pct: Override para ``SESSION_CLOSING_RESERVE_PCT``.
             max_egress_bytes: Override para ``EGRESS_SESSION_MAX_BYTES``.
+            unlimited: Modo sem limite; incompatível com overrides de tokens, tempo e egresso.
 
         Returns:
             Um novo `UsageBudget` com os valores efetivos da sessão.
+
+        Raises:
+            ValueError: Se ``unlimited`` for combinado com override de tokens, tempo ou egresso.
         """
         from src import config as _config
 
+        if unlimited:
+            if max_tokens is not None or max_minutes is not None or max_egress_bytes is not None:
+                raise ValueError(
+                    "As opções --max-tokens, --max-minutes e --max-egress-bytes são incompatíveis com --unlimited."
+                )
+            return cls(
+                max_tokens=None,
+                max_minutes=None,
+                max_task_retries=(
+                    max_task_retries if max_task_retries is not None else _config.SESSION_MAX_TASK_RETRIES
+                ),
+                max_connection_retries=(
+                    max_connection_retries
+                    if max_connection_retries is not None
+                    else _config.SESSION_MAX_CONNECTION_RETRIES
+                ),
+                closing_reserve_pct=(
+                    closing_reserve_pct if closing_reserve_pct is not None else _config.SESSION_CLOSING_RESERVE_PCT
+                ),
+                max_egress_bytes=None,
+                unlimited=True,
+            )
         return cls(
             max_tokens=max_tokens if max_tokens is not None else _config.SESSION_MAX_TOKENS,
             max_minutes=(
@@ -166,10 +237,10 @@ class LimitStatus:
     """Resultado consolidado de uma verificação de limites (`UsageTracker.check`)."""
 
     tokens_used: int
-    tokens_pct: float
+    tokens_pct: float | None  # None no modo sem limite
     tokens_exhausted: bool
     minutes_elapsed: float
-    minutes_pct: float
+    minutes_pct: float | None  # None no modo sem limite
     time_exhausted: bool
     connection_retries: int
     connection_retries_pct: float
@@ -195,17 +266,17 @@ class LimitStatus:
     def stop_reason(self) -> StopReason | None:
         """Motivo de parada correspondente.
 
-        Segue a prioridade tokens > tempo > conexão > egresso, coerente com a
+        Segue a prioridade tokens > tempo > egresso > conexão, coerente com a
         ordem de avaliação em `UsageTracker.check`.
         """
         if self.tokens_exhausted:
             return StopReason.TOKENS
         if self.time_exhausted:
             return StopReason.TIME
-        if self.connection_retries_exhausted:
-            return StopReason.CONNECTION
         if self.egress_exhausted:
             return StopReason.EGRESS
+        if self.connection_retries_exhausted:
+            return StopReason.CONNECTION
         return self.pending_stop
 
 
@@ -395,14 +466,13 @@ class UsageTracker:
             `LimitStatus` com o percentual consumido e o estado de cada limite.
         """
         tokens_used = self._token_reader()
-        tokens_pct = (tokens_used / self.budget.max_tokens) if self.budget.max_tokens else 0.0
-        tokens_exhausted = tokens_used >= self.budget.exploration_token_ceiling
+        ceiling = self.budget.exploration_token_ceiling
+        tokens_pct = (tokens_used / self.budget.max_tokens) if self.budget.max_tokens else None
+        tokens_exhausted = ceiling is not None and tokens_used >= ceiling
 
         minutes_elapsed = self.elapsed_minutes()
-        minutes_pct = (
-            (minutes_elapsed / self.budget.max_minutes) if self.budget.max_minutes else 0.0
-        )
-        time_exhausted = minutes_elapsed >= self.budget.max_minutes
+        minutes_pct = (minutes_elapsed / self.budget.max_minutes) if self.budget.max_minutes else None
+        time_exhausted = self.budget.max_minutes is not None and minutes_elapsed >= self.budget.max_minutes
 
         connection_retries = self._connection_retry_reader()
         connection_pct = (
@@ -413,7 +483,7 @@ class UsageTracker:
         connection_exhausted = connection_retries >= self.budget.max_connection_retries
 
         egress_bytes = self._egress_reader()
-        egress_exhausted = egress_bytes >= self.budget.max_egress_bytes
+        egress_exhausted = self.budget.max_egress_bytes is not None and egress_bytes >= self.budget.max_egress_bytes
 
         status = LimitStatus(
             tokens_used=tokens_used,
@@ -438,7 +508,7 @@ class UsageTracker:
                     "execution_id": self.execution_id,
                     "stop_reason": reason.value if reason else None,
                     "tokens_used": tokens_used,
-                    "tokens_ceiling": self.budget.exploration_token_ceiling,
+                    "tokens_ceiling": ceiling,
                     "minutes_elapsed": minutes_elapsed,
                     "max_minutes": self.budget.max_minutes,
                     "connection_retries": connection_retries,
@@ -454,4 +524,6 @@ class UsageTracker:
         via LLM durante o fechamento, ou se apenas o checkpoint determinístico
         (sem LLM) pode ser gravado (design §3 — reserva esgotada).
         """
+        if self.budget.max_tokens is None:
+            return False
         return self._token_reader() >= self.budget.max_tokens

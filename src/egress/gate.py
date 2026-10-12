@@ -159,6 +159,7 @@ class EgressGate:
         output_max_chars: int | None = None,
         table_min_rows: int | None = None,
         session_max_bytes: int | None = None,
+        unlimited_volume: bool = False,
         known_identifiers: Iterable[str] = (),
     ) -> None:
         """Cria o portão da sessão.
@@ -170,6 +171,9 @@ class EgressGate:
         self.min_group_size = min_group_size if min_group_size is not None else config.require_locality_min_group_size()
         self.output_max_chars = output_max_chars if output_max_chars is not None else config.EGRESS_OUTPUT_MAX_CHARS
         self.table_min_rows = table_min_rows if table_min_rows is not None else config.EGRESS_TABLE_MIN_ROWS
+        # v18.5-operation-metrics: no modo sem limite o volume é registrado, mas nunca retém saídas; os filtros de
+        # localidade, de dados brutos e de despejo tabular continuam iguais.
+        self.unlimited_volume = unlimited_volume
         self.max_egress_bytes = session_max_bytes if session_max_bytes is not None else config.EGRESS_SESSION_MAX_BYTES
         if output_dir is None:
             output_dir = config.OUTPUT_BASE_DIR
@@ -202,7 +206,7 @@ class EgressGate:
 
     @property
     def limit_reached(self) -> bool:
-        return self._new_bytes >= self.max_egress_bytes
+        return not self.unlimited_volume and self._new_bytes >= self.max_egress_bytes
 
     def egress_bytes_for_session(self, session_id: str | None = None) -> int:
         """Volume registrado em ``egress_log`` (design §9)."""

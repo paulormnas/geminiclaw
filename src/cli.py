@@ -8,6 +8,7 @@ import argparse
 import asyncio
 import signal
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -66,7 +67,9 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
   geminiclaw claims list [--project <id>] [--session <id>] [--status <s>] [--json]
   geminiclaw claims resolve <afirmacao_id> --decisao mantida|descartada --motivo "<texto>"
   geminiclaw project new --titulo <t> --objetivo <o> [--dominio <termo>]|list [--status <s>]|show <id>|use <id>
+  geminiclaw project unlimited <id> --on|--off   (marca o projeto para o modo sem limite; cada sessão ainda confirma)
   geminiclaw --project <id> "<tarefa>"
+  geminiclaw --unlimited "<tarefa>"   (sem limite de tokens, tempo, custo e egresso; pede confirmação digitada)
   geminiclaw graph show [--project <id>] [--label <r>] [--dominio <t>] [--status <s>] [--depth N]
                         [--format text|table|json|mermaid]
   geminiclaw graph node <id> [--format text|json]
@@ -230,6 +233,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Limite de tempo de relógio da sessão, em minutos (padrão: SESSION_MAX_MINUTES).",
     )
     parser.add_argument(
+        "--max-egress-bytes",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Limite de volume (bytes) de saídas de execução enviadas fora do nó (padrão: EGRESS_SESSION_MAX_BYTES).",
+    )
+    parser.add_argument(
+        "--unlimited",
+        action="store_true",
+        help=(
+            "Modo sem limite: tokens, tempo, custo e egresso não interrompem a sessão (retentativas e regras de "
+            "localidade continuam). Pede confirmação digitada a cada execução; incompatível com --max-tokens, "
+            "--max-minutes e --max-egress-bytes."
+        ),
+    )
+    parser.add_argument(
         "--max-task-retries",
         type=int,
         default=None,
@@ -262,6 +281,8 @@ def build_usage_budget(args: "argparse.Namespace") -> UsageBudget:
         max_minutes=getattr(args, "max_minutes", None),
         max_task_retries=getattr(args, "max_task_retries", None),
         max_connection_retries=getattr(args, "max_connection_retries", None),
+        max_egress_bytes=getattr(args, "max_egress_bytes", None),
+        unlimited=bool(getattr(args, "unlimited", False)),
     )
 
 
@@ -372,6 +393,48 @@ def show_history() -> None:
     print(f"{BOLD}{_sep}{RESET}\n")
 
 
+def _show_operation_metrics(execution_id: str) -> None:
+    """Mostra as métricas de operação da sessão (v18.5-operation-metrics §6.5).
+
+    Usa as gravadas no fechamento; se a sessão não fechou normalmente (queda, interrupção) ou não as tem, recalcula
+    a partir dos produtores e grava com ``parcial=true``.
+    """
+    from src.operation_metrics import (
+        aggregate_operation_metrics,
+        default_readers,
+        render_operation_metrics_section,
+        unlimited_block,
+    )
+    from src.session import SessionManager
+
+    try:
+        manager = SessionManager()
+        session = manager.get(execution_id)
+    except Exception as exc:  # noqa: BLE001 - bloco opcional da tela
+        print(f"\n  {YELLOW}Métricas de operação indisponíveis: banco inacessível ({type(exc).__name__}).{RESET}")
+        return
+    if session is None:
+        print(f"\n  {DIM}Métricas de operação: sessão '{execution_id}' não encontrada.{RESET}")
+        return
+    payload = dict(session.payload)
+    metrics = payload.get("operation_metrics")
+    if not metrics or metrics.get("parcial") or session.status not in ("closed", "completed"):
+        metrics = aggregate_operation_metrics(
+            execution_id,
+            parcial=session.status not in ("closed", "completed"),
+            readers=default_readers(payload_loader=lambda sid: payload),
+            unlimited=unlimited_block(payload.get("budget"), 0),
+        )
+        try:
+            manager.update(execution_id, payload={**payload, "operation_metrics": metrics})
+        except Exception as exc:  # noqa: BLE001 - recalculado só para exibição
+            logger.warning("Métricas de operação recalculadas não gravadas", extra={"error": type(exc).__name__})
+    print(f"\n  {BOLD}{CYAN}Métricas de Operação{RESET}")
+    for line in render_operation_metrics_section(metrics, stop_reason=payload.get("motivo_parada")).splitlines():
+        if not line.startswith("<!--"):
+            print(f"    {line}")
+
+
 def show_metrics(execution_id: str) -> None:
     """Exibe métricas de telemetria de uma execução.
 
@@ -471,6 +534,8 @@ def show_metrics(execution_id: str) -> None:
         for k, v in derived.items():
             val = f"{v:.2f}" if isinstance(v, float) else str(v)
             print(f"    {DIM}•{RESET} {k:<40} {val}")
+
+    _show_operation_metrics(execution_id)
 
     _sep2 = "─" * 80
     print(f"\n{DIM}{_sep2}{RESET}")
@@ -928,13 +993,28 @@ def print_session_banner(
 
     # Roadmap V18 / Spec usage-limits — orçamento efetivo exibido no início da sessão.
     effective_budget = budget or UsageBudget.from_config()
-    print(
-        f"  {DIM}Orçamento: {RESET}{effective_budget.max_tokens:,} tokens "
-        f"({effective_budget.closing_reserve_pct*100:.0f}% reservados p/ fechamento) │ "
-        f"{effective_budget.max_minutes:.0f}min │ "
-        f"{effective_budget.max_task_retries} retentativas/tarefa │ "
-        f"{effective_budget.max_connection_retries} retentativas de conexão"
-    )
+    if effective_budget.unlimited:
+        from src import config as _cfg
+        from src.unlimited_mode import banner_line, get_activation
+
+        print(
+            f"  {DIM}Orçamento: {RESET}{YELLOW}{BOLD}"
+            + banner_line(
+                effective_budget,
+                (get_activation().origem if get_activation() else "cli"),
+                interval_minutes=_cfg.UNLIMITED_NOTICE_INTERVAL_MINUTES,
+                token_step=_cfg.UNLIMITED_NOTICE_TOKEN_STEP,
+            )
+            + RESET
+        )
+    else:
+        print(
+            f"  {DIM}Orçamento: {RESET}{effective_budget.max_tokens:,} tokens "
+            f"({effective_budget.closing_reserve_pct*100:.0f}% reservados p/ fechamento) │ "
+            f"{effective_budget.max_minutes:.0f}min │ "
+            f"{effective_budget.max_task_retries} retentativas/tarefa │ "
+            f"{effective_budget.max_connection_retries} retentativas de conexão"
+        )
 
     if llm_routing is not None:
         header, *role_lines = llm_routing.banner_lines()
@@ -1341,6 +1421,66 @@ def _handle_vocab_command(argv: list[str], store: Any | None = None) -> int:
     return 0
 
 
+def resolve_unlimited_budget(
+    args: "argparse.Namespace",
+    budget: UsageBudget,
+    *,
+    project_marked: Callable[[str | None], bool] | None = None,
+    input_fn: Callable[[str], str] = input,
+    isatty: Callable[[], bool] | None = None,
+) -> UsageBudget:
+    """Aplica e confirma o modo sem limite (v18.5-operation-metrics, design §2.2).
+
+    O modo vem da opção ``--unlimited`` ou da marcação do projeto; nos dois casos a confirmação digitada é exigida a
+    cada execução, e a retomada (``resume``/``continue``) não herda o modo da sessão anterior. Opções numéricas
+    explícitas (``--max-tokens`` etc.) prevalecem sobre a marcação do projeto.
+
+    Returns:
+        O orçamento a usar (sem limite e confirmado, ou o recebido).
+
+    Raises:
+        UnlimitedModeError: Confirmação ausente, errada ou impossível (sem terminal).
+    """
+    from src.unlimited_mode import (
+        ORIGIN_CLI,
+        ORIGIN_PROJECT,
+        confirm_unlimited,
+        set_activation,
+    )
+
+    origin: str | None = ORIGIN_CLI if budget.unlimited else None
+    explicit_limits = any(
+        getattr(args, name, None) is not None for name in ("max_tokens", "max_minutes", "max_egress_bytes")
+    )
+    if origin is None and not explicit_limits and project_marked is not None:
+        try:
+            if project_marked(getattr(args, "project", None)):
+                origin = ORIGIN_PROJECT
+                budget = UsageBudget.from_config(
+                    max_task_retries=getattr(args, "max_task_retries", None),
+                    max_connection_retries=getattr(args, "max_connection_retries", None),
+                    unlimited=True,
+                )
+        except Exception as exc:  # noqa: BLE001 - sem ler a marcação, a sessão segue limitada (padrão seguro)
+            logger.warning("Marcação de modo sem limite do projeto não lida", extra={"error": type(exc).__name__})
+    if origin is None:
+        set_activation(None)
+        return budget
+    set_activation(confirm_unlimited(budget, origin, input_fn=input_fn, isatty=isatty))
+    return budget
+
+
+def _project_marked_unlimited(project_arg: str | None) -> bool:
+    """True se o projeto da sessão (``--project`` ou o padrão) está marcado com ``modo_sem_limite``."""
+    from src.knowledge import projects
+    from src.knowledge.factory import open_graph_store
+
+    projeto_id = project_arg or projects.get_default_project()
+    if not projeto_id:
+        return False
+    return projects.is_unlimited_marked(open_graph_store(), projeto_id)
+
+
 def main() -> None:
     """Ponto de entrada principal da CLI."""
     # Roadmap V15.6 / Spec G10 — help completo customizado, sem passar pelo argparse padrão
@@ -1413,7 +1553,21 @@ def main() -> None:
     orchestrator: Orchestrator | None = None
 
     def _signal_handler(sig: int, frame: object) -> None:
-        """Handler para SIGINT (Ctrl+C)."""
+        """Handler para SIGINT (Ctrl+C).
+
+        v18.5-operation-metrics §2.6: com uma sessão em andamento, o 1º Ctrl+C pede o fechamento com checkpoint
+        (``interrompida_pesquisador``); o 2º mantém o encerramento imediato.
+        """
+        from src.config import LIMIT_GRACE_SECONDS
+        from src.usage import interrupt_requested, request_interrupt, session_active
+
+        if session_active() and not interrupt_requested():
+            request_interrupt()
+            print(
+                f"\n\n  {YELLOW}⚠  Interrupção pedida: a sessão fecha com checkpoint assim que as subtarefas em "
+                f"andamento terminarem (até {LIMIT_GRACE_SECONDS}s). Ctrl+C de novo encerra imediatamente.{RESET}\n"
+            )
+            return
         print(f"\n\n  {YELLOW}⚠  Interrupção recebida. Encerrando sandboxes de código...{RESET}")
         # Os agentes rodam no processo; só o sandbox de código pode ter deixado container para trás.
         from src.skills.code.sandbox import cleanup_sandbox_containers
@@ -1498,6 +1652,16 @@ def main() -> None:
         asyncio.run(orchestrator.recover_interrupted_sessions())
     except Exception as _e:  # noqa: BLE001 - nunca impede a inicialização
         logger.warning("Detecção de sessões interrompidas falhou", extra={"error": type(_e).__name__})
+
+    # v18.5-operation-metrics — modo sem limite: opção --unlimited ou marcação do projeto, sempre com confirmação.
+    from src.unlimited_mode import UnlimitedModeError
+
+    try:
+        budget = resolve_unlimited_budget(args, budget, project_marked=_project_marked_unlimited)
+    except UnlimitedModeError as e:
+        print(f"\n  {STATUS_ICONS['error']} {RED}{e}{RESET}\n")
+        logger.error("Modo sem limite não iniciado", extra={"error": str(e)})
+        sys.exit(2)
 
     # Roadmap V15.3 / Spec G5 + v18-research-continuity — retomar a partir do checkpoint
     if args.prompt:

@@ -54,6 +54,7 @@ from src.rate_limiter import AdaptiveRateLimiter
 from src.research_data.manifest import ManifestError
 from src.session import SessionManager
 from src.telemetry import get_telemetry
+from src.unlimited_mode import budget_payload, record_confirmation_event
 from src.usage import UsageBudget, UsageTracker
 from src.utils.json_parser import extract_json
 
@@ -654,7 +655,7 @@ class Orchestrator:
                 continues_session_id=continues,
                 prompt=prompt,
                 modo=mode,
-                orcamento=budget.to_payload(),
+                orcamento=budget_payload(budget),
             )
             if resume is not None:
                 recorder.seed(list(resume.completed.values()))
@@ -1103,6 +1104,7 @@ class Orchestrator:
             master_session.id,
             output_dir=self.output_manager.base_dir,
             session_max_bytes=effective_budget.max_egress_bytes,
+            unlimited_volume=effective_budget.unlimited,
         )
         bind_gate(egress_gate)
         self._egress_gates[master_session.id] = egress_gate
@@ -1114,7 +1116,7 @@ class Orchestrator:
                 **master_session.payload,
                 "mode": effective_mode,
                 "prompt": prompt,
-                "budget": effective_budget.to_payload(),
+                "budget": budget_payload(effective_budget),
                 "locality_min_group_size": egress_gate.min_group_size,
                 "llm_routing": routing.payload(),
                 # v18.5-model-catalog-locality — perfil de alocação gravado antes do primeiro envio a um modelo.
@@ -1126,6 +1128,7 @@ class Orchestrator:
             },
         )
         self._wire_version_events(routing, master_session.id)
+        record_confirmation_event(master_session.id)  # v18.5-operation-metrics: modo sem limite confirmado
         continues_id = resume.source_session_id if resume is not None else None
         if resume is not None:
             # Compare-and-set atômico: só uma retomada simultânea da mesma origem vence (sem bifurcar a pesquisa).
@@ -1407,6 +1410,7 @@ class Orchestrator:
                 "planning_runs": self._session_planning_run_counts.get(master_session.id, 0),
                 "report_path": "relatorio_final.md",
                 "provenance_chain_tip": self._session_chain_tip(master_session.id),
+                "operation_metrics": final_payload.get("operation_metrics"),
             }
             (session_dir / "session_metadata.json").write_text(
                 json.dumps(session_metadata, indent=2, ensure_ascii=False, default=str), encoding="utf-8"

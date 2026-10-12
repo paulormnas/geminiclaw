@@ -121,11 +121,18 @@ class AutonomousLoop:
         self._usage_tracker: "UsageTracker | None" = None
         # v18.5-claim-verification: afirmações pendentes de sessões anteriores verificadas nesta execução.
         self._claims_previous: list[Any] = []
+        # v18.5-operation-metrics: cadência e contagem dos avisos periódicos do modo sem limite.
+        self._notice_schedule: Any = None
+        self._unlimited_notices = 0
 
 
     @staticmethod
     def _pending_model_stop() -> "StopReason | None":
-        """``StopReason.MODEL_VERSION`` se, em ``strict``, a versão do modelo mudou ou é desconhecida (v18.5)."""
+        """Parada pedida fora do orçamento: interrupção do pesquisador ou, em ``strict``, versão do modelo (v18.5)."""
+        from src.usage import interrupt_requested
+
+        if interrupt_requested():
+            return StopReason.INTERRUPTED
         from src.llm.session import current_session_routing
         from src.llm.versions import STOP_VERSION
 
@@ -199,6 +206,26 @@ class AutonomousLoop:
         mode: str = "",
         budget: "UsageBudget | None" = None,
     ) -> "OrchestratorResult":
+        """Executa a tarefa utilizando o loop autônomo (ver ``_run_session``).
+
+        Marca a sessão como ativa para que o 1º Ctrl+C a feche com checkpoint (v18.5-operation-metrics §2.6).
+        """
+        from src.usage import clear_interrupt, set_session_active
+
+        clear_interrupt()
+        set_session_active(True)
+        try:
+            return await self._run_session(prompt, master_session_id, mode, budget)
+        finally:
+            set_session_active(False)
+
+    async def _run_session(
+        self,
+        prompt: str,
+        master_session_id: str,
+        mode: str = "",
+        budget: "UsageBudget | None" = None,
+    ) -> "OrchestratorResult":
         """Executa a tarefa utilizando o loop autônomo.
 
         Args:
@@ -229,6 +256,8 @@ class AutonomousLoop:
         )
         self.orchestrator.register_usage_tracker(master_session_id, self._usage_tracker)
         self.max_retries = effective_budget.max_task_retries
+        self._notice_schedule = None  # v18.5-operation-metrics: cadência dos avisos reinicia a cada sessão
+        self._unlimited_notices = 0
 
         logger.info(
             "Iniciando loop autônomo",
@@ -414,11 +443,17 @@ class AutonomousLoop:
         """
         from src.config import (
             MAX_AGENT_RUNS_PER_SESSION,
-            OPERATIONAL_THRESHOLD_WAIT_SECONDS,
             OPERATIONAL_THRESHOLDS,
-            SESSION_MAX_MINUTES,
-            SESSION_MAX_TOKENS,
         )
+
+        # v18.5-operation-metrics §6: percentuais do orçamento efetivo (inclui overrides da CLI); no modo sem
+        # limite os avisos de tokens, tempo e custo não existem (os avisos periódicos os substituem).
+        budget = self._usage_tracker.budget if self._usage_tracker is not None else UsageBudget.from_config()
+        session_max_tokens = budget.max_tokens
+        session_max_minutes = budget.max_minutes
+
+        if await self._maybe_unlimited_notice(master_session_id):
+            return True
 
         telemetry = get_telemetry()
         token_summary = telemetry.get_token_summary(master_session_id)
@@ -426,7 +461,7 @@ class AutonomousLoop:
         total_tokens = sum(r.get("total_tokens") or 0 for r in rows)
         total_cost = sum(r.get("total_cost_usd") or 0 for r in rows)
 
-        token_pct = (total_tokens / SESSION_MAX_TOKENS) if SESSION_MAX_TOKENS else 0.0
+        token_pct = (total_tokens / session_max_tokens) if session_max_tokens else 0.0
         run_counts = getattr(self.orchestrator, "_session_agent_run_counts", None)
         agent_runs = run_counts.get(master_session_id, 0) if isinstance(run_counts, dict) else 0
         run_limit = MAX_AGENT_RUNS_PER_SESSION
@@ -437,18 +472,18 @@ class AutonomousLoop:
         agent_runs_pct = (agent_runs / run_limit) if run_limit else 0.0
         duration_min = (time.time() - getattr(self, "_session_started_at", time.time())) / 60
         # V18/usage-limits — avisos da Spec G5 agora são percentuais dos limites reais
-        # do UsageBudget (SESSION_MAX_MINUTES), não mais minutos absolutos.
-        duration_pct = (duration_min / SESSION_MAX_MINUTES) if SESSION_MAX_MINUTES else 0.0
+        # do UsageBudget (session_max_minutes), não mais minutos absolutos.
+        duration_pct = (duration_min / session_max_minutes) if session_max_minutes else 0.0
 
         triggered: list[str] = []
-        if token_pct >= OPERATIONAL_THRESHOLDS["token_usage_pct"]:
-            triggered.append(f"Uso de tokens: {token_pct*100:.0f}% do limite ({total_tokens}/{SESSION_MAX_TOKENS})")
-        if total_cost >= OPERATIONAL_THRESHOLDS["cost_usd"]:
+        if not budget.unlimited and token_pct >= OPERATIONAL_THRESHOLDS["token_usage_pct"]:
+            triggered.append(f"Uso de tokens: {token_pct*100:.0f}% do limite ({total_tokens}/{session_max_tokens})")
+        if not budget.unlimited and total_cost >= OPERATIONAL_THRESHOLDS["cost_usd"]:
             triggered.append(f"Custo estimado: ${total_cost:.2f} (limite ${OPERATIONAL_THRESHOLDS['cost_usd']:.2f})")
-        if duration_pct >= OPERATIONAL_THRESHOLDS["session_duration_pct"]:
+        if not budget.unlimited and duration_pct >= OPERATIONAL_THRESHOLDS["session_duration_pct"]:
             triggered.append(
                 f"Duração da sessão: {duration_pct*100:.0f}% do limite "
-                f"({duration_min:.0f}min/{SESSION_MAX_MINUTES:.0f}min)"
+                f"({duration_min:.0f}min/{session_max_minutes:.0f}min)"
             )
         planning_counts = getattr(self.orchestrator, "_session_planning_run_counts", None)
         planning_runs = planning_counts.get(master_session_id, 0) if isinstance(planning_counts, dict) else 0
@@ -476,6 +511,12 @@ class AutonomousLoop:
         for item in triggered:
             print(f"  {YELLOW}•{RESET} {item}")
 
+        return await self._offer_suspension(master_session_id)
+
+    async def _offer_suspension(self, master_session_id: str) -> bool:
+        """Oferece ao pesquisador suspender a sessão (modo ``assisted``); ``True`` se ele digitou 's'."""
+        from src.config import OPERATIONAL_THRESHOLD_WAIT_SECONDS
+
         try:
             answer = await asyncio.wait_for(
                 asyncio.to_thread(input, "  Digite 's' para suspender a sessão, ou aguarde para continuar: "),
@@ -495,6 +536,62 @@ class AutonomousLoop:
             return True
 
         return False
+
+    async def _maybe_unlimited_notice(self, master_session_id: str) -> bool:
+        """Aviso periódico de consumo do modo sem limite (v18.5-operation-metrics §2.5).
+
+        Emitido no terminal em todos os modos quando passa o intervalo de tempo ou de tokens (o que ocorrer primeiro).
+        No ``assisted`` oferece suspender; em ``semi``/``auto`` não bloqueia.
+
+        Returns:
+            True se o pesquisador suspendeu a sessão; False caso contrário (inclusive fora do modo sem limite).
+        """
+        tracker = self._usage_tracker
+        if tracker is None or not tracker.budget.unlimited:
+            return False
+        if self._notice_schedule is None:
+            from src import config
+            from src.unlimited_mode import NoticeSchedule
+
+            self._notice_schedule = NoticeSchedule(
+                config.UNLIMITED_NOTICE_INTERVAL_MINUTES,
+                config.UNLIMITED_NOTICE_TOKEN_STEP,
+                started_minutes=tracker.elapsed_minutes(),
+            )
+        status = tracker.check()
+        if not self._notice_schedule.due(status.minutes_elapsed, status.tokens_used):
+            return False
+
+        from src.utils.terminal import BOLD, RESET, YELLOW
+
+        rows = get_telemetry().get_token_summary(master_session_id).get("by_provider_model", [])
+        costs = [r.get("total_cost_usd") for r in rows if r.get("total_cost_usd") is not None]
+        cost = f"US$ {sum(costs):.2f}" if costs else "não informado"
+        line = (
+            f"Modo sem limite: {status.minutes_elapsed:.0f} min │ {status.tokens_used:,} tokens │ custo {cost} │ "
+            f"egresso {status.egress_bytes:,} bytes"
+        )
+        print(f"\n{YELLOW}{BOLD}⚠ {line}{RESET}")
+        logger.warning(
+            "Aviso periódico do modo sem limite",
+            extra={"master_session_id": master_session_id, "tokens_used": status.tokens_used},
+        )
+        self._unlimited_notices += 1
+        get_telemetry().record_agent_event(
+            execution_id=master_session_id,
+            session_id=master_session_id,
+            agent_id="autonomous_loop",
+            event_type="unlimited_notice",
+            payload={
+                "minutes_elapsed": round(status.minutes_elapsed, 2),
+                "tokens_used": status.tokens_used,
+                "egress_bytes": status.egress_bytes,
+                "numero": self._unlimited_notices,
+            },
+        )
+        if self._session_mode != "assisted":
+            return False
+        return await self._offer_suspension(master_session_id)
 
     async def _report_divergence(
         self, task: "AgentTask", attempt_errors: List[str], master_session_id: str
@@ -1428,10 +1525,13 @@ class AutonomousLoop:
             # terminar; se estourar, as demais são canceladas e a sessão fecha por
             # limite de tempo (design §3).
             coroutines = [_execute_task_in_dag(t, i) for i, t in enumerate(tasks)]
-            remaining_seconds = max(
-                0.0, (self._usage_tracker.budget.max_minutes * 60) - (self._usage_tracker.elapsed_minutes() * 60)
-            )
-            gather_timeout = remaining_seconds + LIMIT_GRACE_SECONDS
+            if self._usage_tracker.budget.max_minutes is None:  # modo sem limite: nenhum prazo de ciclo
+                gather_timeout = None
+            else:
+                remaining_seconds = max(
+                    0.0, (self._usage_tracker.budget.max_minutes * 60) - (self._usage_tracker.elapsed_minutes() * 60)
+                )
+                gather_timeout = remaining_seconds + LIMIT_GRACE_SECONDS
             try:
                 await asyncio.wait_for(asyncio.gather(*coroutines), timeout=gather_timeout)
             except asyncio.TimeoutError:
@@ -1885,6 +1985,17 @@ class AutonomousLoop:
             },
         )
 
+        if reason == StopReason.INTERRUPTED:  # v18.5-operation-metrics: conta como intervenção humana
+            telemetry.record_agent_event(
+                execution_id=master_session_id,
+                session_id=master_session_id,
+                agent_id="autonomous_loop",
+                event_type="researcher_interruption",
+                payload={"em": datetime.now(timezone.utc).isoformat()},
+            )
+
+        await self.record_operation_metrics(master_session_id, parcial=False)
+
         completed_tasks = [t for t, s in dag_state.items() if s.get("status") == "success"]
         abandoned_tasks = [t for t, s in dag_state.items() if s.get("status") == "abandonada"]
         pending_tasks = [
@@ -2293,6 +2404,7 @@ class AutonomousLoop:
         markdown = render_report_markdown(data, narrative)
         markdown = await self._append_provenance_section(markdown, master_session_id)
         markdown = await self._finalize_report(markdown, master_session_id, session_dir)
+        markdown = await self._append_operation_metrics_section(markdown, master_session_id, session_dir, stop_reason)
         try:
             (session_dir / "report_data.json").write_text(report_data_json(data), encoding="utf-8")
         except OSError as exc:
@@ -2301,6 +2413,98 @@ class AutonomousLoop:
         # Falha da chamada ao agente continua sendo falha; narrativa indisponível não é.
         summary_result.response = {"text": markdown}
         return summary_result
+
+    def _session_payload(self, session_id: str) -> dict[str, Any]:
+        session = self.orchestrator.session_manager.get(session_id)
+        return dict(session.payload) if session is not None else {}
+
+    async def record_operation_metrics(self, master_session_id: str, *, parcial: bool) -> dict[str, Any] | None:
+        """Agrega as métricas de operação da sessão e grava em ``payload["operation_metrics"]`` (idempotente).
+
+        Sem LLM. Uma falha nunca impede o fechamento nem o relatório: devolve ``None`` e registra em log
+        (v18.5-operation-metrics §1.2–1.3).
+        """
+        from src.operation_metrics import aggregate_operation_metrics, default_readers, unlimited_block
+
+        telemetry = get_telemetry()
+
+        def on_error(group: str, message: str) -> None:
+            telemetry.record_agent_event(
+                execution_id=master_session_id,
+                session_id=master_session_id,
+                agent_id="autonomous_loop",
+                event_type="operation_metrics_error",
+                payload={"grupo": group, "mensagem": message[:300]},
+            )
+
+        try:
+            await telemetry.flush()  # tokens e snapshots ainda em buffer entram na agregação
+            payload = await asyncio.to_thread(self._session_payload, master_session_id)
+            metrics = await asyncio.to_thread(
+                aggregate_operation_metrics,
+                master_session_id,
+                parcial=parcial,
+                readers=default_readers(
+                    self.orchestrator.output_manager.base_dir, payload_loader=self._session_payload
+                ),
+                unlimited=unlimited_block(payload.get("budget"), self._unlimited_notices),
+                on_error=on_error,
+            )
+            self.orchestrator.session_manager.update(
+                master_session_id,
+                payload={**self._session_payload(master_session_id), "operation_metrics": metrics},
+            )
+            return metrics
+        except Exception as exc:  # noqa: BLE001 - métricas nunca bloqueiam o fechamento
+            logger.error(
+                "Falha ao agregar as métricas de operação",
+                extra={"error": type(exc).__name__, "detalhe": str(exc)[:300], "session_id": master_session_id},
+            )
+            return None
+
+    def _continued_chain_metrics(self, session_id: str, current: dict[str, Any]) -> list[dict[str, Any]]:
+        """Métricas gravadas das sessões que esta continua (``continues_session_id``) mais a atual, da mais antiga."""
+        chain = [current]
+        seen = {session_id}
+        payload = self._session_payload(session_id)
+        while len(chain) < 50:
+            previous_id = payload.get("continues_session_id")
+            if not previous_id or previous_id in seen:
+                break
+            seen.add(previous_id)
+            payload = self._session_payload(previous_id)
+            previous = payload.get("operation_metrics")
+            if isinstance(previous, dict):
+                chain.insert(0, previous)
+        return chain
+
+    async def _append_operation_metrics_section(
+        self, markdown: str, master_session_id: str, session_dir: Path, stop_reason: Optional[str]
+    ) -> str:
+        """Acrescenta ao relatório a seção determinística "Métricas de operação" (orquestrador, sem LLM; design §5).
+
+        Roda depois do pipeline do relatório: a verificação de números e de afirmações já produziu os seus dados, e a
+        seção delimitada (``operation-metrics``) não passa pelo verificador de números.
+        """
+        from src.operation_metrics import render_operation_metrics_section
+
+        metrics = await self.record_operation_metrics(master_session_id, parcial=False)
+        if metrics is None:
+            body = "## Métricas de operação\n\nNão foi possível agregar as métricas de operação desta sessão (ver log)."
+            section = f"<!-- operation-metrics:begin -->\n{body}\n<!-- operation-metrics:end -->"
+        else:
+            section = render_operation_metrics_section(metrics, stop_reason=stop_reason)
+            chain = await asyncio.to_thread(self._continued_chain_metrics, master_session_id, metrics)
+            if len(chain) > 1:  # sessão continuada: soma informativa da cadeia (design §5)
+                from src.operation_metrics import END_MARK, render_chain_line
+
+                section = section.replace(END_MARK, f"{render_chain_line(chain)}\n{END_MARK}")
+        markdown = f"{markdown.rstrip()}\n\n{section}\n"
+        try:
+            (session_dir / "relatorio_final.md").write_text(markdown, encoding="utf-8")
+        except OSError as exc:
+            logger.error("Falha ao gravar a seção de métricas de operação", extra={"error": str(exc)})
+        return markdown
 
     async def _append_provenance_section(self, markdown: str, master_session_id: str) -> str:
         """Acrescenta ao relatório a seção determinística de proveniência (orquestrador, sem LLM; design §8).

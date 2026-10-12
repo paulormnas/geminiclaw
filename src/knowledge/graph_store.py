@@ -929,51 +929,56 @@ class AgeGraphStore(GraphStore):
 
                     raise DisallowedRelationError("*", rt, "*")
         rel_pattern = f":{'|'.join(rel_types)}" if rel_types else ""
-
-        if direction == "out":
-            pattern = f"-[r{rel_pattern}*1..{int(depth)}]->(m)"
-        elif direction == "in":
-            pattern = f"<-[r{rel_pattern}*1..{int(depth)}]-(m)"
-        else:
-            pattern = f"-[r{rel_pattern}*1..{int(depth)}]-(m)"
-
-        # Para saltos únicos (depth=1, o caso comum), pedimos o triplo (a relação e os
-        # dois vértices adjacentes) em uma única consulta — isso permite resolver o
-        # ``src_id``/``dst_id`` de domínio (UUIDv7) da aresta a partir dos próprios
-        # vértices retornados, em vez do graphid interno do AGE. Para depth > 1, o
-        # caminho tem uma lista de relações; extraímos cada uma via UNWIND e resolvemos
-        # seus vértices adjacentes com uma segunda consulta por identidade (id de nó).
-        node_cypher = f"MATCH (n {{id: $id}}){pattern} RETURN DISTINCT m"
-        node_rows = self._run_cypher_rows(node_cypher, {"id": node_id}, columns=("result",))
-        nodes = [self._node_from_agtype(row["result"]) for row in node_rows]
-        nodes_by_domain_id = {node.id: node for node in nodes}
-
-        rel_pattern_edges = f":{'|'.join(rel_types)}" if rel_types else ""
         edge_left, edge_right = {"out": ("-", "->"), "in": ("<-", "-"), "both": ("-", "-")}[direction]
-        edge_cypher = (
-            f"MATCH (n {{id: $id}}){edge_left}[rel{rel_pattern_edges}*1..{int(depth)}]{edge_right}(x) "
-            "UNWIND rel AS one_rel "
-            "WITH one_rel, startNode(one_rel) AS a, endNode(one_rel) AS b "
-            "RETURN DISTINCT a, one_rel, b"
+
+        # Consultas de comprimento variável do AGE (``*1..N``) custam ~0,25 s cada no Pi 5, mesmo com N=1, e crescem
+        # com o grafo (medido em 2026-10-12: o ciclo de hipóteses passou de 16 s para 869 s). O salto simples custa
+        # ~1 ms. Por isso a vizinhança é percorrida em níveis de saltos simples, que dão o mesmo conjunto de nós e
+        # arestas do caminho de comprimento variável até ``depth``.
+        nodes_by_domain_id: dict[str, Node] = {}
+        edges_by_key: dict[tuple[str, str, str], Edge] = {}
+        frontier = [node_id]
+        seen = {node_id}
+        for _level in range(max(int(depth), 1)):
+            next_frontier: list[str] = []
+            for current in frontier:
+                hop = self._hop(current, rel_pattern, edge_left, edge_right)
+                for edge, a_node, b_node in hop:
+                    edges_by_key.setdefault((edge.src_id, edge.rel_type, edge.dst_id), edge)
+                    for node in (a_node, b_node):
+                        nodes_by_domain_id.setdefault(node.id, node)
+                        if node.id not in seen:
+                            seen.add(node.id)
+                            next_frontier.append(node.id)
+            if not next_frontier:
+                break
+            frontier = next_frontier
+
+        return Subgraph(nodes=list(nodes_by_domain_id.values()), edges=list(edges_by_key.values()))
+
+    def _hop(
+        self, node_id: str, rel_pattern: str, edge_left: str, edge_right: str
+    ) -> list[tuple[Edge, Node, Node]]:
+        """Um salto simples a partir de ``node_id``: ``(aresta, origem, destino)`` de cada aresta adjacente."""
+        cypher = (
+            f"MATCH (n {{id: $id}}){edge_left}[rel{rel_pattern}]{edge_right}(x) "
+            "WITH rel, startNode(rel) AS a, endNode(rel) AS b "
+            "RETURN DISTINCT a, rel, b"
         )
-        edge_rows = self._run_cypher_rows(edge_cypher, {"id": node_id}, columns=("a", "one_rel", "b"))
-        edges = []
-        for row in edge_rows:
+        rows = self._run_cypher_rows(cypher, {"id": node_id}, columns=("a", "rel", "b"))
+        hops: list[tuple[Edge, Node, Node]] = []
+        for row in rows:
             a_node = self._node_from_agtype(row["a"])
             b_node = self._node_from_agtype(row["b"])
-            rel_value = row["one_rel"]
-            edges.append(
-                Edge(
-                    src_id=a_node.id,
-                    rel_type=rel_value["label"],
-                    dst_id=b_node.id,
-                    properties=dict(rel_value.get("properties", {})),
-                )
+            rel_value = row["rel"]
+            edge = Edge(
+                src_id=a_node.id,
+                rel_type=rel_value["label"],
+                dst_id=b_node.id,
+                properties=dict(rel_value.get("properties", {})),
             )
-            nodes_by_domain_id.setdefault(a_node.id, a_node)
-            nodes_by_domain_id.setdefault(b_node.id, b_node)
-
-        return Subgraph(nodes=list(nodes_by_domain_id.values()), edges=edges)
+            hops.append((edge, a_node, b_node))
+        return hops
 
     def project_subgraph(self, projeto_id: str, labels: list[str] | None = None) -> Subgraph:
         if labels:

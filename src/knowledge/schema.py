@@ -1,7 +1,7 @@
 """Schema declarativo do grafo de conhecimento (ADR 015 §2–§5, §11).
 
 Fonte única da verdade para:
-    - os 13 tipos de nó, suas propriedades e enumerações;
+    - os 14 tipos de nó, suas propriedades e enumerações;
     - as relações permitidas (par rótulo-origem → tipo → rótulo-destino);
     - as propriedades comuns preenchidas automaticamente pelo ``GraphStore``.
 
@@ -109,7 +109,7 @@ DEFAULT_EDGE_ORIGEM = "afirmado"
 
 
 # ---------------------------------------------------------------------------
-# Nós (13 tipos — ADR 015 §3)
+# Nós (14 tipos — ADR 015 §3; ``Afirmacao`` acrescentado por v18.5-claim-verification)
 # ---------------------------------------------------------------------------
 
 NODE_SCHEMAS: dict[str, NodeSchema] = {
@@ -273,6 +273,35 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             "proximo_passo_sugerido": PropertySchema(),
         },
     ),
+    # v18.5-claim-verification (design §2): afirmação atômica de uma ``Descoberta`` e o seu status de verificação.
+    # ``status_afirmacao`` é independente de ``Resultado.status_validacao``, ``Attempt.validation`` e
+    # ``Descoberta.status``.
+    "Afirmacao": NodeSchema(
+        "Afirmacao",
+        {
+            "texto": PropertySchema(required=True),
+            "status_afirmacao": PropertySchema(
+                required=True,
+                enum=(
+                    "suportada",
+                    "parcial",
+                    "refutada_deterministica",
+                    "contestada",
+                    "nao_verificavel",
+                    "pendente",
+                ),
+            ),
+            "metodo": PropertySchema(enum=("deterministico", "modelo")),
+            "parte_nao_suportada": PropertySchema(),
+            "justificativa": PropertySchema(),
+            "verificador": PropertySchema(),
+            "motivo_pendencia": PropertySchema(
+                enum=("orcamento_esgotado", "falha_verificador", "sem_modelo_verificador")
+            ),
+            "revisao_pesquisador": PropertySchema(),
+            "codigo_arquivo": PropertySchema(),
+        },
+    ),
     "Oportunidade": NodeSchema(
         "Oportunidade",
         {
@@ -381,6 +410,9 @@ RELATION_SCHEMAS: list[RelationSchema] = [
     _rel("Abordagem", "FUNDIDA_EM", "Abordagem"),
     _rel("Abordagem", "COMPONENTE_DE", "Abordagem"),
     _rel("Oportunidade", "ORIGINADA_DE", "Descoberta"),
+    # v18.5-claim-verification: a afirmação vem de uma Descoberta e foi conferida contra a evidência do grafo.
+    _rel("Afirmacao", "EXTRAIDA_DE", "Descoberta"),
+    _rel("Afirmacao", "CONFERIDA_CONTRA", ("Resultado", "Experimento", "Insumo")),
     _rel("Oportunidade", "SUGERE", ("Abordagem", "Hipotese")),
     _rel("Oportunidade", "PARA", "Problema"),
     _rel("Oportunidade", "GEROU", "Hipotese"),

@@ -7,10 +7,12 @@ import json
 import os
 import shutil
 import tempfile
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.agents.validator_agent import ValidatorAgent
+from src.llm.base import LLMResponse
 from src.orchestrator import AgentResult, AgentTask, Orchestrator
 from src.output_manager import OutputManager
 from src.session import SessionManager
@@ -80,6 +82,13 @@ async def test_autonomous_complex_flow_integration():
         output_manager = OutputManager(base_dir=output_dir)
 
         orchestrator = Orchestrator(session_manager=session_manager, output_manager=output_manager)
+
+        # v18.5-claim-verification: a verificação das conclusões chama o Validator; sem um provedor simulado o teste
+        # tentaria o Ollama de verdade (e esperaria as retentativas de conexão).
+        verifier_provider = MagicMock()
+        verifier_provider.model_name = "validator-simulado"
+        verifier_provider.generate = AsyncMock(return_value=LLMResponse(text='{"afirmacoes": []}'))
+        orchestrator.validator = ValidatorAgent(provider=verifier_provider)
 
         # Planejamento mockado diretamente para isolar o teste do fluxo do loop
         task1 = AgentTask(

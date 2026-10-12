@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from src.report.base_converter import MARKS_RE, ReportConverter, strip_markup_helpers
+from src.report.base_converter import CLAIM_MARK_RE, MARKS_RE, ReportConverter, claim_status_slug, strip_markup_helpers
 
 _PRINT_CSS = """
 :root { color-scheme: light dark; }
@@ -31,7 +31,20 @@ code, pre { font-family: "SFMono-Regular", Consolas, monospace; background: #f5f
 pre { padding: 1rem; overflow-x: auto; border-radius: 4px; }
 code { padding: 0.15rem 0.3rem; border-radius: 3px; }
 blockquote { border-left: 4px solid #ccc; margin-left: 0; padding-left: 1rem; color: #555; }
-:root { --mark-bg: #fff3b0; --mark-fg: #5c4400; --origin-fg: #1f5f99; }
+:root {
+    --mark-bg: #fff3b0; --mark-fg: #5c4400; --origin-fg: #1f5f99;
+    --claim-parcial-bg: #ffe3b3; --claim-parcial-fg: #5c3300;
+    --claim-refutada-bg: #f8c9c9; --claim-refutada-fg: #6b0f0f;
+    --claim-contestada-bg: #e6d3f5; --claim-contestada-fg: #3f1a63;
+    --claim-nao-verificavel-bg: #e3e3e3; --claim-nao-verificavel-fg: #333;
+    --claim-pendente-bg: #d3e6f8; --claim-pendente-fg: #123a63;
+}
+mark.claim { font-weight: 600; padding: 0 0.2rem; border-radius: 3px; font-size: 0.85em; }
+mark.status-parcial { background: var(--claim-parcial-bg); color: var(--claim-parcial-fg); }
+mark.status-refutada { background: var(--claim-refutada-bg); color: var(--claim-refutada-fg); }
+mark.status-contestada { background: var(--claim-contestada-bg); color: var(--claim-contestada-fg); }
+mark.status-nao-verificavel { background: var(--claim-nao-verificavel-bg); color: var(--claim-nao-verificavel-fg); }
+mark.status-pendente { background: var(--claim-pendente-bg); color: var(--claim-pendente-fg); }
 mark.nao-verificado, mark.literal {
     background: var(--mark-bg); color: var(--mark-fg); font-weight: 600; padding: 0 0.2rem; border-radius: 3px;
 }
@@ -42,13 +55,20 @@ sup.origem a { color: var(--origin-fg); text-decoration: none; font-family: "Hel
     th { background: #2a2a2a; }
     code, pre { background: #262626; }
     blockquote { color: #aaa; }
-    :root { --mark-bg: #5c4a00; --mark-fg: #ffe9a0; --origin-fg: #8fc4f5; }
+    :root {
+        --mark-bg: #5c4a00; --mark-fg: #ffe9a0; --origin-fg: #8fc4f5;
+        --claim-parcial-bg: #5c3d00; --claim-parcial-fg: #ffd9a0;
+        --claim-refutada-bg: #6b1f1f; --claim-refutada-fg: #ffc9c9;
+        --claim-contestada-bg: #4a2a6b; --claim-contestada-fg: #e6d3f5;
+        --claim-nao-verificavel-bg: #444; --claim-nao-verificavel-fg: #e3e3e3;
+        --claim-pendente-bg: #1f4a73; --claim-pendente-fg: #d3e6f8;
+    }
 }
 
 @media print {
     body { max-width: 100%; color: #000; background: #fff; }
     a { color: #000; text-decoration: underline; }
-    mark.nao-verificado, mark.literal { background: none; color: #000; border: 1px solid #000; }
+    mark.nao-verificado, mark.literal, mark.claim { background: none; color: #000; border: 1px solid #000; }
 }
 """
 
@@ -77,6 +97,12 @@ def _decorate_marks(html: str) -> str:
         if match.group(1):
             code = f"{match.group(1)}{match.group(2)}"
             return f'<sup class="origem"><a href="#origem-{code}">{code}</a></sup>'
+        claim = CLAIM_MARK_RE.fullmatch(match.group(0))
+        if claim:
+            return (
+                f'<mark class="claim status-{claim_status_slug(claim.group(2))}">'
+                f"{match.group(0)[1:-1]}</mark>"
+            )
         if match.group(0) == "[não verificado]":
             return '<mark class="nao-verificado">não verificado</mark>'
         return '<mark class="literal">literal no código</mark>'

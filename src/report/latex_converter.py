@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from src.report.base_converter import MARKS_RE, ORIGIN_ANCHOR_RE, ReportConverter, strip_markup_helpers
+from src.report.base_converter import CLAIM_MARK_RE, MARKS_RE, ORIGIN_ANCHOR_RE, ReportConverter, strip_markup_helpers
 
 _LATEX_SPECIAL_CHARS = {
     "\\": r"\textbackslash{}",
@@ -43,6 +43,21 @@ def _escape_latex(text: str) -> str:
     return "".join(result)
 
 
+_CLAIM_COLORS = {
+    "parcial": "orange!35",
+    "refutada": "red!30",
+    "contestada": "violet!30",
+    "não verificável": "gray!30",
+    "pendente": "cyan!25",
+}
+
+
+def _claim_box(mark: str) -> str:
+    """``[A3 · parcial]`` → caixa colorida por status (cores de ``xcolor``)."""
+    status = CLAIM_MARK_RE.fullmatch(mark).group(2)
+    return r"\colorbox{" + _CLAIM_COLORS[status] + r"}{\textbf{" + _escape_latex(mark[1:-1]) + "}}"
+
+
 def _convert_emphasis(text: str) -> str:
     """Converte **negrito**, *itálico* e `código` para LaTeX, escapando o restante."""
     tokens: list[str] = []
@@ -63,6 +78,8 @@ def _convert_emphasis(text: str) -> str:
         elif match.group(5) is not None:
             code = f"{match.group(5)}{match.group(6)}"
             tokens.append(r"\textsuperscript{\hyperlink{origem-" + code + "}{" + code + "}}")
+        elif CLAIM_MARK_RE.fullmatch(match.group(0)):
+            tokens.append(_claim_box(match.group(0)))
         elif match.group(0) == "[não verificado]":
             tokens.append(r"\colorbox{yellow}{\textbf{não verificado}}")
         else:

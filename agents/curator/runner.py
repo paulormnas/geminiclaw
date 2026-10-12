@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
@@ -84,6 +84,8 @@ class CuratorReport:
     descartados: int = 0
     recusas: int = 0
     pares_revisados: int = 0
+    # v18.5-claim-verification: ids das descobertas criadas ou reforçadas (não vão para a telemetria).
+    descobertas_tocadas: list[str] = field(default_factory=list)
 
     def payload(self) -> dict[str, Any]:
         """Conteúdo do evento de telemetria (somente números e códigos)."""
@@ -234,6 +236,7 @@ class Curator:
                 report.criados, report.reforcados = stats.criados, stats.reforcados
                 report.descartados, report.recusas = stats.descartados, stats.recusas
                 report.pares_revisados = stats.pares_revisados
+                report.descobertas_tocadas = list(toolkit.touched_discoveries)
         self._emit(report, int((time.monotonic() - started) * 1000))
         return report
 

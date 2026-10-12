@@ -106,6 +106,10 @@ def ensure_infrastructure() -> None:
         PlatformImageError: A imagem do sandbox falta ou tem arquitetura diferente (a sessão não começa).
     """
     print(f"\n{BOLD}🔍 Verificando infraestrutura do ambiente...{RESET}")
+    if SKILL_CODE_ENABLED:
+        from src.skills.code.sandbox import sweep_orphan_work_dirs
+
+        sweep_orphan_work_dirs()  # v18.5-sandbox-phases B3
     check_container_daemon()
     check_sandbox_image_for_session()
     check_postgres()

@@ -318,6 +318,46 @@ def _setting(name: str):
     return config.get_env(name, default=str(default))
 
 
+_RUN_DIR_RE = re.compile(r"^[0-9a-f]{32}$")
+
+
+def sweep_orphan_work_dirs(
+    work_dir: Optional[str] = None,
+    max_age_hours: Optional[float] = None,
+    now: Optional[float] = None,
+) -> List[str]:
+    """Remove diretórios de trabalho de execuções do sandbox deixados por um encerramento abrupto (B3).
+
+    Só remove entradas ``<32 hex>`` (nome de ``uuid4().hex``) que sejam diretórios de verdade (não links) e cuja
+    última modificação seja mais antiga que ``SANDBOX_WORK_ORPHAN_MAX_HOURS``: um limite acima do maior tempo de
+    execução impede apagar a execução de outro processo. Best-effort: nunca levanta.
+
+    Returns:
+        Nomes dos diretórios removidos.
+    """
+    removed: List[str] = []
+    try:
+        root = pathlib.Path(work_dir or _setting("SANDBOX_WORK_DIR"))
+        if not root.is_absolute():
+            root = (pathlib.Path(__file__).resolve().parents[3] / root)
+        hours = max_age_hours if max_age_hours is not None else float(_setting("SANDBOX_WORK_ORPHAN_MAX_HOURS"))
+        limit = hours * 3600
+        current = now if now is not None else time.time()
+        if not root.is_dir():
+            return removed
+        for entry in root.iterdir():
+            if not _RUN_DIR_RE.fullmatch(entry.name) or entry.is_symlink() or not entry.is_dir():
+                continue
+            if current - entry.stat().st_mtime > limit:
+                shutil.rmtree(entry, ignore_errors=True)
+                removed.append(entry.name)
+        if removed:
+            logger.info("Diretórios de trabalho órfãos do sandbox removidos", extra={"quantidade": len(removed)})
+    except Exception as exc:  # noqa: BLE001 - a varredura nunca impede a partida
+        logger.warning("Varredura de diretórios órfãos do sandbox falhou", extra={"error": type(exc).__name__})
+    return removed
+
+
 def cleanup_sandbox_containers() -> int:
     """Encerra e remove containers de sandbox que ficaram para trás (ex.: após Ctrl+C).
 

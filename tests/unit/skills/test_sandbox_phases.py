@@ -521,3 +521,45 @@ def test_sandbox_nao_usa_mais_desconexao_de_rede():
     """A rede do script é decidida na criação do container (fail-closed), não por disconnect em container único."""
     source = (Path(__file__).parents[3] / "src" / "skills" / "code" / "sandbox.py").read_text(encoding="utf-8")
     assert "disconnect" not in source
+
+
+# -- B3: varredura de diretórios de trabalho órfãos (v18.5-sandbox-phases 7.11) --------------------------------------
+
+
+@pytest.mark.unit
+def test_varredura_remove_so_orfaos_antigos(tmp_path):
+    from src.skills.code.sandbox import sweep_orphan_work_dirs
+
+    old_dir, new_dir, other = "a" * 32, "b" * 32, tmp_path / "nao-e-uma-execucao"
+    for name in (old_dir, new_dir):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "x").write_text("x")
+    other.mkdir()
+    (tmp_path / ("c" * 32)).write_text("arquivo, não diretório")
+    now = 1_000_000.0
+    os.utime(tmp_path / old_dir, (now - 30 * 3600, now - 30 * 3600))
+    os.utime(tmp_path / new_dir, (now - 1 * 3600, now - 1 * 3600))
+    os.utime(other, (now - 90 * 3600, now - 90 * 3600))
+
+    removed = sweep_orphan_work_dirs(str(tmp_path), max_age_hours=24, now=now)
+
+    assert removed == [old_dir]
+    assert not (tmp_path / old_dir).exists() and (tmp_path / new_dir).exists() and other.exists()
+    assert (tmp_path / ("c" * 32)).exists()
+
+
+@pytest.mark.unit
+def test_varredura_nao_segue_link_simbolico_e_nunca_levanta(tmp_path):
+    from src.skills.code.sandbox import sweep_orphan_work_dirs
+
+    target = tmp_path / "alvo"
+    target.mkdir()
+    (target / "dado").write_text("importante")
+    link = tmp_path / ("d" * 32)
+    link.symlink_to(target, target_is_directory=True)
+    now = 2_000_000.0
+    os.utime(target, (now - 99 * 3600, now - 99 * 3600))
+
+    assert sweep_orphan_work_dirs(str(tmp_path), max_age_hours=1, now=now) == []
+    assert (target / "dado").read_text() == "importante"
+    assert sweep_orphan_work_dirs(str(tmp_path / "nao_existe"), max_age_hours=1, now=now) == []

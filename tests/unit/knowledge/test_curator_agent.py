@@ -562,3 +562,21 @@ async def test_timeout_preserva_as_contagens_e_adiamento_registra_pendencia(worl
     assert adiado.ok is False and events[-1][1]["reason"] == "orcamento_da_sessao"
     linhas = (ids["dir"] / "curator_audit.jsonl").read_text()
     assert "execucao_adiada" in linhas
+
+
+@pytest.mark.asyncio
+async def test_papel_curator_sem_modelo_elegivel_nao_e_falha(world):
+    """Papel opcional desligado na sessão (sem modelo elegível): a execução é dispensada, sem erro nem pendência."""
+    env, graph, make, ids = world
+    provider = Scripted()
+    curator, events = make(provider)
+
+    def sem_papel():
+        raise KeyError("curator")
+
+    curator._provider_factory = sem_papel  # noqa: SLF001
+
+    report = await curator.close_session("sem_caminhos_promissores")
+
+    assert report.ok is True and report.reason == "papel_desligado" and provider.calls == []
+    assert events and events[-1][1]["reason"] == "papel_desligado"

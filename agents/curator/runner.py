@@ -204,7 +204,13 @@ class Curator:
         started = time.monotonic()
         toolkit: CuratorToolkit | None = None
         try:
-            provider = self._provider_factory()
+            try:
+                provider = self._provider_factory()
+            except KeyError:
+                # Papel opcional sem modelo elegível na política da sessão ("desligado nesta sessão"): não é falha.
+                report.reason = "papel_desligado"
+                self._emit(report, int((time.monotonic() - started) * 1000))
+                return report
             toolkit = CuratorToolkit(
                 self._store,
                 project_id=self._project_id,

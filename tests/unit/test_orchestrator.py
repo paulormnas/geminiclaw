@@ -309,3 +309,23 @@ class TestOrchestratorInProcessRuntime:
 
         assert answer == "42"
         mock_core.assert_called_once()
+
+
+def test_plano_bruto_do_researcher_e_gravado_para_auditoria(tmp_path):
+    from unittest.mock import MagicMock
+
+    from src.orchestrator import Orchestrator
+
+    orch = Orchestrator.__new__(Orchestrator)
+    orch.output_manager = MagicMock()
+    orch.output_manager.base_dir = tmp_path
+
+    orch._save_raw_plan("sess", 2, '[{"task_name": "a"}]')
+    assert (tmp_path / "sess" / "plans" / "plano_2.txt").read_text(encoding="utf-8") == '[{"task_name": "a"}]'
+
+    orch._save_raw_plan("sess", 3, "x" * 300_000)  # limitado
+    assert len((tmp_path / "sess" / "plans" / "plano_3.txt").read_text(encoding="utf-8")) == 200_000
+
+    orch.output_manager.base_dir = tmp_path / "arquivo"
+    (tmp_path / "arquivo").write_text("não é diretório")
+    orch._save_raw_plan("sess", 1, "texto")  # falha de disco não levanta

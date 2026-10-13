@@ -1,10 +1,10 @@
 # ADR 018 — Imagem Enxuta do Sandbox de Código e Seleção de Imagens por Plataforma
 
-**Status:** Parcialmente implementado — imagem enxuta do sandbox e Qdrant oficial mergeados; seleção de imagens por plataforma pendente (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-08)
+**Status:** Aceito — `v16-sandbox-slim-image` e `v16-platform-images` concluídas e arquivadas em 2026-10-13; pendentes, registrados em `openspec/changes/archive/PENDENCIAS.md`: lock multiarquitetura (5.5.1), digests das imagens base (5.5.2) e medições no Pi 5 (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-13)
 **Data:** 2026-09-29
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Relacionados:** ADR 014 (agentes em processo; sandbox como único uso de container), ADR 003 §2 (sandbox de código), ADR 016 (imagem do PostgreSQL), ADR 005 (persistência)
-**Specs relacionadas:** `openspec/changes/v16-in-process-agents` (fase 2)
+**Specs relacionadas:** `openspec/changes/archive/v16-in-process-agents` (fase 2)
 
 > **Aprovado como direção em 2026-10-01.** A segunda onda do ADR 014 foi concluída (#80 e #81),
 > então a retomada prevista na seção "Revisão" começou. Os itens 1, 2, 3 e 5 estão descritos nas
@@ -34,8 +34,8 @@
 
 | Mudança OpenSpec | Estado | PR |
 |---|---|---|
-| [`v16-sandbox-slim-image`](../../openspec/changes/v16-sandbox-slim-image/proposal.md) | Implementada, com pendências | #99 |
-| [`v16-platform-images`](../../openspec/changes/v16-platform-images/proposal.md) | Implementada, com pendências (5.5.1 lock multiarquitetura e 5.5.2 digests das imagens base) | #123 |
+| [`v16-sandbox-slim-image`](../../openspec/changes/archive/v16-sandbox-slim-image/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #99 |
+| [`v16-platform-images`](../../openspec/changes/archive/v16-platform-images/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #123 |
 
 ---
 

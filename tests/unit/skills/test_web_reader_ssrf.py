@@ -1,7 +1,7 @@
 """Testes de bloqueio de rede interna do WebReaderSkill (Roadmap V16/ADR 014).
 
 Cobre o Requirement "Leitura web sem acesso à rede local" da spec
-``agent-runtime`` (openspec/changes/v16-in-process-agents/specs/agent-runtime/spec.md).
+``agent-runtime`` (openspec/changes/archive/v16-in-process-agents/specs/agent-runtime/spec.md).
 """
 
 import socket

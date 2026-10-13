@@ -1,7 +1,7 @@
 """Testes de src/agent_runtime/context.py (Roadmap V16/ADR 014).
 
 Cobre os Requirements "Contexto isolado por tarefa" da spec ``agent-runtime``
-(openspec/changes/v16-in-process-agents/specs/agent-runtime/spec.md).
+(openspec/changes/archive/v16-in-process-agents/specs/agent-runtime/spec.md).
 """
 
 import asyncio

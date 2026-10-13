@@ -7,14 +7,14 @@
 **ADRs relacionados:** ADR 007 (Model Router por papel), ADR 009 (conhecimento), ADR 013 (federação), ADR 017 (catálogo e roteador), ADR 019 (localidade dos dados)
 
 
-## Estado da implementação (2026-10-08)
+## Estado da implementação (2026-10-13)
 
 | Mudança OpenSpec | Estado | PR |
 |---|---|---|
-| [`v16-provider-registry`](../../openspec/changes/v16-provider-registry/proposal.md) | Implementada, com pendências | #59 |
-| [`v16-anthropic-provider`](../../openspec/changes/v16-anthropic-provider/proposal.md) | Implementada, com pendências | #79 |
-| [`v16-local-embeddings`](../../openspec/changes/v16-local-embeddings/proposal.md) | Implementada, com pendências | #66 |
-| [`v16-model-catalog-router`](../../openspec/changes/v16-model-catalog-router/proposal.md) | Implementada, com pendências | #102 |
+| [`v16-provider-registry`](../../openspec/changes/archive/v16-provider-registry/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #59 |
+| [`v16-anthropic-provider`](../../openspec/changes/archive/v16-anthropic-provider/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #79 |
+| [`v16-local-embeddings`](../../openspec/changes/archive/v16-local-embeddings/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #66 |
+| [`v16-model-catalog-router`](../../openspec/changes/archive/v16-model-catalog-router/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #102 |
 
 ---
 

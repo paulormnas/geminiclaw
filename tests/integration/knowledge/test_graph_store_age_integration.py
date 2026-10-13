@@ -1,6 +1,6 @@
 """Testes de integração de ``AgeGraphStore`` contra uma instância real de Apache AGE.
 
-Cobrem a tarefa 4.3 de ``openspec/changes/v17-graph-store/tasks.md``: criar
+Cobrem a tarefa 4.3 de ``openspec/changes/archive/v17-graph-store/tasks.md``: criar
 nó, criar aresta, ``neighbors`` e ``project_subgraph`` fim-a-fim contra o
 motor Cypher real — complementam (não duplicam) os testes unitários com
 mocks de ``tests/unit/knowledge/test_graph_store_age.py``, que cobrem a

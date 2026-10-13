@@ -1,21 +1,21 @@
 # ADR 010 — Propósito: Assistente Digital de Pesquisa Científica
 
-**Status:** Parcialmente implementado — V16, V17 e V18 mergeadas; V18.5 (parcial) e V19 pendentes (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-08)
+**Status:** Parcialmente implementado — V16, V17, V18 e V18.5 concluídas e arquivadas (2026-10-13); V19 pendente (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-13)
 **Data:** 2026-09-28
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Substitui:** ADR 001 (a partir da aprovação, 2026-10-01)
 **ADRs relacionados:** ADR 009 (conhecimento experimental), ADR 011 (provedores), ADR 012 (Curator), ADR 013 (federação)
 
 
-## Estado da implementação (2026-10-08)
+## Estado da implementação (2026-10-13)
 
 | Mudança OpenSpec | Estado | PR |
 |---|---|---|
-| [`v16-research-assistant-prompts`](../../openspec/changes/v16-research-assistant-prompts/proposal.md) | Implementada, com pendências | #63 |
-| [`v16-pipeline-robustness`](../../openspec/changes/v16-pipeline-robustness/proposal.md) | Implementada, com pendências | #95 |
-| [`v18-usage-limits`](../../openspec/changes/v18-usage-limits/proposal.md) | Implementada, com pendências | #68 |
-| [`v18-research-continuity`](../../openspec/changes/v18-research-continuity/proposal.md) | Implementada, com pendências | #108 |
-| [`v18-hypothesis-loop`](../../openspec/changes/v18-hypothesis-loop/proposal.md) | Implementada, com pendências | #109, #115 |
+| [`v16-research-assistant-prompts`](../../openspec/changes/archive/v16-research-assistant-prompts/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #63 |
+| [`v16-pipeline-robustness`](../../openspec/changes/archive/v16-pipeline-robustness/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #95 |
+| [`v18-usage-limits`](../../openspec/changes/archive/v18-usage-limits/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #68 |
+| [`v18-research-continuity`](../../openspec/changes/archive/v18-research-continuity/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #108 |
+| [`v18-hypothesis-loop`](../../openspec/changes/archive/v18-hypothesis-loop/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #109, #115 |
 | [`v19-equipment-control`](../../openspec/changes/v19-equipment-control/proposal.md) | Não iniciada | — |
 
 ---

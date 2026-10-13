@@ -58,42 +58,46 @@ O sistema SHALL <comportamento obrigatório>.
 4. **Arquivamento** — após o merge em `dev`, a pasta vai para `changes/archive/` e os
    requisitos são consolidados em `specs/<capacidade>/spec.md`.
 
-## Mudanças propostas
+## Mudanças
+
+**Arquivadas em 2026-10-13:** as 32 mudanças de V16 a V18.5 (links para `changes/archive/`), com os
+requisitos consolidados em [`specs/`](specs/README.md) e os itens abertos em
+[`changes/archive/PENDENCIAS.md`](changes/archive/PENDENCIAS.md). Em aberto: V19 e V20.
 
 | Versão | Mudança | Capacidade | ADRs | Depende de |
 |---|---|---|---|---|
-| V16 | [v16-provider-registry](changes/v16-provider-registry/proposal.md) | `llm-providers` | 011 | — |
-| V16 | [v16-anthropic-provider](changes/v16-anthropic-provider/proposal.md) | `llm-providers` | 011 | v16-provider-registry |
-| V16 | [v16-local-embeddings](changes/v16-local-embeddings/proposal.md) | `embeddings` | 011 | — |
-| V16 | [v16-in-process-agents](changes/v16-in-process-agents/proposal.md) | `agent-runtime` | 014 | v16-provider-registry |
-| V16 | [v16-research-assistant-prompts](changes/v16-research-assistant-prompts/proposal.md) | `agent-prompts` | 010, 011 | v16-in-process-agents |
-| V16 (robustez) | [v16-pipeline-robustness](changes/v16-pipeline-robustness/proposal.md) | `pipeline-robustness` | 002, 010 | v16-in-process-agents (implementada) |
-| V16 (robustez) | [v16-agent-communication-eval](changes/v16-agent-communication-eval/proposal.md) | `communication-eval` | 012, 002, 019, 011 | v16-pipeline-robustness |
-| V16 (complemento) | [v16-model-catalog-router](changes/v16-model-catalog-router/proposal.md) | `llm-providers` | 017, 011 | v16-provider-registry |
-| V16 (complemento) | [v16-sandbox-slim-image](changes/v16-sandbox-slim-image/proposal.md) | `code-sandbox` | 018, 014, 003 | v16-in-process-agents |
-| V16 (complemento) | [v16-platform-images](changes/v16-platform-images/proposal.md) | `platform-images` | 018 | v16-sandbox-slim-image |
-| V17 | [v17-graph-store](changes/v17-graph-store/proposal.md) | `knowledge-graph` | 009, 015 | V16 |
-| V17 | [v17-controlled-vocabulary](changes/v17-controlled-vocabulary/proposal.md) | `vocabulary` | 015 | v17-graph-store |
-| V17 | [v17-evidence-verdict](changes/v17-evidence-verdict/proposal.md) | `evidence-scoring` | 015 | — (módulo puro) |
-| V17 | [v17-research-project](changes/v17-research-project/proposal.md) | `research-project` | 015 | v17-graph-store, v17-controlled-vocabulary |
-| V17 | [v17-structural-fact-ingestion](changes/v17-structural-fact-ingestion/proposal.md) | `knowledge-ingestion` | 009, 015 | v17-research-project |
-| V17 | [v17-knowledge-semantic-index](changes/v17-knowledge-semantic-index/proposal.md) | `knowledge-semantics` | 011, 015 | v16-local-embeddings, v17-graph-store |
-| V17 | [v17-domain-search](changes/v17-domain-search/proposal.md) | `domain-search` | 015, 011, 012 | v17-controlled-vocabulary, v17-knowledge-semantic-index |
-| V17 | [v17-curator-agent](changes/v17-curator-agent/proposal.md) | `curator` | 012, 015 | todas as anteriores de V17 |
-| V17 | [v17-graph-cli](changes/v17-graph-cli/proposal.md) | `graph-cli` | 015 | v17-graph-store, v17-curator-agent |
-| V17 | [v17-input-document-index](changes/v17-input-document-index/proposal.md) | `input-documents` | 015, 011, 019 | v16-local-embeddings, v17-research-project, v17-structural-fact-ingestion |
-| V18 | [v18-usage-limits](changes/v18-usage-limits/proposal.md) | `usage-limits` | 010, 012 | V16 |
-| V18 | [v18-research-continuity](changes/v18-research-continuity/proposal.md) | `session-continuity` | 010 | v18-usage-limits, v17-structural-fact-ingestion |
-| V18 | [v18-hypothesis-loop](changes/v18-hypothesis-loop/proposal.md) | `hypothesis-loop` | 010, 012 | V17, v18-usage-limits, v18-research-continuity |
-| V18 | [v18-researcher-consult](changes/v18-researcher-consult/proposal.md) | `researcher-consult` | 012, 010, 019 | v18-usage-limits |
-| V18.5 | [v18.5-model-catalog-locality](changes/v18.5-model-catalog-locality/proposal.md) | `llm-providers` | 019, 017 | V18, v16-model-catalog-router |
-| V18.5 | [v18.5-egress-gate](changes/v18.5-egress-gate/proposal.md) | `data-egress` | 019, 014 | v18.5-model-catalog-locality |
-| V18.5 | [v18.5-research-data-ingestion](changes/v18.5-research-data-ingestion/proposal.md) | `research-data` | 019 | v18.5-egress-gate (entregar junto) |
-| V18.5 | [v18.5-sandbox-phases](changes/v18.5-sandbox-phases/proposal.md) | `code-sandbox` | 019, 014, 018 | V18, v16-sandbox-slim-image |
-| V18.5 | [v18.5-execution-provenance](changes/v18.5-execution-provenance/proposal.md) | `execution-provenance` | 019, 015 | v18.5-sandbox-phases, v17-research-project |
-| V18.5 | [v18.5-numeric-references](changes/v18.5-numeric-references/proposal.md) | `numeric-provenance` | 019 | v18.5-execution-provenance |
-| V18.5 | [v18.5-claim-verification](changes/v18.5-claim-verification/proposal.md) | `claim-verification` | 019, 015 | v18.5-numeric-references, v18.5-model-catalog-locality |
-| V18.5 | [v18.5-operation-metrics](changes/v18.5-operation-metrics/proposal.md) | `operation-metrics` | 019 | v18.5-egress-gate, v18.5-execution-provenance, v18.5-claim-verification |
+| V16 | [v16-provider-registry](changes/archive/v16-provider-registry/proposal.md) | `llm-providers` | 011 | — |
+| V16 | [v16-anthropic-provider](changes/archive/v16-anthropic-provider/proposal.md) | `llm-providers` | 011 | v16-provider-registry |
+| V16 | [v16-local-embeddings](changes/archive/v16-local-embeddings/proposal.md) | `embeddings` | 011 | — |
+| V16 | [v16-in-process-agents](changes/archive/v16-in-process-agents/proposal.md) | `agent-runtime` | 014 | v16-provider-registry |
+| V16 | [v16-research-assistant-prompts](changes/archive/v16-research-assistant-prompts/proposal.md) | `agent-prompts` | 010, 011 | v16-in-process-agents |
+| V16 (robustez) | [v16-pipeline-robustness](changes/archive/v16-pipeline-robustness/proposal.md) | `pipeline-robustness` | 002, 010 | v16-in-process-agents (implementada) |
+| V16 (robustez) | [v16-agent-communication-eval](changes/archive/v16-agent-communication-eval/proposal.md) | `communication-eval` | 012, 002, 019, 011 | v16-pipeline-robustness |
+| V16 (complemento) | [v16-model-catalog-router](changes/archive/v16-model-catalog-router/proposal.md) | `llm-providers` | 017, 011 | v16-provider-registry |
+| V16 (complemento) | [v16-sandbox-slim-image](changes/archive/v16-sandbox-slim-image/proposal.md) | `code-sandbox` | 018, 014, 003 | v16-in-process-agents |
+| V16 (complemento) | [v16-platform-images](changes/archive/v16-platform-images/proposal.md) | `platform-images` | 018 | v16-sandbox-slim-image |
+| V17 | [v17-graph-store](changes/archive/v17-graph-store/proposal.md) | `knowledge-graph` | 009, 015 | V16 |
+| V17 | [v17-controlled-vocabulary](changes/archive/v17-controlled-vocabulary/proposal.md) | `vocabulary` | 015 | v17-graph-store |
+| V17 | [v17-evidence-verdict](changes/archive/v17-evidence-verdict/proposal.md) | `evidence-scoring` | 015 | — (módulo puro) |
+| V17 | [v17-research-project](changes/archive/v17-research-project/proposal.md) | `research-project` | 015 | v17-graph-store, v17-controlled-vocabulary |
+| V17 | [v17-structural-fact-ingestion](changes/archive/v17-structural-fact-ingestion/proposal.md) | `knowledge-ingestion` | 009, 015 | v17-research-project |
+| V17 | [v17-knowledge-semantic-index](changes/archive/v17-knowledge-semantic-index/proposal.md) | `knowledge-semantics` | 011, 015 | v16-local-embeddings, v17-graph-store |
+| V17 | [v17-domain-search](changes/archive/v17-domain-search/proposal.md) | `domain-search` | 015, 011, 012 | v17-controlled-vocabulary, v17-knowledge-semantic-index |
+| V17 | [v17-curator-agent](changes/archive/v17-curator-agent/proposal.md) | `curator` | 012, 015 | todas as anteriores de V17 |
+| V17 | [v17-graph-cli](changes/archive/v17-graph-cli/proposal.md) | `graph-cli` | 015 | v17-graph-store, v17-curator-agent |
+| V17 | [v17-input-document-index](changes/archive/v17-input-document-index/proposal.md) | `input-documents` | 015, 011, 019 | v16-local-embeddings, v17-research-project, v17-structural-fact-ingestion |
+| V18 | [v18-usage-limits](changes/archive/v18-usage-limits/proposal.md) | `usage-limits` | 010, 012 | V16 |
+| V18 | [v18-research-continuity](changes/archive/v18-research-continuity/proposal.md) | `session-continuity` | 010 | v18-usage-limits, v17-structural-fact-ingestion |
+| V18 | [v18-hypothesis-loop](changes/archive/v18-hypothesis-loop/proposal.md) | `hypothesis-loop` | 010, 012 | V17, v18-usage-limits, v18-research-continuity |
+| V18 | [v18-researcher-consult](changes/archive/v18-researcher-consult/proposal.md) | `researcher-consult` | 012, 010, 019 | v18-usage-limits |
+| V18.5 | [v18.5-model-catalog-locality](changes/archive/v18.5-model-catalog-locality/proposal.md) | `llm-providers` | 019, 017 | V18, v16-model-catalog-router |
+| V18.5 | [v18.5-egress-gate](changes/archive/v18.5-egress-gate/proposal.md) | `data-egress` | 019, 014 | v18.5-model-catalog-locality |
+| V18.5 | [v18.5-research-data-ingestion](changes/archive/v18.5-research-data-ingestion/proposal.md) | `research-data` | 019 | v18.5-egress-gate (entregar junto) |
+| V18.5 | [v18.5-sandbox-phases](changes/archive/v18.5-sandbox-phases/proposal.md) | `code-sandbox` | 019, 014, 018 | V18, v16-sandbox-slim-image |
+| V18.5 | [v18.5-execution-provenance](changes/archive/v18.5-execution-provenance/proposal.md) | `execution-provenance` | 019, 015 | v18.5-sandbox-phases, v17-research-project |
+| V18.5 | [v18.5-numeric-references](changes/archive/v18.5-numeric-references/proposal.md) | `numeric-provenance` | 019 | v18.5-execution-provenance |
+| V18.5 | [v18.5-claim-verification](changes/archive/v18.5-claim-verification/proposal.md) | `claim-verification` | 019, 015 | v18.5-numeric-references, v18.5-model-catalog-locality |
+| V18.5 | [v18.5-operation-metrics](changes/archive/v18.5-operation-metrics/proposal.md) | `operation-metrics` | 019 | v18.5-egress-gate, v18.5-execution-provenance, v18.5-claim-verification |
 | V18.6 | [v18.6-review-evidence](changes/v18.6-review-evidence/proposal.md) | `pipeline-robustness` | 002, 010, 019 | — |
 | V18.6 | [v18.6-benchmark-harness](changes/v18.6-benchmark-harness/proposal.md) | `benchmark` | 005, 009, 010, 020 | — (item de juiz: v18.6-validator-independence) |
 | V18.6 | [v18.6-validator-independence](changes/v18.6-validator-independence/proposal.md) | `llm-providers` | 020, 017, 019 | aprovação do ADR 020 |

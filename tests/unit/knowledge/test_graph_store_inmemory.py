@@ -2,7 +2,7 @@
 
 Exercita a interface GraphStore ponta a ponta sem depender de banco de
 dados, incluindo os cenários de segurança e auditoria de
-`openspec/changes/v17-graph-store/specs/knowledge-graph/spec.md`
+`openspec/changes/archive/v17-graph-store/specs/knowledge-graph/spec.md`
 (tarefas 4.1 e 4.2 de tasks.md).
 """
 

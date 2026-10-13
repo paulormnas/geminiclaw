@@ -15,5 +15,5 @@ Módulos:
     runtime: ``AgentRuntime``, responsável por executar uma ``AgentTask`` em
         processo com supervisão de timeout e isolamento de falhas.
 
-Ver ``openspec/changes/v16-in-process-agents/``.
+Ver ``openspec/changes/archive/v16-in-process-agents/``.
 """

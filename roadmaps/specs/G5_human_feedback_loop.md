@@ -44,7 +44,7 @@ não tem visibilidade do que aconteceu durante a sessão.
 
 ---
 
-> **Revisão V18 (`openspec/changes/v18-researcher-consult`):** nos modos `semi` e `auto`,
+> **Revisão V18 (`openspec/changes/archive/v18-researcher-consult`):** nos modos `semi` e `auto`,
 > `ask_researcher` deixa de devolver apenas a suposição documentada: o Researcher consultor
 > responde no lugar do humano (ADR 012 §8), com registro em `researcher_interactions`
 > (`respondido_por`, `consulta`, `motivo_fallback`). O comportamento do modo `assisted` e a

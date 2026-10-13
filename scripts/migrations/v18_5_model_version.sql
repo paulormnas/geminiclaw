@@ -1,7 +1,7 @@
 -- scripts/migrations/v18_5_model_version.sql
 --
 -- Migração v18.5: coluna da versão efetiva do modelo em token_usage
--- (openspec/changes/v18.5-model-catalog-locality, tarefas 0.2 e 3.3; alteração de
+-- (openspec/changes/archive/v18.5-model-catalog-locality, tarefas 0.2 e 3.3; alteração de
 -- schema aprovada explicitamente pelo pesquisador).
 --
 -- IDEMPOTENTE: ADD COLUMN IF NOT EXISTS; pode ser aplicada várias vezes.

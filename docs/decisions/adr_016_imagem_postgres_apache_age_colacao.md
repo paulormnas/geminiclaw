@@ -1,15 +1,15 @@
 # ADR 016 — Imagem do PostgreSQL para Apache AGE (Alpine/musl → Debian/glibc) e colação de índices
 
-**Status:** Aprovado em 2026-10-08 pelo pesquisador responsável — imagem `apache/age` (Debian/glibc) em uso desde o PR #64; validação da colação e dos índices no volume existente do Pi 5 pendente (atualizado em 2026-10-08)
+**Status:** Aceito — imagem `apache/age` (Debian/glibc) em uso desde o PR #64; `v17-graph-store` concluída e arquivada em 2026-10-13; validação da colação e dos índices no volume existente do Pi 5 pendente (bateria final, `openspec/changes/archive/PENDENCIAS.md`) (aprovado em 2026-10-08 pelo pesquisador responsável; atualizado em 2026-10-13)
 **Data:** 2026-09-29
-**Relacionados:** ADR 005 (persistência), ADR 009 §4 (Apache AGE), PR #64 (`openspec/changes/v17-graph-store/`)
+**Relacionados:** ADR 005 (persistência), ADR 009 §4 (Apache AGE), PR #64 (`openspec/changes/archive/v17-graph-store/`)
 
 
-## Estado da implementação (2026-10-08)
+## Estado da implementação (2026-10-13)
 
 | Mudança OpenSpec | Estado | PR |
 |---|---|---|
-| [`v17-graph-store`](../../openspec/changes/v17-graph-store/proposal.md) | Implementada, com pendências | #64, #71 |
+| [`v17-graph-store`](../../openspec/changes/archive/v17-graph-store/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #64, #71 |
 
 ## Contexto
 

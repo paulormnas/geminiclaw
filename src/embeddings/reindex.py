@@ -1,7 +1,7 @@
 """Reindexação de coleções Qdrant após troca do modelo de embeddings local.
 
 Implementa `geminiclaw embeddings reindex [--collection NOME] [--yes]`
-(Roadmap V16 / ADR 011 §3, `openspec/changes/v16-local-embeddings/design.md`
+(Roadmap V16 / ADR 011 §3, `openspec/changes/archive/v16-local-embeddings/design.md`
 "Reindexação"). Revetoriza os pontos de uma coleção usando o provedor de
 embeddings local atualmente configurado, atualizando os metadados
 (`embedding_model`, `embedding_version`, `embedding_dim`, `text_hash`) de

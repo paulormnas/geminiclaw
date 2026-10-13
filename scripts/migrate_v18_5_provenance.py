@@ -1,4 +1,4 @@
-"""Aplica a migração do registro de execuções (V18.5, openspec/changes/v18.5-execution-provenance, tarefa 1.2).
+"""Aplica a migração do registro de execuções (V18.5, openspec/changes/archive/v18.5-execution-provenance, tarefa 1.2).
 
 Cria a tabela ``execution_records`` (somente-acréscimo, com gatilhos) a partir de
 ``scripts/migrations/v18_5_001_execution_records.sql``. Idempotente e aditiva: não altera nem apaga dados existentes.

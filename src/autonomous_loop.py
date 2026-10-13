@@ -1934,7 +1934,7 @@ class AutonomousLoop:
         reserva de fechamento, tenta também uma consolidação final via Summarizer.
 
         Nota de integração (spec ambiguity, ver relatório da mudança): o design
-        (``openspec/changes/v18-usage-limits/design.md`` §3) especifica o fechamento
+        (``openspec/changes/archive/v18-usage-limits/design.md`` §3) especifica o fechamento
         como "checkpoint (v18-research-continuity) + curator.close_session". Nem o
         checkpoint de ``v18-research-continuity`` nem o agente Curator (ADR 012)
         existem neste codebase — são mudanças paralelas/futuras que ainda não foram

@@ -1,7 +1,7 @@
 """Testes de confinamento de write_artifact (Roadmap V16/ADR 014, Design §4).
 
 Cobre o Requirement "Escrita confinada ao diretório da sessão" da spec
-``agent-runtime`` (openspec/changes/v16-in-process-agents/specs/agent-runtime/spec.md).
+``agent-runtime`` (openspec/changes/archive/v16-in-process-agents/specs/agent-runtime/spec.md).
 """
 
 import os

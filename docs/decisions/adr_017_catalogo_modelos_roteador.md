@@ -16,12 +16,12 @@
 >   roda em modelos de nuvem (Gemini, Claude); modelos locais continuam elegíveis pela preferência.
 
 
-## Estado da implementação (2026-10-08)
+## Estado da implementação (2026-10-13)
 
 | Mudança OpenSpec | Estado | PR |
 |---|---|---|
-| [`v16-model-catalog-router`](../../openspec/changes/v16-model-catalog-router/proposal.md) | Implementada, com pendências | #102 |
-| [`v18.5-model-catalog-locality`](../../openspec/changes/v18.5-model-catalog-locality/proposal.md) | Implementada, com pendências | #112 |
+| [`v16-model-catalog-router`](../../openspec/changes/archive/v16-model-catalog-router/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #102 |
+| [`v18.5-model-catalog-locality`](../../openspec/changes/archive/v18.5-model-catalog-locality/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #112 |
 
 ## Contexto
 

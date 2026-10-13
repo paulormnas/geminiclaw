@@ -19,42 +19,42 @@ operação e o modo sem limite.
 ## Tarefas
 
 ### Tarefa 1: Localidade declarada no catálogo e versão efetiva do modelo
-- **Spec:** [`v18.5-model-catalog-locality`](../openspec/changes/v18.5-model-catalog-locality/proposal.md)
+- **Spec:** [`v18.5-model-catalog-locality`](../openspec/changes/archive/v18.5-model-catalog-locality/proposal.md)
 - **Critérios de aceite:** [ ] `localidade`, `aceita_dados_brutos` e `familia_modelo` no catálogo · [ ] perfil de alocação no banner, na sessão e no relatório · [ ] `versao_efetiva` por chamada
 - **Complexidade estimada:** Média
 
 ### Tarefa 2: Camada única de saída
-- **Spec:** [`v18.5-egress-gate`](../openspec/changes/v18.5-egress-gate/proposal.md)
+- **Spec:** [`v18.5-egress-gate`](../openspec/changes/archive/v18.5-egress-gate/proposal.md)
 - **Critérios de aceite:** [ ] todo envio externo passa pelo `EgressGate` · [ ] filtro da saída do sandbox · [ ] contaminação entre papéis · [ ] registro de egresso e limite de volume
 - **Complexidade estimada:** Alta
 
 ### Tarefa 3: Ingestão de dados de pesquisa
-- **Spec:** [`v18.5-research-data-ingestion`](../openspec/changes/v18.5-research-data-ingestion/proposal.md)
+- **Spec:** [`v18.5-research-data-ingestion`](../openspec/changes/archive/v18.5-research-data-ingestion/proposal.md)
 - **Critérios de aceite:** [ ] sem linhas brutas nem extremos exatos para modelos sem `aceita_dados_brutos` · [ ] tamanho mínimo de grupo · [ ] marcações de arquivo · [ ] visão pela camada de saída
 - **Complexidade estimada:** Média
 
 ### Tarefa 4: Sandbox em fases de rede
-- **Spec:** [`v18.5-sandbox-phases`](../openspec/changes/v18.5-sandbox-phases/proposal.md)
+- **Spec:** [`v18.5-sandbox-phases`](../openspec/changes/archive/v18.5-sandbox-phases/proposal.md)
 - **Critérios de aceite:** [ ] instalação e busca de ativos sem dados · [ ] execução sem rede · [ ] erro acionável para download não declarado
 - **Complexidade estimada:** Média
 
 ### Tarefa 5: Registro de execuções encadeado por hash
-- **Spec:** [`v18.5-execution-provenance`](../openspec/changes/v18.5-execution-provenance/proposal.md)
+- **Spec:** [`v18.5-execution-provenance`](../openspec/changes/archive/v18.5-execution-provenance/proposal.md)
 - **Critérios de aceite:** [ ] registros de início e término · [ ] acréscimo serializado · [ ] `provenance verify` · [ ] ponta da cadeia no checkpoint e no relatório
 - **Complexidade estimada:** Alta
 
 ### Tarefa 6: Referências numéricas
-- **Spec:** [`v18.5-numeric-references`](../openspec/changes/v18.5-numeric-references/proposal.md)
+- **Spec:** [`v18.5-numeric-references`](../openspec/changes/archive/v18.5-numeric-references/proposal.md)
 - **Critérios de aceite:** [ ] `{{res}}`, `{{calc}}` e `{{src}}` renderizados · [ ] verificador de números · [ ] métricas literais sinalizadas
 - **Complexidade estimada:** Alta
 
 ### Tarefa 7: Verificação das conclusões por afirmações
-- **Spec:** [`v18.5-claim-verification`](../openspec/changes/v18.5-claim-verification/proposal.md)
+- **Spec:** [`v18.5-claim-verification`](../openspec/changes/archive/v18.5-claim-verification/proposal.md)
 - **Critérios de aceite:** [ ] status por afirmação · [ ] refutação só por LLM vira contestada · [ ] pendentes verificadas na retomada
 - **Complexidade estimada:** Alta
 
 ### Tarefa 8: Métricas de operação e modo sem limite
-- **Spec:** [`v18.5-operation-metrics`](../openspec/changes/v18.5-operation-metrics/proposal.md)
+- **Spec:** [`v18.5-operation-metrics`](../openspec/changes/archive/v18.5-operation-metrics/proposal.md)
 - **Critérios de aceite:** [ ] métricas por sessão no relatório · [ ] modo sem limite explícito com confirmação · [ ] limites de retentativas mantidos
 - **Complexidade estimada:** Média
 

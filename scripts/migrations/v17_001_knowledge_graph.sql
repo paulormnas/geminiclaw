@@ -5,7 +5,7 @@
 --
 -- IDEMPOTENTE: pode ser aplicada múltiplas vezes sem duplicar grafo,
 -- extensão, índices ou tabela (Requirement "Migração idempotente",
--- openspec/changes/v17-graph-store/specs/knowledge-graph/spec.md).
+-- openspec/changes/archive/v17-graph-store/specs/knowledge-graph/spec.md).
 --
 -- Este arquivo é um TEMPLATE: {graph_name} é substituído pelo script Python
 -- scripts/migrate_v17_knowledge.py com o valor de config.KNOWLEDGE_GRAPH_NAME

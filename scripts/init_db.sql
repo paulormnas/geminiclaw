@@ -276,7 +276,7 @@ CREATE INDEX IF NOT EXISTS idx_chunks_doc ON document_chunks (document_id);
 
 -- =============================================================
 -- Fila de similaridade do grafo de conhecimento (V17 / ADR 015 §6,
--- openspec/changes/v17-knowledge-semantic-index). Pares candidatos fora do
+-- openspec/changes/archive/v17-knowledge-semantic-index). Pares candidatos fora do
 -- grafo; só pares confirmados viram aresta SEMELHANTE_A (feito pelo Curator).
 -- Idempotente: não apaga nem altera dados existentes.
 -- =============================================================
@@ -308,7 +308,7 @@ CREATE TABLE IF NOT EXISTS similarity_queue (
 CREATE INDEX IF NOT EXISTS idx_simq_pendente ON similarity_queue (status, prioridade DESC);
 
 -- =============================================================
--- Registro de egresso (V18.5 / ADR 019 §3.5 e §8, openspec/changes/v18.5-egress-gate).
+-- Registro de egresso (V18.5 / ADR 019 §3.5 e §8, openspec/changes/archive/v18.5-egress-gate).
 -- Uma linha por envio externo (LLM, visão, busca, leitura web), inclusive recusas e destinos no_no.
 -- O conteúdo enviado não é gravado aqui (fica em outputs/<sessão>/egress/envios.jsonl.gz).
 -- Idempotente: não apaga nem altera dados existentes.
@@ -336,7 +336,7 @@ CREATE TABLE IF NOT EXISTS egress_log (
 CREATE INDEX IF NOT EXISTS idx_egress_session ON egress_log (session_id);
 
 -- =============================================================
--- Registro de execuções encadeado por hash (V18.5 / ADR 019 §4, openspec/changes/v18.5-execution-provenance).
+-- Registro de execuções encadeado por hash (V18.5 / ADR 019 §4, openspec/changes/archive/v18.5-execution-provenance).
 -- Somente-acréscimo: os gatilhos recusam UPDATE, DELETE e TRUNCATE. Idempotente.
 -- =============================================================
 CREATE TABLE IF NOT EXISTS execution_records (

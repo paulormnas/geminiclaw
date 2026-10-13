@@ -1,6 +1,6 @@
 # ADR 019 — Localidade dos Dados de Pesquisa e Proveniência dos Resultados
 
-**Status:** Parcialmente implementado — localidade no catálogo, fases do sandbox e camada de saída mergeadas; proveniência, referências numéricas, verificação de afirmações, métricas e ingestão de dados pendentes (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-08)
+**Status:** Parcialmente implementado — as 8 mudanças V18.5 estão concluídas e arquivadas (2026-10-13), com validação real e revisões de segurança pendentes (`openspec/changes/archive/PENDENCIAS.md`); o §10 (atuação sobre instrumentos) entra na V19 (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-13)
 **Data:** 2026-09-29
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** implementação depois da V18 (incluindo as mudanças em andamento dos ADRs 017 e 018) e **antes da V19** (`roadmaps/roadmap_V19.md`); é também pré-requisito da federação (V20, ADR 013)
@@ -11,14 +11,14 @@
 
 | Mudança OpenSpec | Estado | PR |
 |---|---|---|
-| [`v18.5-model-catalog-locality`](../../openspec/changes/v18.5-model-catalog-locality/proposal.md) | Implementada, com pendências | #112 |
-| [`v18.5-sandbox-phases`](../../openspec/changes/v18.5-sandbox-phases/proposal.md) | Implementada, com pendências | #111 |
-| [`v18.5-egress-gate`](../../openspec/changes/v18.5-egress-gate/proposal.md) | Implementada, com pendências | #113 |
-| [`v18.5-execution-provenance`](../../openspec/changes/v18.5-execution-provenance/proposal.md) | Implementada, com pendências | #119 |
-| [`v18.5-numeric-references`](../../openspec/changes/v18.5-numeric-references/proposal.md) | Implementada, com pendências | #120 |
-| [`v18.5-claim-verification`](../../openspec/changes/v18.5-claim-verification/proposal.md) | Implementada, com pendências | #121 |
-| [`v18.5-operation-metrics`](../../openspec/changes/v18.5-operation-metrics/proposal.md) | Implementada, com pendências | #122 |
-| [`v18.5-research-data-ingestion`](../../openspec/changes/v18.5-research-data-ingestion/proposal.md) | Implementada, com pendências | #118 |
+| [`v18.5-model-catalog-locality`](../../openspec/changes/archive/v18.5-model-catalog-locality/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #112 |
+| [`v18.5-sandbox-phases`](../../openspec/changes/archive/v18.5-sandbox-phases/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #111 |
+| [`v18.5-egress-gate`](../../openspec/changes/archive/v18.5-egress-gate/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #113 |
+| [`v18.5-execution-provenance`](../../openspec/changes/archive/v18.5-execution-provenance/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #119 |
+| [`v18.5-numeric-references`](../../openspec/changes/archive/v18.5-numeric-references/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #120 |
+| [`v18.5-claim-verification`](../../openspec/changes/archive/v18.5-claim-verification/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #121 |
+| [`v18.5-operation-metrics`](../../openspec/changes/archive/v18.5-operation-metrics/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #122 |
+| [`v18.5-research-data-ingestion`](../../openspec/changes/archive/v18.5-research-data-ingestion/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #118 |
 
 ---
 

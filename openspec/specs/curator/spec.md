@@ -1,0 +1,196 @@
+# Especificação: curator
+
+Verdade atual consolidada a partir das mudanças arquivadas (2026-10-13). Cada requisito indica a
+mudança que o definiu por último; os cenários vêm do delta original, em GIVEN/WHEN/THEN.
+
+**Mudanças de origem:** [`v17-curator-agent`](../../changes/archive/v17-curator-agent/proposal.md)
+
+## Requirements
+
+### Requirement: Papel Curator
+_Origem: [`v17-curator-agent`](../../changes/archive/v17-curator-agent/proposal.md)_
+O sistema SHALL oferecer o agente Curator, executado em processo, responsável por registrar o
+conhecimento interpretado no grafo: descobertas, oportunidades, caminhos sem conclusão e
+confirmação de similaridades.
+
+#### Scenario: Checkpoint de consolidação
+- **WHEN** um ciclo de planejamento termina
+- **THEN** o Curator consolida as sinalizações pendentes e os novos resultados da sessão
+
+#### Scenario: Falha do Curator
+- **WHEN** a chamada ao LLM do Curator falha
+- **THEN** a sessão continua e as pendências permanecem para a próxima execução
+
+### Requirement: Revisão antes de criar
+_Origem: [`v17-curator-agent`](../../changes/archive/v17-curator-agent/proposal.md)_
+As ferramentas de escrita do Curator SHALL buscar nós semelhantes antes de criar
+`Descoberta`, `Oportunidade` ou caminho sem conclusão, e SHALL recusar a criação de duplicatas.
+
+#### Scenario: Duplicata
+- **GIVEN** uma `Descoberta` existente com similaridade 0,93 à proposta
+- **WHEN** `create_discovery` é chamado
+- **THEN** a criação é recusada e o ID existente é devolvido com orientação para `reinforce_discovery`
+
+#### Scenario: Variação sem diferença explícita
+- **GIVEN** uma `Descoberta` existente com similaridade 0,78
+- **WHEN** `create_discovery` é chamado sem `diferenca`
+- **THEN** a criação é recusada
+
+#### Scenario: Variação justificada
+- **WHEN** `create_discovery` é chamado com `variacao_de` e `diferenca` preenchidos
+- **THEN** a descoberta é criada ligada à original
+- **AND** `nos_consultados` contém os IDs verificados
+
+### Requirement: Somente conhecimento significativo com evidência
+_Origem: [`v17-curator-agent`](../../changes/archive/v17-curator-agent/proposal.md)_
+O sistema SHALL criar uma `Descoberta` somente se ela apontar um novo caminho de pesquisa ou
+documentar um caminho explorado, e SHALL exigir evidência ligada.
+
+#### Scenario: Sem evidência
+- **WHEN** `create_discovery(tipo="funciona", evidencia_ids=[])` é chamado
+- **THEN** a criação é recusada
+
+#### Scenario: Caminho sem conclusão
+- **GIVEN** uma hipótese interrompida por limite de tempo
+- **WHEN** a sessão termina
+- **THEN** o Curator registra uma `Descoberta(tipo="caminho_sem_conclusao")` com `ponto_de_parada`, `motivo` e `proximo_passo_sugerido`
+
+### Requirement: Veredito calculado sem LLM
+_Origem: [`v17-curator-agent`](../../changes/archive/v17-curator-agent/proposal.md)_
+O sistema SHALL recalcular, de forma determinística, o veredito das hipóteses e descobertas
+afetadas após cada subtarefa, mantendo `SUSTENTA`/`REFUTA` com peso e os atalhos
+`FUNCIONOU_PARA`/`FALHOU_PARA`.
+
+#### Scenario: Recálculo após resultado
+- **WHEN** um novo resultado validado é ingerido para uma hipótese
+- **THEN** `suporte`, `certeza`, `veredito` e `n_tentativas` da hipótese são atualizados
+- **AND** existe `Resultado-SUSTENTA->Hipotese` ou `Resultado-REFUTA->Hipotese` com `peso` igual ao `w` calculado
+
+#### Scenario: Atalho contestado
+- **GIVEN** `Abordagem-FUNCIONOU_PARA->Problema` com descoberta de veredito 0,2
+- **WHEN** novas evidências levam o veredito a 0,05
+- **THEN** a aresta passa a `status="contestada"`
+
+#### Scenario: Descoberta condicional
+- **GIVEN** uma descoberta com `filtro_condicoes = {"dataset_ids": ["d1"]}`
+- **WHEN** o veredito é recalculado
+- **THEN** apenas tentativas com o dataset `d1` entram na conta
+
+### Requirement: Promoção de configuração
+_Origem: [`v17-curator-agent`](../../changes/archive/v17-curator-agent/proposal.md)_
+O sistema SHALL promover uma configuração a `Abordagem(tipo="configuracao")` quando ela tiver
+ao menos 3 resultados positivos validados em ao menos 2 projetos.
+
+#### Scenario: Critério não atingido
+- **WHEN** a configuração tem 3 positivos validados em um único projeto
+- **THEN** nenhuma abordagem é criada
+
+#### Scenario: Critério atingido
+- **WHEN** a configuração tem 3 positivos validados em 2 projetos
+- **THEN** uma `Abordagem(tipo="configuracao")` é criada com `VARIANTE_DE` a abordagem base
+- **AND** reexecutar a detecção não cria outra
+
+### Requirement: Sinalizações de outros agentes
+_Origem: [`v17-curator-agent`](../../changes/archive/v17-curator-agent/proposal.md)_
+O sistema SHALL permitir que Researcher, Developer e Validator sinalizem pontos ao Curator, que
+decide registrar ou descartar cada um com motivo.
+
+#### Scenario: Sinalização registrada
+- **WHEN** o Developer chama `flag_for_curator(tipo="falha_relevante", ...)`
+- **THEN** a sinalização aparece em `pending_flags` no próximo checkpoint
+- **AND** após a revisão fica marcada como `registrada` ou `descartada` com motivo
+
+### Requirement: Revisão da fila de similaridade
+_Origem: [`v17-curator-agent`](../../changes/archive/v17-curator-agent/proposal.md)_
+O Curator SHALL revisar pares da fila por ordem de prioridade dentro do seu orçamento, criando
+`SEMELHANTE_A` apenas para pares confirmados.
+
+#### Scenario: Orçamento
+- **GIVEN** 50 pares pendentes e `CURATOR_QUEUE_BATCH=20`
+- **WHEN** o Curator executa
+- **THEN** no máximo 20 pares são revisados e os demais continuam pendentes
+
+### Requirement: Duplicatas de abordagem fundidas sem apagar
+_Origem: [`v17-curator-agent`](../../changes/archive/v17-curator-agent/proposal.md)_
+O sistema SHALL fundir abordagens duplicadas marcando a duplicada como `fundida` com
+`FUNDIDA_EM`, sem apagar nós ou arestas.
+
+#### Scenario: Fusão
+- **WHEN** "resnet18" é fundida em "ResNet-18"
+- **THEN** ambas existem, a primeira com `status="fundida"`, e o veredito da canônica passa a incluir as tentativas da fundida
+
+### Requirement: Nenhuma remoção pelo Curator
+_Origem: [`v17-curator-agent`](../../changes/archive/v17-curator-agent/proposal.md)_
+As ferramentas do Curator MUST NOT apagar nós ou arestas nem executar Cypher de escrita.
+
+#### Scenario: Inventário
+- **WHEN** as ferramentas do Curator são inspecionadas
+- **THEN** nenhuma remove dados, e a única consulta livre usa o papel somente-leitura
+
+### Requirement: Decisões reservadas ao pesquisador
+_Origem: [`v17-curator-agent`](../../changes/archive/v17-curator-agent/proposal.md)_
+Agentes SHALL NOT confirmar o `Problema`, aprovar ou rejeitar termos do vocabulário nem decidir sobre `Oportunidade`.
+O `GraphStore` MUST recusar essas escritas a atores `agente` (allowlist: `Oportunidade` só `documentada`, vocabulário
+só `candidato`) e MUST tratar nós `rejeitado`/`rejeitada` como imutáveis para agentes.
+
+#### Scenario: Agente tenta pular a aprovação
+- **WHEN** um agente cria ou atualiza uma `Oportunidade` com `status="em_investigacao"`
+- **THEN** a escrita é recusada
+
+#### Scenario: Resposta do consultor não autoriza
+- **GIVEN** um pedido de decisão reservada registrado no gate
+- **WHEN** a resposta vem de `ask_researcher` ou do Researcher consultor
+- **THEN** o pedido continua pendente
+
+### Requirement: Atualização de arestas derivadas
+_Origem: [`v17-curator-agent`](../../changes/archive/v17-curator-agent/proposal.md)_
+`GraphStore.update_edge` SHALL alterar apenas propriedades das relações derivadas (`SUSTENTA`, `REFUTA`,
+`FUNCIONOU_PARA`, `FALHOU_PARA`), apenas para `orquestrador`/`pesquisador`, registrando auditoria.
+
+#### Scenario: Reescrever APLICOU.config
+- **WHEN** qualquer ator tenta `update_edge` em `APLICOU`
+- **THEN** a operação é recusada
+
+### Requirement: Fusão e promoção restritas ao projeto
+_Origem: [`v17-curator-agent`](../../changes/archive/v17-curator-agent/proposal.md)_
+`merge_approaches` SHALL exigir abordagens do projeto da sessão, do mesmo tipo, com `SEMELHANTE_A` de score
+`>= SIM_DUPLICATE_MIN` confirmado em execução anterior. A promoção SHALL gravar só no projeto da sessão e contar
+projetos com `Sessao` real; tentativas de outro projeto só contam se `compartilhavel`.
+
+#### Scenario: Par relacionado confirmado
+- **WHEN** um par `relacionado` é confirmado e a fusão é pedida
+- **THEN** a fusão é recusada
+
+### Requirement: Leituras sem dados privados de outros projetos
+_Origem: [`v17-curator-agent`](../../changes/archive/v17-curator-agent/proposal.md)_
+`read_query` SHALL devolver somente IDs e números; a fila de similaridade SHALL entregar só ID e rótulo de nó privado
+de outro projeto.
+
+#### Scenario: Consulta livre com texto privado
+- **WHEN** `read_query` retorna texto de um nó de outro projeto
+- **THEN** o texto é substituído por `[omitido]`
+
+### Requirement: Fatos estruturais só pela ingestão
+_Origem: [`v17-curator-agent`](../../changes/archive/v17-curator-agent/proposal.md)_
+O `GraphStore` MUST recusar a criação ou alteração de `Sessao`, `Insumo`, `Experimento` e `Resultado` por ator `agente`.
+
+#### Scenario: Agente cria Experimento
+- **WHEN** um agente chama `create_node("Experimento")` com justificativa e `nos_consultados` presentes
+- **THEN** a escrita é recusada por papel
+
+### Requirement: `read_query` restrito
+_Origem: [`v17-curator-agent`](../../changes/archive/v17-curator-agent/proposal.md)_
+`read_query` SHALL exigir `LIMIT` e `$projeto_id`, recusar literais e funções/predicados de texto e devolver só IDs e
+números. A restrição é sintática (limitação residual registrada em `design.md`).
+
+#### Scenario: Oráculo de texto
+- **WHEN** a consulta usa `length(n.enunciado)` ou `STARTS WITH`
+- **THEN** a consulta é recusada
+
+### Requirement: Papel opcional
+_Origem: [`v17-curator-agent`](../../changes/archive/v17-curator-agent/proposal.md)_
+O papel `curator` SHALL ser opcional na resolução da sessão: sem modelo elegível ele é desligado e a sessão continua.
+
+#### Scenario: Sem modelo elegível
+- **WHEN** nenhum modelo atende ao papel `curator`
+- **THEN** os demais papéis resolvem e o Curator fica desligado

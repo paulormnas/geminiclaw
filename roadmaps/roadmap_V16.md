@@ -18,7 +18,7 @@ Cada tarefa é uma mudança OpenSpec com proposta, design, tarefas e requisitos 
 `openspec/changes/<id>/`.
 
 ### Tarefa 1: Registro único de provedores LLM
-- **Spec:** [`v16-provider-registry`](../openspec/changes/v16-provider-registry/proposal.md)
+- **Spec:** [`v16-provider-registry`](../openspec/changes/archive/v16-provider-registry/proposal.md)
 - **Módulos afetados:** `src/llm/`, `src/model_router.py`, `pyproject.toml`
 - **Critérios de aceite:**
   - [ ] Seleção global e por papel usam o mesmo registro.
@@ -27,7 +27,7 @@ Cada tarefa é uma mudança OpenSpec com proposta, design, tarefas e requisitos 
 - **Complexidade estimada:** Média
 
 ### Tarefa 2: Embeddings locais e versionados
-- **Spec:** [`v16-local-embeddings`](../openspec/changes/v16-local-embeddings/proposal.md)
+- **Spec:** [`v16-local-embeddings`](../openspec/changes/archive/v16-local-embeddings/proposal.md)
 - **Módulos afetados:** `src/embeddings/`, indexadores de `search_deep` e `document_processor`
 - **Critérios de aceite:**
   - [ ] Nenhum vetor aleatório em código de produção.
@@ -36,7 +36,7 @@ Cada tarefa é uma mudança OpenSpec com proposta, design, tarefas e requisitos 
 - **Complexidade estimada:** Média
 
 ### Tarefa 3: Agentes em processo; containers só como sandbox
-- **Spec:** [`v16-in-process-agents`](../openspec/changes/v16-in-process-agents/proposal.md)
+- **Spec:** [`v16-in-process-agents`](../openspec/changes/archive/v16-in-process-agents/proposal.md)
 - **Módulos afetados:** `src/orchestrator.py`, `src/agent_runtime/`, `agents/`, `src/runner.py`, `src/ipc.py`
 - **Critérios de aceite:**
   - [ ] Fase 1: agentes em processo atrás de `AGENT_RUNTIME`, com salvaguardas do host.
@@ -45,7 +45,7 @@ Cada tarefa é uma mudança OpenSpec com proposta, design, tarefas e requisitos 
 - **Complexidade estimada:** Alta
 
 ### Tarefa 4: Prompts alinhados ao novo propósito
-- **Spec:** [`v16-research-assistant-prompts`](../openspec/changes/v16-research-assistant-prompts/proposal.md)
+- **Spec:** [`v16-research-assistant-prompts`](../openspec/changes/archive/v16-research-assistant-prompts/proposal.md)
 - **Módulos afetados:** `agents/*/agent.py`, `src/config.py`
 - **Critérios de aceite:**
   - [ ] Teste de política de prompts verde.
@@ -74,17 +74,17 @@ Mudanças decorrentes dos ADRs 017 e 018, aprovados em 2026-10-01. Entram depois
 robustez do pipeline e podem andar em paralelo com a V17.
 
 ### Tarefa 5: Catálogo de modelos e roteador por papel
-- **Spec:** [`v16-model-catalog-router`](../openspec/changes/v16-model-catalog-router/proposal.md)
+- **Spec:** [`v16-model-catalog-router`](../openspec/changes/archive/v16-model-catalog-router/proposal.md)
 - **Critérios de aceite:** [ ] catálogo versionado e validado · [ ] política `self_hosted_only` por padrão · [ ] roteador puro resolvido uma vez por sessão · [ ] `LLM_PROVIDER`/`LLM_MODEL`/`DEFAULT_MODEL` removidas
 - **Complexidade estimada:** Alta
 
 ### Tarefa 6: Imagem enxuta do sandbox e execução sem root
-- **Spec:** [`v16-sandbox-slim-image`](../openspec/changes/v16-sandbox-slim-image/proposal.md)
+- **Spec:** [`v16-sandbox-slim-image`](../openspec/changes/archive/v16-sandbox-slim-image/proposal.md)
 - **Critérios de aceite:** [ ] imagem sem código do projeto e sem extras · [ ] nenhum comando como root · [ ] falha de instalação fatal · [ ] script sem rede
 - **Complexidade estimada:** Média
 
 ### Tarefa 7: Identificação de plataforma e seleção de imagens
-- **Spec:** [`v16-platform-images`](../openspec/changes/v16-platform-images/proposal.md)
+- **Spec:** [`v16-platform-images`](../openspec/changes/archive/v16-platform-images/proposal.md)
 - **Critérios de aceite:** [ ] detecção de Pi 5, macOS e x86_64 · [ ] build e pull nativos com arquitetura conferida · [ ] imagem do sandbox conferida no início da sessão
 - **Complexidade estimada:** Média
 
@@ -108,7 +108,7 @@ avaliação da matriz de modelos é repetida** até o pipeline concluir a tarefa
 etapa usa uma execução por mudança.
 
 ### Tarefa 8: Robustez do planejamento, da revisão e do relatório
-- **Spec:** [`v16-pipeline-robustness`](../openspec/changes/v16-pipeline-robustness/proposal.md)
+- **Spec:** [`v16-pipeline-robustness`](../openspec/changes/archive/v16-pipeline-robustness/proposal.md)
 - **Critérios de aceite:** [ ] plano normalizado sem inventar conteúdo · [ ] reprovação repetida
   termina em erro explícito ou aprovação com avisos · [ ] artefato com outro prefixo aprova com
   `name_mismatch` · [ ] disjuntor só dispara sem mudança de erro por dois ciclos · [ ] limites
@@ -117,7 +117,7 @@ etapa usa uma execução por mudança.
 - **Complexidade estimada:** Alta
 
 ### Tarefa 9: Avaliação da comunicação entre agentes
-- **Spec:** [`v16-agent-communication-eval`](../openspec/changes/v16-agent-communication-eval/proposal.md)
+- **Spec:** [`v16-agent-communication-eval`](../openspec/changes/archive/v16-agent-communication-eval/proposal.md)
 - **Critérios de aceite:** [ ] verdade determinística por subtarefa · [ ] matriz de confusão do
   revisor · [ ] taxa de resolução e laços · [ ] juiz LLM de outro provedor, com redação e teto
   de custo · [ ] calibração humana (cerca de 20 eventos) com kappa no relatório

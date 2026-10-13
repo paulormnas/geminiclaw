@@ -1,6 +1,6 @@
 """Testes da visualização do grafo pela CLI (v17-graph-cli, requisito "Visualização sem LLM").
 
-Cada teste cita o ``#### Scenario`` (ou a tarefa) de ``openspec/changes/v17-graph-cli`` que cobre. Sem rede, banco ou
+Cada teste cita o ``#### Scenario`` (ou a tarefa) de ``openspec/changes/archive/v17-graph-cli`` que cobre. Sem rede, banco ou
 LLM: o grafo é em memória e qualquer chamada a provedor falha o teste.
 """
 

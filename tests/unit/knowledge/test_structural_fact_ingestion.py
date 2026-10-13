@@ -1,4 +1,4 @@
-"""Testes de ``src.knowledge.ingestion`` (``openspec/changes/v17-structural-fact-ingestion``).
+"""Testes de ``src.knowledge.ingestion`` (``openspec/changes/archive/v17-structural-fact-ingestion``).
 
 Usam ``InMemoryGraphStore`` e arquivos em ``tmp_path``; nenhum teste usa rede, LLM, Docker ou AGE.
 Um teste por ``#### Scenario`` da spec ``knowledge-ingestion`` (nome do cenário no docstring), mais

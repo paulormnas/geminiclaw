@@ -7,15 +7,15 @@
 **ADRs relacionados:** ADR 001 (propósito — em revisão), ADR 005 (persistência)
 
 
-## Estado da implementação (2026-10-08)
+## Estado da implementação (2026-10-13)
 
 | Mudança OpenSpec | Estado | PR |
 |---|---|---|
-| [`v17-graph-store`](../../openspec/changes/v17-graph-store/proposal.md) | Implementada, com pendências | #64, #71 |
-| [`v17-evidence-verdict`](../../openspec/changes/v17-evidence-verdict/proposal.md) | Implementada | #62 |
-| [`v17-structural-fact-ingestion`](../../openspec/changes/v17-structural-fact-ingestion/proposal.md) | Implementada, com pendências | #105 |
-| [`v17-knowledge-semantic-index`](../../openspec/changes/v17-knowledge-semantic-index/proposal.md) | Implementada, com pendências | #100 |
-| [`v17-curator-agent`](../../openspec/changes/v17-curator-agent/proposal.md) | Implementada, com pendências | #106 |
+| [`v17-graph-store`](../../openspec/changes/archive/v17-graph-store/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #64, #71 |
+| [`v17-evidence-verdict`](../../openspec/changes/archive/v17-evidence-verdict/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #62 |
+| [`v17-structural-fact-ingestion`](../../openspec/changes/archive/v17-structural-fact-ingestion/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #105 |
+| [`v17-knowledge-semantic-index`](../../openspec/changes/archive/v17-knowledge-semantic-index/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #100 |
+| [`v17-curator-agent`](../../openspec/changes/archive/v17-curator-agent/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #106 |
 
 ---
 

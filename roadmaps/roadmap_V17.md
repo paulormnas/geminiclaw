@@ -15,52 +15,52 @@ pelo agente Curator, com veredito de evidência objetivo e acesso do pesquisador
 ## Tarefas
 
 ### Tarefa 1: Armazenamento do grafo
-- **Spec:** [`v17-graph-store`](../openspec/changes/v17-graph-store/proposal.md)
+- **Spec:** [`v17-graph-store`](../openspec/changes/archive/v17-graph-store/proposal.md)
 - **Critérios de aceite:** [ ] AGE no PostgreSQL do Pi 5 · [ ] schema declarativo · [ ] escrita tipada sem injeção · [ ] papel somente-leitura
 - **Complexidade estimada:** Alta
 
 ### Tarefa 2: Vocabulário controlado
-- **Spec:** [`v17-controlled-vocabulary`](../openspec/changes/v17-controlled-vocabulary/proposal.md)
+- **Spec:** [`v17-controlled-vocabulary`](../openspec/changes/archive/v17-controlled-vocabulary/proposal.md)
 - **Critérios de aceite:** [ ] domínios do CNPq carregados · [ ] catálogo de métricas · [ ] candidatos e decisão pela CLI
 - **Complexidade estimada:** Média
 
 ### Tarefa 3: Veredito de evidência
-- **Spec:** [`v17-evidence-verdict`](../openspec/changes/v17-evidence-verdict/proposal.md)
+- **Spec:** [`v17-evidence-verdict`](../openspec/changes/archive/v17-evidence-verdict/proposal.md)
 - **Critérios de aceite:** [ ] testes-ouro do ADR 015 verdes · [ ] parâmetros configuráveis
 - **Complexidade estimada:** Média
 
 ### Tarefa 4: Projeto de pesquisa e problema confirmado
-- **Spec:** [`v17-research-project`](../openspec/changes/v17-research-project/proposal.md)
+- **Spec:** [`v17-research-project`](../openspec/changes/archive/v17-research-project/proposal.md)
 - **Critérios de aceite:** [ ] projetos na CLI · [ ] problema redigido pelo Researcher e confirmado pelo pesquisador
 - **Complexidade estimada:** Média
 
 ### Tarefa 5: Ingestão de fatos estruturais
-- **Spec:** [`v17-structural-fact-ingestion`](../openspec/changes/v17-structural-fact-ingestion/proposal.md)
+- **Spec:** [`v17-structural-fact-ingestion`](../openspec/changes/archive/v17-structural-fact-ingestion/proposal.md)
 - **Critérios de aceite:** [ ] fatos gravados sem LLM · [ ] causa de falha classificada · [ ] idempotente · [ ] resiliente a grafo indisponível
 - **Complexidade estimada:** Alta
 
 ### Tarefa 6: Índice semântico e fila de similaridade
-- **Spec:** [`v17-knowledge-semantic-index`](../openspec/changes/v17-knowledge-semantic-index/proposal.md)
+- **Spec:** [`v17-knowledge-semantic-index`](../openspec/changes/archive/v17-knowledge-semantic-index/proposal.md)
 - **Critérios de aceite:** [ ] mesmo ID no grafo e no Qdrant · [ ] consulta híbrida · [ ] fila fora do grafo sem limite de conexões
 - **Complexidade estimada:** Alta
 
 ### Tarefa 6.1: Busca de domínio com embeddings hierárquicos
-- **Spec:** [`v17-domain-search`](../openspec/changes/v17-domain-search/proposal.md)
+- **Spec:** [`v17-domain-search`](../openspec/changes/archive/v17-domain-search/proposal.md)
 - **Critérios de aceite:** [ ] texto e payload do `Dominio` com o caminho da grande área ao termo · [ ] busca com preferência pelo nível mais específico e filtro por subárvore · [ ] ferramenta `buscar_dominio` somente leitura para Researcher e Curator · [ ] avaliação `hit@1`/`hit@3` do modelo de embedding
 - **Complexidade estimada:** Média
 
 ### Tarefa 7: Agente Curator
-- **Spec:** [`v17-curator-agent`](../openspec/changes/v17-curator-agent/proposal.md)
+- **Spec:** [`v17-curator-agent`](../openspec/changes/archive/v17-curator-agent/proposal.md)
 - **Critérios de aceite:** [ ] diretrizes do ADR 015 §10 aplicadas pelas ferramentas · [ ] veredito recalculado sem LLM · [ ] promoção de configuração
 - **Complexidade estimada:** Alta
 
 ### Tarefa 8: CLI do grafo
-- **Spec:** [`v17-graph-cli`](../openspec/changes/v17-graph-cli/proposal.md)
+- **Spec:** [`v17-graph-cli`](../openspec/changes/archive/v17-graph-cli/proposal.md)
 - **Critérios de aceite:** [ ] visualização sem LLM · [ ] alteração via Curator com confirmação
 - **Complexidade estimada:** Média
 
 ### Tarefa 9: Indexação dos insumos com metadados
-- **Spec:** [`v17-input-document-index`](../openspec/changes/v17-input-document-index/proposal.md)
+- **Spec:** [`v17-input-document-index`](../openspec/changes/archive/v17-input-document-index/proposal.md)
 - **Critérios de aceite:** [ ] indexação automática e idempotente por projeto · [ ] texto enriquecido com metadados · [ ] datasets e imagens só como descritor · [ ] busca restrita ao projeto
 - **Complexidade estimada:** Média
 

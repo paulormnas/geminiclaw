@@ -23,7 +23,7 @@ rótulo, sintaxe de índice em propriedade ``agtype``) não foi validada contra
 uma instância real neste ambiente de desenvolvimento — apenas contra a
 documentação da extensão. Rode este script uma vez em um banco de
 teste/isolado e confira os logs antes de aplicá-lo em qualquer ambiente
-compartilhado (tarefa 5.1/5.2 de ``openspec/changes/v17-graph-store/tasks.md``).
+compartilhado (tarefa 5.1/5.2 de ``openspec/changes/archive/v17-graph-store/tasks.md``).
 """
 
 from __future__ import annotations

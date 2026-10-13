@@ -278,7 +278,7 @@ EMBEDDING_BATCH_SIZE = int(get_env("EMBEDDING_BATCH_SIZE", default="32"))
 EMBEDDING_OFFLINE = get_env_bool("EMBEDDING_OFFLINE", default=False)
 
 # Índice semântico do grafo de conhecimento (Roadmap V17 / ADR 015 §6,
-# openspec/changes/v17-knowledge-semantic-index). Coleção Qdrant com um ponto
+# openspec/changes/archive/v17-knowledge-semantic-index). Coleção Qdrant com um ponto
 # por nó vetorizável (ID do ponto = ID do nó) e limiares das faixas de
 # similaridade. Os limiares dependem do modelo de embedding e são calibrados
 # pelo pesquisador (`geminiclaw knowledge stats` apenas sugere ajustes).

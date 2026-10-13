@@ -1,6 +1,6 @@
 # Vocabulário controlado
 
-Arquivos de carga inicial do grafo de conhecimento (`openspec/changes/v17-controlled-vocabulary`,
+Arquivos de carga inicial do grafo de conhecimento (`openspec/changes/archive/v17-controlled-vocabulary`,
 ADR 015 §4 e §8).
 
 ## `metrics.yaml`

@@ -1,6 +1,6 @@
 """Testes unitários para src/knowledge/validation.py.
 
-Cobrem os cenários de `openspec/changes/v17-graph-store/specs/knowledge-graph/spec.md`
+Cobrem os cenários de `openspec/changes/archive/v17-graph-store/specs/knowledge-graph/spec.md`
 (tarefa 4.1 de tasks.md): rótulo desconhecido, propriedade obrigatória
 ausente, enumeração inválida, relação não permitida, justificativa de
 agente ausente e campos imutáveis.

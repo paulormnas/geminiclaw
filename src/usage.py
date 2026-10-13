@@ -7,7 +7,7 @@ usados pelo `AutonomousLoop` (`src/autonomous_loop.py`) para transformar os
 limites operacionais da Spec G5 — hoje apenas avisos — em condições de parada
 reais.
 
-Ver ``openspec/changes/v18-usage-limits/design.md`` para o desenho completo.
+Ver ``openspec/changes/archive/v18-usage-limits/design.md`` para o desenho completo.
 """
 
 from __future__ import annotations

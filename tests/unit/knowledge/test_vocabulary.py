@@ -1,4 +1,4 @@
-"""Testes de ``src.knowledge.vocabulary`` (``openspec/changes/v17-controlled-vocabulary``).
+"""Testes de ``src.knowledge.vocabulary`` (``openspec/changes/archive/v17-controlled-vocabulary``).
 
 Usa ``InMemoryGraphStore`` e um CSV claramente fictício (``tests/fixtures/cnpq_areas_fixture.csv``);
 a tabela oficial do CNPq não é usada nem reproduzida aqui.

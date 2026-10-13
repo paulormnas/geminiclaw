@@ -19,16 +19,16 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 | [007](adr_007_reestruturacao_papeis_agentes.md) | Reestruturação de Papéis de Agentes: 3 Papéis Claros (V14) | ✅ Aceito | 2026-09-22 |
 | [008](adr_008_workspace_manifest_session_scoped.md) | Workspace Manifest e Session-Scoped Volumes (V13) | ✅ Aceito | 2026-09-22 |
 | [009](adr_009_camada_conhecimento_experimental.md) | Camada de Conhecimento Experimental: Grafo (Apache AGE) + Vetorial (Qdrant) | ✅ Aceito (validação em AGE/Qdrant reais pendente) | 2026-09-28 |
-| [010](adr_010_proposito_assistente_digital_pesquisa.md) | Propósito: Assistente Digital de Pesquisa Científica (substitui 001) | 🟠 Parcialmente implementado (V19 e parte da V18.5 pendentes) | 2026-09-28 |
+| [010](adr_010_proposito_assistente_digital_pesquisa.md) | Propósito: Assistente Digital de Pesquisa Científica (substitui 001) | 🟠 Parcialmente implementado (V16–V18.5 concluídas e arquivadas; V19 pendente) | 2026-09-28 |
 | [011](adr_011_provedores_agnosticos.md) | Provedores Agnósticos: Registro de Provedores LLM e de Embeddings (substitui 006) | ✅ Aceito (2026-10-01) | 2026-09-28 |
 | [012](adr_012_agente_curator_ciclo_exploracao.md) | Agente Curator e Ciclo de Exploração Contínua | ✅ Aceito (validação em AGE real pendente) | 2026-09-28 |
 | [013](adr_013_federacao_rede_publica.md) | Federação: Rede Pública de Conhecimento entre Nós (Princípios) | 🟢 Aprovado (princípios; implementação não iniciada, V20) | 2026-09-28 |
 | [014](adr_014_agentes_em_processo_sandbox_codigo.md) | Agentes em Processo no Host; Containers Apenas como Sandbox de Código | ✅ Aceito | 2026-09-28 |
-| [015](adr_015_modelo_dados_grafo_conhecimento.md) | Modelo de Dados do Grafo de Conhecimento e Ligação com Embeddings | 🟠 Parcialmente implementado (V17/V18 prontos; V18.5–V20 pendentes) | 2026-09-28 |
-| [016](adr_016_imagem_postgres_apache_age_colacao.md) | Imagem do PostgreSQL para Apache AGE (musl → glibc) e Colação de Índices | 🟢 Aprovado (2026-10-08; implementada, validação da colação no Pi pendente) | 2026-09-29 |
+| [015](adr_015_modelo_dados_grafo_conhecimento.md) | Modelo de Dados do Grafo de Conhecimento e Ligação com Embeddings | 🟠 Parcialmente implementado (V17–V18.5 concluídas e arquivadas; V19–V20 pendentes) | 2026-09-28 |
+| [016](adr_016_imagem_postgres_apache_age_colacao.md) | Imagem do PostgreSQL para Apache AGE (musl → glibc) e Colação de Índices | ✅ Aceito (2026-10-13; validação da colação no Pi pendente) | 2026-09-29 |
 | [017](adr_017_catalogo_modelos_roteador.md) | Catálogo de Modelos e Roteador de Provedores por Papel | ✅ Aceito | 2026-09-29 |
-| [018](adr_018_imagem_sandbox_enxuta_e_imagens_por_plataforma.md) | Imagem Enxuta do Sandbox de Código e Seleção de Imagens por Plataforma (registro de ideias) | 🟠 Parcialmente implementado (`v16-platform-images` mergeada em 2026-10-12; faltam 5.5.1 e 5.5.2) | 2026-09-29 |
-| [019](adr_019_localidade_dados_proveniencia_resultados.md) | Localidade dos Dados de Pesquisa e Proveniência dos Resultados | 🟠 Parcialmente implementado (as 8 mudanças V18.5 estão mergeadas, com pendências de validação real e de revisão de segurança; passa a Aceito quando elas fecharem) | 2026-09-29 |
+| [018](adr_018_imagem_sandbox_enxuta_e_imagens_por_plataforma.md) | Imagem Enxuta do Sandbox de Código e Seleção de Imagens por Plataforma (registro de ideias) | ✅ Aceito (2026-10-13; 5.5.1, 5.5.2 e medições no Pi pendentes) | 2026-09-29 |
+| [019](adr_019_localidade_dados_proveniencia_resultados.md) | Localidade dos Dados de Pesquisa e Proveniência dos Resultados | 🟠 Parcialmente implementado (8 mudanças V18.5 concluídas e arquivadas; §10 na V19; validação real e revisões de segurança pendentes) | 2026-09-29 |
 
 ---
 
@@ -106,6 +106,11 @@ ADR 010 (Propósito: Assistente de Pesquisa) ← define o escopo de tudo (substi
 ---
 
 ## Lacunas de especificação (2026-10-01)
+
+**Atualização 2026-10-13:** as 32 mudanças de V16 a V18.5 foram concluídas e arquivadas em
+`openspec/changes/archive/`, com os requisitos consolidados em `openspec/specs/`. Os itens que estavam
+abertos nos `tasks.md` (validação no Pi 5, revisões de segurança e débitos) estão em
+[`openspec/changes/archive/PENDENCIAS.md`](../../openspec/changes/archive/PENDENCIAS.md).
 
 Verificação dos ADRs aprovados contra `openspec/changes/`. Não há mais specs faltando para os
 ADRs aprovados, exceto o ADR 016 (Proposto). A ordem de trabalho está na memória do projeto e no

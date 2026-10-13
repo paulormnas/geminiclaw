@@ -41,7 +41,7 @@ ProviderFactory = Callable[[ProviderSettings], LLMProvider]
 
 # Nome canônico -> variável de ambiente, apenas quando diverge da convenção
 # <PROVIDER>_BASE_URL / <PROVIDER>_API_KEY (nome já consagrado no ecossistema
-# daquele provedor). Ver `openspec/changes/v16-provider-registry/design.md`.
+# daquele provedor). Ver `openspec/changes/archive/v16-provider-registry/design.md`.
 #
 # ADR 017 §8: `openai` e `openai_compatible` NÃO compartilham variáveis (a chave real da OpenAI nunca
 # pode ir a um servidor compatível): `openai` usa OPENAI_API_KEY/OPENAI_BASE_URL (convenção do

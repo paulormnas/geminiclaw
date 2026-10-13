@@ -13,7 +13,7 @@
 **ADRs relacionados:** ADR 004 (IPC local), ADR 009 (conhecimento), ADR 010 (propósito), ADR 011 (embeddings)
 
 
-## Estado da implementação (2026-10-08)
+## Estado da implementação (2026-10-13)
 
 | Mudança OpenSpec | Estado | PR |
 |---|---|---|

@@ -226,7 +226,7 @@ class TestOrchestratorInProcessRuntime:
     """Testes do runtime de agentes em processo (Roadmap V16/ADR 014).
 
     Cobre o Requirement "Agentes executam em processo no host" da spec
-    ``agent-runtime`` (openspec/changes/v16-in-process-agents/).
+    ``agent-runtime`` (openspec/changes/archive/v16-in-process-agents/).
     """
 
     async def test_available_agents_are_role_ids(self) -> None:

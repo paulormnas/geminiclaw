@@ -1,6 +1,6 @@
 -- scripts/migrations/v18_5_egress_log.sql
 --
--- Migração v18.5: tabela do registro de egresso (openspec/changes/v18.5-egress-gate, tarefas 0.2 e 1.3;
+-- Migração v18.5: tabela do registro de egresso (openspec/changes/archive/v18.5-egress-gate, tarefas 0.2 e 1.3;
 -- alteração de schema aprovada explicitamente pelo pesquisador). ADR 019 §3.5 e §8.
 --
 -- IDEMPOTENTE: CREATE TABLE/INDEX IF NOT EXISTS; pode ser aplicada várias vezes.

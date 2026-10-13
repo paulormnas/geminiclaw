@@ -1,7 +1,7 @@
 """Testes da alteração do grafo pela CLI com o Curator (v17-graph-cli, requisitos de alteração e remoção).
 
 O Curator é um dublê roteirizado (nenhuma rede nem provedor pago); o grafo é em memória. Cada teste cita o
-``#### Scenario`` ou a tarefa de ``openspec/changes/v17-graph-cli`` que cobre.
+``#### Scenario`` ou a tarefa de ``openspec/changes/archive/v17-graph-cli`` que cobre.
 """
 
 from __future__ import annotations

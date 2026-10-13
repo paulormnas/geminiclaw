@@ -1,6 +1,6 @@
 -- scripts/migrations/v18_5_001_execution_records.sql
 --
--- Migração v18.5: registro de execuções encadeado por hash (openspec/changes/v18.5-execution-provenance, tarefas 0.1 e
+-- Migração v18.5: registro de execuções encadeado por hash (openspec/changes/archive/v18.5-execution-provenance, tarefas 0.1 e
 -- 1.1; alteração de schema aprovada explicitamente pelo pesquisador). ADR 019 §4.
 --
 -- IDEMPOTENTE: CREATE TABLE/INDEX IF NOT EXISTS e CREATE OR REPLACE para função e gatilhos; pode ser aplicada várias

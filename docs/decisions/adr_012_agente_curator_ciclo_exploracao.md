@@ -6,15 +6,15 @@
 **ADRs relacionados:** ADR 007 (papéis), ADR 009 (conhecimento experimental), ADR 010 (propósito), ADR 014 (agentes em processo)
 
 
-## Estado da implementação (2026-10-08)
+## Estado da implementação (2026-10-13)
 
 | Mudança OpenSpec | Estado | PR |
 |---|---|---|
-| [`v17-curator-agent`](../../openspec/changes/v17-curator-agent/proposal.md) | Implementada, com pendências | #106 |
-| [`v18-researcher-consult`](../../openspec/changes/v18-researcher-consult/proposal.md) | Implementada, com pendências | #97 |
-| [`v18-research-continuity`](../../openspec/changes/v18-research-continuity/proposal.md) | Implementada, com pendências | #108 |
-| [`v18-hypothesis-loop`](../../openspec/changes/v18-hypothesis-loop/proposal.md) | Implementada, com pendências | #109, #115 |
-| [`v18-usage-limits`](../../openspec/changes/v18-usage-limits/proposal.md) | Implementada, com pendências | #68 |
+| [`v17-curator-agent`](../../openspec/changes/archive/v17-curator-agent/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #106 |
+| [`v18-researcher-consult`](../../openspec/changes/archive/v18-researcher-consult/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #97 |
+| [`v18-research-continuity`](../../openspec/changes/archive/v18-research-continuity/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #108 |
+| [`v18-hypothesis-loop`](../../openspec/changes/archive/v18-hypothesis-loop/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #109, #115 |
+| [`v18-usage-limits`](../../openspec/changes/archive/v18-usage-limits/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #68 |
 
 ---
 

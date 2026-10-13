@@ -40,12 +40,12 @@ Conflito entre dois pins (juiz e julgado da mesma família):
 | `flexible` | pin do juiz ignorado com `WARNING`; juiz pela preferência sem a família | igual a `required` se houver elegível; senão pin mantido com `atendida=false` | sem conferência |
 
 Sem modelo elegível para o `validator` em `required`: `NoEligibleModelError` com a sugestão do ADR
-020 item 5; `_suggestion` (`routing.py:141-156`) ganha o ramo de `mesma_familia_julgamento`.
+020 §2; `_suggestion` (`routing.py:141-156`) ganha o ramo de `mesma_familia_julgamento`.
 
 Na inicialização, todos os papéis **evitam** conflito (pulam as famílias proibidas quando há
 alternativa na preferência), mas só o par `validator`/`developer` é exigência: sem alternativa,
 `reviewer` e `base` ficam com o preferido e o conflito é tratado no despacho (§4). A tabela de pins
-acima vale só para o par `validator`/`developer` (ADR 020 item 4).
+acima vale só para o par `validator`/`developer` (ADR 020 §4).
 
 ## 4. Conferência no despacho
 
@@ -60,7 +60,9 @@ class JudgeIndependenceGuard:
 - `check` é chamado ao aceitar dica (`apply_hint`, `src/orchestrator.py:1909`), ao despachar subtarefa
   para `base` ou `reviewer` e ao trocar para a reserva do 429 (`fallback_for`).
 - Despacho de `base`/`reviewer` em conflito: primeiro tenta o próximo modelo elegível de outra
-  família na preferência do papel (`substituido`); sem nenhum, aplica o modo.
+  família na preferência do papel (`substituido`); sem nenhum, aplica o modo. Um `base`/`reviewer`
+  com pin só é substituído com `LLM_ROUTING=flexible`; com `strict` não tem alternativa e vai direto
+  ao modo (ADR 020 §3).
 - Decisões: `aceito`, `substituido`, `rejeitado` (dica volta ao modelo resolvido; reserva não é
   usada; despacho de `base`/`reviewer` em `required` falha **só a subtarefa** com
   `mesma_familia_julgamento` e a sugestão, e a sessão continua), `aceito_preferred` (modo `preferred`).

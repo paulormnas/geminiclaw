@@ -5,7 +5,7 @@
 ### Requirement: Modo de independência do julgamento
 O sistema SHALL ler `LLM_JUDGE_INDEPENDENCE` (`required`, `preferred`, `off`). Sem valor, o modo
 SHALL ser `required` com `LLM_DATA_POLICY=third_party_allowed` e `preferred` com
-`self_hosted_only`. Valor inválido MUST impedir a inicialização (ADR 020, item 5).
+`self_hosted_only`. Valor inválido MUST impedir a inicialização (ADR 020 §2).
 
 #### Scenario: Padrão em política de terceiros
 - **GIVEN** `LLM_DATA_POLICY=third_party_allowed` e a variável ausente
@@ -26,7 +26,7 @@ SHALL ser `required` com `LLM_DATA_POLICY=third_party_allowed` e `preferred` com
 Com modo `required` ou `preferred`, o roteador SHALL resolver o `validator` para um modelo de
 `familia_modelo` diferente da do modelo resolvido para o `developer`, descartando os demais com o
 motivo `mesma_familia_julgamento`, inclusive quando o modelo de outra família está num grupo de
-preferência inferior (ADR 020, itens 1 e 4).
+preferência inferior (ADR 020 §3 e §4).
 
 #### Scenario: Preferido da mesma família
 - **GIVEN** `developer` resolvido para `anthropic/claude-sonnet-5-5` e a preferência do `validator`

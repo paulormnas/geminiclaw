@@ -1,6 +1,7 @@
 # Tarefas: v18.6-review-evidence
 
-**Estado (2026-10-13):** Implementada, com pendências: código e testes unitários das seções 1 a 6 concluídos (branch `feat/v18.6-review-evidence`); ficam abertos o parecer do Analista de Segurança (0.2) e a medição sobre os dados do benchmark no Pi (7.2). Questões do design §8 resolvidas com as propostas do próprio design, por instrução do orquestrador.
+**Estado (2026-10-13):** Concluída e arquivada — código mergeado em `dev` (#142). Os itens ainda abertos abaixo foram transferidos para [`PENDENCIAS.md`](../PENDENCIAS.md).
+**Estado anterior (2026-10-13):** Implementada, com pendências: código e testes unitários das seções 1 a 6 concluídos (branch `feat/v18.6-review-evidence`); ficam abertos o parecer do Analista de Segurança (0.2) e a medição sobre os dados do benchmark no Pi (7.2). Questões do design §8 resolvidas com as propostas do próprio design, por instrução do orquestrador.
 
 ## 0. Pré-requisitos
 - [x] 0.1 Questões do design §8: adotadas as propostas do design (limiar só com `hypothesis_ref`; `val_` é `validacao`; um nível de achatamento). Confirmar no PR.

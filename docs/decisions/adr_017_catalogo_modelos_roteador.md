@@ -16,12 +16,18 @@
 >   roda em modelos de nuvem (Gemini, Claude); modelos locais continuam elegíveis pela preferência.
 
 
+> **Atualização 2026-10-13 (ADR 020):** o catálogo (versão 3) prefere Claude, Gemini e GPT antes dos
+> modelos locais para `validator` e `reviewer`; a elegibilidade ganha a condição de família diferente da
+> do Developer, que vale também para pins, dicas de plano e para o modelo de reserva do Google no 429
+> (§2, §6 e §7; `v18.6-validator-independence`, #145).
+
 ## Estado da implementação (2026-10-13)
 
 | Mudança OpenSpec | Estado | PR |
 |---|---|---|
 | [`v16-model-catalog-router`](../../openspec/changes/archive/v16-model-catalog-router/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #102 |
 | [`v18.5-model-catalog-locality`](../../openspec/changes/archive/v18.5-model-catalog-locality/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #112 |
+| [`v18.6-validator-independence`](../../openspec/changes/archive/v18.6-validator-independence/proposal.md) | Concluída e arquivada | #145 |
 
 ## Contexto
 

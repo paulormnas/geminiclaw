@@ -1,6 +1,6 @@
 # ADR 010 — Propósito: Assistente Digital de Pesquisa Científica
 
-**Status:** Parcialmente implementado — V16, V17, V18 e V18.5 concluídas e arquivadas (2026-10-13); V19 pendente (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-13)
+**Status:** Parcialmente implementado — V16, V17, V18 e V18.5 concluídas e arquivadas; V18.6 concluída e arquivada, com a matriz de validação (bancos isolados, 3 repetições) e outras pendências em aberto (2026-10-13); V19 pendente (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-13)
 **Data:** 2026-09-28
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Substitui:** ADR 001 (a partir da aprovação, 2026-10-01)
@@ -17,6 +17,10 @@
 | [`v18-research-continuity`](../../openspec/changes/archive/v18-research-continuity/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #108 |
 | [`v18-hypothesis-loop`](../../openspec/changes/archive/v18-hypothesis-loop/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #109, #115 |
 | [`v19-equipment-control`](../../openspec/changes/v19-equipment-control/proposal.md) | Não iniciada | — |
+| [`v18.6-review-evidence`](../../openspec/changes/archive/v18.6-review-evidence/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`: parecer de segurança do perfil estrutural, medição 7.2 parcial, questões do design §8) | #142 |
+| [`v18.6-benchmark-harness`](../../openspec/changes/archive/v18.6-benchmark-harness/proposal.md) | Concluída e arquivada, com pendências (`cached_input` dos modelos OpenAI, composição da matriz `matrix_modelos_v18_6.json`, matrizes antigas agora recusadas pelo runner, execução curta no Pi; ver `PENDENCIAS.md`) | #144 |
+| [`v18.6-validator-independence`](../../openspec/changes/archive/v18.6-validator-independence/proposal.md) | Concluída e arquivada | #145 |
+| [`v18.6-hypothesis-closure`](../../openspec/changes/archive/v18.6-hypothesis-closure/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`: causa da ausência de `afirmacoes.json` no Sonnet não confirmada, questões do design §8) | #146 |
 
 ---
 

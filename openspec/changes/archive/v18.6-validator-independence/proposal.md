@@ -2,9 +2,9 @@
 
 **ID:** `v18.6-validator-independence` · **Versão:** V18.6 ·
 **Capacidade:** `llm-providers` (reutilizada de `v16-model-catalog-router` e `v18.5-model-catalog-locality`)
-**ADRs de origem:** [ADR 020](../../../docs/decisions/adr_020_independencia_validator.md) (itens 1 a 8
-e 10), que revisa o [ADR 017](../../../docs/decisions/adr_017_catalogo_modelos_roteador.md) §2, §6 e
-§7 e o [ADR 019](../../../docs/decisions/adr_019_localidade_dados_proveniencia_resultados.md) §6.
+**ADRs de origem:** [ADR 020](../../../../docs/decisions/adr_020_independencia_validator.md) (itens 1 a 8
+e 10), que revisa o [ADR 017](../../../../docs/decisions/adr_017_catalogo_modelos_roteador.md) §2, §6 e
+§7 e o [ADR 019](../../../../docs/decisions/adr_019_localidade_dados_proveniencia_resultados.md) §6.
 **Origem dos requisitos:** decisão do pesquisador de 2026-10-13: o Validator usa família de modelo
 diferente da do Developer; Researcher e Developer podem coincidir.
 **Depende de:** aprovação do ADR 020 (Proposto). Nenhuma outra mudança em aberto.

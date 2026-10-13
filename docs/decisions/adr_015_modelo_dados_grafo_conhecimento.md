@@ -1,6 +1,6 @@
 # ADR 015 — Modelo de Dados do Grafo de Conhecimento e Ligação com Embeddings
 
-**Status:** Parcialmente implementado — modelo de V17, V18 e V18.5 concluído e arquivado (2026-10-13); entidades de V19 e V20 pendentes; valores iniciais a calibrar com dados reais (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-13)
+**Status:** Parcialmente implementado — modelo de V17, V18, V18.5 e V18.6 (`Experimento` em `sucesso` com a tentativa e veredito calculado) concluído e arquivado (2026-10-13); entidades de V19 e V20 pendentes; valores iniciais a calibrar com dados reais (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-13)
 **Data:** 2026-09-28
 **Autores:** Arquiteto de Soluções (GeminiClaw), com revisão do pesquisador responsável
 **ADRs relacionados:** ADR 009 (camada de conhecimento), ADR 010 (propósito), ADR 011 (embeddings locais), ADR 012 (Curator), ADR 013 (federação), ADR 014 (execução no host)
@@ -15,8 +15,9 @@
 | [`v17-research-project`](../../openspec/changes/archive/v17-research-project/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #103 |
 | [`v17-graph-cli`](../../openspec/changes/archive/v17-graph-cli/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #107 |
 | [`v18-hypothesis-loop`](../../openspec/changes/archive/v18-hypothesis-loop/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #109, #115 |
-| [`v18.5-claim-verification`](../../openspec/changes/archive/v18.5-claim-verification/proposal.md) | Não iniciada | — |
-| [`v18.5-execution-provenance`](../../openspec/changes/archive/v18.5-execution-provenance/proposal.md) | Não iniciada | — |
+| [`v18.5-claim-verification`](../../openspec/changes/archive/v18.5-claim-verification/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #121 |
+| [`v18.5-execution-provenance`](../../openspec/changes/archive/v18.5-execution-provenance/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #119 |
+| [`v18.6-hypothesis-closure`](../../openspec/changes/archive/v18.6-hypothesis-closure/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`: causa da ausência de `afirmacoes.json` no Sonnet não confirmada, questões do design §8) | #146 |
 | [`v20-federated-records`](../../openspec/changes/v20-federated-records/proposal.md) | Não iniciada | — |
 
 ---

@@ -7,6 +7,16 @@
 
 ---
 
+## Estado da implementação (2026-10-13)
+
+| Mudança OpenSpec | Estado | PR |
+|---|---|---|
+| [`v18.6-benchmark-harness`](../../openspec/changes/archive/v18.6-benchmark-harness/proposal.md) | Concluída e arquivada, com pendências (`cached_input` dos modelos OpenAI, composição da matriz `matrix_modelos_v18_6.json`, matrizes antigas agora recusadas pelo runner, execução curta no Pi; ver `PENDENCIAS.md`) | #144 |
+
+Os bancos de benchmark (PostgreSQL, Qdrant) passam a ser isolados e recriáveis (`--reset-stores`, quatro guardas, arquivo de segurança antes do reset); o banco do `.env` nunca é alvo do reset. O restante deste ADR segue em vigor.
+
+---
+
 ## Contexto
 
 O sistema precisa persistir múltiplos tipos de dado com características diferentes:

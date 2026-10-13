@@ -2,13 +2,13 @@
 
 **ID:** `v18.6-review-evidence` · **Versão:** V18.6 (correções do benchmark de 2026-10-13) ·
 **Capacidade:** `pipeline-robustness` (reutilizada de `v16-pipeline-robustness`)
-**ADRs de origem:** [ADR 002](../../../docs/decisions/adr_002_arquitetura_multi_agent_system.md)
-(revisão como etapa do DAG), [ADR 010](../../../docs/decisions/adr_010_proposito_assistente_digital_pesquisa.md)
-(o assistente precisa concluir sozinho) e [ADR 019](../../../docs/decisions/adr_019_localidade_dados_proveniencia_resultados.md)
+**ADRs de origem:** [ADR 002](../../../../docs/decisions/adr_002_arquitetura_multi_agent_system.md)
+(revisão como etapa do DAG), [ADR 010](../../../../docs/decisions/adr_010_proposito_assistente_digital_pesquisa.md)
+(o assistente precisa concluir sozinho) e [ADR 019](../../../../docs/decisions/adr_019_localidade_dados_proveniencia_resultados.md)
 §3 (o que pode sair do nó). Não há ADR novo: a mudança ajusta contratos de módulos existentes e
 respeita as regras de localidade em vigor.
 **Origem dos requisitos:** benchmark de 2026-10-13
-([`docs/benchmarks/2026-10-13-modelos-v18-resultados.md`](../../../docs/benchmarks/2026-10-13-modelos-v18-resultados.md))
+([`docs/benchmarks/2026-10-13-modelos-v18-resultados.md`](../../../../docs/benchmarks/2026-10-13-modelos-v18-resultados.md))
 e a investigação dos eventos `subtask_review` e `plan_validation` gravados no Pi 5 (2026-10-13).
 **Depende de:** — (módulos implementados: `src/agents/validator_agent.py`, `src/artifact_match.py`,
 `src/metrics_file.py`, `src/knowledge/normalization.py`, `src/egress/`)

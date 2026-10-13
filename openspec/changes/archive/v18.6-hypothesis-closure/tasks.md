@@ -1,6 +1,7 @@
 # Tarefas: v18.6-hypothesis-closure
 
-**Estado (2026-10-13):** Implementada. Testes verdes (ruff; Pi 5: 3534 passed, 1 falha preexistente da fila de similaridade; AGE real passou). Pendentes: (b) tarefa 6.1 (causa da ausência de `afirmacoes.json` no Sonnet) sem confirmação nos eventos do Pi; (c) respostas do pesquisador às questões do design §8 (adotadas as propostas conservadoras, design §8.1). `v18.6-review-evidence` já está em `dev` (#142).
+**Estado (2026-10-13):** Concluída e arquivada — código mergeado em `dev` (#146). Os itens ainda abertos abaixo foram transferidos para [`PENDENCIAS.md`](../PENDENCIAS.md).
+**Estado anterior (2026-10-13):** Implementada. Testes verdes (ruff; Pi 5: 3534 passed, 1 falha preexistente da fila de similaridade; AGE real passou). Pendentes: (b) tarefa 6.1 (causa da ausência de `afirmacoes.json` no Sonnet) sem confirmação nos eventos do Pi; (c) respostas do pesquisador às questões do design §8 (adotadas as propostas conservadoras, design §8.1). `v18.6-review-evidence` já está em `dev` (#142).
 
 ## 0. Pré-requisitos
 - [ ] 0.1 Questões do design §8 respondidas pelo pesquisador. (Pendente: adotadas as propostas conservadoras, design §8.1.)

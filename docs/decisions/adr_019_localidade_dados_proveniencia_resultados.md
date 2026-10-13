@@ -1,11 +1,17 @@
 # ADR 019 — Localidade dos Dados de Pesquisa e Proveniência dos Resultados
 
-**Status:** Parcialmente implementado — as 8 mudanças V18.5 estão concluídas e arquivadas (2026-10-13), com validação real e revisões de segurança pendentes (`openspec/changes/archive/PENDENCIAS.md`); o §10 (atuação sobre instrumentos) entra na V19 (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-13)
+**Status:** Parcialmente implementado — as 8 mudanças V18.5 e 3 da V18.6 (`v18.6-review-evidence`, `v18.6-validator-independence`, `v18.6-hypothesis-closure`) estão concluídas e arquivadas (2026-10-13), com validação real e revisões de segurança pendentes (`openspec/changes/archive/PENDENCIAS.md`); o §10 (atuação sobre instrumentos) entra na V19 (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-13)
 **Data:** 2026-09-29
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** implementação depois da V18 (incluindo as mudanças em andamento dos ADRs 017 e 018) e **antes da V19** (`roadmaps/roadmap_V19.md`); é também pré-requisito da federação (V20, ADR 013)
 **ADRs relacionados:** ADR 009 e 015 (conhecimento), ADR 010 (propósito), ADR 011 (embeddings locais), ADR 012 (Curator), ADR 013 (federação), ADR 014 (sandbox), ADR 017 (catálogo e roteador), ADR 018 (imagem do sandbox)
 
+
+> **Atualização 2026-10-13 (V18.6):** o ADR 020 (independência do julgamento) transforma a diversidade de
+> família do §6 em regra para o julgamento (Validator, revisão de subtarefa, juiz da avaliação de
+> comunicação), com a ordem de resolução do roteador alterada (papéis com pin primeiro, juízes sem
+> pin por último). O perfil estrutural de artefatos de dados (`v18.6-review-evidence`) só entrega ao
+> revisor esquema e agregados, sob o §3 (o `EgressGate` não o retém).
 
 ## Estado da implementação (2026-10-13)
 
@@ -19,6 +25,9 @@
 | [`v18.5-claim-verification`](../../openspec/changes/archive/v18.5-claim-verification/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #121 |
 | [`v18.5-operation-metrics`](../../openspec/changes/archive/v18.5-operation-metrics/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #122 |
 | [`v18.5-research-data-ingestion`](../../openspec/changes/archive/v18.5-research-data-ingestion/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #118 |
+| [`v18.6-review-evidence`](../../openspec/changes/archive/v18.6-review-evidence/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`: parecer de segurança do perfil estrutural, medição 7.2 parcial, questões do design §8) | #142 |
+| [`v18.6-validator-independence`](../../openspec/changes/archive/v18.6-validator-independence/proposal.md) | Concluída e arquivada | #145 |
+| [`v18.6-hypothesis-closure`](../../openspec/changes/archive/v18.6-hypothesis-closure/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`: causa da ausência de `afirmacoes.json` no Sonnet não confirmada, questões do design §8) | #146 |
 
 ---
 

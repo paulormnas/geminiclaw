@@ -2,9 +2,9 @@
 
 **ID:** `v18.6-benchmark-harness` · **Versão:** V18.6 (correções do benchmark de 2026-10-13) ·
 **Capacidade:** `benchmark` (nova)
-**ADRs de origem:** [ADR 010](../../../docs/decisions/adr_010_proposito_assistente_digital_pesquisa.md)
-(avaliação do assistente), [ADR 005](../../../docs/decisions/adr_005_estrategia_persistencia.md)
-(PostgreSQL, Qdrant) e [ADR 009](../../../docs/decisions/adr_009_camada_conhecimento_experimental.md)
+**ADRs de origem:** [ADR 010](../../../../docs/decisions/adr_010_proposito_assistente_digital_pesquisa.md)
+(avaliação do assistente), [ADR 005](../../../../docs/decisions/adr_005_estrategia_persistencia.md)
+(PostgreSQL, Qdrant) e [ADR 009](../../../../docs/decisions/adr_009_camada_conhecimento_experimental.md)
 (memória vetorial e de grafo). Não há ADR novo: o ferramental de benchmark é código de apoio
 (`scripts/benchmark/`), sem contrato com o produto.
 **Origem dos requisitos:** revisão do benchmark de 2026-10-13 com o pesquisador. Decisões de
@@ -12,7 +12,7 @@
 relacional, vetorial e de grafo, manter o alvo 0,95 fixo e investigar a acurácia 1,000.
 **Depende de:** — (pode ser implementada em paralelo com `v18.6-review-evidence`; o placar por
 resultado validado só fica completo depois dela, ver design §4.3). O item "juiz declarado por
-combinação" depende da aprovação do [ADR 020](../../../docs/decisions/adr_020_independencia_validator.md)
+combinação" depende da aprovação do [ADR 020](../../../../docs/decisions/adr_020_independencia_validator.md)
 e de `v18.6-validator-independence`.
 **Habilita:** a próxima rodada da matriz, com 3 repetições por combinação.
 

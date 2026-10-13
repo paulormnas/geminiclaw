@@ -15,6 +15,7 @@
 | [`v18-research-continuity`](../../openspec/changes/archive/v18-research-continuity/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #108 |
 | [`v18-hypothesis-loop`](../../openspec/changes/archive/v18-hypothesis-loop/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #109, #115 |
 | [`v18-usage-limits`](../../openspec/changes/archive/v18-usage-limits/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #68 |
+| [`v18.6-hypothesis-closure`](../../openspec/changes/archive/v18.6-hypothesis-closure/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`: causa da ausência de `afirmacoes.json` no Sonnet não confirmada, questões do design §8) | #146 |
 
 ---
 

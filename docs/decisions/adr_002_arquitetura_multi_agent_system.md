@@ -7,6 +7,17 @@
 
 ---
 
+## Estado da implementação (2026-10-13)
+
+| Mudança OpenSpec | Estado | PR |
+|---|---|---|
+| [`v18.6-review-evidence`](../../openspec/changes/archive/v18.6-review-evidence/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`: parecer de segurança do perfil estrutural, medição 7.2 parcial, questões do design §8) | #142 |
+| [`v18.6-hypothesis-closure`](../../openspec/changes/archive/v18.6-hypothesis-closure/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`: causa da ausência de `afirmacoes.json` no Sonnet não confirmada, questões do design §8) | #146 |
+
+Estado do DAG: a V18.6 acrescentou o estado `concluded_negative` (resultado negativo conclui a subtarefa, sem retentativa, e libera as dependentes) e a revisão com `ReviewResult.outcome`. O restante deste ADR segue em vigor sem alteração.
+
+---
+
 ## Contexto
 
 Pesquisa científica assistida por IA envolve tarefas com dependências complexas e heterogêneas: buscar referências, analisar dados, escrever código, validar resultados, gerar relatórios. Um agente único tentando fazer tudo em sequência linear teria: contexto excessivamente longo, impossibilidade de paralelismo, e falha total quando qualquer etapa falha.

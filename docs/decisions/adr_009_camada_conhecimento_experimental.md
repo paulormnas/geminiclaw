@@ -1,6 +1,6 @@
 # ADR 009 — Camada de Conhecimento Experimental: Grafo (Apache AGE) + Vetorial (Qdrant)
 
-**Status:** Aceito — implementado nas mudanças V17/V18 (grafo, veredito, ingestão estrutural, Curator, CLI); validação em Apache AGE/Qdrant reais pendente (bateria final no Pi 5) (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-08)
+**Status:** Aceito — implementado nas mudanças V17/V18 (grafo, veredito, ingestão estrutural, Curator, CLI) e V18.6 (resultado negativo como evidência, bancos de benchmark isolados); validação em Apache AGE/Qdrant reais pendente (bateria final no Pi 5) (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-13)
 **Data:** 2026-09-28
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** a definir (sequência pós-V15)
@@ -16,6 +16,8 @@
 | [`v17-structural-fact-ingestion`](../../openspec/changes/archive/v17-structural-fact-ingestion/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #105 |
 | [`v17-knowledge-semantic-index`](../../openspec/changes/archive/v17-knowledge-semantic-index/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #100 |
 | [`v17-curator-agent`](../../openspec/changes/archive/v17-curator-agent/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #106 |
+| [`v18.6-benchmark-harness`](../../openspec/changes/archive/v18.6-benchmark-harness/proposal.md) | Concluída e arquivada, com pendências (`cached_input` dos modelos OpenAI, composição da matriz `matrix_modelos_v18_6.json`, matrizes antigas agora recusadas pelo runner, execução curta no Pi; ver `PENDENCIAS.md`) | #144 |
+| [`v18.6-hypothesis-closure`](../../openspec/changes/archive/v18.6-hypothesis-closure/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`: causa da ausência de `afirmacoes.json` no Sonnet não confirmada, questões do design §8) | #146 |
 
 ---
 

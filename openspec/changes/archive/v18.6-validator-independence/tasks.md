@@ -1,6 +1,7 @@
 # Tarefas: v18.6-validator-independence
 
-**Estado (2026-10-13):** Implementada, com pendências: código e testes unitários prontos (3376 unit verdes, ruff limpo). Pi 5: 3475 passed, 1 falha preexistente (ver 8.1). Pendente: a nota nos ADRs 007, 017 e 019 (7.2, do Arquiteto).
+**Estado (2026-10-13):** Concluída e arquivada — código mergeado em `dev` (#145). Os itens ainda abertos abaixo foram transferidos para [`PENDENCIAS.md`](../PENDENCIAS.md).
+**Estado anterior (2026-10-13):** Implementada, com pendências: código e testes unitários prontos (3376 unit verdes, ruff limpo). Pi 5: 3475 passed, 1 falha preexistente (ver 8.1). Pendente: a nota nos ADRs 007, 017 e 019 (7.2, do Arquiteto).
 
 ## 0. Pré-requisitos
 - [x] 0.1 ADR 020 aprovado (PR #143); divergências 1 e 2 decididas (dica descartada; padrão `preferred` em `self_hosted_only`).
@@ -42,7 +43,7 @@
 
 ## 7. Documentação e ADRs
 - [x] 7.1 `.env.example` com exemplo de juiz de outra família.
-- [ ] 7.2 Nota de atualização nos ADRs 007, 017 e 019 apontando para o ADR 020 (PR de documentação, pelo Arquiteto).
+- [x] 7.2 Nota de atualização nos ADRs 007, 017 e 019 apontando para o ADR 020 (PR de fechamento documental da V18.6, pelo Arquiteto).
 
 ## 8. Validação
 - [x] 8.1 `uv run ruff check .` limpo; unit local 3376 passed. Pi 5 (2026-10-13): unit + integration 3475 passed, 6 skipped, 1 failed (`test_similarity_queue_integration::test_fluxo_completo_da_fila`, preexistente: item `x` sobrando na fila compartilhada; falha também na dev antiga do Pi).

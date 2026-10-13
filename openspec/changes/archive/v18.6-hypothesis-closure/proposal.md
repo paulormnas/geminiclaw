@@ -2,13 +2,13 @@
 
 **ID:** `v18.6-hypothesis-closure` · **Versão:** V18.6 (correções do benchmark de 2026-10-13) ·
 **Capacidade:** `hypothesis-loop` (reutilizada de `v18-hypothesis-loop`)
-**ADRs de origem:** [ADR 009](../../../docs/decisions/adr_009_camada_conhecimento_experimental.md)
+**ADRs de origem:** [ADR 009](../../../../docs/decisions/adr_009_camada_conhecimento_experimental.md)
 (resultados negativos são conhecimento de primeira classe),
-[ADR 010](../../../docs/decisions/adr_010_proposito_assistente_digital_pesquisa.md) (o assistente
-formula e testa hipóteses), [ADR 012](../../../docs/decisions/adr_012_agente_curator_ciclo_exploracao.md)
-(ciclo de exploração e critérios de parada), [ADR 015](../../../docs/decisions/adr_015_modelo_dados_grafo_conhecimento.md)
+[ADR 010](../../../../docs/decisions/adr_010_proposito_assistente_digital_pesquisa.md) (o assistente
+formula e testa hipóteses), [ADR 012](../../../../docs/decisions/adr_012_agente_curator_ciclo_exploracao.md)
+(ciclo de exploração e critérios de parada), [ADR 015](../../../../docs/decisions/adr_015_modelo_dados_grafo_conhecimento.md)
 (veredito calculado, `Resultado-MEDE->Metrica`) e
-[ADR 019](../../../docs/decisions/adr_019_localidade_dados_proveniencia_resultados.md) §6
+[ADR 019](../../../../docs/decisions/adr_019_localidade_dados_proveniencia_resultados.md) §6
 (verificação de afirmações). Não há ADR novo: a mudança faz o código cumprir decisões já aprovadas.
 **Origem dos requisitos:** benchmark de 2026-10-13, investigação do grafo do Pi 5 e decisão do
 pesquisador de 2026-10-13: **um resultado científico negativo (hipótese refutada) é progresso,

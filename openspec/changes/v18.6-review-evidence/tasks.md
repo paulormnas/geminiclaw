@@ -43,6 +43,7 @@
 - [x] 6.2 Testes: os dois cenários da regra modificada; atualizar testes de `v16-pipeline-robustness` que dependiam da regra antiga.
 
 ## 7. Validação
-- [ ] 7.1 `uv run ruff check .` e `uv run pytest -m "unit or integration" -v` verdes.
-- [ ] 7.2 Reprocessar, sem LLM, os eventos `subtask_review`/`plan_validation` e os nós `Resultado` do benchmark de 2026-10-13 que ainda estão no Pi (os diretórios de sessão foram apagados) e registrar quantas reprovações determinísticas deixariam de ocorrer.
+- [x] 7.1 `uv run ruff check .` verde; unit: 3335 passed, 2 skipped (local); unit+integration no Pi: 3434 passed, 6 skipped, 1 falha preexistente fora do escopo (`test_similarity_queue_integration::test_fluxo_completo_da_fila`, fila compartilhada do Pi com mais de 1000 itens em `next_batch(1000)`; nenhum arquivo tocado por esta mudança).
+- [ ] 7.2 (parcial) Reprocessar, sem LLM, os eventos `subtask_review`/`plan_validation` e os nós `Resultado` do benchmark de 2026-10-13 que ainda estão no Pi (os diretórios de sessão foram apagados) e registrar quantas reprovações determinísticas deixariam de ocorrer.
+  - Feito: classificação textual, sem LLM, dos eventos `subtask_review` (36 no dia, 30 reprovados) e `plan_validation` (43, 16 reprovados) de 2026-10-13 no Pi. Reprovações cuja causa as regras novas tratam: 10 por "métrica não está em metrics.json" (limite superior: os `metrics.json` foram apagados e a mensagem antiga não listava as chaves), 8 por artefato `.py` ou `.joblib`/`.pkl` (5 + 3; mais 9 de "artefato" sem extensão no texto, não classificadas), 1 por evidência de tamanho em bytes; 8 das 16 reprovações de plano são pela regra do limiar numérico (limite superior: o plano não está nos eventos, então não se sabe quais têm `hypothesis_ref`). Pendente: os nós `Resultado` do AGE e a conferência exata, que exigem os `metrics.json` e planos já apagados.
 - [x] 7.3 `tasks.md` com caixas e linha **Estado** atualizadas no PR.

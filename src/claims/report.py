@@ -77,12 +77,14 @@ class ClaimsRunner:
         loop: Laço de eventos onde o Validator roda.
         make_service: Constrói o ``ClaimService`` da sessão a partir do estado do relatório.
         result_status: ``(exec_id, métrica) -> status_validacao`` (grafo), para o pacote de evidência.
+        session_results: Tabela dos resultados validados da sessão (evidência das frases sem código).
         timeout: Espera máxima (segundos) pela verificação; ``None`` espera sem limite.
     """
 
     loop: asyncio.AbstractEventLoop
     make_service: Callable[[ReportState], ClaimService]
     result_status: Callable[[str, str], str | None] = lambda _e, _m: None
+    session_results: Callable[[], Any] | None = None
     timeout: float | None = None
     sections: tuple[str, ...] = field(default_factory=lambda: tuple(config.CLAIM_VERIFY_SECTIONS))
 
@@ -93,7 +95,9 @@ class ClaimsRunner:
             conclusions = extract_report_conclusions(state.text, self.sections)
             service = self.make_service(state)
             codes = codes_from_render(state.render.codigos)
-            evidence = report_evidence_builder(state.render.codigos, state.session_dir.parent, self.result_status)
+            evidence = report_evidence_builder(
+                state.render.codigos, state.session_dir.parent, self.result_status, self.session_results
+            )
             future = asyncio.run_coroutine_threadsafe(
                 service.verify_conclusions(conclusions, codes, evidence), self.loop
             )
@@ -187,3 +191,34 @@ def register_claims(pipeline: ReportPipeline, runner: ClaimsRunner) -> None:
     after = "verify" if "verify" in pipeline.stage_names else None
     pipeline.register_stage(STAGE_NAME, runner, after=after)
     pipeline.register_section(CLAIMS_SECTION, claims_section, CLAIMS_SECTION_TITLE)
+
+
+EMPTY_REASONS = ("sem_conclusoes", "verificacao_desligada", "orcamento_esgotado", "falha_verificador")
+
+
+def empty_reason(state: ReportState, budget_exhausted: bool = False) -> str:
+    """Motivo de o relatório não ter produzido afirmações (``afirmacoes.json`` vazio, ``v18.6-hypothesis-closure``)."""
+    if not config.CLAIM_VERIFY_ENABLED:
+        return "verificacao_desligada"
+    if state.extras.get("claims_error"):
+        return "falha_verificador"
+    data = state.extras.get("claims")
+    if not data or not data.get("conclusoes"):
+        return "sem_conclusoes"
+    return "orcamento_esgotado" if budget_exhausted else "falha_verificador"
+
+
+def ensure_claims_file(state: ReportState, budget_exhausted: bool = False) -> None:
+    """Grava ``afirmacoes.json`` quando há relatório final, mesmo sem afirmações, com ``motivo_vazio``.
+
+    Nunca sobrescreve afirmações existentes; um arquivo ilegível é deixado como está (a falha já foi registrada).
+    """
+    try:
+        store = ClaimStore.load(state.session_dir, state.session_id)
+    except Exception as exc:  # noqa: BLE001 - arquivo ilegível: não o apaga
+        logger.warning("afirmacoes.json ilegível; motivo_vazio não gravado", extra={"erro": type(exc).__name__})
+        return
+    if store.afirmacoes:
+        return
+    store.motivo_vazio = empty_reason(state, budget_exhausted)
+    store.save()

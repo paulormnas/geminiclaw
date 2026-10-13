@@ -50,9 +50,11 @@ class LoopHarness:
     """Orquestrador real sobre um projeto com Problema confirmado; planos e execuções simulados."""
 
     def __init__(self, tmp_path: Path, *, mode: str = "auto", plans: list[Any] | None = None,
-                 approver: Any = None, confirmer: Any = None, validator: Any = None) -> None:
+                 approver: Any = None, confirmer: Any = None, validator: Any = None,
+                 record_attempts: bool = True, world_kw: dict[str, Any] | None = None) -> None:
+        self.record_attempts = record_attempts
         self.tmp_path = tmp_path
-        self.w = HypothesisWorld(mode=mode)
+        self.w = HypothesisWorld(mode=mode, **(world_kw or {}))
         self.mode = mode
         self.sm = FakeSessionManager()
         self.plans: list[Any] = list(plans or [])
@@ -85,6 +87,15 @@ class LoopHarness:
             text = item if isinstance(item, str) else json.dumps(item)
             return AgentResult(agent_id="researcher", session_id="x", status="success", response={"text": text})
         self.ran.append(task_.task_name)
+        if self.record_attempts and task_.agent_id == "developer":
+            # v18.6-hypothesis-closure: o Developer deixa metrics.json; a ingestão real grava a tentativa no grafo
+            # (valor neutro no veredito), e a hipótese deixa de estar "sem tentativa".
+            folder = self.session_dir / task_.task_name
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "metrics.json").write_text(
+                json.dumps({"task_name": task_.task_name, "seed": 1, "parameters": {}, "metrics": {"r2": 0.75}}),
+                encoding="utf-8",
+            )
         return AgentResult(agent_id=task_.agent_id, session_id="x", status="success", response={"text": "feito"})
 
     async def run(self, prompt: str = "Estudar o rendimento", budget: UsageBudget | None = None, **kw: Any) -> Any:

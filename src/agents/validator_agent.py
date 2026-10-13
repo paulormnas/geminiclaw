@@ -230,10 +230,23 @@ def _evaluate_comparison(
     crit: MetricCriterion, cmp: Comparison, metrics: Dict[str, Any]
 ) -> Tuple[Optional[bool], str]:
     """Avalia uma comparação: ``True``/``False`` ou ``None`` (indecidida: vai ao revisor LLM)."""
+    ok, detail, _ = _evaluate_comparison_found(crit, cmp, metrics)
+    return ok, detail
+
+
+def _evaluate_comparison_found(
+    crit: MetricCriterion, cmp: Comparison, metrics: Dict[str, Any]
+) -> Tuple[Optional[bool], str, Optional[Tuple[str, float]]]:
+    """Como ``_evaluate_comparison``, com ``(chave, valor)`` quando houve comparação numérica de fato.
+
+    O terceiro item é ``None`` para métrica ausente, valor não numérico e comparação indecidida: só a comparação
+    numérica reprovada pode virar resultado negativo (``v18.6-hypothesis-closure`` §1).
+    """
     existing = sorted(str(k) for k in (metrics or {}))
     missing = (
         False,
         f"Critério '{crit.text}': a métrica '{cmp.metric}' não está em metrics.json (chaves existentes: {existing}).",
+        None,
     )
     if not config.REVIEW_METRIC_QUALIFIERS:  # comportamento anterior: nome inteiro normalizado
         normalized: Dict[str, Any] = {}
@@ -243,9 +256,11 @@ def _evaluate_comparison(
         if cmp.metric not in normalized:
             return missing
         try:
-            return _compare(crit.text, cmp, str(cmp.metric), float(normalized[cmp.metric]))
+            actual_norm = float(normalized[cmp.metric])
         except (TypeError, ValueError):
-            return False, f"Critério '{crit.text}': valor de '{cmp.metric}' em metrics.json não é numérico."
+            return False, f"Critério '{crit.text}': valor de '{cmp.metric}' em metrics.json não é numérico.", None
+        passed, detail = _compare(crit.text, cmp, str(cmp.metric), actual_norm)
+        return passed, detail, (str(cmp.metric), actual_norm)
     qualifier = criterion_qualifier(cmp.raw_name)
     allowed = {qualifier} if qualifier not in ("", "teste") else {"teste", ""}
     candidates = metric_candidates(metrics, str(cmp.metric), allowed, _METRIC_ALIASES)
@@ -257,10 +272,11 @@ def _evaluate_comparison(
             return None, (
                 f"Critério '{crit.text}': a métrica '{cmp.metric}' aparece em mais de um grupo "
                 f"({[k for k, _ in candidates]}) e o critério não nomeia o grupo."
-            )
+            ), None
         candidates = named
     key, actual = candidates[0]
-    return _compare(crit.text, cmp, key, actual)
+    passed, detail = _compare(crit.text, cmp, key, actual)
+    return passed, detail, (key, float(actual))
 
 
 def _evaluate_metric_criteria(
@@ -282,6 +298,28 @@ def _evaluate_metric_criteria(
         else:
             results.append((True, " ".join(d for _, d in outcomes)))
     return results
+
+
+def _threshold_misses(
+    criteria: List[MetricCriterion], metrics: Dict[str, Any]
+) -> Optional[List[Dict[str, Any]]]:
+    """Reprovações por limiar, se TODAS as comparações decididas vieram de comparação numérica de fato.
+
+    Devolve ``None`` quando algum critério ficou indecidido, ou reprovou por métrica ausente ou valor não
+    numérico (nunca é resultado negativo); senão a lista ``{metric, value, operator, threshold}`` do que não
+    atingiu o limiar (vazia se nada reprovou).
+    """
+    misses: List[Dict[str, Any]] = []
+    for crit in criteria:
+        for cmp in crit.comparisons:
+            ok, _, found = _evaluate_comparison_found(crit, cmp, metrics)
+            if ok is None or (ok is False and found is None):
+                return None
+            if ok is False and found is not None:
+                misses.append(
+                    {"metric": found[0], "value": found[1], "operator": cmp.operator, "threshold": cmp.threshold}
+                )
+    return misses
 
 
 def _metrics_table(metrics: Dict[str, Any]) -> str:
@@ -490,6 +528,14 @@ class ReviewResult:
     # qualificador de conjunto das métricas de metrics.json (só as que têm um), para o evento subtask_review.
     undecided_criteria: List[str] = field(default_factory=list)
     metric_qualifiers: Dict[str, str] = field(default_factory=dict)
+    # v18.6-hypothesis-closure: "aprovado" | "reprovado" | "resultado_negativo" (hipótese refutada por limiar
+    # numérico, sem outro problema). ``negative_findings`` traz {metric, value, operator, threshold} para o feedback.
+    outcome: str = "reprovado"
+    negative_findings: List[Dict[str, Any]] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.is_approved and self.outcome == "reprovado":
+            self.outcome = "aprovado"
 
 
 class ValidatorAgent:
@@ -673,6 +719,14 @@ class ValidatorAgent:
                 issues=[str(e)],
             )
 
+    @staticmethod
+    def _as_negative(fail: ReviewResult, resolved: Dict[str, str], mismatch: bool) -> ReviewResult:
+        """A reprovação por limiar vira ``resultado_negativo`` (segue ``fail`` para quem ignora o campo)."""
+        fail.outcome = "resultado_negativo"
+        fail.resolved_artifacts = resolved
+        fail.name_mismatch = mismatch
+        return fail
+
     async def review_result(
         self,
         task: Any,
@@ -712,6 +766,11 @@ class ValidatorAgent:
         undecided: List[str] = []
         qualifiers_seen: Dict[str, str] = {}
         metrics_table: Optional[str] = None
+        metric_fail: Optional[ReviewResult] = None  # reprovação por métrica, adiada quando pode ser resultado negativo
+        negative_candidate = False
+        hypothesis_id = getattr(task, "hypothesis_id", None) or (
+            task.get("hypothesis_id") if isinstance(task, dict) else None
+        )
 
         # 0. Roadmap V15.2 / Spec G2 — validação científica via metrics.json quando algum critério
         # cita uma métrica conhecida com limiar (v16-pipeline-robustness §3). Avaliada ANTES do
@@ -764,7 +823,7 @@ class ValidatorAgent:
             undecided = [c.text for c, (ok, _) in zip(metric_criteria, evaluations) if ok is None]
             undecided += partial_criteria
             if failed:
-                return ReviewResult(
+                metric_fail = ReviewResult(
                     is_approved=False,
                     status="fail",
                     feedback=" ".join(detail for _, detail in evaluations),
@@ -772,6 +831,17 @@ class ValidatorAgent:
                     signature=issue_signature([f"critério {c.metric} {c.operator}" for c in metric_criteria]),
                     metric_qualifiers=qualifiers_seen,
                 )
+                # v18.6-hypothesis-closure §1: reprovação só por limiar numérico numa subtarefa com hipótese pode
+                # ser resultado negativo; a decisão final espera artefatos e critérios restantes (abaixo).
+                misses = (
+                    _threshold_misses(metric_criteria, metrics)
+                    if config.NEGATIVE_RESULT_AS_PROGRESS and hypothesis_id and not undecided
+                    else None
+                )
+                if not misses:
+                    return metric_fail
+                metric_fail.negative_findings = misses
+                negative_candidate = True
 
         # 1. Resolução de artefatos em disco (comparador tolerante, v16-pipeline-robustness §2)
         resolutions: List[ArtifactResolution] = []
@@ -796,6 +866,9 @@ class ValidatorAgent:
                 "Subtarefa reprovada por artefatos ausentes no disco",
                 extra={"task_name": task_name, "missing": missing_artifacts},
             )
+            if metric_fail is not None:  # a reprovação por métrica já decidida prevalece (reprovado)
+                metric_fail.negative_findings = []
+                return metric_fail
             return ReviewResult(
                 is_approved=False,
                 status="fail",
@@ -811,6 +884,8 @@ class ValidatorAgent:
         validation_criteria = [
             c for c in (validation_criteria or []) if not (isinstance(c, str) and c.strip() in metric_texts)
         ]
+        if negative_candidate and metric_fail is not None and not validation_criteria:
+            return self._as_negative(metric_fail, resolved_map, mismatch)
         if not validation_criteria and metric_criteria:
             return ReviewResult(
                 is_approved=True, status="pass", feedback=metric_feedback, issues=[],
@@ -883,6 +958,12 @@ class ValidatorAgent:
                     status = parsed.get("status", "pass").lower()
                     is_approved = status == "pass"
                     llm_issues = [str(i) for i in (parsed.get("issues") or [])]
+                    if negative_candidate and metric_fail is not None:
+                        # o revisor LLM aprovou os critérios restantes: resultado negativo; senão, reprovado
+                        if is_approved:
+                            return self._as_negative(metric_fail, resolved_map, mismatch)
+                        metric_fail.negative_findings = []
+                        return metric_fail
                     return ReviewResult(
                         is_approved=is_approved,
                         status="pass" if is_approved else "fail",
@@ -898,6 +979,10 @@ class ValidatorAgent:
                     )
             except Exception as e:
                 logger.warning(f"Erro na revisão semântica via LLM: {e}")
+
+        if metric_fail is not None:  # revisor LLM indisponível ou ilegível: nada confirma o resultado negativo
+            metric_fail.negative_findings = []
+            return metric_fail
 
         # Se não há critérios ou LLM não falhou os critérios e artefatos estão no disco:
         return ReviewResult(

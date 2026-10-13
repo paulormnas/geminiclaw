@@ -53,8 +53,13 @@ from src.knowledge.ingestion_queue import (
     PendingQueue,
     event_key,
 )
-from src.knowledge.normalization import clean_free_text, normalize_domain_term, split_metric_name
-from src.knowledge.projects import validate_project_id
+from src.knowledge.normalization import (
+    clean_free_text,
+    normalize_domain_term,
+    normalize_metric_name,
+    split_metric_name,
+)
+from src.knowledge.projects import get_active_problem, validate_project_id
 from src.knowledge.provenance import Actor
 from src.knowledge.vocabulary import VocabularyError, resolve_metric
 from src.logger import get_logger
@@ -202,6 +207,8 @@ class SubtaskInput:
             não rodou). Ausente em eventos antigos: tratado como não verificado.
         validation_criteria: Critérios de aceite da subtarefa (os quantitativos indicam quais
             métricas o Validator avaliou contra um limiar).
+        review_outcome: ``resultado_negativo`` quando a reprovação foi só por limiar numérico numa subtarefa com
+            hipótese (``v18.6-hypothesis-closure``): o experimento conta como execução bem-sucedida.
         hypothesis_id: ``id`` da ``Hipotese`` formal que a subtarefa testa (``v18-hypothesis-loop``); quando presente,
             o ``Experimento`` liga-se a ela por ``TESTA`` e a hipótese provisória da V17 não é criada.
     """
@@ -219,6 +226,7 @@ class SubtaskInput:
     review_verified: bool = False
     validation_criteria: list[str] = field(default_factory=list)
     hypothesis_id: str | None = None
+    review_outcome: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serializa para o evento da fila."""
@@ -255,6 +263,7 @@ class SubtaskInput:
                 c[:_MAX_CRITERION] for c in (criteria if isinstance(criteria, list) else []) if isinstance(c, str)
             ][:_MAX_CRITERIA],
             hypothesis_id=_opt_id(data.get("hypothesis_id")),
+            review_outcome=_opt_text(data.get("review_outcome"), 32),
         )
 
 
@@ -610,7 +619,8 @@ class _Writer:
         for warning in ev.warnings:
             logger.warning("Leitura de artefato tolerada na ingestão", extra={"extra": {"motivo": warning}})
 
-        failed_run = sub.agent_status != "success" or sub.review_status == "fail"
+        negative = self._is_negative(sub)
+        failed_run = sub.agent_status != "success" or (sub.review_status == "fail" and not negative)
         experimental_type = sub.agent_id == "developer" or sub.task_type in EXPERIMENTAL_TASK_TYPES
         if not (ev.metrics_status != "ausente" or ev.steps or (failed_run and experimental_type)):
             return None  # subtarefa sem código experimental e sem métricas: nenhum nó (design §1)
@@ -706,8 +716,22 @@ class _Writer:
         return props
 
     @staticmethod
-    def _experiment_status(sub: SubtaskInput, metrics: dict[str, Any] | None) -> str:
-        if sub.agent_status != "success" or sub.review_status == "fail":
+    def _is_negative(sub: SubtaskInput) -> bool:
+        """Reprovação só por limiar numa subtarefa com hipótese: hipótese refutada, não falha de execução."""
+        return (
+            config.NEGATIVE_RESULT_AS_PROGRESS
+            and sub.review_outcome == "resultado_negativo"
+            and sub.review_status == "fail"
+            and bool(sub.hypothesis_id)
+        )
+
+    @classmethod
+    def _experiment_status(cls, sub: SubtaskInput, metrics: dict[str, Any] | None) -> str:
+        if sub.agent_status != "success":
+            return "falha"
+        if cls._is_negative(sub):
+            return "sucesso"  # v18.6-hypothesis-closure: o Resultado validado entra no veredito como evidência
+        if sub.review_status == "fail":
             return "falha"
         if sub.review_status == "divergent_but_documented":
             return "divergente_documentado"
@@ -731,6 +755,10 @@ class _Writer:
             "caminho_artefatos": f"{self.ctx.session_id}/{_clean(sub.task_name, MAX_NAME_CHARS)}",
             "no_execucao": self.ctx.no_execucao,
         }
+        if self._is_negative(sub):
+            props["criterio_plano_atendido"] = False
+        elif sub.review_status == "pass" and sub.review_verified and _has_quantitative(sub.validation_criteria):
+            props["criterio_plano_atendido"] = True
         if status == "falha":
             cause = classify_failure(
                 agent_error_category=sub.agent_error_category,
@@ -824,6 +852,7 @@ class _Writer:
                 existing[nome] = resultado_id
             self._edge(exp_id, "PRODUZIU", resultado_id)
             self._mede(resultado_id, nome)
+            self._check_sem_mede(resultado_id, nome)
 
     def _metrics_match_record(self, prov: Any, session_dir: Path | None, task_name: str) -> bool:
         """``metrics.json`` em disco com o hash do término; senão registra ``proveniencia_inconsistente``."""
@@ -895,6 +924,70 @@ class _Writer:
         if resolution.node_id is not None and resolution.status != "candidato_criado":
             self._edge(resultado_id, "MEDE", resolution.node_id)
 
+    def _problem_metric(self) -> Node | None:
+        """``Metrica`` do critério de sucesso do ``Problema`` ativo do projeto, ou ``None``."""
+        try:
+            problema = get_active_problem(self.store, self.ctx.project_id)
+        except Exception:  # noqa: BLE001 - o sinal é complementar
+            return None
+        criterio = problema.properties.get("criterio_sucesso") if problema is not None else None
+        if not isinstance(criterio, dict):
+            return None
+        metric: Node | None = None
+        if criterio.get("metrica_id"):
+            metric = self.store.get_node(str(criterio["metrica_id"]))
+        if metric is None and criterio.get("metrica"):
+            found = self.store.find_nodes("Metrica", {"nome": str(criterio["metrica"])}, limit=1)
+            metric = found[0] if found else None
+        return metric
+
+    def _check_sem_mede(self, resultado_id: str, nome: str) -> None:
+        """Evento ``resultado_sem_mede``: o ``Resultado`` tem o nome da métrica do ``Problema`` e não ganhou ``MEDE``.
+
+        Motivos: ``qualificador_excluido`` (``cv``/``treino``/``validacao`` ou métrica de grupo),
+        ``metrica_nao_aprovada`` (a ``Metrica`` do ``Problema`` não está aprovada) e ``resolucao_falhou`` (o nome
+        não resolveu para ela).
+        """
+        metric = self._problem_metric()
+        if metric is None:
+            return
+        from src.agents.validator_agent import _METRIC_ALIASES  # import tardio: módulo pesado
+
+        def canon(text: str) -> str:
+            key = normalize_metric_name(text)
+            return _METRIC_ALIASES.get(key, key)
+
+        parts = split_metric_name(nome.rsplit(".", 1)[-1])
+        base = canon(parts.base or nome)
+        names = {canon(str(metric.properties.get("nome", "")))} | {
+            canon(str(x)) for x in metric.properties.get("sinonimos") or []
+        }
+        if base not in names:
+            return
+        if any(m.id == metric.id for m in self.store.neighbors(resultado_id, ["MEDE"], direction="out", depth=1).nodes):
+            return
+        if config.REVIEW_METRIC_QUALIFIERS and ("." in nome or parts.qualifier not in ("", "teste")):
+            reason = "qualificador_excluido"
+        elif metric.properties.get("status") != "aprovado":
+            reason = "metrica_nao_aprovada"
+        else:
+            reason = "resolucao_falhou"
+        logger.warning(
+            "Resultado da métrica do Problema sem MEDE", extra={"extra": {"resultado": nome, "motivo": reason}}
+        )
+        try:
+            from src.telemetry import get_telemetry
+
+            get_telemetry().record_agent_event(
+                execution_id=self.ctx.session_id,
+                session_id=self.ctx.session_id,
+                agent_id="orchestrator",
+                event_type="resultado_sem_mede",
+                payload={"nome": nome[:120], "motivo": reason},
+            )
+        except Exception:  # noqa: BLE001 - telemetria nunca derruba a ingestão
+            logger.warning("Evento resultado_sem_mede não registrado")
+
     def _datasets(self, session_dir: Path, exp_id: str, project_node: str, ev: Any) -> None:
         """``Experimento-USOU->Insumo`` por dataset de ``params.json`` e ``dataset_ids``."""
         names = (ev.params or {}).get("datasets")
@@ -918,6 +1011,13 @@ class _Writer:
             node = self.store.get_node(exp_id)
             if node is not None and sorted(node.properties.get("dataset_ids") or []) != sorted(ids):
                 self.store.update_node(exp_id, {"dataset_ids": ids}, actor=ACTOR_ORQUESTRADOR)
+
+
+def _has_quantitative(criteria: list[str]) -> bool:
+    """Algum critério de aceite compara uma métrica conhecida com um limiar (decidido pelo revisor)."""
+    from src.agents.validator_agent import _metric_criteria  # import tardio: módulo pesado
+
+    return bool(_metric_criteria(list(criteria)))
 
 
 def _is_plain_filename(name: str) -> bool:

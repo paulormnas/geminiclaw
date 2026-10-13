@@ -18,6 +18,7 @@ from src.knowledge.graph_store import InMemoryGraphStore
 from src.knowledge.ingestion import SessionContext, ingest_session_start
 from src.knowledge.projects import confirm_problem, create_project
 from src.knowledge.provenance import Actor
+from src.knowledge.vocabulary import approve_term
 from src.orchestrator import AgentResult, AgentTask, Orchestrator
 from src.output_manager import OutputManager
 from src.resume import ResumeError, prepare_resume, select_session_for_project
@@ -39,6 +40,8 @@ class World:
         self.pid = create_project(self.store, "P", "O", [])
         if confirm:
             confirm_problem(self.store, self.pid, make_draft(), sentido_metrica="maior_melhor")
+            for metric in self.store.find_nodes("Metrica", {"status": "candidato"}, limit=10):
+                approve_term(self.store, metric.id)  # v18.6-hypothesis-closure §4: veredito exige Metrica aprovada
         self.sm = FakeSessionManager()
         self.runtime = MagicMock()
         self.ran: list[str] = []

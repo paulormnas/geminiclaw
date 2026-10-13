@@ -7,18 +7,18 @@
 **ADRs relacionados:** ADR 009 e 015 (conhecimento), ADR 010 (propósito), ADR 011 (embeddings locais), ADR 012 (Curator), ADR 013 (federação), ADR 014 (sandbox), ADR 017 (catálogo e roteador), ADR 018 (imagem do sandbox)
 
 
-## Estado da implementação (2026-10-08)
+## Estado da implementação (2026-10-13)
 
 | Mudança OpenSpec | Estado | PR |
 |---|---|---|
 | [`v18.5-model-catalog-locality`](../../openspec/changes/v18.5-model-catalog-locality/proposal.md) | Implementada, com pendências | #112 |
 | [`v18.5-sandbox-phases`](../../openspec/changes/v18.5-sandbox-phases/proposal.md) | Implementada, com pendências | #111 |
 | [`v18.5-egress-gate`](../../openspec/changes/v18.5-egress-gate/proposal.md) | Implementada, com pendências | #113 |
-| [`v18.5-execution-provenance`](../../openspec/changes/v18.5-execution-provenance/proposal.md) | Não iniciada | — |
-| [`v18.5-numeric-references`](../../openspec/changes/v18.5-numeric-references/proposal.md) | Não iniciada | — |
-| [`v18.5-claim-verification`](../../openspec/changes/v18.5-claim-verification/proposal.md) | Não iniciada | — |
-| [`v18.5-operation-metrics`](../../openspec/changes/v18.5-operation-metrics/proposal.md) | Não iniciada | — |
-| [`v18.5-research-data-ingestion`](../../openspec/changes/v18.5-research-data-ingestion/proposal.md) | Não iniciada | — |
+| [`v18.5-execution-provenance`](../../openspec/changes/v18.5-execution-provenance/proposal.md) | Implementada, com pendências | #119 |
+| [`v18.5-numeric-references`](../../openspec/changes/v18.5-numeric-references/proposal.md) | Implementada, com pendências | #120 |
+| [`v18.5-claim-verification`](../../openspec/changes/v18.5-claim-verification/proposal.md) | Implementada, com pendências | #121 |
+| [`v18.5-operation-metrics`](../../openspec/changes/v18.5-operation-metrics/proposal.md) | Implementada, com pendências | #122 |
+| [`v18.5-research-data-ingestion`](../../openspec/changes/v18.5-research-data-ingestion/proposal.md) | Implementada, com pendências | #118 |
 
 ---
 

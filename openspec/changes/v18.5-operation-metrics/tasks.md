@@ -1,7 +1,6 @@
 # Tarefas: v18.5-operation-metrics
 
-**Estado (2026-10-12):** Implementada no branch `feat/v185-operation-metrics` (PR para `dev`, empilhado sobre
-`feat/v185-claim-verification`), ainda não mergeada. Pendente só 9.2 (revisão do Analista de Segurança, papel humano) e a
+**Estado (2026-10-13):** Mergeada em `dev` (#122) e exercitada no benchmark de 2026-10-13 no Pi 5. Pendente só 9.2 (revisão do Analista de Segurança, papel humano) e a
 bateria de sessões reais no Pi. Desvios em relação ao design: (a) o aviso periódico (4.2) mostra tempo, tokens, custo e
 egresso, mas não ciclos concluídos nem hipóteses em teste (não há contador estável no laço); (b) em
 `intervencoes_humanas`, aprovações, rejeições e edições ficam `null` (as decisões vivem no grafo, sem vínculo com a

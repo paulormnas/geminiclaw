@@ -30,12 +30,12 @@
 > como ideias em aberto.
 
 
-## Estado da implementação (2026-10-08)
+## Estado da implementação (2026-10-13)
 
 | Mudança OpenSpec | Estado | PR |
 |---|---|---|
 | [`v16-sandbox-slim-image`](../../openspec/changes/v16-sandbox-slim-image/proposal.md) | Implementada, com pendências | #99 |
-| [`v16-platform-images`](../../openspec/changes/v16-platform-images/proposal.md) | Não iniciada | — |
+| [`v16-platform-images`](../../openspec/changes/v16-platform-images/proposal.md) | Implementada, com pendências (5.5.1 lock multiarquitetura e 5.5.2 digests das imagens base) | #123 |
 
 ---
 

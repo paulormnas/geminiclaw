@@ -1,6 +1,6 @@
 # Tarefas: v16-platform-images
 
-**Estado (2026-10-12):** Implementada no branch `feat/v16-platform-images` (PR para `dev`). Pendentes: 5.5.1 e 5.5.2
+**Estado (2026-10-13):** Mergeada em `dev` (#123). Pendentes: 5.5.1 e 5.5.2
 (alteram o `containers/sandbox/Dockerfile` e exigem rede/registro e decisão sobre lock por plataforma e política de
 digests: ficam para aprovação do pesquisador), 6.6 (integração no Mac e no Pi 5) e a revisão nos 7 eixos. Desvios:
 (a) o item `SETUP.md` não existe no repositório, então `scripts/setup_pi.sh` e o `README.md` chamam o utilitário;

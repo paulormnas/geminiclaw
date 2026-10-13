@@ -29,7 +29,7 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 | [017](adr_017_catalogo_modelos_roteador.md) | Catálogo de Modelos e Roteador de Provedores por Papel | ✅ Aceito | 2026-09-29 |
 | [018](adr_018_imagem_sandbox_enxuta_e_imagens_por_plataforma.md) | Imagem Enxuta do Sandbox de Código e Seleção de Imagens por Plataforma (registro de ideias) | ✅ Aceito (2026-10-13; 5.5.1, 5.5.2 e medições no Pi pendentes) | 2026-09-29 |
 | [019](adr_019_localidade_dados_proveniencia_resultados.md) | Localidade dos Dados de Pesquisa e Proveniência dos Resultados | 🟠 Parcialmente implementado (8 mudanças V18.5 concluídas e arquivadas; §10 na V19; validação real e revisões de segurança pendentes) | 2026-09-29 |
-| [020](adr_020_independencia_validator.md) | Independência do Julgamento: Família de Modelo do Validator Diferente da do Developer | 🔵 Proposto (2026-10-13; spec `v18.6-validator-independence`) | 2026-10-13 |
+| [020](adr_020_independencia_validator.md) | Independência do Julgamento: Família de Modelo do Validator Diferente da do Developer | 🟢 Aprovado (2026-10-13; spec `v18.6-validator-independence`) | 2026-10-13 |
 
 
 ---

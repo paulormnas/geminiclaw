@@ -1,6 +1,6 @@
 # ADR 020 — Independência do Julgamento: Família de Modelo do Validator Diferente da do Developer
 
-**Status:** Proposto
+**Status:** Aprovado (2026-10-13, pesquisador; as propostas adotadas nas duas divergências valem)
 **Data:** 2026-10-13
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** `roadmaps/roadmap_V18.6.md`
@@ -209,7 +209,7 @@ A telemetria da revisão de subtarefa passa a registrar o papel `validator` com
 - **ADRs 007, 017 e 019** recebem uma nota apontando para este ADR quando ele for aprovado. O
   comentário sobre a ordem de resolução em `routing.py:250` muda.
 
-## Divergências para decisão do pesquisador
+## Divergências (decididas em 2026-10-13: valem as propostas adotadas)
 
 1. **Dica do Developer na família do juiz.** Há três opções:
    - descartar a dica (adotado no §4): o juiz fica fixo na sessão;

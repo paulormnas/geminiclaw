@@ -27,6 +27,7 @@ import pytest
 from scripts.benchmark import reset_stores
 from scripts.benchmark.reset_stores import BenchmarkTarget, ResetError
 
+DIRTY_POINT = 987654321
 DEV_URL = os.environ.get("DATABASE_URL", "")
 QDRANT_URL = os.environ.get("BENCHMARK_IT_QDRANT_URL", "")
 
@@ -107,8 +108,13 @@ def _dirty(target: BenchmarkTarget) -> None:
             f"SELECT * FROM cypher('{target.graph_name}', $$ CREATE (:Hipotese {{id: 'sujo'}}) $$) AS (v agtype)"
         )
     client = QdrantClient(url=target.qdrant_url)
-    client.create_collection(target.knowledge_collection, vectors_config=VectorParams(size=4, distance=Distance.COSINE))
-    client.upsert(target.knowledge_collection, [PointStruct(id=1, vector=[0.1, 0.2, 0.3, 0.4], payload={"k": 1})])
+    size = 4
+    if target.knowledge_collection in {c.name for c in client.get_collections().collections}:
+        # A carga do vocabulário já indexa termos na coleção: o ponto sujo usa a mesma dimensão.
+        size = client.get_collection(target.knowledge_collection).config.params.vectors.size
+    else:
+        client.create_collection(target.knowledge_collection, vectors_config=VectorParams(size=4, distance=Distance.COSINE))
+    client.upsert(target.knowledge_collection, [PointStruct(id=DIRTY_POINT, vector=[0.1] * size, payload={"k": 1})])
 
 
 def _graph_nodes(target: BenchmarkTarget) -> int:
@@ -141,7 +147,7 @@ def test_reset_completo_dump_gravado_e_tabelas_iguais_ao_initdb(sandbox_target, 
     client = QdrantClient(url=target.qdrant_url)
     assert report.dropped_collections == [target.knowledge_collection]
     if target.knowledge_collection in {c.name for c in client.get_collections().collections}:
-        assert client.retrieve(target.knowledge_collection, [1]) == []  # o ponto sujo não sobreviveu
+        assert client.retrieve(target.knowledge_collection, [DIRTY_POINT]) == []  # o ponto sujo não sobreviveu
     assert report.dump_path and Path(report.dump_path).is_file() and Path(report.dump_path).stat().st_size > 0
     assert Path(report.dump_path).parent == tmp_path / "r1" / "pre_reset"
     assert report.qdrant_snapshots and all(Path(p).is_file() for p in report.qdrant_snapshots)

@@ -18,6 +18,11 @@ o ``validator``, se a primeira posição com elegível tiver mais de um, vence o
 ``familias_autor`` (famílias dos papéis que escrevem afirmações); sem diferente, vale a ordem da lista. Um modelo de
 posição inferior nunca substitui o da primeira posição com elegível, e o pin desliga o desempate.
 
+Independência do julgamento (ADR 020; v18.6-validator-independence): ``familias_proibidas`` descarta, com o motivo
+``mesma_familia_julgamento``, os modelos cuja ``familia_modelo`` coincide com a de um modelo do outro grupo
+(juízes: ``validator``/``reviewer``; julgados: ``developer``/``base``), mesmo em posição inferior da preferência.
+``resolve_session`` resolve na ordem: pins, julgados, demais papéis e, por último, os juízes sem pin.
+
 Este módulo também é o único lugar que lista as variáveis de ambiente removidas
 (``LLM_PROVIDER``, ``LLM_MODEL``, ``DEFAULT_MODEL``, ``AGENT_MODEL``) para o aviso de obsolescência.
 """
@@ -25,7 +30,7 @@ Este módulo também é o único lugar que lista as variáveis de ambiente remov
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Collection, Mapping
 
 from src.llm.availability import MOTIVO_NAO_VERIFICADO, Availability
@@ -42,6 +47,19 @@ ROUTING_STRICT = "strict"
 ROUTING_MODES = (ROUTING_FLEXIBLE, ROUTING_STRICT)
 
 MOTIVO_POLITICA = "politica"
+MOTIVO_MESMA_FAMILIA = "mesma_familia_julgamento"
+
+# Independência do julgamento (ADR 020 §1): juízes não podem compartilhar família com julgados em uso.
+JUDGE_ROLES: tuple[str, ...] = ("validator", "reviewer")
+JUDGED_ROLES: tuple[str, ...] = ("developer", "base")
+# O par exigido na inicialização (ADR 020 §4); reviewer/base são conferidos no despacho.
+PAIR_ROLES: tuple[str, ...] = ("validator", "developer")
+JUDGE_MODE_REQUIRED = "required"
+JUDGE_MODE_PREFERRED = "preferred"
+JUDGE_MODE_OFF = "off"
+JUDGE_MODES = (JUDGE_MODE_REQUIRED, JUDGE_MODE_PREFERRED, JUDGE_MODE_OFF)
+ORIGEM_MODO_VARIAVEL = "variavel"
+ORIGEM_MODO_PADRAO = "padrao_politica"
 
 # Papéis que escrevem afirmações verificadas pelo Validator (ADR 019 §6); o Validator é resolvido por último.
 AUTHOR_ROLES: tuple[str, ...] = ("researcher", "developer", "summarizer", "curator")
@@ -95,6 +113,28 @@ class RoleResolution:
     descartados: tuple[tuple[str, str], ...] = ()
     # Só no validator: {"aplicado", "familias_autor", "candidatos", "escolhido"} (ADR 019 §6).
     desempate: Mapping[str, object] | None = None
+    # ADR 020: o modo ``preferred`` (ou o pin em ``strict``) manteve um modelo da mesma família do outro grupo.
+    conflito_independencia: bool = False
+
+
+def effective_judge_mode(env_value: str | None, data_policy: str) -> tuple[str, str]:
+    """``(modo, origem)`` da independência do julgamento (ADR 020 §2).
+
+    Valor explícito vence o padrão; sem ele, ``required`` com ``third_party_allowed`` e ``preferred`` com
+    ``self_hosted_only``.
+
+    Raises:
+        RoutingError: Valor inválido (a inicialização não prossegue).
+    """
+    value = (env_value or "").strip().lower()
+    if value:
+        if value not in JUDGE_MODES:
+            raise RoutingError(
+                f"LLM_JUDGE_INDEPENDENCE inválido: '{value}'. Valores aceitos: {', '.join(JUDGE_MODES)}."
+            )
+        return value, ORIGEM_MODO_VARIAVEL
+    mode = JUDGE_MODE_REQUIRED if data_policy == POLICY_THIRD_PARTY else JUDGE_MODE_PREFERRED
+    return mode, ORIGEM_MODO_PADRAO
 
 
 def validate_policy(politica: str) -> str:
@@ -141,6 +181,12 @@ def is_eligible(entry: ModelEntry, requisitos: Mapping[str, object], politica: s
 def _suggestion(politica: str, descartados: tuple[tuple[str, str], ...]) -> str:
     parts: list[str] = []
     reasons = [motivo for _, motivo in descartados]
+    if MOTIVO_MESMA_FAMILIA in reasons:
+        return (
+            "Nenhum modelo elegível de outra família que o juiz possa usar: defina LLM_JUDGE_INDEPENDENCE=preferred "
+            "para seguir com aviso, habilite outra família (LLM_DATA_POLICY=third_party_allowed com credencial "
+            "do provedor, ou um modelo local de outra família em catalog.local.yaml) ou use LLM_JUDGE_INDEPENDENCE=off."
+        )
     if politica == POLICY_SELF_HOSTED and MOTIVO_POLITICA in reasons:
         parts.append(
             "Defina LLM_DATA_POLICY=third_party_allowed para permitir provedores de nuvem "
@@ -177,10 +223,16 @@ def resolve(
     overrides: Mapping[str, Pin] | None = None,
     routing: str = ROUTING_FLEXIBLE,
     familias_autor: Collection[str] = (),
+    familias_proibidas: Collection[str] = (),
+    tolerar_conflito: bool = False,
 ) -> RoleResolution:
     """Resolve o modelo de um papel (função pura; ver o algoritmo no docstring do módulo).
 
-    ``familias_autor``: famílias já resolvidas para os papéis autores (usadas só no ``validator``).
+    ``familias_autor``: famílias já resolvidas para os papéis autores (usadas só no ``validator``, para o
+    desempate do ADR 019 §6). ``familias_proibidas``: famílias que o papel não pode usar (ADR 020); o descarte
+    vale também para o pin. ``tolerar_conflito``: sem alternativa, segue com o modelo em conflito e marca
+    ``conflito_independencia`` (modo ``preferred``); senão, :class:`NoEligibleModelError` (ou :class:`PinError`
+    para um pin em ``strict``).
 
     Raises:
         ValueError: Papel desconhecido.
@@ -191,30 +243,53 @@ def resolve(
     validate_routing_mode(routing)
     role = catalogo.normalize_role(papel)
     spec = catalogo.papeis[role]
+    forbidden = frozenset(familias_proibidas)
     descartados: list[tuple[str, str]] = []
+    kept_pin: RoleResolution | None = None
 
     pin = (overrides or {}).get(role)
     if pin is not None:
         entry = catalogo.modelos.get(pin.id)
         reason = "fora_do_catalogo" if entry is None else _discard_reason(entry, spec.requisitos, disponiveis, politica)
         if reason is None and entry is not None:
-            return RoleResolution(
-                role, entry.id, entry.trust, "pin_legado" if pin.legado else "pin",
+            origem = "pin_legado" if pin.legado else "pin"
+            pin_resolution = RoleResolution(
+                role, entry.id, entry.trust, origem,
                 desempate=_tiebreak_record(role, False, familias_autor, (), entry.id),
             )
-        message = f"Pin '{pin.id}' do papel '{role}' não vale: {reason}"
-        if reason == MOTIVO_POLITICA:
-            message += " (defina LLM_DATA_POLICY=third_party_allowed ou remova o pin)"
-        if routing == ROUTING_STRICT:
-            raise PinError(message + "; LLM_ROUTING=strict não aceita pin em conflito.")
-        logger.warning(message + "; seguindo a ordem de preferência do catálogo.")
-        descartados.append((pin.id, f"pin:{reason}"))
+            if entry.familia_modelo not in forbidden:
+                return pin_resolution
+            message = (
+                f"Pin '{pin.id}' do papel '{role}' é da família '{entry.familia_modelo}', a mesma de um modelo do "
+                f"outro grupo do julgamento ({MOTIVO_MESMA_FAMILIA})"
+            )
+            if routing == ROUTING_STRICT:
+                if tolerar_conflito:
+                    logger.warning(message + "; LLM_ROUTING=strict mantém o pin e a independência não é atendida.")
+                    return replace(pin_resolution, conflito_independencia=True)
+                raise PinError(
+                    message + "; LLM_ROUTING=strict não troca o pin. Use pins de famílias diferentes ou "
+                    "LLM_JUDGE_INDEPENDENCE=preferred."
+                )
+            logger.warning(message + "; ignorando o pin e seguindo a ordem de preferência do catálogo.")
+            descartados.append((pin.id, MOTIVO_MESMA_FAMILIA))
+            kept_pin = replace(pin_resolution, conflito_independencia=True)
+        else:
+            message = f"Pin '{pin.id}' do papel '{role}' não vale: {reason}"
+            if reason == MOTIVO_POLITICA:
+                message += " (defina LLM_DATA_POLICY=third_party_allowed ou remova o pin)"
+            if routing == ROUTING_STRICT:
+                raise PinError(message + "; LLM_ROUTING=strict não aceita pin em conflito.")
+            logger.warning(message + "; seguindo a ordem de preferência do catálogo.")
+            descartados.append((pin.id, f"pin:{reason}"))
 
     for group in spec.preferencia_grupos:
         eligible: list[ModelEntry] = []
         for model_id in group:
             entry = catalogo.modelos[model_id]
             reason = _discard_reason(entry, spec.requisitos, disponiveis, politica)
+            if reason is None and entry.familia_modelo in forbidden:
+                reason = MOTIVO_MESMA_FAMILIA
             if reason is None:
                 eligible.append(entry)
             else:
@@ -231,8 +306,31 @@ def resolve(
             desempate=_tiebreak_record(role, applied, familias_autor, [e.id for e in eligible], chosen.id),
         )
 
+    if forbidden and tolerar_conflito:
+        if kept_pin is not None:
+            logger.warning(
+                "Sem alternativa de outra família: o pin é mantido e a independência não é atendida",
+                extra={"role": role, "pin": kept_pin.id},
+            )
+            return replace(kept_pin, descartados=tuple(descartados))
+        fallback = resolve(
+            papel, catalogo, disponiveis, politica, overrides, routing, familias_autor, (), False
+        )
+        logger.warning(
+            "Sem alternativa de outra família: segue com o preferido e a independência não é atendida",
+            extra={"role": role, "modelo": fallback.id},
+        )
+        return replace(
+            fallback, descartados=tuple(descartados) + fallback.descartados, conflito_independencia=True
+        )
+
     discarded = tuple(descartados)
     raise NoEligibleModelError(role, politica, discarded, _suggestion(politica, discarded))
+
+
+def _family(catalogo: Catalog, resolution: RoleResolution) -> str | None:
+    entry = catalogo.modelos.get(resolution.id)
+    return entry.familia_modelo if entry is not None else None
 
 
 def resolve_session(
@@ -241,34 +339,86 @@ def resolve_session(
     politica: str,
     overrides: Mapping[str, Pin] | None = None,
     routing: str = ROUTING_FLEXIBLE,
+    modo_independencia: str = JUDGE_MODE_OFF,
 ) -> dict[str, RoleResolution]:
     """Resolve todos os papéis do catálogo de uma vez (o **mapa resolvido** da sessão).
 
     Todos os papéis sem modelo elegível são reportados juntos, para o pesquisador corrigir de
     uma vez. Pins inválidos em ``strict`` são fatais imediatamente.
+
+    Ordem (ADR 020 §3): (a) papéis com pin, julgados antes dos livres e dos juízes; (b) julgados sem pin, evitando
+    as famílias dos juízes com pin; (c) livres sem pin (o desempate do ADR 019 §6 usa os autores já resolvidos);
+    (d) juízes sem pin, evitando as famílias de todos os julgados resolvidos. Com ``modo_independencia="off"``
+    nenhuma família é proibida.
     """
+    if modo_independencia not in JUDGE_MODES:
+        raise RoutingError(
+            f"modo de independência inválido: '{modo_independencia}'. Valores aceitos: {', '.join(JUDGE_MODES)}."
+        )
+    pins = overrides or {}
+    check = modo_independencia != JUDGE_MODE_OFF
+    preferred = modo_independencia == JUDGE_MODE_PREFERRED
     resolved: dict[str, RoleResolution] = {}
     failures: list[NoEligibleModelError] = []
-    # O validator vai por último: o desempate precisa das famílias dos papéis autores (ADR 019 §6).
-    order = [r for r in catalogo.papeis if r != VALIDATOR_ROLE] + [r for r in catalogo.papeis if r == VALIDATOR_ROLE]
-    for role in order:
-        authors = {
-            catalogo.modelos[res.id].familia_modelo
-            for name, res in resolved.items()
-            if name in AUTHOR_ROLES and res.id in catalogo.modelos
-        }
+
+    def families(roles: tuple[str, ...]) -> set[str]:
+        return {f for r in roles if r in resolved and (f := _family(catalogo, resolved[r])) is not None}
+
+    def authors() -> set[str]:
+        return families(AUTHOR_ROLES)
+
+    def one(role: str) -> None:
+        if role in JUDGE_ROLES:
+            forbidden = families(JUDGED_ROLES) if check else set()
+            counterpart = "developer"
+        elif role in JUDGED_ROLES:
+            forbidden = families(JUDGE_ROLES) if check else set()
+            counterpart = "validator"
+        else:
+            forbidden, counterpart = set(), ""
+        hard = families((counterpart,)) if counterpart else set()
+        soft = forbidden - hard
         try:
-            resolved[role] = resolve(role, catalogo, disponiveis, politica, overrides, routing, authors)
+            if role in PAIR_ROLES and soft:
+                # Evita todas as famílias; só a do par é exigência (reviewer/base são conferidos no despacho).
+                try:
+                    resolved[role] = resolve(
+                        role, catalogo, disponiveis, politica, pins, routing, authors(), forbidden, False
+                    )
+                except (NoEligibleModelError, PinError):
+                    resolved[role] = resolve(
+                        role, catalogo, disponiveis, politica, pins, routing, authors(), hard, preferred
+                    )
+            else:
+                resolved[role] = resolve(
+                    role, catalogo, disponiveis, politica, pins, routing, authors(), forbidden,
+                    preferred if role in PAIR_ROLES else True,
+                )
         except (NoEligibleModelError, PinError) as exc:
             if role in OPTIONAL_ROLES:
                 logger.warning(
                     "Papel opcional sem modelo elegível: desligado nesta sessão",
                     extra={"role": role, "politica": politica},
                 )
-                continue
+                return
             if isinstance(exc, PinError):
                 raise  # pin inválido de papel obrigatório segue fatal (strict)
             failures.append(exc)
+
+    roles = list(catalogo.papeis)
+    pinned = [r for r in roles if r in pins]
+    unpinned = [r for r in roles if r not in pins]
+    phases = [
+        [r for r in pinned if r in JUDGED_ROLES],
+        [r for r in pinned if r not in JUDGED_ROLES and r not in JUDGE_ROLES],
+        [r for r in pinned if r in JUDGE_ROLES],
+        [r for r in unpinned if r in JUDGED_ROLES],
+        [r for r in unpinned if r not in JUDGED_ROLES and r not in JUDGE_ROLES],
+        [r for r in unpinned if r in JUDGE_ROLES],
+    ]
+    for phase in phases:
+        for role in phase:
+            one(role)
     if len(failures) == 1:
         raise failures[0]
     if failures:
@@ -280,6 +430,32 @@ def resolve_session(
         )
         raise merged
     return {role: resolved[role] for role in catalogo.papeis if role in resolved}
+
+
+def find_alternative(
+    papel: str,
+    catalogo: Catalog,
+    disponiveis: Mapping[str, Availability],
+    politica: str,
+    familias_proibidas: Collection[str],
+    excluir: Collection[str] = (),
+) -> ModelEntry | None:
+    """Próximo modelo elegível do papel, na ordem de preferência, de família fora de ``familias_proibidas``.
+
+    Usado no despacho de ``reviewer``/``base`` (ADR 020 §4): a independência vence a posição na preferência.
+    """
+    role = catalogo.normalize_role(papel)
+    spec = catalogo.papeis[role]
+    forbidden = set(familias_proibidas)
+    for model_id in spec.preferencia:
+        if model_id in excluir:
+            continue
+        entry = catalogo.modelos[model_id]
+        if entry.familia_modelo in forbidden:
+            continue
+        if _discard_reason(entry, spec.requisitos, disponiveis, politica) is None:
+            return entry
+    return None
 
 
 def validate_hint(

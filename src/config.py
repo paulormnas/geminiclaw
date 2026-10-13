@@ -71,6 +71,9 @@ LLM_DATA_POLICY = get_env("LLM_DATA_POLICY", default="self_hosted_only").strip()
 # 'flexible' registra WARNING e segue a preferência quando um pin/dica não vale; 'strict' torna
 # pins e conflitos fatais e ignora a dica de modelo do plano.
 LLM_ROUTING = get_env("LLM_ROUTING", default="flexible").strip().lower()
+# Independência do julgamento (ADR 020): 'required' | 'preferred' | 'off'. Vazio = padrão pela política de dados
+# ('required' com third_party_allowed, 'preferred' com self_hosted_only). Valor inválido impede a inicialização.
+LLM_JUDGE_INDEPENDENCE = get_env("LLM_JUDGE_INDEPENDENCE", default="").strip().lower()
 # Lista de permissão de provedores (separados por vírgula). Vazio = padrão do perfil de deployment.
 LLM_PROVIDER_PRIORITY = get_env("LLM_PROVIDER_PRIORITY", default="")
 # Timeout (s) do health check de cada (provedor, modelo) no início da sessão.

@@ -163,6 +163,8 @@ def test_model_router_dica_invalida_usa_o_modelo_resolvido(monkeypatch):
 @pytest.mark.unit
 def test_model_router_dica_valida_troca_o_modelo(monkeypatch):
     monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "http://localhost:11434")
+    # Só há a família qwen local: sem desligar a conferência (ADR 020) a dica cairia na família do validator.
+    monkeypatch.setattr("src.config.LLM_JUDGE_INDEPENDENCE", "off")
 
     provider = ModelRouter.get_provider("developer", model="ollama/qwen3.5:4b")
 

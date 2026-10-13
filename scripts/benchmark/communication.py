@@ -415,8 +415,10 @@ def evaluate_events(
             })
 
     plan_seq, subtask_seq = build_sequences(events)
+    # ADR 020 §6: a revisão de subtarefa é registrada como `validator`; `reviewer` cobre sessões anteriores.
+    reviewer_model = models_by_role.get("validator") or models_by_role.get("reviewer")
     return {
-        "reviewer": {"model": models_by_role.get("reviewer"), "confusion": reviewer_confusion(pairs),
+        "reviewer": {"model": reviewer_model, "confusion": reviewer_confusion(pairs),
                      "reviews": len(pairs), "mismatches": mismatches},
         "resolution": {"plan": resolution_stats(plan_seq), "subtask": resolution_stats(subtask_seq),
                        "loops": {"validator": loop_stats(plan_seq), "reviewer": loop_stats(subtask_seq)}},

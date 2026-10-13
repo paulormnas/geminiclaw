@@ -14,11 +14,12 @@ pytestmark = pytest.mark.unit
 DEV = "google/gemini-3.8-flash"
 LITE = "google/gemini-3.1-flash-lite"
 SONNET = "anthropic/claude-sonnet-5-5"
+GPT = "openai/gpt-6-luna"
 GOOD = json.dumps({"necessidade": 3, "clareza": 2, "justificativa": "ok"})
 
 
 def models(**kw):
-    base = {"developer": DEV, "researcher": DEV, "reviewer": LITE}
+    base = {"developer": DEV, "researcher": DEV, "reviewer": SONNET}
     base.update(kw)
     return base
 
@@ -43,13 +44,28 @@ def factory(*texts, usage=None):
 def test_selecao_entre_os_demais_papeis():
     """Scenario: Seleção entre os demais papéis."""
     sel = cj.select_judge(models())
-    assert sel.key == LITE and sel.excluded == [DEV]
+    assert sel.key == SONNET and sel.excluded == [DEV]
 
 
-def test_preferencia_por_outro_provedor():
-    """Scenario: Preferência por outro provedor."""
-    sel = cj.select_judge(models(), candidates=[SONNET])
-    assert sel.key == SONNET and "provedor diferente" in sel.reason
+def test_familia_do_researcher_so_desempata():
+    """ADR 020 §7: com o researcher no Claude, o candidato de outra família vence o desempate."""
+    sel = cj.select_judge(models(researcher=SONNET), candidates=[GPT])
+    assert sel.key == GPT and "família diferente" in sel.reason
+
+
+def test_juiz_exclui_a_familia_do_developer_e_do_base():
+    """ADR 020 §7: o modelo da mesma família do developer ou do base não é candidato, mesmo sendo outro modelo."""
+    assert cj.select_judge(models(), candidates=[LITE]).key == SONNET  # LITE é gemini, como o developer
+    with pytest.raises(cj.JudgeUnavailable):
+        cj.select_judge(models(reviewer=LITE), candidates=[LITE])
+    sel = cj.select_judge(models(base=SONNET, reviewer=LITE), candidates=[GPT])  # base no claude: claude excluído
+    assert sel.key == GPT
+
+
+def test_researcher_na_mesma_familia_do_juiz_nao_o_exclui():
+    """O Researcher pode ser da família do juiz: só perde o desempate."""
+    sel = cj.select_judge(models(researcher=SONNET))
+    assert sel.key == SONNET
 
 
 def test_sem_candidato_valido_lista_os_excluidos():
@@ -61,8 +77,8 @@ def test_sem_candidato_valido_lista_os_excluidos():
 
 def test_modelo_do_agente_que_perguntou_gera_same_model():
     """Scenario: Modelo do agente que perguntou."""
-    assert cj.select_judge(models(), asking_model=LITE) is None
-    out = cj.judge_events([event(asker_model=LITE)], models(), provider_factory=lambda *a: None,
+    assert cj.select_judge(models(), asking_model=SONNET) is None
+    out = cj.judge_events([event(asker_model=SONNET)], models(), provider_factory=lambda *a: None,
                           allow_external=True, max_usd=1.0)
     assert out["events"][0]["reason"] == "same_model" and out["skipped"] == {"same_model": 1}
 
@@ -90,10 +106,10 @@ def run(events, texts=(), provider_models=None, **kw):
 
 def test_nota_valida_grava_modelo_e_versao_da_rubrica():
     """Scenario: Nota válida."""
-    out, _ = run([event()], [GOOD], provider_models=models(reviewer=LITE), allow_external=True)
+    out, _ = run([event()], [GOOD], provider_models=models(reviewer=SONNET), allow_external=True)
     entry = out["events"][0]
     assert entry["status"] == "judged" and entry["scores"]["necessidade"] == 3
-    assert entry["judge"] == LITE and entry["rubric_version"] == cj.RUBRIC_VERSION
+    assert entry["judge"] == SONNET and entry["rubric_version"] == cj.RUBRIC_VERSION
 
 
 def test_saida_invalida_duas_vezes_vira_judge_error():
@@ -344,7 +360,7 @@ def test_exclusao_por_modelo_ignora_caixa_prefixo_e_espacos(variant):
 
 
 def test_modelo_do_agente_que_perguntou_tambem_e_comparado_na_forma_canonica():
-    assert cj.select_judge(models(), asking_model="Google/Gemini-3.1-Flash-Lite") is None
+    assert cj.select_judge(models(), asking_model="Anthropic/Claude-Sonnet-5-5") is None
 
 
 def test_judge_session_passa_os_nomes_de_arquivo_protegidos(tmp_path, monkeypatch):
@@ -384,7 +400,7 @@ def test_teto_vale_tambem_para_a_nova_tentativa():
 def test_notas_agregadas_por_juiz_e_selecao_registrada():
     """I5 e sugestão: nada mistura juízes diferentes; a seleção fica na saída."""
     out, _ = run([event(1)], [GOOD])
-    assert out["selection"]["selected"] == LITE and out["selection"]["excluded"] == [DEV]
+    assert out["selection"]["selected"] == SONNET and out["selection"]["excluded"] == [DEV]
 
 
 # --- juiz passa pelo roteador (ADR 017) -----------------------------------------------------------

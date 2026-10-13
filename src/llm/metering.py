@@ -18,7 +18,10 @@ from src.llm.allocation import record_call_version
 from src.llm.base import LLMProvider, LLMResponse
 from src.llm.pricing import estimate_cost
 from src.llm.versions import normalize_version
+from src.logger import get_logger
 from src.telemetry import get_telemetry
+
+logger = get_logger(__name__)
 
 _bound: contextvars.ContextVar[Optional[tuple[str, str]]] = contextvars.ContextVar("bound_execution", default=None)
 
@@ -47,8 +50,13 @@ def record_llm_call(
     latency_ms: int,
     agent_id: str,
     task_name: Optional[str] = None,
+    funcao: Optional[str] = None,
 ) -> None:
-    """Grava tokens, custo estimado e latência de uma chamada LLM em ``token_usage``."""
+    """Grava tokens, custo estimado e latência de uma chamada LLM em ``token_usage``.
+
+    ``funcao`` (ex.: ``revisao_subtarefa``) distingue o que o papel fazia na chamada. ``token_usage`` não tem coluna
+    para isso (sem mudança de schema, ADR 020): a função vai no log estruturado da chamada.
+    """
     ctx = get_agent_context_optional()
     bound = _bound.get()
     if ctx is not None:
@@ -65,6 +73,8 @@ def record_llm_call(
     name, model = provider_name(provider), provider.model_name or "unknown"
     # v18.5-model-catalog-locality — versão efetiva servida (rastreia troca de versão na sessão).
     versao = record_call_version(name, model, normalize_version(getattr(response, "versao_efetiva", None)))
+    if funcao:
+        logger.debug("Chamada LLM", extra={"agent_id": agent_id, "funcao": funcao, "task_name": task_name})
     get_telemetry().record_token_usage(
         execution_id=execution_id,
         session_id=session_id,

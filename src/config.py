@@ -168,6 +168,12 @@ PLAN_REJECTION_STALL_LIMIT = int(get_env("PLAN_REJECTION_STALL_LIMIT", default="
 ARTIFACT_MATCH_MODE = get_env("ARTIFACT_MATCH_MODE", default="tolerant").lower()  # tolerant | strict
 CIRCUIT_BREAKER_STALL_CYCLES = int(get_env("CIRCUIT_BREAKER_STALL_CYCLES", default="2"))
 
+# v18.6-review-evidence — evidência e tolerância na revisão de subtarefas.
+REVIEW_METRIC_QUALIFIERS = get_env_bool("REVIEW_METRIC_QUALIFIERS", default=True)
+REVIEW_ARTIFACT_PROFILE = get_env_bool("REVIEW_ARTIFACT_PROFILE", default=True)
+REVIEW_PROFILE_MAX_BYTES = int(get_env("REVIEW_PROFILE_MAX_BYTES", default="5242880"))
+REVIEW_PROFILE_MAX_CHARS = int(get_env("REVIEW_PROFILE_MAX_CHARS", default="1200"))
+
 # v16-agent-communication-eval — avaliação pós-execução da comunicação entre agentes.
 # O modelo do juiz é selecionado automaticamente (design §5.3); PROVIDER/MODEL são sobrescrita opcional.
 COMM_EVAL_JUDGE_PROVIDER = get_env("COMM_EVAL_JUDGE_PROVIDER", default="").lower()

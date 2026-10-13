@@ -247,6 +247,8 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             # v18.5-execution-provenance: execução de origem e hash do metrics.json registrado no término.
             "exec_id": PropertySchema(),
             "hash_metrics": PropertySchema(),
+            # v18.6-review-evidence: conjunto de avaliação do nome da métrica (test_/cv_/train_/val_).
+            "qualificador": PropertySchema(enum=("teste", "cv", "treino", "validacao")),
         },
     ),
     "Decisao": NodeSchema(

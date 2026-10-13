@@ -85,6 +85,41 @@ def test_exato_com_prefixo_outputs_e_pasta_da_subtarefa_primeiro(tmp_path):
 
 
 def test_arquivos_de_infraestrutura_sao_ignorados(tmp_path):
-    _touch(tmp_path, "t/script.py", "t/scientific_helpers.py")
-    res = resolve_artifacts(["script.py"], tmp_path, "t")
+    _touch(tmp_path, "t/scientific_helpers.py")
+    res = resolve_artifacts(["scientific_helpers.py"], tmp_path, "t")
     assert res[0].tier == "missing"
+
+
+def test_um_script_esperado_resolve_para_o_script_executado(tmp_path):
+    """Scenario: Um script esperado."""
+    _touch(tmp_path, "eda/script.py")
+    (res,) = resolve_artifacts(["eda_iris.py"], tmp_path, "eda")
+    assert res.tier == "script" and res.name_mismatch
+    assert res.matched[0].as_posix() == "eda/script.py"
+
+
+def test_dois_scripts_esperados_ficam_missing(tmp_path):
+    """Scenario: Dois scripts esperados."""
+    _touch(tmp_path, "t/script.py")
+    res = resolve_artifacts(["treino.py", "avaliacao.py"], tmp_path, "t")
+    assert [r.tier for r in res] == ["missing", "missing"]
+
+
+def test_script_de_outra_subtarefa_nao_resolve(tmp_path):
+    """Scenario: Script de outra subtarefa."""
+    _touch(tmp_path, "eda/script.py")
+    (res,) = resolve_artifacts(["treino.py"], tmp_path, "treino")
+    assert res.tier == "missing"
+
+
+def test_modelo_serializado_com_outro_nome_resolve_por_extensao(tmp_path):
+    """Scenario: Nome de modelo diferente."""
+    _touch(tmp_path, "t/dummy_most_frequent.joblib")
+    (res,) = resolve_artifacts(["dummy_baseline.joblib"], tmp_path, "t")
+    assert res.tier == "extension" and res.name_mismatch
+
+
+def test_codigo_continua_fora_da_camada_de_extensao(tmp_path):
+    _touch(tmp_path, "t/outro.py")
+    (res,) = resolve_artifacts(["modelo.py"], tmp_path, "t")
+    assert res.tier == "missing"

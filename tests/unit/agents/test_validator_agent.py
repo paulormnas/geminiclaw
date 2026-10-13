@@ -258,9 +258,9 @@ async def test_validator_accepts_qualitative_criterion_for_eda(mock_validator_pr
 @pytest.mark.asyncio
 @pytest.mark.unit
 async def test_validator_requires_quantitative_criterion_for_validation_type(mock_validator_provider):
-    """task_type='validation' também exige critério quantitativo, assim como 'reproduction'."""
+    """task_type='validation' com hypothesis_ref também exige critério quantitativo, como 'reproduction'."""
     validator = ValidatorAgent(provider=mock_validator_provider)
-    plan = [_base_task(task_type="validation", validation_criteria=["Resultado documentado"])]
+    plan = [_base_task(task_type="validation", hypothesis_ref="h1", validation_criteria=["Resultado documentado"])]
 
     result = await validator.validate_plan(plan, prompt="Validar hipótese X")
 

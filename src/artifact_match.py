@@ -1,7 +1,7 @@
 """Comparador tolerante de artefatos (V16 / ``v16-pipeline-robustness`` §2).
 
 Resolve cada artefato esperado pelo plano contra os arquivos reais da sessão, em camadas da mais
-estrita à mais tolerante (``exact``, ``glob``, ``normalized``, ``extension``). Função pura sobre o
+estrita à mais tolerante (``exact``, ``glob``, ``normalized``, ``script``, ``extension``). Função pura sobre o
 sistema de arquivos: nunca lê conteúdo e nunca sai da pasta da sessão.
 """
 
@@ -15,7 +15,7 @@ from pathlib import Path
 
 # Extensões de artefato de dados para as quais a camada ``extension`` vale (nunca código).
 EXTENSION_TIER_SUFFIXES = frozenset(
-    {".png", ".jpg", ".jpeg", ".svg", ".csv", ".json", ".md", ".txt", ".html", ".pdf", ".parquet"}
+    {".png", ".jpg", ".jpeg", ".svg", ".csv", ".json", ".md", ".txt", ".html", ".pdf", ".parquet", ".joblib", ".pkl"}
 )
 _IGNORED_NAMES = frozenset({"scientific_helpers.py", "script.py", "manifest.json"})
 
@@ -27,7 +27,7 @@ class ArtifactResolution:
     Attributes:
         expected: Nome ou padrão esperado, como no plano.
         matched: Caminhos resolvidos, relativos à pasta da sessão (vazio = ausente).
-        tier: ``exact``, ``glob``, ``normalized``, ``extension`` ou ``missing``.
+        tier: ``exact``, ``glob``, ``normalized``, ``script``, ``extension`` ou ``missing``.
     """
 
     expected: str
@@ -37,7 +37,7 @@ class ArtifactResolution:
     @property
     def name_mismatch(self) -> bool:
         """Indica resolução por nome diferente do esperado (aprovação com aviso)."""
-        return self.tier in ("normalized", "extension")
+        return self.tier in ("normalized", "script", "extension")
 
 
 def _normalize(name: str) -> str:
@@ -95,6 +95,20 @@ def _pair_by_overlap(items: list[tuple[int, str]], candidates: list[Path]) -> li
         taken_files.add(j)
         pairs.append((items[i], candidates[j]))
     return pairs
+
+
+def _task_script(session_dir: Path, task_dir: str | None) -> Path | None:
+    """``<task_dir>/script.py`` (relativo à sessão) quando existe, é arquivo comum e não sai da sessão."""
+    if not task_dir or not _is_safe_expected(task_dir):
+        return None
+    root = session_dir.resolve()
+    candidate = root / task_dir / "script.py"
+    try:
+        if candidate.is_symlink() or not candidate.is_file():
+            return None
+        return candidate.resolve().relative_to(root)
+    except (ValueError, OSError):
+        return None
 
 
 def _clean(expected: str) -> str:
@@ -170,6 +184,15 @@ def resolve_artifacts(
     run_tier("glob", glob)
     if mode != "strict":
         run_tier("normalized", lambda exp: take(lambda f: _normalize(f.name) == _normalize(Path(exp).name))[:1])
+
+        # script: um único .py esperado e não resolvido vira o script.py executado na pasta da subtarefa
+        pending_py = [(i, e) for i, e in pending if Path(e).suffix.lower() == ".py"]
+        script = _task_script(Path(session_dir), task_dir)
+        if len(pending_py) == 1 and script is not None and script not in used:
+            idx, exp = pending_py[0]
+            used.add(script)
+            results[idx] = ArtifactResolution(exp, [script], "script")
+            pending = [(i, e) for i, e in pending if i != idx]
 
         # extension: cada arquivo restante com a mesma extensão resolve um esperado (sobra = missing)
         by_suffix: dict[str, list[tuple[int, str]]] = {}

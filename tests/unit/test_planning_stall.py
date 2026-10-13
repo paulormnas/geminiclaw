@@ -108,7 +108,7 @@ async def test_assinatura_deterministica_do_validator_real_e_estavel():
     provider = MagicMock()
     provider.generate = AsyncMock(return_value=LLMResponse(text='{"status": "approved"}'))
     agent = ValidatorAgent(provider=provider)
-    bad = [{"agent_id": "developer", "task_name": "avaliar", "prompt": "p", "task_type": "validation",
+    bad = [{"agent_id": "developer", "task_name": "avaliar", "prompt": "p", "task_type": "validation", "hypothesis_ref": "h1",
             "validation_criteria": ["modelos comparados"]}]
     r1 = await agent.validate_plan(bad, "x")
     r2 = await agent.validate_plan(bad, "y")

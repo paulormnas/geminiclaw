@@ -13,7 +13,11 @@
 # e `familia_modelo` (obrigatório, `^[a-z0-9][a-z0-9_-]*$`). São declarações do operador, nunca inferidas do endpoint.
 # Uma posição de `preferencia` pode ser uma lista de ids (empate); o Validator desempata por família diferente da
 # dos papéis autores (ADR 019 §6).
-versao: 2
+#
+# Independência do julgamento (v18.6-validator-independence, ADR 020 §5): a preferência de `validator` e `reviewer`
+# traz um modelo de nuvem de cada família (Claude, Gemini, GPT) antes dos locais, para haver sempre uma alternativa
+# de outra família quando a nuvem é permitida. Com `self_hosted_only` esses modelos são descartados pela política.
+versao: 3
 
 modelos:
   - id: google/gemini-3.8-flash
@@ -100,6 +104,8 @@ papeis:
     requisitos: {saida_estruturada: true}
     preferencia:
       - anthropic/claude-sonnet-5-5
+      - google/gemini-3.8-flash
+      - openai/gpt-6-luna
       - ollama/qwen3:8b
       - ollama/qwen3.5:4b
   reviewer:
@@ -107,6 +113,7 @@ papeis:
     preferencia:
       - anthropic/claude-sonnet-5-5
       - google/gemini-3.8-flash
+      - openai/gpt-6-luna
       - ollama/qwen3:8b
       - ollama/qwen3.5:4b
   summarizer:

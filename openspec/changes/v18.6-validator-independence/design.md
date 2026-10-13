@@ -92,6 +92,21 @@ A nova ordem do catálogo pode levar o juiz a um provedor de nuvem antes não us
 sujeito a `LLM_DATA_POLICY`, a `LLM_PROVIDER_PRIORITY` (lista de permissão) e ao `EgressGate`
 (ADR 019 §3). Nada muda no que o juiz recebe.
 
+### Parecer de segurança (STRIDE curto, 2026-10-13)
+
+Escopo: efeito da nova ordem do catálogo e da regra R1 sobre o egresso e sobre a superfície de ataque.
+
+| Ameaça | Avaliação | Mitigação / requisito |
+|---|---|---|
+| **Information disclosure** (juiz em provedor de nuvem antes não usado) | O catálogo só traz modelos de nuvem na preferência; sob `self_hosted_only` (padrão) a política os descarta antes de qualquer outra regra, então a mudança não abre egresso nessa política. Sob `third_party_allowed` o juiz pode ir a um provedor novo. | **Requisito S1:** a elegibilidade de um modelo de outra família continua passando por `_discard_reason` (política, lista `LLM_PROVIDER_PRIORITY`, disponibilidade); nenhum caminho de substituição, de despacho ou de reserva contorna esse filtro. **S2:** todo envio ao juiz segue pelo `EgressGate`/`GatedProvider` com o destino do modelo efetivo (inclusive o substituído). **S3:** o banner e o evento mostram o provedor/modelo escolhido. |
+| **Tampering** (dica de plano gerada pelo LLM tenta trocar o juiz ou forçar família) | A dica já é superfície de injeção (ADR 017 §7). R1 só a restringe mais: dica na família do juiz é rejeitada; o juiz nunca muda no meio da sessão. | **S4:** a dica nunca altera o modelo de um juiz nem sobrepõe pin; `required` e `preferred` rejeitam a dica em conflito. |
+| **Spoofing** (família declarada em `catalog.local.yaml`) | O operador pode declarar qualquer família; é confiança no operador, não ameaça externa. | **S5:** a origem da família (`versionado`/`local`) é registrada no payload (design §5). |
+| **Repudiation** | Conferências e descartes não deixariam rastro sem registro. | **S6:** evento `independencia_julgamento` por conferência e `atendida` no payload; nenhum modo desliga a conferência em silêncio. |
+| **Denial of service** (sessão não inicia em `required`) | Falha explícita e acionável é desejada (fail-fast); a instalação padrão usa `preferred`. | Mensagem com sugestão (`LLM_JUDGE_INDEPENDENCE=preferred`). |
+| **Elevation of privilege** | Nenhuma: não há novo prompt, ferramenta, sandbox ou segredo; o juiz recebe o mesmo conteúdo. | Segredos continuam só em `.env`; os eventos não gravam credenciais nem texto de prompt. |
+
+Conclusão: sem bloqueio. Os requisitos S1 a S6 passam a valer na implementação e nos testes.
+
 ## 7. Retomada
 
 Na retomada, as famílias julgadas de todos os eventos `independencia_julgamento` da sessão original

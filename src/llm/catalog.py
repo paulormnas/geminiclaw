@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -73,6 +73,8 @@ class ModelEntry:
     # Declarações do operador (ADR 019 §1); nunca inferidas do endpoint. Padrões seguros.
     localidade: str = "fora_do_no"
     aceita_dados_brutos: bool = False  # valor efetivo (no_no implica True)
+    # Origem da declaração (ADR 020 §6): ``versionado`` ou ``local`` (catalog.local.yaml).
+    origem: str = "versionado"
 
 
 @dataclass(frozen=True)
@@ -388,6 +390,7 @@ def load_catalog(
             raise _fail(local_source, "papeis", "o catálogo local só pode ter a chave 'modelos'")
         _check_keys(local_data, _LOCAL_KEYS, local_source, "")
         local_models = _parse_models(local_data.get("modelos", []), local_source, registered, seen)
+        local_models = {key: replace(entry, origem="local") for key, entry in local_models.items()}
         models.update(local_models)
         digest_input = raw + local_raw
         local_used = local_source

@@ -3,9 +3,9 @@
 **Estado (2026-10-13):** Proposta, aguardando aprovação do ADR 020 (Proposto), das divergências registradas nele e o parecer do Analista de Segurança (design §6).
 
 ## 0. Pré-requisitos
-- [ ] 0.1 ADR 020 aprovado; divergências 1 e 2 decididas pelo pesquisador.
-- [ ] 0.2 Parecer do Analista de Segurança sobre o egresso (design §6).
-- [ ] 0.3 Worktree `.worktrees/feat-v18.6-validator-independence`.
+- [x] 0.1 ADR 020 aprovado (PR #143); divergências 1 e 2 decididas (dica descartada; padrão `preferred` em `self_hosted_only`).
+- [x] 0.2 Parecer de segurança (STRIDE curto) sobre o egresso no design §6; sem bloqueio, requisitos S1 a S6.
+- [x] 0.3 Worktree `.worktrees/feat-v18.6-validator-independence`.
 
 ## 1. Modo
 - [ ] 1.1 `effective_judge_mode` e `LLM_JUDGE_INDEPENDENCE` em `src/config.py` e `.env.example` (design §2).

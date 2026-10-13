@@ -44,7 +44,7 @@
 - [ ] 6.2 `cached_input` dos modelos OpenAI da matriz, com fonte e data. _Aberto: falta o preço oficial dos modelos GPT da matriz (o código não tem fonte e a tabela não é preenchida por suposição); `LLM_PRICING_OVERRIDES` já aceita o terceiro valor._
 - [x] 6.3 Teste: "Responses com cache" e o equivalente de Chat Completions.
 
-## 6b. Juiz independente na matriz (ADR 020 item 9)
+## 6b. Juiz independente na matriz (ADR 020 §7)
 _Pendente por inteiro: depende da aprovação do ADR 020 e de `v18.6-validator-independence`._
 - [ ] 6b.1 `build_env` não expande `*` para `VALIDATOR` e `REVIEWER`; a combinação declara o juiz.
 - [ ] 6b.2 Recusa da combinação com juiz da mesma família do `developer`, salvo `"independencia_julgamento": "off"` (controle); a família vem do catálogo.

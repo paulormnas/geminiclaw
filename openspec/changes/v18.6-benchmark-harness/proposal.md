@@ -60,7 +60,7 @@ e de `v18.6-validator-independence`.
   aprovadas, e a contagem de motivos de parada.
 - **Modificado:** custo: o provedor OpenAI passa a informar `cached_tokens`, e a tabela de
   preços ganha `cached_input` para os modelos GPT usados (fonte oficial citada no código).
-- **Novo:** juiz declarado por combinação (ADR 020, item 9): o `*` não cobre `validator` e
+- **Novo:** juiz declarado por combinação (ADR 020 §7): o `*` não cobre `validator` e
   `reviewer`; combinação com juiz da família do `developer` é recusada, salvo a combinação de
   controle (`"independencia_julgamento": "off"`); a matriz da próxima rodada tem ao menos uma.
 - **Fora do escopo:**

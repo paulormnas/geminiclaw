@@ -215,10 +215,15 @@ class FakeResourceSampler:
 
 
 def _run_fake_combination(monkeypatch, tmp_path, *, reset=False, work=lambda: None, nodes=None, interval=5.0,
-                          session: Path | None = None):
+                          session: Path | None = None, combo: dict | None = None, popen_env: dict | None = None):
     """Roda ``run_combination`` sem subprocesso, banco ou Qdrant reais."""
     nodes = nodes if nodes is not None else {"n": 0}
-    monkeypatch.setattr(run_benchmark.subprocess, "Popen", lambda *a, **k: FakeProc(work))
+    def fake_popen(*a, **k):
+        if popen_env is not None:
+            popen_env.update(k["env"])
+        return FakeProc(work)
+
+    monkeypatch.setattr(run_benchmark.subprocess, "Popen", fake_popen)
     monkeypatch.setattr(run_benchmark, "ResourceSampler", FakeResourceSampler)
     monkeypatch.setattr(footprint, "snapshot", lambda: {})
     monkeypatch.setattr(footprint, "session_operation_metrics", lambda s: None)
@@ -235,7 +240,7 @@ def _run_fake_combination(monkeypatch, tmp_path, *, reset=False, work=lambda: No
         "accuracy_validated": None, "accuracy_source": "grafo_validado", "checks_validated": None})
     monkeypatch.setattr(run_benchmark, "_save_log", lambda name, log: str(tmp_path / f"{name}.log"))
     return run_combination(
-        {"name": "combo", "roles": {"*": "anthropic/claude-haiku-5-5"}, "sem_projeto": True}, "tarefa",
+        combo or {"name": "combo", "roles": {"*": "anthropic/claude-haiku-5-5"}, "sem_projeto": True}, "tarefa",
         {"DATABASE_URL": BENCH_URL}, 60, tmp_path / "outputs", None,
         repeticao=1, results_path=tmp_path / "results.json", target=make_target(), reset=reset,
         store_sample_seconds=interval,
@@ -485,3 +490,74 @@ def test_responses_com_cache_cobra_800_tokens_a_preco_de_cache(monkeypatch) -> N
     chat._post_with_retry = fake_post  # type: ignore[method-assign]
     chat_usage = asyncio.run(chat.generate([{"role": "user", "content": "oi"}])).usage
     assert chat_usage["cached_tokens"] == 800
+
+
+# --- Juiz declarado por combinação (ADR 020 §7) ---------------------------------------------------------------------
+
+HAIKU, SONNET, GEMINI = "anthropic/claude-haiku-5-5", "anthropic/claude-sonnet-5-5", "google/gemini-3.8-flash"
+
+
+def test_juiz_nao_declarado() -> None:
+    """Cenário "Juiz não declarado": o '*' não cobre o validator; a mensagem pede o VALIDATOR."""
+    combo = {"name": "c", "roles": {"*": HAIKU}}
+    with pytest.raises(run_benchmark.CombinationRefused, match="VALIDATOR"):
+        run_benchmark.validate_combination(combo)
+    env = run_benchmark.build_env({"VALIDATOR_MODEL": "x", "REVIEWER_MODEL": "y"}, combo["roles"])
+    assert "VALIDATOR_MODEL" not in env and "REVIEWER_MODEL" not in env
+    assert env["DEVELOPER_MODEL"] == HAIKU and env["BASE_MODEL"] == HAIKU
+
+
+def test_juiz_da_mesma_familia() -> None:
+    """Cenário "Juiz da mesma família": claude nos dois lados é recusado; outra família passa."""
+    combo = {"name": "c", "roles": {"*": HAIKU, "VALIDATOR": SONNET}}
+    with pytest.raises(run_benchmark.CombinationRefused, match="claude"):
+        run_benchmark.validate_combination(combo)
+    run_benchmark.validate_combination({"name": "c", "roles": {"*": HAIKU, "VALIDATOR": GEMINI}})
+    with pytest.raises(run_benchmark.CombinationRefused, match="REVIEWER"):
+        run_benchmark.validate_combination({"name": "c", "roles": {"*": HAIKU, "VALIDATOR": GEMINI, "REVIEWER": SONNET}})
+
+
+def test_combinacao_de_controle(monkeypatch, tmp_path) -> None:
+    """Cenário "Combinação de controle": aceita na validação, LLM_JUDGE_INDEPENDENCE=off no subprocesso, controle: true."""
+    combo = {"name": "controle", "roles": {"*": HAIKU, "VALIDATOR": SONNET}, "independencia_julgamento": "off",
+             "sem_projeto": True}
+    run_benchmark.validate_combination(combo)
+    seen: dict = {}
+    result = _run_fake_combination(monkeypatch, tmp_path, combo=combo, popen_env=seen)
+    assert seen["LLM_JUDGE_INDEPENDENCE"] == "off" and seen["VALIDATOR_MODEL"] == SONNET
+    assert result["controle"] is True
+    normal = {"name": "n", "roles": {"*": HAIKU, "VALIDATOR": GEMINI}, "sem_projeto": True}
+    seen2: dict = {}
+    result2 = _run_fake_combination(monkeypatch, tmp_path, combo=normal, popen_env=seen2)
+    assert result2["controle"] is False and "LLM_JUDGE_INDEPENDENCE" not in seen2
+
+
+def test_combinacao_de_controle_exige_validator_e_valor_off() -> None:
+    with pytest.raises(run_benchmark.CombinationRefused, match="VALIDATOR"):
+        run_benchmark.validate_combination({"name": "c", "roles": {"*": HAIKU}, "independencia_julgamento": "off"})
+    with pytest.raises(run_benchmark.CombinationRefused, match="off"):
+        run_benchmark.validate_combination(
+            {"name": "c", "roles": {"*": HAIKU, "VALIDATOR": GEMINI}, "independencia_julgamento": "on"})
+
+
+def test_check_pins_juiz_e_registro_de_independencia() -> None:
+    """check_pins: juiz não herda '*'; registro independencia_julgamento esperado conforme o controle."""
+    roles = {"*": HAIKU, "VALIDATOR": SONNET}
+    routing = {"papeis": {"developer": {"id": HAIKU, "origem": "pin"}, "base": {"id": HAIKU, "origem": "pin"},
+                          "researcher": {"id": HAIKU, "origem": "pin"}, "summarizer": {"id": HAIKU, "origem": "pin"},
+                          "validator": {"id": SONNET, "origem": "pin"},
+                          "reviewer": {"id": GEMINI, "origem": "preferencia"}},
+               "independencia_julgamento": {"modo": "off"}}
+    assert run_benchmark.check_pins(roles, routing, controle=True) == []
+    problems = run_benchmark.check_pins(roles, routing, controle=False)
+    assert len(problems) == 1 and "off" in problems[0]
+    routing["independencia_julgamento"] = {"modo": "required"}
+    assert "controle" in run_benchmark.check_pins(roles, routing, controle=True)[0]
+
+
+def test_matriz_v18_6_valida() -> None:
+    """A matriz versionada passa na validação e inclui ao menos uma combinação de controle."""
+    matrix = json.loads(Path("scripts/benchmark/matrix_modelos_v18_6.json").read_text(encoding="utf-8"))
+    for combo in matrix["combinations"]:
+        run_benchmark.validate_combination(combo)
+    assert any(run_benchmark.is_control(c) for c in matrix["combinations"])

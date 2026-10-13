@@ -13,7 +13,8 @@ grava o arquivo de segurança e recria o banco e as coleções do sistema do Qdr
 Sem a flag nada é apagado e cada resultado traz ``isolated: false``. ``--repeat N`` roda cada combinação N
 vezes (chave ``(nome, repeticao)``, então uma matriz interrompida é retomada).
 Cada repetição é arquivada em ``<results>.d/<combinação>/r<r>/`` (sessão, log, eventos,
-grafo do projeto e ``pre_reset/``). Códigos de saída: 2 guarda do reset recusou, 3 anomalia com
+grafo do projeto e ``pre_reset/``). Códigos de saída: 2 guarda do reset ou combinação sem juiz independente (ADR 020 §7)
+recusada, 3 anomalia com
 ``--fail-fast``, 4 reset ou conferência falhou.
 
 Cada combinação vira um subprocesso ``main.py --mode auto`` com as variáveis de papel
@@ -54,6 +55,58 @@ from scripts.benchmark.scoring import (
 )
 
 ROLES = ("RESEARCHER", "VALIDATOR", "DEVELOPER", "BASE", "SUMMARIZER", "REVIEWER")
+# Papéis de julgamento: o ``*`` não os cobre; a combinação os declara (ADR 020 §7).
+JUDGE_ROLES = ("VALIDATOR", "REVIEWER")
+
+
+class CombinationRefused(ValueError):
+    """Combinação que viola a independência do julgamento (ADR 020 §7); recusada antes de rodar."""
+
+
+def model_family(spec: str) -> str:
+    """``familia_modelo`` do catálogo efetivo para ``provedor/modelo``; falha se o modelo não está no catálogo."""
+    from src.llm.catalog import load_catalog
+
+    entry = load_catalog().modelos.get(spec)
+    if entry is None:
+        raise CombinationRefused(f"modelo '{spec}' fora do catálogo: não há família para conferir a independência.")
+    return entry.familia_modelo
+
+
+def is_control(combo: dict) -> bool:
+    """Combinação de controle: marcada com ``"independencia_julgamento": "off"``."""
+    return combo.get("independencia_julgamento") == "off"
+
+
+def validate_combination(combo: dict, family_of=model_family) -> None:
+    """Confere o juiz declarado da combinação (ADR 020 §7).
+
+    O ``validator`` MUST ser declarado e ter família diferente da do ``developer`` (``DEVELOPER`` ou ``*``);
+    o ``reviewer``, quando declarado, segue a mesma regra. A marca ``"independencia_julgamento": "off"``
+    (controle) dispensa a regra de família, mas não a declaração do ``validator``.
+
+    Raises:
+        CombinationRefused: Juiz não declarado ou da mesma família do ``developer`` sem a marca de controle.
+    """
+    name, roles = combo.get("name", "?"), combo["roles"]
+    marca = combo.get("independencia_julgamento")
+    if marca not in (None, "off"):
+        raise CombinationRefused(f"{name}: 'independencia_julgamento' só aceita \"off\" (recebido {marca!r}).")
+    if not roles.get("VALIDATOR"):
+        raise CombinationRefused(
+            f"{name}: o '*' não cobre o juiz; declare o VALIDATOR (e o REVIEWER, se a tarefa o usar) em 'roles'."
+        )
+    developer = roles.get("DEVELOPER", roles.get("*"))
+    if developer is None or is_control(combo):
+        return
+    dev_family = family_of(developer)
+    for role in JUDGE_ROLES:
+        spec = roles.get(role)
+        if spec and family_of(spec) == dev_family:
+            raise CombinationRefused(
+                f"{name}: {role} ({spec}) tem a família '{dev_family}' do developer ({developer}); "
+                'use outra família ou marque a combinação como controle com "independencia_julgamento": "off".'
+            )
 
 
 def build_env(base: dict[str, str], roles: dict[str, str], extra: dict[str, str] | None = None) -> dict[str, str]:
@@ -74,7 +127,7 @@ def build_env(base: dict[str, str], roles: dict[str, str], extra: dict[str, str]
     for role in ROLES:
         env.pop(f"{role}_PROVIDER", None)
     default = roles.get("*")
-    assignments = {role: roles.get(role, default) for role in ROLES}
+    assignments = {role: roles.get(role) if role in JUDGE_ROLES else roles.get(role, default) for role in ROLES}
     for role, spec in assignments.items():
         if spec is None:
             env.pop(f"{role}_MODEL", None)
@@ -88,11 +141,15 @@ def build_env(base: dict[str, str], roles: dict[str, str], extra: dict[str, str]
     return env
 
 
-def check_pins(roles: dict[str, str], llm_routing: dict | None) -> list[str]:
+def check_pins(roles: dict[str, str], llm_routing: dict | None, controle: bool = False) -> list[str]:
     """Confere o mapa resolvido da sessão com os pins da combinação (modo ``flexible``).
 
     Em ``flexible`` um pin que não vale cai em silêncio na preferência do catálogo; sem esta
     conferência o resultado seria atribuído a um modelo que não rodou.
+
+    Os papéis de julgamento não herdam o ``*`` (só são conferidos se declarados). Se o mapa traz o registro
+    ``independencia_julgamento`` (ADR 020 §7), o modo efetivo deve ser ``off`` na combinação de controle e
+    diferente de ``off`` nas demais.
 
     Returns:
         Divergências legíveis (vazio = todos os papéis rodaram no modelo pedido).
@@ -103,7 +160,7 @@ def check_pins(roles: dict[str, str], llm_routing: dict | None) -> list[str]:
     resolved = llm_routing.get("papeis", {})
     problems = []
     for role in ROLES:
-        expected = roles.get(role, default)
+        expected = roles.get(role) if role in JUDGE_ROLES else roles.get(role, default)
         if expected is None:
             continue
         entry = resolved.get(role.lower())
@@ -113,6 +170,13 @@ def check_pins(roles: dict[str, str], llm_routing: dict | None) -> list[str]:
             problems.append(
                 f"{role}: pedido {expected}, rodou {entry.get('id')} (origem={entry.get('origem')})"
             )
+    registro = llm_routing.get("independencia_julgamento")
+    if registro is not None:
+        modo = registro.get("modo") if isinstance(registro, dict) else registro
+        if controle and modo != "off":
+            problems.append(f"independencia_julgamento: controle esperava modo off, registrou {modo}")
+        elif not controle and modo == "off":
+            problems.append("independencia_julgamento: modo off registrado numa combinação que não é de controle")
     return problems
 
 
@@ -283,7 +347,9 @@ def run_combination(
     Raises:
         ResetError: O reset ou a conferência pós-reset falhou (o runner termina com código 4).
     """
-    env = build_env(env_base, combo["roles"], {**(extra_env or {}), **combo.get("env", {})})
+    controle = is_control(combo)
+    judge_env = {"LLM_JUDGE_INDEPENDENCE": "off"} if controle else {}
+    env = build_env(env_base, combo["roles"], {**(extra_env or {}), **combo.get("env", {}), **judge_env})
     archive_dir = archive_dir_for(results_path, combo["name"], repeticao) if results_path else None
     reset_report = None
     if reset and target is not None and archive_dir is not None:
@@ -301,7 +367,7 @@ def run_combination(
         except Exception as exc:  # noqa: BLE001 - registrado; a combinação não roda sem projeto
             seed_error = f"{type(exc).__name__}: {exc}"
     base_result = {"name": combo["name"], "roles": combo["roles"], "repeticao": repeticao,
-                   "isolated": bool(reset_report), "reset": reset_report}
+                   "controle": controle, "isolated": bool(reset_report), "reset": reset_report}
     before = footprint.snapshot()
     started_wall = time.time()
     start = time.monotonic()
@@ -359,7 +425,7 @@ def run_combination(
                       acuracia_declarada_texto=text_score["acuracia_declarada_texto"],
                       tokens=sum_tokens(usage), db=db_metrics(session.name), **board)
         result["anomalias_placar"] = scoreboard_anomalies(board)
-        divergences = check_pins(combo["roles"], db_llm_routing(session.name))
+        divergences = check_pins(combo["roles"], db_llm_routing(session.name), controle)
         result["routing_check"] = {"ok": not divergences, "divergences": divergences}
         for line in divergences:
             print(f"[benchmark] AVISO {combo['name']}: {line}")
@@ -489,7 +555,15 @@ def main() -> None:
         for provider, cost in r.get("tokens", {}).get("cost_by_provider", {}).items():
             spent[provider] = spent.get(provider, 0.0) + cost
 
-    for combo, repeticao in pending_runs(matrix["combinations"], results, args.repeat, args.only):
+    pending = pending_runs(matrix["combinations"], results, args.repeat, args.only)
+    try:
+        for combo in {c["name"]: c for c, _ in pending}.values():
+            validate_combination(combo)
+    except CombinationRefused as exc:
+        print(f"[benchmark] COMBINAÇÃO RECUSADA: {exc}", file=sys.stderr, flush=True)
+        sys.exit(2)
+
+    for combo, repeticao in pending:
         required = combo.get("requires")
         providers = {spec.partition("/")[0] for spec in combo["roles"].values()}
         over = next((p for p in providers if p in budget and spent.get(p, 0.0) >= budget[p]), None)

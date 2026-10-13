@@ -110,7 +110,7 @@ class TestRunner:
     def test_build_env_default_and_override(self):
         env = run_benchmark.build_env({"X": "1"}, {"DEVELOPER": "google/a", "*": "anthropic/b"})
         assert env["DEVELOPER_MODEL"] == "google/a"
-        assert env["BASE_MODEL"] == "anthropic/b" and env["REVIEWER_MODEL"] == "anthropic/b"
+        assert env["BASE_MODEL"] == "anthropic/b" and "REVIEWER_MODEL" not in env  # juiz não herda o "*"
         assert env["X"] == "1"
 
     def test_build_env_usa_pins_sem_variaveis_removidas(self):
@@ -125,7 +125,7 @@ class TestRunner:
             run_benchmark.build_env({}, {"*": "modelo-sem-barra"})
 
     def test_check_pins_ok_e_divergencias(self):
-        roles = {"DEVELOPER": "google/a", "*": "anthropic/b"}
+        roles = {"DEVELOPER": "google/a", "VALIDATOR": "anthropic/b", "REVIEWER": "anthropic/b", "*": "anthropic/b"}
         ok = {"papeis": {r.lower(): {"id": "anthropic/b", "origem": "pin"} for r in run_benchmark.ROLES}}
         ok["papeis"]["developer"] = {"id": "google/a", "origem": "pin_legado"}
         assert run_benchmark.check_pins(roles, ok) == []

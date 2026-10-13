@@ -157,7 +157,7 @@ tempo, custo, acurácia validada e subtarefas aprovadas, e a contagem por motivo
 O runner SHALL não expandir o pin `*` para os papéis `validator` e `reviewer`, SHALL recusar a
 combinação cujo `validator` não está declarado ou tem a família do `developer`, salvo quando marcada
 com `"independencia_julgamento": "off"`, e SHALL registrar a marca no resultado
-(ADR 020, item 9).
+(ADR 020 §7).
 
 #### Scenario: Juiz não declarado
 - **GIVEN** a combinação `{"roles": {"*": "anthropic/claude-haiku-5-5"}}`

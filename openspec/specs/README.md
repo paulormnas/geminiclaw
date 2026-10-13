@@ -5,12 +5,15 @@ Verdade atual do sistema, organizada por capacidade (`specs/<capacidade>/spec.md
 Os requisitos são consolidados aqui quando cada mudança de `openspec/changes/` é implementada,
 integrada em `dev` e arquivada. A primeira consolidação (2026-10-13) reuniu as 32 mudanças de V16 a
 V18.5: requisitos `ADDED` e `MODIFIED` em ordem cronológica (o último vence) e `REMOVED` listados no
-fim de cada arquivo. Cada requisito cita a mudança de origem.
+fim de cada arquivo. Cada requisito cita a mudança de origem. A segunda consolidação (2026-10-13)
+acrescentou as 4 mudanças da V18.6 (`pipeline-robustness`, `benchmark` (nova), `llm-providers` e
+`hypothesis-loop`).
 
 | Capacidade | Arquivo |
 |---|---|
 | `agent-prompts` | [`agent-prompts/spec.md`](agent-prompts/spec.md) |
 | `agent-runtime` | [`agent-runtime/spec.md`](agent-runtime/spec.md) |
+| `benchmark` | [`benchmark/spec.md`](benchmark/spec.md) |
 | `claim-verification` | [`claim-verification/spec.md`](claim-verification/spec.md) |
 | `code-sandbox` | [`code-sandbox/spec.md`](code-sandbox/spec.md) |
 | `communication-eval` | [`communication-eval/spec.md`](communication-eval/spec.md) |

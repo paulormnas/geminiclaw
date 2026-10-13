@@ -1,6 +1,6 @@
 # ADR 020 — Independência do Julgamento: Família de Modelo do Validator Diferente da do Developer
 
-**Status:** Aprovado (2026-10-13, pesquisador; as propostas adotadas nas duas divergências valem)
+**Status:** Parcialmente implementado — as duas mudanças OpenSpec (`v18.6-validator-independence`, `v18.6-benchmark-harness`) estão mergeadas e arquivadas (2026-10-13); para Aceito faltam a matriz com bancos isolados e 3 repetições no Pi 5 (só com confirmação do pesquisador) e a confirmação da composição da matriz `matrix_modelos_v18_6.json`; a revisão prevista na seção Revisão depende dessa rodada (aprovado em 2026-10-13 pelo pesquisador; atualizado em 2026-10-13)
 **Data:** 2026-10-13
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** `roadmaps/roadmap_V18.6.md`
@@ -224,10 +224,10 @@ A telemetria da revisão de subtarefa passa a registrar o papel `validator` com
 
 ## Mudanças OpenSpec exigidas
 
-| Mudança | Escopo |
-|---|---|
-| [`v18.6-validator-independence`](../../openspec/changes/v18.6-validator-independence/proposal.md) | §1 a §6 e o juiz da avaliação de comunicação (§7): roteador, despacho, dicas, reserva, modos, catálogo, registro, retomada |
-| [`v18.6-benchmark-harness`](../../openspec/changes/v18.6-benchmark-harness/proposal.md) | Runner do §7: juiz declarado por combinação, combinação de controle, `check_pins` |
+| Mudança | Escopo | Estado | PR |
+|---|---|---|---|
+| [`v18.6-validator-independence`](../../openspec/changes/archive/v18.6-validator-independence/proposal.md) | §1 a §6 e o juiz da avaliação de comunicação (§7): roteador, despacho, dicas, reserva, modos, catálogo, registro, retomada | Concluída e arquivada | #145 |
+| [`v18.6-benchmark-harness`](../../openspec/changes/archive/v18.6-benchmark-harness/proposal.md) | Runner do §7: juiz declarado por combinação, combinação de controle, `check_pins` | Concluída e arquivada, com pendências (composição da matriz a confirmar; `cached_input` OpenAI; matrizes antigas recusadas) | #144 |
 
 ## Revisão
 

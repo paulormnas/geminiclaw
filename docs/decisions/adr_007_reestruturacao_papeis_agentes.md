@@ -5,6 +5,11 @@
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** `roadmaps/roadmap_V14.md`
 
+> **Atualização 2026-10-13 (ADR 020):** o papel e o agente `reviewer` continuam no código e passam a ser
+> papel de juiz: o Validator e o `reviewer` usam família de modelo diferente da do Developer
+> (`v18.6-validator-independence`, #145). A chamada de revisão de subtarefa é registrada com o papel
+> `validator`.
+>
 > **Revisado pelo ADR 017 (2026-10-01):** o Validator não precisa mais usar modelo local
 > (`trust: self_hosted`); a escolha de modelo por papel passa ao catálogo e ao roteador do ADR 017.
 

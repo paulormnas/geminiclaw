@@ -1,5 +1,11 @@
 # Roadmap V18.6 — Correções do Benchmark de 2026-10-13
 
+> **Estado (2026-10-13):** as Tarefas 1 a 4 estão concluídas, mergeadas em `dev` (#142, #144, #145, #146)
+> e arquivadas em `openspec/changes/archive/`, com os requisitos consolidados em `openspec/specs/`. A
+> etapa **não está encerrada**: faltam a matriz com bancos isolados e 3 repetições no Pi 5 (só com
+> confirmação do pesquisador), o parecer de segurança da Tarefa 1 e as respostas do pesquisador às
+> questões de design (ver "Pendências conhecidas"). Itens abertos: [`PENDENCIAS.md`](../openspec/changes/archive/PENDENCIAS.md).
+
 ## Objetivo
 
 Fazer o ciclo de pesquisa autônomo concluir por critério científico, não por regra do framework, e
@@ -14,7 +20,7 @@ e da investigação dos eventos e do grafo gravados no Pi 5:
 - o placar do benchmark lia números do texto (a acurácia 1,000 era uma contagem);
 - o Validator julgava o trabalho do próprio modelo.
 
-ADRs de origem: 002, 005, 009, 010, 012, 015, 019 e o ADR 020 (novo, Proposto).
+ADRs de origem: 002, 005, 009, 010, 012, 015, 019 e o ADR 020 (aprovado em 2026-10-13; Parcialmente implementado).
 
 ## Decisões do pesquisador (2026-10-13)
 
@@ -28,28 +34,28 @@ ADRs de origem: 002, 005, 009, 010, 012, 015, 019 e o ADR 020 (novo, Proposto).
 ## Dependências
 
 - V18.5 mergeada em `dev` (todas as mudanças estão mergeadas).
-- ADR 020 aprovado, para a Tarefa 3 e o item de juiz da Tarefa 4.
+- ADR 020 aprovado, para a Tarefa 3 e o item de juiz da Tarefa 2 (atendido em 2026-10-13, PR #143).
 
 ## Tarefas
 
 ### Tarefa 1: Evidência e tolerância na revisão
-- **Spec:** [`v18.6-review-evidence`](../openspec/changes/v18.6-review-evidence/proposal.md)
-- **Critérios de aceite:** [ ] `test_accuracy` satisfaz critério de acurácia; `cv_*` não · [ ] `metrics.json` com `metricas` e grupos por modelo · [ ] critério com várias comparações · [ ] perfil estrutural de CSV/JSON como `esquema_agregado` · [ ] `script.py` resolve o `.py` esperado · [ ] baseline `validation` sem hipótese não exige limiar
+- **Spec:** [`v18.6-review-evidence`](../openspec/changes/archive/v18.6-review-evidence/proposal.md) · **Estado (2026-10-13):** concluída e arquivada, #142
+- **Critérios de aceite:** [x] `test_accuracy` satisfaz critério de acurácia; `cv_*` não · [x] `metrics.json` com `metricas` e grupos por modelo · [x] critério com várias comparações · [x] perfil estrutural de CSV/JSON como `esquema_agregado` · [x] `script.py` resolve o `.py` esperado · [x] baseline `validation` sem hipótese não exige limiar
 - **Complexidade estimada:** Média
 
 ### Tarefa 2: Benchmark com bancos isolados e placar independente
-- **Spec:** [`v18.6-benchmark-harness`](../openspec/changes/v18.6-benchmark-harness/proposal.md)
-- **Critérios de aceite:** [ ] reset com quatro guardas e arquivo de segurança · [ ] vocabulário semeado e conferido · [ ] série de crescimento das memórias · [ ] acurácia oficial só de resultado validado · [ ] arquivamento da sessão · [ ] `--repeat N` com agregados · [ ] juiz declarado por combinação e combinação de controle
+- **Spec:** [`v18.6-benchmark-harness`](../openspec/changes/archive/v18.6-benchmark-harness/proposal.md) · **Estado (2026-10-13):** concluída e arquivada, #144
+- **Critérios de aceite:** [x] reset com quatro guardas e arquivo de segurança · [x] vocabulário semeado e conferido · [x] série de crescimento das memórias · [x] acurácia oficial só de resultado validado · [x] arquivamento da sessão · [x] `--repeat N` com agregados · [x] juiz declarado por combinação e combinação de controle
 - **Complexidade estimada:** Média
 
 ### Tarefa 3: Independência do julgamento
-- **Spec:** [`v18.6-validator-independence`](../openspec/changes/v18.6-validator-independence/proposal.md)
-- **Critérios de aceite:** [ ] `validator` de família diferente do `developer` na inicialização · [ ] conferência no despacho de dicas, `base`, `reviewer` e reserva do 429 · [ ] modo por política · [ ] registro no banner, payload, relatório e retomada
+- **Spec:** [`v18.6-validator-independence`](../openspec/changes/archive/v18.6-validator-independence/proposal.md) · **Estado (2026-10-13):** concluída e arquivada, #145
+- **Critérios de aceite:** [x] `validator` de família diferente do `developer` na inicialização · [x] conferência no despacho de dicas, `base`, `reviewer` e reserva do 429 · [x] modo por política · [x] registro no banner, payload, relatório e retomada
 - **Complexidade estimada:** Média
 
 ### Tarefa 4: Fechamento de hipóteses e resultado negativo
-- **Spec:** [`v18.6-hypothesis-closure`](../openspec/changes/v18.6-hypothesis-closure/proposal.md)
-- **Critérios de aceite:** [ ] resultado negativo conclui a subtarefa e conta como progresso · [ ] `Experimento` em `sucesso` e veredito com a tentativa · [ ] `veredito_indisponivel` no início da sessão · [ ] `sem_caminhos_promissores` só com todas as hipóteses testadas · [ ] evidência para frases sem código e `afirmacoes.json` sempre gravado
+- **Spec:** [`v18.6-hypothesis-closure`](../openspec/changes/archive/v18.6-hypothesis-closure/proposal.md) · **Estado (2026-10-13):** concluída e arquivada, #146
+- **Critérios de aceite:** [x] resultado negativo conclui a subtarefa e conta como progresso · [x] `Experimento` em `sucesso` e veredito com a tentativa · [x] `veredito_indisponivel` no início da sessão · [x] `sem_caminhos_promissores` só com todas as hipóteses testadas · [x] evidência para frases sem código e `afirmacoes.json` sempre gravado
 - **Complexidade estimada:** Alta
 
 ## Ordem de implementação
@@ -62,8 +68,18 @@ Depois:            bateria no Pi (com confirmação do pesquisador) e matriz com
 ```
 
 ## Validação da Etapa
-- [ ] Todos os testes unitários e de integração passam.
-- [ ] Validação real no Raspberry Pi 5: matriz com bancos isolados e 3 repetições, só depois da confirmação do pesquisador.
-- [ ] Revisões do Analista de Segurança concluídas (Tarefas 1 e 3).
-- [ ] ADR 020 Aceito.
-- [ ] PRs merged em `dev`; mudanças arquivadas.
+- [x] Todos os testes unitários e de integração passam. _Pi 5, 2026-10-13, `uv run pytest -m "unit or integration"`: #142 3434 passed; #144 3468; #145 3475; #146 3534. Todos com 1 falha preexistente, fora do escopo: `test_similarity_queue_integration::test_fluxo_completo_da_fila` (item `x` sobrando na fila compartilhada do Pi; falha também na `dev` antiga)._
+- [ ] Validação real no Raspberry Pi 5: matriz com bancos isolados e 3 repetições, só depois da confirmação do pesquisador. _Pendente. A composição de `scripts/benchmark/matrix_modelos_v18_6.json` (três combinações com juiz de outra família e `controle-gemini-todos`) também aguarda confirmação._
+- [ ] Revisões do Analista de Segurança concluídas (Tarefas 1 e 3). _Tarefa 3: feita no design §6 de `v18.6-validator-independence`, sem bloqueio (requisitos S1 a S6). **Tarefa 1 pendente:** parecer sobre o perfil estrutural de CSV/JSON (`v18.6-review-evidence`, design §4)._
+- [ ] ADR 020 Aceito. _Hoje Parcialmente implementado: depende da matriz acima e da revisão prevista no próprio ADR._
+- [x] PRs merged em `dev`; mudanças arquivadas. _#142, #144, #145 e #146 mergeados; as 4 mudanças arquivadas e os ADRs 002, 005, 009, 010, 012, 015, 019 e 020 atualizados (PR de fechamento documental)._
+
+## Pendências conhecidas
+
+- **Questões do design §8:** as respostas do pesquisador a `v18.6-review-evidence` e a `v18.6-hypothesis-closure` (e a `v18.6-benchmark-harness`, 0.1) não foram dadas; vigoram as propostas dos designs.
+- **`v18.6-benchmark-harness` 6.2:** falta o preço oficial `cached_input` dos modelos OpenAI da matriz (fonte e data); sem ele o token em cache é cobrado ao preço de entrada e o custo é superestimado. Não foi inventado.
+- **`v18.6-review-evidence` 7.2 (parcial):** a conferência exata sobre os `metrics.json`, planos e nós `Resultado` do benchmark de 2026-10-13 não é possível (apagados do Pi); só há a classificação textual dos eventos, com limites superiores.
+- **`v18.6-hypothesis-closure` 6.1:** a causa da ausência de `afirmacoes.json` na sessão do Sonnet (2026-10-12 21:53) não foi confirmada nos eventos do Pi; a tarefa 6.3 elimina o sintoma (arquivo sempre gravado, com `motivo_vazio`).
+- **Composição da matriz `matrix_modelos_v18_6.json`:** a confirmar com o pesquisador antes da rodada.
+- **Matrizes antigas:** `matrix_baixo_custo.json` e `matrix_modelos_2026_10.json` passaram a ser recusadas pelo runner (o `*` não cobre o juiz; o `VALIDATOR` precisa ser declarado, ADR 020 §7). Decidir entre migrá-las para o juiz declarado ou removê-las.
+- **Execução curta no Pi (`v18.6-benchmark-harness` 7.2):** uma combinação, `--repeat 1`, `--reset-stores`, só após confirmação do pesquisador.

@@ -93,13 +93,13 @@ def test_arquivo_reescrito_por_execucao_posterior_nao_e_alteracao(tmp_path):
     assert report.exit_code == EXIT_OK and states == ["ok", "substituido"] and path.exists()
 
 
-def _with_input(tmp_path: Path, ledger, content: str):
+def _with_input(tmp_path: Path, ledger, content: str, name: str = "script.py"):
     """Execução que registra um arquivo de ENTRADA real em disco (ex.: o ``script.py`` da subtarefa)."""
     out_dir = tmp_path / "outputs" / "s1" / "tarefa"
     out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / "script.py"
+    path = out_dir / name
     path.write_text(content, encoding="utf-8")
-    entrada = {"caminho": "s1/tarefa/script.py", "sha256": sha256_file(path), "tamanho": path.stat().st_size}
+    entrada = {"caminho": f"s1/tarefa/{name}", "sha256": sha256_file(path), "tamanho": path.stat().st_size}
     run_one(ledger, termino_over={"entradas": [entrada]})
     return path
 
@@ -108,12 +108,23 @@ def test_script_reescrito_pela_retentativa_nao_marca_a_cadeia_como_divergente(tm
     """Regressão do benchmark de 2026-10-12: cada retentativa sobrescreve ``script.py`` (entrada); só a referência
     mais recente vale contra o disco, as anteriores ficam substituídas."""
     ledger = make_ledger(tmp_path)
-    _with_input(tmp_path, ledger, "print(1)\n")
-    path = _with_input(tmp_path, ledger, "print(2)\n")
+    _with_input(tmp_path, ledger, "a,b\n1,2\n", name="dados.csv")
+    path = _with_input(tmp_path, ledger, "a,b\n3,4\n", name="dados.csv")
     report = verify_project(ledger.store, "proj", tmp_path / "outputs")
     assert report.integra and sorted(a["estado"] for a in report.arquivos) == ["ok", "substituido"]
-    path.write_text("print('adulterado')\n", encoding="utf-8")  # a última referência continua sendo conferida
+    path.write_text("a,b\n9,9\n", encoding="utf-8")  # a última referência continua sendo conferida
     assert not verify_project(ledger.store, "proj", tmp_path / "outputs").integra
+
+
+def test_codigo_gerado_como_entrada_nao_e_comparado_com_o_disco(tmp_path):
+    """O sandbox reescreve ``script.py`` a cada execução (a última pode nem listá-lo); a integridade do código de
+    cada execução é o ``hash_codigo`` do registro. Dados de entrada que não são ``.py`` continuam conferidos."""
+    ledger = make_ledger(tmp_path)
+    script = _with_input(tmp_path, ledger, "print(1)\n")
+    script.write_text("print('reescrito pela execução seguinte, sem registro')\n", encoding="utf-8")
+    report = verify_project(ledger.store, "proj", tmp_path / "outputs")
+    assert report.integra and [a["estado"] for a in report.arquivos] == ["substituido"]
+    assert report.arquivos[0]["detalhe"].startswith("código gerado")
 
 
 def test_orfa_sem_termino_apos_queda(tmp_path):

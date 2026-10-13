@@ -181,6 +181,12 @@ def _check_files(
                 if last_writer.get(caminho, 0) > rec.seq:
                     results.append({**entry, "estado": FILE_SUBSTITUIDO})
                     continue
+                if papel == "entrada" and caminho.endswith(".py"):
+                    # Código gerado (``script.py`` e afins): o sandbox o reescreve a cada execução e a integridade
+                    # de cada execução já está no ``hash_codigo`` do registro; comparar com o disco acusaria o
+                    # arquivo reescrito pela execução seguinte.
+                    results.append({**entry, "estado": FILE_SUBSTITUIDO, "detalhe": "código gerado: hash_codigo"})
+                    continue
                 if expected is None:
                     results.append({**entry, "estado": FILE_AUSENTE, "detalhe": "hash não registrado"})
                     continue

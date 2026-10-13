@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import json
+import statistics
 import sys
+from collections import Counter
 from pathlib import Path
+
+from scripts.benchmark import footprint
 
 
 def _fmt(stats: dict | None, key: str = "max", suffix: str = "") -> str:
@@ -19,24 +23,90 @@ def _cost(tokens: dict) -> str:
 
 
 def render(results: list[dict]) -> str:
-    header = ("| Combinação | Status | Tempo (s) | Tokens in | Tokens out | Subtarefas ok | Checklist | Acurácia | "
-              "CPU sis. máx (%) | RAM máx (MB) | Temp máx (°C) | Throttling | Custo (USD) | Retentativas |\n"
-              "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+    header = ("| Combinação | Rep. | Status | Tempo (s) | Tokens in | Tokens out | Subtarefas ok | Checklist | "
+              "Acurácia | CPU sis. máx (%) | RAM máx (MB) | Temp máx (°C) | Throttling | Custo (USD) | Retentativas |\n"
+              "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     rows = [header]
     for r in results:
         if r["status"] == "skipped":
-            rows.append(f"| {r['name']} | pulada ({r.get('reason', '')}) |" + " - |" * 12)
+            rows.append(f"| {r['name']} | {r.get('repeticao', 1)} | pulada ({r.get('reason', '')}) |" + " - |" * 12)
+            continue
+        if not r.get("resources"):  # reset_error ou seed_error: nada foi medido
+            rows.append(f"| {r['name']} | {r.get('repeticao', 1)} | {r['status']} |" + " - |" * 12)
             continue
         res, tok = r["resources"], r.get("tokens", {})
-        out, score = r.get("outcome", {}), r.get("score", {})
-        acc = score.get("accuracy")
+        out = r.get("outcome", {})
+        acc = r.get("accuracy_validated")
+        checks = r.get("checks_validated")
+        checklist = f"{sum(checks.values())}/{len(checks)}" if checks else "-"
         rows.append(
-            f"| {r['name']} | {r['status']} | {r['wall_seconds']} | {tok.get('prompt_tokens', '-')} | "
+            f"| {r['name']} | {r.get('repeticao', 1)} | {r['status']} | {r['wall_seconds']} | "
+            f"{tok.get('prompt_tokens', '-')} | "
             f"{tok.get('completion_tokens', '-')} | {out.get('subtasks_ok', '-')}/{out.get('subtasks', '-')} | "
-            f"{score.get('score', '-')}/{score.get('max_score', '-')} | {'-' if acc is None else f'{acc:.3f}'} | "
+            f"{checklist} | {'-' if acc is None else f'{acc:.3f}'} | "
             f"{_fmt(res['sys_cpu_pct'])} | {_fmt(res['mem_used_mb'])} | {_fmt(res['temp_c'])} | "
             f"{', '.join(res['throttled']) or 'não'} | {_cost(tok)} | "
             f"{r.get('db', {}).get('connection_retries', '-')} |"
+        )
+    return "\n".join(rows)
+
+
+def _stats(values: list[float]) -> str:
+    """``média ± desvio [mín, máx]`` (desvio amostral; ``-`` sem valores, sem desvio com uma só)."""
+    if not values:
+        return "-"
+    mean = statistics.fmean(values)
+    spread = f" ± {statistics.stdev(values):.3f}" if len(values) > 1 else ""
+    return f"{mean:.3f}{spread} [{min(values):.3f}, {max(values):.3f}]"
+
+
+def render_aggregates(results: list[dict]) -> str:
+    """Agregados por combinação entre as repetições (design §6): tempo, custo, acurácia validada, subtarefas, paradas.
+
+    A acurácia ignora repetições sem valor (``null``); a coluna de nulos mostra quantas foram.
+    """
+    groups: dict[str, list[dict]] = {}
+    for r in results:
+        if r.get("status") != "skipped":
+            groups.setdefault(r["name"], []).append(r)
+    header = (
+        "| Combinação | Repetições | Tempo (s) | Custo (USD) | Acurácia validada | Acurácia nula | "
+        "Subtarefas aprovadas | Motivos de parada |\n|---|---|---|---|---|---|---|---|"
+    )
+    rows = [header]
+    for name, items in groups.items():
+        accuracies = [r["accuracy_validated"] for r in items if r.get("accuracy_validated") is not None]
+        stops = Counter(str(r.get("stop_reason") or "n/d") for r in items)
+        approved = [r["outcome"]["subtasks_ok"] for r in items if r.get("outcome", {}).get("subtasks_ok") is not None]
+        costs = [r["tokens"]["cost_usd"] for r in items if r.get("tokens", {}).get("cost_usd") is not None]
+        rows.append(
+            f"| {name} | {len(items)} | {_stats([r['wall_seconds'] for r in items if 'wall_seconds' in r])} | "
+            f"{_stats(costs)} | {_stats(accuracies)} | {len(items) - len(accuracies)} | {_stats(approved)} | "
+            f"{', '.join(f'{k}: {v}' for k, v in sorted(stops.items()))} |"
+        )
+    return "\n".join(rows)
+
+
+def render_growth(results: list[dict]) -> str:
+    """Crescimento das memórias por execução: total (fim menos início) e taxa por minuto (design §3.2)."""
+    header = (
+        "| Combinação | Rep. | Duração (min) | Nós do grafo | Pontos do Qdrant | agent_events | egress_log | "
+        "execution_records | Tamanho do banco (MB) |\n|---|---|---|---|---|---|---|---|---|"
+    )
+    rows = [header]
+
+    def cell(g: dict, key: str) -> str:
+        return f"{g[key]['total']:+d} ({g[key]['por_minuto']}/min)"
+
+    for r in results:
+        g = footprint.growth(r.get("store_timeline") or [])
+        if r.get("status") == "skipped" or g is None:
+            continue
+        mb = g["db_bytes"]["total"] / 1_000_000
+        rows.append(
+            f"| {r['name']} | {r.get('repeticao', 1)} | {g['duracao_min']} | {cell(g, 'nos_grafo')} | "
+            f"{cell(g, 'pontos_qdrant')} | {cell(g, 'agent_events')} | {cell(g, 'egress_log')} | "
+            f"{cell(g, 'execution_records')} | {mb:+.1f} |"
         )
     return "\n".join(rows)
 
@@ -167,6 +237,12 @@ if __name__ == "__main__":
     print(render(loaded))
     print()
     print(render_interactions(loaded))
+    if any(r.get("repeticao", 1) > 1 for r in loaded):
+        print()
+        print(render_aggregates(loaded))
+    if any(r.get("store_timeline") for r in loaded):
+        print()
+        print(render_growth(loaded))
     if any(r.get("footprint_delta") for r in loaded):
         print()
         print(render_knowledge(loaded))

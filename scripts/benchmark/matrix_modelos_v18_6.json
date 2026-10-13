@@ -1,0 +1,55 @@
+{
+  "task_file": "scripts/benchmark/task_iris.txt",
+  "timeout_seconds": 12000,
+  "budget_usd": {
+    "anthropic": 14.0,
+    "openai": 8.0
+  },
+  "env": {
+    "ANTHROPIC_EFFORT": "medium",
+    "LOCALITY_MIN_GROUP_SIZE": "10",
+    "LLM_REQUESTS_PER_MINUTE": "60",
+    "SESSION_MAX_TOKENS": "3000000",
+    "SESSION_MAX_MINUTES": "180",
+    "GOOGLE_FALLBACK_MODEL": "",
+    "OPENAI_REASONING_EFFORT": "none"
+  },
+  "combinations": [
+    {
+      "name": "gemini-dev-sonnet-juiz",
+      "roles": {
+        "*": "google/gemini-3.8-flash",
+        "VALIDATOR": "anthropic/claude-sonnet-5-5",
+        "REVIEWER": "anthropic/claude-sonnet-5-5"
+      },
+      "requires": "ANTHROPIC_API_KEY"
+    },
+    {
+      "name": "haiku-dev-terra-juiz",
+      "roles": {
+        "*": "anthropic/claude-haiku-5-5",
+        "VALIDATOR": "openai/gpt-5.6-terra",
+        "REVIEWER": "openai/gpt-5.6-terra"
+      },
+      "requires": "OPENAI_API_KEY"
+    },
+    {
+      "name": "sonnet-dev-gemini-juiz",
+      "roles": {
+        "*": "anthropic/claude-sonnet-5-5",
+        "VALIDATOR": "google/gemini-3.8-flash",
+        "REVIEWER": "google/gemini-3.8-flash"
+      },
+      "requires": "ANTHROPIC_API_KEY"
+    },
+    {
+      "name": "controle-gemini-todos",
+      "roles": {
+        "*": "google/gemini-3.8-flash",
+        "VALIDATOR": "google/gemini-3.8-flash",
+        "REVIEWER": "google/gemini-3.8-flash"
+      },
+      "independencia_julgamento": "off"
+    }
+  ]
+}

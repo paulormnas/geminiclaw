@@ -86,6 +86,26 @@ uv run python .agents/skills/clean_dev.py --skip-logs --skip-outputs --skip-post
 
 ---
 
+## 3b. Reset do banco de benchmark (v18.6-benchmark-harness)
+
+O benchmark não usa esta limpeza: ele tem o próprio banco (`BENCHMARK_DATABASE_URL`, nome com a marca
+`BENCHMARK_DB_MARKER`, diferente do banco de `DATABASE_URL`) e o próprio reset, que **recria** o banco do zero e apaga
+as coleções do sistema no Qdrant antes de cada execução. É uma operação destrutiva: exige `--reset-stores` e
+`--confirm-target <banco>@<host>`, grava antes um `pg_dump` e os snapshots do Qdrant em
+`<results>.d/<combinação>/r<r>/pre_reset/` (desligável com `--no-pre-reset-dump`) e não toca nos bancos de
+desenvolvimento.
+
+```bash
+uv run python -m scripts.benchmark.run_benchmark <matriz.json> --results ~/bench/results.json \
+  --repeat 3 --reset-stores --confirm-target geminiclaw_bench@localhost
+```
+
+Para recriar só o banco de benchmark, sem rodar a matriz: `uv run python -m scripts.benchmark.reset_stores
+--reset-stores --confirm-target <banco>@<host> --archive-dir <pasta>`. Sem `--reset-stores` o runner não apaga nada e
+marca cada resultado com `isolated: false`.
+
+---
+
 ## 4. O que é limpo
 
 | Subsistema | O que é removido |

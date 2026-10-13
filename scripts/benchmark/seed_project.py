@@ -13,6 +13,12 @@ from typing import Any
 
 from src.knowledge import projects
 from src.knowledge.problem import ProblemDraft
+from src.knowledge.vocabulary import find_approved_metric
+
+
+class VocabularyNotSeededError(RuntimeError):
+    """O vocabulário controlado não foi carregado no grafo (``scripts/seed_vocabulary.py``)."""
+
 
 BENCHMARK_DRAFT = ProblemDraft(
     titulo="Classificação supervisionada no dataset Iris",
@@ -40,11 +46,19 @@ def seed_project(name: str, store: Any | None = None) -> str:
 
     Raises:
         ProjectError: Falha ao criar o projeto ou confirmar o ``Problema``.
+        VocabularyNotSeededError: A ``Metrica`` do ``Problema`` não existe aprovada no vocabulário.
     """
     if store is None:
         from src.knowledge.factory import open_graph_store
 
         store = open_graph_store()
+    # Sem a métrica canônica o Problema ganharia um candidato sem sinônimos e nenhum Resultado ganharia ``MEDE``
+    # (veredito das hipóteses preso em 0): falha antes de criar qualquer nó.
+    if find_approved_metric(store, BENCHMARK_DRAFT.metrica) is None:
+        raise VocabularyNotSeededError(
+            f"A métrica '{BENCHMARK_DRAFT.metrica}' não está aprovada no vocabulário do grafo; "
+            "rode scripts/seed_vocabulary.py (ou use --reset-stores, que semeia o banco de benchmark)."
+        )
     project_id = projects.create_project(
         store,
         f"Benchmark {name}",

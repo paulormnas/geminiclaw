@@ -16,6 +16,7 @@ from src.knowledge.ingestion import SessionContext, ingest_session_start
 from src.knowledge.projects import confirm_problem, create_project, get_active_problem
 from src.knowledge.provenance import Actor
 from src.knowledge.semantic_index import SemanticIndex
+from src.knowledge.vocabulary import approve_term
 from tests.support.controlled_embedding_provider import ControlledEmbeddingProvider
 from tests.support.curator_graph import CuratorGraph
 from tests.unit.research_project.test_projects import make_draft
@@ -31,7 +32,7 @@ class HypothesisWorld:
     """Projeto, Problema confirmado (alvo 0,8; delta_min 0,05), sessão e atalhos para montar nós."""
 
     def __init__(self, *, mode: str = "auto", index: bool = False, alvo: float | None = 0.8,
-                 delta_min: float = 0.05, session_id: str = "sessao-h") -> None:
+                 delta_min: float = 0.05, session_id: str = "sessao-h", approve_metric: bool = True) -> None:
         self.raw = InMemoryGraphStore()
         self.provider: ControlledEmbeddingProvider | None = None
         self.index: SemanticIndex | None = None
@@ -47,6 +48,9 @@ class HypothesisWorld:
         )
         self.problem = get_active_problem(self.store, self.pid)
         assert self.problem is not None
+        if approve_metric:  # v18.6-hypothesis-closure §4: sem Metrica aprovada o veredito é indisponível
+            for metric in self.store.find_nodes("Metrica", {"status": "candidato"}, limit=10):
+                approve_term(self.store, metric.id)
         self.sid = session_id
         self.ctx = SessionContext(self.pid, self.sid, mode, "2026-10-07T00:00:00+00:00", "no")
         self.session_node = ingest_session_start(self.store, self.ctx)

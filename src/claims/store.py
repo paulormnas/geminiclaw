@@ -39,6 +39,8 @@ class ClaimStore:
         self.session_id = session_id
         self.conclusoes: dict[str, dict[str, Any]] = {}
         self.afirmacoes: list[Afirmacao] = []
+        # v18.6-hypothesis-closure: por que não há afirmações (gravado só quando a lista é vazia).
+        self.motivo_vazio: str | None = None
 
     @property
     def path(self) -> Path:
@@ -64,6 +66,7 @@ class ClaimStore:
             raise ClaimStoreError(f"{store.path}: versão não suportada (esperada ≤ {FILE_VERSION}).")
         store.conclusoes = {c["conclusao_id"]: c for c in data.get("conclusoes", []) if isinstance(c, dict)}
         store.afirmacoes = [Afirmacao.from_dict(a) for a in data.get("afirmacoes", []) if isinstance(a, dict)]
+        store.motivo_vazio = data.get("motivo_vazio") if isinstance(data.get("motivo_vazio"), str) else None
         return store
 
     def save(self) -> None:
@@ -74,6 +77,8 @@ class ClaimStore:
             "conclusoes": list(self.conclusoes.values()),
             "afirmacoes": [a.to_dict() for a in self.afirmacoes],
         }
+        if not self.afirmacoes and self.motivo_vazio:
+            payload["motivo_vazio"] = self.motivo_vazio
         tmp = self.path.with_suffix(".json.tmp")
         with open(tmp, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, ensure_ascii=False, indent=2)

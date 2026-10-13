@@ -252,6 +252,36 @@ class PlanRejectionReader:
         return {"ciclos_rejeicao_plano": sum(1 for e in events if not (e.get("payload") or {}).get("approved", True))}
 
 
+class HypothesisClosureReader:
+    """Grupo ``verificacao`` (``v18.6-hypothesis-closure``): resultados sem ``MEDE``, subtarefas com resultado
+    negativo e hipóteses sem tentativa no fechamento (eventos ``resultado_sem_mede``, ``subtask_review`` e
+    ``hipoteses_sem_tentativa``)."""
+
+    group = "verificacao"
+    producer = "orquestrador (fechamento de hipóteses)"
+
+    def read(self, session_id: str) -> dict[str, Any]:
+        from src.telemetry import get_telemetry
+
+        telemetry = get_telemetry()
+        no_mede = telemetry.get_events(session_id, "resultado_sem_mede")
+        reviews = telemetry.get_events(session_id, "subtask_review")
+        untested = telemetry.get_events(session_id, "hipoteses_sem_tentativa")
+        negative_tasks = {
+            e.get("task_name")
+            for e in reviews
+            if (e.get("payload") or {}).get("outcome") == "resultado_negativo"
+        }
+        last = untested[-1] if untested else None
+        return {
+            "resultados_sem_mede": len(no_mede),
+            "subtarefas_resultado_negativo": len(negative_tasks),
+            "hipoteses_sem_tentativa_no_fechamento": len((last.get("payload") or {}).get("hipoteses") or [])
+            if last
+            else 0,
+        }
+
+
 class CostResourcesReader:
     """Grupo ``custo_recursos``: tokens e custo por tarefa e papel, hardware do nó (telemetria existente)."""
 
@@ -403,6 +433,7 @@ def default_readers(
         ProvenanceChainReader(),
         ClaimVerificationReader(output_dir),
         PlanRejectionReader(),
+        HypothesisClosureReader(),
         CostResourcesReader(),
         HumanInterventionsReader(payload_loader),
         JudgeIndependenceReader(payload_loader),

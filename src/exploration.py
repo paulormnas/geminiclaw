@@ -41,6 +41,7 @@ from src.knowledge.hypotheses import (
 from src.knowledge.hypothesis_cycle import Approver, HypothesisCycle, Selection, SolutionStatus, terminal_approver
 from src.knowledge.ingestion import SessionContext
 from src.knowledge.normalization import normalize_domain_term
+from src.knowledge.projects import get_active_problem
 from src.knowledge.suggestions import Suggestion, SuggestionError, SuggestionStore
 from src.logger import get_logger
 
@@ -436,6 +437,30 @@ class ExplorationSession:
             self.declined_solutions.add(solution.hypothesis_id)
         return answer
 
+    def verdict_availability(self) -> tuple[str, str] | None:
+        """Confere se o veredito pode ser calculado (``v18.6-hypothesis-closure`` §4).
+
+        Returns:
+            ``None`` se a ``Metrica`` do ``Problema`` está aprovada no vocabulário; senão ``(motivo, correção)``.
+        """
+        from src.knowledge.service import KnowledgeService, KnowledgeServiceError
+
+        fix = (
+            "rode `scripts/seed_vocabulary.py` ou aprove a métrica com `geminiclaw vocab approve <id>` "
+            "(`geminiclaw vocab pending` lista os candidatos)"
+        )
+        try:
+            problem = get_active_problem(self.store, self.ctx.project_id)
+            if problem is None:
+                return "projeto sem Problema confirmado", fix
+            _, metric = KnowledgeService(self.store).criterion_for(problem)
+        except KnowledgeServiceError as exc:
+            return f"métrica do Problema não resolvida ({str(exc)[:160]})", fix
+        status = metric.properties.get("status")
+        if status != "aprovado":
+            return f"a Metrica '{metric.properties.get('nome')}' do Problema está com status '{status}'", fix
+        return None
+
     def has_open_paths(self, in_plan: set[str]) -> bool:
         """Há caminho em aberto fora do plano: hipótese ``em_teste`` ou sugestão pendente do Curator.
 
@@ -444,7 +469,22 @@ class ExplorationSession:
         """
         try:
             runnable = self.cycle.pending_runnable(in_plan)
+            untested = self.cycle.untested_hypotheses()
         except Exception as exc:  # noqa: BLE001
             logger.warning("Hipóteses em aberto indisponíveis", extra={"extra": {"erro": type(exc).__name__}})
             raise SuggestionError(f"Falha ao consultar hipóteses em aberto ({type(exc).__name__}).") from exc
-        return bool(runnable) or bool(self.pending_suggestions())
+        # v18.6-hypothesis-closure §5: hipótese do plano que nunca foi testada também é caminho aberto.
+        return bool(runnable) or bool(untested) or bool(self.pending_suggestions())
+
+    def untested_hypotheses(self) -> list[tuple[str, str]]:
+        """``(id, enunciado)`` das hipóteses ``em_teste`` sem tentativa.
+
+        Raises:
+            SuggestionError: Falha ao consultar as hipóteses (não equivale a "nenhuma sem tentativa").
+        """
+        try:
+            nodes = self.cycle.untested_hypotheses()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Hipóteses sem tentativa indisponíveis", extra={"extra": {"erro": type(exc).__name__}})
+            raise SuggestionError(f"Falha ao consultar hipóteses sem tentativa ({type(exc).__name__}).") from exc
+        return [(n.id, str(n.properties.get("enunciado", ""))[:160]) for n in nodes]

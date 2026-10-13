@@ -14,7 +14,12 @@ from typing import Any, Callable, Iterable
 from src import config
 from src.claims.decompose import conclusion_from_discovery
 from src.claims.deterministic import CodeValue
-from src.claims.evidence import codes_from_payload, discovery_evidence_builder, report_evidence_builder
+from src.claims.evidence import (
+    codes_from_payload,
+    discovery_evidence_builder,
+    report_evidence_builder,
+    session_results_item,
+)
 from src.claims.graph import update_discovery_claim, write_discovery_claim
 from src.claims.model import Afirmacao, Conclusao
 from src.claims.service import ClaimService
@@ -103,6 +108,10 @@ class ClaimRuntime:
         except Exception as exc:  # noqa: BLE001
             logger.warning("Grafo indisponível para a verificação", extra={"erro": type(exc).__name__})
             return None
+
+    def session_results(self, session_id: str) -> Callable[[], Any]:
+        """Provedor da tabela de resultados validados da sessão (evidência de frases sem código de referência)."""
+        return lambda: session_results_item(self.graph(), session_id)
 
     def budget_exhausted(self, session_id: str) -> bool:
         """Limite de tokens ou de tempo atingido (a sessão segue; as afirmações restantes ficam ``pendente``)."""

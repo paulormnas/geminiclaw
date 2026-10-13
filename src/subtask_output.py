@@ -6,6 +6,24 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
 
 
+def negative_result_feedback(negatives: Dict[str, Dict[str, Any]]) -> str:
+    """Linhas de feedback ao Researcher para os resultados negativos do ciclo (só números de ``metrics.json``)."""
+    lines: List[str] = []
+    for task_name, info in sorted(negatives.items()):
+        ref = info.get("hypothesis") or "hipótese"
+        for f in info.get("findings") or []:
+            lines.append(
+                f"Resultado negativo: {ref} (subtarefa {task_name}): {f['metric']} = {f['value']:g} "
+                f"{_INVERSE_OPERATOR.get(f['operator'], 'não atende')} {f['threshold']:g}. A hipótese recebeu "
+                "evidência contra ela. Não repita a mesma configuração; proponha outra abordagem ou encerre a "
+                "hipótese."
+            )
+    return "\n".join(lines)
+
+
+_INVERSE_OPERATOR = {">": "<=", ">=": "<", "<": ">=", "<=": ">", "==": "!="}
+
+
 @dataclass
 class SubtaskOutput:
     """Output estruturado de uma subtarefa para propagação via DAG.
@@ -111,7 +129,11 @@ class SubtaskOutput:
         if review_data:
             confidence = review_data.get("confidence", 1.0)
             validation_results = review_data.get("criteria_results", [])
-            if review_data.get("status") == "fail":
+            if review_data.get("status") == "fail" and review_data.get("outcome") == "resultado_negativo":
+                status = "resultado_negativo"  # v18.6-hypothesis-closure: concluída, com evidência contra a hipótese
+                note = negative_result_feedback({task_name: {"findings": review_data.get("negative_findings")}})
+                text_summary = f"{text_summary}\n{note}".strip() if note else text_summary
+            elif review_data.get("status") == "fail":
                 status = "failed_review"
 
         return cls(

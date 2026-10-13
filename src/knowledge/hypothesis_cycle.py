@@ -526,6 +526,20 @@ class HypothesisCycle:
             if n.properties.get("status") == STATUS_EM_TESTE and n.id not in exclude
         ]
 
+    def untested_hypotheses(self) -> list[Node]:
+        """Hipóteses ``em_teste`` do projeto sem nenhuma tentativa (``n_tentativas = 0`` ou ainda não calculado).
+
+        Hipótese no plano e nunca testada é caminho aberto (``v18.6-hypothesis-closure`` §5).
+        """
+        out: list[Node] = []
+        for n in self.project_hypotheses():
+            if n.properties.get("status") != STATUS_EM_TESTE:
+                continue
+            tries = n.properties.get("n_tentativas")
+            if not isinstance(tries, (int, float)) or isinstance(tries, bool) or tries <= 0:
+                out.append(n)
+        return out
+
     def open_hypotheses_view(self, limit: int = 20) -> list[dict[str, Any]]:
         """Hipóteses abertas e recém-concluídas para o contexto do Researcher (texto: dado não confiável)."""
         out: list[dict[str, Any]] = []

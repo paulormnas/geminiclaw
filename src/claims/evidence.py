@@ -7,6 +7,7 @@ O pacote nunca é instrução: cada item é conteúdo observado, entregue ao ``E
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable
 
@@ -65,10 +66,51 @@ def _divergence_note(output_dir: Path | None, relative: str | None) -> str | Non
     return str(note) if note else None
 
 
+_ACCEPTED_RESULTS = ("validado", "divergente_documentado")
+_MAX_RESULT_ROWS = 200
+
+
+def session_results_item(graph: Any, session_id: str) -> EvidenceItem | None:
+    """Tabela dos ``Resultado``s validados da sessão (nome, qualificador, valor, subtarefa, ``exec_id``).
+
+    Evidência das frases do relatório que não citam código de referência (``v18.6-hypothesis-closure`` §6.1).
+    Devolve ``None`` sem grafo, sem resultados ou em falha de leitura (o verificador devolve ``sem_evidencia``).
+    """
+    if graph is None:
+        return None
+    try:
+        nodes = graph.find_nodes("Resultado", {"sessao_id": session_id}, limit=_MAX_RESULT_ROWS)
+        rows: list[str] = []
+        for node in nodes:
+            p = node.properties
+            if p.get("status_validacao") not in _ACCEPTED_RESULTS:
+                continue
+            exps = [n for n in graph.neighbors(node.id, ["PRODUZIU"], direction="in", depth=1).nodes
+                    if n.label == "Experimento"]
+            subtask = str(exps[0].properties.get("subtarefa_id", "—")).split(":")[-1] if exps else "—"
+            rows.append(
+                f"{p.get('nome_original')} | {p.get('qualificador') or '—'} | {p.get('valor')!r} | {subtask} | "
+                f"{p.get('exec_id') or '—'}"
+            )
+    except Exception as exc:  # noqa: BLE001 - sem a tabela a frase fica sem evidência
+        logger.warning("Tabela de resultados da sessão indisponível", extra={"erro": type(exc).__name__})
+        return None
+    if not rows:
+        return None
+    from src import config
+
+    limit = max(200, config.CLAIM_EVIDENCE_MAX_CHARS // 2)
+    text = "nome | qualificador | valor | subtarefa | exec_id\n" + "\n".join(sorted(rows))
+    if len(text) > limit:
+        text = text[:limit] + " […]"
+    return EvidenceItem("", f"resultados:{session_id}", "Resultados validados da sessão", text, ContentOrigin.GRAFO)
+
+
 def report_evidence_builder(
     codigos: list[Any] | list[dict[str, Any]],
     output_dir: Path | None,
     result_status: Callable[[str, str], str | None] = lambda _exec, _metric: None,
+    session_results: Callable[[], EvidenceItem | None] | None = None,
 ) -> Callable[[Conclusao, list[Sentence]], list[EvidenceItem]]:
     """Construtor de pacotes para conclusões do relatório: um item por código de origem citado.
 
@@ -76,6 +118,7 @@ def report_evidence_builder(
         codigos: ``RenderedCode`` (ou os dicionários de ``proveniencia_numerica.json``).
         output_dir: Raiz de ``outputs/`` (para ler a ``divergence_note`` do ``metrics.json``).
         result_status: ``(exec_id, métrica) -> status_validacao`` do ``Resultado`` no grafo, se existir.
+        session_results: Item com a tabela dos resultados validados da sessão; vale para toda frase sem código.
     """
     by_code: dict[str, dict[str, Any]] = {}
     for code in codigos:
@@ -129,6 +172,12 @@ def report_evidence_builder(
             items.append(
                 EvidenceItem("", ref, code, _cap("\n".join(lines)), origin, frozenset(frases))
             )
+        covered = {i for frases in seen.values() for i in frases}
+        uncoded = frozenset(s.indice for s in sentences if s.indice not in covered)
+        if uncoded and session_results is not None:
+            table = session_results()
+            if table is not None:
+                items.append(replace(table, frases=uncoded))
         return _number(items)
 
     return build

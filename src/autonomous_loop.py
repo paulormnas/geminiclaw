@@ -14,7 +14,7 @@ import uuid
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from src import config
 from src.config import (
@@ -44,9 +44,11 @@ from src.logger import get_logger
 from src.model_router import ModelRouter
 from src.pipeline_errors import AgentRunLimitReached, PlanningStalled
 from src.skills.memory.short_term import ShortTermMemory
+from src.subtask_output import negative_result_feedback
 from src.telemetry import get_telemetry
 from src.triage import TriageClassifier
 from src.usage import StopReason, UsageBudget, UsageTracker
+from src.utils.terminal import print_status
 
 if TYPE_CHECKING:
     from src.exploration import ExplorationSession, ExplorationStop
@@ -68,6 +70,14 @@ class CycleProgress:
     def advanced_from(self, previous: "CycleProgress") -> bool:
         """Há progresso se surgiram sucessos novos ou a assinatura dos erros mudou."""
         return not self.succeeded <= previous.succeeded or self.failure_signatures != previous.failure_signatures
+
+
+DONE_STATUSES = ("success", "concluded_negative")  # estados do DAG que liberam as dependentes e contam como progresso
+
+
+def succeeded_task_names(dag_state: Dict[str, Any]) -> List[str]:
+    """Subtarefas que avançaram a pesquisa no ciclo: sucesso ou resultado negativo (``v18.6-hypothesis-closure``)."""
+    return [t for t, state in dag_state.items() if state["status"] in DONE_STATUSES]
 
 
 _PATH_RE = re.compile(r"[\w.\-]*[/\\][\w./\\\-]*")
@@ -798,6 +808,67 @@ class AutonomousLoop:
             ExplorationStop.ERROR, master_session_id, prompt, tasks, dag_state, final_results
         )
 
+    async def _check_verdict_available(self, exploration: Any, master_session_id: str) -> Optional[str]:
+        """Confere a ``Metrica`` do ``Problema`` antes do primeiro planejamento (``v18.6-hypothesis-closure`` §4).
+
+        Returns:
+            A mensagem de aviso (motivo e correção) se o veredito não pode ser calculado; senão ``None``.
+        """
+        try:
+            found = await asyncio.to_thread(exploration.verdict_availability)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - sem leitura do grafo não há como afirmar que o veredito existe
+            found = (f"falha ao conferir a métrica do Problema ({type(exc).__name__})", "verifique o grafo")
+        if found is None:
+            return None
+        reason, fix = found
+        message = f"Veredito indisponível: {reason}. Correção: {fix}."
+        logger.warning(message, extra={"master_session_id": master_session_id})
+        print_status("warning", message)
+        get_telemetry().record_agent_event(
+            execution_id=master_session_id,
+            session_id=master_session_id,
+            agent_id="autonomous_loop",
+            event_type="veredito_indisponivel",
+            payload={"motivo": reason[:300], "correcao": fix, "modo": self._session_mode},
+        )
+        return message
+
+    async def _close_untested_hypotheses(
+        self,
+        untested: List[Tuple[str, str]],
+        idle_cycles: int,
+        master_session_id: str,
+        prompt: str,
+        tasks: List["AgentTask"],
+        dag_state: Dict[str, Any],
+        final_results: List["AgentResult"],
+    ) -> "OrchestratorResult":
+        """Ciclos ociosos esgotados com hipótese sem tentativa: fecha com ``erro`` e a lista das hipóteses."""
+        from src.exploration import ExplorationStop
+
+        message = f"hipóteses sem tentativa após {idle_cycles} ciclos ociosos: " + ", ".join(h for h, _ in untested)
+        logger.error(message, extra={"hipoteses_sem_tentativa": [h for h, _ in untested]})
+        get_telemetry().record_agent_event(
+            execution_id=master_session_id,
+            session_id=master_session_id,
+            agent_id="autonomous_loop",
+            event_type="hipoteses_sem_tentativa",
+            payload={"hipoteses": [h for h, _ in untested][:50], "ciclos_ociosos": idle_cycles, "mensagem": message},
+        )
+        from src.orchestrator import AgentResult
+
+        final_results.append(
+            AgentResult(
+                agent_id="orchestrator", session_id=master_session_id, status="error",
+                response={"text": message}, error=message,
+            )
+        )
+        return await self._close_exploration(
+            ExplorationStop.ERROR, master_session_id, prompt, tasks, dag_state, final_results
+        )
+
     async def _close_exploration(
         self,
         stop: Any,
@@ -879,6 +950,21 @@ class AutonomousLoop:
         # consecutivos rejeitados pelo Validator.
         exploration = self._exploration(master_session_id)
         exploring = exploration is not None
+        if exploration is not None:
+            unavailable = await self._check_verdict_available(exploration, master_session_id)
+            if unavailable is not None and self._session_mode == "auto":
+                # O critério de parada depende do veredito: sem métrica aprovada o modo auto não planeja (§1.6).
+                from src.exploration import ExplorationStop
+
+                final_results.append(
+                    AgentResult(
+                        agent_id="orchestrator", session_id=master_session_id, status="error",
+                        response={"text": unavailable}, error=unavailable,
+                    )
+                )
+                return await self._close_exploration(
+                    ExplorationStop.ERROR, master_session_id, prompt, [], {}, final_results
+                )
         cycle_no = 0
         rejected_plans = 0
         legacy_attempt = 0
@@ -1012,6 +1098,8 @@ class AutonomousLoop:
                         has_open = exploration.idle_cycles < 2 and await asyncio.to_thread(
                             exploration.has_open_paths, in_plan
                         )
+                        # v18.6-hypothesis-closure §5: hipótese em_teste sem tentativa nunca fecha como "sem caminhos".
+                        untested = await asyncio.to_thread(exploration.untested_hypotheses)
                     except SuggestionError as exc:
                         return await self._close_on_suggestion_failure(
                             exc, master_session_id, prompt, list(cumulative_tasks.values()), cumulative_dag,
@@ -1020,6 +1108,11 @@ class AutonomousLoop:
                     if not has_open:
                         from src.exploration import ExplorationStop
 
+                        if untested:
+                            return await self._close_untested_hypotheses(
+                                untested, exploration.idle_cycles, master_session_id, prompt,
+                                list(cumulative_tasks.values()), cumulative_dag, final_results,
+                            )
                         return await self._close_exploration(
                             ExplorationStop.NO_PATHS, master_session_id, prompt, list(cumulative_tasks.values()),
                             cumulative_dag, final_results,
@@ -1028,6 +1121,10 @@ class AutonomousLoop:
                         "Nenhuma subtarefa nova no plano. Há hipóteses em teste ou sugestões do Curator ainda "
                         "abertas: inclua subtarefas que as testem, ou encerre sem hipótese nova."
                     )
+                    if untested:
+                        execution_feedback += "\nHipóteses ainda sem nenhuma tentativa: " + "; ".join(
+                            f"{hid} ({text})" for hid, text in untested
+                        ) + "."
                     explore_next = True
                     current_plan_dicts = [
                         {k: v for k, v in t.__dict__.items() if v is not None and k not in ("subtask_id", "created_at")}
@@ -1129,6 +1226,7 @@ class AutonomousLoop:
 
             final_results = []
             cycle_results: Dict[str, AgentResult] = {}  # resultado final de cada subtarefa executada NESTE ciclo
+            cycle_negatives: Dict[str, Dict[str, Any]] = {}  # resultados negativos NESTE ciclo
             
             # Futures para cada tarefa (para sincronização do DAG)
             dag_state = {}
@@ -1154,7 +1252,7 @@ class AutonomousLoop:
                 for dep in task.depends_on:
                     if dep in dag_state:
                         await dag_state[dep]["future"]
-                        if dag_state[dep]["status"] != "success":
+                        if dag_state[dep]["status"] not in DONE_STATUSES:
                             # Dependência falhou ou foi cancelada -> Cancelar esta tarefa
                             logger.warning(f"Subtarefa {task.task_name} cancelada porque a dependência '{dep}' falhou.")
                             if task.task_name:
@@ -1317,7 +1415,15 @@ class AutonomousLoop:
                             logger.info(f"Iniciando revisão da subtarefa {task.task_name}")
                             review = await self._review_subtask(task, result, master_session_id, attempt_number)
                             last_review = review
-                            if review.get("status") == "fail":
+                            if review.get("status") == "fail" and review.get("outcome") == "resultado_negativo":
+                                # v18.6-hypothesis-closure: hipótese refutada por limiar é conclusão, não falha.
+                                result.response["outcome"] = "resultado_negativo"
+                                cycle_negatives[task.task_name or ""] = {
+                                    "hypothesis": task.hypothesis_ref or task.hypothesis_id or "",
+                                    "findings": review.get("negative_findings") or [],
+                                }
+                                logger.info(f"Subtarefa {task.task_name} concluída com resultado negativo")
+                            elif review.get("status") == "fail":
                                 success = False
                                 result.status = "error"
                                 result.error = f"Falha na revisão: {', '.join(review.get('issues', []))}"
@@ -1502,7 +1608,9 @@ class AutonomousLoop:
 
                 if task.task_name:
                     if success:
-                        dag_state[task.task_name]["status"] = "success"
+                        dag_state[task.task_name]["status"] = (
+                            "concluded_negative" if task.task_name in cycle_negatives else "success"
+                        )
                     elif self._usage_tracker.task_retries_exhausted(retry_key):
                         # V18/usage-limits — retentativas da MESMA tarefa esgotadas: a
                         # tarefa é ABANDONADA, não "failed". Isso a exclui de
@@ -1565,7 +1673,7 @@ class AutonomousLoop:
                     cumulative_dag[name] = {"status": state["status"], "error": state.get("error")}
                 for name, result in cycle_results.items():
                     latest_results[name] = result
-                    if dag_state.get(name, {}).get("status") == "success":
+                    if dag_state.get(name, {}).get("status") in DONE_STATUSES:
                         done_results[name] = result
                 final_results = list(latest_results.values())
                 cycle_no += 1
@@ -1650,6 +1758,8 @@ class AutonomousLoop:
                 if exploring:
                     # v18-hypothesis-loop: sucesso do ciclo não encerra a pesquisa; replaneja em modo de exploração.
                     execution_feedback = self._exploration_feedback(cycle_no, cycle_results, abandoned_tasks)
+                    if cycle_negatives:
+                        execution_feedback += "\n" + negative_result_feedback(cycle_negatives)
                     explore_next = True
                     continue
 
@@ -1678,7 +1788,7 @@ class AutonomousLoop:
             
             # Se falhou, preparamos o feedback para a próxima tentativa de plano (Recuperação Incremental)
             explore_next = False
-            succeeded_tasks = [t for t, state in dag_state.items() if state["status"] == "success"]
+            succeeded_tasks = succeeded_task_names(dag_state)
             logger.warning(f"O plano falhou nas tarefas: {failed_tasks}. Iniciando recuperação incremental...")
 
             # V12.5.1 — Circuit breaker: detecta progresso zero entre ciclos consecutivos
@@ -1775,6 +1885,8 @@ class AutonomousLoop:
                 "objetivos restantes, "
                 "sem refazer as tarefas que já tiveram sucesso."
             )
+            if cycle_negatives:
+                execution_feedback += "\n\n" + negative_result_feedback(cycle_negatives)
 
 
             # V5.8 — Telemetria: replan_triggered
@@ -1865,6 +1977,7 @@ class AutonomousLoop:
                 agent_error_category=getattr(result, "error_category", None),
                 review_status=(review or {}).get("status"),
                 review_verified=bool((review or {}).get("verified", False)),
+                review_outcome=(review or {}).get("outcome"),
                 validation_criteria=[c for c in (task.validation_criteria or []) if isinstance(c, str)],
                 hypothesis_id=task.hypothesis_id or None,
             )
@@ -1997,10 +2110,10 @@ class AutonomousLoop:
 
         await self.record_operation_metrics(master_session_id, parcial=False)
 
-        completed_tasks = [t for t, s in dag_state.items() if s.get("status") == "success"]
+        completed_tasks = [t for t, s in dag_state.items() if s.get("status") in DONE_STATUSES]
         abandoned_tasks = [t for t, s in dag_state.items() if s.get("status") == "abandonada"]
         pending_tasks = [
-            t for t, s in dag_state.items() if s.get("status") not in ("success", "abandonada")
+            t for t, s in dag_state.items() if s.get("status") not in (*DONE_STATUSES, "abandonada")
         ]
 
         # design §3 — "Reserva esgotada": se não sobrar orçamento nem para a reserva de
@@ -2315,6 +2428,7 @@ class AutonomousLoop:
                         str(c)[:200] for c in (getattr(review, "undecided_criteria", None) or [])
                     ][:8],
                     "metric_qualifiers": dict(list((getattr(review, "metric_qualifiers", None) or {}).items())[:20]),
+                    "outcome": getattr(review, "outcome", None) or ("aprovado" if review.is_approved else "reprovado"),
                 },
             )
         except Exception as exc:
@@ -2325,6 +2439,8 @@ class AutonomousLoop:
             "feedback": review.feedback,
             "resolved_artifacts": review.resolved_artifacts,
             "verified": bool(getattr(review, "verified", True)),
+            "outcome": getattr(review, "outcome", None) or ("aprovado" if review.is_approved else "reprovado"),
+            "negative_findings": list(getattr(review, "negative_findings", None) or []),
         }
 
     async def _synthesize_results(
@@ -2609,7 +2725,16 @@ class AutonomousLoop:
                     counts=dict(counts),
                 )
                 state.extras["claims_previous"] = list(self._claims_previous)
-                await asyncio.to_thread(self._claims_pipeline().build, state)
+                await asyncio.to_thread(self._claims_pipeline(master_session_id).build, state)
+                try:  # v18.6-hypothesis-closure §6.2: afirmacoes.json sempre existe quando há relatório final
+                    from src.claims.report import ensure_claims_file
+
+                    await asyncio.to_thread(
+                        ensure_claims_file, state,
+                        self.orchestrator.claim_runtime().budget_exhausted(master_session_id),
+                    )
+                except Exception as exc:  # noqa: BLE001 - complementar: nunca derruba o relatório
+                    logger.warning("afirmacoes.json vazio não gravado", extra={"error": type(exc).__name__})
                 revised = await self._revise_report_source(master_session_id, session_dir, state, source, cycle)
                 if revised is None:
                     break
@@ -2632,7 +2757,7 @@ class AutonomousLoop:
                 pass
             return notice + source_markdown
 
-    def _claims_pipeline(self) -> Any:
+    def _claims_pipeline(self, session_id: str) -> Any:
         """Pipeline do relatório com o estágio ``claims`` (v18.5-claim-verification), no laço de eventos atual."""
         from src.claims.report import ClaimsRunner, register_claims
         from src.report.pipeline import build_default_pipeline
@@ -2645,6 +2770,7 @@ class AutonomousLoop:
                 ClaimsRunner(
                     loop=asyncio.get_running_loop(),
                     make_service=lambda state: runtime.make_service(state.session_id),
+                    session_results=runtime.session_results(session_id),
                 ),
             )
         return pipeline

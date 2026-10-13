@@ -177,6 +177,9 @@ REVIEW_ARTIFACT_PROFILE = get_env_bool("REVIEW_ARTIFACT_PROFILE", default=True)
 REVIEW_PROFILE_MAX_BYTES = int(get_env("REVIEW_PROFILE_MAX_BYTES", default="5242880"))
 REVIEW_PROFILE_MAX_CHARS = int(get_env("REVIEW_PROFILE_MAX_CHARS", default="1200"))
 
+# v18.6-hypothesis-closure — resultado científico negativo (hipótese refutada por limiar) é progresso, não falha.
+NEGATIVE_RESULT_AS_PROGRESS = get_env_bool("NEGATIVE_RESULT_AS_PROGRESS", default=True)
+
 # v16-agent-communication-eval — avaliação pós-execução da comunicação entre agentes.
 # O modelo do juiz é selecionado automaticamente (design §5.3); PROVIDER/MODEL são sobrescrita opcional.
 COMM_EVAL_JUDGE_PROVIDER = get_env("COMM_EVAL_JUDGE_PROVIDER", default="").lower()

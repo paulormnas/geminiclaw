@@ -225,6 +225,8 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             "seed": PropertySchema(),
             "hash_codigo": PropertySchema(),
             "ambiente": PropertySchema(),
+            # v18.6-hypothesis-closure: o critério quantitativo do plano foi atendido (ausente sem critério).
+            "criterio_plano_atendido": PropertySchema(),
             # v18.5-execution-provenance: execuções registradas (a principal e todas, na ordem da cadeia).
             "exec_id": PropertySchema(),
             "exec_ids": PropertySchema(),

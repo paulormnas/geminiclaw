@@ -120,6 +120,43 @@ a sessão do Sonnet não gravou o arquivo e registra a causa no PR.
 3. **Resultado negativo sem hipótese.** Uma subtarefa sem `hypothesis_id` que não atinge o próprio
    limiar continua `reprovado`. Proposta: manter, porque sem hipótese não há o que refutar.
 
+## 8.1 Decisões adotadas na implementação (2026-10-13)
+
+O pesquisador não respondeu as questões do §8 antes da implementação; foi adotada a hipótese mais conservadora de cada
+uma, e o PR as lista para confirmação.
+
+1. **Modo `auto` sem métrica aprovada:** a sessão não inicia (proposta do §4). `assisted` e `semi` avisam e seguem.
+2. **Ciclos ociosos esgotados com hipótese sem tentativa:** fecha com `erro` e a mensagem do §5, sem membro novo em
+   `StopReason`. O evento `hipoteses_sem_tentativa` leva a lista e alimenta `hipoteses_sem_tentativa_no_fechamento`.
+3. **Resultado negativo sem hipótese:** continua `reprovado`.
+
+Detalhes que o texto original deixava abertos:
+
+- **Condição 4 do §1.** A reprovação por limiar é adiada (não retorna na hora): se há artefatos ausentes, o resultado é
+  `reprovado`; se restam critérios qualitativos, só o parecer `pass` do revisor LLM mantém `resultado_negativo`; revisor
+  indisponível ou ilegível dá `reprovado` (nada confirma o resto). Um critério parcialmente conhecido ou indecidido
+  também dá `reprovado`.
+- **`criterio_plano_atendido = true`** só quando a revisão foi `pass` verificada e o plano tinha critério quantitativo
+  (métrica conhecida com limiar); sem critério quantitativo a propriedade não é gravada.
+- **`resultado_sem_mede` (§3):** o nome base (com sinônimos e aliases do revisor) é comparado ao nome e aos sinônimos da
+  `Metrica` do `Problema`; o evento sai quando não existe `Resultado-MEDE->Metrica` dessa métrica. Motivo
+  `qualificador_excluido` para `cv`/`treino`/`validacao` e métrica de grupo, `metrica_nao_aprovada` se a `Metrica` do
+  `Problema` não é `aprovado`, senão `resolucao_falhou`. O `MEDE` para um nó `candidato` continua sendo criado (sem
+  mudança de comportamento).
+- **Aviso no banner (§4):** o banner da CLI sai antes da sessão existir; o aviso é impresso no início da sessão
+  (`print_status`) e registrado no evento `veredito_indisponivel`.
+- **Hipótese "sem tentativa" (§5):** `n_tentativas` ausente vale 0; hipótese `em_teste` já exclui as retiradas pela
+  governança (que viram `abandonada`/`proposta`). Identificadas pelo `id` do grafo (o `ref` do plano não é gravado).
+- **Estado `concluded_negative`** conta como concluída em `completed_tasks` do fechamento, em `done_results` (não é
+  reexecutada em ciclos seguintes) e em `succeeded_task_names` (disjuntor).
+- **Tabela de resultados (§6.1):** limitada a `max(200, CLAIM_EVIDENCE_MAX_CHARS // 2)` caracteres.
+- **`afirmacoes.json` (§6.2):** gravado após o pipeline do relatório; não sobrescreve afirmações existentes. Se o
+  pipeline inteiro falhar antes, o arquivo não é gravado (o relatório já leva o aviso).
+- **Tarefa 6.1 (Sonnet sem `afirmacoes.json`):** sem acesso aos logs do Pi nesta sessão, a causa não foi confirmada por
+  eventos. Pelo código, o arquivo só nascia no fim do estágio `claims`; sem `CLAIM_VERIFY_ENABLED`, sem `render`, ou com
+  exceção antes de `store.save()` o arquivo não era criado. A correção do §6.2 torna a ausência explícita
+  (`motivo_vazio`); a confirmação por eventos fica pendente.
+
 ## 9. Riscos e mitigações
 
 | Risco | Mitigação |

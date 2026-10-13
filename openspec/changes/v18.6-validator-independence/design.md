@@ -130,7 +130,7 @@ desempate.
 | Segurança | Possível provedor novo para o juiz (§6) |
 | Testes e telemetria | Rótulo de papel da revisão corrigido; testes do roteador puros |
 
-## 10. Questões em aberto
+## 10. Questões em aberto (decididas em 2026-10-13: dica descartada e padrão `preferred`; Claude segue primeiro no catálogo)
 
 1. As duas divergências do ADR 020 (dica do Developer na família do juiz; padrão por política).
 2. Ordem de preferência dos juízes no catálogo: manter Claude Sonnet primeiro (com o Developer em

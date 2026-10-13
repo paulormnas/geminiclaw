@@ -301,6 +301,38 @@ class CostResourcesReader:
         }
 
 
+class JudgeIndependenceReader:
+    """Grupo ``verificacao``: independência do julgamento (ADR 020), lida do payload da sessão.
+
+    Sessões sem o registro (anteriores a v18.6-validator-independence) ficam como lacuna, nunca como "atendida".
+    """
+
+    group = "verificacao"
+    producer = "independencia_julgamento"
+
+    def __init__(self, payload_loader: Callable[[str], dict[str, Any]] | None = None) -> None:
+        self._payload_loader = payload_loader
+
+    def read(self, session_id: str) -> dict[str, Any]:
+        if self._payload_loader is None:
+            raise MetricsUnavailable("payload da sessão indisponível", self.producer)
+        payload = self._payload_loader(session_id) or {}
+        record = payload.get("independencia_julgamento")
+        if not isinstance(record, dict):
+            raise MetricsUnavailable("sessão sem o registro independencia_julgamento", self.producer)
+        events = [e for e in (payload.get("eventos_independencia_julgamento") or []) if isinstance(e, dict)]
+        validator = record.get("validator") or {}
+        developer = record.get("developer") or {}
+        return {
+            "independencia_julgamento_modo": record.get("modo"),
+            "independencia_julgamento_atendida": record.get("atendida"),
+            "independencia_julgamento_rejeicoes": sum(1 for e in events if e.get("decisao") == "rejeitado"),
+            "independencia_julgamento_familias": {
+                "validator": validator.get("familia"), "developer": developer.get("familia"),
+            },
+        }
+
+
 class HumanInterventionsReader:
     """Grupo ``intervencoes_humanas``: o que o pesquisador fez na sessão.
 
@@ -373,6 +405,7 @@ def default_readers(
         PlanRejectionReader(),
         CostResourcesReader(),
         HumanInterventionsReader(payload_loader),
+        JudgeIndependenceReader(payload_loader),
     ]
 
 
@@ -486,6 +519,14 @@ def render_operation_metrics_section(metrics: dict[str, Any], *, stop_reason: st
         )
         lines.append(f"- **Verificação:** {claims}; planos reprovados: {_fmt(ver.get('ciclos_rejeicao_plano'))}")
         lines.extend(_gaps(ver))
+        if ver.get("independencia_julgamento_modo") is not None:
+            families = ver.get("independencia_julgamento_familias") or {}
+            lines.append(
+                f"- **Independência do julgamento:** modo {ver['independencia_julgamento_modo']}; "
+                f"{families.get('validator')} (validator) / {families.get('developer')} (developer); "
+                f"atendida: {_fmt(ver.get('independencia_julgamento_atendida'))}; "
+                f"conferências rejeitadas: {_fmt(ver.get('independencia_julgamento_rejeicoes'))}"
+            )
         for cycle in ver.get("ciclos_correcao_conclusoes") or []:
             lines.append(
                 f"  - {cycle['conclusao_id']}: {_fmt(cycle['ciclos'])} ciclo(s) de correção, "

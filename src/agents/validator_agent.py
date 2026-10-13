@@ -873,7 +873,11 @@ class ValidatorAgent:
                     temperature=0.1,
                     max_tokens=800,
                 )
-                record_llm_call(self.provider, response, int((time.monotonic() - _t0) * 1000), "reviewer")
+                # ADR 020 §6: a revisão de subtarefa usa o modelo do validator e é registrada como tal.
+                record_llm_call(
+                    self.provider, response, int((time.monotonic() - _t0) * 1000), "validator",
+                    funcao="revisao_subtarefa",
+                )
                 parsed = extract_json(response.text or "")
                 if isinstance(parsed, dict) and "status" in parsed:
                     status = parsed.get("status", "pass").lower()

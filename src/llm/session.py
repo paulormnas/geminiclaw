@@ -24,11 +24,13 @@ from src.llm.availability import (
     static_availability,
 )
 from src.llm.catalog import Catalog, load_catalog, split_model_id
+from src.llm.independence import JudgeIndependenceGuard
 from src.llm.routing import (
     POLICY_SELF_HOSTED,
     ROUTING_STRICT,
     Pin,
     RoleResolution,
+    effective_judge_mode,
     is_eligible,
     read_pins,
     resolve_session,
@@ -53,20 +55,25 @@ class SessionRouting:
     disponiveis: Mapping[str, Availability]
     # Versão efetiva por modelo e eventos de troca da sessão (v18.5-model-catalog-locality, design §4).
     versions: VersionTracker = field(default_factory=VersionTracker, compare=False, repr=False)
+    # Independência do julgamento (ADR 020): estado e conferência da sessão. ``None`` só em montagens manuais.
+    guard: JudgeIndependenceGuard | None = field(default=None, compare=False, repr=False)
 
     def resolution(self, papel: str) -> RoleResolution:
         """Resolução do papel (aplica ``aliases_papel``; papel desconhecido -> ``ValueError``)."""
         return self.papeis[self.catalogo.normalize_role(papel)]
 
-    def apply_hint(self, papel: str, hint: str | None) -> str:
+    def apply_hint(self, papel: str, hint: str | None, *, subtarefa: str | None = None) -> str:
         """``id`` efetivo do papel: a dica ``provedor/modelo`` do plano, se válida; senão o resolvido.
 
         A dica é texto gerado pelo LLM do planejamento (superfície de injeção de prompt): ela
-        **nunca** sobrepõe um pin do pesquisador (``origem`` ``pin`` ou ``pin_legado``).
+        **nunca** sobrepõe um pin do pesquisador (``origem`` ``pin`` ou ``pin_legado``). Uma dica de juiz
+        ou julgado na família do outro grupo é rejeitada (ADR 020 §4); o juiz nunca troca de modelo.
         """
         resolved = self.resolution(papel)
         if not hint or hint == resolved.id:
             return resolved.id
+        if self.guard is not None and self.guard.is_approved(resolved.papel, hint):
+            return hint  # já conferida (dica aceita ou substituição do despacho)
         if resolved.origem != "preferencia":
             logger.warning(
                 "Dica de modelo do plano ignorada: o papel tem pin do pesquisador",
@@ -74,7 +81,27 @@ class SessionRouting:
             )
             return resolved.id
         accepted = validate_hint(papel, hint, self.catalogo, self.disponiveis, self.politica, self.modo)
-        return accepted or resolved.id
+        if accepted is None:
+            return resolved.id
+        if self.guard is not None:
+            return self.guard.check_hint(resolved.papel, resolved.id, accepted, subtarefa)
+        return accepted
+
+    def dispatch_model(self, papel: str, hint: str | None, *, subtarefa: str | None = None) -> str:
+        """Modelo efetivo de uma subtarefa no despacho: dica conferida e, para ``reviewer``/``base``, a independência.
+
+        Raises:
+            JudgeIndependenceError: ``required`` sem alternativa de outra família (só esta subtarefa falha).
+            ValueError: Papel fora do catálogo.
+        """
+        resolved = self.resolution(papel)
+        model = self.apply_hint(papel, hint, subtarefa=subtarefa)
+        if self.guard is not None and model == resolved.id:
+            model = self.guard.check_dispatch(
+                resolved.papel, model, subtarefa,
+                pin_fixo=resolved.origem != "preferencia" and self.modo == ROUTING_STRICT,
+            )
+        return model
 
     def fallback_for(self, resolved_id: str) -> str | None:
         """Modelo de fallback do Google no 429, se aceito (ADR 017 §6, design §4).
@@ -115,6 +142,10 @@ class SessionRouting:
                 extra={"fallback": fallback_id, "model": resolved_id},
             )
             return None
+        if self.guard is not None:  # ADR 020 §4: a reserva também respeita a independência do julgamento
+            roles = [role for role, resolution in self.papeis.items() if resolution.id == resolved_id]
+            if not self.guard.check_fallback(roles, resolved_id, fallback_id):
+                return None
         return configured
 
     def payload(self) -> dict[str, Any]:
@@ -134,6 +165,10 @@ class SessionRouting:
             },
         }
 
+    def independence_payload(self) -> dict[str, Any] | None:
+        """Conteúdo de ``payload["independencia_julgamento"]`` (ADR 020 §6), ou ``None`` sem a conferência."""
+        return self.guard.registro() if self.guard is not None else None
+
     def banner_lines(self) -> list[str]:
         """Linhas do banner: política, modo, catálogo e uma linha por papel."""
         width = max((len(role) for role in self.papeis), default=0)
@@ -143,6 +178,8 @@ class SessionRouting:
         ]
         for role, res in self.papeis.items():
             lines.append(f"{role.ljust(width)}  {res.id}  ({res.trust})")
+        if self.guard is not None:
+            lines.append(self.guard.summary_line())
         return lines
 
 
@@ -203,9 +240,11 @@ def _resolve(
     modo: str,
     disponiveis: Mapping[str, Availability],
 ) -> SessionRouting:
-    papeis = resolve_session(catalog, disponiveis, politica, pins, modo)
+    judge_mode, origem_modo = effective_judge_mode(config.LLM_JUDGE_INDEPENDENCE, politica)
+    papeis = resolve_session(catalog, disponiveis, politica, pins, modo, judge_mode)
+    guard = JudgeIndependenceGuard(catalog, papeis, dict(disponiveis), politica, judge_mode, origem_modo, modo)
     return SessionRouting(
-        politica, modo, catalog, papeis, dict(disponiveis), VersionTracker(strict=modo == ROUTING_STRICT)
+        politica, modo, catalog, papeis, dict(disponiveis), VersionTracker(strict=modo == ROUTING_STRICT), guard
     )
 
 

@@ -1,7 +1,8 @@
 """Juiz LLM das perguntas de ``ask_researcher`` e calibração humana (``v16-agent-communication-eval`` §5 e §6).
 
-O modelo do juiz é selecionado automaticamente: diferente dos modelos de ``developer`` e
-``researcher`` (planejamento) da sessão e do agente que perguntou. O texto enviado ao juiz passa
+O modelo do juiz é selecionado automaticamente: de família diferente da dos modelos de ``developer`` e ``base``
+da sessão (ADR 020 §7; a família é a do catálogo), diferente do agente que perguntou e, como desempate, de família
+diferente da do ``researcher`` (planejamento). O texto enviado ao juiz passa
 por redação (ADR 019 §3). Nada daqui é executado dentro da sessão, e nada é gravado nela.
 """
 
@@ -26,8 +27,9 @@ from src.utils.json_parser import extract_json
 
 RUBRIC_VERSION = "1"
 CRITERIA = ("necessidade", "clareza", "resposta", "efeito")
-EXCLUDED_ROLES = ("developer", "researcher")
-POOL_ROLES = ("reviewer", "validator", "summarizer", "base")
+EXCLUDED_ROLES = ("developer", "base")  # julgados: o juiz não pode ser da família deles (ADR 020 §7)
+TIEBREAK_ROLES = ("researcher",)  # a família do planejamento só desempata
+POOL_ROLES = ("reviewer", "validator", "summarizer", "researcher")
 CALIBRATION_DIR = Path("docs/benchmarks/calibracao")
 LABELS_PATH = CALIBRATION_DIR / "ask_researcher.jsonl"
 CALIBRATION_RESULT_PATH = CALIBRATION_DIR / "resultado.json"
@@ -182,13 +184,27 @@ def _price_rank(key: str) -> float:
     return float("inf") if price is None else price.input + price.output
 
 
+def model_family(key: str) -> str | None:
+    """``familia_modelo`` do catálogo para ``provedor/modelo`` (forma canônica); ``None`` se fora do catálogo."""
+    from src.llm.session import get_catalog
+
+    wanted = canon_model(key)
+    for model_id, entry in get_catalog().modelos.items():
+        if canon_model(model_id) == wanted:
+            return entry.familia_modelo
+    return None
+
+
 def select_judge(
     models_by_role: dict[str, str],
     candidates: list[str] | None = None,
     asking_model: str | None = None,
     override: str | None = None,
 ) -> JudgeSelection | None:
-    """Escolhe o modelo do juiz, diferente dos de ``developer`` e ``researcher`` e do que perguntou.
+    """Escolhe o modelo do juiz, de família diferente da de ``developer`` e ``base`` e do que perguntou.
+
+    A família do ``researcher`` só desempata (ADR 020 §7). Um modelo fora do catálogo não tem família conhecida:
+    é excluído só se for o mesmo modelo de um julgado.
 
     Args:
         models_by_role: ``{papel: "provedor/modelo"}`` da sessão (de ``token_usage``).
@@ -205,7 +221,10 @@ def select_judge(
     """
     excluded = sorted({models_by_role[r] for r in EXCLUDED_ROLES if r in models_by_role})
     excluded_canon = {canon_model(m) for m in excluded}
-    excluded_providers = {canon_model(m).partition('/')[0] for m in excluded}
+    excluded_families = {f for m in excluded if (f := model_family(m)) is not None}
+    planner_families = {
+        f for r in TIEBREAK_ROLES if r in models_by_role and (f := model_family(models_by_role[r])) is not None
+    }
     if override:
         pool = [override]
     else:
@@ -213,11 +232,12 @@ def select_judge(
         for key in [models_by_role[r] for r in POOL_ROLES if r in models_by_role] + list(candidates or []):
             if key not in pool:
                 pool.append(key)
-    valid = [m for m in pool if canon_model(m) not in excluded_canon]
+    valid = [m for m in pool if canon_model(m) not in excluded_canon and model_family(m) not in excluded_families]
     if not valid:
         raise JudgeUnavailable(
-            "Nenhum candidato válido para o juiz. Modelos excluídos (developer e researcher): "
-            f"{', '.join(excluded) or 'nenhum'}. Informe candidatos em COMM_EVAL_JUDGE_CANDIDATES."
+            "Nenhum candidato válido para o juiz. Modelos excluídos (developer e base) e suas famílias "
+            f"({', '.join(sorted(excluded_families)) or 'desconhecidas'}): {', '.join(excluded) or 'nenhum'}. "
+            "Informe candidatos de outra família em COMM_EVAL_JUDGE_CANDIDATES."
         )
     asking = canon_model(asking_model) if asking_model else None
     allowed = [m for m in valid if canon_model(m) != asking]
@@ -226,14 +246,14 @@ def select_judge(
     order = {m: i for i, m in enumerate(allowed)}
     best = min(
         allowed,
-        key=lambda m: (canon_model(m).partition("/")[0] in excluded_providers, _price_rank(m), order[m]),
+        key=lambda m: (model_family(m) in planner_families, _price_rank(m), order[m]),
     )
     if override:
         reason = "sobrescrita do pesquisador"
-    elif canon_model(best).partition('/')[0] not in excluded_providers:
-        reason = "provedor diferente do desenvolvimento e do planejamento"
+    elif model_family(best) not in planner_families:
+        reason = "família diferente do desenvolvimento e do planejamento"
     else:
-        reason = "menor preço entre os candidatos válidos"
+        reason = "menor preço entre os candidatos de família diferente do desenvolvimento"
     provider, model = _split(best)
     return JudgeSelection(provider.lower(), model, reason, excluded)
 

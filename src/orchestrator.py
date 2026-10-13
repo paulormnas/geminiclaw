@@ -43,6 +43,7 @@ from src.human_gate import HumanGate
 from src.knowledge.hypotheses import PlanExtras, split_plan
 from src.knowledge.suggestions import SuggestionError
 from src.llm.allocation import build_allocation_profile
+from src.llm.independence import JudgeIndependenceError
 from src.llm.metering import bind_execution, bound_execution_id
 from src.llm.session import SessionRouting, bind_session_routing, build_session_routing, get_session_routing
 from src.llm.vision import VisionConfigError
@@ -1079,6 +1080,15 @@ class Orchestrator:
         # chamada de LLM; o mapa vale até o fim da sessão (sem troca no meio).
         routing = llm_routing or await build_session_routing()
         bind_session_routing(routing)
+        if resume is not None and routing.guard is not None:
+            # ADR 020 §4 (retomada): o juiz resolvido agora é conferido contra as famílias julgadas da sessão
+            # original, antes de criar a sessão e de reverificar qualquer afirmação pendente.
+            from src.llm.independence import judged_families_from_session
+
+            source = self.session_manager.get(resume.source_session_id)
+            routing.guard.verificar_retomada(
+                judged_families_from_session(dict(source.payload) if source is not None else {})
+            )
 
         logger.info(
             "Nova requisição recebida no orquestrador",
@@ -1119,6 +1129,9 @@ class Orchestrator:
                 "budget": budget_payload(effective_budget),
                 "locality_min_group_size": egress_gate.min_group_size,
                 "llm_routing": routing.payload(),
+                # v18.6-validator-independence — modo, famílias e `atendida` (ADR 020 §6).
+                "independencia_julgamento": routing.independence_payload(),
+                "eventos_independencia_julgamento": [],
                 # v18.5-model-catalog-locality — perfil de alocação gravado antes do primeiro envio a um modelo.
                 "allocation_profile": build_allocation_profile(routing),
                 "eventos_versao_modelo": [],
@@ -1128,6 +1141,7 @@ class Orchestrator:
             },
         )
         self._wire_version_events(routing, master_session.id)
+        self._wire_independence_events(routing, master_session.id)
         record_confirmation_event(master_session.id)  # v18.5-operation-metrics: modo sem limite confirmado
         continues_id = resume.source_session_id if resume is not None else None
         if resume is not None:
@@ -1656,6 +1670,37 @@ class Orchestrator:
         versions.set_event_sink(on_event)
         versions.set_change_sink(on_change)
 
+    def _wire_independence_events(self, routing: Any, session_id: str) -> None:
+        """Liga o ``JudgeIndependenceGuard`` à telemetria e ao payload da sessão mestra (ADR 020 §6).
+
+        Cada conferência grava o evento ``independencia_julgamento`` em ``agent_events`` e o acrescenta a
+        ``payload["eventos_independencia_julgamento"]``; ``independencia_julgamento.atendida`` acompanha o guard.
+        """
+        guard = getattr(routing, "guard", None)
+        if guard is None:
+            return
+        payload_lock = threading.Lock()
+
+        def on_event(event: dict[str, Any]) -> None:
+            get_telemetry().record_agent_event(
+                execution_id=session_id,
+                session_id=session_id,
+                agent_id="orchestrator",
+                event_type=event["tipo"],
+                task_name=event.get("subtarefa") or None,
+                payload=event,
+            )
+            with payload_lock:
+                session = self.session_manager.get(session_id)
+                payload = dict(session.payload) if session is not None else {}
+                payload["eventos_independencia_julgamento"] = [
+                    *payload.get("eventos_independencia_julgamento", []), event
+                ]
+                payload["independencia_julgamento"] = guard.registro()
+                self.session_manager.update(session_id, payload=payload)
+
+        guard.set_event_sink(on_event)
+
     def register_usage_tracker(self, master_session_id: str, tracker: UsageTracker) -> None:
         """Registra o ``UsageTracker`` da sessão (criado pelo ``AutonomousLoop``), para que o
         consultor respeite o orçamento de tokens/tempo (V18 / Spec `researcher-consult`)."""
@@ -1905,10 +1950,36 @@ class Orchestrator:
 
         # ADR 017 §7: a dica preferred_model do plano só vale como provedor/modelo validado pelo
         # roteador; caso contrário o papel usa o modelo resolvido da sessão.
+        # ADR 020 §4: a dica e o despacho de reviewer/base passam pela conferência de independência do julgamento.
         try:
-            model = get_session_routing().apply_hint(task.agent_id, task.preferred_model)
+            model = get_session_routing().dispatch_model(
+                task.agent_id, task.preferred_model, subtarefa=task.task_name or None
+            )
         except ValueError:
             model = ""  # papel fora do catálogo: o runtime recusa com mensagem própria
+        except JudgeIndependenceError as exc:
+            # `required` sem alternativa de outra família: só esta subtarefa falha; a sessão continua.
+            message = str(exc)
+            logger.error("Subtarefa recusada pela independência do julgamento", extra={"role": task.agent_id})
+            telemetry.record_agent_event(
+                execution_id=_exec_id,
+                session_id=session.id,
+                agent_id=task.agent_id,
+                event_type="error",
+                task_name=task.task_name or None,
+                payload={"status": "error", "motivo": "mesma_familia_julgamento", "runtime": "inprocess"},
+            )
+            try:
+                self.session_manager.close(session.id)
+            except Exception as close_exc:  # noqa: BLE001
+                logger.error(f"Erro ao fechar sessão {session.id}: {close_exc}")
+            return AgentResult(
+                agent_id=task.agent_id,
+                session_id=session.id,
+                status="error",
+                response={"error": message, "motivo": "mesma_familia_julgamento"},
+                error=message,
+            )
         enable_thinking = OLLAMA_ENABLE_THINKING if task.agent_id not in ("planner", "validator") else True
 
         async def _ask_researcher_callback(

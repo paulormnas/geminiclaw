@@ -1,6 +1,6 @@
 # Tarefas: v18.6-hypothesis-closure
 
-**Estado (2026-10-13):** Implementada no PR `feat/v18.6-hypothesis-closure` (testes unitários verdes, `ruff` verde). Pendentes: (a) teste de integração com AGE real e bateria `unit or integration` no Raspberry Pi (acesso ao Pi negado pelo classificador de permissões nesta sessão; `tests/integration/knowledge/test_hypothesis_closure_age.py` está escrito e é pulado sem AGE); (b) tarefa 6.1 (causa da ausência de `afirmacoes.json` no Sonnet) sem os eventos do Pi; (c) respostas do pesquisador às questões do design §8 (adotadas as propostas, ver design §8.1). `v18.6-review-evidence` já está em `dev` (#142).
+**Estado (2026-10-13):** Implementada. Testes verdes (ruff; Pi 5: 3534 passed, 1 falha preexistente da fila de similaridade; AGE real passou). Pendentes: (b) tarefa 6.1 (causa da ausência de `afirmacoes.json` no Sonnet) sem confirmação nos eventos do Pi; (c) respostas do pesquisador às questões do design §8 (adotadas as propostas conservadoras, design §8.1). `v18.6-review-evidence` já está em `dev` (#142).
 
 ## 0. Pré-requisitos
 - [ ] 0.1 Questões do design §8 respondidas pelo pesquisador. (Pendente: adotadas as propostas conservadoras, design §8.1.)
@@ -43,6 +43,6 @@
 - [x] 7.2 Teste dos três contadores.
 
 ## 8. Validação
-- [ ] 8.1 `uv run ruff check .` e `uv run pytest -m "unit or integration" -v` verdes. (`ruff` e `-m unit` verdes no Mac, exceto 4 testes que exigem `openpyxl`/`pytesseract` não instalados; `integration` pendente no Pi.)
-- [ ] 8.2 (escrito; execução no Pi pendente) Teste de integração com AGE real: sessão simulada (provedores LLM falsos) com uma hipótese refutada e outra validada fecha uma delas com status calculado.
+- [x] 8.1 `ruff` verde. Pi 5 (2026-10-13): unit + integration 3534 passed, 8 skipped, 1 failed (`test_similarity_queue_integration::test_fluxo_completo_da_fila`, preexistente: item `x` sobrando na fila compartilhada; falha também na dev antiga do Pi). No Mac, 4 testes exigem `openpyxl`/`pytesseract`, instalados no Pi.
+- [x] 8.2 Teste de integração com AGE real (`tests/integration/knowledge/test_hypothesis_closure_age.py`): passou no Pi 5 em 2026-10-13; sessão simulada com uma hipótese refutada e outra validada fecha pelo veredito calculado.
 - [x] 8.3 `tasks.md` com caixas e linha **Estado** atualizadas no PR.

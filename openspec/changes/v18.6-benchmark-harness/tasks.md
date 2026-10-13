@@ -1,6 +1,6 @@
 # Tarefas: v18.6-benchmark-harness
 
-**Estado (2026-10-13):** Implementada, com pendências. Feitos os grupos 1 a 6 e 7.1/7.3/7.4: reset isolado com quatro guardas e arquivo de segurança (`scripts/benchmark/reset_stores.py`, validado no Pi 5 contra PostgreSQL com AGE e Qdrant reais em banco e coleção descartáveis; os bancos compartilhados não foram resetados), semeadura com fail-fast, `StoreSampler`, placar validado, arquivamento, `--repeat` com agregados e `cached_tokens`. Pendentes: **6.2** (`cached_input` dos modelos OpenAI: falta o valor da fonte oficial; não foi inventado), **6b** inteiro (juiz declarado por combinação; depende do ADR 020, ainda Proposto, e de `v18.6-validator-independence`), **0.1** (questões do design §8 respondidas só pelas propostas do design) e **7.2** (execução curta no Pi só após confirmação do pesquisador).
+**Estado (2026-10-13):** Implementada, com pendências. Feitos os grupos 1 a 6b e 7.1/7.3/7.4: reset isolado com quatro guardas e arquivo de segurança (`scripts/benchmark/reset_stores.py`, validado no Pi 5 antes da queda de energia contra PostgreSQL com AGE e Qdrant reais em banco e coleção descartáveis; os bancos compartilhados não foram resetados), semeadura com fail-fast, `StoreSampler`, placar validado, arquivamento, `--repeat` com agregados, `cached_tokens` e, com o ADR 020 aprovado, o juiz declarado por combinação (`validate_combination`, `controle`, `LLM_JUDGE_INDEPENDENCE=off`, `check_pins`, matriz `matrix_modelos_v18_6.json`). Os testes unitários passam localmente (3369) e a suíte de integração e a validação no Pi 5 após a queda de energia **não foram reexecutadas nesta sessão** (acesso ao Pi não autorizado). Pendentes: **6.2** (`cached_input` dos modelos OpenAI: falta o valor da fonte oficial; não foi inventado), **0.1** (questões do design §8 respondidas só pelas propostas do design), **6b.4** (composição da matriz a confirmar com o pesquisador), **7.1-Pi** (integração no Pi) e **7.2** (execução curta no Pi só após confirmação do pesquisador). Dependência do juiz no roteador: o registro `independencia_julgamento` do payload só existe com `v18.6-validator-independence`; até lá `check_pins` o confere apenas se presente.
 
 ## 0. Pré-requisitos
 - [ ] 0.1 Questões do design §8 respondidas pelo pesquisador. _Aberto: implementado com as propostas do design (mesmas coleções do Qdrant; sem reexecução do modelo; 3 repetições na próxima rodada; arquivo de segurança retido)._
@@ -46,14 +46,15 @@
 
 ## 6b. Juiz independente na matriz (ADR 020 §7)
 _Pendente por inteiro: depende da aprovação do ADR 020 e de `v18.6-validator-independence`._
-- [ ] 6b.1 `build_env` não expande `*` para `VALIDATOR` e `REVIEWER`; a combinação declara o juiz.
-- [ ] 6b.2 Recusa da combinação com juiz da mesma família do `developer`, salvo `"independencia_julgamento": "off"` (controle); a família vem do catálogo.
-- [ ] 6b.3 `check_pins` aceita o registro `independencia_julgamento` como esperado.
-- [ ] 6b.4 Nova matriz `scripts/benchmark/matrix_modelos_v18_6.json` com o juiz declarado e ao menos uma combinação de controle (composição a confirmar com o pesquisador).
-- [ ] 6b.5 Testes: os cenários de "Juiz declarado por combinação".
+- [x] 6b.1 `build_env` não expande `*` para `VALIDATOR` e `REVIEWER`; a combinação declara o juiz.
+- [x] 6b.2 Recusa da combinação com juiz da mesma família do `developer`, salvo `"independencia_julgamento": "off"` (controle); a família vem do catálogo.
+- [x] 6b.3 `check_pins` aceita o registro `independencia_julgamento` como esperado.
+- [x] 6b.4 Nova matriz `scripts/benchmark/matrix_modelos_v18_6.json` com o juiz declarado e ao menos uma combinação de controle (composição a confirmar com o pesquisador). _Proposta implementada: três combinações com juiz de outra família (Gemini, Claude, GPT) e `controle-gemini-todos`; a composição segue aberta para o pesquisador._
+- [x] 6b.5 Testes: os cenários de "Juiz declarado por combinação".
 
 ## 7. Validação
-- [x] 7.1 `uv run ruff check .` e `uv run pytest -m "unit or integration" -v` verdes.
+- [x] 7.1 `uv run ruff check .` e `uv run pytest -m "unit or integration" -v` verdes. _Reconfirmado em 2026-10-13 só `ruff` e `-m unit` (3369 passed); `-m integration` no Pi pendente (ver 7.1-Pi)._
+- [ ] 7.1-Pi Reexecutar `tests/integration/test_benchmark_reset_integration.py` e os testes unitários no Pi 5 contra PostgreSQL e Qdrant reais (banco e coleções descartáveis), após a queda de energia.
 - [ ] 7.2 Execução curta no Pi **somente após confirmação do pesquisador** (bateria final): uma combinação, `--repeat 1`, `--reset-stores`, conferindo o arquivo de segurança, a série e o placar.
 - [x] 7.3 Atualizar `.agents/workflows/clean.md` e o cabeçalho de `run_benchmark.py` com o novo uso.
 - [x] 7.4 `tasks.md` com caixas e linha **Estado** atualizadas no PR.

@@ -302,8 +302,6 @@ def run_combination(
             seed_error = f"{type(exc).__name__}: {exc}"
     base_result = {"name": combo["name"], "roles": combo["roles"], "repeticao": repeticao,
                    "isolated": bool(reset_report), "reset": reset_report}
-    if combo.get("independencia_julgamento") == "off":
-        base_result["controle"] = True
     before = footprint.snapshot()
     started_wall = time.time()
     start = time.monotonic()

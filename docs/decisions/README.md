@@ -29,6 +29,7 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 | [017](adr_017_catalogo_modelos_roteador.md) | Catálogo de Modelos e Roteador de Provedores por Papel | ✅ Aceito | 2026-09-29 |
 | [018](adr_018_imagem_sandbox_enxuta_e_imagens_por_plataforma.md) | Imagem Enxuta do Sandbox de Código e Seleção de Imagens por Plataforma (registro de ideias) | 🟠 Parcialmente implementado (`v16-platform-images` mergeada em 2026-10-12; faltam 5.5.1 e 5.5.2) | 2026-09-29 |
 | [019](adr_019_localidade_dados_proveniencia_resultados.md) | Localidade dos Dados de Pesquisa e Proveniência dos Resultados | 🟠 Parcialmente implementado (as 8 mudanças V18.5 estão mergeadas, com pendências de validação real e de revisão de segurança; passa a Aceito quando elas fecharem) | 2026-09-29 |
+| [020](adr_020_independencia_validator.md) | Independência do Julgamento: Família de Modelo do Validator Diferente da do Developer | 🔵 Proposto (2026-10-13; spec `v18.6-validator-independence`) | 2026-10-13 |
 
 ---
 
@@ -100,12 +101,17 @@ ADR 010 (Propósito: Assistente de Pesquisa) ← define o escopo de tudo (substi
   │           └── ADR 013 (Federação) ← como o conhecimento é compartilhado entre nós (último)
   ├── ADR 011 (Provedores Agnósticos) ← quais modelos e embeddings são usados (substitui ADR 006)
   ├── ADR 019 (Localidade e Proveniência) ← o que sai do nó e de onde vem cada número (após a V18, antes da V19)
+  │     └── ADR 020 (Independência do Julgamento) ← juiz de família diferente da do Developer (V18.6)
   └── ADR 008 (Manifest V13) ← como o contexto de código é persistido
 ```
 
 ---
 
 ## Lacunas de especificação (2026-10-01)
+
+Descritas em 2026-10-13 (aguardando aprovação do pesquisador), etapa V18.6 de correções do benchmark
+de 2026-10-13 (`roadmaps/roadmap_V18.6.md`): `v18.6-review-evidence`, `v18.6-benchmark-harness`,
+`v18.6-hypothesis-closure` (sem ADR novo) e `v18.6-validator-independence` (ADR 020, Proposto).
 
 Verificação dos ADRs aprovados contra `openspec/changes/`. Não há mais specs faltando para os
 ADRs aprovados, exceto o ADR 016 (Proposto). A ordem de trabalho está na memória do projeto e no

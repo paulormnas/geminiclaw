@@ -98,6 +98,10 @@ requisitos consolidados em [`specs/`](specs/README.md) e os itens abertos em
 | V18.5 | [v18.5-numeric-references](changes/archive/v18.5-numeric-references/proposal.md) | `numeric-provenance` | 019 | v18.5-execution-provenance |
 | V18.5 | [v18.5-claim-verification](changes/archive/v18.5-claim-verification/proposal.md) | `claim-verification` | 019, 015 | v18.5-numeric-references, v18.5-model-catalog-locality |
 | V18.5 | [v18.5-operation-metrics](changes/archive/v18.5-operation-metrics/proposal.md) | `operation-metrics` | 019 | v18.5-egress-gate, v18.5-execution-provenance, v18.5-claim-verification |
+| V18.6 | [v18.6-review-evidence](changes/v18.6-review-evidence/proposal.md) | `pipeline-robustness` | 002, 010, 019 | — |
+| V18.6 | [v18.6-benchmark-harness](changes/v18.6-benchmark-harness/proposal.md) | `benchmark` | 005, 009, 010, 020 | — (item de juiz: v18.6-validator-independence) |
+| V18.6 | [v18.6-validator-independence](changes/v18.6-validator-independence/proposal.md) | `llm-providers` | 020, 017, 019 | aprovação do ADR 020 |
+| V18.6 | [v18.6-hypothesis-closure](changes/v18.6-hypothesis-closure/proposal.md) | `hypothesis-loop` | 009, 010, 012, 015, 019 | v18.6-review-evidence |
 | V19 | [v19-equipment-control](changes/v19-equipment-control/proposal.md) | `equipment-control` | 019, 014, 015, 010 | V18.5, v18-researcher-consult |
 | V20 | [v20-node-identity](changes/v20-node-identity/proposal.md) | `node-identity` | 013 | V16–V19 validadas |
 | V20 | [v20-federated-records](changes/v20-federated-records/proposal.md) | `federation-records` | 013, 019, 015 | v20-node-identity, V18.5 |

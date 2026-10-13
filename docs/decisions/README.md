@@ -29,6 +29,8 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 | [017](adr_017_catalogo_modelos_roteador.md) | Catálogo de Modelos e Roteador de Provedores por Papel | ✅ Aceito | 2026-09-29 |
 | [018](adr_018_imagem_sandbox_enxuta_e_imagens_por_plataforma.md) | Imagem Enxuta do Sandbox de Código e Seleção de Imagens por Plataforma (registro de ideias) | ✅ Aceito (2026-10-13; 5.5.1, 5.5.2 e medições no Pi pendentes) | 2026-09-29 |
 | [019](adr_019_localidade_dados_proveniencia_resultados.md) | Localidade dos Dados de Pesquisa e Proveniência dos Resultados | 🟠 Parcialmente implementado (8 mudanças V18.5 concluídas e arquivadas; §10 na V19; validação real e revisões de segurança pendentes) | 2026-09-29 |
+| [020](adr_020_independencia_validator.md) | Independência do Julgamento: Família de Modelo do Validator Diferente da do Developer | 🔵 Proposto (2026-10-13; spec `v18.6-validator-independence`) | 2026-10-13 |
+
 
 ---
 
@@ -100,6 +102,7 @@ ADR 010 (Propósito: Assistente de Pesquisa) ← define o escopo de tudo (substi
   │           └── ADR 013 (Federação) ← como o conhecimento é compartilhado entre nós (último)
   ├── ADR 011 (Provedores Agnósticos) ← quais modelos e embeddings são usados (substitui ADR 006)
   ├── ADR 019 (Localidade e Proveniência) ← o que sai do nó e de onde vem cada número (após a V18, antes da V19)
+  │     └── ADR 020 (Independência do Julgamento) ← juiz de família diferente da do Developer (V18.6)
   └── ADR 008 (Manifest V13) ← como o contexto de código é persistido
 ```
 

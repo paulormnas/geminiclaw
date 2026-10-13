@@ -89,7 +89,7 @@ async def test_plan_rejection_message_is_actionable_and_llm_is_told_not_to_rejec
     provider.model_name = "m"
     provider.generate = AsyncMock(return_value=LLMResponse(text='{"status": "approved"}'))
     agent = ValidatorAgent(provider=provider)
-    bad = [{"agent_id": "developer", "task_name": "avaliar", "prompt": "p", "task_type": "validation",
+    bad = [{"agent_id": "developer", "task_name": "avaliar", "prompt": "p", "task_type": "validation", "hypothesis_ref": "h1",
             "validation_criteria": ["modelos comparados"]}]
     result = await agent.validate_plan(bad, "tarefa")
     assert not result.is_valid and "Correção" in result.issues[0] and "model_impl" in result.issues[0]

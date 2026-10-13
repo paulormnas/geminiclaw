@@ -2239,6 +2239,7 @@ class Orchestrator:
                         "reason": str(val_result.reason or "")[:300],
                         "issues": [str(i)[:200] for i in (val_result.issues or [])][:8],
                         "plan_tasks": len(current_plan_data),
+                        "plan_warnings": list(getattr(val_result, "warnings", None) or []),
                     },
                 )
             except Exception as exc:

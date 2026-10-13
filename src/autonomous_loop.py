@@ -2311,6 +2311,10 @@ class AutonomousLoop:
                     "resolved_artifacts": dict(list((review.resolved_artifacts or {}).items())[:12]),
                     "name_mismatch": bool(review.name_mismatch),
                     "verified": bool(getattr(review, "verified", True)),
+                    "undecided_criteria": [
+                        str(c)[:200] for c in (getattr(review, "undecided_criteria", None) or [])
+                    ][:8],
+                    "metric_qualifiers": dict(list((getattr(review, "metric_qualifiers", None) or {}).items())[:20]),
                 },
             )
         except Exception as exc:

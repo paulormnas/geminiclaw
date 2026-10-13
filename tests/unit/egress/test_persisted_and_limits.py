@@ -332,7 +332,8 @@ def test_json_de_metricas_na_sintese_e_saida_de_execucao(gate, third_party):
     assert "max: [10, 20)" in out.messages[0]["content"]
 
 
-def test_evidencia_do_validator_classifica_pela_origem(tmp_path):
+def test_evidencia_do_validator_classifica_pela_origem(tmp_path, monkeypatch):
+    monkeypatch.setattr("src.config.REVIEW_ARTIFACT_PROFILE", False)  # com o perfil, o CSV sai como esquema agregado
     from src.agents.validator_agent import build_artifact_evidence_fragments
 
     (tmp_path / "metrics.json").write_text('{"acc": 0.9}', encoding="utf-8")

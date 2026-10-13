@@ -53,7 +53,7 @@ from src.knowledge.ingestion_queue import (
     PendingQueue,
     event_key,
 )
-from src.knowledge.normalization import clean_free_text, normalize_domain_term
+from src.knowledge.normalization import clean_free_text, normalize_domain_term, split_metric_name
 from src.knowledge.projects import validate_project_id
 from src.knowledge.provenance import Actor
 from src.knowledge.vocabulary import VocabularyError, resolve_metric
@@ -810,6 +810,7 @@ class _Writer:
                     "nome_original": nome,
                     "valor": value,
                     "status_validacao": self._status_validacao(sub, str(raw_name), evaluated),
+                    **self._qualificador_props(nome),
                     "caminho_metrics": f"{self.ctx.session_id}/{ev.metrics_path or ''}",
                 }
                 if prov is not None:
@@ -863,8 +864,28 @@ class _Writer:
             return "validado"
         return "nao_validado"
 
+    @staticmethod
+    def _qualificador_props(nome: str) -> dict[str, Any]:
+        """``qualificador`` do ``Resultado`` (``teste``, ``cv``, ``treino``, ``validacao``) quando o nome tem um."""
+        if not config.REVIEW_METRIC_QUALIFIERS:
+            return {}
+        qualifier = split_metric_name(nome.rsplit(".", 1)[-1]).qualifier
+        return {"qualificador": qualifier} if qualifier else {}
+
     def _mede(self, resultado_id: str, nome: str) -> None:
-        """``Resultado-MEDE->Metrica`` quando a métrica tem forma canônica; nunca cria candidato."""
+        """``Resultado-MEDE->Metrica`` quando a métrica tem forma canônica; nunca cria candidato.
+
+        Com qualificador de conjunto (``v18.6-review-evidence`` §1.2) só ``teste`` ou sem qualificador liga à
+        métrica canônica, pelo nome base; ``cv``, ``treino`` e ``validacao`` ficam no grafo sem ``MEDE``. Métrica de
+        grupo (``modelo.metrica``) não é ligada: o grupo é uma variante, não o resultado do teste da hipótese.
+        """
+        if config.REVIEW_METRIC_QUALIFIERS:
+            if "." in nome:
+                return
+            parts = split_metric_name(nome)
+            if parts.qualifier not in ("", "teste"):
+                return
+            nome = parts.base or nome
         try:
             resolution = resolve_metric(
                 self.store, nome, actor=ACTOR_ORQUESTRADOR, sessao_id=self.ctx.session_id, semantic_search=None

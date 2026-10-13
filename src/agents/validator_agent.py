@@ -14,7 +14,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from src import config
 from src.artifact_match import ArtifactResolution, resolve_artifacts
+from src.artifact_profile import profile_artifact
 from src.claims.verifier import ClaimBatchResult, ClaimVerifierError, EvidenceItem, NoVerifierModel
 from src.config import APP_NAME, ARTIFACT_MATCH_MODE
 from src.egress.classification import artifact_origin
@@ -27,11 +29,16 @@ from src.egress.fragments import (
     taint_if,
 )
 from src.egress.gate import role_tainted
-from src.knowledge.normalization import normalize_metric_name
+from src.knowledge.normalization import (
+    criterion_qualifier,
+    normalize_metric_name,
+    normalized_words,
+    split_metric_name,
+)
 from src.llm.base import LLMProvider
 from src.llm.metering import record_llm_call
 from src.logger import get_logger
-from src.metrics_file import metrics_of
+from src.metrics_file import metric_candidates, metrics_of
 from src.model_router import ModelRouter
 from src.utils.json_parser import extract_json
 
@@ -39,9 +46,18 @@ logger = get_logger(__name__)
 
 MANDATORY_KEYS = ["agent_id", "task_name", "prompt", "validation_criteria"]
 
-# Roadmap V15.1 / Spec G1 — tipos de tarefa que exigem ao menos 1 critério quantitativo
-# (com threshold numérico) em validation_criteria, por serem confirmatórios por natureza.
+# Roadmap V15.1 / Spec G1 e v18.6-review-evidence §6 — tipos de tarefa que exigem ao menos 1 critério
+# quantitativo (com threshold numérico) em validation_criteria: ``reproduction`` sempre; ``validation`` só quando
+# testa uma hipótese (``hypothesis_ref``). Baseline e diagnóstico sem hipótese passam com aviso.
 _QUANTITATIVE_REQUIRED_TASK_TYPES = {"reproduction", "validation"}
+WARNING_VALIDATION_WITHOUT_HYPOTHESIS = "validation_sem_hipotese"
+
+
+def _requires_quantitative(task: Dict[str, Any]) -> bool:
+    task_type = task.get("task_type")
+    if task_type == "reproduction":
+        return True
+    return task_type == "validation" and bool(str(task.get("hypothesis_ref") or "").strip())
 
 # Heurística de "critério quantitativo": presença de um dígito combinado com um operador
 # de comparação (símbolo ou palavra) — ex: "acurácia > 0.85", "pelo menos 90% de cobertura".
@@ -68,7 +84,8 @@ SCHEMA_INSTRUCTION = """Cada subtarefa no plano DEVE ser um objeto JSON contendo
 - "hypothesis": opcional (recomendado) — o que esta subtarefa testa ou produz
 - "scientific_rationale": opcional (recomendado) — por que esta etapa é metodologicamente necessária
 - "validation_criteria": list[str] (OBRIGATÓRIO: lista com ao menos 1 critério verificável de aceite;
-  para task_type 'reproduction' ou 'validation', ao menos 1 critério deve conter um threshold numérico)
+  para task_type 'reproduction', ou 'validation' com 'hypothesis_ref', ao menos 1 critério deve conter um
+  threshold numérico)
 - "expected_artifacts": list[str] (arquivos esperados a serem gerados em /outputs/)
 - "depends_on": list[str] (nomes de tarefas das quais esta depende)
 - campos OPCIONAIS do orquestrador, que fazem parte do formato e NUNCA são motivo de reprovação:
@@ -120,68 +137,163 @@ def _metric_key(raw_name: str) -> Optional[str]:
 
 
 @dataclass(frozen=True)
-class MetricCriterion:
-    """Critério de aceite que cita uma métrica conhecida, operador e limiar."""
+class Comparison:
+    """Uma comparação ``<nome> <operador> <valor>`` de um critério; ``metric`` é ``None`` se o nome é desconhecido."""
 
-    text: str
-    metric: str
+    raw_name: str
+    metric: Optional[str]
     operator: str
     threshold: float
 
 
-def _metric_criteria(criteria: List[Any]) -> List[MetricCriterion]:
-    """Seleciona os critérios que citam uma métrica conhecida com operador e valor.
+@dataclass(frozen=True)
+class MetricCriterion:
+    """Critério de aceite cujas comparações citam todas uma métrica conhecida."""
 
-    Critérios de contagem ("pelo menos 3 gráficos") ou qualitativos não entram: seguem para o
-    revisor LLM (``v16-pipeline-robustness`` §3).
+    text: str
+    comparisons: Tuple[Comparison, ...]
+
+    @property
+    def metric(self) -> str:
+        """Métrica da primeira comparação (compatibilidade com consumidores de critério simples)."""
+        return str(self.comparisons[0].metric)
+
+    @property
+    def operator(self) -> str:
+        return self.comparisons[0].operator
+
+    @property
+    def threshold(self) -> float:
+        return self.comparisons[0].threshold
+
+
+def _comparisons(criterion: str) -> List[Comparison]:
+    """Todas as comparações do critério (``finditer``), cada uma com a métrica conhecida ou ``None``."""
+    return [
+        Comparison(raw_name.strip(), _metric_key(raw_name), operator, float(raw_value.replace(",", ".")))
+        for raw_name, operator, raw_value in _CRITERION_VALUE_PATTERN.findall(criterion)
+    ]
+
+
+def _metric_criteria(criteria: List[Any]) -> List[MetricCriterion]:
+    """Seleciona os critérios cujas comparações citam todas uma métrica conhecida.
+
+    Critério de contagem, qualitativo ou com alguma comparação sem métrica conhecida não entra: segue para o
+    revisor LLM (``v16-pipeline-robustness`` §3, ``v18.6-review-evidence`` §3.1).
     """
     found: List[MetricCriterion] = []
     for criterion in criteria or []:
         if not isinstance(criterion, str):
             continue
-        match = _CRITERION_VALUE_PATTERN.search(criterion)
-        if not match:
-            continue
-        raw_name, operator, raw_value = match.groups()
-        metric = _metric_key(raw_name)
-        if metric is None:
-            continue
-        found.append(MetricCriterion(criterion.strip(), metric, operator, float(raw_value.replace(",", "."))))
+        comparisons = _comparisons(criterion)
+        if comparisons and all(c.metric is not None for c in comparisons):
+            found.append(MetricCriterion(criterion.strip(), tuple(comparisons)))
     return found
+
+
+def _partly_known_criteria(criteria: List[Any]) -> List[str]:
+    """Critérios com ao menos uma comparação de métrica conhecida e outra desconhecida (vão ao LLM)."""
+    partial: List[str] = []
+    for criterion in criteria or []:
+        if not isinstance(criterion, str):
+            continue
+        metrics = [c.metric for c in _comparisons(criterion)]
+        if any(m is not None for m in metrics) and any(m is None for m in metrics):
+            partial.append(criterion.strip())
+    return partial
+
+
+_OPERATORS = {
+    ">": lambda a, b: a > b,
+    ">=": lambda a, b: a >= b,
+    "<": lambda a, b: a < b,
+    "<=": lambda a, b: a <= b,
+    "==": lambda a, b: a == b,
+}
+
+
+def _compare(crit_text: str, cmp: Comparison, key: str, actual: float) -> Tuple[bool, str]:
+    passed = _OPERATORS[cmp.operator](actual, cmp.threshold)
+    return passed, (
+        f"Critério '{crit_text}' avaliado contra metrics.json: '{key}' valor real = {actual}, "
+        f"threshold {cmp.operator} {cmp.threshold} -> {'atendido' if passed else 'não atendido'}."
+    )
+
+
+def _group_named(group: str, criterion_text: str) -> bool:
+    """O nome do grupo (``random_forest``) aparece no critério: todas as suas palavras, normalizadas."""
+    group_words = set(normalized_words(group))
+    return bool(group_words) and group_words <= set(normalized_words(criterion_text))
+
+
+def _evaluate_comparison(
+    crit: MetricCriterion, cmp: Comparison, metrics: Dict[str, Any]
+) -> Tuple[Optional[bool], str]:
+    """Avalia uma comparação: ``True``/``False`` ou ``None`` (indecidida: vai ao revisor LLM)."""
+    existing = sorted(str(k) for k in (metrics or {}))
+    missing = (
+        False,
+        f"Critério '{crit.text}': a métrica '{cmp.metric}' não está em metrics.json (chaves existentes: {existing}).",
+    )
+    if not config.REVIEW_METRIC_QUALIFIERS:  # comportamento anterior: nome inteiro normalizado
+        normalized: Dict[str, Any] = {}
+        for key, value in (metrics or {}).items():
+            norm = _normalize_metric_name(str(key))
+            normalized[_METRIC_ALIASES.get(norm, norm)] = value
+        if cmp.metric not in normalized:
+            return missing
+        try:
+            return _compare(crit.text, cmp, str(cmp.metric), float(normalized[cmp.metric]))
+        except (TypeError, ValueError):
+            return False, f"Critério '{crit.text}': valor de '{cmp.metric}' em metrics.json não é numérico."
+    qualifier = criterion_qualifier(cmp.raw_name)
+    allowed = {qualifier} if qualifier not in ("", "teste") else {"teste", ""}
+    candidates = metric_candidates(metrics, str(cmp.metric), allowed, _METRIC_ALIASES)
+    if not candidates:
+        return missing
+    if len(candidates) > 1:
+        named = [c for c in candidates if "." in c[0] and _group_named(c[0].rsplit(".", 1)[0], crit.text)]
+        if len(named) != 1:
+            return None, (
+                f"Critério '{crit.text}': a métrica '{cmp.metric}' aparece em mais de um grupo "
+                f"({[k for k, _ in candidates]}) e o critério não nomeia o grupo."
+            )
+        candidates = named
+    key, actual = candidates[0]
+    return _compare(crit.text, cmp, key, actual)
 
 
 def _evaluate_metric_criteria(
     criteria: List[MetricCriterion], metrics: Dict[str, Any]
-) -> List[Tuple[bool, str]]:
-    """Avalia TODOS os critérios com métrica nomeada contra os valores reais de ``metrics.json``."""
-    normalized: Dict[str, Any] = {}
-    for key, value in (metrics or {}).items():
-        norm = _normalize_metric_name(str(key))
-        normalized[_METRIC_ALIASES.get(norm, norm)] = value
+) -> List[Tuple[Optional[bool], str]]:
+    """Avalia cada critério (todas as comparações) contra os valores reais de ``metrics.json``.
 
-    results: List[Tuple[bool, str]] = []
+    Devolve ``(True, ...)`` atendido, ``(False, ...)`` reprovado e ``(None, ...)`` indecidido (métrica em vários
+    grupos sem o critério nomear o grupo: segue para o revisor LLM, nunca reprova por métrica ausente).
+    """
+    results: List[Tuple[Optional[bool], str]] = []
     for crit in criteria:
-        if crit.metric not in normalized:
-            results.append((False, f"Critério '{crit.text}': a métrica '{crit.metric}' não está em metrics.json."))
-            continue
-        try:
-            actual = float(normalized[crit.metric])
-        except (TypeError, ValueError):
-            results.append((False, f"Critério '{crit.text}': valor de '{crit.metric}' em metrics.json não é numérico."))
-            continue
-        passed = {
-            ">": actual > crit.threshold,
-            ">=": actual >= crit.threshold,
-            "<": actual < crit.threshold,
-            "<=": actual <= crit.threshold,
-            "==": actual == crit.threshold,
-        }[crit.operator]
-        results.append((
-            passed,
-            f"Critério '{crit.text}' avaliado contra metrics.json: valor real = {actual}, "
-            f"threshold {crit.operator} {crit.threshold} -> {'atendido' if passed else 'não atendido'}.",
-        ))
+        outcomes = [_evaluate_comparison(crit, cmp, metrics) for cmp in crit.comparisons]
+        failed = [d for ok, d in outcomes if ok is False]
+        if failed:
+            results.append((False, " ".join(failed)))
+        elif any(ok is None for ok, _ in outcomes):
+            results.append((None, " ".join(d for _, d in outcomes)))
+        else:
+            results.append((True, " ".join(d for _, d in outcomes)))
     return results
+
+
+def _metrics_table(metrics: Dict[str, Any]) -> str:
+    """Tabela achatada de ``metrics.json`` (chave e valor) como evidência para o revisor LLM."""
+    rows = [f"- {key}: {value}" for key, value in list(metrics.items())[:60]]
+    return "TABELA DE MÉTRICAS (metrics.json):\n" + "\n".join(rows)
+
+
+def _metric_qualifiers(metrics: Dict[str, Any]) -> Dict[str, str]:
+    """Qualificador de conjunto de cada métrica de ``metrics.json`` que tem um (para o evento ``subtask_review``)."""
+    found = {str(k): split_metric_name(str(k).rsplit(".", 1)[-1]).qualifier for k in (metrics or {})}
+    return {k: q for k, q in found.items() if q}
 
 
 def evaluated_metric_names(criteria: List[Any], metrics: Optional[Dict[str, Any]]) -> List[str]:
@@ -190,12 +302,21 @@ def evaluated_metric_names(criteria: List[Any], metrics: Optional[Dict[str, Any]
     Usada pela ingestão de fatos para marcar ``Resultado.status_validacao="validado"`` nas
     métricas que o Validator avaliou contra um limiar (``v17-structural-fact-ingestion``).
     """
-    wanted = {c.metric for c in _metric_criteria(criteria if isinstance(criteria, list) else [])}
+    wanted = {
+        str(cmp.metric)
+        for c in _metric_criteria(criteria if isinstance(criteria, list) else [])
+        for cmp in c.comparisons
+    }
     names: List[str] = []
     for key in (metrics or {}):
         norm = _normalize_metric_name(str(key))
         if _METRIC_ALIASES.get(norm, norm) in wanted:
             names.append(str(key))
+            continue
+        if config.REVIEW_METRIC_QUALIFIERS:
+            parts = split_metric_name(str(key).rsplit(".", 1)[-1])
+            if parts.qualifier in ("teste", "") and _METRIC_ALIASES.get(parts.base, parts.base) in wanted:
+                names.append(str(key))
     return names
 
 
@@ -233,11 +354,21 @@ class ValidationResult:
     signature: str = ""
     deterministic: bool = False  # reprovação por checagem estrutural (não por LLM)
     approved_with_warnings: bool = False
+    warnings: List[str] = field(default_factory=list)  # avisos não bloqueantes (validation_sem_hipotese)
 
 
 _TEXT_EVIDENCE_SUFFIXES = {".json", ".md", ".txt", ".csv", ".log"}
 _EVIDENCE_HEAD_CHARS = 700
 _EVIDENCE_MAX_FILES = 12
+
+
+def _profile_for(path: Path) -> Optional[str]:
+    """Perfil estrutural de um dado de pesquisa CSV/TSV/JSON (no lugar do trecho que o filtro retinha)."""
+    if not config.REVIEW_ARTIFACT_PROFILE or artifact_origin(path) is not ContentOrigin.DADO_DE_PESQUISA:
+        return None
+    return profile_artifact(
+        path, max_bytes=config.REVIEW_PROFILE_MAX_BYTES, max_chars=config.REVIEW_PROFILE_MAX_CHARS
+    )
 
 
 def build_artifact_evidence_fragments(
@@ -248,7 +379,8 @@ def build_artifact_evidence_fragments(
     """Resume os artefatos esperados que existem em disco como trechos rotulados (v18.5-egress-gate).
 
     Caminho relativo, tamanho e começo do conteúdo. O começo do conteúdo de um arquivo de dados (tabular, JSON, imagem)
-    é ``dado_de_pesquisa`` (retido para revisor sem dados brutos); ``metrics.json``, texto e logs são
+    é ``dado_de_pesquisa`` (retido para revisor sem dados brutos; CSV/TSV/JSON saem como perfil estrutural
+    ``esquema_agregado``, sem valores); ``metrics.json``, texto e logs são
     ``saida_execucao`` (filtrados); linhas só com nome e tamanho (binários) são nomes de artefatos.
     """
     ins = ContentOrigin.INSTRUCAO
@@ -278,7 +410,17 @@ def build_artifact_evidence_fragments(
         size = path.stat().st_size
         tier = tier_by_file.get(rel)
         note = f" [resolvido por {tier}]" if tier in ("normalized", "extension") else ""
-        if path.suffix.lower() in _TEXT_EVIDENCE_SUFFIXES and size < 2_000_000:
+        profile = _profile_for(path)
+        if profile is not None:
+            fragments.append(
+                PromptFragment(
+                    f"- {rel} ({size} bytes){note}\n  PERFIL (estrutura, sem valores): "
+                    + profile.replace("\n", "\n  "),
+                    ContentOrigin.ESQUEMA_AGREGADO,
+                    source=ARTIFACT_NAMES_SOURCE,
+                )
+            )
+        elif path.suffix.lower() in _TEXT_EVIDENCE_SUFFIXES and size < 2_000_000:
             head = path.read_text(encoding="utf-8", errors="replace")[:_EVIDENCE_HEAD_CHARS].replace("\n", " ")
             fragments.append(
                 PromptFragment(
@@ -344,6 +486,10 @@ class ReviewResult:
     # False quando nada foi de fato verificado: a revisão por LLM falhou, veio ilegível ou não rodou
     # (o ``pass`` é só "seguir adiante"). A ingestão de fatos nunca grava ``validado`` nesse caso.
     verified: bool = True
+    # v18.6-review-evidence: critérios que a avaliação determinística não decidiu e foram ao revisor LLM, e o
+    # qualificador de conjunto das métricas de metrics.json (só as que têm um), para o evento subtask_review.
+    undecided_criteria: List[str] = field(default_factory=list)
+    metric_qualifiers: Dict[str, str] = field(default_factory=dict)
 
 
 class ValidatorAgent:
@@ -391,6 +537,7 @@ class ValidatorAgent:
             )
 
         structural_issues = []
+        plan_warnings: List[str] = []
         for idx, task in enumerate(plan):
             if not isinstance(task, dict):
                 structural_issues.append(f"Subtarefa {idx+1} não é um objeto JSON.")
@@ -423,10 +570,16 @@ class ValidatorAgent:
                     f"Subtarefa '{task.get('task_name', idx+1)}' possui 'scientific_rationale' vazia."
                 )
 
-            # task_type 'reproduction'/'validation' exige ao menos 1 critério quantitativo
+            # 'reproduction', ou 'validation' com hypothesis_ref, exige ao menos 1 critério quantitativo
             task_type = task.get("task_type")
             if (
-                task_type in _QUANTITATIVE_REQUIRED_TASK_TYPES
+                task_type == "validation"
+                and not _requires_quantitative(task)
+                and WARNING_VALIDATION_WITHOUT_HYPOTHESIS not in plan_warnings
+            ):
+                plan_warnings.append(WARNING_VALIDATION_WITHOUT_HYPOTHESIS)
+            if (
+                _requires_quantitative(task)
                 and isinstance(criteria, list)
                 and criteria
                 and not _has_quantitative_criterion(criteria)
@@ -450,6 +603,7 @@ class ValidatorAgent:
                 issues=structural_issues,
                 signature=issue_signature(structural_issues),
                 deterministic=True,
+                warnings=plan_warnings,
             )
 
         # Validação semântica e lógica via LLM
@@ -460,7 +614,8 @@ class ValidatorAgent:
             "Avalie se a sequência de subtarefas atende à solicitação original "
             "e se as dependências fazem sentido lógico.\n"
             "Não reprove por causa de limiares numéricos em 'validation_criteria': o framework os exige em tarefas "
-            "'validation' e 'reproduction'. Reprove só por falha lógica, dependência incoerente ou cobertura "
+            "'reproduction' e 'validation' com 'hypothesis_ref'. Reprove só por falha lógica, dependência incoerente "
+            "ou cobertura "
             "incompleta da solicitação, e liste problemas que o planejador consiga corrigir.\n"
             "Nomenclatura, estilo, escolha de 'task_type' entre tipos válidos e detalhes opcionais não são motivo "
             "de reprovação. Liste no máximo 3 problemas, só os que impediriam a execução ou o cumprimento da "
@@ -506,6 +661,7 @@ class ValidatorAgent:
                 reason=parsed.get("reason", ""),
                 issues=parsed.get("issues", []),
                 signature="" if is_valid else issue_signature(llm_issues or [str(parsed.get("reason", ""))]),
+                warnings=plan_warnings,
             )
 
         except Exception as e:
@@ -549,15 +705,20 @@ class ValidatorAgent:
         depends_on = getattr(task, "depends_on", None) or (
             task.get("depends_on", []) if isinstance(task, dict) else []
         )
-        metric_criteria = _metric_criteria(validation_criteria) if isinstance(validation_criteria, list) else []
+        criteria_list = validation_criteria if isinstance(validation_criteria, list) else []
+        metric_criteria = _metric_criteria(criteria_list)
+        partial_criteria = _partly_known_criteria(criteria_list)
         metric_feedback = ""
+        undecided: List[str] = []
+        qualifiers_seen: Dict[str, str] = {}
+        metrics_table: Optional[str] = None
 
         # 0. Roadmap V15.2 / Spec G2 — validação científica via metrics.json quando algum critério
         # cita uma métrica conhecida com limiar (v16-pipeline-robustness §3). Avaliada ANTES do
         # response_text, que é frequentemente otimista ou impreciso.
-        if metric_criteria:
+        if metric_criteria or partial_criteria:
             metrics_file = _find_metrics_file(output_dir, str(task_name), list(depends_on))
-            if metrics_file is None:
+            if metrics_file is None and metric_criteria:
                 existing = self._list_task_files(output_dir, str(task_name))
                 msg = f"metrics.json não encontrado em /outputs/{task_name}/ (existem: {existing})"
                 logger.warning(
@@ -567,32 +728,49 @@ class ValidatorAgent:
                 return ReviewResult(is_approved=False, status="fail", feedback=msg, issues=[msg],
                                     signature=issue_signature(["metrics.json ausente"]))
 
-            try:
-                metrics_data = json.loads(metrics_file.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError) as e:
-                msg = f"Falha ao ler metrics.json: {e}"
-                return ReviewResult(is_approved=False, status="fail", feedback=msg, issues=[msg],
-                                    signature=issue_signature(["metrics.json ilegível"]))
+            metrics: Dict[str, Any] = {}
+            if metrics_file is not None:
+                try:
+                    metrics_data = json.loads(metrics_file.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError) as e:
+                    if metric_criteria:
+                        msg = f"Falha ao ler metrics.json: {e}"
+                        return ReviewResult(is_approved=False, status="fail", feedback=msg, issues=[msg],
+                                            signature=issue_signature(["metrics.json ilegível"]))
+                    metrics_data = {}
 
-            divergence_note = metrics_data.get("divergence_note")
-            if divergence_note:
-                return ReviewResult(
-                    is_approved=True,
-                    status="divergent_but_documented",
-                    feedback=f"Resultado diverge do esperado, mas está documentado: {divergence_note}",
-                    issues=[],
-                )
+                divergence_note = metrics_data.get("divergence_note") if isinstance(metrics_data, dict) else None
+                if divergence_note:
+                    return ReviewResult(
+                        is_approved=True,
+                        status="divergent_but_documented",
+                        feedback=f"Resultado diverge do esperado, mas está documentado: {divergence_note}",
+                        issues=[],
+                    )
+                ignored_paths: List[str] = []
+                metrics = metrics_of(metrics_data, ignored_paths)
+                if ignored_paths:
+                    logger.info(
+                        "metrics.json com níveis de aninhamento ignorados",
+                        extra={"metrics_ignored_paths": ignored_paths[:12]},
+                    )
+                qualifiers_seen = _metric_qualifiers(metrics) if config.REVIEW_METRIC_QUALIFIERS else {}
+                if metrics:
+                    metrics_table = _metrics_table(metrics)
 
-            evaluations = _evaluate_metric_criteria(metric_criteria, metrics_of(metrics_data))
-            metric_feedback = " ".join(detail for _, detail in evaluations)
-            failed = [detail for ok, detail in evaluations if not ok]
+            evaluations = _evaluate_metric_criteria(metric_criteria, metrics)
+            metric_feedback = " ".join(detail for ok, detail in evaluations if ok is not None)
+            failed = [detail for ok, detail in evaluations if ok is False]
+            undecided = [c.text for c, (ok, _) in zip(metric_criteria, evaluations) if ok is None]
+            undecided += partial_criteria
             if failed:
                 return ReviewResult(
                     is_approved=False,
                     status="fail",
-                    feedback=metric_feedback,
+                    feedback=" ".join(detail for _, detail in evaluations),
                     issues=failed,
                     signature=issue_signature([f"critério {c.metric} {c.operator}" for c in metric_criteria]),
+                    metric_qualifiers=qualifiers_seen,
                 )
 
         # 1. Resolução de artefatos em disco (comparador tolerante, v16-pipeline-robustness §2)
@@ -629,14 +807,14 @@ class ValidatorAgent:
         mismatch = any(r.name_mismatch for r in resolutions)
 
         # Critérios restantes (qualitativos ou de contagem) vão ao revisor LLM
-        metric_texts = {c.text for c in metric_criteria}
+        metric_texts = {c.text for c in metric_criteria} - set(undecided)
         validation_criteria = [
             c for c in (validation_criteria or []) if not (isinstance(c, str) and c.strip() in metric_texts)
         ]
         if not validation_criteria and metric_criteria:
             return ReviewResult(
                 is_approved=True, status="pass", feedback=metric_feedback, issues=[],
-                resolved_artifacts=resolved_map, name_mismatch=mismatch,
+                resolved_artifacts=resolved_map, name_mismatch=mismatch, metric_qualifiers=qualifiers_seen,
             )
 
         # 2. Avaliação de critérios de validação via LLM se houver critérios
@@ -653,6 +831,9 @@ class ValidatorAgent:
                 "arquivo existir com conteúdo coerente.\n"
                 "- Não reprove por não ver o conteúdo completo de um arquivo cuja existência e tamanho foram "
                 "confirmados; reprove só se a evidência contradiz um critério ou o critério exige algo ausente.\n"
+                "- O tamanho em bytes não é evidência de conteúdo. Não estime linhas ou colunas pelo tamanho.\n"
+                "- Quando houver PERFIL, use-o para conferir linhas, colunas e chaves. Reprove só se o perfil "
+                "contradiz o critério.\n"
                 "- Um artefato com nome diferente do esperado (marcado [resolvido por ...]) NÃO é motivo de "
                 "reprovação: avalie o conteúdo.\n"
                 "- Cada item em 'issues' deve citar o critério específico não atendido.\n"
@@ -672,6 +853,11 @@ class ValidatorAgent:
                     source="criterios",
                 ),
                 *evidence,
+                *(
+                    [PromptFragment("\n" + metrics_table, ContentOrigin.SAIDA_EXECUCAO, source="artefato:metrics.json")]
+                    if metrics_table and undecided
+                    else []
+                ),
                 PromptFragment(
                     taint_if(f"\nRESPOSTA DO AGENTE:\n{response_text[:3000]}", role_tainted(agent_role)),
                     ContentOrigin.INSTRUCAO,
@@ -703,6 +889,8 @@ class ValidatorAgent:
                         signature=""
                         if is_approved
                         else issue_signature(llm_issues or [str(parsed.get("feedback", ""))]),
+                        undecided_criteria=undecided,
+                        metric_qualifiers=qualifiers_seen,
                     )
             except Exception as e:
                 logger.warning(f"Erro na revisão semântica via LLM: {e}")
@@ -716,6 +904,8 @@ class ValidatorAgent:
             resolved_artifacts=resolved_map,
             name_mismatch=mismatch,
             verified=False,
+            undecided_criteria=undecided,
+            metric_qualifiers=qualifiers_seen,
         )
 
     async def verify_claims(

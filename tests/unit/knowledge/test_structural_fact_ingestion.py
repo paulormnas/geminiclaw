@@ -738,3 +738,39 @@ def test_graph_store_error_inesperado_vira_pendencia(session_dir, ctx):
 
     assert FactIngestor(_Boom, ctx, session_dir).session_start() is False
     assert (session_dir / PENDING_FILENAME).exists()
+
+
+# --- v18.6-review-evidence: qualificador de conjunto ------------------------
+
+
+@pytest.mark.unit
+def test_ingestao_liga_resultado_de_teste_a_metrica_canonica(store, ctx, session_dir):
+    """Scenario: Ingestão liga resultado de teste à métrica canônica."""
+    _write_task(session_dir, metrics={"test_accuracy": 0.95})
+    ingest_session_start(store, ctx)
+    ingest_subtask(store, ctx, session_dir, _sub())
+    (res,) = _nodes(store, "Resultado")
+    assert res.properties["qualificador"] == "teste"
+    (mede,) = _rels(store, "MEDE")
+    assert mede.src_id == res.id and store.get_node(mede.dst_id).properties["nome"] == "acuracia"
+
+
+@pytest.mark.unit
+def test_ingestao_nao_liga_validacao_cruzada_a_metrica_do_teste(store, ctx, session_dir):
+    """Scenario: Ingestão não liga validação cruzada à métrica do teste."""
+    _write_task(session_dir, metrics={"cv_accuracy_mean": 0.97, "val_accuracy": 0.9, "train_accuracy": 1.0})
+    ingest_session_start(store, ctx)
+    ingest_subtask(store, ctx, session_dir, _sub())
+    assert {n.properties["qualificador"] for n in _nodes(store, "Resultado")} == {"cv", "validacao", "treino"}
+    assert _rels(store, "MEDE") == []
+
+
+@pytest.mark.unit
+def test_ingestao_com_qualificador_desligado_mantem_o_comportamento_anterior(store, ctx, session_dir, monkeypatch):
+    """Scenario: Qualificador desligado (ingestão)."""
+    monkeypatch.setattr("src.config.REVIEW_METRIC_QUALIFIERS", False)
+    _write_task(session_dir, metrics={"test_accuracy": 0.95})
+    ingest_session_start(store, ctx)
+    ingest_subtask(store, ctx, session_dir, _sub())
+    (res,) = _nodes(store, "Resultado")
+    assert "qualificador" not in res.properties and _rels(store, "MEDE") == []

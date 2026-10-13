@@ -111,8 +111,9 @@ Quando solicitado a gerar um plano (ou quando receber 'MODO: PLAN'):
      arquitetura, algoritmo, teste_estatistico, pipeline, protocolo, instrumento, biblioteca,
      configuracao, outro. Omita o campo quando a subtarefa não aplica um método.
    - "validation_criteria": list[str] (OBRIGATÓRIO: ao menos 1 critério explícito de aceite; para
-     task_type 'reproduction' ou 'validation', inclua ao menos 1 critério QUANTITATIVO com threshold
-     numérico, ex: "acurácia > 0.85")
+     task_type 'reproduction' ou 'validation' com `hypothesis_ref`, inclua ao menos 1 critério
+     QUANTITATIVO com threshold numérico, ex: "acurácia > 0.85"; 'validation' sem hipótese, como um
+     baseline, dispensa o limiar)
    - "expected_artifacts": list[str] (nomes dos arquivos a serem gerados em /outputs/)
    - "depends_on": list[str] (nomes de subtarefas pré-requisito)
 5. Retorne a lista de subtarefas em formato JSON válido.

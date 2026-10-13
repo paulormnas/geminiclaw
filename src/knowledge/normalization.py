@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from dataclasses import dataclass
 
 
 def _strip_accents(text: str) -> str:
@@ -31,6 +32,59 @@ def normalize_metric_name(name: str) -> str:
         Forma normalizada, apenas ``[a-z0-9]``.
     """
     return re.sub(r"[^a-z0-9]+", "", _strip_accents(name).lower())
+
+
+QUALIFIER_WORDS: dict[str, str] = {
+    "test": "teste", "teste": "teste", "holdout": "teste", "heldout": "teste",
+    "cv": "cv", "crossval": "cv", "kfold": "cv",
+    "train": "treino", "training": "treino", "treino": "treino",
+    "val": "validacao", "valid": "validacao", "validation": "validacao", "validacao": "validacao",
+}
+_CV_PHRASES = ("validacao cruzada", "cross validation", "cross val", "crossvalidation")
+
+
+@dataclass(frozen=True)
+class MetricName:
+    """Nome de métrica separado do qualificador de conjunto (``test_accuracy`` -> base ``accuracy``, ``teste``)."""
+
+    base: str  # forma normalizada sem qualificador
+    qualifier: str  # "teste" | "cv" | "treino" | "validacao" | "" (sem qualificador)
+    raw: str  # nome como escrito
+
+
+def normalized_words(text: str) -> list[str]:
+    return [w for w in re.split(r"[^a-z0-9]+", _strip_accents(text).lower()) if w]
+
+
+def split_metric_name(name: str) -> MetricName:
+    """Separa o conjunto de avaliação do nome de uma métrica.
+
+    O nome é dividido em palavras (``_``, ``-``, ``.``, espaço); se a primeira ou a última palavra está na lista
+    fechada de qualificadores, só ela sai do nome base. Sufixos estatísticos (``mean``, ``std``) ficam no base:
+    ``cv_accuracy_mean`` tem base ``accuracymean`` e qualificador ``cv``, nunca a acurácia de teste.
+    """
+    words = normalized_words(name)
+    qualifier = ""
+    if len(words) > 1:
+        if words[0] in QUALIFIER_WORDS:
+            qualifier, words = QUALIFIER_WORDS[words[0]], words[1:]
+        elif words[-1] in QUALIFIER_WORDS:
+            qualifier, words = QUALIFIER_WORDS[words[-1]], words[:-1]
+    return MetricName(base="".join(words), qualifier=qualifier, raw=name)
+
+
+def criterion_qualifier(text: str) -> str:
+    """Conjunto citado explicitamente em um trecho de critério ("... validação cruzada ..."), ou ``""``.
+
+    Usa a mesma tabela de ``split_metric_name``; "validação cruzada" vale ``cv`` (não ``validacao``).
+    """
+    plain = " ".join(normalized_words(text))
+    if any(phrase in plain for phrase in _CV_PHRASES):
+        return "cv"
+    for word in plain.split():
+        if word in QUALIFIER_WORDS:
+            return QUALIFIER_WORDS[word]
+    return ""
 
 
 def normalize_domain_term(term: str) -> str:

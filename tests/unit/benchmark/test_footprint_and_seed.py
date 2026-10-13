@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from pathlib import Path
 
 import pytest
@@ -13,10 +14,20 @@ from scripts.benchmark.run_benchmark import anomalies
 from scripts.benchmark.seed_project import BENCHMARK_DRAFT, seed_project
 from src.knowledge import projects
 from src.knowledge.graph_store import InMemoryGraphStore
+from src.knowledge.vocabulary import seed_vocabulary
 
 pytestmark = pytest.mark.unit
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+def seeded_store(tmp_path: Path) -> InMemoryGraphStore:
+    """Grafo em memória com o vocabulário real de métricas e a tabela CNPq fictícia dos testes."""
+    shutil.copy(ROOT / "tests" / "fixtures" / "cnpq_areas_fixture.csv", tmp_path / "cnpq_areas.csv")
+    shutil.copy(ROOT / "data" / "vocabulary" / "metrics.yaml", tmp_path / "metrics.yaml")
+    store = InMemoryGraphStore()
+    seed_vocabulary(store, vocabulary_dir=tmp_path)
+    return store
 
 
 def test_delta_so_lista_o_que_mudou_e_ausente_conta_zero() -> None:
@@ -33,16 +44,16 @@ def test_delta_propaga_erros_de_medicao() -> None:
     assert out["qdrant_erro"] == "x" or out["postgres_erro"] == "y"
 
 
-def test_project_graph_conta_nos_por_rotulo_e_arestas_por_tipo() -> None:
-    store = InMemoryGraphStore()
+def test_project_graph_conta_nos_por_rotulo_e_arestas_por_tipo(tmp_path: Path) -> None:
+    store = seeded_store(tmp_path)
     project_id = seed_project("combo-a", store)
     graph = footprint.project_graph(project_id, store)
     assert graph["total_nos"] >= 2 and graph["nos_por_rotulo"].get("Problema") == 1
     assert "erro" not in graph and graph["total_arestas"] == sum(graph["arestas_por_tipo"].values())
 
 
-def test_semeadura_cria_projeto_com_problema_confirmado_e_um_por_combinacao() -> None:
-    store = InMemoryGraphStore()
+def test_semeadura_cria_projeto_com_problema_confirmado_e_um_por_combinacao(tmp_path: Path) -> None:
+    store = seeded_store(tmp_path)
     first, second = seed_project("luna", store), seed_project("terra", store)
     assert first != second
     detail = projects.get_project(store, first)

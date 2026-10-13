@@ -3,7 +3,18 @@
 Uso (no Raspberry Pi, na raiz do repositório)::
 
     uv run python -m scripts.benchmark.run_benchmark scripts/benchmark/matrix_baixo_custo.json \
-        --results ~/bench/results.json [--only NOME ...]
+        --results ~/bench/results.json [--only NOME ...] [--repeat N] \
+        [--reset-stores --confirm-target BANCO@HOST [--no-pre-reset-dump]]
+
+Isolamento (v18.6-benchmark-harness): com ``BENCHMARK_DATABASE_URL`` (e ``BENCHMARK_QDRANT_URL``) o runner e os
+subprocessos usam o banco de benchmark. ``--reset-stores`` (operação destrutiva; exige ``--confirm-target`` igual a
+``banco@host`` do alvo, a marca ``BENCHMARK_DB_MARKER`` no nome e banco diferente do de ``DATABASE_URL``)
+grava o arquivo de segurança e recria o banco e as coleções do sistema do Qdrant antes de **cada** execução.
+Sem a flag nada é apagado e cada resultado traz ``isolated: false``. ``--repeat N`` roda cada combinação N
+vezes (chave ``(nome, repeticao)``, então uma matriz interrompida é retomada).
+Cada repetição é arquivada em ``<results>.d/<combinação>/r<r>/`` (sessão, log, eventos,
+grafo do projeto e ``pre_reset/``). Códigos de saída: 2 guarda do reset recusou, 3 anomalia com
+``--fail-fast``, 4 reset ou conferência falhou.
 
 Cada combinação vira um subprocesso ``main.py --mode auto`` com as variáveis de papel
 sobrescritas. Mede tempo de parede, tokens (de ``session_metadata.json``), checklist de acurácia
@@ -24,8 +35,23 @@ from pathlib import Path
 from dotenv import dotenv_values
 
 from scripts.benchmark import footprint
+from scripts.benchmark.archive import archive_dir_for, archive_repetition, fetch_events
+from scripts.benchmark.reset_stores import (
+    EXIT_RESET_FAILED,
+    BenchmarkTarget,
+    ResetError,
+    ResetRefused,
+    check_guards,
+    reset_stores,
+    target_env,
+)
 from scripts.benchmark.resources import ResourceSampler
-from scripts.benchmark.scoring import score_session, session_outcome
+from scripts.benchmark.scoring import (
+    score_session,
+    scoreboard_anomalies,
+    session_outcome,
+    validated_scoreboard,
+)
 
 ROLES = ("RESEARCHER", "VALIDATOR", "DEVELOPER", "BASE", "SUMMARIZER", "REVIEWER")
 
@@ -208,13 +234,61 @@ def anomalies(result: dict) -> list[str]:
             problems.append(f"grupo de métricas '{group}' em erro: {values.get('mensagem', '')[:160]}")
     if result.get("seed_error"):
         problems.append(f"semeadura do projeto falhou: {result['seed_error']}")
+    if result.get("score_error"):
+        problems.append(f"placar validado indisponível: {result['score_error']}")
     return problems
 
 
+def pending_runs(
+    combinations: list[dict], results: list[dict], repeat: int, only: list[str] | None = None
+) -> list[tuple[dict, int]]:
+    """Pares ``(combinação, repetição)`` ainda sem resultado, na ordem da matriz (retomada pela chave do design §6)."""
+    done = {(r["name"], r.get("repeticao", 1)) for r in results}
+    return [
+        (combo, rep)
+        for combo in combinations
+        if not only or combo["name"] in only
+        for rep in range(1, repeat + 1)
+        if (combo["name"], rep) not in done
+    ]
+
+
+def compute_scoreboard(project_id: str | None, session: Path, events: list[dict] | None) -> dict:
+    """Placar oficial da sessão (grafo e eventos); falha vira ``score_error``, nunca um valor inventado."""
+    empty = {"accuracy_validated": None, "accuracy_source": "grafo_validado", "checks_validated": None}
+    if not project_id:
+        return {**empty, "accuracy_note": "sem projeto semeado"}
+    try:
+        from scripts.benchmark.communication import load_plan
+        from src.knowledge.factory import open_raw_graph_store
+
+        report_path = session / "relatorio_final.md"
+        final_report = report_path.read_text(encoding="utf-8") if report_path.is_file() else ""
+        board = validated_scoreboard(
+            open_raw_graph_store(), project_id, session.name, load_plan(session), events or [], final_report
+        )
+        board.pop("elegiveis", None)
+        return board
+    except Exception as exc:  # noqa: BLE001 - registrado e tratado como defeito em ``anomalies``
+        return {**empty, "accuracy_note": "placar indisponível", "score_error": f"{type(exc).__name__}: {exc}"}
+
+
 def run_combination(
-    combo: dict, task: str, env_base: dict[str, str], timeout: int, output_dir: Path, extra_env: dict | None = None
+    combo: dict, task: str, env_base: dict[str, str], timeout: int, output_dir: Path, extra_env: dict | None = None,
+    *, repeticao: int = 1, results_path: Path | None = None, target: BenchmarkTarget | None = None,
+    reset: bool = False, dump: bool = True, store_sample_seconds: float = footprint.DEFAULT_STORE_SAMPLE_SECONDS,
 ) -> dict:
+    """Uma execução (combinação x repetição): reset, semeadura, medição, placar e arquivamento (design §1).
+
+    Raises:
+        ResetError: O reset ou a conferência pós-reset falhou (o runner termina com código 4).
+    """
     env = build_env(env_base, combo["roles"], {**(extra_env or {}), **combo.get("env", {})})
+    archive_dir = archive_dir_for(results_path, combo["name"], repeticao) if results_path else None
+    reset_report = None
+    if reset and target is not None and archive_dir is not None:
+        _close_local_pools()  # DROP DATABASE ... FORCE derruba conexões; fecha as do runner antes
+        reset_report = reset_stores(target, archive_dir=archive_dir, dump=dump, base_env=env_base).to_dict()
     project_args: list[str] = []
     project_id = None
     seed_error = None
@@ -226,6 +300,10 @@ def run_combination(
             project_args = ["--project", project_id]
         except Exception as exc:  # noqa: BLE001 - registrado; a combinação não roda sem projeto
             seed_error = f"{type(exc).__name__}: {exc}"
+    base_result = {"name": combo["name"], "roles": combo["roles"], "repeticao": repeticao,
+                   "isolated": bool(reset_report), "reset": reset_report}
+    if combo.get("independencia_julgamento") == "off":
+        base_result["controle"] = True
     before = footprint.snapshot()
     started_wall = time.time()
     start = time.monotonic()
@@ -234,10 +312,18 @@ def run_combination(
         env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     ) if seed_error is None else None
     if proc is None:
-        return {"name": combo["name"], "roles": combo["roles"], "status": "seed_error", "seed_error": seed_error,
+        return {**base_result, "status": "seed_error", "seed_error": seed_error,
                 "wall_seconds": 0.0, "resources": {}, "log_tail": ""}
     sampler = ResourceSampler(root_pid=proc.pid, interval=1.0)
     sampler.start()
+    store_sampler = footprint.StoreSampler(
+        lambda: footprint.collect_store_sample(
+            env["DATABASE_URL"], env.get("QDRANT_URL", "http://localhost:6333"),
+            env.get("KNOWLEDGE_GRAPH_NAME", "knowledge"),
+        ),
+        store_sample_seconds,
+    )
+    store_sampler.start()
     timed_out = False
     try:
         log, _ = proc.communicate(timeout=timeout)
@@ -248,30 +334,55 @@ def run_combination(
     elapsed = time.monotonic() - start
     sampler.stop()
     sampler.join(timeout=5)
+    timeline = store_sampler.stop()
 
     result = {
-        "name": combo["name"], "roles": combo["roles"], "status": "timeout" if timed_out else f"exit {proc.returncode}",
+        **base_result, "status": "timeout" if timed_out else f"exit {proc.returncode}",
         "wall_seconds": round(elapsed, 1), "resources": sampler.summary(), "log_tail": (log or "")[-1500:],
-        "log_file": _save_log(combo["name"], log or ""),
+        "log_file": _save_log(f"{combo['name']}-r{repeticao}", log or ""), "store_timeline": timeline,
     }
     result["project_id"] = project_id
     result["footprint_delta"] = footprint.delta(before, footprint.snapshot())
     if project_id:
         result["project_graph"] = footprint.project_graph(project_id)
     session = newest_session(output_dir, started_wall - 1)
+    events = None
     if session is not None:
         result["stop_reason"] = _stop_reason(session)
         result["operation_metrics"] = footprint.session_operation_metrics(session.name)
         result["embedding_events"] = footprint.embedding_events(session.name)
         outcome = session_outcome(session)
         usage = outcome.get("token_usage") or db_token_usage(session.name)  # sessão abortada: sem metadata
-        result.update(session=session.name, outcome=outcome, score=score_session(session),
-                      tokens=sum_tokens(usage), db=db_metrics(session.name))
+        text_score = score_session(session)
+        events = fetch_events(session.name)
+        board = compute_scoreboard(project_id, session, events)
+        result.update(session=session.name, outcome=outcome, score=text_score,
+                      checks_texto=text_score["checks_texto"],
+                      acuracia_declarada_texto=text_score["acuracia_declarada_texto"],
+                      tokens=sum_tokens(usage), db=db_metrics(session.name), **board)
+        result["anomalias_placar"] = scoreboard_anomalies(board)
         divergences = check_pins(combo["roles"], db_llm_routing(session.name))
         result["routing_check"] = {"ok": not divergences, "divergences": divergences}
         for line in divergences:
             print(f"[benchmark] AVISO {combo['name']}: {line}")
+        for mark in result["anomalias_placar"]:
+            print(f"[benchmark] CONFERIR {combo['name']} r{repeticao}: {mark}")
+    if archive_dir is not None:
+        archived = archive_repetition(
+            archive_dir, session_dir=session, log=log or "", events=events,
+            project_graph=footprint.project_graph_full(project_id) if project_id else None,
+        )
+        result["archive_dir"] = str(archived)
     return result
+
+
+def _close_local_pools() -> None:
+    try:
+        from src.db import close_pool
+
+        close_pool()
+    except Exception:  # noqa: BLE001 - sem pool aberto não há o que fechar
+        pass
 
 
 def recompute_tokens(results_path: Path, output_dir: Path | None = None) -> None:
@@ -280,6 +391,8 @@ def recompute_tokens(results_path: Path, output_dir: Path | None = None) -> None
     for item in results:
         if output_dir and item.get("session") and (output_dir / item["session"]).is_dir():
             item["score"] = score_session(output_dir / item["session"])
+            item["checks_texto"] = item["score"]["checks_texto"]
+            item["acuracia_declarada_texto"] = item["score"]["acuracia_declarada_texto"]
         if item.get("session") and not item.get("tokens", {}).get("calls"):
             item["tokens"] = sum_tokens(db_token_usage(item["session"]))
             print(f"[benchmark] tokens recalculados do banco: {item['name']} -> {item['tokens']['total_tokens']}")
@@ -324,6 +437,13 @@ def main() -> None:
     parser.add_argument("--recompute", action="store_true", help="refaz os tokens do banco e sai (sem rodar nada)")
     parser.add_argument("--fail-fast", action="store_true",
                         help="interrompe (código 3) na primeira combinação com defeito de infraestrutura/código")
+    parser.add_argument("--repeat", type=int, default=1, help="repetições por combinação (padrão 1)")
+    parser.add_argument("--reset-stores", action="store_true",
+                        help="OPERAÇÃO DESTRUTIVA: recria o banco e as coleções de benchmark antes de cada execução")
+    parser.add_argument("--confirm-target", default=None,
+                        help="banco@host de BENCHMARK_DATABASE_URL, repetido para confirmar o reset")
+    parser.add_argument("--no-pre-reset-dump", action="store_true",
+                        help="não grava o pg_dump e os snapshots antes do reset")
     parser.add_argument("--eval-comm", action="store_true",
                         help="avalia a comunicação entre agentes das sessões já executadas, depois da execução")
     parser.add_argument("--eval-judge", action="store_true",
@@ -338,21 +458,40 @@ def main() -> None:
                                args.eval_judge)
         return
 
+    if args.repeat < 1:
+        parser.error("--repeat deve ser >= 1")
     matrix = json.loads(args.matrix.read_text(encoding="utf-8"))
     task = Path(matrix["task_file"]).expanduser().read_text(encoding="utf-8")
     env_base = {**os.environ, **{k: v for k, v in dotenv_values(".env").items() if v is not None}}
+    target = None
+    try:
+        if env_base.get("BENCHMARK_DATABASE_URL") or args.reset_stores:
+            target = BenchmarkTarget.from_env(env_base)  # DATABASE_URL ainda é o de desenvolvimento aqui
+        if args.reset_stores:
+            check_guards(target, reset_requested=True, confirm_target=args.confirm_target)
+    except ResetRefused as exc:
+        print(f"[benchmark] RESET RECUSADO: {exc}", file=sys.stderr, flush=True)
+        sys.exit(2)
+    if target is not None:
+        env_base = target_env(target, env_base)
+        # O próprio runner (semeadura, pegada, placar) também fala com o banco de benchmark.
+        for key in ("DATABASE_URL", "QDRANT_URL", "KNOWLEDGE_READER_DATABASE_URL"):
+            if env_base.get(key):
+                os.environ[key] = env_base[key]
+        print(f"[benchmark] alvo: {target.label} ({target.safe_url}); Qdrant {target.qdrant_url}", flush=True)
+    if not args.reset_stores:
+        print("[benchmark] AVISO: sem --reset-stores as execuções não estão isoladas (isolated: false); "
+              "o que uma grava, a próxima encontra.", flush=True)
+    sample_seconds = float(env_base.get("BENCHMARK_STORE_SAMPLE_SECONDS") or footprint.DEFAULT_STORE_SAMPLE_SECONDS)
     output_dir = Path(env_base.get("OUTPUT_BASE_DIR", "outputs"))
     results = json.loads(args.results.read_text()) if args.results.exists() else []
-    done = {r["name"] for r in results}
     budget = matrix.get("budget_usd", {})  # teto de gasto acumulado por provedor
     spent: dict[str, float] = {}
     for r in results:
         for provider, cost in r.get("tokens", {}).get("cost_by_provider", {}).items():
             spent[provider] = spent.get(provider, 0.0) + cost
 
-    for combo in matrix["combinations"]:
-        if (args.only and combo["name"] not in args.only) or combo["name"] in done:
-            continue
+    for combo, repeticao in pending_runs(matrix["combinations"], results, args.repeat, args.only):
         required = combo.get("requires")
         providers = {spec.partition("/")[0] for spec in combo["roles"].values()}
         over = next((p for p in providers if p in budget and spent.get(p, 0.0) >= budget[p]), None)
@@ -362,20 +501,32 @@ def main() -> None:
             skip = f"orçamento de {over} esgotado (${spent[over]:.2f} de ${budget[over]:.2f})"
         else:
             skip = None
+        label = f"{combo['name']} r{repeticao}"
         if skip:
-            results.append({"name": combo["name"], "roles": combo["roles"], "status": "skipped", "reason": skip})
+            results.append({"name": combo["name"], "repeticao": repeticao, "roles": combo["roles"],
+                            "status": "skipped", "reason": skip})
         else:
-            print(f"[benchmark] {combo['name']} ...", flush=True)
-            results.append(
-                run_combination(combo, task, env_base, matrix["timeout_seconds"], output_dir, matrix.get("env"))
-            )
+            print(f"[benchmark] {label} ...", flush=True)
+            try:
+                results.append(run_combination(
+                    combo, task, env_base, matrix["timeout_seconds"], output_dir, matrix.get("env"),
+                    repeticao=repeticao, results_path=args.results, target=target, reset=args.reset_stores,
+                    dump=not args.no_pre_reset_dump, store_sample_seconds=sample_seconds,
+                ))
+            except ResetError as exc:
+                results.append({"name": combo["name"], "repeticao": repeticao, "roles": combo["roles"],
+                                "status": "reset_error", "reset_error": str(exc)})
+                args.results.write_text(json.dumps(results, indent=2, ensure_ascii=False, default=str),
+                                        encoding="utf-8")
+                print(f"[benchmark] INTERROMPIDO em {label}: reset falhou: {exc}", file=sys.stderr, flush=True)
+                sys.exit(EXIT_RESET_FAILED)
             for provider, cost in results[-1].get("tokens", {}).get("cost_by_provider", {}).items():
                 spent[provider] = spent.get(provider, 0.0) + cost
         args.results.write_text(json.dumps(results, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
-        print(f"[benchmark] {combo['name']}: {results[-1]['status']}", flush=True)
+        print(f"[benchmark] {label}: {results[-1]['status']}", flush=True)
         problems = anomalies(results[-1])
         if problems and args.fail_fast:
-            print(f"[benchmark] INTERROMPIDO em {combo['name']}: " + " | ".join(problems), flush=True)
+            print(f"[benchmark] INTERROMPIDO em {label}: " + " | ".join(problems), flush=True)
             sys.exit(3)
 
     from scripts.benchmark.interactions import knowledge_footprint

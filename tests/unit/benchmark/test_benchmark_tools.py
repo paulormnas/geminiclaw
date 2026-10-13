@@ -69,31 +69,31 @@ class TestScoring:
         )
         (tmp_path / "grafico.png").write_bytes(b"x")
         result = scoring.score_session(tmp_path)
-        assert result["score"] == result["max_score"] == 6
-        assert result["accuracy"] == pytest.approx(0.9667)
+        assert result["score_texto"] == result["max_score"] == 6
+        assert result["acuracia_declarada_texto"] == pytest.approx(0.9667)
         assert result["algorithms"] == ["logistic regression", "random forest"]
 
     def test_empty_session_scores_zero(self, tmp_path):
-        assert scoring.score_session(tmp_path)["score"] == 0
+        assert scoring.score_session(tmp_path)["score_texto"] == 0
 
     def test_implausible_accuracy_does_not_count_as_comparison(self, tmp_path):
         (tmp_path / "a.md").write_text("LogisticRegression e SVM accuracy: 0.31\n")
         result = scoring.score_session(tmp_path)
-        assert result["checks"]["two_algorithms"] and not result["checks"]["comparison"]
+        assert result["checks_texto"]["two_algorithms"] and not result["checks_texto"]["comparison"]
 
     def test_framework_helper_example_does_not_count(self, tmp_path):
         (tmp_path / "scientific_helpers.py").write_text('metrics: ex: {"accuracy": 0.87}, LogisticRegression, SVM')
         (tmp_path / "script.py").write_text("print('accuracy 0.99')  # código, não resultado")
         result = scoring.score_session(tmp_path)
-        assert result["accuracy"] is None and result["algorithms"] == []
+        assert result["acuracia_declarada_texto"] is None and result["algorithms"] == []
 
     def test_train_accuracy_is_ignored(self, tmp_path):
         (tmp_path / "metrics.json").write_text('{"train_accuracy": 0.99,\n"test_accuracy": 0.93}')
-        assert scoring.score_session(tmp_path)["accuracy"] == pytest.approx(0.93)
+        assert scoring.score_session(tmp_path)["acuracia_declarada_texto"] == pytest.approx(0.93)
 
     def test_tiny_numbers_near_the_word_accuracy_are_not_an_accuracy(self, tmp_path):
         (tmp_path / "plano.md").write_text("Tolerância de accuracy: 0.05 entre as execuções")
-        assert scoring.score_session(tmp_path)["accuracy"] is None
+        assert scoring.score_session(tmp_path)["acuracia_declarada_texto"] is None
 
     def test_percent_accuracy(self):
         assert scoring.reported_accuracies("Acurácia: 96,7%") == [pytest.approx(0.967)]
@@ -190,9 +190,11 @@ def test_report_renders_ok_and_skipped():
               "sys_cpu_pct": {"max": 80}, "mem_used_mb": {"max": 3000}, "temp_c": {"max": 70}, "throttled": [],
           },
           "tokens": {"prompt_tokens": 100, "completion_tokens": 50, "cost_usd": 0.12}, "db": {"connection_retries": 2},
-          "outcome": {"subtasks": 3, "subtasks_ok": 3}, "score": {"score": 5, "max_score": 6, "accuracy": 0.95}}
+          "outcome": {"subtasks": 3, "subtasks_ok": 3}, "accuracy_validated": 0.95,
+          "checks_validated": {"eda": True, "preprocessing": True, "two_algorithms": True, "comparison": True,
+                               "recommendation": True, "artifacts": False}}
     text = report.render([ok, {"name": "b", "status": "skipped", "reason": "KEY ausente"}])
-    assert "| a | exit 0 | 10.5 | 100 | 50 | 3/3 | 5/6 | 0.950 | 80 | 3000 | 70 | não | 0.1200 | 2 |" in text
+    assert "| a | 1 | exit 0 | 10.5 | 100 | 50 | 3/3 | 5/6 | 0.950 | 80 | 3000 | 70 | não | 0.1200 | 2 |" in text
     assert "pulada (KEY ausente)" in text
 
 

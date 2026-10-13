@@ -7,7 +7,10 @@ Também lê o ``operation_metrics`` gravado na sessão (v18.5-operation-metrics)
 
 from __future__ import annotations
 
+import threading
+import time
 from collections import Counter
+from collections.abc import Callable
 from typing import Any
 
 # Tabelas de interesse (nome fixo: o texto SQL nunca recebe entrada externa).
@@ -104,6 +107,25 @@ def project_graph(project_id: str, store: Any | None = None) -> dict[str, Any]:
         return {"erro": f"{type(exc).__name__}: {exc}"}
 
 
+def project_graph_full(project_id: str, store: Any | None = None) -> dict[str, Any]:
+    """Nós (com propriedades) e arestas do subgrafo do projeto, para o arquivamento da repetição."""
+    try:
+        if store is None:
+            from src.knowledge.factory import open_raw_graph_store
+
+            store = open_raw_graph_store()
+        sub = store.project_subgraph(project_id)
+        return {
+            "nos": [{"id": n.id, "label": n.label, "propriedades": n.properties} for n in sub.nodes],
+            "arestas": [
+                {"origem": e.src_id, "tipo": e.rel_type, "destino": e.dst_id, "propriedades": e.properties}
+                for e in sub.edges
+            ],
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"erro": f"{type(exc).__name__}: {exc}"}
+
+
 def session_operation_metrics(session_id: str) -> dict[str, Any] | None:
     """``payload["operation_metrics"]`` da sessão mestra, ou ``None`` se a sessão não o gravou."""
     try:
@@ -128,3 +150,142 @@ def embedding_events(session_id: str) -> dict[str, Any]:
         return {event: sum(agents.values()) for event, agents in counts.items()}
     except Exception as exc:  # noqa: BLE001
         return {"erro": f"{type(exc).__name__}: {exc}"}
+
+
+# --------------------------------------------------------------------------------------------
+# Crescimento das memórias no tempo (v18.6-benchmark-harness §3)
+# --------------------------------------------------------------------------------------------
+
+# Tabelas amostradas: as de ``TABLES`` mais as de memória e índice (nomes fixos; o SQL nunca recebe entrada externa).
+SAMPLED_TABLES = (*TABLES, "similarity_queue", "long_term_memory", "document_chunks")
+DEFAULT_STORE_SAMPLE_SECONDS = 30.0
+
+
+def collect_store_sample(database_url: str, qdrant_url: str, graph_name: str) -> dict[str, Any]:
+    """Uma amostra das três memórias, por conexão própria (fora do pool do processo medido).
+
+    Cada seção falha isoladamente: o motivo vai para ``erro`` e as demais seções seguem.
+    """
+    sample: dict[str, Any] = {}
+    errors: list[str] = []
+    try:
+        sample["postgres"], sample["grafo"] = _sample_postgres(database_url, graph_name)
+    except Exception as exc:  # noqa: BLE001 - o benchmark segue sem a medida
+        errors.append(f"postgres: {type(exc).__name__}: {exc}")
+    try:
+        from qdrant_client import QdrantClient
+
+        client = QdrantClient(url=qdrant_url)
+        sample["qdrant"] = {
+            c.name: int(client.get_collection(c.name).points_count or 0) for c in client.get_collections().collections
+        }
+    except Exception as exc:  # noqa: BLE001
+        errors.append(f"qdrant: {type(exc).__name__}: {exc}")
+    if errors:
+        sample["erro"] = "; ".join(errors)
+    return sample
+
+
+def _sample_postgres(database_url: str, graph_name: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    import psycopg
+    from psycopg import sql
+
+    with psycopg.connect(database_url, autocommit=True, connect_timeout=5) as conn:
+        postgres: dict[str, Any] = {
+            "db_bytes": int(conn.execute("SELECT pg_database_size(current_database())").fetchone()[0])
+        }
+        tables: dict[str, int] = {}
+        for table in SAMPLED_TABLES:
+            # Tabelas criadas por migrações do pool podem estar em ag_catalog (ver ``snapshot``).
+            for schema in ("public", "ag_catalog"):
+                if conn.execute("SELECT to_regclass(%s)", (f"{schema}.{table}",)).fetchone()[0]:
+                    query = sql.SQL("SELECT count(*) FROM {}.{}").format(sql.Identifier(schema), sql.Identifier(table))
+                    tables[table] = int(conn.execute(query).fetchone()[0])
+                    break
+        postgres["tabelas"] = tables
+        grafo: dict[str, dict[str, int]] = {"nos": {}, "arestas": {}}
+        labels = conn.execute(
+            "SELECT l.name, l.kind FROM ag_catalog.ag_label l JOIN ag_catalog.ag_graph g ON g.graphid = l.graph "
+            "WHERE g.name = %s AND l.name NOT LIKE '\\_ag\\_label%%'",
+            (graph_name,),
+        ).fetchall()
+        for name, kind in labels:  # contagem pela tabela do rótulo: sem Cypher de caminho (custo baixo no Pi)
+            query = sql.SQL("SELECT count(*) FROM {}.{}").format(sql.Identifier(graph_name), sql.Identifier(name))
+            count = int(conn.execute(query).fetchone()[0])
+            if count:
+                grafo["nos" if kind == "v" else "arestas"][name] = count
+    return postgres, grafo
+
+
+class StoreSampler:
+    """Amostra o crescimento das memórias a cada ``interval`` segundos, mais uma amostra no início e uma no fim.
+
+    Args:
+        source: Função sem argumentos que devolve uma amostra (``collect_store_sample`` com os alvos fixados).
+            Exceção da fonte vira ``{"t": ..., "erro": ...}`` e o benchmark continua.
+        interval: Segundos entre amostras (``BENCHMARK_STORE_SAMPLE_SECONDS``).
+    """
+
+    def __init__(self, source: Callable[[], dict[str, Any]], interval: float = DEFAULT_STORE_SAMPLE_SECONDS) -> None:
+        self._source = source
+        self._interval = max(float(interval), 0.05)
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, name="store-sampler", daemon=True)
+        self._t0 = time.monotonic()
+        self.timeline: list[dict[str, Any]] = []
+
+    def _take(self) -> None:
+        try:
+            sample = dict(self._source())
+        except Exception as exc:  # noqa: BLE001
+            sample = {"erro": f"{type(exc).__name__}: {exc}"}
+        self.timeline.append({"t": round(time.monotonic() - self._t0, 1), **sample})
+
+    def _run(self) -> None:
+        while not self._stop.wait(self._interval):
+            self._take()
+
+    def start(self) -> None:
+        self._t0 = time.monotonic()
+        self._take()
+        self._thread.start()
+
+    def stop(self) -> list[dict[str, Any]]:
+        """Para o laço, grava a amostra final e devolve a série."""
+        self._stop.set()
+        if self._thread.is_alive():
+            self._thread.join(timeout=self._interval + 30)
+        self._take()
+        return self.timeline
+
+
+def growth(timeline: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Crescimento total (última amostra sem erro menos a primeira) e taxa por minuto; ``None`` sem duas amostras."""
+    valid = [s for s in timeline if not s.get("erro")]
+    if len(valid) < 2:
+        return None
+    first, last = valid[0], valid[-1]
+    minutes = max((last["t"] - first["t"]) / 60.0, 1e-9)
+
+    def total(sample: dict[str, Any], *path: str) -> int:
+        node: Any = sample
+        for key in path:
+            node = (node or {}).get(key) if isinstance(node, dict) else None
+        if isinstance(node, dict):
+            return sum(node.values())
+        return int(node or 0)
+
+    metrics = {
+        "nos_grafo": ("grafo", "nos"),
+        "arestas_grafo": ("grafo", "arestas"),
+        "pontos_qdrant": ("qdrant",),
+        "agent_events": ("postgres", "tabelas", "agent_events"),
+        "egress_log": ("postgres", "tabelas", "egress_log"),
+        "execution_records": ("postgres", "tabelas", "execution_records"),
+        "db_bytes": ("postgres", "db_bytes"),
+    }
+    out: dict[str, Any] = {"duracao_min": round(minutes, 3), "amostras": len(valid)}
+    for name, path in metrics.items():
+        diff = total(last, *path) - total(first, *path)
+        out[name] = {"total": diff, "por_minuto": round(diff / minutes, 2)}
+    return out

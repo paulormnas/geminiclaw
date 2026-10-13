@@ -177,6 +177,23 @@ def _normalizer(label: str) -> Callable[[str], str]:
     return normalize_domain_term if label == "Dominio" else normalize_metric_name
 
 
+def find_approved_metric(store: GraphStore, name: str) -> Node | None:
+    """``Metrica`` aprovada cujo nome ou sinônimo coincide com ``name`` (forma normalizada); ``None`` se não há.
+
+    Só leitura: ao contrário de :func:`resolve_metric`, nunca cria candidato.
+    """
+    key = normalize_metric_name(name)
+    if not key:
+        return None
+    for node in _all_nodes(store, "Metrica"):
+        if node.properties.get("status") != "aprovado":
+            continue
+        names = [node.properties.get("nome"), *(node.properties.get("sinonimos") or [])]
+        if any(normalize_metric_name(str(n)) == key for n in names if n):
+            return node
+    return None
+
+
 def _base_props(sessao_id: str) -> dict[str, Any]:
     return {"projeto_id": GLOBAL_PROJECT_ID, "sessao_id": sessao_id, "visibilidade": "compartilhavel"}
 

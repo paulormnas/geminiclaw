@@ -1,6 +1,6 @@
 # Tarefas: v18.5-claim-verification
 
-**Estado (2026-10-08):** Implementada no branch `feat/v185-claim-verification` (PR para `dev`), ainda não mergeada.
+**Estado (2026-10-13):** Mergeada em `dev` (#121). Validada no Pi 5 em sessões reais do benchmark de 2026-10-13: a verificação classificou quase tudo como `nao_verificavel` (investigar).
 Pendentes, por dependerem de execução real ou de papel humano: 5.1 (sessões de referência, na bateria do Pi) e
 5.2 (revisão do Analista de Segurança). O rótulo `Afirmacao` e as duas relações exigem rodar de novo
 `scripts/migrate_v17_knowledge.py` no banco (idempotente) antes do primeiro uso em produção; sem isso o nó não é

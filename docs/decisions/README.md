@@ -27,8 +27,8 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 | [015](adr_015_modelo_dados_grafo_conhecimento.md) | Modelo de Dados do Grafo de Conhecimento e Ligação com Embeddings | 🟠 Parcialmente implementado (V17/V18 prontos; V18.5–V20 pendentes) | 2026-09-28 |
 | [016](adr_016_imagem_postgres_apache_age_colacao.md) | Imagem do PostgreSQL para Apache AGE (musl → glibc) e Colação de Índices | 🟢 Aprovado (2026-10-08; implementada, validação da colação no Pi pendente) | 2026-09-29 |
 | [017](adr_017_catalogo_modelos_roteador.md) | Catálogo de Modelos e Roteador de Provedores por Papel | ✅ Aceito | 2026-09-29 |
-| [018](adr_018_imagem_sandbox_enxuta_e_imagens_por_plataforma.md) | Imagem Enxuta do Sandbox de Código e Seleção de Imagens por Plataforma (registro de ideias) | 🟠 Parcialmente implementado (falta `v16-platform-images`) | 2026-09-29 |
-| [019](adr_019_localidade_dados_proveniencia_resultados.md) | Localidade dos Dados de Pesquisa e Proveniência dos Resultados | 🟠 Parcialmente implementado (3 de 8 mudanças V18.5) | 2026-09-29 |
+| [018](adr_018_imagem_sandbox_enxuta_e_imagens_por_plataforma.md) | Imagem Enxuta do Sandbox de Código e Seleção de Imagens por Plataforma (registro de ideias) | 🟠 Parcialmente implementado (`v16-platform-images` mergeada em 2026-10-12; faltam 5.5.1 e 5.5.2) | 2026-09-29 |
+| [019](adr_019_localidade_dados_proveniencia_resultados.md) | Localidade dos Dados de Pesquisa e Proveniência dos Resultados | 🟠 Parcialmente implementado (as 8 mudanças V18.5 estão mergeadas, com pendências de validação real e de revisão de segurança; passa a Aceito quando elas fecharem) | 2026-09-29 |
 
 ---
 

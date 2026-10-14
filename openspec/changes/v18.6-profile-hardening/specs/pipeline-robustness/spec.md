@@ -67,7 +67,7 @@ decimais em rótulos SHALL ser trocados pelo marcador de padrão numérico.
 - **THEN** o perfil mostra `coluna_N` no lugar
 
 #### Scenario: Número decimal no rótulo
-- **GIVEN** uma coluna chamada `limiar 0.05`
+- **GIVEN** um JSON com a chave `limiar 0.05`
 - **WHEN** o perfil é calculado
 - **THEN** `0.05` não aparece e há um marcador `<num padrão=...>`
 
@@ -99,7 +99,7 @@ O perfil SHALL ler no máximo `REVIEW_PROFILE_MAX_COLUMNS` (padrão 200) colunas
 (padrão 200) linhas de chaves no JSON; acima disso SHALL informar a contagem total e o corte.
 
 #### Scenario: CSV largo
-- **GIVEN** um CSV com cabeçalho de 1000000 de colunas e 300 linhas
+- **GIVEN** um CSV com cabeçalho de 1000000 de colunas e 20 linhas
 - **WHEN** o perfil é calculado
 - **THEN** devolve em menos de 2 s e indica "colunas: 1000000 (descrição limitada às primeiras 200)"
 

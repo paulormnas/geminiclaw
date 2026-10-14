@@ -31,6 +31,7 @@ from src.egress import filters
 from src.egress.filters import FilterContext
 from src.egress.fragments import (
     ARTIFACT_NAMES_SOURCE,
+    ARTIFACT_PROFILE_SOURCE,
     FRAGMENT_SEPARATOR,
     OBSERVED_ORIGINS,
     TOOL_CALLS_TAINTED_KEY,
@@ -269,7 +270,10 @@ class EgressGate:
                     "intervencoes": dict(local),
                 }
             )
-            if frag.origin in OBSERVED_ORIGINS and not wholesale:
+            observed = frag.origin in OBSERVED_ORIGINS or (
+                frag.origin is ContentOrigin.ESQUEMA_AGREGADO and frag.source == ARTIFACT_PROFILE_SOURCE
+            )
+            if observed and not wholesale:
                 return delimit(text, frag.origin, frag.source, block_id)
             return text
 

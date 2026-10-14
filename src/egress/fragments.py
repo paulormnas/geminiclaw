@@ -44,6 +44,9 @@ OBSERVED_ORIGINS: frozenset[ContentOrigin] = frozenset(
 
 # Fonte dos trechos com nomes de artefatos: o EgressGate aplica a regra de nomes (design §3.5) a eles.
 ARTIFACT_NAMES_SOURCE = "artefatos"
+# Fonte do perfil estrutural de artefato (v18.6-profile-hardening): conteúdo derivado de arquivo não confiável, sempre
+# delimitado como dado pelo EgressGate.
+ARTIFACT_PROFILE_SOURCE = "perfil_artefato"
 
 ORIGIN_INSTRUCAO_VALUE = ContentOrigin.INSTRUCAO.value
 FRAGMENTS_KEY = "_fragments"

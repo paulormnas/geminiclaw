@@ -176,6 +176,11 @@ REVIEW_METRIC_QUALIFIERS = get_env_bool("REVIEW_METRIC_QUALIFIERS", default=True
 REVIEW_ARTIFACT_PROFILE = get_env_bool("REVIEW_ARTIFACT_PROFILE", default=True)
 REVIEW_PROFILE_MAX_BYTES = int(get_env("REVIEW_PROFILE_MAX_BYTES", default="5242880"))
 REVIEW_PROFILE_MAX_CHARS = int(get_env("REVIEW_PROFILE_MAX_CHARS", default="1200"))
+# v18.6-profile-hardening — limites estruturais do perfil (NC-PERFIL-5).
+REVIEW_PROFILE_MAX_COLUMNS = int(get_env("REVIEW_PROFILE_MAX_COLUMNS", default="200"))
+REVIEW_PROFILE_MAX_ROWS = int(get_env("REVIEW_PROFILE_MAX_ROWS", default="100000"))
+REVIEW_PROFILE_MAX_SECONDS = float(get_env("REVIEW_PROFILE_MAX_SECONDS", default="5"))
+REVIEW_PROFILE_MAX_JSON_LINES = int(get_env("REVIEW_PROFILE_MAX_JSON_LINES", default="200"))
 
 # v18.6-hypothesis-closure — resultado científico negativo (hipótese refutada por limiar) é progresso, não falha.
 NEGATIVE_RESULT_AS_PROGRESS = get_env_bool("NEGATIVE_RESULT_AS_PROGRESS", default=True)

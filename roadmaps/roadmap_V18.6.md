@@ -58,11 +58,16 @@ ADRs de origem: 002, 005, 009, 010, 012, 015, 019 e o ADR 020 (aprovado em 2026-
 - **Critérios de aceite:** [x] resultado negativo conclui a subtarefa e conta como progresso · [x] `Experimento` em `sucesso` e veredito com a tentativa · [x] `veredito_indisponivel` no início da sessão · [x] `sem_caminhos_promissores` só com todas as hipóteses testadas · [x] evidência para frases sem código e `afirmacoes.json` sempre gravado
 - **Complexidade estimada:** Alta
 
+### Tarefa 5: Remoção de agentes e papéis sem uso
+- **Spec:** [`v18.6-remove-unused-agents`](../openspec/changes/v18.6-remove-unused-agents/proposal.md)
+- **Critérios de aceite:** [ ] agente `reviewer` removido do código, catálogo e benchmark · [ ] papéis de subtarefa só `developer` e `researcher` · [ ] revisão de subtarefa registrada como `validator` · [ ] atalho `agent_tasks` e `REVIEW_MODE=end_only` removidos
+- **Complexidade estimada:** Baixa
+
 ## Ordem de implementação
 
 ```
 Onda 1 (paralelo): Tarefa 1 (review-evidence) · Tarefa 2 (benchmark-harness, sem o item de juiz)
-Onda 2:            Tarefa 3 (validator-independence, após aprovação do ADR 020) · item de juiz da Tarefa 2
+Onda 2:            Tarefa 5 (remove-unused-agents, antes da Tarefa 3, que ela simplifica) · Tarefa 3 (validator-independence, após aprovação do ADR 020) · item de juiz da Tarefa 2
 Onda 3:            Tarefa 4 (hypothesis-closure, depende da Tarefa 1)
 Depois:            bateria no Pi (com confirmação do pesquisador) e matriz com 3 repetições por combinação
 ```

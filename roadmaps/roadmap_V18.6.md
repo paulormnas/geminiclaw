@@ -20,7 +20,7 @@ e da investigação dos eventos e do grafo gravados no Pi 5:
 - o placar do benchmark lia números do texto (a acurácia 1,000 era uma contagem);
 - o Validator julgava o trabalho do próprio modelo.
 
-ADRs de origem: 002, 005, 009, 010, 012, 015, 019 e o ADR 020 (aprovado em 2026-10-13; Parcialmente implementado).
+ADRs de origem: 002, 005, 009, 010, 012, 015, 019 e o ADR 020 (aceito em 2026-10-13).
 
 ## Decisões do pesquisador (2026-10-13)
 
@@ -75,16 +75,16 @@ Depois:            bateria no Pi (com confirmação do pesquisador) e matriz com
 ## Validação da Etapa
 - [x] Todos os testes unitários e de integração passam. _Pi 5, 2026-10-13, `uv run pytest -m "unit or integration"`: #142 3434 passed; #144 3468; #145 3475; #146 3534. Todos com 1 falha preexistente, fora do escopo: `test_similarity_queue_integration::test_fluxo_completo_da_fila` (item `x` sobrando na fila compartilhada do Pi; falha também na `dev` antiga)._
 - [ ] Validação real no Raspberry Pi 5: matriz com bancos isolados e 3 repetições, só depois da confirmação do pesquisador. _Pendente. A composição de `scripts/benchmark/matrix_modelos_v18_6.json` (três combinações com juiz de outra família e `controle-gemini-todos`) também aguarda confirmação._
-- [ ] Revisões do Analista de Segurança concluídas (Tarefas 1 e 3). _Tarefa 3: feita no design §6 de `v18.6-validator-independence`, sem bloqueio (requisitos S1 a S6). **Tarefa 1 pendente:** parecer sobre o perfil estrutural de CSV/JSON (`v18.6-review-evidence`, design §4)._
-- [ ] ADR 020 Aceito. _Hoje Parcialmente implementado: depende da matriz acima e da revisão prevista no próprio ADR._
+- [x] Revisões do Analista de Segurança concluídas (Tarefas 1 e 3). _Tarefa 3: feita no design §6 de `v18.6-validator-independence`, sem bloqueio (requisitos S1 a S6). Tarefa 1: parecer de 2026-10-13 em `docs/security/parecer_v18_6_perfil_estrutural.md`, aprovado com ressalvas (2 achados altos, 3 médios, 1 baixo); as correções ficam como NC-PERFIL-1 a 6, pendentes de mudança OpenSpec._
+- [x] ADR 020 Aceito. _Aceito pelo pesquisador em 2026-10-13, embora a matriz com bancos isolados e 3 repetições fique para depois; a revisão prevista no ADR após essa rodada é acompanhamento, não bloqueio._
 - [x] PRs merged em `dev`; mudanças arquivadas. _#142, #144, #145 e #146 mergeados; as 4 mudanças arquivadas e os ADRs 002, 005, 009, 010, 012, 015, 019 e 020 atualizados (PR de fechamento documental)._
 
 ## Pendências conhecidas
 
 - **Questões do design §8:** as respostas do pesquisador a `v18.6-review-evidence` e a `v18.6-hypothesis-closure` (e a `v18.6-benchmark-harness`, 0.1) não foram dadas; vigoram as propostas dos designs.
-- **`v18.6-benchmark-harness` 6.2:** falta o preço oficial `cached_input` dos modelos OpenAI da matriz (fonte e data); sem ele o token em cache é cobrado ao preço de entrada e o custo é superestimado. Não foi inventado.
 - **`v18.6-review-evidence` 7.2 (parcial):** a conferência exata sobre os `metrics.json`, planos e nós `Resultado` do benchmark de 2026-10-13 não é possível (apagados do Pi); só há a classificação textual dos eventos, com limites superiores.
-- **`v18.6-hypothesis-closure` 6.1:** a causa da ausência de `afirmacoes.json` na sessão do Sonnet (2026-10-12 21:53) não foi confirmada nos eventos do Pi; a tarefa 6.3 elimina o sintoma (arquivo sempre gravado, com `motivo_vazio`).
+- **`v18.6-hypothesis-closure` 6.1:** a causa da ausência de `afirmacoes.json` na sessão do Sonnet (2026-10-12 21:53) **NÃO foi confirmada** (sem acesso aos eventos do Pi). É preciso reexecutar a sessão com o modelo Sonnet, no Pi, quando o pesquisador autorizar a bateria, e investigar pelos eventos. Hipóteses já levantadas: `CLAIM_VERIFY_ENABLED` desligado, falta de `render`, exceção antes de `store.save()`. O que observar: os eventos do estágio `claims` e as exceções. A tarefa 6.3 elimina o sintoma (arquivo sempre gravado, com `motivo_vazio`), não confirma a causa.
+- **Correções do parecer de segurança do perfil estrutural (NC-PERFIL-1 a 6):** [`docs/security/parecer_v18_6_perfil_estrutural.md`](../docs/security/parecer_v18_6_perfil_estrutural.md) exige mudança OpenSpec própria (cabeçalho verificado, symlink, nome seguro e perfil delimitado, perfil sem exceção, limites de colunas/linhas, mapas). Altas: NC-PERFIL-1 e 2.
+- **Em PR próprio (fora destas pendências):** `cached_input` dos modelos OpenAI (preço oficial obtido em developers.openai.com/api/docs/pricing, consultado em 2026-10-13: gpt-6-luna US$ 0,10 / 0,01 / 0,50 e gpt-5.6-terra US$ 2,00 / 0,20 / 12,00 por 1 M de tokens, entrada / cache / saída) e remoção das matrizes antigas `matrix_baixo_custo.json` e `matrix_modelos_2026_10.json`.
 - **Composição da matriz `matrix_modelos_v18_6.json`:** a confirmar com o pesquisador antes da rodada.
-- **Matrizes antigas:** `matrix_baixo_custo.json` e `matrix_modelos_2026_10.json` passaram a ser recusadas pelo runner (o `*` não cobre o juiz; o `VALIDATOR` precisa ser declarado, ADR 020 §7). Decidir entre migrá-las para o juiz declarado ou removê-las.
 - **Execução curta no Pi (`v18.6-benchmark-harness` 7.2):** uma combinação, `--repeat 1`, `--reset-stores`, só após confirmação do pesquisador.

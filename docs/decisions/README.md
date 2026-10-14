@@ -29,7 +29,7 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 | [017](adr_017_catalogo_modelos_roteador.md) | Catálogo de Modelos e Roteador de Provedores por Papel | ✅ Aceito | 2026-09-29 |
 | [018](adr_018_imagem_sandbox_enxuta_e_imagens_por_plataforma.md) | Imagem Enxuta do Sandbox de Código e Seleção de Imagens por Plataforma (registro de ideias) | ✅ Aceito (2026-10-13; 5.5.1, 5.5.2 e medições no Pi pendentes) | 2026-09-29 |
 | [019](adr_019_localidade_dados_proveniencia_resultados.md) | Localidade dos Dados de Pesquisa e Proveniência dos Resultados | 🟠 Parcialmente implementado (8 mudanças V18.5 e 3 da V18.6 concluídas e arquivadas; §10 na V19; validação real e revisões de segurança pendentes) | 2026-09-29 |
-| [020](adr_020_independencia_validator.md) | Independência do Julgamento: Família de Modelo do Validator Diferente da do Developer | 🟠 Parcialmente implementado (2026-10-13; `v18.6-validator-independence` e `v18.6-benchmark-harness` concluídas e arquivadas; matriz com bancos isolados e 3 repetições no Pi 5 pendente) | 2026-10-13 |
+| [020](adr_020_independencia_validator.md) | Independência do Julgamento: Família de Modelo do Validator Diferente da do Developer | ✅ Aceito (2026-10-13; `v18.6-validator-independence` e `v18.6-benchmark-harness` concluídas e arquivadas; matriz com bancos isolados e 3 repetições no Pi 5 e revisão do ADR depois dela ficam como acompanhamento) | 2026-10-13 |
 
 
 ---
@@ -112,8 +112,8 @@ ADR 010 (Propósito: Assistente de Pesquisa) ← define o escopo de tudo (substi
 
 **Atualização 2026-10-13 (V18.6):** as 4 mudanças da V18.6 (`v18.6-review-evidence`, `v18.6-benchmark-harness`,
 `v18.6-validator-independence`, `v18.6-hypothesis-closure`) foram arquivadas e o status dos ADRs 002, 005, 009, 010, 012, 015,
-019 e 020 foi atualizado (notas nos ADRs 007, 017 e 019 apontam para o ADR 020). O ADR 020 fica Parcialmente implementado até a
-matriz com 3 repetições (só com confirmação do pesquisador).
+019 e 020 foi atualizado (notas nos ADRs 007, 017 e 019 apontam para o ADR 020). O ADR 020 foi aceito pelo pesquisador em 2026-10-13; a
+matriz com 3 repetições (só com confirmação do pesquisador) e a revisão posterior do ADR ficam como acompanhamento, sem bloquear o aceite.
 
 **Atualização 2026-10-13:** as 32 mudanças de V16 a V18.5 foram concluídas e arquivadas em
 `openspec/changes/archive/`, com os requisitos consolidados em `openspec/specs/`. Os itens que estavam

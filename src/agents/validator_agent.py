@@ -379,6 +379,13 @@ def _find_metrics_file(output_dir: Optional[Path | str], task_name: str, depends
     return None
 
 
+def issue_text(issue: Any) -> str:
+    """Texto de um problema do parecer do LLM; alguns modelos devolvem objetos em vez de texto."""
+    if isinstance(issue, dict):
+        return "; ".join(f"{key}: {value}" for key, value in issue.items())
+    return str(issue)
+
+
 def issue_signature(issues: List[str]) -> str:
     """Assinatura estável de um conjunto de problemas (números e caixa não contam)."""
     normalized = sorted({re.sub(r"\d+", "#", i.lower().strip()) for i in issues if i})
@@ -770,8 +777,8 @@ class ValidatorAgent:
 
             status = parsed.get("status", "revision_needed").lower()
             is_valid = status == "approved"
-            llm_issues = [str(i) for i in (parsed.get("issues") or [])]
-            issues = list(parsed.get("issues") or [])
+            llm_issues = [issue_text(i) for i in (parsed.get("issues") or [])]
+            issues = list(llm_issues)
             metrics_ok = False
             if metric_definition is not None:
                 metrics_ok = str(parsed.get("metricas_status", "")).lower() == "approved"
@@ -1044,7 +1051,7 @@ class ValidatorAgent:
                 if isinstance(parsed, dict) and "status" in parsed:
                     status = parsed.get("status", "pass").lower()
                     is_approved = status == "pass"
-                    llm_issues = [str(i) for i in (parsed.get("issues") or [])]
+                    llm_issues = [issue_text(i) for i in (parsed.get("issues") or [])]
                     if negative_candidate and metric_fail is not None:
                         # o revisor LLM aprovou os critérios restantes: resultado negativo; senão, reprovado
                         if is_approved:
@@ -1055,7 +1062,7 @@ class ValidatorAgent:
                         is_approved=is_approved,
                         status="pass" if is_approved else "fail",
                         feedback=parsed.get("feedback", ""),
-                        issues=parsed.get("issues", []),
+                        issues=llm_issues,
                         resolved_artifacts=resolved_map,
                         name_mismatch=mismatch,
                         signature=""

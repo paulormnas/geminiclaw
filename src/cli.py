@@ -1241,7 +1241,7 @@ async def execute_prompt(
         if context_bundle and result.session_id:
             print_context_lifecycle_message(result.session_id, context_bundle)
     except Exception as e:
-        logger.error("Erro ao processar prompt", extra={"error": str(e)})
+        logger.error("Erro ao processar prompt", extra={"error": str(e)}, exc_info=True)
         print(f"\n  {STATUS_ICONS['error']} {RED}Erro: {e}{RESET}\n")
     return True
 

@@ -34,7 +34,7 @@
 - [x] 5.3 Testes: os três cenários do requisito modificado.
 
 ## 6. Afirmações
-- [ ] 6.1 Investigar por que a sessão do Sonnet (2026-10-12 21:53) não gravou `afirmacoes.json`, pelos eventos no Pi, e registrar a causa no PR. (Pendente: sem acesso aos logs do Pi; análise de código no design §8.1.)
+- [ ] 6.1 Investigar por que a sessão do Sonnet (2026-10-12 21:53) não gravou `afirmacoes.json`, pelos eventos no Pi, e registrar a causa no PR. (Pendente: sem acesso aos logs do Pi; análise de código no design §8.1.) **A causa NÃO foi confirmada.** Reexecutar a sessão com o modelo Sonnet no Pi, quando o pesquisador autorizar a bateria, e investigar pelos eventos. Hipóteses: `CLAIM_VERIFY_ENABLED` desligado, falta de `render`, exceção antes de `store.save()`. Observar: eventos do estágio `claims` e exceções.
 - [x] 6.2 `session_results_item` e inclusão para frases sem código (§6.1).
 - [x] 6.3 `afirmacoes.json` sempre gravado com `motivo_vazio` (§6.2).
 - [x] 6.4 Testes: "Frase sem código recebe a tabela" e "Relatório sem afirmações".

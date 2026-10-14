@@ -1,6 +1,6 @@
 # ADR 020 — Independência do Julgamento: Família de Modelo do Validator Diferente da do Developer
 
-**Status:** Parcialmente implementado — as duas mudanças OpenSpec (`v18.6-validator-independence`, `v18.6-benchmark-harness`) estão mergeadas e arquivadas (2026-10-13); para Aceito faltam a matriz com bancos isolados e 3 repetições no Pi 5 (só com confirmação do pesquisador) e a confirmação da composição da matriz `matrix_modelos_v18_6.json`; a revisão prevista na seção Revisão depende dessa rodada (aprovado em 2026-10-13 pelo pesquisador; atualizado em 2026-10-13)
+**Status:** Aceito (2026-10-13, pelo pesquisador) — as duas mudanças OpenSpec (`v18.6-validator-independence`, `v18.6-benchmark-harness`) estão mergeadas e arquivadas (2026-10-13). O aceite ocorreu antes da bateria do benchmark com bancos isolados e 3 repetições no Pi 5, que continua pendente (só com confirmação do pesquisador); a revisão prevista na seção Revisão depois dessa rodada é acompanhamento, não bloqueio (aprovado em 2026-10-13; aceito em 2026-10-13)
 **Data:** 2026-10-13
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** `roadmaps/roadmap_V18.6.md`
@@ -235,3 +235,14 @@ Revisar depois da próxima rodada com 3 repetições. Se a taxa de reprovação 
 validada não diferirem entre as combinações com família diferente e a de controle, o modo padrão
 volta a ser discutido (`preferred` ou só desempate). Revisar também se a validação do plano pelo
 mesmo modelo do Researcher mostrar viés.
+
+## Estado da implementação
+
+| Parte | Estado | Evidência |
+|---|---|---|
+| §1 a §6: roteador, despacho, dicas, reserva do 429, modos, catálogo, registro, retomada | Implementada | `v18.6-validator-independence`, #145 |
+| §7: runner do benchmark com juiz declarado, combinação de controle e `check_pins` | Implementada | `v18.6-benchmark-harness`, #144 |
+| Parecer de segurança do juiz (egresso) | Feito, sem bloqueio | design §6 de `v18.6-validator-independence` (S1 a S6) |
+| Composição da matriz `matrix_modelos_v18_6.json` | Pendente (confirmação do pesquisador) | `roadmaps/roadmap_V18.6.md`, Pendências conhecidas |
+| Matriz com bancos isolados e 3 repetições no Pi 5 | Pendente (só com confirmação do pesquisador) | Acompanhamento; não bloqueia o aceite |
+| Revisão do ADR após a rodada com 3 repetições | Pendente | Seção Revisão acima |

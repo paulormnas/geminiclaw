@@ -1,11 +1,12 @@
 # Tarefas: v18.6-review-evidence
 
 **Estado (2026-10-13):** Concluída e arquivada — código mergeado em `dev` (#142). Os itens ainda abertos abaixo foram transferidos para [`PENDENCIAS.md`](../PENDENCIAS.md).
+**Parecer de segurança (2026-10-13):** registrado em `docs/security/parecer_v18_6_perfil_estrutural.md` (tarefa 0.2); ressalvas pendentes como NC-PERFIL-1 a 6.
 **Estado anterior (2026-10-13):** Implementada, com pendências: código e testes unitários das seções 1 a 6 concluídos (branch `feat/v18.6-review-evidence`); ficam abertos o parecer do Analista de Segurança (0.2) e a medição sobre os dados do benchmark no Pi (7.2). Questões do design §8 resolvidas com as propostas do próprio design, por instrução do orquestrador.
 
 ## 0. Pré-requisitos
 - [x] 0.1 Questões do design §8: adotadas as propostas do design (limiar só com `hypothesis_ref`; `val_` é `validacao`; um nível de achatamento). Confirmar no PR.
-- [ ] 0.2 Parecer do Analista de Segurança sobre o perfil estrutural registrado no design §4 ou no PR.
+- [x] 0.2 Parecer do Analista de Segurança sobre o perfil estrutural: [`docs/security/parecer_v18_6_perfil_estrutural.md`](../../../../docs/security/parecer_v18_6_perfil_estrutural.md) (2026-10-13). Veredito: aprovado com ressalvas; 2 achados altos (S1 CSV sem cabeçalho expõe a primeira linha; S2 symlink lê arquivo fora da sessão), 3 médios (S3 injeção por nome de coluna, S4 `RecursionError`, S5 CPU com muitas colunas) e 1 baixo (S6). Correções como requisitos R1 a R6 do parecer, pendentes de mudança OpenSpec própria (NC-PERFIL-1 a 6).
 - [x] 0.3 Worktree `.worktrees/v18.6-review-evidence` (branch `feat/v18.6-review-evidence`).
 
 ## 1. Qualificador de métrica

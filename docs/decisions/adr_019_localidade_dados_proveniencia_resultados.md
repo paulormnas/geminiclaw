@@ -31,6 +31,7 @@
 | [`v18.6-review-evidence`](../../openspec/changes/archive/v18.6-review-evidence/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`: parecer de segurança do perfil estrutural, medição 7.2 parcial, questões do design §8) | #142 |
 | [`v18.6-validator-independence`](../../openspec/changes/archive/v18.6-validator-independence/proposal.md) | Concluída e arquivada | #145 |
 | [`v18.6-hypothesis-closure`](../../openspec/changes/archive/v18.6-hypothesis-closure/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`: causa da ausência de `afirmacoes.json` no Sonnet não confirmada, questões do design §8) | #146 |
+| [`v18.6-models-gemini4-gpt6`](../../openspec/changes/archive/v18.6-models-gemini4-gpt6/proposal.md) | Versão efetiva do modelo, data e preços registrados por execução do benchmark (§6); concluída e arquivada | #160 |
 | [`v18.6-profile-hardening`](../../openspec/changes/archive/v18.6-profile-hardening/proposal.md) | Concluída e arquivada: NC-PERFIL-1 a 6 do parecer de segurança do perfil estrutural corrigidas (§3 itens 1, 5 e 6); Pi 5: 3558 passed, 0 falhas | #154 |
 
 ---

@@ -1,8 +1,8 @@
 # Pendências das Mudanças Arquivadas (V16–V18.6)
 
-As 32 mudanças das versões V16 a V18.5 e as 7 da V18.6 (`v18.6-review-evidence`,
+As 32 mudanças das versões V16 a V18.5 e as 8 da V18.6 (`v18.6-review-evidence`,
 `v18.6-benchmark-harness`, `v18.6-validator-independence`, `v18.6-hypothesis-closure`,
-`v18.6-profile-hardening`, `v18.6-remove-unused-agents` e `v18.6-auto-metrics-and-stop-reasons`) foram arquivadas em 2026-10-13 e 2026-10-14, com o código mergeado em `dev`. Os itens que estavam abertos nos `tasks.md` foram reunidos aqui por categoria, para não
+`v18.6-profile-hardening`, `v18.6-remove-unused-agents`, `v18.6-auto-metrics-and-stop-reasons` e `v18.6-models-gemini4-gpt6`) foram arquivadas em 2026-10-13 e 2026-10-14, com o código mergeado em `dev`. Os itens que estavam abertos nos `tasks.md` foram reunidos aqui por categoria, para não
 se perderem no arquivo. Cada item cita a mudança de origem.
 
 - **Validação em ambiente real:** entra na bateria final no Raspberry Pi 5, que só começa com a

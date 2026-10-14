@@ -1,6 +1,6 @@
 # Tarefas: v18.6-models-gemini4-gpt6
 
-**Estado (2026-10-14):** Implementada (seções 0 a 3 e 4.1, 4.3). Suíte no Pi: 3614 passed, 0 falhas (2026-10-14); os quatro modelos existem nas APIs da conta. Preços reconferidos nas páginas oficiais em 2026-10-14 (sem mudança).
+**Estado (2026-10-14):** Concluída e arquivada (#160), seções 0 a 4. Suíte no Pi: 3614 passed, 0 falhas (2026-10-14); os quatro modelos existem nas APIs da conta. Preços reconferidos nas páginas oficiais em 2026-10-14 (sem mudança).
 
 ## 0. Pré-requisitos
 - [x] 0.1 Spec aprovada pelo pesquisador (merge do PR de especificação), com a escolha do `gpt-6.1-sol` (design §10.2).

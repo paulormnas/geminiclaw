@@ -1,7 +1,7 @@
 # Roadmap V18.6 — Correções do Benchmark de 2026-10-13
 
 > **Estado (2026-10-14):** as Tarefas 1 a 6 e a correção NC-PERFIL (`v18.6-profile-hardening`) estão
-> concluídas, mergeadas em `dev` (#142, #144, #145, #146, #154, #155, #157) e arquivadas em
+> concluídas, mergeadas em `dev` (#142, #144, #145, #146, #154, #155, #157, #160) e arquivadas em
 > `openspec/changes/archive/`, com os requisitos consolidados em `openspec/specs/`. A etapa **não está
 > encerrada**: faltam a matriz com bancos isolados e 3 repetições no Pi 5 (só com confirmação do
 > pesquisador), a composição da matriz e as respostas do pesquisador às questões de design (ver
@@ -75,8 +75,8 @@ ADRs de origem: 002, 005, 009, 010, 012, 015, 019 e o ADR 020 (aceito em 2026-10
 - **Complexidade estimada:** Média
 
 ### Tarefa 7: Migração para Gemini 4 e GPT-6, com a versão dos modelos registrada
-- **Spec:** [`v18.6-models-gemini4-gpt6`](../openspec/changes/v18.6-models-gemini4-gpt6/proposal.md) · **Estado (2026-10-14):** especificada, aguarda implementação
-- **Critérios de aceite:** [ ] catálogo versão 5 com `gemini-4-argon` e `gpt-6.1-sol` · [ ] preço com vigência (promoção do Gemini 4 até 2026-11-30) · [ ] resultado e relatório do benchmark com modelo pedido, versão efetiva, data e preços · [ ] matriz com os modelos novos e teto de US$ 14 por provedor · [ ] coleções do Qdrant recriadas sob demanda depois do reset
+- **Spec:** [`v18.6-models-gemini4-gpt6`](../openspec/changes/archive/v18.6-models-gemini4-gpt6/proposal.md) · **Estado (2026-10-14):** concluída e arquivada, #160 (Pi 5: 3614 passed, 0 falhas)
+- **Critérios de aceite:** [x] catálogo versão 5 com `gemini-4-argon` e `gpt-6.1-sol` · [x] preço com vigência (promoção do Gemini 4 até 2026-11-30) · [x] resultado e relatório do benchmark com modelo pedido, versão efetiva, data e preços · [x] matriz com os modelos novos e teto de US$ 14 por provedor · [x] coleções do Qdrant recriadas sob demanda depois do reset
 - **Complexidade estimada:** Média
 
 ## Ordem de implementação

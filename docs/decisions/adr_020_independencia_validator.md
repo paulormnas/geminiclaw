@@ -228,6 +228,7 @@ A telemetria da revisão de subtarefa passa a registrar o papel `validator` com
 | [`v18.6-validator-independence`](../../openspec/changes/archive/v18.6-validator-independence/proposal.md) | §1 a §6 e o juiz da avaliação de comunicação (§7): roteador, despacho, dicas, reserva, modos, catálogo, registro, retomada | Concluída e arquivada | #145 |
 | [`v18.6-remove-unused-agents`](../../openspec/changes/archive/v18.6-remove-unused-agents/proposal.md) | Juiz = `validator` e julgado = `developer`: remove `reviewer` e `base` dos grupos, os pontos de despacho (`check_dispatch`) e o rótulo `reviewer` da revisão | Concluída e arquivada | #155 |
 | [`v18.6-benchmark-harness`](../../openspec/changes/archive/v18.6-benchmark-harness/proposal.md) | Runner do §7: juiz declarado por combinação, combinação de controle, `check_pins` | Concluída e arquivada, com pendência (composição da matriz a confirmar; o `cached_input` OpenAI foi resolvido no #150 e as matrizes antigas removidas no #152) | #144 |
+| [`v18.6-models-gemini4-gpt6`](../../openspec/changes/archive/v18.6-models-gemini4-gpt6/proposal.md) | Matriz com Gemini 4 Argon e GPT-6.1 Sol (mesmas quatro combinações) e orçamento de US$ 14 por provedor; concluída e arquivada | #160 |
 
 ## Revisão
 

@@ -34,6 +34,7 @@
 | [`v18.5-model-catalog-locality`](../../openspec/changes/archive/v18.5-model-catalog-locality/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #112 |
 | [`v18.6-validator-independence`](../../openspec/changes/archive/v18.6-validator-independence/proposal.md) | Concluída e arquivada | #145 |
 | [`v18.6-remove-unused-agents`](../../openspec/changes/archive/v18.6-remove-unused-agents/proposal.md) | Concluída e arquivada: papel `reviewer` removido do catálogo (versão 4), `REVIEWER_MODEL` obsoleta com `WARNING` | #155 |
+| [`v18.6-models-gemini4-gpt6`](../../openspec/changes/archive/v18.6-models-gemini4-gpt6/proposal.md) | Concluída e arquivada: catálogo versão 5 (`gemini-4-argon`, `gpt-6.1-sol`), preço com vigência | #160 |
 
 ## Contexto
 

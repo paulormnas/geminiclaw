@@ -357,16 +357,6 @@ def _no_curator():
 
 
 @pytest.mark.asyncio
-async def test_modo_auto_sem_metrica_aprovada_termina_com_erro_sem_chamar_o_researcher(tmp_path, _no_curator):
-    """Scenario: Modo auto sem métrica aprovada."""
-    h = LoopHarness(tmp_path, plans=[plan([task("t1")], [hyp("h1")])], world_kw={"approve_metric": False})
-    result = await h.run()
-    assert h.stop_reason == "erro"
-    assert h.plan_calls == 0 and h.ran == []
-    assert any("scripts/seed_vocabulary.py" in (r.error or "") for r in result.results)
-
-
-@pytest.mark.asyncio
 async def test_modo_assistido_sem_metrica_aprovada_avisa_e_segue(tmp_path, capsys, _no_curator):
     """Scenario: Modo assistido sem métrica aprovada."""
     p = plan([task("t1")], [hyp("h1")])
@@ -376,6 +366,7 @@ async def test_modo_assistido_sem_metrica_aprovada_avisa_e_segue(tmp_path, capsy
     await h.run()
     assert "Veredito indisponível" in capsys.readouterr().out
     assert h.plan_calls >= 1 and h.ran == ["t1"]
+    assert "DEFINIÇÃO DE MÉTRICAS" not in h.planner_prompts[0]  # v18.6-auto-metrics-and-stop-reasons: só no auto
 
 
 # --- Fechamento por falta de caminhos -------------------------------------------------------------------------------
@@ -393,14 +384,14 @@ async def test_hipotese_no_plano_sem_tentativa_nao_fecha_e_o_feedback_cita(tmp_p
 
 
 @pytest.mark.asyncio
-async def test_ciclos_ociosos_esgotados_fecham_com_erro_e_lista_as_hipoteses(tmp_path, _no_curator):
+async def test_ciclos_ociosos_esgotados_fecham_com_hipoteses_nao_testadas(tmp_path, _no_curator):
     """Scenario: Ciclos ociosos esgotados."""
     first = plan([task("t1")], [hyp("h1")])
     h = LoopHarness(tmp_path, plans=[first, first, first], record_attempts=False)
     result = await h.run()
     (node,) = h.hypotheses()
-    assert h.stop_reason == "erro"
-    assert any(f"hipóteses sem tentativa após 2 ciclos ociosos: {node.id}" in (r.error or "") for r in result.results)
+    assert h.stop_reason == "hipoteses_nao_testadas"  # v18.6-auto-metrics-and-stop-reasons: não é mais `erro`
+    assert all(r.status != "error" for r in result.results)
 
 
 @pytest.mark.asyncio
@@ -481,6 +472,7 @@ def test_contadores_de_operacao():
         out = HypothesisClosureReader().read("s")
     assert out == {
         "resultados_sem_mede": 2, "subtarefas_resultado_negativo": 1, "hipoteses_sem_tentativa_no_fechamento": 2,
+        "fechada_por_hipoteses_nao_testadas": False, "reprovacoes_sem_hipotese": 0,
     }
 
 

@@ -264,6 +264,31 @@ def _stop_reason(session_dir: Path) -> str | None:
         return None
 
 
+STOP_UNTESTED_HYPOTHESES = "hipoteses_nao_testadas"
+
+
+def stop_class(stop: str | None) -> str | None:
+    """Classe do ``motivo_parada``: limite, erro, interrupção, critério de pesquisa ou hipótese não testada.
+
+    Valores: ``limite``, ``erro``, ``interrupcao``, ``hipoteses_nao_testadas`` e ``criterio_pesquisa``.
+    ``hipoteses_nao_testadas`` é parada de pesquisa (o Researcher não testou as hipóteses que abriu): fica
+    identificável nos relatórios, mas não é anomalia nem erro (``v18.6-auto-metrics-and-stop-reasons``).
+    ``None`` sem motivo registrado.
+    """
+    if not stop:
+        return None
+    stop = str(stop)
+    if stop.startswith("limite_"):
+        return "limite"
+    if stop == "erro":
+        return "erro"
+    if stop in ("interrompida", "interrompida_pesquisador"):
+        return "interrupcao"
+    if stop == STOP_UNTESTED_HYPOTHESES:
+        return STOP_UNTESTED_HYPOTHESES
+    return "criterio_pesquisa"
+
+
 def anomalies(result: dict) -> list[str]:
     """Problemas de infraestrutura/código numa combinação (não a baixa qualidade do modelo): interrompem o benchmark.
 
@@ -279,7 +304,7 @@ def anomalies(result: dict) -> list[str]:
     if "Traceback (most recent call last)" in (result.get("log_tail") or ""):
         problems.append("traceback no fim do log")
     stop = result.get("stop_reason")
-    if stop and (str(stop).startswith("limite_") or stop in ("erro", "interrompida", "interrompida_pesquisador")):
+    if stop_class(stop) in ("limite", "erro", "interrupcao"):
         problems.append(
             f"sessão fechada por '{stop}' antes de concluir: a comparação entre modelos exige sessões completas "
             "(ajuste o orçamento da matriz)"

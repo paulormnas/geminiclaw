@@ -137,6 +137,7 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
                     "sem_caminhos_promissores",  # v18-hypothesis-loop
                     "planos_rejeitados",  # v18-hypothesis-loop
                     "limite_ciclos",  # v18-hypothesis-loop
+                    "hipoteses_nao_testadas",  # v18.6-auto-metrics-and-stop-reasons
                     "limite_tokens",
                     "limite_tempo",
                     "limite_retentativas",
@@ -352,6 +353,11 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             "sinonimos_candidatos": PropertySchema(),
             "status": PropertySchema(required=True, enum=("candidato", "aprovado", "rejeitado")),
             "motivo_decisao": PropertySchema(),
+            # v18.6-auto-metrics-and-stop-reasons: métrica definida pelo agente no modo auto (opcionais; a ausência
+            # equivale a "pesquisador").
+            "origem_definicao": PropertySchema(enum=("pesquisador", "agente")),
+            "aprovada_por": PropertySchema(enum=("pesquisador", "validator")),
+            "justificativa_definicao": PropertySchema(),
         },
     ),
 }

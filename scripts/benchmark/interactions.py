@@ -20,6 +20,7 @@ def summarize_events(events: list[dict[str, Any]]) -> dict:
     validations = [e["payload"] for e in events if e["event_type"] == "plan_validation"]
     reviews = [e["payload"] for e in events if e["event_type"] == "subtask_review"]
     questions = [e["payload"] for e in events if e["event_type"] == "ask_researcher"]
+    reason_counts = Counter(m for r in reviews if not r.get("approved") for m in (r.get("motivos") or []))
     return {
         "event_counts": dict(counts),
         "messages": sum(counts[t] for t in MESSAGE_EVENTS),
@@ -32,6 +33,9 @@ def summarize_events(events: list[dict[str, Any]]) -> dict:
             "total": len(reviews),
             "approved": sum(1 for r in reviews if r.get("approved")),
             "rejections": [r.get("issues") or [r.get("feedback")] for r in reviews if not r.get("approved")],
+            # v18.6-auto-metrics-and-stop-reasons: motivos de reprovação registrados (ex.: sem_hipotese); a chave só
+            # existe quando algum foi registrado (o resumo sem motivos segue idêntico ao anterior).
+            **({"motivos": dict(reason_counts)} if reason_counts else {}),
         },
         "ask_researcher": [
             {"question": q.get("question"), "why": q.get("why_cant_proceed"), "options": q.get("options")}

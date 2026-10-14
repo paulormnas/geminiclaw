@@ -87,6 +87,16 @@ def render_aggregates(results: list[dict]) -> str:
     return "\n".join(rows)
 
 
+def render_untested_stops(results: list[dict]) -> str:
+    """Execuções fechadas por ``hipoteses_nao_testadas``: parada de pesquisa, listada à parte (não é erro)."""
+    rows = [
+        f"- {r['name']} (repetição {r.get('repeticao', 1)})"
+        for r in results
+        if r.get("status") != "skipped" and r.get("stop_reason") == "hipoteses_nao_testadas"
+    ]
+    return "\n".join(rows)
+
+
 def render_growth(results: list[dict]) -> str:
     """Crescimento das memórias por execução: total (fim menos início) e taxa por minuto (design §3.2)."""
     header = (
@@ -127,6 +137,11 @@ def render_interactions(results: list[dict]) -> str:
             f"- Validação de plano: {plans['approved']}/{plans['total']} aprovadas",
             f"- Revisão de subtarefa: {reviews['approved']}/{reviews['total']} aprovadas",
         ]
+        if reviews.get("motivos"):  # só presente quando houve motivo registrado
+            lines.append(
+                "- Motivos de reprovação de subtarefa: "
+                + ", ".join(f"{k}: {v}" for k, v in sorted(reviews["motivos"].items()))
+            )
         for issues in (plans["rejections"] + reviews["rejections"])[:4]:
             lines.append(f"  - reprovação: {'; '.join(str(i) for i in issues)[:240]}")
         for q in data["ask_researcher"][:4]:
@@ -240,6 +255,10 @@ if __name__ == "__main__":
     if any(r.get("repeticao", 1) > 1 for r in loaded):
         print()
         print(render_aggregates(loaded))
+    if render_untested_stops(loaded):
+        print()
+        print("### Paradas por hipóteses não testadas (parada de pesquisa, não erro)")
+        print(render_untested_stops(loaded))
     if any(r.get("store_timeline") for r in loaded):
         print()
         print(render_growth(loaded))

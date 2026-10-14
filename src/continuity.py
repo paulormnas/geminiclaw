@@ -1121,6 +1121,12 @@ def evaluate_resumability(
             "a exploração parou por planos consecutivos rejeitados (planos_rejeitados); retomar repete o mesmo "
             "planejamento — continuar mesmo assim?",
         )
+    if motivo == "hipoteses_nao_testadas":
+        return Resumability(
+            RESUME_REFUSE,
+            "a exploração parou com hipóteses em teste sem nenhuma tentativa (hipoteses_nao_testadas); retomar "
+            "repete o mesmo planejamento. Inicie uma nova sessão ou oriente o Researcher a testar essas hipóteses.",
+        )
     if motivo == "erro":
         return Resumability(
             RESUME_REFUSE,

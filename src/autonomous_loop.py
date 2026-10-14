@@ -806,11 +806,11 @@ class AutonomousLoop:
             ExplorationStop.ERROR, master_session_id, prompt, tasks, dag_state, final_results
         )
 
-    async def _check_verdict_available(self, exploration: Any, master_session_id: str) -> Optional[str]:
+    async def _check_verdict_available(self, exploration: Any, master_session_id: str) -> Optional[Tuple[str, str]]:
         """Confere a ``Metrica`` do ``Problema`` antes do primeiro planejamento (``v18.6-hypothesis-closure`` §4).
 
         Returns:
-            A mensagem de aviso (motivo e correção) se o veredito não pode ser calculado; senão ``None``.
+            ``(mensagem de aviso, motivo)`` se o veredito não pode ser calculado; senão ``None``.
         """
         try:
             found = await asyncio.to_thread(exploration.verdict_availability)
@@ -822,6 +822,8 @@ class AutonomousLoop:
             return None
         reason, fix = found
         message = f"Veredito indisponível: {reason}. Correção: {fix}."
+        if self._session_mode == "auto":
+            message += " No modo auto, o Researcher definirá a métrica no plano e o Validator a validará."
         logger.warning(message, extra={"master_session_id": master_session_id})
         print_status("warning", message)
         get_telemetry().record_agent_event(
@@ -831,7 +833,7 @@ class AutonomousLoop:
             event_type="veredito_indisponivel",
             payload={"motivo": reason[:300], "correcao": fix, "modo": self._session_mode},
         )
-        return message
+        return message, reason
 
     async def _close_untested_hypotheses(
         self,
@@ -843,28 +845,30 @@ class AutonomousLoop:
         dag_state: Dict[str, Any],
         final_results: List["AgentResult"],
     ) -> "OrchestratorResult":
-        """Ciclos ociosos esgotados com hipótese sem tentativa: fecha com ``erro`` e a lista das hipóteses."""
+        """Ciclos ociosos esgotados com hipótese sem tentativa: fecha com ``hipoteses_nao_testadas``.
+
+        É uma parada de pesquisa, não uma falha: não acrescenta resultado de erro
+        (``v18.6-auto-metrics-and-stop-reasons``).
+        """
         from src.exploration import ExplorationStop
 
         message = f"hipóteses sem tentativa após {idle_cycles} ciclos ociosos: " + ", ".join(h for h, _ in untested)
-        logger.error(message, extra={"hipoteses_sem_tentativa": [h for h, _ in untested]})
+        logger.warning(message, extra={"hipoteses_sem_tentativa": [h for h, _ in untested]})
+        print_status("warning", message)
         get_telemetry().record_agent_event(
             execution_id=master_session_id,
             session_id=master_session_id,
             agent_id="autonomous_loop",
             event_type="hipoteses_sem_tentativa",
-            payload={"hipoteses": [h for h, _ in untested][:50], "ciclos_ociosos": idle_cycles, "mensagem": message},
-        )
-        from src.orchestrator import AgentResult
-
-        final_results.append(
-            AgentResult(
-                agent_id="orchestrator", session_id=master_session_id, status="error",
-                response={"text": message}, error=message,
-            )
+            payload={
+                "motivo_parada": ExplorationStop.UNTESTED_HYPOTHESES.value,
+                "hipoteses": [h for h, _ in untested][:50],
+                "ciclos_ociosos": idle_cycles,
+                "mensagem": message,
+            },
         )
         return await self._close_exploration(
-            ExplorationStop.ERROR, master_session_id, prompt, tasks, dag_state, final_results
+            ExplorationStop.UNTESTED_HYPOTHESES, master_session_id, prompt, tasks, dag_state, final_results
         )
 
     async def _close_exploration(
@@ -951,18 +955,9 @@ class AutonomousLoop:
         if exploration is not None:
             unavailable = await self._check_verdict_available(exploration, master_session_id)
             if unavailable is not None and self._session_mode == "auto":
-                # O critério de parada depende do veredito: sem métrica aprovada o modo auto não planeja (§1.6).
-                from src.exploration import ExplorationStop
-
-                final_results.append(
-                    AgentResult(
-                        agent_id="orchestrator", session_id=master_session_id, status="error",
-                        response={"text": unavailable}, error=unavailable,
-                    )
-                )
-                return await self._close_exploration(
-                    ExplorationStop.ERROR, master_session_id, prompt, [], {}, final_results
-                )
+                # v18.6-auto-metrics-and-stop-reasons: no modo auto o Researcher define a métrica no plano e o
+                # Validator a valida; só depois ela vale para o veredito. A sessão não deixa de iniciar.
+                exploration.require_metric_definition(unavailable[1])
         cycle_no = 0
         rejected_plans = 0
         legacy_attempt = 0
@@ -2427,6 +2422,7 @@ class AutonomousLoop:
                     ][:8],
                     "metric_qualifiers": dict(list((getattr(review, "metric_qualifiers", None) or {}).items())[:20]),
                     "outcome": getattr(review, "outcome", None) or ("aprovado" if review.is_approved else "reprovado"),
+                    "motivos": [str(m)[:64] for m in (getattr(review, "motivos", None) or [])][:8],
                 },
             )
         except Exception as exc:
@@ -2439,6 +2435,7 @@ class AutonomousLoop:
             "verified": bool(getattr(review, "verified", True)),
             "outcome": getattr(review, "outcome", None) or ("aprovado" if review.is_approved else "reprovado"),
             "negative_findings": list(getattr(review, "negative_findings", None) or []),
+            "motivos": list(getattr(review, "motivos", None) or []),
         }
 
     async def _synthesize_results(

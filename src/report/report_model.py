@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from src.metrics_file import metrics_of
+from src.operation_metrics import describe_stop_reason
 from src.utils.json_parser import extract_json
 
 NARRATIVE_FIELDS = (
@@ -252,7 +253,7 @@ def _metadata_section(data: ReportData, narrative: Narrative) -> str:
         f"- **Replanejamentos**: {m.replans}",
     ]
     if m.stop_reason:
-        lines.append(f"- **Motivo de parada**: {m.stop_reason}")
+        lines.append(f"- **Motivo de parada**: {describe_stop_reason(m.stop_reason)}")
     lines.append(
         f"- **Nível de Confiança Consolidado**: {narrative.confianca_nivel} — {narrative.confianca_justificativa}"
     )

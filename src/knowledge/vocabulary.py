@@ -194,6 +194,24 @@ def find_approved_metric(store: GraphStore, name: str) -> Node | None:
     return None
 
 
+def find_rejected_metric(store: GraphStore, name: str) -> Node | None:
+    """``Metrica`` rejeitada pelo pesquisador cujo nome ou sinônimo coincide com ``name``; ``None`` se não há.
+
+    Só leitura. ``resolve_metric`` ignora nós rejeitados; quem grava métricas definidas por agente usa esta busca para
+    não reabrir uma decisão do pesquisador.
+    """
+    key = normalize_metric_name(name)
+    if not key:
+        return None
+    for node in _all_nodes(store, "Metrica"):
+        if node.properties.get("status") != "rejeitado":
+            continue
+        names = [node.properties.get("nome"), *(node.properties.get("sinonimos") or [])]
+        if any(normalize_metric_name(str(n)) == key for n in names if n):
+            return node
+    return None
+
+
 def _base_props(sessao_id: str) -> dict[str, Any]:
     return {"projeto_id": GLOBAL_PROJECT_ID, "sessao_id": sessao_id, "visibilidade": "compartilhavel"}
 

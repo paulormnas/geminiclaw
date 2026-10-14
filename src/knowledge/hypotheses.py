@@ -38,6 +38,7 @@ from src.knowledge.ingestion import (
     SessionContext,
     _Writer,
 )
+from src.knowledge.metric_definition import MetricDecl, parse_metrics
 from src.knowledge.normalization import clean_free_text, normalize_domain_term
 from src.knowledge.projects import get_active_problem
 from src.logger import get_logger
@@ -68,7 +69,7 @@ _MAX_CONSULTED = 50
 _MAX_SIMILAR = 5
 _LEXICAL_MIN_OVERLAP = 0.5  # sem índice semântico: fração mínima de termos do menor enunciado em comum
 _MAX_DISCARDED = 10
-_PLAN_DATA_KEYS = ("hipoteses", "decisoes", "respostas_sugestoes")
+_PLAN_DATA_KEYS = ("hipoteses", "decisoes", "respostas_sugestoes", "metricas")
 
 
 class HypothesisError(GraphStoreError):
@@ -148,6 +149,8 @@ class PlanExtras:
     respostas: tuple[SuggestionReply, ...] = ()
     novo_formato: bool = False
     descartados_do_plano: int = 0  # entradas inválidas ignoradas (só contagem, para telemetria)
+    # v18.6-auto-metrics-and-stop-reasons: métricas definidas no plano (modo auto); gravadas só após a validação.
+    metricas: tuple[MetricDecl, ...] = ()
 
     @property
     def vazio(self) -> bool:
@@ -318,7 +321,8 @@ def split_plan(raw: Any) -> tuple[Any, PlanExtras]:
     hips, d1 = _parse_hypotheses(raw.get("hipoteses"))
     decs, d2 = _parse_decisions(raw.get("decisoes"))
     replies, d3 = _parse_replies(raw.get("respostas_sugestoes"))
-    return subtasks, PlanExtras(tuple(hips), tuple(decs), tuple(replies), True, d1 + d2 + d3)
+    metrics, d4 = parse_metrics(raw.get("metricas")) if "metricas" in raw else ([], 0)
+    return subtasks, PlanExtras(tuple(hips), tuple(decs), tuple(replies), True, d1 + d2 + d3 + d4, tuple(metrics))
 
 
 def legacy_hypotheses(tasks: list[dict[str, Any]]) -> tuple[HypothesisDecl, ...]:

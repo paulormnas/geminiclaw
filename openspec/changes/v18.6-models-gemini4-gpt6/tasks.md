@@ -1,6 +1,6 @@
 # Tarefas: v18.6-models-gemini4-gpt6
 
-**Estado (2026-10-14):** Implementada (seções 0 a 3 e 4.1, 4.3). Pendentes: 4.2 (suíte no Pi) e 4.4 (disponibilidade na conta, antes da bateria). Preços reconferidos nas páginas oficiais em 2026-10-14 (sem mudança).
+**Estado (2026-10-14):** Implementada (seções 0 a 3 e 4.1, 4.3). Suíte no Pi: 3614 passed, 0 falhas (2026-10-14); os quatro modelos existem nas APIs da conta. Preços reconferidos nas páginas oficiais em 2026-10-14 (sem mudança).
 
 ## 0. Pré-requisitos
 - [x] 0.1 Spec aprovada pelo pesquisador (merge do PR de especificação), com a escolha do `gpt-6.1-sol` (design §10.2).
@@ -26,6 +26,6 @@
 
 ## 4. Validação
 - [x] 4.1 `uv run ruff check .` e `uv run pytest -m unit -v` verdes.
-- [ ] 4.2 Suíte `unit or integration` no Pi 5 (worktree do Pi, `flock`, log em `~/*.log`): 0 falhas.
+- [x] 4.2 Suíte `unit or integration` no Pi 5 (worktree do Pi, `flock`, log em `~/*.log`): 0 falhas.
 - [x] 4.3 `tasks.md` com caixas e linha **Estado** atualizadas no PR.
-- [ ] 4.4 Disponibilidade dos quatro modelos na conta, conferida na API antes da bateria (memória de disponibilidade de modelos).
+- [x] 4.4 Disponibilidade dos quatro modelos na conta, conferida na API antes da bateria (memória de disponibilidade de modelos).

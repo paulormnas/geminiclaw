@@ -41,6 +41,7 @@ def test_validator_de_outra_familia_com_developer_gemini(tmp_path) -> None:
 
 def test_padrao_do_fallback_do_google(monkeypatch) -> None:
     monkeypatch.delenv("GOOGLE_FALLBACK_MODEL", raising=False)
+    monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: False)  # o .env local não entra no padrão
     from src import config
 
     try:

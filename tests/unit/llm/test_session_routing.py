@@ -77,7 +77,7 @@ async def test_handle_request_grava_llm_routing_no_payload_da_sessao(nuvem):
 
     first_update = session_manager.update.call_args_list[0]
     payload = first_update.kwargs["payload"]
-    assert payload["llm_routing"]["papeis"]["developer"]["id"] == "google/gemini-3.8-flash"
+    assert payload["llm_routing"]["papeis"]["developer"]["id"] == "google/gemini-4-argon"
     assert payload["llm_routing"]["catalogo"]["hash"]
 
 
@@ -156,13 +156,13 @@ async def test_429_nao_troca_o_modelo_resolvido(nuvem):
         client = MagicMock()
         client.aio.models.generate_content = AsyncMock(side_effect=[rate_limit, rate_limit, ok])
         client_cls.return_value = client
-        provider = GoogleProvider(api_key="k", model="gemini-3.8-flash", fallback_model=None)
-        await provider._call_with_retry("gemini-3.8-flash", [], None)
+        provider = GoogleProvider(api_key="k", model="gemini-4-argon", fallback_model=None)
+        await provider._call_with_retry("gemini-4-argon", [], None)
 
     models_used = [call.kwargs["model"] for call in client.aio.models.generate_content.call_args_list]
-    assert models_used == ["gemini-3.8-flash"] * 3
+    assert models_used == ["gemini-4-argon"] * 3
     assert emit.call_count == 2  # cada retentativa é registrada e conta no orçamento de conexão da sessão
-    assert routing.resolution("developer").id == resolved_before == "google/gemini-3.8-flash"
+    assert routing.resolution("developer").id == resolved_before == "google/gemini-4-argon"
 
 
 @pytest.mark.asyncio
@@ -170,8 +170,8 @@ async def test_fallback_do_google_so_com_catalogo_trust_e_flexivel(nuvem, monkey
     routing = await build_session_routing()
     primary = "google/gemini-3.5-flash-lite"
 
-    monkeypatch.setattr("src.config.GOOGLE_FALLBACK_MODEL", "gemini-3.8-flash")
-    assert routing.fallback_for(primary) == "gemini-3.8-flash"
+    monkeypatch.setattr("src.config.GOOGLE_FALLBACK_MODEL", "gemini-4-argon")
+    assert routing.fallback_for(primary) == "gemini-4-argon"
 
     monkeypatch.setattr("src.config.GOOGLE_FALLBACK_MODEL", "gemini-9-inexistente")
     assert routing.fallback_for(primary) is None
@@ -179,7 +179,7 @@ async def test_fallback_do_google_so_com_catalogo_trust_e_flexivel(nuvem, monkey
     monkeypatch.setattr("src.config.GOOGLE_FALLBACK_MODEL", "")
     assert routing.fallback_for(primary) is None
 
-    monkeypatch.setattr("src.config.GOOGLE_FALLBACK_MODEL", "gemini-3.8-flash")
+    monkeypatch.setattr("src.config.GOOGLE_FALLBACK_MODEL", "gemini-4-argon")
     assert routing.fallback_for("anthropic/claude-sonnet-5-5") is None
     strict = await _build_strict(monkeypatch)
     assert strict.fallback_for(primary) is None

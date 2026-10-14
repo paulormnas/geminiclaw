@@ -45,7 +45,7 @@ class Fake:
 def _all_ok() -> list[Fake]:
     return [
         Fake("egresso", {
-            "bytes_total": 2048, "por_destino": [{"provedor": "google", "modelo": "gemini-3.8-flash",
+            "bytes_total": 2048, "por_destino": [{"provedor": "google", "modelo": "gemini-4-argon",
                                                  "trust": "third_party", "localidade": "fora_do_no", "bytes": 2048,
                                                  "chamadas": 3}],
             "por_origem": {"instrucao": 100, "saida_execucao": 1948}, "intervencoes_filtro": {"saida_retida": 2},

@@ -15,7 +15,7 @@ from src.llm import registry
 from src.llm.providers.google import GoogleProvider
 
 MODEL = "gemini-3.5-flash"
-FALLBACK = "gemini-3.8-flash"
+FALLBACK = "gemini-4-argon"
 
 
 @pytest.fixture(autouse=True)

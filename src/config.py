@@ -93,7 +93,7 @@ GEMINI_API_KEY = get_env("GEMINI_API_KEY")
 # Modelo usado quando o principal do Google atinge o limite de requisições (HTTP 429). Vazio desliga o fallback.
 # Só é aceito se estiver no catálogo com o mesmo `trust` e atender aos requisitos do papel; desligado em
 # LLM_ROUTING=strict.
-GOOGLE_FALLBACK_MODEL = get_env("GOOGLE_FALLBACK_MODEL", default="gemini-3.8-flash")
+GOOGLE_FALLBACK_MODEL = get_env("GOOGLE_FALLBACK_MODEL", default="gemini-4-argon")
 
 # Provedor openai_compatible (V16) — servidores que falam o protocolo /v1/chat/completions
 # (llama.cpp server, vLLM, LM Studio, serviços hospedados compatíveis). ADR 017 §8: variáveis
@@ -270,7 +270,7 @@ CONTEXT_TOKEN_WARNING_THRESHOLD = int(get_env("CONTEXT_TOKEN_WARNING_THRESHOLD",
 # Descrição de imagens por modelo de visão (v18.5-research-data-ingestion): ``provedor/modelo``, entrada do catálogo
 # de modelos. Vazio = sem visão (OCR local).
 VISION_MODEL = get_env("VISION_MODEL", default="")
-# Obsoleto: ``gemini`` vira alias de ``VISION_MODEL=google/gemini-3.8-flash`` (com aviso); ``local`` = sem visão.
+# Obsoleto: ``gemini`` vira alias de ``VISION_MODEL=google/gemini-4-argon`` (com aviso); ``local`` = sem visão.
 OCR_PROVIDER = get_env("OCR_PROVIDER", default="local")
 
 # Docker settings

@@ -53,7 +53,7 @@ def test_model_router_com_nuvem_liberada(nuvem_liberada):
     assert get_role_model_config("researcher").provider == "google"
     researcher = ModelRouter.get_provider("researcher")
     assert isinstance(researcher.inner, GoogleProvider)
-    assert researcher.model_name == "gemini-3.8-flash"
+    assert researcher.model_name == "gemini-4-argon"
     assert isinstance(ModelRouter.get_provider("developer").inner, GoogleProvider)
     # O Validator cai no Ollama: o Claude não tem chave.
     assert get_role_model_config("validator").provider == "ollama"

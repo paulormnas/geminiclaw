@@ -43,7 +43,7 @@ uv run geminiclaw "Implemente um pipeline de classificação supervisionada para
 ### Passo B: Execução em Nuvem (Google Gemini)
 ```bash
 export LLM_DATA_POLICY=third_party_allowed
-export RESEARCHER_MODEL=google/gemini-3.8-flash   # pin provedor/modelo (ADR 017); requer GEMINI_API_KEY
+export RESEARCHER_MODEL=google/gemini-4-argon   # pin provedor/modelo (ADR 017); requer GEMINI_API_KEY
 export OUTPUT_BASE_DIR=outputs/cloud
 unset OLLAMA_BASE_URL
 

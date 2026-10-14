@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 
 VISION_CHANNEL = "visao"
 VISION_ROLE = "ingestao"
-OBSOLETE_ALIAS_MODEL = "google/gemini-3.8-flash"
+OBSOLETE_ALIAS_MODEL = "google/gemini-4-argon"
 DEFAULT_VISION_PROMPT = (
     "Descreva o conteúdo desta imagem em detalhes (gráficos, tabelas, texto visível, "
     "estruturas de microscopia, etc.) para uso como contexto científico."
@@ -48,7 +48,7 @@ def configured_model_id(environ: dict[str, str] | None = None) -> str | None:
     """``provedor/modelo`` da visão, ou ``None`` (sem visão).
 
     ``VISION_MODEL`` vence; ``OCR_PROVIDER=gemini`` sem ``VISION_MODEL`` é alias obsoleto de
-    ``google/gemini-3.8-flash`` e emite ``WARNING``. Lê o ambiente no momento da chamada (testes e sobrescrita).
+    ``google/gemini-4-argon`` e emite ``WARNING``. Lê o ambiente no momento da chamada (testes e sobrescrita).
     """
     env = environ if environ is not None else os.environ
     from src import config

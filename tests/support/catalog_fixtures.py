@@ -41,7 +41,7 @@ def model(
 
 def base_document() -> dict:
     """Catálogo mínimo válido: um modelo de nuvem, um do Claude e um local; todos os papéis."""
-    prefs = ["anthropic/claude-sonnet-5-5", "google/gemini-3.8-flash", "ollama/qwen3:8b"]
+    prefs = ["anthropic/claude-sonnet-5-5", "google/gemini-4-argon", "ollama/qwen3:8b"]
     roles = {
         name: {"requisitos": {}, "preferencia": list(prefs)}
         for name in ("researcher", "developer", "summarizer", "validator", "curator", "base")
@@ -51,7 +51,7 @@ def base_document() -> dict:
         "versao": 1,
         "modelos": [
             model("anthropic/claude-sonnet-5-5", "third_party"),
-            model("google/gemini-3.8-flash", "third_party"),
+            model("google/gemini-4-argon", "third_party"),
             model("ollama/qwen3:8b", "self_hosted"),
         ],
         "papeis": roles,

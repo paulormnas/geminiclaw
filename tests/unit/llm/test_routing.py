@@ -20,7 +20,7 @@ from tests.support.catalog_fixtures import all_available, base_document, load, m
 pytestmark = pytest.mark.unit
 
 CLAUDE = "anthropic/claude-sonnet-5-5"
-GEMINI = "google/gemini-3.8-flash"
+GEMINI = "google/gemini-4-argon"
 QWEN = "ollama/qwen3:8b"
 
 
@@ -188,7 +188,7 @@ def test_pin_fora_do_catalogo_e_indisponivel(catalog):
 
 def test_variaveis_legadas(catalog, caplog):
     """Cenário: Variáveis legadas ({PAPEL}_PROVIDER + {PAPEL}_MODEL sem barra)."""
-    env = {"DEVELOPER_PROVIDER": "google", "DEVELOPER_MODEL": "gemini-3.8-flash"}
+    env = {"DEVELOPER_PROVIDER": "google", "DEVELOPER_MODEL": "gemini-4-argon"}
 
     with caplog.at_level(logging.WARNING, logger="src.llm.routing"):
         pins = read_pins(catalog, env)

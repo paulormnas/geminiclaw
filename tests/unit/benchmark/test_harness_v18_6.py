@@ -494,7 +494,7 @@ def test_responses_com_cache_cobra_800_tokens_a_preco_de_cache(monkeypatch) -> N
 
 # --- Juiz declarado por combinação (ADR 020 §7) ---------------------------------------------------------------------
 
-HAIKU, SONNET, GEMINI = "anthropic/claude-haiku-5-5", "anthropic/claude-sonnet-5-5", "google/gemini-3.8-flash"
+HAIKU, SONNET, GEMINI = "anthropic/claude-haiku-5-5", "anthropic/claude-sonnet-5-5", "google/gemini-4-argon"
 
 
 def test_juiz_nao_declarado() -> None:

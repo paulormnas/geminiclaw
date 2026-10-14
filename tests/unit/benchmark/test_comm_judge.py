@@ -11,7 +11,7 @@ from src.llm.base import LLMResponse
 
 pytestmark = pytest.mark.unit
 
-DEV = "google/gemini-3.8-flash"
+DEV = "google/gemini-4-argon"
 LITE = "google/gemini-3.1-flash-lite"
 SONNET = "anthropic/claude-sonnet-5-5"
 GPT = "openai/gpt-6-luna"
@@ -349,7 +349,7 @@ def test_ollama_em_host_remoto_conta_como_externo(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "variant", ["google/Gemini-3.8-Flash", "google/models/gemini-3.8-flash", " GOOGLE/gemini-3.8-flash "]
+    "variant", ["google/Gemini-4-Argon", "google/models/gemini-4-argon", " GOOGLE/gemini-4-argon "]
 )
 def test_exclusao_por_modelo_ignora_caixa_prefixo_e_espacos(variant):
     """B2: variações do mesmo modelo não contornam a exclusão de developer e researcher."""

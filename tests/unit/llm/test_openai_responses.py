@@ -103,19 +103,19 @@ def test_esforco_none_continua_no_chat(monkeypatch) -> None:
     assert paths == ["/chat/completions"]
 
 
-def test_precos_terra_e_haiku_com_faixa_de_prompt_longo() -> None:
-    assert pricing.estimate_cost("openai", "gpt-5.6-terra", 1_000_000, 1_000_000) == pytest.approx(14.0)
+def test_precos_sol_e_haiku_com_faixa_de_prompt_longo() -> None:
+    assert pricing.estimate_cost("openai", "gpt-6.1-sol", 1_000_000, 1_000_000) == pytest.approx(4.0 + 15.0)
     short = pricing.estimate_cost("anthropic", "claude-haiku-5-5", 100_000, 10_000, cached_tokens=50_000)
     assert short == pytest.approx((50_000 * 0.10 + 50_000 * 0.01 + 10_000 * 0.50) / 1e6)
     long = pricing.estimate_cost("anthropic", "claude-haiku-5-5", 100_001, 10_000)
     assert long == pytest.approx((100_001 * 0.50 + 10_000 * 2.50) / 1e6)
 
 
-def test_catalogo_tem_terra_e_haiku() -> None:
+def test_catalogo_tem_sol_e_haiku() -> None:
     from src.llm.catalog import load_catalog
 
     catalog = load_catalog()
-    assert {"openai/gpt-5.6-terra", "anthropic/claude-haiku-5-5"} <= set(catalog.modelos)
+    assert {"openai/gpt-6.1-sol", "anthropic/claude-haiku-5-5"} <= set(catalog.modelos)
 
 
 def test_haiku_55_recebe_effort() -> None:

@@ -89,7 +89,7 @@ async def test_planning_loop_with_new_fields(orchestrator):
             "task_name": "task1",
             "prompt": "search X",
             "validation_criteria": ["Criterio 1", "Criterio 2"],
-            "preferred_model": "gemini-3.8-flash"
+            "preferred_model": "gemini-4-argon"
         }
     ]
     """
@@ -99,4 +99,4 @@ async def test_planning_loop_with_new_fields(orchestrator):
 
     assert len(tasks) == 1
     assert tasks[0].validation_criteria == ["Criterio 1", "Criterio 2"]
-    assert tasks[0].preferred_model == "gemini-3.8-flash"
+    assert tasks[0].preferred_model == "gemini-4-argon"

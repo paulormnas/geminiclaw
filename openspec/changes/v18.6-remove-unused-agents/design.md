@@ -45,7 +45,7 @@ estrita com a mensagem "papel `reviewer` removido em V18.6 (v18.6-remove-unused-
   publica a chave `revisao_subtarefa`.
 - `comm_judge.POOL_ROLES` passa a `("validator", "summarizer", "base")`.
 
-## 5. Questões em aberto (decisão do pesquisador)
+## 5. Decisões do pesquisador (2026-10-13: valem as propostas)
 
 1. **`base` como papel interno.** Proposto: manter `base` só para promoção de memória e extração de
    padrões. Alternativa: executar esses dois trabalhos com o `summarizer` e remover o papel `base`

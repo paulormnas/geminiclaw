@@ -6,7 +6,7 @@
 [ADR 020](../../../docs/decisions/adr_020_independencia_validator.md) (papéis de juiz e julgado).
 **Origem dos requisitos:** pedido do pesquisador (2026-10-13): sem débito técnico de agentes que não
 são usados.
-**Depende de:** nada. **Simplifica:** [`v18.6-validator-independence`](../v18.6-validator-independence/proposal.md)
+**Depende de:** nada. **Simplifica:** [`v18.6-validator-independence`](../archive/v18.6-validator-independence/proposal.md) (já mergeada, #145)
 (juízes = `validator`; julgados = `developer`).
 
 ## Por quê
@@ -58,7 +58,7 @@ Uso real na telemetria do Pi 5 (Postgres, 2026-09-30 a 2026-10-13):
 - **Rótulo da revisão de subtarefa:** a telemetria registra papel `validator` e
   `funcao = "revisao_subtarefa"`, não `reviewer`. A chave `reviewer` das métricas de comunicação
   (`scripts/benchmark/communication.py:419-422`, `report.py:142-159`) passa a se chamar
-  `revisao_subtarefa`. Este item sai de `v18.6-validator-independence` (tarefas 6.1 e 6.2).
+  `revisao_subtarefa`. A chamada LLM já usa o papel `validator` desde o #145 (`v18.6-validator-independence`); aqui só o evento `subtask_review` deixa de usar `agent_id = "reviewer"`.
 - **Variável obsoleta:** `REVIEWER_MODEL` definida no ambiente gera `WARNING` na inicialização
   ("variável obsoleta, o papel `reviewer` foi removido"), em vez de ser ignorada em silêncio.
 
@@ -85,7 +85,11 @@ Uso real na telemetria do Pi 5 (Postgres, 2026-09-30 a 2026-10-13):
 - **ADR 020:** juízes = `validator`; julgados = `developer`. Saem os pontos de conferência de
   despacho de `reviewer`/`base` (§4) e a ressalva "conflitos de `reviewer`/`base` no despacho".
 
-## Aprovações necessárias
+## Aprovações
+
+**Aprovada pelo pesquisador em 2026-10-13** ("pode seguir com todas as correções e limpezas"), com as propostas do design §5: `base` mantido como papel interno e os 3 `sandbox_run` do `base` tratados como diagnóstico manual. A exclusão de `agents/reviewer/` está autorizada.
+
+Aprovações que eram necessárias:
 
 - **Exclusão de arquivos** (`agents/reviewer/`): aprovação do pesquisador (AGENTS.md §1.5).
 - As decisões em aberto do `design.md` §5.

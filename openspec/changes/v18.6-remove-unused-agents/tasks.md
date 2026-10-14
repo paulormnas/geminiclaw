@@ -1,9 +1,9 @@
 # Tarefas: v18.6-remove-unused-agents
 
-**Estado (2026-10-13):** Proposta, aguardando aprovação do pesquisador (exclusão de `agents/reviewer/` e questões do design §5).
+**Estado (2026-10-13):** Aprovada pelo pesquisador (exclusão de `agents/reviewer/` e design §5 com as propostas). Aguardando implementação.
 
 ## 0. Pré-requisitos
-- [ ] 0.1 Proposta aprovada; questões 5.1 e 5.2 do design decididas.
+- [x] 0.1 Proposta aprovada; questões 5.1 e 5.2 do design decididas.
 - [ ] 0.2 Worktree `.worktrees/feat-v18.6-remove-unused-agents`.
 
 ## 1. Agente `reviewer`
@@ -32,6 +32,6 @@
 
 ## 6. Documentação
 - [ ] 6.1 ADR 020 §1 e §4: juízes = `validator`, julgados = `developer`; remover os pontos de `reviewer`/`base`.
-- [ ] 6.2 `v18.6-validator-independence`: retirar as tarefas 6.1/6.2 (movidas para cá) e as referências a `reviewer`/`base`.
+- [ ] 6.2 Mudança arquivada `v18.6-validator-independence` e `openspec/specs/llm-providers/spec.md`: retirar as referências a `reviewer`/`base` dos requisitos (pontos de conferência de despacho, `JudgeIndependenceGuard.check_dispatch`, `_UNUSED_UNTIL_DISPATCH`).
 - [ ] 6.3 Nota no ADR 007: o papel `reviewer` foi removido do código.
 - [ ] 6.4 `tasks.md` com caixas e linha **Estado** atualizadas no PR.

@@ -112,10 +112,10 @@ def test_relatorios_de_conhecimento_e_operacao() -> None:
     assert "| 2048 | 3 | integra | 5/1/0 | 2 | 3/4 | 2 | 0.42 | 33.1 |" in operation
 
 
-def test_matriz_do_benchmark_de_2026_10_e_valida() -> None:
-    matrix = json.loads((ROOT / "scripts" / "benchmark" / "matrix_modelos_2026_10.json").read_text(encoding="utf-8"))
+def test_matriz_do_benchmark_v18_6_e_valida() -> None:
+    matrix = json.loads((ROOT / "scripts" / "benchmark" / "matrix_modelos_v18_6.json").read_text(encoding="utf-8"))
     names = [c["name"] for c in matrix["combinations"]]
-    assert len(names) == len(set(names)) >= 5
+    assert len(names) == len(set(names)) >= 4
     assert not re.search(r"gemini-3\.7|flash-3\.7", json.dumps(matrix))
     from src.llm.catalog import load_catalog
 

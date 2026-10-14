@@ -1,6 +1,6 @@
 """Independência do julgamento: modo, roteador, pins, despacho, registro e retomada (v18.6-validator-independence).
 
-Cada teste cita o Scenario da spec ``openspec/changes/v18.6-validator-independence/specs/llm-providers/spec.md``.
+Cada teste cita o Scenario da spec ``openspec/specs/llm-providers/spec.md``.
 """
 
 from __future__ import annotations

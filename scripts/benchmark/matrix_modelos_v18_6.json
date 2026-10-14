@@ -13,7 +13,7 @@
     "SESSION_MAX_TOKENS": "3000000",
     "SESSION_MAX_MINUTES": "180",
     "GOOGLE_FALLBACK_MODEL": "",
-    "OPENAI_REASONING_EFFORT": "none"
+    "OPENAI_REASONING_EFFORT": "low"
   },
   "combinations": [
     {

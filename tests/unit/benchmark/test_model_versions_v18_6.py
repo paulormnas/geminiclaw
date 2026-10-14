@@ -107,3 +107,16 @@ def test_teto_do_google_atingido() -> None:
     reason = budget_skip_reason(combo, {"google": 14.0, "anthropic": 14.0}, {"google": 14.2})
     assert reason == "orçamento de google esgotado ($14.20 de $14.00)"
     assert budget_skip_reason(combo, {"google": 14.0}, {"google": 1.0}) is None
+
+
+def test_teto_vale_por_rodada() -> None:
+    from scripts.benchmark.run_benchmark import add_spent, budget_skip_reason
+
+    combo = {"roles": {"*": "google/gemini-4-argon"}}
+    spent: dict[int, dict[str, float]] = {}
+    add_spent(spent, {"repeticao": 1, "tokens": {"cost_by_provider": {"google": 14.2}}})
+    add_spent(spent, {"repeticao": 2, "tokens": {"cost_by_provider": {"google": 3.0}}})
+    budget = {"google": 14.0}
+    assert budget_skip_reason(combo, budget, spent[1]) is not None
+    assert budget_skip_reason(combo, budget, spent[2]) is None
+    assert budget_skip_reason(combo, budget, spent.get(3, {})) is None

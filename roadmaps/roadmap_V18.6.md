@@ -74,6 +74,11 @@ ADRs de origem: 002, 005, 009, 010, 012, 015, 019 e o ADR 020 (aceito em 2026-10
 - **Critérios de aceite:** [x] modo `auto` sem métrica aprovada não termina com erro: o Researcher define `metricas` e o Validator as valida · [x] precedência do pesquisador e rejeição respeitadas · [x] `hipoteses_nao_testadas` no lugar de `erro` · [x] `sem_hipotese` na reprovação sem `hypothesis_id` · [x] benchmark e métricas de operação classificam os dois motivos
 - **Complexidade estimada:** Média
 
+### Tarefa 7: Migração para Gemini 4 e GPT-6, com a versão dos modelos registrada
+- **Spec:** [`v18.6-models-gemini4-gpt6`](../openspec/changes/v18.6-models-gemini4-gpt6/proposal.md) · **Estado (2026-10-14):** especificada, aguarda implementação
+- **Critérios de aceite:** [ ] catálogo versão 5 com `gemini-4-argon` e `gpt-6.1-sol` · [ ] preço com vigência (promoção do Gemini 4 até 2026-11-30) · [ ] resultado e relatório do benchmark com modelo pedido, versão efetiva, data e preços · [ ] matriz com os modelos novos e teto de US$ 14 por provedor · [ ] coleções do Qdrant recriadas sob demanda depois do reset
+- **Complexidade estimada:** Média
+
 ## Ordem de implementação
 
 ```

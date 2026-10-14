@@ -1,5 +1,7 @@
 # Proposta: Independência do Julgamento no Roteador
 
+> **Nota (2026-10-13, `v18.6-remove-unused-agents`, #155):** os papéis `reviewer` e `base` citados abaixo como juiz e julgado foram removidos da regra. O juiz é só o `validator` e o julgado é só o `developer`; os pontos de conferência de despacho de `base`/`reviewer` e `check_dispatch` deixaram de existir. O texto abaixo é o histórico da proposta original; a verdade atual está em `openspec/specs/llm-providers/spec.md` e no ADR 020.
+
 **ID:** `v18.6-validator-independence` · **Versão:** V18.6 ·
 **Capacidade:** `llm-providers` (reutilizada de `v16-model-catalog-router` e `v18.5-model-catalog-locality`)
 **ADRs de origem:** [ADR 020](../../../../docs/decisions/adr_020_independencia_validator.md) (itens 1 a 8

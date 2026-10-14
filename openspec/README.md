@@ -60,10 +60,10 @@ O sistema SHALL <comportamento obrigatório>.
 
 ## Mudanças
 
-**Arquivadas em 2026-10-13:** as 32 mudanças de V16 a V18.5 e as 4 da V18.6 (links para
+**Arquivadas em 2026-10-13:** as 32 mudanças de V16 a V18.5 e as 6 da V18.6 (links para
 `changes/archive/`), com os requisitos consolidados em [`specs/`](specs/README.md) e os itens
 abertos em [`changes/archive/PENDENCIAS.md`](changes/archive/PENDENCIAS.md). Em aberto: V19 e V20
-(e a proposta `v18.6-remove-unused-agents`, em outra branch).
+(e a `v18.6-auto-metrics-and-stop-reasons`, em outra branch).
 
 | Versão | Mudança | Capacidade | ADRs | Depende de |
 |---|---|---|---|---|
@@ -103,6 +103,8 @@ abertos em [`changes/archive/PENDENCIAS.md`](changes/archive/PENDENCIAS.md). Em 
 | V18.6 | [v18.6-benchmark-harness](changes/archive/v18.6-benchmark-harness/proposal.md) | `benchmark` | 005, 009, 010, 020 | — (item de juiz: v18.6-validator-independence) |
 | V18.6 | [v18.6-validator-independence](changes/archive/v18.6-validator-independence/proposal.md) | `llm-providers` | 020, 017, 019 | ADR 020 (aprovado) |
 | V18.6 | [v18.6-hypothesis-closure](changes/archive/v18.6-hypothesis-closure/proposal.md) | `hypothesis-loop` | 009, 010, 012, 015, 019 | v18.6-review-evidence |
+| V18.6 | [v18.6-remove-unused-agents](changes/archive/v18.6-remove-unused-agents/proposal.md) | `agent-runtime`, `llm-providers`, `communication-eval` | 007, 020 | v18.6-validator-independence |
+| V18.6 | [v18.6-profile-hardening](changes/archive/v18.6-profile-hardening/proposal.md) | `pipeline-robustness`, `data-egress` | 019 | v18.6-review-evidence |
 | V19 | [v19-equipment-control](changes/v19-equipment-control/proposal.md) | `equipment-control` | 019, 014, 015, 010 | V18.5, v18-researcher-consult |
 | V20 | [v20-node-identity](changes/v20-node-identity/proposal.md) | `node-identity` | 013 | V16–V19 validadas |
 | V20 | [v20-federated-records](changes/v20-federated-records/proposal.md) | `federation-records` | 013, 019, 015 | v20-node-identity, V18.5 |

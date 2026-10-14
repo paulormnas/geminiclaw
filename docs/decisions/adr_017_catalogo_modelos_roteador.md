@@ -17,9 +17,14 @@
 
 
 > **Atualização 2026-10-13 (ADR 020):** o catálogo (versão 3) prefere Claude, Gemini e GPT antes dos
-> modelos locais para `validator` e `reviewer`; a elegibilidade ganha a condição de família diferente da
+> modelos locais para `validator`; a elegibilidade ganha a condição de família diferente da
 > do Developer, que vale também para pins, dicas de plano e para o modelo de reserva do Google no 429
 > (§2, §6 e §7; `v18.6-validator-independence`, #145).
+>
+> **Atualização 2026-10-13 (`v18.6-remove-unused-agents`, #155):** o papel `reviewer` saiu do catálogo
+> (versão 4) e de `REQUIRED_ROLES`; os papéis do §2 são `researcher`, `developer`, `summarizer`, `validator` e
+> `base`. `catalog.local.yaml` com `papeis.reviewer` para a inicialização como papel removido (§9), e
+> `REVIEWER_MODEL` no ambiente gera `WARNING` e é ignorada.
 
 ## Estado da implementação (2026-10-13)
 
@@ -28,6 +33,7 @@
 | [`v16-model-catalog-router`](../../openspec/changes/archive/v16-model-catalog-router/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #102 |
 | [`v18.5-model-catalog-locality`](../../openspec/changes/archive/v18.5-model-catalog-locality/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #112 |
 | [`v18.6-validator-independence`](../../openspec/changes/archive/v18.6-validator-independence/proposal.md) | Concluída e arquivada | #145 |
+| [`v18.6-remove-unused-agents`](../../openspec/changes/archive/v18.6-remove-unused-agents/proposal.md) | Concluída e arquivada: papel `reviewer` removido do catálogo (versão 4), `REVIEWER_MODEL` obsoleta com `WARNING` | #155 |
 
 ## Contexto
 
@@ -38,7 +44,7 @@ O objetivo é que o `.env` guarde só credenciais e endpoints, que o orquestrado
 ## Decisão
 
 1. **Catálogo versionado** (`src/llm/catalog.yaml`, dados). Cada modelo registra só fatos que algum requisito filtra: provedor, nome, tool calling, saída estruturada, janela de contexto e `trust` (`self_hosted` ou `third_party`). `trust` é declarado na entrada do catálogo, não inferido do host — um endpoint `openai_compatible` continua `self_hosted` mesmo numa máquina de GPU fora da rede local; só entradas de provedores de nuvem (Google, OpenAI, Anthropic etc.) são `third_party`.
-2. **Papéis no catálogo.** Todo chamador de LLM resolve pelo roteador: `researcher`, `developer`, `reviewer`, `summarizer`, `validator` e `base` (o antigo `planner` é resolvido como `researcher`). Cada papel declara requisitos (ex.: Researcher exige tool calling) e uma ordem de preferência. **Nenhum papel exige `trust: self_hosted`:** o envio a provedores de nuvem é governado pela política de dados (§3) e, para dados de pesquisa, pela camada de saída do ADR 019; o Validator pode usar modelo local ou de nuvem, conforme a preferência configurada. *(O requisito `trust: self_hosted` do Validator, herdado do ADR 007, foi removido em 2026-10-01 por decisão do pesquisador responsável.)* `get_provider()` sem papel passa a delegar para `researcher`. Embeddings ficam fora do escopo (ADR 011 §3).
+2. **Papéis no catálogo.** Todo chamador de LLM resolve pelo roteador: `researcher`, `developer`, `summarizer`, `validator` e `base` (`reviewer` foi removido na V18.6; o antigo `planner` é resolvido como `researcher`). Cada papel declara requisitos (ex.: Researcher exige tool calling) e uma ordem de preferência. **Nenhum papel exige `trust: self_hosted`:** o envio a provedores de nuvem é governado pela política de dados (§3) e, para dados de pesquisa, pela camada de saída do ADR 019; o Validator pode usar modelo local ou de nuvem, conforme a preferência configurada. *(O requisito `trust: self_hosted` do Validator, herdado do ADR 007, foi removido em 2026-10-01 por decisão do pesquisador responsável.)* `get_provider()` sem papel passa a delegar para `researcher`. Embeddings ficam fora do escopo (ADR 011 §3).
 3. **Política de dados explícita.** `LLM_DATA_POLICY=self_hosted_only|third_party_allowed`, padrão `self_hosted_only`. Sob `self_hosted_only`, modelos com `trust: third_party` são descartados antes de qualquer outra regra; ter uma chave de nuvem no `.env` não basta para enviar dados a um provedor externo. A política aparece no banner e no registro da sessão.
 4. **Disponibilidade.** Um provedor está disponível quando tem credencial ou endpoint no `.env`, está em `LLM_PROVIDER_PRIORITY` (que é lista de permissão) e passa num health check com timeout curto. Para provedores locais o check confirma que o modelo está instalado (ex.: `/api/tags` do Ollama), não só o endpoint. Offline, o provedor sai da lista. `DEPLOYMENT_PROFILE=pi5` define a prioridade padrão.
 5. **Roteador puro.** `resolve(papel, catálogo, disponíveis, política, overrides)` filtra por política, requisitos e lista de permissão e escolhe pela preferência. Sem estado e testável por unidade. Se nenhum modelo servir para um papel, a sessão falha com mensagem acionável.

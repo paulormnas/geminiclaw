@@ -3,7 +3,7 @@
 Verdade atual consolidada a partir das mudanças arquivadas (2026-10-13). Cada requisito indica a
 mudança que o definiu por último; os cenários vêm do delta original, em GIVEN/WHEN/THEN.
 
-**Mudanças de origem:** [`v16-agent-communication-eval`](../../changes/archive/v16-agent-communication-eval/proposal.md)
+**Mudanças de origem:** [`v16-agent-communication-eval`](../../changes/archive/v16-agent-communication-eval/proposal.md), [`v18.6-remove-unused-agents`](../../changes/archive/v18.6-remove-unused-agents/proposal.md)
 
 ## Requirements
 
@@ -285,3 +285,18 @@ atual de `summarize_events`, e SHALL executar a avaliação somente depois da ex
 #### Scenario: Ordem de execução
 - **WHEN** o benchmark roda com `--eval-comm`
 - **THEN** a avaliação começa depois do término da sessão avaliada
+
+### Requirement: Métricas da revisão de subtarefa com rótulo novo
+_Origem: [`v18.6-remove-unused-agents`](../../changes/archive/v18.6-remove-unused-agents/proposal.md)_
+O relatório de comunicação SHALL publicar as métricas da revisão de subtarefa na chave
+`revisao_subtarefa` e SHALL ler eventos `subtask_review` com `agent_id` `validator` ou `reviewer`
+(sessões gravadas antes da V18.6). O pool do juiz da avaliação SHALL excluir `reviewer`.
+
+#### Scenario: Sessão antiga
+- **GIVEN** uma sessão com eventos `subtask_review` de `agent_id = "reviewer"`
+- **WHEN** o relatório de comunicação é gerado
+- **THEN** as revisões aparecem em `revisao_subtarefa`
+
+#### Scenario: Pool do juiz
+- **WHEN** `select_judge` monta o pool
+- **THEN** o pool não contém `reviewer`

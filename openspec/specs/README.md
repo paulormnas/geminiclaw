@@ -7,7 +7,11 @@ integrada em `dev` e arquivada. A primeira consolidação (2026-10-13) reuniu as
 V18.5: requisitos `ADDED` e `MODIFIED` em ordem cronológica (o último vence) e `REMOVED` listados no
 fim de cada arquivo. Cada requisito cita a mudança de origem. A segunda consolidação (2026-10-13)
 acrescentou as 4 mudanças da V18.6 (`pipeline-robustness`, `benchmark` (nova), `llm-providers` e
-`hypothesis-loop`).
+`hypothesis-loop`). A terceira consolidação (2026-10-13) acrescentou
+`v18.6-profile-hardening` (`pipeline-robustness`, `data-egress`) e `v18.6-remove-unused-agents`
+(`agent-runtime`, `llm-providers`, `communication-eval`); os `MODIFIED`/`REMOVED` desta última foram
+aplicados aos requisitos existentes (catálogo versionado, rótulo da revisão de subtarefa, agente
+Reviewer).
 
 | Capacidade | Arquivo |
 |---|---|

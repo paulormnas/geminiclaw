@@ -2,11 +2,11 @@
 
 **ID:** `v18.6-remove-unused-agents` · **Versão:** V18.6 ·
 **Capacidades:** `agent-runtime`, `llm-providers`, `communication-eval`
-**ADRs de origem:** [ADR 007](../../../docs/decisions/adr_007_reestruturacao_papeis_agentes.md) (o Validator absorveu o Reviewer) e
-[ADR 020](../../../docs/decisions/adr_020_independencia_validator.md) (papéis de juiz e julgado).
+**ADRs de origem:** [ADR 007](../../../../docs/decisions/adr_007_reestruturacao_papeis_agentes.md) (o Validator absorveu o Reviewer) e
+[ADR 020](../../../../docs/decisions/adr_020_independencia_validator.md) (papéis de juiz e julgado).
 **Origem dos requisitos:** pedido do pesquisador (2026-10-13): sem débito técnico de agentes que não
 são usados.
-**Depende de:** nada. **Simplifica:** [`v18.6-validator-independence`](../archive/v18.6-validator-independence/proposal.md) (já mergeada, #145)
+**Depende de:** nada. **Simplifica:** [`v18.6-validator-independence`](../v18.6-validator-independence/proposal.md) (já mergeada, #145)
 (juízes = `validator`; julgados = `developer`).
 
 ## Por quê

@@ -1,13 +1,13 @@
 # Pendências das Mudanças Arquivadas (V16–V18.6)
 
-As 32 mudanças das versões V16 a V18.5 e as 4 da V18.6 (`v18.6-review-evidence`,
-`v18.6-benchmark-harness`, `v18.6-validator-independence`, `v18.6-hypothesis-closure`) foram
-arquivadas em 2026-10-13, com o código mergeado em `dev`. Os itens que estavam abertos nos `tasks.md` foram reunidos aqui por categoria, para não
+As 32 mudanças das versões V16 a V18.5 e as 6 da V18.6 (`v18.6-review-evidence`,
+`v18.6-benchmark-harness`, `v18.6-validator-independence`, `v18.6-hypothesis-closure`,
+`v18.6-profile-hardening` e `v18.6-remove-unused-agents`) foram arquivadas em 2026-10-13, com o código mergeado em `dev`. Os itens que estavam abertos nos `tasks.md` foram reunidos aqui por categoria, para não
 se perderem no arquivo. Cada item cita a mudança de origem.
 
 - **Validação em ambiente real:** entra na bateria final no Raspberry Pi 5, que só começa com a
   confirmação do pesquisador. A etapa V18.6 (`roadmaps/roadmap_V18.6.md`) termina com essa bateria.
-- **Segurança:** pareceres do Analista de Segurança ainda não registrados (o da Tarefa 1 da V18.6 foi registrado em 2026-10-13; restam as correções NC-PERFIL-1 a 6).
+- **Segurança:** pareceres do Analista de Segurança ainda não registrados (o da Tarefa 1 da V18.6 foi registrado em 2026-10-13 e as correções NC-PERFIL-1 a 6 foram feitas e arquivadas em `v18.6-profile-hardening`, #154; sem parecer de segurança pendente na V18.6).
 - **Administrativo:** itens de PR, revisão e lint cumpridos pelo merge do PR da mudança; mantidos
   só para rastreabilidade.
 - **Débito técnico ou decisão pendente:** trabalho que precisa de uma mudança OpenSpec nova ou de
@@ -26,7 +26,7 @@ se perderem no arquivo. Cada item cita a mudança de origem.
 - [ ] [`v18.5-sandbox-phases`](v18.5-sandbox-phases/tasks.md): 5.5.1 Cota de disco para os bind mounts `/outputs` e `/deps` (hoje só o `/tmp` em `tmpfs` tem limite; um script ou instalação pode encher o disco do Pi). Motivo: depende de decisão do mecanismo (quota de sistema de arquivos, `ulimit fsize` ou monitor) e de validação no Pi. **RISCO ACEITO PENDENTE** (revisão de segurança M1): mitigado só pela checagem de espaço livre antes de iniciar (`SANDBOX_MIN_FREE_BYTES`), pelo teto por ativo (512 MiB) e pelo teto somado (2 GiB); não limita o que o script grava durante a execução.
 - [ ] [`v18.5-claim-verification`](v18.5-claim-verification/tasks.md): 5.2 Revisão do Analista de Segurança (evidência como dado, egresso).
 - [ ] [`v18.5-operation-metrics`](v18.5-operation-metrics/tasks.md): 9.2 Revisão do Analista de Segurança (ativação do modo, ausência de ativação por agente).
-- [x] [`v18.6-review-evidence`](v18.6-review-evidence/tasks.md): 0.2 Parecer do Analista de Segurança sobre o perfil estrutural de CSV/JSON: feito em 2026-10-13 ([`docs/security/parecer_v18_6_perfil_estrutural.md`](../../../docs/security/parecer_v18_6_perfil_estrutural.md)); aprovado com ressalvas. **Abertas as correções NC-PERFIL-1 a 6** (requisitos R1 a R6 do parecer: cabeçalho verificado, symlink, delimitação e nome seguro, perfil sem exceção, limites de colunas/linhas, mapas), que exigem mudança OpenSpec própria. O parecer da Tarefa 3 (`v18.6-validator-independence`, egresso do juiz) foi feito no design §6, sem bloqueio.
+- [x] [`v18.6-review-evidence`](v18.6-review-evidence/tasks.md): 0.2 Parecer do Analista de Segurança sobre o perfil estrutural de CSV/JSON: feito em 2026-10-13 ([`docs/security/parecer_v18_6_perfil_estrutural.md`](../../../docs/security/parecer_v18_6_perfil_estrutural.md)); aprovado com ressalvas. **Correções NC-PERFIL-1 a 6 feitas** pela mudança [`v18.6-profile-hardening`](v18.6-profile-hardening/tasks.md) (#154, arquivada; requisitos R1 a R6: cabeçalho verificado, symlink, delimitação e nome seguro, perfil sem exceção, limites de colunas/linhas, mapas); validação no Pi 5: 3558 passed, 0 falhas. O parecer da Tarefa 3 (`v18.6-validator-independence`, egresso do juiz) foi feito no design §6, sem bloqueio.
 
 ## Validação em ambiente real (bateria no Pi 5)
 

@@ -3,7 +3,7 @@
 Verdade atual consolidada a partir das mudanças arquivadas (2026-10-13). Cada requisito indica a
 mudança que o definiu por último; os cenários vêm do delta original, em GIVEN/WHEN/THEN.
 
-**Mudanças de origem:** [`v16-provider-registry`](../../changes/archive/v16-provider-registry/proposal.md), [`v16-anthropic-provider`](../../changes/archive/v16-anthropic-provider/proposal.md), [`v16-model-catalog-router`](../../changes/archive/v16-model-catalog-router/proposal.md), [`v18.5-model-catalog-locality`](../../changes/archive/v18.5-model-catalog-locality/proposal.md), [`v18.6-validator-independence`](../../changes/archive/v18.6-validator-independence/proposal.md)
+**Mudanças de origem:** [`v16-provider-registry`](../../changes/archive/v16-provider-registry/proposal.md), [`v16-anthropic-provider`](../../changes/archive/v16-anthropic-provider/proposal.md), [`v16-model-catalog-router`](../../changes/archive/v16-model-catalog-router/proposal.md), [`v18.5-model-catalog-locality`](../../changes/archive/v18.5-model-catalog-locality/proposal.md), [`v18.6-validator-independence`](../../changes/archive/v18.6-validator-independence/proposal.md), [`v18.6-remove-unused-agents`](../../changes/archive/v18.6-remove-unused-agents/proposal.md)
 
 ## Requirements
 
@@ -141,17 +141,24 @@ e SHALL retentar apenas erros de conexão, 429 e 5xx, emitindo `connection_retry
 - **THEN** o erro é propagado sem retentativa
 
 ### Requirement: Catálogo versionado e validado
-_Origem: [`v16-model-catalog-router`](../../changes/archive/v16-model-catalog-router/proposal.md)_
+_Origem: [`v16-model-catalog-router`](../../changes/archive/v16-model-catalog-router/proposal.md), alterado por [`v18.6-remove-unused-agents`](../../changes/archive/v18.6-remove-unused-agents/proposal.md)_
 O sistema SHALL carregar `src/llm/catalog.yaml` com `yaml.safe_load` e validá-lo por esquema
 estrito antes de qualquer chamada de LLM, e SHALL interromper a inicialização, com mensagem
 que cita o arquivo, o campo e o `id`, quando houver chave desconhecida, provedor não
 registrado, `id` duplicado, valor fora do enum ou papel sem modelo na preferência
-(ADR 017 §1, §9).
+(ADR 017 §1, §9). Um papel removido (`reviewer`) SHALL ser rejeitado com mensagem que o identifica
+como removido.
+(Antes: seis papéis obrigatórios, incluindo `reviewer`.)
 
 #### Scenario: Catálogo versionado válido
 - **WHEN** o teste carrega o `src/llm/catalog.yaml` do repositório
 - **THEN** a validação passa
 - **AND** todos os cinco papéis (`researcher`, `developer`, `summarizer`, `validator`, `base`) têm ao menos um modelo na preferência
+
+#### Scenario: Catálogo local com papel removido
+- **GIVEN** um `catalog.local.yaml` com `papeis.reviewer`
+- **WHEN** o catálogo é carregado
+- **THEN** a inicialização para com erro que cita `reviewer` como papel removido
 
 #### Scenario: Campo extra
 - **GIVEN** um catálogo com `custo: 1` numa entrada de modelo
@@ -666,15 +673,26 @@ nuvem de cada família do catálogo antes de qualquer modelo local.
 - **WHEN** o catálogo versionado é carregado no teste
 - **THEN** a preferência de `validator` contém `claude`, `gemini` e `gpt` antes de `qwen`
 
-### Requirement: Rótulo de papel da revisão de subtarefa
-_Origem: [`v18.6-validator-independence`](../../changes/archive/v18.6-validator-independence/proposal.md)_
-A chamada LLM da revisão de subtarefa SHALL ser registrada com o papel `validator` e
+### Requirement: Variável de modelo obsoleta
+_Origem: [`v18.6-remove-unused-agents`](../../changes/archive/v18.6-remove-unused-agents/proposal.md)_
+Com `REVIEWER_MODEL` definida no ambiente, o sistema SHALL registrar `WARNING` na inicialização
+informando que o papel foi removido, e SHALL seguir sem usá-la.
+
+#### Scenario: `REVIEWER_MODEL` definida
+- **GIVEN** `REVIEWER_MODEL=anthropic/claude-haiku-5-5`
+- **WHEN** a sessão inicia
+- **THEN** o log tem um `WARNING` que cita `REVIEWER_MODEL` e o papel removido
+
+### Requirement: Rótulo da revisão de subtarefa
+_Origem: [`v18.6-remove-unused-agents`](../../changes/archive/v18.6-remove-unused-agents/proposal.md) (substitui o requisito "Rótulo de papel da revisão de subtarefa" de [`v18.6-validator-independence`](../../changes/archive/v18.6-validator-independence/proposal.md))_
+A chamada LLM e o evento da revisão de subtarefa SHALL ser registrados com o papel `validator` e
 `funcao = "revisao_subtarefa"`.
-(Antes: registrada como `reviewer`, embora usasse o modelo do `validator`.)
+(Antes: a chamada já usava o papel `validator` desde a `v18.6-validator-independence`, mas o evento `subtask_review` registrava `agent_id = "reviewer"`.)
 
 #### Scenario: Telemetria da revisão
 - **WHEN** `review_result` chama o modelo
-- **THEN** o registro da chamada tem papel `validator` e `funcao = "revisao_subtarefa"`
+- **THEN** o registro da chamada e o evento `subtask_review` têm papel `validator`
+
 
 ## Requisitos removidos
 

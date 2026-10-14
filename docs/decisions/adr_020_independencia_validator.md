@@ -226,8 +226,8 @@ A telemetria da revisão de subtarefa passa a registrar o papel `validator` com
 | Mudança | Escopo | Estado | PR |
 |---|---|---|---|
 | [`v18.6-validator-independence`](../../openspec/changes/archive/v18.6-validator-independence/proposal.md) | §1 a §6 e o juiz da avaliação de comunicação (§7): roteador, despacho, dicas, reserva, modos, catálogo, registro, retomada | Concluída e arquivada | #145 |
-| [`v18.6-remove-unused-agents`](../../openspec/changes/v18.6-remove-unused-agents/proposal.md) | Juiz = `validator` e julgado = `developer`: remove `reviewer` e `base` dos grupos, os pontos de despacho (`check_dispatch`) e o rótulo `reviewer` da revisão | Implementada (aguarda merge e arquivamento) | — |
-| [`v18.6-benchmark-harness`](../../openspec/changes/archive/v18.6-benchmark-harness/proposal.md) | Runner do §7: juiz declarado por combinação, combinação de controle, `check_pins` | Concluída e arquivada, com pendências (composição da matriz a confirmar; `cached_input` OpenAI; matrizes antigas recusadas) | #144 |
+| [`v18.6-remove-unused-agents`](../../openspec/changes/archive/v18.6-remove-unused-agents/proposal.md) | Juiz = `validator` e julgado = `developer`: remove `reviewer` e `base` dos grupos, os pontos de despacho (`check_dispatch`) e o rótulo `reviewer` da revisão | Concluída e arquivada | #155 |
+| [`v18.6-benchmark-harness`](../../openspec/changes/archive/v18.6-benchmark-harness/proposal.md) | Runner do §7: juiz declarado por combinação, combinação de controle, `check_pins` | Concluída e arquivada, com pendência (composição da matriz a confirmar; o `cached_input` OpenAI foi resolvido no #150 e as matrizes antigas removidas no #152) | #144 |
 
 ## Revisão
 
@@ -242,7 +242,7 @@ mesmo modelo do Researcher mostrar viés.
 |---|---|---|
 | §1 a §6: roteador, despacho, dicas, reserva do 429, modos, catálogo, registro, retomada | Implementada | `v18.6-validator-independence`, #145 |
 | §7: runner do benchmark com juiz declarado, combinação de controle e `check_pins` | Implementada | `v18.6-benchmark-harness`, #144 |
-| Juiz = `validator`, julgado = `developer`; sem `reviewer` nem `base` na regra | Implementada (PR da `v18.6-remove-unused-agents`; status final após o merge) | `v18.6-remove-unused-agents` |
+| Juiz = `validator`, julgado = `developer`; sem `reviewer` nem `base` na regra | Implementada | `v18.6-remove-unused-agents`, #155 (Pi 5: 3549 passed, 0 falhas) |
 | Parecer de segurança do juiz (egresso) | Feito, sem bloqueio | design §6 de `v18.6-validator-independence` (S1 a S6) |
 | Composição da matriz `matrix_modelos_v18_6.json` | Pendente (confirmação do pesquisador) | `roadmaps/roadmap_V18.6.md`, Pendências conhecidas |
 | Matriz com bancos isolados e 3 repetições no Pi 5 | Pendente (só com confirmação do pesquisador) | Acompanhamento; não bloqueia o aceite |

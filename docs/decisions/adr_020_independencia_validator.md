@@ -15,7 +15,7 @@ modelo na verificação de afirmações)
 | 019, tabela de impacto | A ordem de resolução muda: papéis com pin primeiro, juízes sem pin por último (§3). |
 | 017 §2 e §7 | Nova condição de elegibilidade, que vale também para pins e dicas de plano. |
 | 017 §6 | O modelo de reserva do Google no 429 (`GOOGLE_FALLBACK_MODEL`) passa pela regra. |
-| 007 | O papel e o agente `reviewer` continuam no código e passam a ser papel de juiz. |
+| 007 | O Validator é o único juiz; o papel e o agente `reviewer` foram removidos do código (`v18.6-remove-unused-agents`). |
 
 ---
 
@@ -41,7 +41,9 @@ O ADR 019 §6 usa a família diferente só como **desempate** na escolha do `val
 Outro problema: o ADR 007 registrou que o Validator absorveu o Reviewer, mas o papel `reviewer`
 continua no código (`src/agent_runtime/definitions.py:70`, `agents/reviewer/agent.py`,
 `src/llm/catalog.py:36`). Além disso, a revisão de subtarefa feita pelo `validator` é registrada na
-telemetria como `"reviewer"` (`src/agents/validator_agent.py:690`).
+telemetria como `"reviewer"` (`src/agents/validator_agent.py:690`). A mudança
+`v18.6-remove-unused-agents` removeu o papel e o agente e passou a registrar a revisão como `validator`; este
+ADR não trata mais de `reviewer`.
 
 ### Hipótese assumida
 
@@ -57,14 +59,14 @@ próxima rodada mede a hipótese com uma combinação de controle (§7).
 
 | Grupo | Papéis | O que fazem |
 |---|---|---|
-| **Juízes** | `validator`, `reviewer` | `validator`: valida o plano, revisa o resultado de cada subtarefa e verifica as afirmações do relatório. `reviewer`: agente de subtarefa que revisa código ou texto. |
-| **Julgados** | `developer`, `base` | Produzem os resultados medidos (código, métricas, artefatos). |
-| **Livres** | `researcher`, `summarizer`, `curator` | Não entram na regra. |
+| **Juiz** | `validator` | Valida o plano, revisa o resultado de cada subtarefa e verifica as afirmações do relatório. |
+| **Julgado** | `developer` | Produz os resultados medidos (código, métricas, artefatos). |
+| **Livres** | `researcher`, `summarizer`, `base`, `curator` | Não entram na regra. |
 
 **Família** é o campo `familia_modelo` do catálogo (linhagem de treinamento: `claude`, `gemini`,
 `gpt`, `qwen`...). Não é o provedor nem o tamanho do modelo.
 
-> **R1.** Nenhum juiz pode usar um modelo da mesma família de um julgado em uso na sessão.
+> **R1.** O juiz não pode usar um modelo da mesma família do julgado em uso na sessão.
 
 Para os papéis livres não há regra nova. O `researcher` pode usar o mesmo modelo do `developer`
 ou do `validator`. Neste último caso, a validação do plano é feita pelo modelo que o escreveu, o
@@ -99,8 +101,8 @@ Toda escolha de modelo para um juiz ou um julgado passa pelo mesmo procedimento:
 
 1. **Sem conflito com R1:** o modelo é usado (`aceito`).
 2. **Com conflito:** procura-se uma **alternativa**, que é outro modelo elegível que cumpra R1, na
-   ordem definida para aquele ponto (§4). Se há alternativa, ela é usada (`substituido`, ou
-   `rejeitado` quando o que se descarta é uma dica ou a reserva). O modelo descartado recebe o
+   ordem definida para aquele ponto (§4). Se há alternativa, ela é usada (na inicialização, o
+   modelo descartado fica em `descartados`; `rejeitado` quando o que se descarta é uma dica ou a reserva). O modelo descartado recebe o
    motivo `mesma_familia_julgamento`.
 3. **Sem alternativa:** aplica-se o modo (§2).
 
@@ -126,7 +128,6 @@ a preferência do catálogo.
 | Ponto | O que é conferido | Alternativa (passo 2) | `required` sem alternativa | `preferred` sem alternativa |
 |---|---|---|---|---|
 | **Inicialização: `validator` × `developer`** | O par principal. É a única exigência de inicialização. | O próximo modelo elegível do papel que cede (§3). | A sessão não inicia: `NoEligibleModelError`, ou `PinError` com dois pins em `strict`. | Usa o preferido, ou mantém o pin. |
-| **Inicialização: `reviewer` e `base`** | Os demais pares juiz × julgado. | O próximo modelo elegível do papel. | O papel fica com o preferido. O conflito é tratado no despacho, porque muitas sessões nunca usam esses papéis. | Igual a `required`. |
 | **Despacho de subtarefa para `reviewer` ou `base`** | O modelo do papel contra os modelos efetivos em uso. | O próximo modelo elegível de outra família na preferência do papel (`substituido`). | **Só aquela subtarefa** falha, com `mesma_familia_julgamento` e a sugestão. A sessão continua. | A subtarefa roda (`aceito_preferred`). |
 | **Dica de plano (`preferred_model`)**, para qualquer juiz ou julgado | O modelo da dica. | O modelo já resolvido do papel (`rejeitado`). Sempre existe. | Nunca ocorre. | Nunca ocorre. |
 | **Reserva do 429** | O modelo de reserva. | Nenhuma: a reserva é o único outro modelo. | A reserva não é usada (`rejeitado`). O 429 segue o cooldown e as retentativas atuais. | A reserva é usada, com `WARNING` e `atendida=false` naquela chamada. |
@@ -139,7 +140,7 @@ Uma dica que cairia na família do juiz é descartada; o juiz não muda para aco
 
 ### 5. Catálogo
 
-A lista de preferência de `validator` e `reviewer` MUST ter, antes de qualquer modelo local de
+A lista de preferência de `validator` MUST ter, antes de qualquer modelo local de
 capacidade menor, ao menos um modelo de nuvem de cada família do catálogo versionado (hoje: Claude,
 Gemini, GPT). Isso garante uma alternativa sempre que a nuvem é permitida e só tem efeito com
 `third_party_allowed`. A lista de permissão `LLM_PROVIDER_PRIORITY` continua limitando os
@@ -150,7 +151,7 @@ provedores usados.
 | Onde | O que |
 |---|---|
 | Payload da sessão, campo `independencia_julgamento` (ao lado do `desempate`) | Modo efetivo e origem do modo (variável ou padrão da política); modelo, família e origem da família (catálogo versionado ou `catalog.local.yaml`) de `validator` e `developer`; `atendida`. |
-| Evento `independencia_julgamento`, a cada conferência dos pontos de despacho, dica, reserva e retomada | Subtarefa, papel, modelo, família, decisão (`aceito`, `substituido`, `rejeitado`, `aceito_preferred`) e motivo. |
+| Evento `independencia_julgamento`, a cada conferência da dica, da reserva e da retomada | Subtarefa, papel, modelo, família, decisão (`aceito`, `rejeitado`, `aceito_preferred`) e motivo. |
 | Banner, relatório final e métricas de operação | O resumo, por exemplo "Julgamento: gemini (validator) ≠ claude (developer)", ou o aviso quando `atendida=false`. |
 
 `atendida` é `false` sempre que o modo `preferred` aceitou um conflito.
@@ -163,8 +164,7 @@ A telemetria da revisão de subtarefa passa a registrar o papel `validator` com
 
 ### 7. Benchmark e avaliação de comunicação
 
-- **Runner:** não expande `*` para os juízes. Cada combinação declara o `validator`, e o `reviewer`
-  se a tarefa o usar. O runner recusa a combinação em que a família do juiz coincide com a do
+- **Runner:** não expande `*` para os juízes. Cada combinação declara o `validator`. O runner recusa a combinação em que a família do juiz coincide com a do
   `developer`, salvo se ela estiver marcada como controle (`"independencia_julgamento": "off"`). A
   matriz da próxima rodada inclui ao menos uma combinação de controle. `check_pins` trata como
   esperado o registro do §6.
@@ -180,7 +180,6 @@ A telemetria da revisão de subtarefa passa a registrar o papel `validator` com
 |---|---|
 | Manter a família só como desempate (ADR 019 §6) | Não cobre pins, dicas, reserva nem grupos de um modelo, que são os casos atuais. |
 | Família diferente de todos os papéis autores | Exige três ou mais famílias e contraria a decisão do pesquisador. |
-| Conferir `reviewer` e `base` já na inicialização | Bloquearia sessões que nunca usam esses papéis. |
 | Trocar o juiz por subtarefa quando uma dica cai na família dele | Troca o juiz no meio da sessão, o que o ADR 017 §6 não permite e complica a auditoria (ver Divergência 1). |
 | Independência por tamanho de modelo (ex.: Haiku julgando Sonnet) | Mesma linhagem, erros correlacionados. |
 | Independência por provedor | Um provedor serve várias famílias, e uma família vem de vários provedores. |
@@ -216,7 +215,7 @@ A telemetria da revisão de subtarefa passa a registrar o papel `validator` com
    - aceitar a dica e trocar o juiz daquela subtarefa: preserva o melhor modelo de código, mas troca
      o juiz no meio da sessão;
    - pôr um modelo de nuvem que não seja Claude (Gemini ou GPT) em primeiro lugar na preferência de
-     `validator` e `reviewer`: reduz o conflito sem trocar o juiz e deixa Claude livre para as dicas
+     `validator`: reduz o conflito sem trocar o juiz e deixa Claude livre para as dicas
      do Developer, mas muda o juiz padrão de quem usa o catálogo sem pins.
 2. **Padrão em `self_hosted_only`.** A proposta usa `preferred`. A alternativa é incluir no catálogo
    um segundo modelo local de outra família e manter `required` sempre, com custo de memória no
@@ -227,6 +226,7 @@ A telemetria da revisão de subtarefa passa a registrar o papel `validator` com
 | Mudança | Escopo | Estado | PR |
 |---|---|---|---|
 | [`v18.6-validator-independence`](../../openspec/changes/archive/v18.6-validator-independence/proposal.md) | §1 a §6 e o juiz da avaliação de comunicação (§7): roteador, despacho, dicas, reserva, modos, catálogo, registro, retomada | Concluída e arquivada | #145 |
+| [`v18.6-remove-unused-agents`](../../openspec/changes/v18.6-remove-unused-agents/proposal.md) | Juiz = `validator` e julgado = `developer`: remove `reviewer` e `base` dos grupos, os pontos de despacho (`check_dispatch`) e o rótulo `reviewer` da revisão | Implementada (aguarda merge e arquivamento) | — |
 | [`v18.6-benchmark-harness`](../../openspec/changes/archive/v18.6-benchmark-harness/proposal.md) | Runner do §7: juiz declarado por combinação, combinação de controle, `check_pins` | Concluída e arquivada, com pendências (composição da matriz a confirmar; `cached_input` OpenAI; matrizes antigas recusadas) | #144 |
 
 ## Revisão
@@ -242,6 +242,7 @@ mesmo modelo do Researcher mostrar viés.
 |---|---|---|
 | §1 a §6: roteador, despacho, dicas, reserva do 429, modos, catálogo, registro, retomada | Implementada | `v18.6-validator-independence`, #145 |
 | §7: runner do benchmark com juiz declarado, combinação de controle e `check_pins` | Implementada | `v18.6-benchmark-harness`, #144 |
+| Juiz = `validator`, julgado = `developer`; sem `reviewer` nem `base` na regra | Implementada (PR da `v18.6-remove-unused-agents`; status final após o merge) | `v18.6-remove-unused-agents` |
 | Parecer de segurança do juiz (egresso) | Feito, sem bloqueio | design §6 de `v18.6-validator-independence` (S1 a S6) |
 | Composição da matriz `matrix_modelos_v18_6.json` | Pendente (confirmação do pesquisador) | `roadmaps/roadmap_V18.6.md`, Pendências conhecidas |
 | Matriz com bancos isolados e 3 repetições no Pi 5 | Pendente (só com confirmação do pesquisador) | Acompanhamento; não bloqueia o aceite |

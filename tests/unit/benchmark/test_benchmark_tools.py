@@ -110,7 +110,7 @@ class TestRunner:
     def test_build_env_default_and_override(self):
         env = run_benchmark.build_env({"X": "1"}, {"DEVELOPER": "google/a", "*": "anthropic/b"})
         assert env["DEVELOPER_MODEL"] == "google/a"
-        assert env["BASE_MODEL"] == "anthropic/b" and "REVIEWER_MODEL" not in env  # juiz não herda o "*"
+        assert env["BASE_MODEL"] == "anthropic/b" and "VALIDATOR_MODEL" not in env  # juiz não herda o "*"
         assert env["X"] == "1"
 
     def test_build_env_usa_pins_sem_variaveis_removidas(self):

@@ -50,7 +50,7 @@ ADRs de origem: 002, 005, 009, 010, 012, 015, 019 e o ADR 020 (aceito em 2026-10
 
 ### Tarefa 3: Independência do julgamento
 - **Spec:** [`v18.6-validator-independence`](../openspec/changes/archive/v18.6-validator-independence/proposal.md) · **Estado (2026-10-13):** concluída e arquivada, #145
-- **Critérios de aceite:** [x] `validator` de família diferente do `developer` na inicialização · [x] conferência no despacho de dicas, `base`, `reviewer` e reserva do 429 · [x] modo por política · [x] registro no banner, payload, relatório e retomada
+- **Critérios de aceite:** [x] `validator` de família diferente do `developer` na inicialização · [x] conferência de dicas e da reserva do 429 · [x] modo por política · [x] registro no banner, payload, relatório e retomada
 - **Complexidade estimada:** Média
 
 ### Tarefa 4: Fechamento de hipóteses e resultado negativo
@@ -59,8 +59,8 @@ ADRs de origem: 002, 005, 009, 010, 012, 015, 019 e o ADR 020 (aceito em 2026-10
 - **Complexidade estimada:** Alta
 
 ### Tarefa 5: Remoção de agentes e papéis sem uso
-- **Spec:** [`v18.6-remove-unused-agents`](../openspec/changes/v18.6-remove-unused-agents/proposal.md)
-- **Critérios de aceite:** [ ] agente `reviewer` removido do código, catálogo e benchmark · [ ] papéis de subtarefa só `developer` e `researcher` · [ ] revisão de subtarefa registrada como `validator` · [ ] atalho `agent_tasks` e `REVIEW_MODE=end_only` removidos
+- **Spec:** [`v18.6-remove-unused-agents`](../openspec/changes/v18.6-remove-unused-agents/proposal.md) · **Estado (2026-10-13):** implementada no PR da mudança (aguarda validação no Pi, merge e arquivamento)
+- **Critérios de aceite:** [x] agente `reviewer` removido do código, catálogo e benchmark · [x] papéis de subtarefa só `developer` e `researcher` · [x] revisão de subtarefa registrada como `validator` · [x] atalho `agent_tasks` e `REVIEW_MODE=end_only` removidos
 - **Complexidade estimada:** Baixa
 
 ## Ordem de implementação

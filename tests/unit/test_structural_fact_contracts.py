@@ -24,6 +24,7 @@ from src.session import Session
 from src.skills.code.manifest import WorkspaceManifest
 from src.skills.code.sandbox import PythonSandbox, extract_exception_type
 from src.skills.code.scientific_helpers import save_experiment_artifacts
+from tests.support.task_loop import run_tasks
 
 # --- 1.1 contrato de artefatos ------------------------------------------------
 
@@ -193,7 +194,7 @@ async def test_orquestrador_ingere_inicio_e_fim_da_sessao(tmp_path):
     store = InMemoryGraphStore()
     pid = create_project(store, "P", "O", [])
     orch = _orch(tmp_path, store)
-    await orch.handle_request("p", [AgentTask(agent_id="a", prompt="p")], project_id=pid)
+    await run_tasks(orch, "p", [AgentTask(agent_id="a", prompt="p")], project_id=pid)
     (sessao,) = store.find_nodes("Sessao", {})
     assert sessao.properties["sessao_id"] == "s1"
     assert sessao.properties["motivo_parada"] == "solucao_encontrada"
@@ -210,7 +211,7 @@ async def test_orquestrador_grafo_fora_nao_derruba_a_sessao(tmp_path):
     orch = _orch(tmp_path, InMemoryGraphStore())
     orch._knowledge_store_factory = _down
     pid = "01890000-0000-7000-8000-000000000001"
-    result = await orch.handle_request("p", [AgentTask(agent_id="a", prompt="p")], project_id=pid)
+    result = await run_tasks(orch, "p", [AgentTask(agent_id="a", prompt="p")], project_id=pid)
     assert result.succeeded == 1
     pending = orch.output_manager.base_dir / "s1" / PENDING_FILENAME
     kinds = [json.loads(line)["kind"] for line in pending.read_text(encoding="utf-8").splitlines()]
@@ -223,7 +224,7 @@ async def test_orquestrador_sem_projeto_nao_abre_o_grafo(tmp_path):
     opened = []
     orch = _orch(tmp_path, InMemoryGraphStore())
     orch._knowledge_store_factory = lambda: opened.append(1)
-    await orch.handle_request("p", [AgentTask(agent_id="a", prompt="p")])
+    await run_tasks(orch, "p", [AgentTask(agent_id="a", prompt="p")])
     assert opened == [] and orch.get_ingestor("s1") is None
 
 

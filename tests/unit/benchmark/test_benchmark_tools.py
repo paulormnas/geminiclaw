@@ -125,16 +125,16 @@ class TestRunner:
             run_benchmark.build_env({}, {"*": "modelo-sem-barra"})
 
     def test_check_pins_ok_e_divergencias(self):
-        roles = {"DEVELOPER": "google/a", "VALIDATOR": "anthropic/b", "REVIEWER": "anthropic/b", "*": "anthropic/b"}
+        roles = {"DEVELOPER": "google/a", "VALIDATOR": "anthropic/b", "*": "anthropic/b"}
         ok = {"papeis": {r.lower(): {"id": "anthropic/b", "origem": "pin"} for r in run_benchmark.ROLES}}
         ok["papeis"]["developer"] = {"id": "google/a", "origem": "pin_legado"}
         assert run_benchmark.check_pins(roles, ok) == []
 
-        ok["papeis"]["reviewer"] = {"id": "ollama/qwen3:8b", "origem": "preferencia"}
+        ok["papeis"]["validator"] = {"id": "ollama/qwen3:8b", "origem": "preferencia"}
         ok["papeis"]["base"] = {"id": "anthropic/b", "origem": "preferencia"}
         problems = run_benchmark.check_pins(roles, ok)
         assert len(problems) == 2
-        assert any("REVIEWER" in p and "ollama/qwen3:8b" in p for p in problems)
+        assert any("VALIDATOR" in p and "ollama/qwen3:8b" in p for p in problems)
         assert any("BASE" in p and "origem=preferencia" in p for p in problems)
 
     def test_check_pins_sem_payload_avisa(self):

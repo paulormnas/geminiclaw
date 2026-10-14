@@ -32,6 +32,7 @@ from src.output_manager import OutputManager
 from src.session import Session
 from tests.support.controlled_embedding_provider import pair_vectors
 from tests.support.curator_graph import CuratorGraph
+from tests.support.task_loop import run_tasks
 from tests.unit.knowledge.conftest import DIM
 
 pytestmark = pytest.mark.unit
@@ -236,7 +237,7 @@ async def test_falha_do_curator_no_orquestrador_nao_derruba_a_sessao(tmp_path, m
     )
     orch.curator_provider = Scripted(error=RuntimeError("boom"))
 
-    result = await orch.handle_request("p", [AgentTask(agent_id="a", prompt="p")], project_id=pid)
+    result = await run_tasks(orch, "p", [AgentTask(agent_id="a", prompt="p")], project_id=pid)
 
     assert result.succeeded == 1
     assert orch.curator_provider.calls  # o Curator tentou e falhou; a sessão terminou normalmente
@@ -426,7 +427,7 @@ async def test_reconcile_on_session_start_roda_antes_de_qualquer_consulta_ao_gra
     original = FactIngestor.session_start
     monkeypatch.setattr(FactIngestor, "session_start", lambda self: (ordem.append("session_start"), original(self))[1])
 
-    await orch.handle_request("p", [AgentTask(agent_id="a", prompt="p")], project_id=pid)
+    await run_tasks(orch, "p", [AgentTask(agent_id="a", prompt="p")], project_id=pid)
 
     assert ordem[:2] == ["reconcile", "session_start"]
     assert orch._knowledge_store is store  # o grafo vem do runtime (store indexado)

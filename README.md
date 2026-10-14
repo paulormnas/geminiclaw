@@ -211,7 +211,6 @@ Implementado em `src/autonomous_loop.py`, o loop gerencia tarefas complexas de p
 | **Researcher** | `agents/researcher/` | Pesquisa na web via busca rápida, extração de conteúdo e síntese. Cache de resultados integrado. |
 | **Planner** | `agents/planner/` | Decomposição de problemas complexos em tarefas atômicas. Triage (simples/complexo). |
 | **Validator** | `agents/validator/` | Verificação de segurança, formato JSON e consistência lógica de planos. |
-| **Reviewer** | `agents/reviewer/` | Validação de resultados de subtarefas contra critérios definidos. |
 | **Summarizer** | `agents/summarizer/` | Síntese final de resultados com rastreabilidade acadêmica e metadados de autonomia. |
 
 Os agentes rodam no processo do orquestrador. O roteador de modelos (ADR 017) resolve o provedor e o modelo de cada papel uma vez por sessão, a partir do catálogo `src/llm/catalog.yaml`, da política `LLM_DATA_POLICY` e da disponibilidade dos provedores; `{PAPEL}_MODEL=provedor/modelo` (por exemplo, `RESEARCHER_MODEL=anthropic/claude-sonnet-5-5`) fixa o modelo de um papel, o que permite misturar provedores na mesma sessão.
@@ -405,7 +404,6 @@ geminiclaw/
 │   ├── base/                  # Agente base (integra skills)
 │   ├── developer/             # Agente que escreve e executa código no sandbox
 │   ├── researcher/            # Agente de pesquisa e planejamento
-│   ├── reviewer/              # Instruções do revisor
 │   └── summarizer/            # Agente que redige o relatório final
 ├── containers/                # Dockerfile do sandbox de código e do PostgreSQL (AGE)
 ├── tests/                     # Testes pytest (unit, integration, e2e)

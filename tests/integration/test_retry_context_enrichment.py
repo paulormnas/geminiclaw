@@ -86,7 +86,7 @@ async def test_retry_context_enrichment(monkeypatch):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_reviewer_receives_artifacts_context(monkeypatch):
+async def test_review_receives_artifacts_context(monkeypatch):
     """V13.5.3 / V14.2: Verifica se _review_subtask injeta contexto de artefatos existentes no Validator."""
     orchestrator = MagicMock()
     orchestrator.output_manager.list_artifacts.return_value = [

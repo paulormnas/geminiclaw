@@ -27,9 +27,9 @@ from src.utils.json_parser import extract_json
 
 RUBRIC_VERSION = "1"
 CRITERIA = ("necessidade", "clareza", "resposta", "efeito")
-EXCLUDED_ROLES = ("developer", "base")  # julgados: o juiz não pode ser da família deles (ADR 020 §7)
+EXCLUDED_ROLES = ("developer",)  # julgados: o juiz não pode ser da família deles (ADR 020 §7)
 TIEBREAK_ROLES = ("researcher",)  # a família do planejamento só desempata
-POOL_ROLES = ("reviewer", "validator", "summarizer", "researcher")
+POOL_ROLES = ("validator", "summarizer", "base", "researcher")
 CALIBRATION_DIR = Path("docs/benchmarks/calibracao")
 LABELS_PATH = CALIBRATION_DIR / "ask_researcher.jsonl"
 CALIBRATION_RESULT_PATH = CALIBRATION_DIR / "resultado.json"

@@ -54,9 +54,9 @@ from scripts.benchmark.scoring import (
     validated_scoreboard,
 )
 
-ROLES = ("RESEARCHER", "VALIDATOR", "DEVELOPER", "BASE", "SUMMARIZER", "REVIEWER")
+ROLES = ("RESEARCHER", "VALIDATOR", "DEVELOPER", "BASE", "SUMMARIZER")
 # Papéis de julgamento: o ``*`` não os cobre; a combinação os declara (ADR 020 §7).
-JUDGE_ROLES = ("VALIDATOR", "REVIEWER")
+JUDGE_ROLES = ("VALIDATOR",)
 
 
 class CombinationRefused(ValueError):
@@ -82,7 +82,7 @@ def validate_combination(combo: dict, family_of=model_family) -> None:
     """Confere o juiz declarado da combinação (ADR 020 §7).
 
     O ``validator`` MUST ser declarado e ter família diferente da do ``developer`` (``DEVELOPER`` ou ``*``);
-    o ``reviewer``, quando declarado, segue a mesma regra. A marca ``"independencia_julgamento": "off"``
+    A marca ``"independencia_julgamento": "off"``
     (controle) dispensa a regra de família, mas não a declaração do ``validator``.
 
     Raises:
@@ -94,7 +94,7 @@ def validate_combination(combo: dict, family_of=model_family) -> None:
         raise CombinationRefused(f"{name}: 'independencia_julgamento' só aceita \"off\" (recebido {marca!r}).")
     if not roles.get("VALIDATOR"):
         raise CombinationRefused(
-            f"{name}: o '*' não cobre o juiz; declare o VALIDATOR (e o REVIEWER, se a tarefa o usar) em 'roles'."
+            f"{name}: o '*' não cobre o juiz; declare o VALIDATOR em 'roles'."
         )
     developer = roles.get("DEVELOPER", roles.get("*"))
     if developer is None or is_control(combo):

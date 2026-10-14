@@ -90,27 +90,27 @@ def test_metrica_abaixo_do_limiar_e_nao_cumprida(tmp_path):
 
 def test_falso_reprovado_e_falso_aprovado():
     """Scenarios: Falso reprovado / Falso aprovado."""
-    out = comm.reviewer_confusion([(False, "fulfilled"), (True, "unfulfilled"), (True, "fulfilled")])
+    out = comm.review_confusion([(False, "fulfilled"), (True, "unfulfilled"), (True, "fulfilled")])
     assert out["false_reject"] == 1 and out["false_accept"] == 1 and out["hit"] == 1
 
 
 def test_indeterminadas_ficam_fora_das_taxas():
     """Scenario: Indeterminadas fora das taxas."""
     pairs = [(True, "fulfilled")] * 3 + [(False, "fulfilled")] + [(True, "indeterminate")] * 2
-    out = comm.reviewer_confusion(pairs)
+    out = comm.review_confusion(pairs)
     assert out["false_reject_rate"] == 0.25 and out["indeterminate_share"] == round(2 / 6, 4)
 
 
 def test_denominador_zero_e_null():
     """Scenario: Denominador zero."""
-    out = comm.reviewer_confusion([(True, "fulfilled")])
+    out = comm.review_confusion([(True, "fulfilled")])
     assert out["false_accept_rate"] is None
 
 
 def test_avaliacao_sem_revisoes_traz_null_sem_erro(tmp_path):
     """Scenario: Evento esperado ausente."""
     out = comm.evaluate_events([ev("spawn", 1)], {}, tmp_path, {})
-    assert out["reviewer"]["reviews"] == 0 and out["reviewer"]["confusion"]["false_reject_rate"] is None
+    assert out["revisao_subtarefa"]["reviews"] == 0 and out["revisao_subtarefa"]["confusion"]["false_reject_rate"] is None
 
 
 def _review(ts, task, approved, **kw):
@@ -121,10 +121,10 @@ def test_desacordos_listam_tarefa_tentativa_e_assinatura(tmp_path):
     _write(tmp_path, "t/a.png")
     plan = {"t": {"task_name": "t", "expected_artifacts": ["a.png"]}}
     out = comm.evaluate_events([_review(time.time() + 50, "t", False, attempt=2, signature="abc")], plan, tmp_path,
-                               {"reviewer": "google/m"})
-    mismatch = out["reviewer"]["mismatches"][0]
+                               {"validator": "google/m"})
+    mismatch = out["revisao_subtarefa"]["mismatches"][0]
     assert mismatch["task_name"] == "t" and mismatch["attempt"] == 2 and mismatch["signature"] == "abc"
-    assert out["reviewer"]["confusion"]["false_reject"] == 1
+    assert out["revisao_subtarefa"]["confusion"]["false_reject"] == 1
 
 
 # --- resolução e laços -------------------------------------------------------------------------
@@ -169,12 +169,12 @@ def test_assinaturas_diferentes_nao_sao_laco():
     assert comm.loop_stats({"m": seq((False, "a"), (False, "b"), (False, "c"))}, min_length=3)["loops"] == 0
 
 
-def test_laco_atribuido_ao_revisor_e_ao_validator_separadamente(tmp_path):
+def test_laco_atribuido_a_revisao_de_subtarefa_e_ao_validator_separadamente(tmp_path):
     events = [_review(i, "t", False, signature="s") for i in range(1, 4)]
     events += [ev("plan_validation", 10 + i, approved=False, signature="p") for i in range(2)]
     out = comm.evaluate_events(events, {}, tmp_path, {})
     loops = out["resolution"]["loops"]
-    assert loops["reviewer"]["loops"] == 1 and loops["validator"]["loops"] == 0
+    assert loops["revisao_subtarefa"]["loops"] == 1 and loops["validator"]["loops"] == 0
 
 
 # --- reparos do planejador ---------------------------------------------------------------------
@@ -245,7 +245,7 @@ def test_metrics_json_malformado_nao_derruba_a_avaliacao(tmp_path, content):
 def test_erro_inesperado_na_verdade_vira_indeterminada(tmp_path, monkeypatch):
     monkeypatch.setattr(comm, "compute_truth", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
     out = comm.evaluate_events([_review(1, "t", True)], {"t": {"task_name": "t"}}, tmp_path, {})
-    assert out["reviewer"]["confusion"]["indeterminate"] == 1
+    assert out["revisao_subtarefa"]["confusion"]["indeterminate"] == 1
 
 
 def test_metrics_json_corrigido_depois_da_revisao_e_indeterminado(tmp_path):

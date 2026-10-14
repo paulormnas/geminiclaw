@@ -130,7 +130,7 @@ def test_validator_sem_exigencia_de_trust(catalog):
 def test_resolve_session_resolve_todos_os_papeis(catalog):
     mapa = resolve_session(catalog, all_available(catalog), "third_party_allowed")
 
-    assert set(mapa) == {"researcher", "developer", "reviewer", "summarizer", "validator", "curator", "base"}
+    assert set(mapa) == {"researcher", "developer", "summarizer", "validator", "curator", "base"}
 
 
 def test_modelo_nao_verificado_e_descartado(catalog):
@@ -276,7 +276,7 @@ def _catalog_com_empate(tmp_path, *, validator_pref, familia_autor="qwen"):
         model(CLAUDE, "third_party", familia="claude"),
         model(GEMINI, "third_party", familia="gemini"),
     ]
-    for role in ("researcher", "developer", "reviewer", "summarizer", "curator", "base"):
+    for role in ("researcher", "developer", "summarizer", "curator", "base"):
         doc["papeis"][role]["preferencia"] = [QWEN]
     doc["papeis"]["validator"]["preferencia"] = validator_pref
     return load(tmp_path, doc)

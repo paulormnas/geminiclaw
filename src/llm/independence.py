@@ -2,14 +2,10 @@
 
 A resolução inicial vive em ``src/llm/routing.py``. Este módulo guarda o **estado da sessão**
 (:class:`JudgeIndependenceGuard`) e aplica o procedimento único de conferência do ADR 020 §3 nos pontos de
-despacho: dica de plano, subtarefa de ``base``/``reviewer``, modelo de reserva do 429 e retomada.
+despacho: dica de plano, modelo de reserva do 429 e retomada.
 
-Regra R1: nenhum juiz (``validator``, ``reviewer``) usa modelo da mesma família de um julgado (``developer``,
-``base``) em uso na sessão. O juiz nunca muda de modelo no meio da sessão: uma dica que cairia na família do juiz é
-descartada.
-
-Os pontos de conferência de ``reviewer`` e ``base`` (``check_dispatch``, ``_UNUSED_UNTIL_DISPATCH``) ficam isolados
-neste módulo: se o papel ``reviewer`` for removido (mudança ``v18.6-remove-unused-agents``), basta apagá-los.
+Regra R1: o juiz (``validator``) não usa modelo da mesma família do julgado (``developer``) em uso na sessão.
+O juiz nunca muda de modelo no meio da sessão: uma dica que cairia na família do juiz é descartada.
 """
 
 from __future__ import annotations
@@ -27,9 +23,7 @@ from src.llm.routing import (
     MOTIVO_MESMA_FAMILIA,
     NoEligibleModelError,
     RoleResolution,
-    RoutingError,
     _suggestion,
-    find_alternative,
 )
 from src.logger import get_logger
 
@@ -37,27 +31,8 @@ logger = get_logger(__name__)
 
 EVENT_TYPE = "independencia_julgamento"
 DECISAO_ACEITO = "aceito"
-DECISAO_SUBSTITUIDO = "substituido"
 DECISAO_REJEITADO = "rejeitado"
 DECISAO_ACEITO_PREFERRED = "aceito_preferred"
-
-# Papéis de despacho conferidos contra os modelos em uso; fora do par validator/developer, só entram na conta
-# depois de despachados (muitas sessões nunca os usam).
-_UNUSED_UNTIL_DISPATCH: tuple[str, ...] = ("reviewer", "base")
-
-
-class JudgeIndependenceError(RoutingError):
-    """A subtarefa não pode rodar sem violar R1 em modo ``required`` (a sessão continua)."""
-
-    def __init__(self, papel: str, modelo: str, familia: str, sugestao: str):
-        self.papel = papel
-        self.modelo = modelo
-        self.familia = familia
-        self.sugestao = sugestao
-        super().__init__(
-            f"O papel '{papel}' não pode usar '{modelo}' (família '{familia}'): {MOTIVO_MESMA_FAMILIA}. {sugestao}"
-        )
-
 
 class JudgeIndependenceGuard:
     """Estado da conferência de independência de uma sessão (mutável; seguro entre threads)."""
@@ -247,52 +222,6 @@ class JudgeIndependenceGuard:
     def is_approved(self, papel: str, model_id: str) -> bool:
         return (papel, model_id) in self._aprovados
 
-    # ------------------------------------------------- despacho de reviewer/base
-
-    def check_dispatch(
-        self, papel: str, model_id: str, subtarefa: str | None, *, pin_fixo: bool = False
-    ) -> str:
-        """Confere o despacho de uma subtarefa para ``reviewer`` ou ``base`` (ADR 020 §4).
-
-        Em conflito procura o próximo modelo elegível de outra família na preferência do papel (``substituido``);
-        sem nenhum, ``required`` levanta :class:`JudgeIndependenceError` (só a subtarefa falha) e ``preferred``
-        segue com aviso. ``pin_fixo``: pin em ``strict`` nunca é trocado.
-
-        Raises:
-            JudgeIndependenceError: Conflito sem alternativa em ``required``.
-        """
-        if not self.ativo or papel not in _UNUSED_UNTIL_DISPATCH:
-            return model_id
-        if (papel, model_id) in self._aprovados:
-            return model_id
-        familia = self.familia(model_id)
-        opostas = self._opostas(papel)
-        if familia is None or familia not in opostas:
-            self._emitir(papel, model_id, DECISAO_ACEITO, None, subtarefa)
-            self._efetivos.setdefault(papel, set()).add(model_id)
-            self._aprovados.add((papel, model_id))
-            return model_id
-        alternativa = None
-        if not pin_fixo:
-            alternativa = find_alternative(
-                papel, self.catalogo, self.disponiveis, self.politica, opostas, excluir=(model_id,)
-            )
-        if alternativa is not None:
-            self._emitir(papel, alternativa.id, DECISAO_SUBSTITUIDO, MOTIVO_MESMA_FAMILIA, subtarefa)
-            self._efetivos.setdefault(papel, set()).add(alternativa.id)
-            self._aprovados.add((papel, alternativa.id))
-            return alternativa.id
-        if self.modo == JUDGE_MODE_REQUIRED:
-            self._emitir(papel, model_id, DECISAO_REJEITADO, MOTIVO_MESMA_FAMILIA, subtarefa)
-            raise JudgeIndependenceError(
-                papel, model_id, familia,
-                _suggestion(self.politica, ((model_id, MOTIVO_MESMA_FAMILIA),)),
-            )
-        self._aceitar_conflito(papel, model_id, subtarefa, "despacho")
-        self._efetivos.setdefault(papel, set()).add(model_id)
-        self._aprovados.add((papel, model_id))
-        return model_id
-
     # --------------------------------------------------------- reserva do 429
 
     def check_fallback(self, papeis: Collection[str], primary_id: str, fallback_id: str) -> bool:
@@ -334,17 +263,11 @@ class JudgeIndependenceGuard:
             if familia is None or familia not in self._familias_retomada:
                 continue
             descartados = ((res.id, MOTIVO_MESMA_FAMILIA),)
-            if papel == "validator" and self.modo == JUDGE_MODE_REQUIRED:
+            if self.modo == JUDGE_MODE_REQUIRED:
                 raise NoEligibleModelError(
                     papel, self.politica, descartados, _suggestion(self.politica, descartados)
                 )
-            if papel == "validator":
-                self._aceitar_conflito(papel, res.id, None, "retomada")
-            else:
-                logger.warning(
-                    "Reviewer retomado na família de um modelo julgado da sessão original; conferido no despacho",
-                    extra={"role": papel, "modelo": res.id},
-                )
+            self._aceitar_conflito(papel, res.id, None, "retomada")
 
 
 def judged_families_from_session(payload: Mapping[str, Any]) -> set[str]:
@@ -359,7 +282,7 @@ def judged_families_from_session(payload: Mapping[str, Any]) -> set[str]:
         if (
             isinstance(event, Mapping)
             and event.get("papel") in JUDGED_ROLES
-            and event.get("decisao") in (DECISAO_ACEITO, DECISAO_SUBSTITUIDO, DECISAO_ACEITO_PREFERRED)
+            and event.get("decisao") in (DECISAO_ACEITO, DECISAO_ACEITO_PREFERRED)
             and event.get("familia")
         ):
             out.add(str(event["familia"]))
@@ -370,9 +293,7 @@ __all__ = [
     "DECISAO_ACEITO",
     "DECISAO_ACEITO_PREFERRED",
     "DECISAO_REJEITADO",
-    "DECISAO_SUBSTITUIDO",
     "EVENT_TYPE",
-    "JudgeIndependenceError",
     "JudgeIndependenceGuard",
     "judged_families_from_session",
 ]

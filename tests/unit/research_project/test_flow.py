@@ -21,6 +21,7 @@ from src.project_session import (
     ensure_confirmed_problem,
     resolve_project,
 )
+from tests.support.task_loop import run_tasks
 from tests.unit.research_project.test_projects import make_draft
 
 
@@ -244,7 +245,7 @@ class TestOrquestrador:
             output_manager=OutputManager(str(tmp_path / "out"), str(tmp_path / "logs")),
             knowledge_store_factory=InMemoryGraphStore,
         )
-        await orch.handle_request("p", [AgentTask(agent_id="a", prompt="p")],
+        await run_tasks(orch, "p", [AgentTask(agent_id="a", prompt="p")],
                                   project_id="01890000-0000-7000-8000-000000000001", project_context="CTX")
         payloads = [c.kwargs.get("payload", {}) for c in sm.update.call_args_list]
         assert any(p.get("project_id") == "01890000-0000-7000-8000-000000000001" for p in payloads)

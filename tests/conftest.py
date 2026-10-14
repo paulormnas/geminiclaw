@@ -339,7 +339,7 @@ def reset_egress_state(tmp_path_factory, monkeypatch):
     egress_gate.bind_gate_for_tests(None)
 
 
-_ROUTING_ENV_PREFIXES = ("RESEARCHER", "DEVELOPER", "REVIEWER", "SUMMARIZER", "VALIDATOR", "BASE", "PLANNER")
+_ROUTING_ENV_PREFIXES = ("RESEARCHER", "DEVELOPER", "SUMMARIZER", "VALIDATOR", "BASE", "PLANNER")
 _REMOVED_LLM_VARS = ("LLM_PROVIDER", "LLM_MODEL", "DEFAULT_MODEL", "AGENT_MODEL")
 
 

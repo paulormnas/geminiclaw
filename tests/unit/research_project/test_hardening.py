@@ -16,6 +16,7 @@ from src.knowledge.problem import parse_problem_draft
 from src.knowledge.provenance import Actor
 from src.orchestrator import AgentResult, AgentTask, Orchestrator
 from src.project_session import ProjectBinder, ProjectFlowError, resolve_project
+from tests.support.task_loop import run_tasks
 from tests.unit.research_project.test_flow import make_drafter, scripted
 from tests.unit.research_project.test_projects import make_draft
 
@@ -327,7 +328,7 @@ class TestOrquestradorProjeto:
     async def test_project_id_invalido_recusado(self) -> None:
         orch = Orchestrator(session_manager=MagicMock(), agent_runtime=MagicMock())
         with pytest.raises(projects.ProjectError):
-            await orch.handle_request("p", [AgentTask(agent_id="a", prompt="p")], project_id="../../x")
+            await run_tasks(orch, "p", [AgentTask(agent_id="a", prompt="p")], project_id="../../x")
 
     async def test_project_mode_no_payload(self) -> None:
         from src.session import Session
@@ -340,7 +341,7 @@ class TestOrquestradorProjeto:
         runtime.run = AsyncMock(return_value=AgentResult(agent_id="a", session_id="s1", status="success",
                                                          response={}, error=None))
         orch = Orchestrator(session_manager=sm, agent_runtime=runtime)
-        await orch.handle_request("p", [AgentTask(agent_id="a", prompt="p")], project_mode="sem_grafo")
+        await run_tasks(orch, "p", [AgentTask(agent_id="a", prompt="p")], project_mode="sem_grafo")
         payloads = [c.kwargs.get("payload", {}) for c in sm.update.call_args_list]
         assert any(p.get("project_mode") == "sem_grafo" and "project_id" not in p for p in payloads)
 

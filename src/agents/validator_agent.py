@@ -896,7 +896,7 @@ class ValidatorAgent:
         if validation_criteria:
             criteria_str = "\n".join(f"- {c}" for c in validation_criteria)
             system_prompt = (
-                f"Você é o Reviewer do {APP_NAME}. Sua função é avaliar se o resultado de uma subtarefa "
+                f"Você é o Validator do {APP_NAME}. Sua função é avaliar se o resultado de uma subtarefa "
                 "satisfaz os critérios de aceite definidos.\n"
                 "Regras de julgamento:\n"
                 "- A EVIDÊNCIA EM DISCO (caminho relativo, tamanho e começo do conteúdo) é a fonte de verdade; "

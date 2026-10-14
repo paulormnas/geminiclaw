@@ -47,14 +47,13 @@ _AGENT_SYNONYMS: dict[str, str] = {
     "researcher": "researcher",
     "pesquisador": "researcher",
     "research": "researcher",
-    "base": "base",
-    "summarizer": "summarizer",
-    "sumarizador": "summarizer",
-    "reviewer": "reviewer",
-    "revisor": "reviewer",
+    "base": "developer",
     "validator": "validator",
     "validador": "validator",
 }
+
+# Papéis internos ou removidos que uma subtarefa do plano não pode pedir (v18.6-remove-unused-agents).
+_NON_SUBTASK_AGENT_SYNONYMS: frozenset[str] = frozenset({"reviewer", "revisor", "summarizer", "sumarizador"})
 
 
 @dataclass(frozen=True)
@@ -178,7 +177,11 @@ def normalize_plan(raw: Any) -> NormalizedPlan:
         agent = task.get("agent_id")
         if isinstance(agent, str):
             canonical = _AGENT_SYNONYMS.get(_canonical_key(agent))
-            if canonical and canonical != agent:
+            if _canonical_key(agent) in _NON_SUBTASK_AGENT_SYNONYMS:
+                unrecoverable.append(
+                    f"papel de subtarefa inválido: '{agent}' (subtarefa '{label}'); use 'developer' ou 'researcher'."
+                )
+            elif canonical and canonical != agent:
                 task["agent_id"] = canonical
                 repairs.append(PlanRepair(label or None, "normalize_agent_id", f"{agent} -> {canonical}"))
             elif canonical is None:

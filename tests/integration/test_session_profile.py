@@ -16,6 +16,7 @@ from src.autonomous_loop import AutonomousLoop
 from src.cli import show_sessions
 from src.orchestrator import AgentResult, AgentTask, Orchestrator
 from src.session import Session
+from tests.support.task_loop import run_tasks
 
 
 def _make_session(agent_id: str, session_id: str, payload: dict | None = None) -> Session:
@@ -55,7 +56,7 @@ class TestOrchestratorModePropagation:
         mock_sm.create.side_effect = [_make_session("orchestrator", "sess_master"), _make_session("a0", "s0")]
 
         task = AgentTask(agent_id="developer", prompt="faz algo")
-        await orchestrator.handle_request("tarefa", [task], mode="auto")
+        await run_tasks(orchestrator, "tarefa", [task], mode="auto")
 
         assert captured["ctx"].mode == "auto"
 
@@ -66,7 +67,7 @@ class TestOrchestratorModePropagation:
         mock_sm.create.side_effect = [_make_session("orchestrator", "sess_master"), _make_session("a0", "s0")]
 
         task = AgentTask(agent_id="developer", prompt="faz algo")
-        await orchestrator.handle_request("tarefa", [task])
+        await run_tasks(orchestrator, "tarefa", [task])
 
         assert captured["ctx"].mode == SESSION_DEFAULT_MODE
 
@@ -75,7 +76,7 @@ class TestOrchestratorModePropagation:
         mock_sm.create.side_effect = [_make_session("orchestrator", "sess_master"), _make_session("a0", "s0")]
 
         task = AgentTask(agent_id="developer", prompt="faz algo")
-        await orchestrator.handle_request("tarefa", [task], mode="semi")
+        await run_tasks(orchestrator, "tarefa", [task], mode="semi")
 
         update_calls = mock_sm.update.call_args_list
         modes_persisted = [

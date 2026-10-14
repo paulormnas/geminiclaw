@@ -15,6 +15,7 @@ from src.autonomous_loop import AutonomousLoop
 from src.cli import convert_report
 from src.orchestrator import AgentResult, AgentTask, Orchestrator
 from src.session import Session
+from tests.support.task_loop import run_tasks
 
 
 def _make_session(session_id: str, payload: dict | None = None) -> Session:
@@ -90,7 +91,7 @@ class TestSessionMetadataGeneration:
         orchestrator = Orchestrator(session_manager=mock_sm, output_manager=output_manager, agent_runtime=mock_runtime)
 
         task = AgentTask(agent_id="developer", prompt="faz algo")
-        await orchestrator.handle_request("Reproduza a Tabela 3", [task])
+        await run_tasks(orchestrator, "Reproduza a Tabela 3", [task])
 
         metadata_path = tmp_path / "sess_master" / "session_metadata.json"
         assert metadata_path.exists()

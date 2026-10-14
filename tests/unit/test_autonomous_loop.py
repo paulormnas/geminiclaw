@@ -152,7 +152,7 @@ async def test_autonomous_loop_complex_path_fail_after_retries():
     assert orchestrator._execute_agent.call_count == 2 # 2 attempts
 
 @pytest.mark.asyncio
-async def test_autonomous_loop_reviewer_fail_then_success(mock_orchestrator, mock_telemetry):
+async def test_autonomous_loop_review_fail_then_success(mock_orchestrator, mock_telemetry):
     """Testa se uma falha na revisão causa retry da subtarefa.
 
     V18/usage-limits (design §2): retentativas da MESMA tarefa agora são contadas

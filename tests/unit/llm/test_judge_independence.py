@@ -13,7 +13,6 @@ import pytest
 from src.llm.availability import Availability
 from src.llm.catalog import load_catalog
 from src.llm.independence import (
-    JudgeIndependenceError,
     JudgeIndependenceGuard,
     judged_families_from_session,
 )
@@ -217,19 +216,11 @@ def test_dica_do_developer_na_familia_do_juiz(tmp_path):
     """Scenario: Dica do Developer na família do juiz."""
     document = doc({"developer": [GEMINI], "validator": [CLAUDE]})
     routing = make_routing(tmp_path, document)
-    model_id = routing.dispatch_model("developer", CLAUDE, subtarefa="eda")
+    model_id = routing.apply_hint("developer", CLAUDE, subtarefa="eda")
     assert model_id == GEMINI
     event = routing.guard.eventos[-1]
     assert event["decisao"] == "rejeitado" and event["motivo"] == "mesma_familia_julgamento"
     assert event["subtarefa"] == "eda" and event["papel"] == "developer" and event["familia"] == "claude"
-
-
-def test_dica_do_reviewer_na_familia_do_developer(tmp_path):
-    """Scenario: Dica do reviewer na família do Developer."""
-    document = doc({"developer": [GEMINI], "validator": [CLAUDE], "reviewer": [CLAUDE]})
-    routing = make_routing(tmp_path, document)
-    assert routing.apply_hint("reviewer", GEMINI, subtarefa="rev") == CLAUDE
-    assert routing.guard.eventos[-1]["decisao"] == "rejeitado"
 
 
 def test_dica_de_outra_familia_e_aceita_e_registrada(tmp_path):
@@ -280,51 +271,23 @@ def test_reserva_do_429_em_preferred_e_usada_com_aviso(tmp_path, monkeypatch):
     assert not routing.guard.atendida
 
 
-def _base_catalog() -> dict:
-    return doc({"developer": [CLAUDE], "validator": [GEMINI], "base": [GEMINI, HAIKU], "reviewer": [GEMINI]})
-
-
-def test_base_em_conflito_com_alternativa(tmp_path):
-    """Scenario: `base` em conflito com alternativa."""
-    routing = make_routing(tmp_path, _base_catalog())
-    # Na inicialização o base conserva o preferido (o conflito de base/reviewer é tratado no despacho).
-    assert routing.resolution("base").id == GEMINI and routing.resolution("validator").id == GEMINI
-    assert routing.dispatch_model("base", None, subtarefa="s1") == HAIKU
-    event = routing.guard.eventos[-1]
-    assert event["decisao"] == "substituido" and event["modelo"] == HAIKU
-    assert event["motivo"] == "mesma_familia_julgamento"
-    # O provedor aceita o modelo substituído sem nova conferência (ModelRouter chama apply_hint com ele).
-    assert routing.apply_hint("base", HAIKU) == HAIKU
-    assert len(routing.guard.eventos) == 1
-
-
-def test_base_em_conflito_sem_alternativa(tmp_path):
-    """Scenario: `base` em conflito sem alternativa (só a subtarefa falha)."""
-    document = doc({"developer": [CLAUDE], "validator": [GEMINI], "base": [GEMINI]})
+def test_base_nao_e_julgado_depois_da_v18_6(tmp_path):
+    """O `base` (papel interno) não entra na conferência: sem ponto de despacho e sem família proibida."""
+    document = doc({"developer": [CLAUDE], "validator": [GEMINI], "base": [GEMINI, HAIKU]})
     routing = make_routing(tmp_path, document)
-    assert routing.resolution("base").id == GEMINI and routing.resolution("validator").id == GEMINI
-    with pytest.raises(JudgeIndependenceError) as exc:
-        routing.dispatch_model("base", None, subtarefa="s1")
-    assert "mesma_familia_julgamento" in str(exc.value) and exc.value.sugestao
-    assert routing.guard.eventos[-1]["decisao"] == "rejeitado"
-    # A sessão continua: o developer segue sem erro.
-    assert routing.dispatch_model("developer", None, subtarefa="s2") == CLAUDE
-
-
-def test_base_em_conflito_em_preferred_roda(tmp_path):
-    document = doc({"developer": [CLAUDE], "validator": [GEMINI], "base": [GEMINI]})
-    routing = make_routing(tmp_path, document, modo="preferred")
-    assert routing.dispatch_model("base", None, subtarefa="s1") == GEMINI
-    assert routing.guard.eventos[-1]["decisao"] == "aceito_preferred"
+    assert routing.resolution("base").id == GEMINI
+    assert not hasattr(routing, "dispatch_model")
+    assert not hasattr(routing.guard, "check_dispatch")
+    assert routing.guard.eventos == []
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_falha_so_a_subtarefa(tmp_path, monkeypatch):
-    """Scenario: `base` em conflito sem alternativa (o orquestrador devolve erro só desta subtarefa)."""
+async def test_orchestrator_aplica_a_dica_sem_despacho_de_base(tmp_path):
+    """O orquestrador resolve o modelo da subtarefa por `apply_hint` (sem a conferência de `base`/`reviewer`)."""
     from src.llm.session import bind_session_routing
     from src.orchestrator import AgentTask, Orchestrator
 
-    document = doc({"developer": [CLAUDE], "validator": [GEMINI], "base": [GEMINI]})
+    document = doc({"developer": [CLAUDE], "validator": [GEMINI]})
     routing = make_routing(tmp_path, document)
     bind_session_routing(routing)
     orchestrator = Orchestrator.__new__(Orchestrator)
@@ -334,13 +297,15 @@ async def test_orchestrator_falha_so_a_subtarefa(tmp_path, monkeypatch):
     orchestrator.session_manager = MagicMock()
     orchestrator.session_manager.create.return_value = MagicMock(id="agent-session")
     orchestrator.output_manager = MagicMock(base_dir=tmp_path)
-    orchestrator.agent_runtime = MagicMock(run=AsyncMock())
+    orchestrator.agent_runtime = MagicMock(run=AsyncMock(side_effect=RuntimeError("parou aqui")))
     orchestrator._resumes = {}
-    task = AgentTask(agent_id="base", prompt="x", task_name="s1")
+    task = AgentTask(agent_id="developer", prompt="x", task_name="s1", preferred_model=GEMINI)
     with patch("src.orchestrator.get_telemetry", return_value=MagicMock()):
-        result = await orchestrator._execute_agent(task, None)
-    assert result.status == "error" and "mesma_familia_julgamento" in (result.error or "")
-    orchestrator.agent_runtime.run.assert_not_called()
+        try:
+            await orchestrator._execute_agent(task, None)
+        except Exception:  # noqa: BLE001 — o que importa é a decisão registrada antes da execução
+            pass
+    assert routing.guard.eventos[-1]["decisao"] == "rejeitado" and routing.guard.eventos[-1]["papel"] == "developer"
 
 
 # --- Registro --------------------------------------------------------------------------------------------------
@@ -405,7 +370,8 @@ def test_familias_julgadas_do_payload_incluem_eventos():
     payload = {
         "independencia_julgamento": {"developer": {"familia": "gemini"}},
         "eventos_independencia_julgamento": [
-            {"papel": "base", "decisao": "substituido", "familia": "claude"},
+            {"papel": "developer", "decisao": "aceito", "familia": "claude"},
+            {"papel": "base", "decisao": "aceito", "familia": "llama"},
             {"papel": "developer", "decisao": "rejeitado", "familia": "gpt"},
             {"papel": "reviewer", "decisao": "aceito", "familia": "qwen"},
         ],
@@ -438,11 +404,9 @@ async def test_orchestrator_confere_a_retomada_antes_de_criar_a_sessao(tmp_path)
 def test_catalogo_versionado_tem_uma_familia_de_cada_antes_do_local():
     """Scenario: Teste do catálogo."""
     catalog = load_catalog(registered_providers=REGISTERED, base_urls={}, local_path=Path("/nonexistent.yaml"))
-    for role in ("validator", "reviewer"):
-        families = [catalog.modelos[m].familia_modelo for m in catalog.papeis[role].preferencia]
-        first_local = families.index("qwen")
-        before = set(families[:first_local])
-        assert {"claude", "gemini", "gpt"} <= before, role
+    families = [catalog.modelos[m].familia_modelo for m in catalog.papeis["validator"].preferencia]
+    first_local = families.index("qwen")
+    assert {"claude", "gemini", "gpt"} <= set(families[:first_local])
 
 
 # --- Telemetria da revisão -------------------------------------------------------------------------------------
@@ -529,4 +493,4 @@ def test_avaliacao_de_comunicacao_usa_o_validator_para_o_modelo_da_revisao():
     from scripts.benchmark.communication import evaluate_events
 
     result = evaluate_events([], {}, None, {"validator": "google/x", "reviewer": "old/y"})
-    assert result["reviewer"]["model"] == "google/x"
+    assert result["revisao_subtarefa"]["model"] == "google/x"

@@ -9,6 +9,7 @@ from src.orchestrator import (
     Orchestrator,
 )
 from src.session import Session
+from tests.support.task_loop import run_tasks
 
 
 def _make_session(agent_id: str, session_id: str = "sess_r1") -> Session:
@@ -49,7 +50,7 @@ class TestResearcherInOrchestrator:
         )
 
         task = AgentTask(agent_id="researcher_1", prompt="Quem criou o Python?")
-        result = await orchestrator.handle_request("Quem criou o Python?", [task])
+        result = await run_tasks(orchestrator, "Quem criou o Python?", [task])
 
         assert result.total == 1
         assert result.succeeded == 1
@@ -86,7 +87,7 @@ class TestResearcherInOrchestrator:
             AgentTask(agent_id="researcher_1", prompt="pesquisar info"),
         ]
 
-        result = await orchestrator.handle_request("multi-agent", tasks)
+        result = await run_tasks(orchestrator, "multi-agent", tasks)
 
         assert result.total == 2
         assert result.succeeded == 2

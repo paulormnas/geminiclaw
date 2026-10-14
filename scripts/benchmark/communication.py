@@ -1,7 +1,7 @@
 """Avaliação pós-execução da comunicação entre agentes (``v16-agent-communication-eval``).
 
 Lê o que a sessão deixou (eventos do banco e pasta da sessão) e calcula: verdade determinística
-por subtarefa, matriz de confusão do revisor, taxa de resolução e laços de reprovação, reparos do
+por subtarefa, matriz de confusão da revisão de subtarefa, taxa de resolução e laços de reprovação, reparos do
 planejador e, opcionalmente, notas de um juiz LLM sobre as perguntas de ``ask_researcher``
 (``scripts/benchmark/comm_judge.py``). Nada roda dentro da sessão e nada é escrito nela.
 
@@ -217,10 +217,10 @@ def compute_truth(
 
 
 # --------------------------------------------------------------------------------------------
-# Revisor contra a verdade
+# Revisão de subtarefa contra a verdade
 # --------------------------------------------------------------------------------------------
 
-def reviewer_confusion(pairs: list[tuple[bool, Verdict]]) -> dict[str, Any]:
+def review_confusion(pairs: list[tuple[bool, Verdict]]) -> dict[str, Any]:
     """Matriz de confusão do revisor.
 
     Args:
@@ -409,19 +409,20 @@ def evaluate_events(
         pairs.append((approved, truth.verdict))
         if truth.verdict != "indeterminate" and approved != (truth.verdict == "fulfilled"):
             mismatches.append({
-                "task_name": name, "attempt": truth.attempt, "reviewer_approved": approved,
+                "task_name": name, "attempt": truth.attempt, "review_approved": approved,
                 "truth": truth.verdict, "signature": _signature(p),
                 "criteria": [c.subject for c in truth.checks if not c.ok],
             })
 
     plan_seq, subtask_seq = build_sequences(events)
-    # ADR 020 §6: a revisão de subtarefa é registrada como `validator`; `reviewer` cobre sessões anteriores.
-    reviewer_model = models_by_role.get("validator") or models_by_role.get("reviewer")
+    # ADR 020 §6: a revisão de subtarefa é registrada como `validator`; `reviewer` cobre sessões gravadas antes da
+    # V18.6 (os eventos `subtask_review` são lidos pelo tipo, qualquer que seja o `agent_id`).
+    review_model = models_by_role.get("validator") or models_by_role.get("reviewer")
     return {
-        "reviewer": {"model": reviewer_model, "confusion": reviewer_confusion(pairs),
+        "revisao_subtarefa": {"model": review_model, "confusion": review_confusion(pairs),
                      "reviews": len(pairs), "mismatches": mismatches},
         "resolution": {"plan": resolution_stats(plan_seq), "subtask": resolution_stats(subtask_seq),
-                       "loops": {"validator": loop_stats(plan_seq), "reviewer": loop_stats(subtask_seq)}},
+                       "loops": {"validator": loop_stats(plan_seq), "revisao_subtarefa": loop_stats(subtask_seq)}},
         "planner_repairs": {"model": models_by_role.get("researcher"), **planner_repairs(events)},
     }
 

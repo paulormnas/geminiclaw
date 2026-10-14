@@ -229,7 +229,7 @@ def test_destino_no_no_nao_conta(gate, memory_log, local_node):
 
 
 def test_mesmo_trecho_para_outro_destino_conta_de_novo(gate, memory_log, third_party):
-    outro = make_dest(raw=False, role="reviewer", provider="anthropic", model="claude")
+    outro = make_dest(raw=False, role="validator", provider="anthropic", model="claude")
     msgs = [_exec_msg("saida unica")]
     gate.prepare_llm(msgs, None, third_party)
     gate.prepare_llm(msgs, None, outro)

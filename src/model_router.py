@@ -58,7 +58,7 @@ class ModelRouter:
         """Retorna uma instância de LLMProvider para o papel, conforme o mapa resolvido da sessão.
 
         Args:
-            role: Nome do papel (``researcher``, ``developer``, ``validator``, ``reviewer``,
+            role: Nome do papel (``researcher``, ``developer``, ``validator``,
                 ``summarizer``, ``base``; ``planner`` é alias de ``researcher``). ``None``
                 delega para ``researcher``.
             model: Dica ``provedor/modelo`` (ex.: ``AgentTask.preferred_model`` do plano).

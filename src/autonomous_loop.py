@@ -724,14 +724,12 @@ class AutonomousLoop:
         Roteia com base em `task.agent_id`:
         - 'developer' (ou código/dados) -> developer
         - 'researcher' (pesquisa/planejamento) -> researcher
-        - 'base' legado -> redirecionado para 'developer'
         - outros papéis conhecidos (AGENT_IDS) são preservados
+        - papel desconhecido -> palavras-chave do prompt (subtarefas criadas fora do normalizador)
         """
         from src.orchestrator import AGENT_IDS, AgentTask
         raw_agent = (task.agent_id or "developer").lower()
-        if raw_agent == "base":
-            agent_id = "developer"
-        elif raw_agent in AGENT_IDS:
+        if raw_agent in AGENT_IDS:
             agent_id = raw_agent
         else:
             p_lower = (task.prompt or "").lower()
@@ -1408,7 +1406,7 @@ class AutonomousLoop:
 
                     if result.status == "success":
                         success = True
-                        # V6.3: Executa Reviewer se habilitado e houver critérios
+                        # V6.3: executa a revisão da subtarefa se habilitado e houver critérios
                         review = None
                         from src.config import REVIEW_ENABLED, REVIEW_MODE
                         if REVIEW_ENABLED and REVIEW_MODE == "per_subtask" and task.validation_criteria:
@@ -2383,7 +2381,7 @@ class AutonomousLoop:
             Dicionário com o status da revisão e feedback.
         """
 
-        # V14.2: Reviewer executado via corrotina ValidatorAgent (sem container Docker)
+        # V14.2: revisão de subtarefa executada via corrotina ValidatorAgent (sem container Docker)
         output_manager = self.orchestrator.output_manager
         # `list_artifacts` devolve dicts só de `artifacts/`; os scripts gravam em `<subtarefa>/`. O
         # revisor recebe nomes e caminhos e varre a pasta inteira da sessão (`output_dir`).
@@ -2410,7 +2408,7 @@ class AutonomousLoop:
             get_telemetry().record_agent_event(
                 execution_id=bound_execution_id() or master_session_id,
                 session_id=master_session_id,
-                agent_id="reviewer",
+                agent_id="validator",
                 event_type="subtask_review",
                 target_agent_id=task.agent_id,
                 task_name=task.task_name or None,

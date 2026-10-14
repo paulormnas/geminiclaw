@@ -38,7 +38,7 @@ class AgentContext:
             de uma mesma execução orquestrada).
         agent_session_id: ID da sessão específica deste agente/subtarefa.
         agent_id: Papel do agente (``researcher``, ``developer``,
-            ``summarizer``, ``reviewer``, ``base``, ...).
+            ``summarizer``, ``base``, ...).
         task_name: Nome da subtarefa no plano (snake_case), quando houver.
         mode: Modo de operação da sessão (``SessionMode``: assisted|semi|auto).
         output_dir: Diretório absoluto e resolvido de outputs da sessão

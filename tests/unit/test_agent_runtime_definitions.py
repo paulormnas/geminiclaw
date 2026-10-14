@@ -21,7 +21,7 @@ class TestAgentDefinitions:
     """Cobre o Requirement 'Agentes executam em processo no host'."""
 
     def test_known_roles_resolve(self) -> None:
-        for role in ("base", "developer", "researcher", "summarizer", "reviewer"):
+        for role in ("base", "developer", "researcher", "summarizer", "curator"):
             definition = get_agent_definition(role)
             assert definition.agent_id == role
             assert definition.role == role

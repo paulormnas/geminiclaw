@@ -9,6 +9,7 @@ import pytest
 from src.llm.allocation import allocation_banner_lines, build_allocation_profile, current_allocation
 from src.llm.session import bind_session_routing, build_session_routing
 from src.model_router import ModelRouter
+from tests.support.task_loop import run_tasks
 
 pytestmark = pytest.mark.unit
 
@@ -81,7 +82,7 @@ async def test_orquestrador_grava_o_perfil_antes_do_primeiro_envio(nuvem):
 
     with patch.object(orchestrator, "_execute_agent", AsyncMock(side_effect=RuntimeError("parou"))):
         with pytest.raises(RuntimeError, match="parou"):
-            await orchestrator.handle_request("teste", [AgentTask(agent_id="developer", prompt="p")])
+            await run_tasks(orchestrator, "teste", [AgentTask(agent_id="developer", prompt="p")])
 
     payload = session_manager.update.call_args_list[0].kwargs["payload"]
     assert payload["allocation_profile"]["papeis"]["developer"]["provedor_modelo"] == "google/gemini-3.8-flash"

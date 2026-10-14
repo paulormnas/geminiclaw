@@ -34,6 +34,7 @@ from src.knowledge.projects import create_project
 from src.orchestrator import AgentResult, AgentTask, Orchestrator
 from src.output_manager import OutputManager
 from src.session import Session
+from tests.support.task_loop import run_tasks
 
 SESSION = "sessao-rev"
 
@@ -324,7 +325,7 @@ async def test_handle_request_sobrevive_a_fila_inutilizavel(tmp_path):
     (om.base_dir / "s1" / ".knowledge_pending.lock").mkdir()
     orch = Orchestrator(session_manager=sm, output_manager=om, agent_runtime=runtime,
                         knowledge_store_factory=_Down())
-    result = await orch.handle_request("p", [AgentTask(agent_id="a", prompt="p")],
+    result = await run_tasks(orch, "p", [AgentTask(agent_id="a", prompt="p")],
                                        project_id="01890000-0000-7000-8000-000000000001")
     assert result.succeeded == 1
 
@@ -344,7 +345,7 @@ async def test_fim_de_sessao_pelo_orquestrador_grava_motivo_parada(tmp_path, sto
     om = OutputManager(str(tmp_path / "o"), str(tmp_path / "l"))
     orch = Orchestrator(session_manager=sm, output_manager=om, agent_runtime=runtime,
                         knowledge_store_factory=lambda: store)
-    await orch.handle_request("p", [AgentTask(agent_id="a", prompt="p")], project_id=pid)
+    await run_tasks(orch, "p", [AgentTask(agent_id="a", prompt="p")], project_id=pid)
     assert _nodes(store, "Sessao")[0].properties["motivo_parada"] == "limite_tokens"
 
 

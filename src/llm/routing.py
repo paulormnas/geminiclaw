@@ -20,7 +20,7 @@ posição inferior nunca substitui o da primeira posição com elegível, e o pi
 
 Independência do julgamento (ADR 020; v18.6-validator-independence): ``familias_proibidas`` descarta, com o motivo
 ``mesma_familia_julgamento``, os modelos cuja ``familia_modelo`` coincide com a de um modelo do outro grupo
-(juízes: ``validator``/``reviewer``; julgados: ``developer``/``base``), mesmo em posição inferior da preferência.
+(juiz: ``validator``; julgado: ``developer``), mesmo em posição inferior da preferência.
 ``resolve_session`` resolve na ordem: pins, julgados, demais papéis e, por último, os juízes sem pin.
 
 Este módulo também é o único lugar que lista as variáveis de ambiente removidas
@@ -50,9 +50,9 @@ MOTIVO_POLITICA = "politica"
 MOTIVO_MESMA_FAMILIA = "mesma_familia_julgamento"
 
 # Independência do julgamento (ADR 020 §1): juízes não podem compartilhar família com julgados em uso.
-JUDGE_ROLES: tuple[str, ...] = ("validator", "reviewer")
-JUDGED_ROLES: tuple[str, ...] = ("developer", "base")
-# O par exigido na inicialização (ADR 020 §4); reviewer/base são conferidos no despacho.
+JUDGE_ROLES: tuple[str, ...] = ("validator",)
+JUDGED_ROLES: tuple[str, ...] = ("developer",)
+# O par exigido na inicialização (ADR 020 §4).
 PAIR_ROLES: tuple[str, ...] = ("validator", "developer")
 JUDGE_MODE_REQUIRED = "required"
 JUDGE_MODE_PREFERRED = "preferred"
@@ -67,7 +67,10 @@ VALIDATOR_ROLE = "validator"
 
 # Variáveis que deixaram de existir (ADR 017, Consequências): ignoradas com um WARNING único.
 REMOVED_ENV_VARS = ("LLM_PROVIDER", "LLM_MODEL", "DEFAULT_MODEL", "AGENT_MODEL")
+# Variáveis de papéis removidos (v18.6-remove-unused-agents): ignoradas com um WARNING único.
+REMOVED_ROLE_ENV_VARS = ("REVIEWER_MODEL", "REVIEWER_PROVIDER")
 _removed_warned = False
+_removed_role_warned = False
 
 
 class RoutingError(RuntimeError):
@@ -370,30 +373,15 @@ def resolve_session(
     def one(role: str) -> None:
         if role in JUDGE_ROLES:
             forbidden = families(JUDGED_ROLES) if check else set()
-            counterpart = "developer"
         elif role in JUDGED_ROLES:
             forbidden = families(JUDGE_ROLES) if check else set()
-            counterpart = "validator"
         else:
-            forbidden, counterpart = set(), ""
-        hard = families((counterpart,)) if counterpart else set()
-        soft = forbidden - hard
+            forbidden = set()
         try:
-            if role in PAIR_ROLES and soft:
-                # Evita todas as famílias; só a do par é exigência (reviewer/base são conferidos no despacho).
-                try:
-                    resolved[role] = resolve(
-                        role, catalogo, disponiveis, politica, pins, routing, authors(), forbidden, False
-                    )
-                except (NoEligibleModelError, PinError):
-                    resolved[role] = resolve(
-                        role, catalogo, disponiveis, politica, pins, routing, authors(), hard, preferred
-                    )
-            else:
-                resolved[role] = resolve(
-                    role, catalogo, disponiveis, politica, pins, routing, authors(), forbidden,
-                    preferred if role in PAIR_ROLES else True,
-                )
+            resolved[role] = resolve(
+                role, catalogo, disponiveis, politica, pins, routing, authors(), forbidden,
+                preferred if role in PAIR_ROLES else True,
+            )
         except (NoEligibleModelError, PinError) as exc:
             if role in OPTIONAL_ROLES:
                 logger.warning(
@@ -430,32 +418,6 @@ def resolve_session(
         )
         raise merged
     return {role: resolved[role] for role in catalogo.papeis if role in resolved}
-
-
-def find_alternative(
-    papel: str,
-    catalogo: Catalog,
-    disponiveis: Mapping[str, Availability],
-    politica: str,
-    familias_proibidas: Collection[str],
-    excluir: Collection[str] = (),
-) -> ModelEntry | None:
-    """Próximo modelo elegível do papel, na ordem de preferência, de família fora de ``familias_proibidas``.
-
-    Usado no despacho de ``reviewer``/``base`` (ADR 020 §4): a independência vence a posição na preferência.
-    """
-    role = catalogo.normalize_role(papel)
-    spec = catalogo.papeis[role]
-    forbidden = set(familias_proibidas)
-    for model_id in spec.preferencia:
-        if model_id in excluir:
-            continue
-        entry = catalogo.modelos[model_id]
-        if entry.familia_modelo in forbidden:
-            continue
-        if _discard_reason(entry, spec.requisitos, disponiveis, politica) is None:
-            return entry
-    return None
 
 
 def validate_hint(
@@ -504,13 +466,23 @@ def warn_removed_variables(env: Mapping[str, str] | None = None) -> list[str]:
             "(src/llm/catalog.yaml) e {PAPEL}_MODEL=provedor/modelo",
             extra={"variaveis": found},
         )
-    return found
+    global _removed_role_warned
+    found_roles = [name for name in REMOVED_ROLE_ENV_VARS if environ.get(name)]
+    if found_roles and not _removed_role_warned:
+        _removed_role_warned = True
+        logger.warning(
+            "O papel reviewer foi removido na V18.6 (a revisão de subtarefa é do validator): as variáveis "
+            "REVIEWER_MODEL e REVIEWER_PROVIDER são ignoradas",
+            extra={"variaveis": found_roles},
+        )
+    return found + found_roles
 
 
 def reset_removed_variables_warning() -> None:
     """Rearma o aviso único (uso em testes)."""
-    global _removed_warned
+    global _removed_warned, _removed_role_warned
     _removed_warned = False
+    _removed_role_warned = False
 
 
 def read_pins(

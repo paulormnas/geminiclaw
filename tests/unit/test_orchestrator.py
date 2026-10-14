@@ -16,6 +16,7 @@ from src.orchestrator import (
     OrchestratorResult,
 )
 from src.session import Session
+from tests.support.task_loop import run_tasks
 
 
 def _make_session(agent_id: str, session_id: str = "sess_123") -> Session:
@@ -64,7 +65,7 @@ class TestOrchestratorSingleAgent:
         mock_sm.create.side_effect = [_make_session("orchestrator", "sess_master"), _make_session("agent_1", "sess_1")]
         runtime.run.return_value = _make_agent_result("agent_1", "sess_1", response={"answer": "42"})
 
-        result = await orchestrator.handle_request("Olá", [AgentTask(agent_id="agent_1", prompt="Olá")])
+        result = await run_tasks(orchestrator, "Olá", [AgentTask(agent_id="agent_1", prompt="Olá")])
 
         assert result.total == 1
         assert result.succeeded == 1
@@ -109,7 +110,7 @@ class TestOrchestratorMultipleAgents:
         ]
 
         tasks = [AgentTask(agent_id=f"a{i}", prompt=f"prompt_{i}") for i in range(3)]
-        result = await orchestrator.handle_request("multi", tasks)
+        result = await run_tasks(orchestrator, "multi", tasks)
 
         assert result.total == 3
         assert result.succeeded == 3
@@ -135,7 +136,7 @@ class TestOrchestratorPartialFailure:
         ]
 
         tasks = [AgentTask(agent_id=f"a{i}", prompt=f"p{i}") for i in range(3)]
-        result = await orchestrator.handle_request("partial", tasks)
+        result = await run_tasks(orchestrator, "partial", tasks)
 
         assert result.total == 3
         assert result.succeeded == 2
@@ -148,7 +149,7 @@ class TestOrchestratorPartialFailure:
         mock_sm.create.side_effect = [_make_session("orchestrator", "sess_master"), _make_session("a1", "s1")]
         runtime.run.return_value = _make_agent_result("a1", "s1", status="error", error="Provider unavailable")
 
-        result = await orchestrator.handle_request("fail", [AgentTask(agent_id="a1", prompt="test")])
+        result = await run_tasks(orchestrator, "fail", [AgentTask(agent_id="a1", prompt="test")])
 
         assert result.total == 1
         assert result.failed == 1
@@ -171,8 +172,7 @@ class TestOrchestratorResultCounts:
             _make_agent_result(f"a{i}", f"s{i}", status="error", error="falha") for i in range(2)
         ]
 
-        result = await orchestrator.handle_request(
-            "all_fail", [AgentTask(agent_id=f"a{i}", prompt="p") for i in range(2)]
+        result = await run_tasks(orchestrator, "all_fail", [AgentTask(agent_id=f"a{i}", prompt="p") for i in range(2)]
         )
 
         assert result.total == 2
@@ -185,7 +185,7 @@ class TestOrchestratorResultCounts:
         mock_sm.create.side_effect = [_make_session("orchestrator", "sess_master"), _make_session("a1", "s1")]
         runtime.run.return_value = _make_agent_result("a1", "s1", status="timeout", error="Timeout!")
 
-        result = await orchestrator.handle_request("timeout", [AgentTask(agent_id="a1", prompt="test")])
+        result = await run_tasks(orchestrator, "timeout", [AgentTask(agent_id="a1", prompt="test")])
 
         assert result.results[0].status == "timeout"
         assert result.results[0].error is not None
@@ -202,7 +202,7 @@ class TestOrchestratorCleanup:
         mock_sm.create.return_value = _make_session("a1", "sess_cleanup")
         runtime.run.return_value = _make_agent_result("a1", "sess_cleanup", response={"ok": True})
 
-        await orchestrator.handle_request("cleanup", [AgentTask(agent_id="a1", prompt="test")])
+        await run_tasks(orchestrator, "cleanup", [AgentTask(agent_id="a1", prompt="test")])
 
         # close() é chamado duas vezes: uma para o agente e outra para a master session
         assert mock_sm.close.call_count == 2
@@ -214,7 +214,7 @@ class TestOrchestratorCleanup:
         mock_sm.create.return_value = _make_session("a1", "sess_err")
         runtime.run.return_value = _make_agent_result("a1", "sess_err", status="error", error="falha")
 
-        await orchestrator.handle_request("error_cleanup", [AgentTask(agent_id="a1", prompt="test")])
+        await run_tasks(orchestrator, "error_cleanup", [AgentTask(agent_id="a1", prompt="test")])
 
         assert mock_sm.close.call_count == 2
         mock_sm.close.assert_any_call("sess_err")
@@ -249,7 +249,7 @@ class TestOrchestratorInProcessRuntime:
         runtime.run.return_value = _make_agent_result("a1", "s1", response={"text": "ok"})
 
         task = AgentTask(agent_id="a1", prompt="hello")
-        result = await orchestrator.handle_request("inprocess test", [task])
+        result = await run_tasks(orchestrator, "inprocess test", [task])
 
         assert result.succeeded == 1
         assert result.results[0].response == {"text": "ok"}
@@ -267,7 +267,7 @@ class TestOrchestratorInProcessRuntime:
         mock_sm.create.side_effect = [_make_session("orchestrator", "sess_master"), _make_session("a1", "s1")]
         runtime.run.return_value = _make_agent_result("a1", "s1", status="error", error="falha simulada")
 
-        result = await orchestrator.handle_request("inprocess fail", [AgentTask(agent_id="a1", prompt="hello")])
+        result = await run_tasks(orchestrator, "inprocess fail", [AgentTask(agent_id="a1", prompt="hello")])
 
         assert result.failed == 1
         assert result.results[0].status == "error"
@@ -299,7 +299,7 @@ class TestOrchestratorInProcessRuntime:
 
         runtime.run.side_effect = fake_run
 
-        await orchestrator.handle_request("ask_researcher wiring", [AgentTask(agent_id="a1", prompt="hello")])
+        await run_tasks(orchestrator, "ask_researcher wiring", [AgentTask(agent_id="a1", prompt="hello")])
 
         ctx = captured_ctx["ctx"]
         assert ctx.ask_researcher is not None

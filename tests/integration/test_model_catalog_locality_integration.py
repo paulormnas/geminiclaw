@@ -31,7 +31,7 @@ def test_catalogo_versionado_real_resolve_e_serializa_o_perfil(tmp_path):
     profile = build_allocation_profile(routing)
 
     json.loads(json.dumps(profile))  # cabe no JSONB da sessão
-    assert set(profile["papeis"]) >= {"researcher", "developer", "validator", "summarizer", "reviewer", "base"}
+    assert set(profile["papeis"]) >= {"researcher", "developer", "validator", "summarizer", "base"}
     for entry in profile["papeis"].values():
         assert entry["familia_modelo"]
         if entry["trust"] == "third_party":

@@ -169,7 +169,7 @@ tempo, custo, acurácia validada e subtarefas aprovadas, e a contagem por motivo
 
 ### Requirement: Juiz declarado por combinação
 _Origem: [`v18.6-benchmark-harness`](../../changes/archive/v18.6-benchmark-harness/proposal.md)_
-O runner SHALL não expandir o pin `*` para os papéis `validator` e `reviewer`, SHALL recusar a
+O runner SHALL não expandir o pin `*` para o papel `validator`, SHALL recusar a
 combinação cujo `validator` não está declarado ou tem a família do `developer`, salvo quando marcada
 com `"independencia_julgamento": "off"`, e SHALL registrar a marca no resultado
 (ADR 020 §7).

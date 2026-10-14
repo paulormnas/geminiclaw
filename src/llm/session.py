@@ -73,7 +73,7 @@ class SessionRouting:
         if not hint or hint == resolved.id:
             return resolved.id
         if self.guard is not None and self.guard.is_approved(resolved.papel, hint):
-            return hint  # já conferida (dica aceita ou substituição do despacho)
+            return hint  # já conferida (dica aceita)
         if resolved.origem != "preferencia":
             logger.warning(
                 "Dica de modelo do plano ignorada: o papel tem pin do pesquisador",
@@ -86,22 +86,6 @@ class SessionRouting:
         if self.guard is not None:
             return self.guard.check_hint(resolved.papel, resolved.id, accepted, subtarefa)
         return accepted
-
-    def dispatch_model(self, papel: str, hint: str | None, *, subtarefa: str | None = None) -> str:
-        """Modelo efetivo de uma subtarefa no despacho: dica conferida e, para ``reviewer``/``base``, a independência.
-
-        Raises:
-            JudgeIndependenceError: ``required`` sem alternativa de outra família (só esta subtarefa falha).
-            ValueError: Papel fora do catálogo.
-        """
-        resolved = self.resolution(papel)
-        model = self.apply_hint(papel, hint, subtarefa=subtarefa)
-        if self.guard is not None and model == resolved.id:
-            model = self.guard.check_dispatch(
-                resolved.papel, model, subtarefa,
-                pin_fixo=resolved.origem != "preferencia" and self.modo == ROUTING_STRICT,
-            )
-        return model
 
     def fallback_for(self, resolved_id: str) -> str | None:
         """Modelo de fallback do Google no 429, se aceito (ADR 017 §6, design §4).

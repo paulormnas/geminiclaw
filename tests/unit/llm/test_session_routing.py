@@ -16,6 +16,7 @@ from src.llm.session import (
     get_catalog,
 )
 from src.model_router import ModelRouter
+from tests.support.task_loop import run_tasks
 
 pytestmark = pytest.mark.unit
 
@@ -44,7 +45,7 @@ async def test_mapa_no_payload(nuvem):
     payload = routing.payload()
 
     assert set(payload["papeis"]) == {
-        "researcher", "developer", "reviewer", "summarizer", "validator", "curator", "base",
+        "researcher", "developer", "summarizer", "validator", "curator", "base",
     }
     for entry in payload["papeis"].values():
         assert set(entry) == {"id", "trust", "origem"}
@@ -72,7 +73,7 @@ async def test_handle_request_grava_llm_routing_no_payload_da_sessao(nuvem):
 
     with patch.object(orchestrator, "_execute_agent", AsyncMock(side_effect=RuntimeError("parou"))):
         with pytest.raises(RuntimeError, match="parou"):
-            await orchestrator.handle_request("teste", [AgentTask(agent_id="developer", prompt="p")])
+            await run_tasks(orchestrator, "teste", [AgentTask(agent_id="developer", prompt="p")])
 
     first_update = session_manager.update.call_args_list[0]
     payload = first_update.kwargs["payload"]
@@ -91,7 +92,7 @@ async def test_sessao_nao_comeca_sem_modelo_elegivel(monkeypatch):
     orchestrator = Orchestrator(session_manager=session_manager, agent_runtime=MagicMock())
 
     with pytest.raises(NoEligibleModelError) as exc:
-        await orchestrator.handle_request("teste", [AgentTask(agent_id="developer", prompt="p")])
+        await run_tasks(orchestrator, "teste", [AgentTask(agent_id="developer", prompt="p")])
 
     assert "LLM_DATA_POLICY=third_party_allowed" in str(exc.value)
     session_manager.create.assert_not_called()
@@ -270,7 +271,7 @@ async def test_session_start_registra_catalog_hash_na_telemetria(nuvem):
     with patch("src.orchestrator.get_telemetry", return_value=telemetry), \
          patch.object(orchestrator, "_execute_agent", AsyncMock(side_effect=RuntimeError("parou"))):
         with pytest.raises(RuntimeError, match="parou"):
-            await orchestrator.handle_request("teste", [AgentTask(agent_id="developer", prompt="p")])
+            await run_tasks(orchestrator, "teste", [AgentTask(agent_id="developer", prompt="p")])
 
     calls = telemetry.record_agent_event.call_args_list
     events = [c.kwargs for c in calls if c.kwargs.get("event_type") == "session_start"]

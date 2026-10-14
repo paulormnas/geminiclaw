@@ -33,7 +33,7 @@ logger = get_logger(__name__)
 CATALOG_PATH = Path(__file__).with_name("catalog.yaml")
 DEFAULT_LOCAL_PATH = Path(__file__).with_name("catalog.local.yaml")
 
-REQUIRED_ROLES: tuple[str, ...] = ("researcher", "developer", "reviewer", "summarizer", "validator", "base")
+REQUIRED_ROLES: tuple[str, ...] = ("researcher", "developer", "summarizer", "validator", "base")
 # Papéis que não impedem a sessão quando não há modelo elegível (a resolução os omite e o papel fica desligado): o
 # Curator (v17-curator-agent) nunca pode derrubar uma sessão (ADR 014 §4).
 OPTIONAL_ROLES: tuple[str, ...] = ("curator",)
@@ -50,6 +50,7 @@ _MODEL_REQUIRED_KEYS = {
 }
 _MODEL_KEYS = _MODEL_REQUIRED_KEYS | {"localidade", "aceita_dados_brutos"}
 _FAMILY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+REMOVED_ROLES: dict[str, str] = {"reviewer": "papel `reviewer` removido em V18.6 (v18.6-remove-unused-agents)"}
 _ROLE_KEYS = {"requisitos", "preferencia"}
 _REQUIREMENT_KEYS = {"ferramentas", "saida_estruturada", "janela_contexto_min"}
 
@@ -274,6 +275,8 @@ def _parse_roles(raw_roles: Any, source: str, models: Mapping[str, ModelEntry]) 
     roles: dict[str, RoleSpec] = {}
     for name, spec in raw_roles.items():
         path = f"papeis.{name}"
+        if name in REMOVED_ROLES:
+            raise _fail(source, path, REMOVED_ROLES[name])
         if not isinstance(spec, dict):
             raise _fail(source, path, "precisa ser um mapeamento")
         _check_keys(spec, _ROLE_KEYS, source, path)
@@ -387,6 +390,9 @@ def load_catalog(
         local_data, local_raw = _load_yaml(local_file)
         local_source = str(local_file)
         if "papeis" in local_data:
+            removed = [r for r in REMOVED_ROLES if isinstance(local_data["papeis"], dict) and r in local_data["papeis"]]
+            if removed:
+                raise _fail(local_source, f"papeis.{removed[0]}", REMOVED_ROLES[removed[0]])
             raise _fail(local_source, "papeis", "o catálogo local só pode ter a chave 'modelos'")
         _check_keys(local_data, _LOCAL_KEYS, local_source, "")
         local_models = _parse_models(local_data.get("modelos", []), local_source, registered, seen)

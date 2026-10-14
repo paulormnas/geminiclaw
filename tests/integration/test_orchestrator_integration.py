@@ -7,6 +7,7 @@ import pytest
 from src.orchestrator import AgentResult, AgentTask, Orchestrator
 from src.output_manager import OutputManager
 from src.session import SessionManager
+from tests.support.task_loop import run_tasks
 
 
 @pytest.mark.integration
@@ -46,7 +47,7 @@ async def test_orchestrator_single_agent_flow() -> None:
         )
 
         task = AgentTask(agent_id="ag1", prompt="Qual é a resposta para tudo?")
-        result = await orchestrator.handle_request("Qual é a resposta para tudo?", [task])
+        result = await run_tasks(orchestrator, "Qual é a resposta para tudo?", [task])
 
         assert result.total == 1
         assert result.succeeded == 1

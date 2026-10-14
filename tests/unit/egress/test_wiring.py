@@ -435,7 +435,7 @@ def test_roteador_devolve_sempre_provedor_envolvido():
     from src.model_router import ModelRouter
 
     ModelRouter.clear_cache()
-    for role in ("researcher", "developer", "validator", "reviewer", "summarizer", "base", "planner"):
+    for role in ("researcher", "developer", "validator", "summarizer", "base", "planner"):
         assert isinstance(ModelRouter.get_provider(role), GatedProvider), role
     from src.llm.factory import get_provider
 

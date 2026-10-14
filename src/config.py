@@ -458,9 +458,11 @@ MAX_RETRY_PER_SUBTASK = SESSION_MAX_TASK_RETRIES
 # Para qwen3:8b com 8192 tokens, 150 linhas de Python cabem com espaço para o restante.
 MAX_CODE_CONTEXT_LINES = int(get_env("MAX_CODE_CONTEXT_LINES", default="150"))
 
-# Reviewer (V6.3)
+# Revisão de subtarefa pelo Validator (V6.3)
 REVIEW_ENABLED = get_env_bool("REVIEW_ENABLED", default=True)
-REVIEW_MODE = get_env("REVIEW_MODE", default="per_subtask") # per_subtask | end_only | disabled
+REVIEW_MODE = get_env("REVIEW_MODE", default="per_subtask") # per_subtask | disabled
+if REVIEW_MODE not in ("per_subtask", "disabled"):
+    raise ValueError(f"REVIEW_MODE inválido: '{REVIEW_MODE}'. Valores aceitos: per_subtask, disabled.")
 
 # Context Compression (V6.5)
 CONTEXT_COMPRESSION_MODE = get_env("CONTEXT_COMPRESSION_MODE", default="truncate") # truncate | summarize

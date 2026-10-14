@@ -151,7 +151,7 @@ SHALL preferir candidato de provedor diferente do `developer` e do `researcher`.
 avaliação com erro explícito quando não houver candidato válido.
 
 #### Scenario: Seleção entre os demais papéis
-- **GIVEN** `developer` e `researcher` em `google/gemini-3.8-flash` e `reviewer` em
+- **GIVEN** `developer` e `researcher` em `google/gemini-3.8-flash` e `validator` em
   `google/gemini-3.1-flash-lite`
 - **WHEN** o juiz é selecionado
 - **THEN** o escolhido é `google/gemini-3.1-flash-lite` e `judge.excluded` lista o modelo do

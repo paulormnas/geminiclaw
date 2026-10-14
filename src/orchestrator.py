@@ -43,7 +43,6 @@ from src.human_gate import HumanGate
 from src.knowledge.hypotheses import PlanExtras, split_plan
 from src.knowledge.suggestions import SuggestionError
 from src.llm.allocation import build_allocation_profile
-from src.llm.independence import JudgeIndependenceError
 from src.llm.metering import bind_execution, bound_execution_id
 from src.llm.session import SessionRouting, bind_session_routing, build_session_routing, get_session_routing
 from src.llm.vision import VisionConfigError
@@ -72,13 +71,7 @@ logger = get_logger(__name__)
 
 # Papéis de agente que uma subtarefa pode pedir. As definições executáveis (instrução,
 # ferramentas) ficam em src/agent_runtime/definitions.py.
-AGENT_IDS: tuple[str, ...] = (
-    "developer",
-    "base",
-    "researcher",
-    "summarizer",
-    "reviewer",
-)
+AGENT_IDS: tuple[str, ...] = ("developer", "researcher")
 
 @dataclass
 class AgentTask:
@@ -1020,7 +1013,6 @@ class Orchestrator:
     async def handle_request(
         self,
         prompt: str,
-        agent_tasks: list[AgentTask] | None = None,
         mode: str | None = None,
         context_bundle: ContextBundle | None = None,
         budget: UsageBudget | None = None,
@@ -1034,7 +1026,6 @@ class Orchestrator:
 
         Args:
             prompt: O prompt ou tarefa solicitada.
-            agent_tasks: Lista de tarefas (opcional) para bypassar o autonomous loop.
             mode: Nível de autonomia da sessão (SessionMode). Se omitido, usa
                 ``SESSION_DEFAULT_MODE`` (Roadmap V15.6 / Spec G10).
             context_bundle: Contexto pré-carregado de ``input_context/`` (Spec G9).
@@ -1190,18 +1181,13 @@ class Orchestrator:
             # v17-knowledge-semantic-index: reconcilia o índice antes de qualquer consulta ao grafo da sessão.
             await asyncio.to_thread(self._reconcile_knowledge_index)
             await self._safe_ingest(ingestor.session_start)
-            if not agent_tasks:
-                await asyncio.to_thread(self._start_exploration, master_session.id, ingestor, effective_mode)
+            await asyncio.to_thread(self._start_exploration, master_session.id, ingestor, effective_mode)
 
         # V15.5/G9 — Carrega (ou reutiliza) o contexto de input_context/ e o disponibiliza
         # para o Researcher no primeiro ciclo de planejamento; salva snapshot imutável.
-        # O carregamento automático só ocorre no caminho real de uso (loop autônomo):
-        # `agent_tasks` é um bypass de compatibilidade para chamadores programáticos que
-        # montam seu próprio plano (sem Researcher), logo não há prompt de planejamento
-        # para injetar contexto — evitamos o custo (e o I/O) quando não é utilizável.
         bundle = context_bundle
         input_index_report: dict[str, Any] | None = None
-        if bundle is None and not agent_tasks:
+        if bundle is None:
             try:
                 bundle = ContextLoader().load()
             except (ManifestError, VisionConfigError):
@@ -1257,33 +1243,10 @@ class Orchestrator:
 
         heartbeat = self._start_heartbeat(master_session.id)
         try:
-            # Se tarefas explícitas forem fornecidas, executa sequencialmente (compatibilidade)
-            if agent_tasks:
-                logger.info("Executando tarefas explícitas fornecidas (bypass autonomous loop)")
-                results = []
-                for task in agent_tasks:
-                    task.mode = task.mode or effective_mode
-                    result = await self._execute_agent(task, master_session.id)
-                    results.append(result)
-
-                succeeded = sum(1 for r in results if r.status == "success")
-                failed = len(results) - succeeded
-                all_artifacts = self.output_manager.list_artifacts(master_session.id)
-
-                result = OrchestratorResult(
-                    results=results,
-                    total=len(results),
-                    succeeded=succeeded,
-                    failed=failed,
-                    artifacts=all_artifacts,
-                    plan_json=json.dumps([t.__dict__ for t in agent_tasks])
-                )
-            else:
-                # Caso contrário, usa o loop autônomo (Etapa S7)
-                loop = AutonomousLoop(self)
-                result = await loop.run(
-                    prompt, exec_id or master_session.id, mode=effective_mode, budget=effective_budget
-                )
+            loop = AutonomousLoop(self)
+            result = await loop.run(
+                prompt, exec_id or master_session.id, mode=effective_mode, budget=effective_budget
+            )
         except BaseException as run_exc:  # noqa: BLE001 - registra o fim da sessão no grafo e repropaga
             await asyncio.to_thread(heartbeat.stop)
             interrupted = isinstance(run_exc, (KeyboardInterrupt, asyncio.CancelledError))
@@ -1950,36 +1913,13 @@ class Orchestrator:
 
         # ADR 017 §7: a dica preferred_model do plano só vale como provedor/modelo validado pelo
         # roteador; caso contrário o papel usa o modelo resolvido da sessão.
-        # ADR 020 §4: a dica e o despacho de reviewer/base passam pela conferência de independência do julgamento.
+        # ADR 020 §4: a dica do plano passa pela conferência de independência do julgamento.
         try:
-            model = get_session_routing().dispatch_model(
+            model = get_session_routing().apply_hint(
                 task.agent_id, task.preferred_model, subtarefa=task.task_name or None
             )
         except ValueError:
             model = ""  # papel fora do catálogo: o runtime recusa com mensagem própria
-        except JudgeIndependenceError as exc:
-            # `required` sem alternativa de outra família: só esta subtarefa falha; a sessão continua.
-            message = str(exc)
-            logger.error("Subtarefa recusada pela independência do julgamento", extra={"role": task.agent_id})
-            telemetry.record_agent_event(
-                execution_id=_exec_id,
-                session_id=session.id,
-                agent_id=task.agent_id,
-                event_type="error",
-                task_name=task.task_name or None,
-                payload={"status": "error", "motivo": "mesma_familia_julgamento", "runtime": "inprocess"},
-            )
-            try:
-                self.session_manager.close(session.id)
-            except Exception as close_exc:  # noqa: BLE001
-                logger.error(f"Erro ao fechar sessão {session.id}: {close_exc}")
-            return AgentResult(
-                agent_id=task.agent_id,
-                session_id=session.id,
-                status="error",
-                response={"error": message, "motivo": "mesma_familia_julgamento"},
-                error=message,
-            )
         enable_thinking = OLLAMA_ENABLE_THINKING if task.agent_id not in ("planner", "validator") else True
 
         async def _ask_researcher_callback(

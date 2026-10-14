@@ -26,6 +26,7 @@ from src.llm.session import build_session_routing
 from src.orchestrator import AgentTask
 from src.subtask_output import SubtaskOutput
 from src.usage import StopReason, UsageBudget, UsageTracker
+from tests.support.task_loop import run_tasks
 
 pytestmark = pytest.mark.unit
 
@@ -64,7 +65,7 @@ def test_marca_falsa_no_checkpoint_e_recusada():
     for bad in ({"tainted": "sim"}, "texto", {"tainted": True, "origem": "x" * 40}):
         with pytest.raises(CheckpointError):
             SubtaskState.from_dict({**base, "resultado_marca": bad})
-    ok = SubtaskState.from_dict({**base, "resultado_marca": resumo_marca(False, "reviewer")})
+    ok = SubtaskState.from_dict({**base, "resultado_marca": resumo_marca(False, "validator")})
     assert ok.to_dict()["resultado_marca"]["tainted"] is False
     assert "resultado_marca" not in SubtaskState.from_dict(base).to_dict()  # checkpoint antigo segue igual
 
@@ -116,7 +117,7 @@ def test_resultado_de_agente_com_dados_brutos_e_contaminado(monkeypatch):
     monkeypatch.setattr("src.egress.gate.role_tainted", lambda role: role == "developer")
     resultado = SimpleNamespace(response={"text": "média 12.4"}, status="success")
     assert SubtaskOutput.from_agent_result("t", "developer", resultado).tainted is True
-    assert SubtaskOutput.from_agent_result("t", "reviewer", resultado).tainted is False
+    assert SubtaskOutput.from_agent_result("t", "validator", resultado).tainted is False
 
 
 def test_escrita_de_memoria_por_agente_com_dados_brutos_leva_a_tag(monkeypatch):
@@ -181,7 +182,7 @@ async def test_orquestrador_cria_o_portao_e_grava_k_no_payload(nuvem):
 
     with patch.object(orchestrator, "_execute_agent", AsyncMock(side_effect=RuntimeError("parou"))):
         with pytest.raises(RuntimeError, match="parou"):
-            await orchestrator.handle_request("teste", [AgentTask(agent_id="developer", prompt="p")])
+            await run_tasks(orchestrator, "teste", [AgentTask(agent_id="developer", prompt="p")])
 
     payload = session_manager.update.call_args_list[0].kwargs["payload"]
     assert payload["locality_min_group_size"] == 10
@@ -199,7 +200,7 @@ async def test_orquestrador_nao_inicia_sem_locality_min_group_size(monkeypatch):
     session_manager = MagicMock()
     orchestrator = Orchestrator(session_manager=session_manager, agent_runtime=MagicMock())
     with pytest.raises(RuntimeError, match="LOCALITY_MIN_GROUP_SIZE"):
-        await orchestrator.handle_request("teste", [AgentTask(agent_id="developer", prompt="p")])
+        await run_tasks(orchestrator, "teste", [AgentTask(agent_id="developer", prompt="p")])
     session_manager.create.assert_not_called()  # nenhum registro foi criado
 
 

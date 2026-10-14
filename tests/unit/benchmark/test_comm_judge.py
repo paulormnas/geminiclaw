@@ -19,7 +19,7 @@ GOOD = json.dumps({"necessidade": 3, "clareza": 2, "justificativa": "ok"})
 
 
 def models(**kw):
-    base = {"developer": DEV, "researcher": DEV, "reviewer": SONNET}
+    base = {"developer": DEV, "researcher": DEV, "validator": SONNET}
     base.update(kw)
     return base
 
@@ -53,13 +53,13 @@ def test_familia_do_researcher_so_desempata():
     assert sel.key == GPT and "família diferente" in sel.reason
 
 
-def test_juiz_exclui_a_familia_do_developer_e_do_base():
-    """ADR 020 §7: o modelo da mesma família do developer ou do base não é candidato, mesmo sendo outro modelo."""
+def test_juiz_exclui_a_familia_do_developer():
+    """ADR 020 §7: o modelo da mesma família do developer não é candidato, mesmo sendo outro modelo."""
     assert cj.select_judge(models(), candidates=[LITE]).key == SONNET  # LITE é gemini, como o developer
     with pytest.raises(cj.JudgeUnavailable):
-        cj.select_judge(models(reviewer=LITE), candidates=[LITE])
-    sel = cj.select_judge(models(base=SONNET, reviewer=LITE), candidates=[GPT])  # base no claude: claude excluído
-    assert sel.key == GPT
+        cj.select_judge(models(validator=LITE), candidates=[LITE])
+    # o `base` (papel interno) não é julgado: o modelo dele pode ser o juiz
+    assert cj.select_judge({"developer": DEV, "researcher": DEV, "base": SONNET}).key == SONNET
 
 
 def test_researcher_na_mesma_familia_do_juiz_nao_o_exclui():
@@ -71,7 +71,7 @@ def test_researcher_na_mesma_familia_do_juiz_nao_o_exclui():
 def test_sem_candidato_valido_lista_os_excluidos():
     """Scenario: Sem candidato válido."""
     with pytest.raises(cj.JudgeUnavailable) as err:
-        cj.select_judge({"developer": DEV, "researcher": DEV, "reviewer": DEV})
+        cj.select_judge({"developer": DEV, "researcher": DEV, "validator": DEV})
     assert DEV in str(err.value) and "COMM_EVAL_JUDGE_CANDIDATES" in str(err.value)
 
 
@@ -106,7 +106,7 @@ def run(events, texts=(), provider_models=None, **kw):
 
 def test_nota_valida_grava_modelo_e_versao_da_rubrica():
     """Scenario: Nota válida."""
-    out, _ = run([event()], [GOOD], provider_models=models(reviewer=SONNET), allow_external=True)
+    out, _ = run([event()], [GOOD], provider_models=models(validator=SONNET), allow_external=True)
     entry = out["events"][0]
     assert entry["status"] == "judged" and entry["scores"]["necessidade"] == 3
     assert entry["judge"] == SONNET and entry["rubric_version"] == cj.RUBRIC_VERSION
@@ -166,7 +166,7 @@ def test_juiz_externo_nao_habilitado():
 def test_juiz_local_roda_sem_opt_in_nem_teto(monkeypatch):
     monkeypatch.setattr(cj.config, "OLLAMA_BASE_URL", "http://localhost:11434")
     provider, fac = factory(GOOD)
-    out = cj.judge_events([event()], models(reviewer="ollama/qwen3:8b"), provider_factory=fac,
+    out = cj.judge_events([event()], models(validator="ollama/qwen3:8b"), provider_factory=fac,
                           allow_external=False, max_usd=0.0)
     assert out["events"][0]["status"] == "judged"
 
@@ -195,7 +195,7 @@ def test_prompt_enviado_ao_juiz_vai_redigido():
 
 def test_teto_zero_nao_faz_chamada_paga():
     """Scenario: Teto zero."""
-    out, provider = run([event(1), event(2)], [GOOD], provider_models=models(reviewer=SONNET),
+    out, provider = run([event(1), event(2)], [GOOD], provider_models=models(validator=SONNET),
                         max_usd=0.0)
     assert {e["reason"] for e in out["events"]} == {"budget"} and provider.generate.await_count == 0
 
@@ -203,7 +203,7 @@ def test_teto_zero_nao_faz_chamada_paga():
 def test_teto_atingido_no_meio():
     """Scenario: Teto atingido no meio."""
     usage = {"prompt_tokens": 1_000_000, "completion_tokens": 0}  # sonnet: US$ 2,00 por chamada
-    out, _ = run([event(i) for i in range(1, 6)], [GOOD] * 5, provider_models=models(reviewer=SONNET),
+    out, _ = run([event(i) for i in range(1, 6)], [GOOD] * 5, provider_models=models(validator=SONNET),
                  max_usd=5.0, usage=usage)
     statuses = [e["status"] for e in out["events"]]
     assert statuses == ["judged"] * 3 + ["judge_skipped"] * 2
@@ -211,7 +211,7 @@ def test_teto_atingido_no_meio():
 
 
 def test_preco_desconhecido_de_modelo_externo_e_recusado():
-    out, provider = run([event()], [GOOD], provider_models=models(reviewer="openai/modelo-sem-preco"))
+    out, provider = run([event()], [GOOD], provider_models=models(validator="openai/modelo-sem-preco"))
     assert "Preço desconhecido" in out["error"] and provider.generate.await_count == 0
 
 
@@ -323,7 +323,7 @@ def test_eval_comm_roda_depois_da_execucao_e_nao_executa_combinacoes(tmp_path, m
     monkeypatch.setattr("sys.argv", ["run_benchmark", "matrix.json", "--results", str(results), "--eval-comm"])
     rb.main()
     saved = json.loads(results.read_text())
-    assert calls == [] and saved[0]["comm_eval"]["reviewer"]["reviews"] == 0
+    assert calls == [] and saved[0]["comm_eval"]["revisao_subtarefa"]["reviews"] == 0
     assert (tmp_path / "results-comm-sess1.json").exists()
 
 
@@ -341,7 +341,7 @@ def test_ollama_em_host_remoto_conta_como_externo(monkeypatch):
     """I2: `ollama` só é local quando OLLAMA_BASE_URL aponta para o próprio computador."""
     monkeypatch.setattr(cj.config, "OLLAMA_BASE_URL", "http://100.101.56.43:11434")
     provider, fac = factory(GOOD)
-    out = cj.judge_events([event()], models(reviewer="ollama/qwen3:8b"), provider_factory=fac,
+    out = cj.judge_events([event()], models(validator="ollama/qwen3:8b"), provider_factory=fac,
                           allow_external=False, max_usd=0.0)
     assert "COMM_EVAL_ALLOW_EXTERNAL_JUDGE" in out["error"] and provider.generate.await_count == 0
     monkeypatch.setattr(cj.config, "OLLAMA_BASE_URL", "http://127.0.0.1:11434")
@@ -392,7 +392,7 @@ def test_redacao_endurecida(raw):
 def test_teto_vale_tambem_para_a_nova_tentativa():
     """I3: a nova tentativa não estoura o teto de custo."""
     usage = {"prompt_tokens": 1_000_000, "completion_tokens": 0}  # US$ 2,00 por chamada (sonnet)
-    out, provider = run([event()], ["lixo", GOOD], provider_models=models(reviewer=SONNET), max_usd=1.0, usage=usage)
+    out, provider = run([event()], ["lixo", GOOD], provider_models=models(validator=SONNET), max_usd=1.0, usage=usage)
     assert provider.generate.await_count == 1
     assert out["events"][0]["status"] == "judge_skipped" and out["events"][0]["reason"] == "budget"
 

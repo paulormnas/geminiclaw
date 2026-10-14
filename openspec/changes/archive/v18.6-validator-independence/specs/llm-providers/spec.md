@@ -75,10 +75,9 @@ design §3.
 - **AND** o `validator` vem da preferência, de outra família
 
 ### Requirement: Conferência no despacho
-O sistema SHALL conferir, a cada dica de plano aceita, despacho para `base` ou `reviewer` e troca
-para o modelo de reserva no 429, que nenhum juiz (`validator`, `reviewer`) e nenhum julgado
-(`developer`, `base`) em uso compartilham família, e SHALL registrar o evento
-`independencia_julgamento` com a decisão.
+O sistema SHALL conferir, a cada dica de plano aceita e troca para o modelo de reserva no 429, que o
+juiz (`validator`) e o julgado (`developer`) em uso não compartilham família, e SHALL registrar o
+evento `independencia_julgamento` com a decisão.
 
 #### Scenario: Dica do Developer na família do juiz
 - **GIVEN** `validator` da família `claude`, modo `required` e uma subtarefa do `developer` com
@@ -87,25 +86,10 @@ para o modelo de reserva no 429, que nenhum juiz (`validator`, `reviewer`) e nen
 - **THEN** a dica é rejeitada e a subtarefa usa o modelo resolvido do `developer`
 - **AND** o evento registra `decisao = "rejeitado"` e `motivo = "mesma_familia_julgamento"`
 
-#### Scenario: Dica do reviewer na família do Developer
-- **GIVEN** `developer` da família `gemini` e uma subtarefa do `reviewer` com dica `google/gemini-3.8-flash`
-- **WHEN** a dica é avaliada
-- **THEN** a dica é rejeitada
-
 #### Scenario: Modo `off` não confere a reserva
 - **GIVEN** modo `off`, `developer` e `validator` da família `gemini` e uma reserva `gemini`
 - **WHEN** ocorre 429 no `developer`
 - **THEN** a reserva é usada
-
-#### Scenario: `base` em conflito com alternativa
-- **GIVEN** `validator` da família `gemini`, preferência do `base` `[google/gemini-3.8-flash, anthropic/claude-haiku-5-5]`, modo `required`
-- **WHEN** uma subtarefa é despachada para `base`
-- **THEN** ela roda com `anthropic/claude-haiku-5-5` e o evento registra `decisao = "substituido"`
-
-#### Scenario: `base` em conflito sem alternativa
-- **GIVEN** o mesmo caso com só `google/gemini-3.8-flash` disponível para `base`
-- **WHEN** a subtarefa é despachada
-- **THEN** só essa subtarefa falha com `mesma_familia_julgamento` e a sessão continua
 
 #### Scenario: Reserva do 429 na família do juiz em `required`
 - **GIVEN** `validator` da família `gemini`, `developer` de outra família e uma reserva do `developer` da família `gemini`
@@ -134,12 +118,12 @@ afirmações pendentes.
 - **THEN** a retomada falha com `NoEligibleModelError` antes de reverificar afirmações
 
 ### Requirement: Preferência dos juízes no catálogo
-O catálogo versionado SHALL listar, na preferência de `validator` e `reviewer`, ao menos um modelo de
+O catálogo versionado SHALL listar, na preferência de `validator`, ao menos um modelo de
 nuvem de cada família do catálogo antes de qualquer modelo local.
 
 #### Scenario: Teste do catálogo
 - **WHEN** o catálogo versionado é carregado no teste
-- **THEN** as preferências de `validator` e `reviewer` contêm `claude`, `gemini` e `gpt` antes de `qwen`
+- **THEN** a preferência de `validator` contém `claude`, `gemini` e `gpt` antes de `qwen`
 
 ## MODIFIED Requirements
 

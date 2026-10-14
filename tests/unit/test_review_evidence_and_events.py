@@ -27,7 +27,7 @@ def test_evidence_without_session_dir():
 
 
 @pytest.mark.asyncio
-async def test_reviewer_prompt_carries_evidence_and_path_rule(tmp_path):
+async def test_review_prompt_carries_evidence_and_path_rule(tmp_path):
     (tmp_path / "t").mkdir()
     (tmp_path / "t" / "metrics.json").write_text('{"accuracy": 0.95}')
     provider = MagicMock()

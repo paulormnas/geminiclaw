@@ -209,7 +209,7 @@ def render_communication(results: list[dict]) -> str:
         ev = r.get("comm_eval")
         if not ev or "error" in ev:
             continue
-        conf = ev["reviewer"]["confusion"]
+        conf = ev["revisao_subtarefa"]["confusion"]
         res, loops = ev["resolution"], ev["resolution"]["loops"]
         repairs = ev["planner_repairs"]
         judge = ev.get("ask_researcher")
@@ -223,10 +223,10 @@ def render_communication(results: list[dict]) -> str:
         if kappa:
             judge_cell += f" kappa={kappa}"
         rows.append(
-            f"| {r['name']} | {ev['reviewer']['reviews']} | {_pct(conf['false_reject_rate'])} | "
+            f"| {r['name']} | {ev['revisao_subtarefa']['reviews']} | {_pct(conf['false_reject_rate'])} | "
             f"{_pct(conf['false_accept_rate'])} | {_pct(conf['indeterminate_share'])} | "
             f"{_pct(res['subtask']['resolution_rate_with_tail'])} | "
-            f"{loops['validator']['max_length']}/{loops['reviewer']['max_length']} | "
+            f"{loops['validator']['max_length']}/{loops['revisao_subtarefa']['max_length']} | "
             f"{repairs['with_repair']}/{repairs['plans']} | {judge_cell} |"
         )
     return "\n".join(rows)

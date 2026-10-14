@@ -1,7 +1,7 @@
 """Contabilidade de tokens, custo e latência de toda chamada LLM.
 
 Antes, só o laço ReAct (``agent_loop``) gravava ``token_usage``; triagem, sumarização de contexto,
-recuperação e as chamadas do Validator/Reviewer ficavam de fora, subestimando tokens e custo no
+recuperação e as chamadas do Validator ficavam de fora, subestimando tokens e custo no
 benchmark. ``record_llm_call`` é o ponto único de registro: estas chamadas o usam.
 
 A execução corrente vem do ``AgentContext`` (dentro do runtime em processo) ou, fora dele

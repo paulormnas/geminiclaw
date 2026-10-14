@@ -502,8 +502,8 @@ def test_juiz_nao_declarado() -> None:
     combo = {"name": "c", "roles": {"*": HAIKU}}
     with pytest.raises(run_benchmark.CombinationRefused, match="VALIDATOR"):
         run_benchmark.validate_combination(combo)
-    env = run_benchmark.build_env({"VALIDATOR_MODEL": "x", "REVIEWER_MODEL": "y"}, combo["roles"])
-    assert "VALIDATOR_MODEL" not in env and "REVIEWER_MODEL" not in env
+    env = run_benchmark.build_env({"VALIDATOR_MODEL": "x"}, combo["roles"])
+    assert "VALIDATOR_MODEL" not in env
     assert env["DEVELOPER_MODEL"] == HAIKU and env["BASE_MODEL"] == HAIKU
 
 
@@ -513,8 +513,6 @@ def test_juiz_da_mesma_familia() -> None:
     with pytest.raises(run_benchmark.CombinationRefused, match="claude"):
         run_benchmark.validate_combination(combo)
     run_benchmark.validate_combination({"name": "c", "roles": {"*": HAIKU, "VALIDATOR": GEMINI}})
-    with pytest.raises(run_benchmark.CombinationRefused, match="REVIEWER"):
-        run_benchmark.validate_combination({"name": "c", "roles": {"*": HAIKU, "VALIDATOR": GEMINI, "REVIEWER": SONNET}})
 
 
 def test_combinacao_de_controle(monkeypatch, tmp_path) -> None:
@@ -545,8 +543,7 @@ def test_check_pins_juiz_e_registro_de_independencia() -> None:
     roles = {"*": HAIKU, "VALIDATOR": SONNET}
     routing = {"papeis": {"developer": {"id": HAIKU, "origem": "pin"}, "base": {"id": HAIKU, "origem": "pin"},
                           "researcher": {"id": HAIKU, "origem": "pin"}, "summarizer": {"id": HAIKU, "origem": "pin"},
-                          "validator": {"id": SONNET, "origem": "pin"},
-                          "reviewer": {"id": GEMINI, "origem": "preferencia"}},
+                          "validator": {"id": SONNET, "origem": "pin"}},
                "independencia_julgamento": {"modo": "off"}}
     assert run_benchmark.check_pins(roles, routing, controle=True) == []
     problems = run_benchmark.check_pins(roles, routing, controle=False)

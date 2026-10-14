@@ -9,7 +9,7 @@ mudança que o definiu por último; os cenários vêm do delta original, em GIVE
 
 ### Requirement: Agentes executam em processo no host
 _Origem: [`v16-in-process-agents`](../../changes/archive/v16-in-process-agents/proposal.md)_
-O sistema SHALL executar os agentes (Researcher, Developer, Summarizer, Reviewer, Validator e
+O sistema SHALL executar os agentes (Researcher, Developer, Summarizer, Validator e
 futuros papéis) no processo do orquestrador, sem container dedicado por agente.
 
 #### Scenario: Subtarefa sem spawn de container de agente

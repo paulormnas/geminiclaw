@@ -44,7 +44,7 @@ def base_document() -> dict:
     prefs = ["anthropic/claude-sonnet-5-5", "google/gemini-3.8-flash", "ollama/qwen3:8b"]
     roles = {
         name: {"requisitos": {}, "preferencia": list(prefs)}
-        for name in ("researcher", "developer", "reviewer", "summarizer", "validator", "curator", "base")
+        for name in ("researcher", "developer", "summarizer", "validator", "curator", "base")
     }
     roles["researcher"]["requisitos"] = {"ferramentas": True}
     return {

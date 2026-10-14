@@ -11,6 +11,7 @@ from src.cli import clear_context, load_context_with_confirmation
 from src.context_loader import ContextLoader
 from src.orchestrator import AgentResult, AgentTask, Orchestrator
 from src.session import Session
+from tests.support.task_loop import run_tasks
 
 
 def _make_session(agent_id: str, session_id: str, payload: dict | None = None) -> Session:
@@ -126,7 +127,7 @@ class TestOrchestratorContextInjection:
         bundle = ContextLoader(context_dir).load()
 
         task = AgentTask(agent_id="developer", prompt="faz algo")
-        result = await orchestrator.handle_request("tarefa", [task], context_bundle=bundle)
+        result = await run_tasks(orchestrator, "tarefa", [task], context_bundle=bundle)
 
         assert "Contexto científico pré-curado." in orchestrator._current_context_block
         assert result.session_id == "sess_master"
@@ -155,7 +156,7 @@ class TestInputSnapshot:
         bundle = ContextLoader(context_dir).load()
 
         task = AgentTask(agent_id="developer", prompt="faz algo")
-        await orchestrator.handle_request("tarefa", [task], context_bundle=bundle)
+        await run_tasks(orchestrator, "tarefa", [task], context_bundle=bundle)
 
         snapshot_dir = tmp_path / "outputs" / "sess_master" / "input_snapshot"
         assert snapshot_dir.is_dir()

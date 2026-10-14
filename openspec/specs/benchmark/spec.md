@@ -261,12 +261,19 @@ parada) e SHALL avisar quando a mesma combinação teve `versao_efetiva` diferen
 
 ### Requirement: Orçamento por provedor da matriz
 A matriz SHALL declarar `budget_usd` por provedor (`anthropic`, `openai`, `google`), e o runner SHALL pular, com motivo
-registrado, a execução cujo provedor já atingiu o teto. A matriz oficial da V18.6 SHALL usar US$ 14 em cada um. Referência: pedido do pesquisador, 2026-10-14.
+registrado, a execução cujo provedor já atingiu o teto **na sua rodada** (repetição): o gasto de cada rodada começa do zero e o
+teto não é acumulado entre rodadas. A matriz oficial da V18.6 SHALL usar US$ 14 por provedor e por rodada. Referência: pedido do
+pesquisador, 2026-10-14 (limite por rodada, não pelo teste completo).
 
 #### Scenario: Teto do Google atingido
-- **GIVEN** `budget_usd.google = 14.0` e gasto acumulado de US$ 14,20 em combinações com `google/...`
-- **WHEN** a próxima combinação que usa `google` vai rodar
+- **GIVEN** `budget_usd.google = 14.0` e gasto de US$ 14,20 em combinações com `google/...` na rodada 1
+- **WHEN** a próxima combinação da rodada 1 que usa `google` vai rodar
 - **THEN** ela é registrada como `skipped` com "orçamento de google esgotado"
+
+#### Scenario: Nova rodada zera o gasto
+- **GIVEN** o teto do Google esgotado na rodada 1
+- **WHEN** uma combinação que usa `google` vai rodar na rodada 2 sem gasto nela
+- **THEN** ela roda
 
 #### Scenario: Matriz oficial
 - **WHEN** `matrix_modelos_v18_6.json` é carregada

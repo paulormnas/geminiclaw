@@ -342,6 +342,13 @@ def pending_runs(
     ]
 
 
+def add_spent(spent: dict[int, dict[str, float]], result: dict) -> None:
+    """Soma o custo por provedor do resultado ao gasto da sua rodada (a repetição)."""
+    round_spent = spent.setdefault(result.get("repeticao", 1), {})
+    for provider, cost in result.get("tokens", {}).get("cost_by_provider", {}).items():
+        round_spent[provider] = round_spent.get(provider, 0.0) + cost
+
+
 def budget_skip_reason(combo: dict, budget: dict[str, float], spent: dict[str, float]) -> str | None:
     """Motivo para pular a combinação quando o teto de algum provedor que ela usa já foi atingido."""
     providers = sorted({spec.partition("/")[0] for spec in combo["roles"].values()})
@@ -582,11 +589,10 @@ def main() -> None:
     sample_seconds = float(env_base.get("BENCHMARK_STORE_SAMPLE_SECONDS") or footprint.DEFAULT_STORE_SAMPLE_SECONDS)
     output_dir = Path(env_base.get("OUTPUT_BASE_DIR", "outputs"))
     results = json.loads(args.results.read_text()) if args.results.exists() else []
-    budget = matrix.get("budget_usd", {})  # teto de gasto acumulado por provedor
-    spent: dict[str, float] = {}
+    budget = matrix.get("budget_usd", {})  # teto de gasto por provedor e por rodada
+    spent: dict[int, dict[str, float]] = {}  # teto por rodada (repetição): cada rodada começa do zero
     for r in results:
-        for provider, cost in r.get("tokens", {}).get("cost_by_provider", {}).items():
-            spent[provider] = spent.get(provider, 0.0) + cost
+        add_spent(spent, r)
 
     pending = pending_runs(matrix["combinations"], results, args.repeat, args.only)
     try:
@@ -601,7 +607,7 @@ def main() -> None:
         if required and not env_base.get(required):
             skip = f"{required} ausente"
         else:
-            skip = budget_skip_reason(combo, budget, spent)
+            skip = budget_skip_reason(combo, budget, spent.get(repeticao, {}))
         label = f"{combo['name']} r{repeticao}"
         if skip:
             results.append({"name": combo["name"], "repeticao": repeticao, "roles": combo["roles"],
@@ -621,8 +627,7 @@ def main() -> None:
                                         encoding="utf-8")
                 print(f"[benchmark] INTERROMPIDO em {label}: reset falhou: {exc}", file=sys.stderr, flush=True)
                 sys.exit(EXIT_RESET_FAILED)
-            for provider, cost in results[-1].get("tokens", {}).get("cost_by_provider", {}).items():
-                spent[provider] = spent.get(provider, 0.0) + cost
+            add_spent(spent, results[-1])
         args.results.write_text(json.dumps(results, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
         print(f"[benchmark] {label}: {results[-1]['status']}", flush=True)
         problems = anomalies(results[-1])

@@ -2,7 +2,7 @@
 
 Uso (no Raspberry Pi, na raiz do repositório)::
 
-    uv run python -m scripts.benchmark.run_benchmark scripts/benchmark/matrix_baixo_custo.json \
+    uv run python -m scripts.benchmark.run_benchmark scripts/benchmark/matrix_modelos_v18_6.json \
         --results ~/bench/results.json [--only NOME ...] [--repeat N] \
         [--reset-stores --confirm-target BANCO@HOST [--no-pre-reset-dump]]
 

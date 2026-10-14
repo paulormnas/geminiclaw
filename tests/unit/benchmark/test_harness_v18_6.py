@@ -1,6 +1,6 @@
 """v18.6-benchmark-harness: guardas e ordem do reset, semeadura, crescimento, placar, arquivo, repetições e custo.
 
-Um teste (ou mais) por ``#### Scenario`` de ``openspec/changes/v18.6-benchmark-harness/specs/benchmark/spec.md``; o nome
+Um teste (ou mais) por ``#### Scenario`` de ``openspec/specs/benchmark/spec.md``; o nome
 do cenário está no nome do teste. Os cenários que exigem PostgreSQL com AGE e Qdrant reais ("Reset completo", "Dump
 gravado" e "Dump falha" contra o servidor) estão em ``tests/integration/test_benchmark_reset_integration.py``.
 """

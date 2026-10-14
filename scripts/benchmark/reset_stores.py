@@ -1,4 +1,4 @@
-"""Reset isolado dos bancos de benchmark (v18.6-benchmark-harness, ``openspec/changes/v18.6-benchmark-harness``).
+"""Reset isolado dos bancos de benchmark (``openspec/specs/benchmark``).
 
 Recria do zero o banco PostgreSQL **de benchmark** e apaga as coleções do sistema no Qdrant, para que cada execução
 comece sem o que a anterior gravou. É uma operação destrutiva: só age com as quatro guardas satisfeitas

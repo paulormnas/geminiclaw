@@ -168,13 +168,13 @@ class TestRunner:
 
     def test_matrix_file_is_valid(self):
         from pathlib import Path
-        matrix = json.loads(Path("scripts/benchmark/matrix_baixo_custo.json").read_text())
+        matrix = json.loads(Path("scripts/benchmark/matrix_modelos_v18_6.json").read_text())
         names = [c["name"] for c in matrix["combinations"]]
         assert len(names) == len(set(names))
         blob = json.dumps(matrix).lower()
         assert not any(big in blob for big in ("opus", "pro-preview", "gemini-3.1-pro", "fable"))
         anthropic_models = {spec for c in matrix["combinations"] for spec in c["roles"].values() if "anthropic" in spec}
-        assert anthropic_models == {"anthropic/claude-sonnet-5-5"}
+        assert anthropic_models == {"anthropic/claude-sonnet-5-5", "anthropic/claude-haiku-5-5"}
         assert "anthropic" in matrix["budget_usd"]
 
 

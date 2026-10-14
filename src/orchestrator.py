@@ -2052,6 +2052,19 @@ class Orchestrator:
         except Exception as exc:
             logger.warning("Falha ao registrar plan_normalized", extra={"error": str(exc)})
 
+    async def _apply_validated_metrics(self, exploration: Any, extras: PlanExtras, session_id: str) -> None:
+        """Grava as métricas que o Validator aprovou. Falha de escrita não derruba o planejamento: a exigência segue."""
+        try:
+            await asyncio.to_thread(exploration.apply_metrics, extras)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - a métrica fica pendente e é pedida de novo no próximo ciclo
+            logger.error("Métricas validadas não gravadas no grafo", extra={"error": type(exc).__name__})
+            get_telemetry().record_agent_event(
+                execution_id=session_id, session_id=session_id, agent_id="orchestrator",
+                event_type="metricas_nao_aplicadas", payload={"motivo": f"falha_de_escrita:{type(exc).__name__}"},
+            )
+
     async def _run_planning_loop(
         self, 
         prompt: str, 
@@ -2217,9 +2230,15 @@ class Orchestrator:
             last_plan_str = json.dumps(current_plan_data, indent=2)
 
             # 2. Executa o Validator como corrotina assíncrona (V14.2 - sem Docker)
+            # v18.6-auto-metrics-and-stop-reasons: no modo auto sem métrica aprovada, o Validator também julga a
+            # definição de métricas do plano; sem ela, a chamada é a de sempre.
+            metric_definition = (
+                exploration.metric_definition_for_validation(extras) if exploration is not None else None
+            )
             val_result = await self.validator.validate_plan(
                 plan=current_plan_data,
                 prompt=prompt,
+                **({"metric_definition": metric_definition} if metric_definition is not None else {}),
             )
 
             # v16-pipeline-robustness §1.3 — reprovação repetida: a determinística encerra o
@@ -2229,7 +2248,9 @@ class Orchestrator:
             else:
                 repeats = repeats + 1 if val_result.signature == last_signature else 1
                 last_signature = val_result.signature
-                if repeats >= PLAN_REJECTION_STALL_LIMIT and not val_result.deterministic:
+                # Métricas nunca são validadas "por cansaço": sem parecer favorável a elas, a reprovação segue valendo.
+                metrics_gate_open = metric_definition is None or bool(getattr(val_result, "metrics_approved", False))
+                if repeats >= PLAN_REJECTION_STALL_LIMIT and not val_result.deterministic and metrics_gate_open:
                     val_result.is_valid = True
                     val_result.status = "approved"
                     val_result.approved_with_warnings = True
@@ -2267,6 +2288,8 @@ class Orchestrator:
                 logger.info("Plano aprovado pelo Validador", extra={"iteration": iteration + 1})
                 if exploration is not None:
                     self._plan_extras[master_session_id] = extras
+                    if metric_definition is not None and getattr(val_result, "metrics_approved", False):
+                        await self._apply_validated_metrics(exploration, extras, master_session_id)
                 self._resume_planning.discard(master_session_id)
                 self._session_plan_size[master_session_id] = len(current_plan_data)
                 self._session_plan_summary[master_session_id] = "\n".join(

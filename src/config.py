@@ -549,6 +549,8 @@ MAX_EXPLORATION_CYCLES = max(int(get_env("MAX_EXPLORATION_CYCLES", default="20")
 HYPOTHESIS_TEXT_MAX_CHARS = int(get_env("HYPOTHESIS_TEXT_MAX_CHARS", default="1000"))
 HYPOTHESES_MAX_PER_PLAN = int(get_env("HYPOTHESES_MAX_PER_PLAN", default="10"))
 DECISIONS_MAX_PER_PLAN = int(get_env("DECISIONS_MAX_PER_PLAN", default="10"))
+# v18.6-auto-metrics-and-stop-reasons: máximo de métricas que o Researcher pode definir no plano (modo auto).
+METRICS_MAX_PER_PLAN = max(int(get_env("METRICS_MAX_PER_PLAN", default="3")), 1)
 
 # --- Grafo de Conhecimento (Roadmap V17 / ADR 009, ADR 015) ---
 # Nome do grafo Apache AGE (sem o nome do produto — ADR 011).

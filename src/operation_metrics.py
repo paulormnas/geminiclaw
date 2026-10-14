@@ -255,7 +255,8 @@ class PlanRejectionReader:
 class HypothesisClosureReader:
     """Grupo ``verificacao`` (``v18.6-hypothesis-closure``): resultados sem ``MEDE``, subtarefas com resultado
     negativo e hipóteses sem tentativa no fechamento (eventos ``resultado_sem_mede``, ``subtask_review`` e
-    ``hipoteses_sem_tentativa``)."""
+    ``hipoteses_sem_tentativa``). ``v18.6-auto-metrics-and-stop-reasons``: fechamento por
+    ``hipoteses_nao_testadas`` (evento ``exploration_stop``) e reprovações com o motivo ``sem_hipotese``."""
 
     group = "verificacao"
     producer = "orquestrador (fechamento de hipóteses)"
@@ -267,10 +268,16 @@ class HypothesisClosureReader:
         no_mede = telemetry.get_events(session_id, "resultado_sem_mede")
         reviews = telemetry.get_events(session_id, "subtask_review")
         untested = telemetry.get_events(session_id, "hipoteses_sem_tentativa")
+        stops = telemetry.get_events(session_id, "exploration_stop")
         negative_tasks = {
             e.get("task_name")
             for e in reviews
             if (e.get("payload") or {}).get("outcome") == "resultado_negativo"
+        }
+        no_hypothesis_tasks = {
+            e.get("task_name")
+            for e in reviews
+            if "sem_hipotese" in ((e.get("payload") or {}).get("motivos") or [])
         }
         last = untested[-1] if untested else None
         return {
@@ -279,6 +286,10 @@ class HypothesisClosureReader:
             "hipoteses_sem_tentativa_no_fechamento": len((last.get("payload") or {}).get("hipoteses") or [])
             if last
             else 0,
+            "fechada_por_hipoteses_nao_testadas": any(
+                (e.get("payload") or {}).get("motivo_parada") == STOP_UNTESTED_HYPOTHESES for e in stops
+            ),
+            "reprovacoes_sem_hipotese": len(no_hypothesis_tasks),
         }
 
 
@@ -477,6 +488,23 @@ def _gaps(group: dict[str, Any]) -> list[str]:
     return [f"  - parcial: {g['produtor']}: {g['motivo']}" for g in group.get("lacunas", [])]
 
 
+STOP_UNTESTED_HYPOTHESES = "hipoteses_nao_testadas"
+_STOP_DESCRIPTIONS = {
+    STOP_UNTESTED_HYPOTHESES: (
+        "hipóteses em teste sem nenhuma tentativa ao esgotar os ciclos ociosos (parada de pesquisa, não falha de "
+        "infraestrutura)"
+    ),
+}
+
+
+def describe_stop_reason(stop_reason: str | None) -> str | None:
+    """``motivo (explicação)`` para os motivos de parada que pedem explicação; o próprio motivo nos demais."""
+    if not stop_reason:
+        return None
+    explanation = _STOP_DESCRIPTIONS.get(stop_reason)
+    return f"{stop_reason} ({explanation})" if explanation else stop_reason
+
+
 def render_operation_metrics_section(metrics: dict[str, Any], *, stop_reason: str | None = None) -> str:
     """Seção Markdown determinística "Métricas de operação", delimitada para o verificador de números."""
     lines = [BEGIN_MARK, f"## {SECTION_TITLE}", ""]
@@ -490,7 +518,7 @@ def render_operation_metrics_section(metrics: dict[str, Any], *, stop_reason: st
     else:
         lines.append("- **Modo:** com limites de orçamento")
     if stop_reason:
-        lines.append(f"- **Motivo de parada:** {stop_reason}")
+        lines.append(f"- **Motivo de parada:** {describe_stop_reason(stop_reason)}")
     if metrics.get("parcial"):
         lines.append("- **Aviso:** métricas parciais (a sessão não foi fechada normalmente).")
 
@@ -550,6 +578,15 @@ def render_operation_metrics_section(metrics: dict[str, Any], *, stop_reason: st
         )
         lines.append(f"- **Verificação:** {claims}; planos reprovados: {_fmt(ver.get('ciclos_rejeicao_plano'))}")
         lines.extend(_gaps(ver))
+        if stop_reason == STOP_UNTESTED_HYPOTHESES:
+            lines.append(
+                f"  - hipóteses sem tentativa no fechamento: {_fmt(ver.get('hipoteses_sem_tentativa_no_fechamento'))}"
+            )
+        if ver.get("reprovacoes_sem_hipotese"):
+            lines.append(
+                "  - subtarefas reprovadas por limiar sem hipótese (sem_hipotese): "
+                f"{_fmt(ver['reprovacoes_sem_hipotese'])}"
+            )
         if ver.get("independencia_julgamento_modo") is not None:
             families = ver.get("independencia_julgamento_familias") or {}
             lines.append(

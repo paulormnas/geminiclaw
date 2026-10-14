@@ -1,6 +1,7 @@
 # Tarefas: v18.6-remove-unused-agents
 
-**Estado (2026-10-13):** Implementada na branch `feat/v18.6-remove-unused-agents`: itens 1 a 4, testes por cenário (`tests/unit/test_remove_unused_agents.py`) e documentação (6.1 a 6.4). `ruff` e `pytest -m unit` verdes; a bateria de integração (5.3) fica para o Pi, a cargo do orquestrador depois do PR.
+**Estado (2026-10-13):** Concluída e arquivada — código mergeado em `dev` (#155). Validação no Pi 5 (`uv run pytest -m "unit or integration"`): 3549 passed, 0 falhas. Nenhum item aberto.
+**Estado anterior (2026-10-13):** Implementada na branch `feat/v18.6-remove-unused-agents`: itens 1 a 4, testes por cenário (`tests/unit/test_remove_unused_agents.py`) e documentação (6.1 a 6.4). `ruff` e `pytest -m unit` verdes; a bateria de integração (5.3) ficava para o Pi.
 
 ## 0. Pré-requisitos
 - [x] 0.1 Proposta aprovada; questões 5.1 e 5.2 do design decididas.
@@ -29,7 +30,7 @@
 ## 5. Testes
 - [x] 5.1 Um teste por cenário da spec.
 - [x] 5.2 Ajustar os testes que citam `reviewer` e `agent_tasks`.
-- [ ] 5.3 `uv run ruff check .` e `uv run pytest -m "unit or integration" -v` verdes. Feito: `ruff` e a suíte unitária (3448 testes). Pendente: integração (Pi, depois do PR).
+- [x] 5.3 `uv run ruff check .` e `uv run pytest -m "unit or integration" -v` verdes. `ruff` e a suíte unitária (3448 testes) na branch; `unit or integration` no Pi 5 após o merge: 3549 passed, 0 falhas.
 
 ## 6. Documentação
 - [x] 6.1 ADR 020 §1 e §4: juízes = `validator`, julgados = `developer`; remover os pontos de `reviewer`/`base`.

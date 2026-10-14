@@ -1,6 +1,7 @@
 # Tarefas: v18.6-profile-hardening
 
-**Estado (2026-10-13):** Aprovada pelo pesquisador (correção de todas as NC-PERFIL). Implementada na branch `fix/v18.6-profile-hardening` (código, testes e documentação); `ruff` e `pytest -m unit` verdes (3457 passed, 2 skipped). Falta a validação no Pi 5 (orquestrador) e o merge do PR.
+**Estado (2026-10-13):** Concluída e arquivada — código mergeado em `dev` (#154). Validação no Pi 5 (`uv run pytest -m "unit or integration"`): 3558 passed, 0 falhas. NC-PERFIL-1 a 6 corrigidas; nenhum item aberto.
+**Estado anterior (2026-10-13):** Aprovada pelo pesquisador (correção de todas as NC-PERFIL). Implementada na branch `fix/v18.6-profile-hardening` (código, testes e documentação); `ruff` e `pytest -m unit` verdes (3457 passed, 2 skipped). Faltava a validação no Pi 5 e o merge do PR.
 
 ## 0. Pré-requisitos
 - [x] 0.1 Mudança OpenSpec criada (proposal, design, delta de `pipeline-robustness` e `data-egress`).

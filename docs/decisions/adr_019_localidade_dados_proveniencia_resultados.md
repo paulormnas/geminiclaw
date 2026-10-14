@@ -1,6 +1,6 @@
 # ADR 019 — Localidade dos Dados de Pesquisa e Proveniência dos Resultados
 
-**Status:** Parcialmente implementado — as 8 mudanças V18.5 e 3 da V18.6 (`v18.6-review-evidence`, `v18.6-validator-independence`, `v18.6-hypothesis-closure`) estão concluídas e arquivadas (2026-10-13), com validação real e revisões de segurança pendentes (`openspec/changes/archive/PENDENCIAS.md`); o §10 (atuação sobre instrumentos) entra na V19 (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-13)
+**Status:** Parcialmente implementado — as 8 mudanças V18.5 e 4 da V18.6 (`v18.6-review-evidence`, `v18.6-validator-independence`, `v18.6-hypothesis-closure`, `v18.6-profile-hardening`) estão concluídas e arquivadas (2026-10-13), com validação real (bateria no Pi 5) e revisões de segurança da V18.5 pendentes (`openspec/changes/archive/PENDENCIAS.md`); o §10 (atuação sobre instrumentos) entra na V19 (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-13)
 **Data:** 2026-09-29
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** implementação depois da V18 (incluindo as mudanças em andamento dos ADRs 017 e 018) e **antes da V19** (`roadmaps/roadmap_V19.md`); é também pré-requisito da federação (V20, ADR 013)
@@ -11,7 +11,10 @@
 > família do §6 em regra para o julgamento (Validator, revisão de subtarefa, juiz da avaliação de
 > comunicação), com a ordem de resolução do roteador alterada (papéis com pin primeiro, juízes sem
 > pin por último). O perfil estrutural de artefatos de dados (`v18.6-review-evidence`) só entrega ao
-> revisor esquema e agregados, sob o §3 (o `EgressGate` não o retém).
+> revisor esquema e agregados, sob o §3 (o `EgressGate` não o retém). O parecer de segurança desse perfil
+> (`docs/security/parecer_v18_6_perfil_estrutural.md`) achou 6 não conformidades (NC-PERFIL-1 a 6), todas
+> corrigidas por `v18.6-profile-hardening` (#154): cabeçalho verificado, arquivos fora da sessão e
+> symlinks nunca lidos, rótulos seguros, limites estruturais e perfil entregue como dado delimitado.
 
 ## Estado da implementação (2026-10-13)
 
@@ -28,6 +31,7 @@
 | [`v18.6-review-evidence`](../../openspec/changes/archive/v18.6-review-evidence/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`: parecer de segurança do perfil estrutural, medição 7.2 parcial, questões do design §8) | #142 |
 | [`v18.6-validator-independence`](../../openspec/changes/archive/v18.6-validator-independence/proposal.md) | Concluída e arquivada | #145 |
 | [`v18.6-hypothesis-closure`](../../openspec/changes/archive/v18.6-hypothesis-closure/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`: causa da ausência de `afirmacoes.json` no Sonnet não confirmada, questões do design §8) | #146 |
+| [`v18.6-profile-hardening`](../../openspec/changes/archive/v18.6-profile-hardening/proposal.md) | Concluída e arquivada: NC-PERFIL-1 a 6 do parecer de segurança do perfil estrutural corrigidas (§3 itens 1, 5 e 6); Pi 5: 3558 passed, 0 falhas | #154 |
 
 ---
 
@@ -185,6 +189,15 @@ registra** o egresso, mas não o impede de forma absoluta. Um modelo induzido po
 tentar extrair valores aos poucos, e os filtros dos itens 4 e 8 são heurísticos. A prevenção é por camadas (ingestão restrita, filtro,
 sandbox sem rede, limite de volume) e a auditoria é completa. Prevenção total só existe com
 raciocínio em modelo `no_no`.
+
+**Perfil estrutural de artefatos de dados (V18.6):** o revisor recebe de um CSV, TSV ou JSON só o perfil
+calculado no nó (`esquema_agregado`, fonte `perfil_artefato`), nunca valores de célula. A garantia é imposta
+pelo código, não por premissa: a primeira linha só é cabeçalho se for verificada como tal; symlinks e arquivos
+fora do diretório da sessão não são lidos; rótulos de coluna e chave seguem um padrão seguro (outros viram
+`coluna_N`/`chave_N`) e números decimais em rótulos são mascarados; contagens de nulos em grupos menores que
+`LOCALITY_MIN_GROUP_SIZE` são omitidas; o perfil tem limites de colunas, linhas, tempo e linhas de chaves e
+nunca levanta exceção; o `EgressGate` o entrega entre delimitadores `<<<DADO ...>>>` como dado não confiável
+(`v18.6-review-evidence`, `v18.6-profile-hardening`).
 
 ### 4. Registro de execuções encadeado por hash
 

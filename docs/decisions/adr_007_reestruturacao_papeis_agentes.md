@@ -7,7 +7,7 @@
 
 > **Atualização 2026-10-13 (ADR 020):** o Validator usa família de modelo diferente da do Developer
 > (`v18.6-validator-independence`, #145) e a chamada de revisão de subtarefa é registrada com o papel
-> `validator`. O papel e o agente `reviewer` foram removidos do código (`v18.6-remove-unused-agents`): a revisão
+> `validator`. O papel e o agente `reviewer` foram removidos do código (`v18.6-remove-unused-agents`, #155, concluída e arquivada): a revisão
 > de subtarefa é do Validator, como este ADR previa.
 >
 > **Revisado pelo ADR 017 (2026-10-01):** o Validator não precisa mais usar modelo local

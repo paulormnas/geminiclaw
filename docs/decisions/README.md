@@ -28,8 +28,8 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 | [016](adr_016_imagem_postgres_apache_age_colacao.md) | Imagem do PostgreSQL para Apache AGE (musl → glibc) e Colação de Índices | ✅ Aceito (2026-10-13; validação da colação no Pi pendente) | 2026-09-29 |
 | [017](adr_017_catalogo_modelos_roteador.md) | Catálogo de Modelos e Roteador de Provedores por Papel | ✅ Aceito | 2026-09-29 |
 | [018](adr_018_imagem_sandbox_enxuta_e_imagens_por_plataforma.md) | Imagem Enxuta do Sandbox de Código e Seleção de Imagens por Plataforma (registro de ideias) | ✅ Aceito (2026-10-13; 5.5.1, 5.5.2 e medições no Pi pendentes) | 2026-09-29 |
-| [019](adr_019_localidade_dados_proveniencia_resultados.md) | Localidade dos Dados de Pesquisa e Proveniência dos Resultados | 🟠 Parcialmente implementado (8 mudanças V18.5 e 3 da V18.6 concluídas e arquivadas; §10 na V19; validação real e revisões de segurança pendentes) | 2026-09-29 |
-| [020](adr_020_independencia_validator.md) | Independência do Julgamento: Família de Modelo do Validator Diferente da do Developer | ✅ Aceito (2026-10-13; `v18.6-validator-independence` e `v18.6-benchmark-harness` concluídas e arquivadas; matriz com bancos isolados e 3 repetições no Pi 5 e revisão do ADR depois dela ficam como acompanhamento) | 2026-10-13 |
+| [019](adr_019_localidade_dados_proveniencia_resultados.md) | Localidade dos Dados de Pesquisa e Proveniência dos Resultados | 🟠 Parcialmente implementado (8 mudanças V18.5 e 4 da V18.6 concluídas e arquivadas, incluindo as correções do parecer do perfil estrutural; §10 na V19; validação real e revisões de segurança da V18.5 pendentes) | 2026-09-29 |
+| [020](adr_020_independencia_validator.md) | Independência do Julgamento: Família de Modelo do Validator Diferente da do Developer | ✅ Aceito (2026-10-13; `v18.6-validator-independence`, `v18.6-benchmark-harness` e `v18.6-remove-unused-agents` concluídas e arquivadas; matriz com bancos isolados e 3 repetições no Pi 5 e revisão do ADR depois dela ficam como acompanhamento) | 2026-10-13 |
 
 
 ---
@@ -109,6 +109,14 @@ ADR 010 (Propósito: Assistente de Pesquisa) ← define o escopo de tudo (substi
 ---
 
 ## Lacunas de especificação (2026-10-01)
+
+**Atualização 2026-10-13 (V18.6, fechamento 2):** `v18.6-profile-hardening` (#154, NC-PERFIL-1 a 6 do parecer de segurança
+do perfil estrutural) e `v18.6-remove-unused-agents` (#155, remoção do papel e agente `reviewer`) foram arquivadas e os
+requisitos consolidados em `openspec/specs/`. Notas e tabelas de estado atualizadas nos ADRs 007 (papel `reviewer` removido),
+017 (catálogo versão 4, cinco papéis), 019 (§3: perfil estrutural endurecido) e 020 (juiz = `validator`, julgado = `developer`).
+Os status não mudam: ADR 019 segue Parcialmente implementado e o ADR 020 segue Aceito, com a matriz de 3 repetições no Pi 5
+(e a composição da matriz) como acompanhamento. O `cached_input` OpenAI (#150), as matrizes antigas (#152) e a falha da fila de
+similaridade (#151) deixaram de ser pendências.
 
 **Atualização 2026-10-13 (V18.6):** as 4 mudanças da V18.6 (`v18.6-review-evidence`, `v18.6-benchmark-harness`,
 `v18.6-validator-independence`, `v18.6-hypothesis-closure`) foram arquivadas e o status dos ADRs 002, 005, 009, 010, 012, 015,

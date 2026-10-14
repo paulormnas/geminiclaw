@@ -1,6 +1,6 @@
 # Proposta: v18.6-profile-hardening
 
-**Origem:** parecer de segurança [`docs/security/parecer_v18_6_perfil_estrutural.md`](../../../docs/security/parecer_v18_6_perfil_estrutural.md) (2026-10-13), não conformidades NC-PERFIL-1 a 6. O pesquisador autorizou todas as correções.
+**Origem:** parecer de segurança [`docs/security/parecer_v18_6_perfil_estrutural.md`](../../../../docs/security/parecer_v18_6_perfil_estrutural.md) (2026-10-13), não conformidades NC-PERFIL-1 a 6. O pesquisador autorizou todas as correções.
 **Mudança de origem:** `v18.6-review-evidence` (arquivada), requisito "Perfil estrutural de artefatos de dados".
 
 ## Por quê

@@ -3,7 +3,7 @@
 Verdade atual consolidada a partir das mudanças arquivadas (2026-10-13). Cada requisito indica a
 mudança que o definiu por último; os cenários vêm do delta original, em GIVEN/WHEN/THEN.
 
-**Mudanças de origem:** [`v16-in-process-agents`](../../changes/archive/v16-in-process-agents/proposal.md)
+**Mudanças de origem:** [`v16-in-process-agents`](../../changes/archive/v16-in-process-agents/proposal.md), [`v18.6-remove-unused-agents`](../../changes/archive/v18.6-remove-unused-agents/proposal.md)
 
 ## Requirements
 
@@ -177,6 +177,29 @@ da própria sessão, resolvendo links simbólicos antes da checagem.
 - **WHEN** um agente chama `ingest` com esse link
 - **THEN** a ingestão é recusada
 
+### Requirement: Papéis de subtarefa do plano
+_Origem: [`v18.6-remove-unused-agents`](../../changes/archive/v18.6-remove-unused-agents/proposal.md)_
+Uma subtarefa do plano SHALL ser atribuída só a `developer` ou `researcher`. O normalizador do plano
+SHALL reparar `base` para `developer` e SHALL tratar `reviewer` e `summarizer` (e sinônimos) como não
+recuperáveis, com mensagem que lista os papéis válidos.
+
+#### Scenario: `base` no plano
+- **GIVEN** um plano com uma subtarefa `agent_id: "base"`
+- **WHEN** o plano é normalizado
+- **THEN** a subtarefa fica com `agent_id = "developer"`
+- **AND** o reparo `normalize_agent_id` é registrado
+
+#### Scenario: `reviewer` no plano
+- **GIVEN** um plano com uma subtarefa `agent_id: "reviewer"`
+- **WHEN** o plano é normalizado
+- **THEN** o plano tem um problema não recuperável que cita `developer` e `researcher`
+
+#### Scenario: Papéis internos continuam executáveis
+- **WHEN** o runtime em processo monta `AGENT_DEFINITIONS`
+- **THEN** o registro contém `developer`, `researcher`, `summarizer`, `base` e `curator`
+- **AND** não contém `reviewer`
+
 ## Requisitos removidos
 
 - Agentes como containers efêmeros com IPC (removido por [`v16-in-process-agents`](../../changes/archive/v16-in-process-agents/proposal.md))
+- Agente Reviewer, `agents/reviewer/` (removido por [`v18.6-remove-unused-agents`](../../changes/archive/v18.6-remove-unused-agents/proposal.md)): a revisão de subtarefa é feita pelo `validator` (ADR 007)

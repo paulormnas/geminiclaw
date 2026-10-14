@@ -1,10 +1,11 @@
 # Roadmap V18.6 — Correções do Benchmark de 2026-10-13
 
-> **Estado (2026-10-13):** as Tarefas 1 a 4 estão concluídas, mergeadas em `dev` (#142, #144, #145, #146)
-> e arquivadas em `openspec/changes/archive/`, com os requisitos consolidados em `openspec/specs/`. A
-> etapa **não está encerrada**: faltam a matriz com bancos isolados e 3 repetições no Pi 5 (só com
-> confirmação do pesquisador), o parecer de segurança da Tarefa 1 e as respostas do pesquisador às
-> questões de design (ver "Pendências conhecidas"). Itens abertos: [`PENDENCIAS.md`](../openspec/changes/archive/PENDENCIAS.md).
+> **Estado (2026-10-13):** as Tarefas 1 a 5 e a correção NC-PERFIL (`v18.6-profile-hardening`) estão
+> concluídas, mergeadas em `dev` (#142, #144, #145, #146, #154, #155) e arquivadas em
+> `openspec/changes/archive/`, com os requisitos consolidados em `openspec/specs/`. A etapa **não está
+> encerrada**: faltam a matriz com bancos isolados e 3 repetições no Pi 5 (só com confirmação do
+> pesquisador), a composição da matriz e as respostas do pesquisador às questões de design (ver
+> "Pendências conhecidas"). Itens abertos: [`PENDENCIAS.md`](../openspec/changes/archive/PENDENCIAS.md).
 
 ## Objetivo
 
@@ -59,8 +60,13 @@ ADRs de origem: 002, 005, 009, 010, 012, 015, 019 e o ADR 020 (aceito em 2026-10
 - **Complexidade estimada:** Alta
 
 ### Tarefa 5: Remoção de agentes e papéis sem uso
-- **Spec:** [`v18.6-remove-unused-agents`](../openspec/changes/v18.6-remove-unused-agents/proposal.md) · **Estado (2026-10-13):** implementada no PR da mudança (aguarda validação no Pi, merge e arquivamento)
+- **Spec:** [`v18.6-remove-unused-agents`](../openspec/changes/archive/v18.6-remove-unused-agents/proposal.md) · **Estado (2026-10-13):** concluída e arquivada, #155 (Pi 5: 3549 passed, 0 falhas)
 - **Critérios de aceite:** [x] agente `reviewer` removido do código, catálogo e benchmark · [x] papéis de subtarefa só `developer` e `researcher` · [x] revisão de subtarefa registrada como `validator` · [x] atalho `agent_tasks` e `REVIEW_MODE=end_only` removidos
+- **Complexidade estimada:** Baixa
+
+### Correção NC-PERFIL: endurecimento do perfil estrutural
+- **Spec:** [`v18.6-profile-hardening`](../openspec/changes/archive/v18.6-profile-hardening/proposal.md) · **Estado (2026-10-13):** concluída e arquivada, #154 (Pi 5: 3558 passed, 0 falhas)
+- **Critérios de aceite:** [x] cabeçalho verificado (NC-PERFIL-1) · [x] symlink e arquivo fora da sessão nunca lidos (NC-PERFIL-2) · [x] perfil delimitado como dado e rótulos seguros (NC-PERFIL-3 e 6) · [x] perfil sem exceção, JSON profundo e `LOCALITY_MIN_GROUP_SIZE` ausente (NC-PERFIL-4) · [x] limites de colunas, linhas, tempo e linhas de chaves (NC-PERFIL-5)
 - **Complexidade estimada:** Baixa
 
 ## Ordem de implementação
@@ -73,18 +79,16 @@ Depois:            bateria no Pi (com confirmação do pesquisador) e matriz com
 ```
 
 ## Validação da Etapa
-- [x] Todos os testes unitários e de integração passam. _Pi 5, 2026-10-13, `uv run pytest -m "unit or integration"`: #142 3434 passed; #144 3468; #145 3475; #146 3534. Todos com 1 falha preexistente, fora do escopo: `test_similarity_queue_integration::test_fluxo_completo_da_fila` (item `x` sobrando na fila compartilhada do Pi; falha também na `dev` antiga)._
+- [x] Todos os testes unitários e de integração passam. _Pi 5, 2026-10-13, `uv run pytest -m "unit or integration"`: #142 3434 passed; #144 3468; #145 3475; #146 3534 (todos com 1 falha preexistente, `test_similarity_queue_integration::test_fluxo_completo_da_fila`, corrigida no #151); #154 3558 passed, 0 falhas; #155 3549 passed, 0 falhas._
 - [ ] Validação real no Raspberry Pi 5: matriz com bancos isolados e 3 repetições, só depois da confirmação do pesquisador. _Pendente. A composição de `scripts/benchmark/matrix_modelos_v18_6.json` (três combinações com juiz de outra família e `controle-gemini-todos`) também aguarda confirmação._
-- [x] Revisões do Analista de Segurança concluídas (Tarefas 1 e 3). _Tarefa 3: feita no design §6 de `v18.6-validator-independence`, sem bloqueio (requisitos S1 a S6). Tarefa 1: parecer de 2026-10-13 em `docs/security/parecer_v18_6_perfil_estrutural.md`, aprovado com ressalvas (2 achados altos, 3 médios, 1 baixo); as correções NC-PERFIL-1 a 6 foram feitas pela mudança `v18.6-profile-hardening` (2026-10-13), pendente a validação no Pi 5._
+- [x] Revisões do Analista de Segurança concluídas (Tarefas 1 e 3). _Tarefa 3: feita no design §6 de `v18.6-validator-independence`, sem bloqueio (requisitos S1 a S6). Tarefa 1: parecer de 2026-10-13 em `docs/security/parecer_v18_6_perfil_estrutural.md`, aprovado com ressalvas (2 achados altos, 3 médios, 1 baixo); as correções NC-PERFIL-1 a 6 foram feitas pela mudança `v18.6-profile-hardening` (#154) e validadas no Pi 5 (3558 passed, 0 falhas)._
 - [x] ADR 020 Aceito. _Aceito pelo pesquisador em 2026-10-13, embora a matriz com bancos isolados e 3 repetições fique para depois; a revisão prevista no ADR após essa rodada é acompanhamento, não bloqueio._
-- [x] PRs merged em `dev`; mudanças arquivadas. _#142, #144, #145 e #146 mergeados; as 4 mudanças arquivadas e os ADRs 002, 005, 009, 010, 012, 015, 019 e 020 atualizados (PR de fechamento documental)._
+- [x] PRs merged em `dev`; mudanças arquivadas. _#142, #144, #145 e #146 mergeados; as 4 mudanças arquivadas e os ADRs 002, 005, 009, 010, 012, 015, 019 e 020 atualizados (#147); #154 e #155 mergeados, com `v18.6-profile-hardening` e `v18.6-remove-unused-agents` arquivadas e os ADRs 007, 017, 019 e 020 atualizados (PR de fechamento documental)._
 
 ## Pendências conhecidas
 
 - **Questões do design §8:** as respostas do pesquisador a `v18.6-review-evidence` e a `v18.6-hypothesis-closure` (e a `v18.6-benchmark-harness`, 0.1) não foram dadas; vigoram as propostas dos designs.
 - **`v18.6-review-evidence` 7.2 (parcial):** a conferência exata sobre os `metrics.json`, planos e nós `Resultado` do benchmark de 2026-10-13 não é possível (apagados do Pi); só há a classificação textual dos eventos, com limites superiores.
 - **`v18.6-hypothesis-closure` 6.1:** a causa da ausência de `afirmacoes.json` na sessão do Sonnet (2026-10-12 21:53) **NÃO foi confirmada** (sem acesso aos eventos do Pi). É preciso reexecutar a sessão com o modelo Sonnet, no Pi, quando o pesquisador autorizar a bateria, e investigar pelos eventos. Hipóteses já levantadas: `CLAIM_VERIFY_ENABLED` desligado, falta de `render`, exceção antes de `store.save()`. O que observar: os eventos do estágio `claims` e as exceções. A tarefa 6.3 elimina o sintoma (arquivo sempre gravado, com `motivo_vazio`), não confirma a causa.
-- **Correções do parecer de segurança do perfil estrutural (NC-PERFIL-1 a 6):** [`docs/security/parecer_v18_6_perfil_estrutural.md`](../docs/security/parecer_v18_6_perfil_estrutural.md) foi corrigido pela mudança OpenSpec `v18.6-profile-hardening` (NC-PERFIL-1 a 6 corrigidas; validação no Pi 5 pendente) (cabeçalho verificado, symlink, nome seguro e perfil delimitado, perfil sem exceção, limites de colunas/linhas, mapas). Altas: NC-PERFIL-1 e 2.
-- **Em PR próprio (fora destas pendências):** `cached_input` dos modelos OpenAI (preço oficial obtido em developers.openai.com/api/docs/pricing, consultado em 2026-10-13: gpt-6-luna US$ 0,10 / 0,01 / 0,50 e gpt-5.6-terra US$ 2,00 / 0,20 / 12,00 por 1 M de tokens, entrada / cache / saída) e remoção das matrizes antigas `matrix_baixo_custo.json` e `matrix_modelos_2026_10.json`.
 - **Composição da matriz `matrix_modelos_v18_6.json`:** a confirmar com o pesquisador antes da rodada.
 - **Execução curta no Pi (`v18.6-benchmark-harness` 7.2):** uma combinação, `--repeat 1`, `--reset-stores`, só após confirmação do pesquisador.

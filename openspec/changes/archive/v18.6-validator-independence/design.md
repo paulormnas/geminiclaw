@@ -1,5 +1,7 @@
 # Design: v18.6-validator-independence
 
+> **Nota (2026-10-13, `v18.6-remove-unused-agents`, #155):** os papéis `reviewer` e `base` citados abaixo como juiz e julgado foram removidos da regra. O juiz é só o `validator` e o julgado é só o `developer`; os pontos de conferência de despacho de `base`/`reviewer` e `check_dispatch` deixaram de existir. O texto abaixo é o histórico da proposta original; a verdade atual está em `openspec/specs/llm-providers/spec.md` e no ADR 020.
+
 ## 1. Conceitos
 
 - **Juízes:** `validator`, `reviewer` (`JUDGE_ROLES`).

@@ -191,16 +191,16 @@ número decimal SHALL ter o número substituído por marcador, como `sanitize_ar
 
 | NC | Achado | Severidade | Mudança sugerida |
 |---|---|---|---|
-| NC-PERFIL-1 | S1 (R1) | Alta | Corrigida: [`v18.6-profile-hardening`](../../openspec/changes/v18.6-profile-hardening/proposal.md) (R1) |
+| NC-PERFIL-1 | S1 (R1) | Alta | Corrigida: [`v18.6-profile-hardening`](../../openspec/changes/archive/v18.6-profile-hardening/proposal.md) (R1) |
 | NC-PERFIL-2 | S2 (R2) | Alta | Corrigida: `v18.6-profile-hardening` (R2) |
 | NC-PERFIL-3 | S3 (R3) | Média | Corrigida: `v18.6-profile-hardening` (R3) |
 | NC-PERFIL-4 | S4, S7 (R4) | Média | Corrigida: `v18.6-profile-hardening` (R4) |
 | NC-PERFIL-5 | S5 (R5) | Média | Corrigida: `v18.6-profile-hardening` (R5) |
 | NC-PERFIL-6 | S6 (R6) | Baixa | Corrigida: `v18.6-profile-hardening` (R6) |
 
-**Estado (2026-10-13):** NC-PERFIL-1 a 6 corrigidas no código (branch `fix/v18.6-profile-hardening`, testes unitários com os ataques reproduzidos), pendente a validação no Pi 5. A condição abaixo vale até o merge do PR.
+**Estado (2026-10-13):** NC-PERFIL-1 a 6 corrigidas e mergeadas em `dev` (`v18.6-profile-hardening`, #154, arquivada), com testes unitários que reproduzem os ataques. Pi 5: `uv run pytest -m "unit or integration"` 3558 passed, 0 falhas. A condição abaixo vale só como registro histórico.
 
-**Condição para a bateria no Pi 5:** enquanto NC-PERFIL-1 e NC-PERFIL-2 não forem corrigidas, a bateria só deve usar
+**Condição para a bateria no Pi 5 (superada pelo #154):** enquanto NC-PERFIL-1 e NC-PERFIL-2 não forem corrigidas, a bateria só deve usar
 juiz de nuvem se `REVIEW_ARTIFACT_PROFILE=false` (volta ao comportamento anterior: trecho retido pelo gate) ou se os
 conjuntos de dados de teste não contêm dados reais e a pasta de saída não é gravável por código não confiável. Com
 juiz local (`self_hosted_only`), o risco S1 e S2 não sai do nó, mas S3 a S5 continuam.

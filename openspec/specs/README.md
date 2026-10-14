@@ -14,6 +14,7 @@ aplicados aos requisitos existentes (catálogo versionado, rótulo da revisão d
 Reviewer). A quarta consolidação (2026-10-14) acrescentou
 `v18.6-auto-metrics-and-stop-reasons` (`hypothesis-loop`, `vocabulary`, `operation-metrics`, `benchmark`); os
 `MODIFIED` foram aplicados aos requisitos de conferência do veredito, fechamento por falta de caminhos e resultado negativo.
+A quinta consolidação (2026-10-14) acrescentou `v18.6-models-gemini4-gpt6` (`llm-providers`, `benchmark`): catálogo versão 5, preço com vigência, versão dos modelos por execução, orçamento por provedor e coleções do Qdrant recriadas sob demanda.
 
 | Capacidade | Arquivo |
 |---|---|

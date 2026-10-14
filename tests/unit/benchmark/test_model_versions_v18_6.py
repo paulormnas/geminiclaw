@@ -120,3 +120,11 @@ def test_teto_vale_por_rodada() -> None:
     assert budget_skip_reason(combo, budget, spent[1]) is not None
     assert budget_skip_reason(combo, budget, spent[2]) is None
     assert budget_skip_reason(combo, budget, spent.get(3, {})) is None
+
+
+def test_matriz_usa_esforco_de_raciocinio_aceito_pelo_gpt_sol() -> None:
+    """O gpt-6.1-sol recusa `reasoning_effort=none` com HTTP 400; a matriz precisa de um valor aceito."""
+    text = Path("scripts/benchmark/matrix_modelos_v18_6.json").read_text(encoding="utf-8")
+    matrix = json.loads(text)
+    assert "gpt-6.1-sol" in text
+    assert matrix["env"]["OPENAI_REASONING_EFFORT"] in {"low", "medium", "high", "xhigh"}

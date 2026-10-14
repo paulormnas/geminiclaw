@@ -35,7 +35,7 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
-from scripts.benchmark import footprint
+from scripts.benchmark import footprint, model_versions
 from scripts.benchmark.archive import archive_dir_for, archive_repetition, fetch_events
 from scripts.benchmark.reset_stores import (
     EXIT_RESET_FAILED,
@@ -342,6 +342,13 @@ def pending_runs(
     ]
 
 
+def budget_skip_reason(combo: dict, budget: dict[str, float], spent: dict[str, float]) -> str | None:
+    """Motivo para pular a combinação quando o teto de algum provedor que ela usa já foi atingido."""
+    providers = sorted({spec.partition("/")[0] for spec in combo["roles"].values()})
+    over = next((p for p in providers if p in budget and spent.get(p, 0.0) >= budget[p]), None)
+    return f"orçamento de {over} esgotado (${spent[over]:.2f} de ${budget[over]:.2f})" if over else None
+
+
 def compute_scoreboard(project_id: str | None, session: Path, events: list[dict] | None) -> dict:
     """Placar oficial da sessão (grafo e eventos); falha vira ``score_error``, nunca um valor inventado."""
     empty = {"accuracy_validated": None, "accuracy_source": "grafo_validado", "checks_validated": None}
@@ -449,7 +456,8 @@ def run_combination(
                       checks_texto=text_score["checks_texto"],
                       acuracia_declarada_texto=text_score["acuracia_declarada_texto"],
                       tokens=sum_tokens(usage), db=db_metrics(session.name), **board)
-        result["anomalias_placar"] = scoreboard_anomalies(board)
+        result.update(model_versions.execution_record(model_versions.db_allocation_profile(session.name)))
+        result["anomalias_placar"] = [*scoreboard_anomalies(board), *model_versions.version_marks(result["modelos"])]
         divergences = check_pins(combo["roles"], db_llm_routing(session.name), controle)
         result["routing_check"] = {"ok": not divergences, "divergences": divergences}
         for line in divergences:
@@ -590,14 +598,10 @@ def main() -> None:
 
     for combo, repeticao in pending:
         required = combo.get("requires")
-        providers = {spec.partition("/")[0] for spec in combo["roles"].values()}
-        over = next((p for p in providers if p in budget and spent.get(p, 0.0) >= budget[p]), None)
         if required and not env_base.get(required):
             skip = f"{required} ausente"
-        elif over:
-            skip = f"orçamento de {over} esgotado (${spent[over]:.2f} de ${budget[over]:.2f})"
         else:
-            skip = None
+            skip = budget_skip_reason(combo, budget, spent)
         label = f"{combo['name']} r{repeticao}"
         if skip:
             results.append({"name": combo["name"], "repeticao": repeticao, "roles": combo["roles"],

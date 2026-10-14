@@ -237,8 +237,8 @@ class TestImageProcessing:
 
         authorize.assert_called_once()
         assert len(bundle.images) == 1
-        # OCR_PROVIDER=gemini é alias obsoleto de VISION_MODEL=google/gemini-3.8-flash.
-        assert bundle.images[0].provider == "google/gemini-3.8-flash"
+        # OCR_PROVIDER=gemini é alias obsoleto de VISION_MODEL=google/gemini-4-argon.
+        assert bundle.images[0].provider == "google/gemini-4-argon"
         assert "estrutura celular" in bundle.images[0].description
 
     def test_gemini_vision_recusada_para_imagem_de_pesquisa_nao_compartilhavel(

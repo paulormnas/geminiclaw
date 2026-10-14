@@ -108,7 +108,7 @@ async def test_provedor_fora_da_lista_de_permissao(tmp_path, credentials):
     )
 
     assert result["anthropic/claude-sonnet-5-5"] == Availability(False, availability.MOTIVO_FORA_DA_LISTA)
-    assert result["google/gemini-3.8-flash"].ok is True
+    assert result["google/gemini-4-argon"].ok is True
     assert result["ollama/qwen3:8b"].ok is True
 
 
@@ -122,7 +122,7 @@ async def test_sem_credencial_e_sem_endpoint(tmp_path, monkeypatch):
         provider_factory=lambda p, m: _FakeProvider(None),
     )
 
-    assert result["google/gemini-3.8-flash"].motivo == availability.MOTIVO_SEM_CREDENCIAL
+    assert result["google/gemini-4-argon"].motivo == availability.MOTIVO_SEM_CREDENCIAL
     assert result["ollama/qwen3:8b"].motivo == availability.MOTIVO_SEM_ENDPOINT
 
 
@@ -135,13 +135,13 @@ async def test_health_check_do_google_sem_geracao():
         client.aio.models.get = AsyncMock(return_value=object())
         client.aio.models.generate_content = AsyncMock()
         client_cls.return_value = client
-        provider = GoogleProvider(api_key="k", model="gemini-3.8-flash")
+        provider = GoogleProvider(api_key="k", model="gemini-4-argon")
 
     assert await provider.check_availability() is None
     assert await provider.health_check() is True
 
     client.aio.models.generate_content.assert_not_called()
-    client.aio.models.get.assert_awaited_with(model="gemini-3.8-flash")
+    client.aio.models.get.assert_awaited_with(model="gemini-4-argon")
 
 
 async def test_erro_sanitizado(tmp_path, credentials, caplog):
@@ -154,13 +154,13 @@ async def test_erro_sanitizado(tmp_path, credentials, caplog):
     with caplog.at_level(logging.DEBUG):
         result = await compute_availability(
             catalog,
-            ["google/gemini-3.8-flash"],
+            ["google/gemini-4-argon"],
             priority=("google",),
             timeout=1,
             provider_factory=lambda p, m: _FakeProvider(error),
         )
 
-    assert result["google/gemini-3.8-flash"].motivo == "health_check_falhou:HTTPStatusError:401"
+    assert result["google/gemini-4-argon"].motivo == "health_check_falhou:HTTPStatusError:401"
     everything = " ".join(r.getMessage() + str(r.__dict__) for r in caplog.records)
     assert CHAVE not in everything
     assert "HTTPStatusError" in everything and "401" in everything
@@ -178,11 +178,11 @@ async def test_timeout_do_health_check(tmp_path, credentials):
     catalog = load(tmp_path)
 
     result = await compute_availability(
-        catalog, ["google/gemini-3.8-flash"], priority=("google",), timeout=0.01,
+        catalog, ["google/gemini-4-argon"], priority=("google",), timeout=0.01,
         provider_factory=lambda p, m: _Slow(),
     )
 
-    assert result["google/gemini-3.8-flash"].motivo.startswith("health_check_timeout")
+    assert result["google/gemini-4-argon"].motivo.startswith("health_check_timeout")
 
 
 async def test_checks_em_paralelo_e_um_por_modelo(tmp_path, credentials):
@@ -199,7 +199,7 @@ async def test_checks_em_paralelo_e_um_por_modelo(tmp_path, credentials):
 
     assert sorted(calls) == [
         ("anthropic", "claude-sonnet-5-5"),
-        ("google", "gemini-3.8-flash"),
+        ("google", "gemini-4-argon"),
         ("ollama", "qwen3:8b"),
     ]
 

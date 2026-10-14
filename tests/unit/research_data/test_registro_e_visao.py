@@ -65,7 +65,7 @@ def test_origem_desconhecida_na_marca_cai_no_mais_restritivo():
 # --- visão ----------------------------------------------------------------------------------------------------------
 
 def test_imagem_de_pesquisa_com_visao_de_terceiro_cai_para_ocr(context_dir: Path, monkeypatch, gate, memory_log):
-    monkeypatch.setenv("VISION_MODEL", "google/gemini-3.8-flash")
+    monkeypatch.setenv("VISION_MODEL", "google/gemini-4-argon")
     (context_dir / "micro.png").write_bytes(PNG)
     client = MagicMock()
     with patch("google.genai.Client", return_value=client):
@@ -78,7 +78,7 @@ def test_imagem_de_pesquisa_com_visao_de_terceiro_cai_para_ocr(context_dir: Path
 
 
 def test_imagem_compartilhavel_pode_ir_ao_modelo_de_visao(context_dir: Path, monkeypatch, gate):
-    monkeypatch.setenv("VISION_MODEL", "google/gemini-3.8-flash")
+    monkeypatch.setenv("VISION_MODEL", "google/gemini-4-argon")
     (context_dir / "publica.png").write_bytes(PNG)
     write_manifest(
         context_dir,
@@ -119,7 +119,7 @@ def test_alias_obsoleto_do_ocr_provider(context_dir: Path, monkeypatch, caplog):
     from src.llm import vision
 
     with caplog.at_level("WARNING"):
-        assert vision.configured_model_id() == "google/gemini-3.8-flash"
+        assert vision.configured_model_id() == "google/gemini-4-argon"
     assert any("obsoleto" in r.getMessage() for r in caplog.records)
 
 

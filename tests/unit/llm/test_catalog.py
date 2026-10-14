@@ -123,12 +123,12 @@ def test_hash_do_catalogo_inclui_o_local(tmp_path):
 
 def test_tentativa_de_rebaixar_trust(tmp_path):
     """Cenário: Tentativa de rebaixar trust."""
-    local = {"modelos": [model("google/gemini-3.8-flash", "self_hosted")]}
+    local = {"modelos": [model("google/gemini-4-argon", "self_hosted")]}
 
     with pytest.raises(CatalogError, match="duplicado") as exc:
         load(tmp_path, local=local)
 
-    assert "google/gemini-3.8-flash" in str(exc.value)
+    assert "google/gemini-4-argon" in str(exc.value)
 
 
 def test_catalogo_local_com_papeis_e_recusado(tmp_path):

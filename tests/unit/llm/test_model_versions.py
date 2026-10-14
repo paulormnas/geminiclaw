@@ -84,7 +84,7 @@ async def test_google_informa_a_versao():
         client = MagicMock()
         client.aio.models.generate_content = AsyncMock(return_value=_google_response("gemini-2.5-pro-002"))
         client_cls.return_value = client
-        provider = GoogleProvider(api_key="chave-de-teste", model="gemini-3.8-flash")
+        provider = GoogleProvider(api_key="chave-de-teste", model="gemini-4-argon")
 
     response = await provider.generate([{"role": "user", "content": "oi"}])
 
@@ -99,7 +99,7 @@ async def test_google_sem_model_version_e_desconhecida():
         client = MagicMock()
         client.aio.models.generate_content = AsyncMock(return_value=_google_response(False))
         client_cls.return_value = client
-        provider = GoogleProvider(api_key="chave-de-teste", model="gemini-3.8-flash")
+        provider = GoogleProvider(api_key="chave-de-teste", model="gemini-4-argon")
 
     assert (await provider.generate([{"role": "user", "content": "oi"}])).versao_efetiva == UNKNOWN_VERSION
 

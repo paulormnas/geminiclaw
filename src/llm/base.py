@@ -100,5 +100,5 @@ class LLMProvider(ABC):
     @property
     @abstractmethod
     def model_name(self) -> str:
-        """Nome do modelo em uso (ex: 'qwen3.5:4b', 'gemini-3.8-flash')."""
+        """Nome do modelo em uso (ex: 'qwen3.5:4b', 'gemini-4-argon')."""
         ...

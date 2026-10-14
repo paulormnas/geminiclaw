@@ -85,7 +85,7 @@ async def test_orquestrador_grava_o_perfil_antes_do_primeiro_envio(nuvem):
             await run_tasks(orchestrator, "teste", [AgentTask(agent_id="developer", prompt="p")])
 
     payload = session_manager.update.call_args_list[0].kwargs["payload"]
-    assert payload["allocation_profile"]["papeis"]["developer"]["provedor_modelo"] == "google/gemini-3.8-flash"
+    assert payload["allocation_profile"]["papeis"]["developer"]["provedor_modelo"] == "google/gemini-4-argon"
     assert payload["allocation_profile"]["papeis"]["researcher"]["localidade"] == "fora_do_no"
     assert payload["eventos_versao_modelo"] == []
     json.dumps(payload["allocation_profile"])

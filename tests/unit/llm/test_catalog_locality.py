@@ -9,7 +9,7 @@ from tests.support.catalog_fixtures import base_document, load, model
 
 pytestmark = pytest.mark.unit
 
-GEMINI = "google/gemini-3.8-flash"
+GEMINI = "google/gemini-4-argon"
 QWEN = "ollama/qwen3:8b"
 
 

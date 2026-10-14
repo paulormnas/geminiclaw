@@ -8,7 +8,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from scripts.benchmark import footprint
+from scripts.benchmark import footprint, model_versions
 
 
 def _fmt(stats: dict | None, key: str = "max", suffix: str = "") -> str:
@@ -252,6 +252,11 @@ if __name__ == "__main__":
     print(render(loaded))
     print()
     print(render_interactions(loaded))
+    print()
+    print("### Modelos e versões")
+    print(model_versions.render_models(loaded))
+    for warning in model_versions.version_warnings(loaded):
+        print(warning)
     if any(r.get("repeticao", 1) > 1 for r in loaded):
         print()
         print(render_aggregates(loaded))

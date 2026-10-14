@@ -81,7 +81,7 @@ class TestPricing:
     def test_openai_cached_tokens_use_cache_rate(self):
         # luna: entrada 0,10 e cache 0,01 por MTok; terra: 2,00 e 0,20 (developers.openai.com/api/docs/pricing)
         assert pricing.estimate_cost("openai", "gpt-6-luna", 1_000_000, 0, cached_tokens=500_000) == pytest.approx(0.055)
-        assert pricing.estimate_cost("openai", "gpt-5.6-terra", 1_000_000, 0, cached_tokens=1_000_000) == pytest.approx(0.20)
+        assert pricing.estimate_cost("openai", "gpt-6.1-sol", 1_000_000, 0, cached_tokens=1_000_000) == pytest.approx(0.20)
 
     def test_unknown_model_is_none_not_zero(self):
         assert pricing.estimate_cost("google", "modelo-inexistente", 10, 10) is None

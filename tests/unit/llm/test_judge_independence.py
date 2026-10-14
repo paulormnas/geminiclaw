@@ -31,7 +31,7 @@ pytestmark = pytest.mark.unit
 
 CLAUDE = "anthropic/claude-sonnet-5-5"
 HAIKU = "anthropic/claude-haiku-5-5"
-GEMINI = "google/gemini-3.8-flash"
+GEMINI = "google/gemini-4-argon"
 GPT = "openai/gpt-6-luna"
 QWEN = "ollama/qwen3:8b"
 THIRD = "third_party_allowed"

@@ -187,7 +187,7 @@ def test_pool_do_juiz_exclui_reviewer():
     from scripts.benchmark import comm_judge as cj
 
     assert "reviewer" not in cj.POOL_ROLES
-    models = {"developer": "google/gemini-3.8-flash", "researcher": "google/gemini-3.8-flash",
+    models = {"developer": "google/gemini-4-argon", "researcher": "google/gemini-4-argon",
               "reviewer": "anthropic/claude-sonnet-5-5"}
     with pytest.raises(cj.JudgeUnavailable):
         cj.select_judge(models)

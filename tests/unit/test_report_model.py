@@ -38,7 +38,7 @@ def narrative_json(resumo="resumo"):
 def metadata(**kw):
     base = dict(duration_s=12.0, tokens_in=100, tokens_out=50, cost_usd=0.0123,
                 agent_runs={"developer": 5, "researcher": 2}, sandbox_runs=3,
-                models_by_role={"developer": "google/gemini-3.8-flash"})
+                models_by_role={"developer": "google/gemini-4-argon"})
     base.update(kw)
     return ReportMetadata(**base)
 
@@ -65,7 +65,7 @@ def test_metadados_de_execucao_sem_containers():
     """Scenario: Metadados de execução."""
     _, md = render()
     assert "developer: 5, researcher: 2" in md
-    assert "**Execuções no sandbox**: 3" in md and "google/gemini-3.8-flash" in md
+    assert "**Execuções no sandbox**: 3" in md and "google/gemini-4-argon" in md
     assert "US$ 0.0123" in md and "100 de entrada, 50 de saída" in md
     assert "Containers" not in md
 

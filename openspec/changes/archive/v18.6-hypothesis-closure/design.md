@@ -155,7 +155,7 @@ Detalhes que o texto original deixava abertos:
 - **Tarefa 6.1 (Sonnet sem `afirmacoes.json`):** sem acesso aos logs do Pi nesta sessão, a causa não foi confirmada por
   eventos. Pelo código, o arquivo só nascia no fim do estágio `claims`; sem `CLAIM_VERIFY_ENABLED`, sem `render`, ou com
   exceção antes de `store.save()` o arquivo não era criado. A correção do §6.2 torna a ausência explícita
-  (`motivo_vazio`); a confirmação por eventos fica pendente.
+  (`motivo_vazio`); a confirmação por eventos fica pendente: reexecutar a sessão com o modelo Sonnet no Pi, quando o pesquisador autorizar a bateria, observando os eventos do estágio `claims` e as exceções (a causa continua NÃO confirmada).
 
 ## 9. Riscos e mitigações
 

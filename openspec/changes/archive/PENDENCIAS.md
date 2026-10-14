@@ -7,7 +7,7 @@ se perderem no arquivo. Cada item cita a mudança de origem.
 
 - **Validação em ambiente real:** entra na bateria final no Raspberry Pi 5, que só começa com a
   confirmação do pesquisador. A etapa V18.6 (`roadmaps/roadmap_V18.6.md`) termina com essa bateria.
-- **Segurança:** pareceres do Analista de Segurança ainda não registrados.
+- **Segurança:** pareceres do Analista de Segurança ainda não registrados (o da Tarefa 1 da V18.6 foi registrado em 2026-10-13; restam as correções NC-PERFIL-1 a 6).
 - **Administrativo:** itens de PR, revisão e lint cumpridos pelo merge do PR da mudança; mantidos
   só para rastreabilidade.
 - **Débito técnico ou decisão pendente:** trabalho que precisa de uma mudança OpenSpec nova ou de
@@ -26,7 +26,7 @@ se perderem no arquivo. Cada item cita a mudança de origem.
 - [ ] [`v18.5-sandbox-phases`](v18.5-sandbox-phases/tasks.md): 5.5.1 Cota de disco para os bind mounts `/outputs` e `/deps` (hoje só o `/tmp` em `tmpfs` tem limite; um script ou instalação pode encher o disco do Pi). Motivo: depende de decisão do mecanismo (quota de sistema de arquivos, `ulimit fsize` ou monitor) e de validação no Pi. **RISCO ACEITO PENDENTE** (revisão de segurança M1): mitigado só pela checagem de espaço livre antes de iniciar (`SANDBOX_MIN_FREE_BYTES`), pelo teto por ativo (512 MiB) e pelo teto somado (2 GiB); não limita o que o script grava durante a execução.
 - [ ] [`v18.5-claim-verification`](v18.5-claim-verification/tasks.md): 5.2 Revisão do Analista de Segurança (evidência como dado, egresso).
 - [ ] [`v18.5-operation-metrics`](v18.5-operation-metrics/tasks.md): 9.2 Revisão do Analista de Segurança (ativação do modo, ausência de ativação por agente).
-- [ ] [`v18.6-review-evidence`](v18.6-review-evidence/tasks.md): 0.2 Parecer do Analista de Segurança sobre o perfil estrutural de CSV/JSON (`src/artifact_profile.py`, origem `esquema_agregado`; design §4). O parecer da Tarefa 3 (`v18.6-validator-independence`, egresso do juiz) foi feito no design §6, sem bloqueio.
+- [x] [`v18.6-review-evidence`](v18.6-review-evidence/tasks.md): 0.2 Parecer do Analista de Segurança sobre o perfil estrutural de CSV/JSON: feito em 2026-10-13 ([`docs/security/parecer_v18_6_perfil_estrutural.md`](../../../docs/security/parecer_v18_6_perfil_estrutural.md)); aprovado com ressalvas. **Abertas as correções NC-PERFIL-1 a 6** (requisitos R1 a R6 do parecer: cabeçalho verificado, symlink, delimitação e nome seguro, perfil sem exceção, limites de colunas/linhas, mapas), que exigem mudança OpenSpec própria. O parecer da Tarefa 3 (`v18.6-validator-independence`, egresso do juiz) foi feito no design §6, sem bloqueio.
 
 ## Validação em ambiente real (bateria no Pi 5)
 
@@ -71,7 +71,7 @@ se perderem no arquivo. Cada item cita a mudança de origem.
 - [ ] [`v18.5-claim-verification`](v18.5-claim-verification/tasks.md): 5.1 Sessões de referência: distribuição de status e custo em tokens no PR.
 - [ ] [`v18.6-benchmark-harness`](v18.6-benchmark-harness/tasks.md): 7.2 Execução curta no Pi (uma combinação, `--repeat 1`, `--reset-stores`) **somente após confirmação do pesquisador**; conferir o arquivo de segurança, a série de crescimento e o placar. Faz parte da matriz com bancos isolados e 3 repetições (roadmap V18.6, Validação da Etapa), também pendente.
 - [ ] [`v18.6-review-evidence`](v18.6-review-evidence/tasks.md): 7.2 (parcial) Reprocessar os `metrics.json`, planos e nós `Resultado` do benchmark de 2026-10-13, já apagados do Pi; só a classificação textual dos eventos foi feita (limites superiores registrados na própria tarefa). A conferência exata só ocorre com novos dados da matriz.
-- [ ] [`v18.6-hypothesis-closure`](v18.6-hypothesis-closure/tasks.md): 6.1 Causa da ausência de `afirmacoes.json` na sessão do Sonnet (2026-10-12 21:53) **não confirmada**: sem acesso aos eventos do Pi; só análise de código (design §8.1). A tarefa 6.3 (arquivo sempre gravado, com `motivo_vazio`) elimina o sintoma, não confirma a causa.
+- [ ] [`v18.6-hypothesis-closure`](v18.6-hypothesis-closure/tasks.md): 6.1 Causa da ausência de `afirmacoes.json` na sessão do Sonnet (2026-10-12 21:53) **NÃO confirmada**: sem acesso aos eventos do Pi; só análise de código (design §8.1). **É preciso reexecutar a sessão com o modelo Sonnet** (no Pi, quando o pesquisador autorizar a bateria) e investigar pelos eventos. Hipóteses: `CLAIM_VERIFY_ENABLED` desligado, falta de `render`, exceção antes de `store.save()`. Observar: eventos do estágio `claims` e exceções. A tarefa 6.3 (arquivo sempre gravado, com `motivo_vazio`) elimina o sintoma, não confirma a causa.
 
 ## Administrativo (encerrado pelo merge do PR)
 
@@ -115,6 +115,4 @@ se perderem no arquivo. Cada item cita a mudança de origem.
 - [ ] [`v18.6-review-evidence`](v18.6-review-evidence/tasks.md): 0.1 Respostas do pesquisador às questões do design §8 (adotadas as propostas do design: limiar só com `hypothesis_ref`; `val_` é `validacao`; um nível de achatamento).
 - [ ] [`v18.6-hypothesis-closure`](v18.6-hypothesis-closure/tasks.md): 0.1 Respostas do pesquisador às questões do design §8 (adotadas as propostas conservadoras, design §8.1).
 - [ ] [`v18.6-benchmark-harness`](v18.6-benchmark-harness/tasks.md): 0.1 Respostas do pesquisador às questões do design §8 (adotado: mesmas coleções do Qdrant; sem reexecução do modelo; 3 repetições na próxima rodada; arquivo de segurança retido).
-- [ ] [`v18.6-benchmark-harness`](v18.6-benchmark-harness/tasks.md): 6.2 `cached_input` dos modelos OpenAI da matriz: falta o preço oficial (fonte e data); não foi inventado. Até lá o token em cache é cobrado ao preço de entrada (`src/llm/pricing.py`), o que superestima o custo. `LLM_PRICING_OVERRIDES` já aceita o terceiro valor.
 - [ ] [`v18.6-benchmark-harness`](v18.6-benchmark-harness/tasks.md): 6b.4 Composição da matriz `scripts/benchmark/matrix_modelos_v18_6.json` (três combinações com juiz de outra família e `controle-gemini-todos`) a confirmar com o pesquisador antes da rodada com 3 repetições.
-- [ ] [`v18.6-benchmark-harness`](v18.6-benchmark-harness/tasks.md): Matrizes antigas `matrix_baixo_custo.json` e `matrix_modelos_2026_10.json` passaram a ser **recusadas** pelo runner (o `*` não cobre o juiz; `VALIDATOR` deve ser declarado, ADR 020 §7). Decidir se são migradas para o juiz declarado ou removidas.

@@ -70,7 +70,9 @@ def test_fluxo_completo_da_fila(queue):
     assert q.enqueue(_cand(prefix, "x")) is False  # mesmo par, mesmos textos
     assert q.enqueue(_cand(prefix, "y", prioridade=0.9, entre_dominios=True)) is True
 
-    mine = [i for i in q.next_batch(1000) if i.candidate.node_a.startswith(prefix)]
+    # A fila do banco é compartilhada com outras execuções: o lote precisa cobrir todos os pendentes para conter as
+    # linhas do teste, que podem ter prioridade menor que a das já existentes.
+    mine = [i for i in q.next_batch(10_000_000) if i.candidate.node_a.startswith(prefix)]
     assert [i.candidate.node_a.split("-")[2] for i in mine] == ["y", "x"]  # prioridade decrescente
 
     q.mark_discarded(mine[1].id, "pesquisador", "irrelevante")

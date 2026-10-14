@@ -11,7 +11,9 @@ acrescentou as 4 mudanças da V18.6 (`pipeline-robustness`, `benchmark` (nova), 
 `v18.6-profile-hardening` (`pipeline-robustness`, `data-egress`) e `v18.6-remove-unused-agents`
 (`agent-runtime`, `llm-providers`, `communication-eval`); os `MODIFIED`/`REMOVED` desta última foram
 aplicados aos requisitos existentes (catálogo versionado, rótulo da revisão de subtarefa, agente
-Reviewer).
+Reviewer). A quarta consolidação (2026-10-14) acrescentou
+`v18.6-auto-metrics-and-stop-reasons` (`hypothesis-loop`, `vocabulary`, `operation-metrics`, `benchmark`); os
+`MODIFIED` foram aplicados aos requisitos de conferência do veredito, fechamento por falta de caminhos e resultado negativo.
 
 | Capacidade | Arquivo |
 |---|---|

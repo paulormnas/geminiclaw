@@ -60,10 +60,9 @@ O sistema SHALL <comportamento obrigatório>.
 
 ## Mudanças
 
-**Arquivadas em 2026-10-13:** as 32 mudanças de V16 a V18.5 e as 6 da V18.6 (links para
+**Arquivadas em 2026-10-13 e 2026-10-14:** as 32 mudanças de V16 a V18.5 e as 7 da V18.6 (links para
 `changes/archive/`), com os requisitos consolidados em [`specs/`](specs/README.md) e os itens
-abertos em [`changes/archive/PENDENCIAS.md`](changes/archive/PENDENCIAS.md). Em aberto: V19 e V20
-(e a `v18.6-auto-metrics-and-stop-reasons`, em outra branch).
+abertos em [`changes/archive/PENDENCIAS.md`](changes/archive/PENDENCIAS.md). Em aberto: V19 e V20.
 
 | Versão | Mudança | Capacidade | ADRs | Depende de |
 |---|---|---|---|---|
@@ -105,6 +104,7 @@ abertos em [`changes/archive/PENDENCIAS.md`](changes/archive/PENDENCIAS.md). Em 
 | V18.6 | [v18.6-hypothesis-closure](changes/archive/v18.6-hypothesis-closure/proposal.md) | `hypothesis-loop` | 009, 010, 012, 015, 019 | v18.6-review-evidence |
 | V18.6 | [v18.6-remove-unused-agents](changes/archive/v18.6-remove-unused-agents/proposal.md) | `agent-runtime`, `llm-providers`, `communication-eval` | 007, 020 | v18.6-validator-independence |
 | V18.6 | [v18.6-profile-hardening](changes/archive/v18.6-profile-hardening/proposal.md) | `pipeline-robustness`, `data-egress` | 019 | v18.6-review-evidence |
+| V18.6 | [v18.6-auto-metrics-and-stop-reasons](changes/archive/v18.6-auto-metrics-and-stop-reasons/proposal.md) | `hypothesis-loop`, `vocabulary`, `operation-metrics`, `benchmark` | 010, 012, 015, 020 | v18.6-hypothesis-closure |
 | V19 | [v19-equipment-control](changes/v19-equipment-control/proposal.md) | `equipment-control` | 019, 014, 015, 010 | V18.5, v18-researcher-consult |
 | V20 | [v20-node-identity](changes/v20-node-identity/proposal.md) | `node-identity` | 013 | V16–V19 validadas |
 | V20 | [v20-federated-records](changes/v20-federated-records/proposal.md) | `federation-records` | 013, 019, 015 | v20-node-identity, V18.5 |

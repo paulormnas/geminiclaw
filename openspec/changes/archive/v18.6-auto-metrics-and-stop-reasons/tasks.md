@@ -1,6 +1,7 @@
 # Tarefas: v18.6-auto-metrics-and-stop-reasons
 
-**Estado (2026-10-13):** Implementada na branch `feat/v18.6-auto-metrics`: itens 1 a 4 e testes por cenário (`tests/unit/test_auto_metrics_and_stop_reasons.py`, `tests/unit/benchmark/test_stop_reasons.py`, ajustes em `tests/unit/test_hypothesis_closure.py`). `ruff` e `pytest -m unit` verdes (3495 testes); a bateria de integração (5.2) fica para o Pi, a cargo do orquestrador depois do PR. Specs consolidadas e ADRs: no fechamento, depois do merge.
+**Estado (2026-10-14):** Concluída e arquivada — código mergeado em `dev` (#157). Validação no Pi 5 (unit + integration): 3596 passed, 0 falhas. Aberto só o item 5.3 (sessão `auto` real, na bateria do benchmark, com confirmação do pesquisador); registrado em `PENDENCIAS.md`. Specs consolidadas em `openspec/specs/{hypothesis-loop,vocabulary,operation-metrics,benchmark}`.
+**Estado anterior (2026-10-13):** Implementada na branch `feat/v18.6-auto-metrics`: itens 1 a 4 e testes por cenário (`tests/unit/test_auto_metrics_and_stop_reasons.py`, `tests/unit/benchmark/test_stop_reasons.py`, ajustes em `tests/unit/test_hypothesis_closure.py`). `ruff` e `pytest -m unit` verdes (3495 testes); a bateria de integração (5.2) fica para o Pi, a cargo do orquestrador depois do PR.
 
 ## 0. Pré-requisitos
 - [x] 0.1 Direção aprovada pelo pesquisador (2026-10-13), inclusive o schema aditivo.

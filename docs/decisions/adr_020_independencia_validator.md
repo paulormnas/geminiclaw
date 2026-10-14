@@ -243,6 +243,7 @@ mesmo modelo do Researcher mostrar viés.
 | §1 a §6: roteador, despacho, dicas, reserva do 429, modos, catálogo, registro, retomada | Implementada | `v18.6-validator-independence`, #145 |
 | §7: runner do benchmark com juiz declarado, combinação de controle e `check_pins` | Implementada | `v18.6-benchmark-harness`, #144 |
 | Juiz = `validator`, julgado = `developer`; sem `reviewer` nem `base` na regra | Implementada | `v18.6-remove-unused-agents`, #155 (Pi 5: 3549 passed, 0 falhas) |
+| Validator valida as métricas que o Researcher define no modo `auto` (`aprovada_por = "validator"`), com motivos `sem_hipotese` e `hipoteses_nao_testadas` | Implementada | `v18.6-auto-metrics-and-stop-reasons`, #157 (Pi 5: 3596 passed, 0 falhas); a taxa de reprovação do juiz de outra família é medida na matriz |
 | Parecer de segurança do juiz (egresso) | Feito, sem bloqueio | design §6 de `v18.6-validator-independence` (S1 a S6) |
 | Composição da matriz `matrix_modelos_v18_6.json` | Pendente (confirmação do pesquisador) | `roadmaps/roadmap_V18.6.md`, Pendências conhecidas |
 | Matriz com bancos isolados e 3 repetições no Pi 5 | Pendente (só com confirmação do pesquisador) | Acompanhamento; não bloqueia o aceite |

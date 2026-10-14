@@ -18,6 +18,7 @@
 | [`v18.5-claim-verification`](../../openspec/changes/archive/v18.5-claim-verification/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #121 |
 | [`v18.5-execution-provenance`](../../openspec/changes/archive/v18.5-execution-provenance/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`) | #119 |
 | [`v18.6-hypothesis-closure`](../../openspec/changes/archive/v18.6-hypothesis-closure/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`: causa da ausência de `afirmacoes.json` no Sonnet não confirmada, questões do design §8) | #146 |
+| [`v18.6-auto-metrics-and-stop-reasons`](../../openspec/changes/archive/v18.6-auto-metrics-and-stop-reasons/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`: sessão `auto` real na bateria do Pi 5; ratificação das métricas aprovadas pelo agente) | #157 |
 | [`v20-federated-records`](../../openspec/changes/v20-federated-records/proposal.md) | Não iniciada | — |
 
 ---
@@ -157,6 +158,11 @@ projeto), `status` (`candidato` / `aprovado`).
 **`Metrica`** — `nome` canônico, `sinonimos` (ex.: `acc`, `accuracy`, `acuracia`), `sentido`
 (`maior_melhor` / `menor_melhor`), `unidade`, `faixa` (ex.: 0–1), `familia` (ex.: erro de
 regressão, classificação, rendimento de síntese), `status` (`candidato` / `aprovado`).
+Em sessão `auto`, o Researcher pode definir a métrica no plano e o Validator a valida; o
+orquestrador grava então `origem_definicao = "agente"`, `aprovada_por = "validator"` e
+`justificativa_definicao` (propriedades opcionais; a ausência equivale a aprovada pelo pesquisador).
+Nenhum agente aprova `Metrica` por conta própria, e uma `Metrica` aprovada ou rejeitada pelo pesquisador
+prevalece (`v18.6-auto-metrics-and-stop-reasons`). A ratificação pelo pesquisador segue pendente.
 
 ### 5. Relações
 

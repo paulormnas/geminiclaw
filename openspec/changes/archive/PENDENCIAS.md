@@ -1,8 +1,8 @@
 # Pendências das Mudanças Arquivadas (V16–V18.6)
 
-As 32 mudanças das versões V16 a V18.5 e as 6 da V18.6 (`v18.6-review-evidence`,
+As 32 mudanças das versões V16 a V18.5 e as 7 da V18.6 (`v18.6-review-evidence`,
 `v18.6-benchmark-harness`, `v18.6-validator-independence`, `v18.6-hypothesis-closure`,
-`v18.6-profile-hardening` e `v18.6-remove-unused-agents`) foram arquivadas em 2026-10-13, com o código mergeado em `dev`. Os itens que estavam abertos nos `tasks.md` foram reunidos aqui por categoria, para não
+`v18.6-profile-hardening`, `v18.6-remove-unused-agents` e `v18.6-auto-metrics-and-stop-reasons`) foram arquivadas em 2026-10-13 e 2026-10-14, com o código mergeado em `dev`. Os itens que estavam abertos nos `tasks.md` foram reunidos aqui por categoria, para não
 se perderem no arquivo. Cada item cita a mudança de origem.
 
 - **Validação em ambiente real:** entra na bateria final no Raspberry Pi 5, que só começa com a
@@ -72,6 +72,7 @@ se perderem no arquivo. Cada item cita a mudança de origem.
 - [ ] [`v18.6-benchmark-harness`](v18.6-benchmark-harness/tasks.md): 7.2 Execução curta no Pi (uma combinação, `--repeat 1`, `--reset-stores`) **somente após confirmação do pesquisador**; conferir o arquivo de segurança, a série de crescimento e o placar. Faz parte da matriz com bancos isolados e 3 repetições (roadmap V18.6, Validação da Etapa), também pendente.
 - [ ] [`v18.6-review-evidence`](v18.6-review-evidence/tasks.md): 7.2 (parcial) Reprocessar os `metrics.json`, planos e nós `Resultado` do benchmark de 2026-10-13, já apagados do Pi; só a classificação textual dos eventos foi feita (limites superiores registrados na própria tarefa). A conferência exata só ocorre com novos dados da matriz.
 - [ ] [`v18.6-hypothesis-closure`](v18.6-hypothesis-closure/tasks.md): 6.1 Causa da ausência de `afirmacoes.json` na sessão do Sonnet (2026-10-12 21:53) **NÃO confirmada**: sem acesso aos eventos do Pi; só análise de código (design §8.1). **É preciso reexecutar a sessão com o modelo Sonnet** (no Pi, quando o pesquisador autorizar a bateria) e investigar pelos eventos. Hipóteses: `CLAIM_VERIFY_ENABLED` desligado, falta de `render`, exceção antes de `store.save()`. Observar: eventos do estágio `claims` e exceções. A tarefa 6.3 (arquivo sempre gravado, com `motivo_vazio`) elimina o sintoma, não confirma a causa.
+- [ ] [`v18.6-auto-metrics-and-stop-reasons`](v18.6-auto-metrics-and-stop-reasons/tasks.md): 5.3 Sessão `auto` real no Pi 5 (na bateria do benchmark, só com confirmação do pesquisador): conferir se o Researcher propõe métricas razoáveis, se o Validator as aprova (`aprovada_por = "validator"`) e se `hipoteses_nao_testadas` ocorre. O pesquisador ainda **não ratificou** as métricas aprovadas pelo agente (`geminiclaw vocab pending` poderia listá-las).
 
 ## Administrativo (encerrado pelo merge do PR)
 

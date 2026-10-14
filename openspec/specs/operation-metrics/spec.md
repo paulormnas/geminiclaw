@@ -3,7 +3,7 @@
 Verdade atual consolidada a partir das mudanças arquivadas (2026-10-13). Cada requisito indica a
 mudança que o definiu por último; os cenários vêm do delta original, em GIVEN/WHEN/THEN.
 
-**Mudanças de origem:** [`v18.5-operation-metrics`](../../changes/archive/v18.5-operation-metrics/proposal.md)
+**Mudanças de origem:** [`v18.5-operation-metrics`](../../changes/archive/v18.5-operation-metrics/proposal.md), [`v18.6-auto-metrics-and-stop-reasons`](../../changes/archive/v18.6-auto-metrics-and-stop-reasons/proposal.md)
 
 ## Requirements
 
@@ -218,3 +218,19 @@ efetivo da sessão e SHALL omitir os avisos de tokens, tempo e custo no modo sem
 - **GIVEN** `SESSION_MAX_TOKENS=500000` e a sessão iniciada com `--max-tokens 100000`
 - **WHEN** o consumo chega a 80 000 tokens
 - **THEN** o aviso de `token_usage_pct` (0,80) é emitido
+
+### Requirement: Motivos de parada e de reprovação nas métricas de operação
+_Origem: [`v18.6-auto-metrics-and-stop-reasons`](../../changes/archive/v18.6-auto-metrics-and-stop-reasons/proposal.md)_
+O grupo `verificacao` SHALL registrar `fechada_por_hipoteses_nao_testadas` (booleano), `hipoteses_sem_tentativa_no_fechamento` e
+`reprovacoes_sem_hipotese` (subtarefas distintas com o motivo `sem_hipotese`). A seção Markdown "Métricas de operação" SHALL descrever
+o motivo de parada `hipoteses_nao_testadas` com a contagem de hipóteses sem tentativa.
+
+#### Scenario: Contadores
+- **GIVEN** um evento `exploration_stop` com `motivo_parada = "hipoteses_nao_testadas"`, um evento `hipoteses_sem_tentativa` com duas hipóteses e dois `subtask_review` da mesma subtarefa com `motivos = ["sem_hipotese"]`
+- **WHEN** o leitor do grupo lê a sessão
+- **THEN** `fechada_por_hipoteses_nao_testadas` é `true`, `hipoteses_sem_tentativa_no_fechamento` é 2 e `reprovacoes_sem_hipotese` é 1
+
+#### Scenario: Seção do relatório
+- **GIVEN** `stop_reason = "hipoteses_nao_testadas"`
+- **WHEN** a seção é renderizada
+- **THEN** o texto contém o motivo e a explicação "hipóteses em teste sem nenhuma tentativa"

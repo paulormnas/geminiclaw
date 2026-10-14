@@ -1,6 +1,6 @@
 """Cenários da mudança v18.6-remove-unused-agents (remoção do ``reviewer`` e do código sem uso).
 
-Cada teste cita o Scenario da spec em ``openspec/changes/v18.6-remove-unused-agents/specs/``.
+Cada teste cita o Scenario da spec em ``openspec/changes/archive/v18.6-remove-unused-agents/specs/``.
 """
 
 from __future__ import annotations

@@ -2,12 +2,12 @@
 
 **ID:** `v18.6-auto-metrics-and-stop-reasons` · **Versão:** V18.6 ·
 **Capacidades:** `hypothesis-loop`, `vocabulary`, `pipeline-robustness`, `operation-metrics`, `benchmark`
-**ADRs de origem:** [ADR 015](../../../docs/decisions/adr_015_modelo_dados_grafo_conhecimento.md) (`Metrica`,
-vocabulário controlado, §4 autoria e §8 aprovação de termos), [ADR 020](../../../docs/decisions/adr_020_independencia_validator.md)
-(o Validator é de família diferente da do Developer), [ADR 010](../../../docs/decisions/adr_010_proposito_assistente_digital_pesquisa.md)
-(exploração contínua), [ADR 012](../../../docs/decisions/adr_012_agente_curator_ciclo_exploracao.md).
+**ADRs de origem:** [ADR 015](../../../../docs/decisions/adr_015_modelo_dados_grafo_conhecimento.md) (`Metrica`,
+vocabulário controlado, §4 autoria e §8 aprovação de termos), [ADR 020](../../../../docs/decisions/adr_020_independencia_validator.md)
+(o Validator é de família diferente da do Developer), [ADR 010](../../../../docs/decisions/adr_010_proposito_assistente_digital_pesquisa.md)
+(exploração contínua), [ADR 012](../../../../docs/decisions/adr_012_agente_curator_ciclo_exploracao.md).
 **Origem dos requisitos:** decisões do pesquisador em 2026-10-13, que substituem as três hipóteses conservadoras
-adotadas na implementação de [`v18.6-hypothesis-closure`](../archive/v18.6-hypothesis-closure/design.md) (§8.1).
+adotadas na implementação de [`v18.6-hypothesis-closure`](../v18.6-hypothesis-closure/design.md) (§8.1).
 **Depende de:** `v18.6-hypothesis-closure` (mergeada, #146). **Aprovação da direção:** pesquisador, 2026-10-13
 (inclui a alteração **aditiva** de schema).
 

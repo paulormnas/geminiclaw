@@ -21,6 +21,7 @@
 | [`v18.6-benchmark-harness`](../../openspec/changes/archive/v18.6-benchmark-harness/proposal.md) | Concluída e arquivada, com pendências (`cached_input` dos modelos OpenAI, composição da matriz `matrix_modelos_v18_6.json`, matrizes antigas agora recusadas pelo runner, execução curta no Pi; ver `PENDENCIAS.md`) | #144 |
 | [`v18.6-validator-independence`](../../openspec/changes/archive/v18.6-validator-independence/proposal.md) | Concluída e arquivada | #145 |
 | [`v18.6-hypothesis-closure`](../../openspec/changes/archive/v18.6-hypothesis-closure/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`: causa da ausência de `afirmacoes.json` no Sonnet não confirmada, questões do design §8) | #146 |
+| [`v18.6-auto-metrics-and-stop-reasons`](../../openspec/changes/archive/v18.6-auto-metrics-and-stop-reasons/proposal.md) | Concluída e arquivada (pendências em `PENDENCIAS.md`: sessão `auto` real na bateria do Pi 5; ratificação das métricas aprovadas pelo agente) | #157 |
 
 ---
 

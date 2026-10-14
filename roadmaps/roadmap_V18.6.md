@@ -1,7 +1,7 @@
 # Roadmap V18.6 — Correções do Benchmark de 2026-10-13
 
-> **Estado (2026-10-13):** as Tarefas 1 a 5 e a correção NC-PERFIL (`v18.6-profile-hardening`) estão
-> concluídas, mergeadas em `dev` (#142, #144, #145, #146, #154, #155) e arquivadas em
+> **Estado (2026-10-14):** as Tarefas 1 a 6 e a correção NC-PERFIL (`v18.6-profile-hardening`) estão
+> concluídas, mergeadas em `dev` (#142, #144, #145, #146, #154, #155, #157) e arquivadas em
 > `openspec/changes/archive/`, com os requisitos consolidados em `openspec/specs/`. A etapa **não está
 > encerrada**: faltam a matriz com bancos isolados e 3 repetições no Pi 5 (só com confirmação do
 > pesquisador), a composição da matriz e as respostas do pesquisador às questões de design (ver
@@ -69,6 +69,11 @@ ADRs de origem: 002, 005, 009, 010, 012, 015, 019 e o ADR 020 (aceito em 2026-10
 - **Critérios de aceite:** [x] cabeçalho verificado (NC-PERFIL-1) · [x] symlink e arquivo fora da sessão nunca lidos (NC-PERFIL-2) · [x] perfil delimitado como dado e rótulos seguros (NC-PERFIL-3 e 6) · [x] perfil sem exceção, JSON profundo e `LOCALITY_MIN_GROUP_SIZE` ausente (NC-PERFIL-4) · [x] limites de colunas, linhas, tempo e linhas de chaves (NC-PERFIL-5)
 - **Complexidade estimada:** Baixa
 
+### Tarefa 6: Métricas definidas pelo agente no modo `auto` e motivos de parada explícitos
+- **Spec:** [`v18.6-auto-metrics-and-stop-reasons`](../openspec/changes/archive/v18.6-auto-metrics-and-stop-reasons/proposal.md) · **Estado (2026-10-14):** concluída e arquivada, #157 (Pi 5: 3596 passed, 0 falhas)
+- **Critérios de aceite:** [x] modo `auto` sem métrica aprovada não termina com erro: o Researcher define `metricas` e o Validator as valida · [x] precedência do pesquisador e rejeição respeitadas · [x] `hipoteses_nao_testadas` no lugar de `erro` · [x] `sem_hipotese` na reprovação sem `hypothesis_id` · [x] benchmark e métricas de operação classificam os dois motivos
+- **Complexidade estimada:** Média
+
 ## Ordem de implementação
 
 ```
@@ -86,6 +91,8 @@ Depois:            bateria no Pi (com confirmação do pesquisador) e matriz com
 - [x] PRs merged em `dev`; mudanças arquivadas. _#142, #144, #145 e #146 mergeados; as 4 mudanças arquivadas e os ADRs 002, 005, 009, 010, 012, 015, 019 e 020 atualizados (#147); #154 e #155 mergeados, com `v18.6-profile-hardening` e `v18.6-remove-unused-agents` arquivadas e os ADRs 007, 017, 019 e 020 atualizados (PR de fechamento documental)._
 
 ## Pendências conhecidas
+
+- **`v18.6-auto-metrics-and-stop-reasons` 5.3:** sessão `auto` real no Pi 5 (métricas propostas pelo Researcher, aprovadas pelo Validator, `hipoteses_nao_testadas`) e ratificação, pelo pesquisador, das métricas aprovadas pelo agente.
 
 - **Questões do design §8:** as respostas do pesquisador a `v18.6-review-evidence` e a `v18.6-hypothesis-closure` (e a `v18.6-benchmark-harness`, 0.1) não foram dadas; vigoram as propostas dos designs.
 - **`v18.6-review-evidence` 7.2 (parcial):** a conferência exata sobre os `metrics.json`, planos e nós `Resultado` do benchmark de 2026-10-13 não é possível (apagados do Pi); só há a classificação textual dos eventos, com limites superiores.

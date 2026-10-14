@@ -110,6 +110,12 @@ ADR 010 (Propósito: Assistente de Pesquisa) ← define o escopo de tudo (substi
 
 ## Lacunas de especificação (2026-10-01)
 
+**Atualização 2026-10-14 (V18.6, fechamento 3):** `v18.6-auto-metrics-and-stop-reasons` (#157: métricas definidas pelo
+Researcher e validadas pelo Validator no modo `auto`, motivo de parada `hipoteses_nao_testadas` e motivo de reprovação
+`sem_hipotese`) foi arquivada e os requisitos consolidados em `openspec/specs/`. Notas e tabelas de estado nos ADRs 010, 012,
+015 e 020. Os status não mudam (010 e 015 Parcialmente implementados; 012 e 020 como estavam). A sessão `auto` real e a
+ratificação das métricas pelo pesquisador entram na bateria do Pi 5 (`PENDENCIAS.md`).
+
 **Atualização 2026-10-13 (V18.6, fechamento 2):** `v18.6-profile-hardening` (#154, NC-PERFIL-1 a 6 do parecer de segurança
 do perfil estrutural) e `v18.6-remove-unused-agents` (#155, remoção do papel e agente `reviewer`) foram arquivadas e os
 requisitos consolidados em `openspec/specs/`. Notas e tabelas de estado atualizadas nos ADRs 007 (papel `reviewer` removido),

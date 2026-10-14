@@ -40,10 +40,11 @@ PRICES: dict[str, Price] = {
     "google/gemini-3.5-flash-lite": Price(0.30, 2.50, 0.03),
     "google/gemini-3.1-flash-lite": Price(0.25, 1.50, 0.025),
     "anthropic/claude-sonnet-5-5": Price(2.0, 10.0, 0.20),
-    "openai/gpt-6-luna": Price(0.10, 0.50),
-    # Fontes secundárias (a página oficial não foi consultada): Terra US$ 2 / 12; Haiku 5.5 US$ 0,10 / 0,50 até 100K
-    # tokens de entrada e US$ 0,50 / 2,50 acima. Confira a página do provedor antes de usar como cobrança.
-    "openai/gpt-5.6-terra": Price(2.0, 12.0),
+    # OpenAI, tier Standard (contexto curto, até 272K tokens), developers.openai.com/api/docs/pricing, 2026-10-13.
+    "openai/gpt-6-luna": Price(0.10, 0.50, 0.01),
+    "openai/gpt-5.6-terra": Price(2.0, 12.0, 0.20),
+    # Fonte secundária (a página oficial não foi consultada): Haiku 5.5 US$ 0,10 / 0,50 até 100K tokens de entrada e
+    # US$ 0,50 / 2,50 acima. Confira a página do provedor antes de usar como cobrança.
     "anthropic/claude-haiku-5-5": Price(
         0.10, 0.50, 0.01, long_threshold=100_000, long_price=Price(0.50, 2.50, 0.05)
     ),

@@ -25,7 +25,7 @@
       "requires": "ANTHROPIC_API_KEY"
     },
     {
-      "name": "haiku-dev-terra-juiz",
+      "name": "haiku-dev-sol-juiz",
       "roles": {
         "*": "anthropic/claude-haiku-5-5",
         "VALIDATOR": "openai/gpt-6.1-sol"

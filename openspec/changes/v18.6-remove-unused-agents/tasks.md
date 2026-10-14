@@ -16,6 +16,7 @@
 - [ ] 2.1 `AGENT_IDS = ("developer", "researcher")`.
 - [ ] 2.2 `plan_normalizer.py`: `base` → `developer`; `reviewer`/`summarizer` não recuperáveis (design §2).
 - [ ] 2.3 Remover o ramo `base` de `_dispatch_subtask`.
+- [ ] 2.4 `src/llm/independence.py`: remover `check_dispatch`, `_UNUSED_UNTIL_DISPATCH` e a conferência de despacho de `reviewer`/`base` (e o código de `SessionRouting.dispatch_model` que só serve a eles); `JUDGE_ROLES = ("validator",)`, `JUDGED_ROLES = ("developer",)`; ajustar os testes de `tests/unit/llm/test_judge_independence.py`.
 
 ## 3. Telemetria e benchmark
 - [ ] 3.1 `review_result` com papel `validator` e `funcao = "revisao_subtarefa"`; evento `subtask_review` com `agent_id = "validator"`.

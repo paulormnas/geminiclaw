@@ -173,7 +173,10 @@ recorte.
 **4.4 Versão e adendo de projeto.** Mudanças no regimento passam por PR com aprovação do pesquisador. Cada
 sessão registra a versão (hash) do regimento e do recorte usados, junto com o contrato de cada subtarefa
 (§7). Regras próprias de um projeto (por exemplo, restrições de segurança de um laboratório) entram como
-adendo do projeto, nos insumos do pesquisador e fora do repositório, e são injetadas junto do recorte.
+adendo do projeto, nos insumos do pesquisador e fora do repositório, e são injetadas junto do recorte. O
+adendo só pode **restringir** (acrescentar regras ou proibições), nunca afrouxar o regimento nem desligar
+paradas; ativá-lo e cada mudança nele são decisão reservada do pesquisador, pelo gate; o hash do adendo é
+registrado junto com o do regimento.
 
 **4.5 Redação.** Regimento e prompts são escritos de forma direta: frases curtas, sem emojis, sem
 decoração tipográfica e sem repetir a mesma regra em lugares diferentes. Cada regra aparece uma vez, na
@@ -291,7 +294,7 @@ essencial é injetado em toda chamada (§4.3), e a ferramenta fica para o que es
 | Mudança | Capacidade | O que cobre |
 |---|---|---|
 | `v18.7-subtask-contract` | `agent-prompts`, `pipeline-robustness`, `data-egress` | §1–§3, §6, §8: construtores de contexto por papel, contrato da subtarefa, separação critérios × integridade, chaves de métrica, contaminação e tamanho do contrato, colisão de artefatos |
-| `v18.7-agent-system-prompts` | `agent-prompts` | §4–§5: auditoria de cada prompt contra o código; regimento da pesquisa v1 (prosa e parte estruturada); prompts revisados de todos os papéis; recorte por tipo de objetivo e modo; ferramenta de leitura do regimento; versão por sessão; adendo de projeto; teste de coerência |
+| `v18.7-agent-system-prompts` | `agent-prompts`, `agent-runtime` | §4–§5: auditoria de cada prompt contra o código; regimento da pesquisa v1 (prosa e parte estruturada); prompts revisados de todos os papéis; recorte por tipo de objetivo e modo; ferramenta de leitura do regimento; versão por sessão; adendo de projeto; teste de coerência |
 | (dentro de `v18.7-exploration-metrics`, ADR 021) | `operation-metrics` | §6.3, §7: hash do contrato por tentativa, tokens do contrato por execução |
 
 ---

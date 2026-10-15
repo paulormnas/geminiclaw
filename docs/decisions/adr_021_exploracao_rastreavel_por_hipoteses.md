@@ -14,6 +14,10 @@ por chamada), ADR 023 (pesquisa em segundo plano)
 |---|---|
 | 015 §2 | `Experimento` ganha a propriedade `papel` (`teste` / `preparacao` / `referencia`). |
 | 015 §4 | `Hipotese.origem` ganha o valor `sistema`; `Hipotese` ganha a chave estruturada `(problema, abordagem, metrica)` para hipóteses do sistema, a referência R fixada e `abandonada_por`; as transições de status passam a valer também para hipóteses concluídas (§4.4). |
+| 015 §4 (`Problema`) | `criterio_sucesso` ganha `tipo` (`limiar`, `discriminacao`, `cobertura`, `fronteira`) e `ao_atingir_objetivo`; os campos passam a depender do tipo (alvo e `delta_min` só no `limiar`; hipóteses concorrentes e predições no `discriminacao`). |
+| 015 §9 (veredito) | Sem alvo (tipos que não são `limiar`), o termo de magnitude `m` usa o valor neutro já usado sem baseline, revisto na calibração da Etapa 2. |
+| Spec `research-project` | O rascunho do Problema passa a ter o tipo de objetivo; `delta_min` só é exigido no `limiar`. |
+| 012 §8 / spec `researcher-consult` | Nova decisão reservada `restringir_direcao` (§5.5). |
 | 015 §5 | Novas relações `PREPARA` e `REFERENCIA_DE`; o destino de `DERIVADA_DE` passa a aceitar `Hipotese`. |
 | Spec `curator` | O requisito "Veredito calculado sem LLM" passa a recalcular também hipóteses concluídas, com os efeitos do §4.4 sobre oportunidades, decisões e atalhos. |
 | 015 §8 (emenda de 2026-10-08, motivos de parada) | `limite_ciclos` e `limite_execucoes` deixam de existir como motivos; entram `limite_custo` e `saturacao`; `solucao_encontrada` passa a vir do critério do tipo de objetivo (no `limiar`, resultado aprovado pelo Validator que atinge o alvo, sem o filtro de veredito), e respeita a política `ao_atingir_objetivo` (§5.2–§5.5). |
@@ -206,19 +210,24 @@ problema deve ter um objetivo, e o Validator verifica se já o atingiu ao avalia
 
    | Tipo | Atingido quando | Avanço | Saturação |
    |---|---|---|---|
-   | `limiar` | um resultado aprovado pelo Validator alcança o alvo e o ganho mínimo sobre a referência | melhora do melhor resultado validado acima da incerteza da medida | a melhora ainda possível fica abaixo do erro estatístico da medida |
-   | `discriminacao` | entre hipóteses concorrentes, resta uma sustentada e as demais estão refutadas pelo veredito | mudança de veredito de alguma concorrente | nenhum experimento disponível distingue as que restam |
-   | `cobertura` | o pesquisador considera o mapeamento suficiente | hipótese nova que não repete as existentes (abaixo do limiar de similaridade) | a taxa de hipóteses novas cai a quase zero |
+   | `limiar` | um resultado aprovado pelo Validator alcança o alvo e o ganho mínimo sobre a referência | melhora do melhor resultado validado acima da incerteza da medida; sem incerteza medida, qualquer melhora validada (registrada como tal) | com ao menos `SATURATION_MIN_REPLICATES` réplicas (padrão 3), a melhora ainda possível fica abaixo do erro estatístico da medida |
+   | `discriminacao` | as evidências validadas que discriminam as hipóteses concorrentes deixam um desfecho: uma compatível e as demais contrariadas; todas contrariadas; ou várias compatíveis (mecanismos que coexistem) | novo resultado validado cuja predição difere entre as concorrentes | nenhum experimento planejado ou executável tem predições diferentes entre as concorrentes que restam |
+   | `cobertura` | o pesquisador considera o mapeamento suficiente | hipótese nova que não repete as existentes (abaixo do limiar de similaridade) | a taxa de hipóteses novas cai a quase zero (nesta etapa, só aviso; não fecha a sessão) |
    | `fronteira` | o pesquisador aceita o conjunto, ou há k soluções não dominadas | nova solução não dominada pelas já encontradas | as tentativas recentes não ampliam a fronteira |
 
    - No tipo `limiar`, a comparação com o alvo é determinística (a que `check_solution` já faz,
      `src/knowledge/hypothesis_cycle.py:508-514`), **sem o filtro de veredito**
      (`hypothesis_cycle.py:509`), que sai; a verificação do Validator é a aprovação do resultado.
-   - No tipo `discriminacao`, o veredito das hipóteses (ADR 015 §9) é o próprio critério, com os limiares de
-     `DECISION_EVAL_MIN_VERDICT`; a calibração da Etapa 2 vale para ele.
-   - Nesta etapa são implementados `limiar` e `discriminacao`, que o grafo já sustenta; `cobertura` em
-     seguida (reaproveita a deduplicação por similaridade); `fronteira` fica declarado e é especificado
-     junto com a V19 (equipamentos), quando houver experimentos físicos para validá-lo.
+   - No tipo `discriminacao`, cada hipótese concorrente declara a predição que a distingue; um resultado
+     validado contraria uma hipótese quando o Validator, na revisão, confirma que ele diverge da predição
+     dela. O desfecho é decidido por essas evidências validadas, **não pelo valor do veredito**, que ainda não
+     foi calibrado (Etapa 2). "Todas contrariadas" é um resultado registrado e leva o Researcher a propor
+     hipóteses novas; "várias compatíveis" vai ao pesquisador. Quando o experimento que distinguiria as
+     restantes existe mas exige bancada ou equipamento indisponível no sandbox, o desfecho é
+     `aguarda_experimento_fisico` (registrado com o experimento proposto), e não saturação.
+   - Nesta etapa são implementados `limiar`, `discriminacao` e uma forma mínima de `cobertura` (objetivo
+     decidido pelo pesquisador; saturação só como aviso); `fronteira` fica declarado e é especificado junto
+     com a V19 (equipamentos), quando houver experimentos físicos para validá-lo.
    - O veredito continua sendo, em todos os tipos, a medida de confiança do conhecimento no grafo.
 3. **O que acontece ao atingir o objetivo.** Atingir o objetivo é sempre um evento e um marco registrado.
    Se a sessão fecha depende da política do Problema `ao_atingir_objetivo`: `parar` (padrão no `semi` e no
@@ -247,14 +256,19 @@ problema deve ter um objetivo, e o Validator verifica se já o atingiu ao avalia
    - **Saturação.** Esgotadas as intervenções (`EXPLORATION_MAX_INTERVENTIONS`, padrão 3) sem avanço, e se o
      critério de saturação do tipo (item 2) se confirmar, a sessão fecha com `saturacao` no `auto`; no
      `assisted` e no `semi`, registra um pedido ao pesquisador (continuar, orientar ou parar) e segue
-     enquanto ele não responde. Sem incerteza medida (por exemplo, sem réplicas), a saturação não é
-     avaliada e o fato é registrado; valem o objetivo, os limites e o pesquisador.
+     enquanto ele não responde.
+   - **Intervenções esgotadas sem saturação avaliável** (por exemplo, sem réplicas suficientes): em qualquer
+     modo, a sessão emite um evento e registra um pedido ao pesquisador, e segue enquanto ele não responde.
+     A confirmação do modo sem limite informa que, sem limites, não há parada automática garantida.
    - Não se aplica enquanto a política `ao_atingir_objetivo` for `continuar` e o objetivo já tiver sido
      atingido. Os limiares são configuráveis e desligáveis **sozinhos**, sem afetar os limites de custo,
      tokens e tempo; o modo sem limite **não** os desliga.
    - **Restrições.** Uma direção pode ser encerrada por segurança, ética ou recurso (reagente perigoso,
-     nível de biossegurança indisponível, risco de uso dual): é decisão do pesquisador, pelo gate, e retira
-     as hipóteses daquela direção com motivo registrado.
+     nível de biossegurança indisponível, risco de uso dual). É uma decisão reservada nova
+     (`restringir_direcao`), registrada como **regra persistente** do Problema ou do projeto: retira as
+     hipóteses daquela direção (`hipotese_direcao_restrita`) e é aplicada pela governança a todo plano novo,
+     por chave estruturada e abordagem e por similaridade com a direção encerrada. O Validator do plano
+     recebe as restrições ativas; um caso duvidoso vira pedido ao pesquisador e não executa enquanto pendente.
 6. **Proteções contra falha, ajustadas à exploração longa.**
    - O disjuntor de zero progresso passa a medir progresso por novos `Experimento` e `Resultado`
      (inclusive replicações e variações com o mesmo nome de subtarefa), e não por nomes de subtarefa novos
@@ -281,6 +295,7 @@ Os códigos são os que o código grava hoje (`src/exploration.py:374-392`; os m
 | `hipotese_ja_concluida_ou_abandonada` → renomeado `hipotese_abandonada_pelo_pesquisador` | Testes de hipótese abandonada pelo pesquisador (concluídas deixam de bloquear, §4.3) | Decisão humana |
 | `hipotese_hipotese_abandonada`, `hipotese_equivalente_a_hipotese_abandonada` | Plano que referencia ou repete hipótese abandonada **pelo pesquisador** (abandono pelo sistema reabre, §3.5) | Decisão humana |
 | `hipotese_oportunidade_nao_aprovada` | Hipótese de oportunidade sem aprovação | ADR 012 |
+| `hipotese_direcao_restrita` | Hipótese numa direção encerrada pelo pesquisador por segurança, ética ou recurso (§5.5) | Decisão humana |
 | `depende_de_subtarefa_retirada` | Só quando **todas** as hipóteses que a subtarefa serve foram retiradas por um dos motivos acima | Consequência de decisão humana |
 | Reprovação do Validator | O resultado não conta como evidência validada (a subtarefa executa) | ADR 020; integridade |
 | Orçamento, egresso, localidade | Inalterados | ADR 019 |
@@ -439,7 +454,7 @@ intervenções (§5.5).
 |---|---|---|
 | `v18.7-hypothesis-linking` | `hypothesis-loop` | §2–§4, §6–§8: papel do experimento, ligações derivadas, hipótese do sistema (chave, ciclo de vida, R fixada, aprovação por modo), novos testes de hipótese concluída, fila substituída no replanejamento, retorno ao Researcher, motivos de retirada |
 | `v18.7-graph-exploration-relations` | `knowledge-graph` | §2–§4, §9: `papel`, `origem=sistema`, chave estruturada, referência R fixada, `abandonada_por`, `PREPARA`, `REFERENCIA_DE`, `DERIVADA_DE -> Hipotese`, leitura compatível |
-| `v18.7-exploration-limits` | `hypothesis-loop`, `usage-limits`, `agent-runtime`, `operation-metrics`, `benchmark`, `session-continuity` | §5: fim de `HYPOTHESES_PER_CYCLE`, `MAX_EXPLORATION_CYCLES` e `MAX_AGENT_RUNS_PER_SESSION` como parada; limite de custo por sessão (`limite_custo`); modo sem limite cobrindo custo; objetivo tipado (`limiar` e `discriminacao` nesta etapa, `cobertura` em seguida, `fronteira` declarado para a V19) e parada pelo critério do tipo, sem filtro de veredito no `limiar`; política `ao_atingir_objetivo`; estagnação como intervenção do Curator; saturação; restrições por direção; disjuntor por novos experimentos; espera do gate fora dos ciclos ociosos; objetivo obrigatório no `Problema` (confirmado pelo gate no `assisted`/`semi`); motivos novos na classificação do benchmark (`limite_custo` como limite, `saturacao` como critério de pesquisa) e na retomada (`src/continuity.py:64-67`: `limite_custo` retoma sem perguntar, como os demais limites; `saturacao` pergunta) |
+| `v18.7-exploration-limits` | `hypothesis-loop`, `usage-limits`, `agent-runtime`, `operation-metrics`, `benchmark`, `session-continuity`, `research-project`, `knowledge-graph`, `researcher-consult` | §5: fim de `HYPOTHESES_PER_CYCLE`, `MAX_EXPLORATION_CYCLES` e `MAX_AGENT_RUNS_PER_SESSION` como parada; limite de custo por sessão (`limite_custo`); modo sem limite cobrindo custo; objetivo tipado (`limiar`, `discriminacao` e `cobertura` mínima nesta etapa, `fronteira` declarado para a V19), réplicas mínimas para saturação, `aguarda_experimento_fisico`, decisão reservada `restringir_direcao` e parada pelo critério do tipo, sem filtro de veredito no `limiar`; política `ao_atingir_objetivo`; estagnação como intervenção do Curator; saturação; restrições por direção; disjuntor por novos experimentos; espera do gate fora dos ciclos ociosos; objetivo obrigatório no `Problema` (confirmado pelo gate no `assisted`/`semi`); motivos novos na classificação do benchmark (`limite_custo` como limite, `saturacao` como critério de pesquisa) e na retomada (`src/continuity.py:64-67`: `limite_custo` retoma sem perguntar, como os demais limites; `saturacao` pergunta) |
 | `v18.7-exploration-metrics` | `operation-metrics`, `benchmark` | §8.4: contadores por papel e origem, substituição de `reprovacoes_sem_hipotese`; também ADR 022 §6.3 e §7 (hash do contrato por tentativa, tokens do contrato por execução) |
 
 A mudança `v18.7-hypothesis-linking` também atualiza o cenário "Baseline sem hipótese" de

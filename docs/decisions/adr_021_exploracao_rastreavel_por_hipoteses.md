@@ -6,7 +6,7 @@
 **Roadmaps relacionados:** `roadmaps/roadmap_V18.7.md` (criado junto com as mudanças OpenSpec)
 **ADRs relacionados:** ADR 010 (assistente de pesquisa), ADR 012 (Curator e ciclo de exploração),
 ADR 015 (modelo de dados do grafo), ADR 020 (independência do Validator), ADR 022 (contrato de contexto
-por chamada), ADR 023 (pesquisa em segundo plano, a redigir)
+por chamada), ADR 023 (pesquisa em segundo plano)
 
 **O que este ADR muda em outros ADRs:**
 
@@ -16,9 +16,11 @@ por chamada), ADR 023 (pesquisa em segundo plano, a redigir)
 | 015 §4 | `Hipotese.origem` ganha o valor `sistema`; `Hipotese` ganha a chave estruturada `(problema, abordagem, metrica)` para hipóteses do sistema, a referência R fixada e `abandonada_por`; as transições de status passam a valer também para hipóteses concluídas (§4.4). |
 | 015 §5 | Novas relações `PREPARA` e `REFERENCIA_DE`; o destino de `DERIVADA_DE` passa a aceitar `Hipotese`. |
 | Spec `curator` | O requisito "Veredito calculado sem LLM" passa a recalcular também hipóteses concluídas, com os efeitos do §4.4 sobre oportunidades, decisões e atalhos. |
-| 015 §8 (emenda de 2026-10-08, motivos de parada) | `limite_ciclos` deixa de existir como motivo; `solucao_encontrada` passa a vir do parecer do Validator sobre o objetivo, e não do veredito (§5.2). |
+| 015 §8 (emenda de 2026-10-08, motivos de parada) | `limite_ciclos` e `limite_execucoes` deixam de existir como motivos; entram `limite_custo` e `estagnacao`; `solucao_encontrada` passa a vir do resultado aprovado pelo Validator que atinge o objetivo, sem o filtro de veredito, e respeita a política `ao_atingir_objetivo` (§5.2–§5.5). |
 | 012 | O Curator passa a ver as hipóteses `origem=sistema` e pode sugerir reformulação ao Researcher pelo canal de sugestões existente (não há fusão de hipóteses pelo Curator). |
-| Spec `hypothesis-loop` | A exigência "cada subtarefa referencia a hipótese que testa" vira registro; a retirada por `sem_hipotese` deixa de existir; o teto por ciclo deixa de retirar subtarefas; hipóteses concluídas podem receber novos testes. |
+| Spec `hypothesis-loop` | A exigência "cada subtarefa referencia a hipótese que testa" vira registro; a retirada por `sem_hipotese` deixa de existir; `HYPOTHESES_PER_CYCLE`, o teto de ciclos e o filtro `SOLUTION_MIN_VERDICT` saem (cenários "Modo autônomo", "Teto de ciclos" e o critério de solução); hipóteses concluídas podem receber novos testes. |
+| Spec `agent-runtime` | O circuit breaker por `MAX_AGENT_RUNS_PER_SESSION` deixa de encerrar a sessão (§5.1). |
+| Spec `operation-metrics` | O modo sem limite passa a cobrir também o limite de custo; a regra de ativação só por confirmação do pesquisador continua (§5.4). |
 | Spec `pipeline-robustness` | O cenário "Baseline sem hipótese" passa a ser `papel = referencia`. |
 | Spec `operation-metrics` | `reprovacoes_sem_hipotese` dá lugar a contadores de ligação derivada (§8). |
 
@@ -142,7 +144,7 @@ legítima e executa normalmente; o Researcher recebe a indicação de que poderi
    só diferem no nome da abordagem). A deduplicação por similaridade (`HYPOTHESIS_DEDUP_SIMILARITY`)
    continua valendo para as hipóteses declaradas.
 5. **Ciclo de vida.** A hipótese do sistema existe por causa da subtarefa que a originou: se essa subtarefa
-   for retirada (§6), sair da fila num replanejamento (§5.6) ou esgotar as tentativas sem nenhuma execução,
+   for retirada (§6), sair da fila num replanejamento (§5.8) ou esgotar as tentativas sem nenhuma execução,
    a hipótese vai a `abandonada` com `abandonada_por = "sistema"` e o motivo, em vez de ficar `em_teste`
    sem tentativa (o que manteria caminhos "abertos" sem trabalho real e levaria a
    `hipoteses_nao_testadas`). **O abandono pelo sistema não bloqueia:** quando um plano posterior traz a mesma
@@ -193,27 +195,45 @@ problema deve ter um objetivo, e o Validator verifica se já o atingiu ao avalia
 1. **Sem teto de hipóteses nem de ciclos.** `HYPOTHESES_PER_CYCLE` deixa de existir: todas as hipóteses
    executáveis do plano entram na fila, em ordem de prioridade (a prioridade atual continua ordenando), e
    nenhuma subtarefa é retirada por `hipotese_adiada_por_prioridade`. `MAX_EXPLORATION_CYCLES`
-   (`limite_ciclos`) e `MAX_AGENT_RUNS_PER_SESSION` deixam de ser condições de parada (continuam medidos e
-   relatados).
+   (`limite_ciclos`) e `MAX_AGENT_RUNS_PER_SESSION` (`limite_execucoes`) deixam de ser condições de parada
+   (continuam medidos e relatados).
 2. **Parada pelo objetivo.** Todo `Problema` tem um objetivo: métrica, sentido, alvo e ganho mínimo sobre a
-   referência (o critério de sucesso que já existe; no modo `auto`, definido pelo agente e aprovado pelo
-   Validator). Um `Problema` sem objetivo não inicia a exploração: o primeiro plano o define. A sessão
-   fecha por `solucao_encontrada` quando o Validator, ao revisar uma subtarefa, confirma que um resultado
-   **validado** atinge o objetivo. A confirmação vai no parecer da revisão (campo próprio, com o resultado e
-   o valor). O veredito das hipóteses deixa de ser condição para essa parada e continua sendo a medida de
-   confiança do conhecimento no grafo. No `assisted`, o pesquisador confirma ou manda continuar, como hoje.
-3. **Limites de custo, tokens e tempo, todos opcionais.** A sessão tem três limites configuráveis: custo
-   (US$, total e por provedor), tokens e tempo. Cada um pode ser desligado (vazio ou `0` = sem limite);
-   com os três desligados, a exploração continua até o objetivo, até não haver caminho aberto, até o
-   pesquisador parar ou até uma falha. O modo sem limite que já existe (decisão reservada ao pesquisador)
-   passa a ser o caso de os três estarem desligados.
-4. **Proteções contra falha continuam.** O disjuntor de zero progresso e `MAX_PLAN_RETRIES` (planos
-   rejeitados em sequência) não limitam a exploração: detectam um laço que gasta sem produzir nada e
-   fecham a sessão com `erro` / `planos_rejeitados`.
-5. **Exploração longa em segundo plano.** Uma exploração sem teto não pode prender o pesquisador: a
+   referência (o critério de sucesso que já existe). No `auto`, o objetivo proposto no plano vale depois de
+   aprovado pelo Validator e é exibido ao pesquisador como evento; no `assisted` e no `semi`, confirmá-lo é
+   decisão reservada (`confirmar_problema`) e passa pelo gate. O objetivo pode ser revisto depois pelo mesmo
+   caminho. **O objetivo é atingido** quando um resultado **aprovado pelo Validator** na revisão da subtarefa
+   alcança o alvo e o ganho mínimo: a verificação do Validator é a aprovação do resultado, e a comparação
+   com o alvo é determinística (a que `check_solution` já faz, `src/knowledge/hypothesis_cycle.py:508-514`),
+   **sem o filtro de veredito** (`hypothesis_cycle.py:509`), que sai. O veredito continua sendo a medida de
+   confiança do conhecimento no grafo.
+3. **O que acontece ao atingir o objetivo.** Atingir o objetivo é sempre um evento e um marco registrado.
+   Se a sessão fecha depende da política do Problema `ao_atingir_objetivo`: `parar` (padrão no `semi` e no
+   `auto`), `perguntar` (padrão no `assisted`: o pesquisador escolhe encerrar ou continuar, pelo gate) ou
+   `continuar` (segue replicando, otimizando além do alvo e testando hipóteses abertas, até os limites ou
+   até não haver caminho).
+4. **Limites de custo, tokens, tempo e egresso.** A sessão tem limites configuráveis de custo (US$, total e
+   por provedor; novo, com o motivo de parada `limite_custo`), tokens, tempo e volume de egresso. Cada um
+   pode ser ajustado livremente para cima. **Desligar limites** é a decisão reservada que já existe ("ativar
+   o modo sem limite"): exige confirmação do pesquisador no terminal ou pelo gate persistente (ADR 023),
+   nunca por variável de ambiente ou arquivo de configuração (spec `operation-metrics`). Com os limites
+   desligados, a exploração segue até o objetivo (conforme a política do item 3), até não haver caminho, até
+   a estagnação (item 5), até o pesquisador parar ou até uma falha.
+5. **Estagnação.** Para que uma exploração sem limites não gaste sem fim atrás de um alvo inatingível, a
+   sessão fecha com `estagnacao` depois de `EXPLORATION_STALL_CYCLES` ciclos (padrão 5) sem melhorar o
+   melhor resultado validado da métrica do objetivo nem criar hipótese nova. O limiar é configurável;
+   desligá-lo faz parte do modo sem limite (item 4). No `assisted`, em vez de fechar, a sessão registra um
+   pedido ao pesquisador (continuar, orientar ou parar).
+6. **Proteções contra falha, ajustadas à exploração longa.**
+   - O disjuntor de zero progresso passa a medir progresso por novos `Experimento` e `Resultado`
+     (inclusive replicações e variações com o mesmo nome de subtarefa), e não por nomes de subtarefa novos
+     (`src/autonomous_loop.py:70-75`); o limiar continua configurável.
+   - A espera por um pedido pendente do pesquisador não conta como ciclo ocioso nem como estagnação
+     (`src/autonomous_loop.py:1091`).
+   - `MAX_PLAN_RETRIES` (planos rejeitados em sequência) fecha com `planos_rejeitados` no `auto`; no
+     `assisted` e no `semi`, registra um pedido ao pesquisador antes de fechar.
+7. **Exploração longa em segundo plano.** Uma exploração sem teto não pode prender o pesquisador: a
    execução em segundo plano, com acompanhamento à parte, é decidida no ADR 023.
-
-6. **Replanejamento.** Quando o Researcher replaneja, **o plano novo substitui a fila**: itens da fila ausentes do plano novo saem
+8. **Replanejamento.** Quando o Researcher replaneja, **o plano novo substitui a fila**: itens da fila ausentes do plano novo saem
 com o motivo `removida_pelo_replanejamento` (registrado, não é retirada por governança), e as hipóteses do
 sistema ligadas a eles seguem o §3.5.
 
@@ -303,18 +323,27 @@ durante a execução.
 
 ### H. Manter `HYPOTHESES_PER_CYCLE` como ordenação, e `MAX_EXPLORATION_CYCLES` como parada
 **Rejeitada pelo pesquisador:** tetos de hipóteses ou de ciclos limitam pesquisas que precisam de uma
-exploração longa; o controle de gasto fica com os limites de custo, tokens e tempo (§5.3).
+exploração longa; o controle de gasto fica com os limites de custo, tokens, tempo e egresso (§5.4).
 
 ### I. Teto de tentativas para hipóteses do sistema deixarem de prender a sessão
-**Rejeitada:** era a defesa contra sessões que nunca fecham; com a parada pelo objetivo (§5.2), os limites
-opcionais (§5.3) e a execução em segundo plano (ADR 023), a sessão não prende o pesquisador, e um teto
+**Rejeitada:** era a defesa contra sessões que nunca fecham; com a parada pelo objetivo (§5.2), a
+estagnação (§5.5) e a execução em segundo plano (ADR 023), a sessão não prende o pesquisador, e um teto
 desses voltaria a cortar exploração.
 
 ### J. Solução decidida pelo veredito da hipótese (`SOLUTION_MIN_VERDICT`)
 **Rejeitada:** o veredito mede a confiança acumulada do conhecimento e precisa de várias evidências
 independentes (uma evidência perfeita dá no máximo 0,11); usá-lo como parada fez nenhuma sessão da bateria
 V18.6 fechar por solução, mesmo com acurácia validada 1,0. A parada passa a ser o objetivo do Problema
-confirmado pelo Validator (§5.2).
+atingido por um resultado aprovado pelo Validator, com comparação determinística (§5.2).
+
+### K. Confirmação do objetivo por um campo novo no parecer do Validator
+**Rejeitada na revisão:** trocaria a comparação determinística que já existe por um julgamento de LLM,
+sujeito a falso positivo (encerra cedo) e falso negativo (nunca encerra). O Validator verifica ao aprovar o
+resultado; a comparação com o alvo é feita pelo código.
+
+### L. Desligar limites por `0` ou vazio no `.env`
+**Rejeitada na revisão:** contornaria a decisão reservada do modo sem limite; desligar limites continua
+exigindo a confirmação do pesquisador (§5.4).
 
 ---
 
@@ -351,7 +380,8 @@ confirmado pelo Validator (§5.2).
 2. **Hipótese do sistema por modo.** No `assisted`, aguarda aprovação do pesquisador; no `semi` e no
    `auto`, segue por decisão do Researcher e do Validator (§3.6).
 3. **Tetos.** Sem teto de hipóteses nem de ciclos; limites de custo, tokens e tempo, configuráveis e
-   desligáveis; parada pelo objetivo do Problema, verificado pelo Validator (§5).
+   desligáveis (pela decisão reservada do modo sem limite); parada pelo objetivo do Problema, verificado
+   pelo Validator (§5).
 4. **Sessão livre.** O trabalho longo ocorre em segundo plano, com acompanhamento à parte, enquanto o
    pesquisador continua conversando com os agentes (ADR 023).
 
@@ -361,9 +391,9 @@ confirmado pelo Validator (§5.2).
 
 | Mudança | Capacidade | O que cobre |
 |---|---|---|
-| `v18.7-hypothesis-linking` | `hypothesis-loop` | §2–§8: papel do experimento, ligações derivadas, hipótese do sistema (chave, ciclo de vida, R fixada), novos testes de hipótese concluída, fila por ciclo, retorno ao Researcher, motivos de retirada |
+| `v18.7-hypothesis-linking` | `hypothesis-loop` | §2–§4, §6–§8: papel do experimento, ligações derivadas, hipótese do sistema (chave, ciclo de vida, R fixada, aprovação por modo), novos testes de hipótese concluída, fila substituída no replanejamento, retorno ao Researcher, motivos de retirada |
 | `v18.7-graph-exploration-relations` | `knowledge-graph` | §2–§4, §9: `papel`, `origem=sistema`, chave estruturada, referência R fixada, `abandonada_por`, `PREPARA`, `REFERENCIA_DE`, `DERIVADA_DE -> Hipotese`, leitura compatível |
-| `v18.7-exploration-limits` | `hypothesis-loop`, `usage-limits` | §5: fim de `HYPOTHESES_PER_CYCLE`, `MAX_EXPLORATION_CYCLES` e `MAX_AGENT_RUNS_PER_SESSION` como parada; limite de custo por sessão; limites desligáveis; parada pelo objetivo confirmado pelo Validator; objetivo obrigatório no `Problema` |
+| `v18.7-exploration-limits` | `hypothesis-loop`, `usage-limits`, `agent-runtime`, `operation-metrics` | §5: fim de `HYPOTHESES_PER_CYCLE`, `MAX_EXPLORATION_CYCLES` e `MAX_AGENT_RUNS_PER_SESSION` como parada; limite de custo por sessão (`limite_custo`); modo sem limite cobrindo custo; parada pelo objetivo sem filtro de veredito; política `ao_atingir_objetivo`; estagnação; disjuntor por novos experimentos; espera do gate fora dos ciclos ociosos; objetivo obrigatório no `Problema` (confirmado pelo gate no `assisted`/`semi`); motivos em `src/continuity.py` |
 | `v18.7-exploration-metrics` | `operation-metrics`, `benchmark` | §8.4: contadores por papel e origem, substituição de `reprovacoes_sem_hipotese`; também ADR 022 §6.3 e §7 (hash do contrato por tentativa, tokens do contrato por execução) |
 
 A mudança `v18.7-hypothesis-linking` também atualiza o cenário "Baseline sem hipótese" de

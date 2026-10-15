@@ -41,8 +41,8 @@ O terminal SHALL permitir que o pesquisador pergunte ao Researcher sobre o proje
 - **THEN** o uso da sessão passa a 10500, `LimitStatus.tokens_exhausted` é verdadeiro no próximo ponto de verificação e a sessão fecha com `limite_tokens`
 - **AND** as métricas de operação mostram os 1500 tokens como `consulta`
 
-### Requirement: Texto livre é conversa e `nova` inicia a pesquisa
-O REPL SHALL tratar o texto livre sem comando como conversa com o Researcher, equivalente a `perguntar`, e MUST NOT iniciar pesquisa por ele; iniciar uma pesquisa SHALL exigir o comando explícito `nova <tarefa>`, com a verificação de memória de `v18.7-background-sessions`. Com outra pesquisa em execução, `nova` SHALL perguntar "Iniciar outra? [s/N]" antes da verificação de memória. Sem pesquisa para consultar, o texto livre SHALL ser recusado com a indicação de `nova <tarefa>`, sem chamada ao modelo (decisão do pesquisador, 2026-10-15; ADR 023 §3).
+### Requirement: Texto livre é conversa e `nova-pesquisa` inicia a pesquisa
+O REPL SHALL tratar o texto livre sem comando como conversa com o Researcher, equivalente a `perguntar`, e MUST NOT iniciar pesquisa por ele; iniciar uma pesquisa SHALL exigir o comando explícito `nova-pesquisa <tarefa>`, com a verificação de memória de `v18.7-background-sessions`. Com outra pesquisa em execução, `nova-pesquisa` SHALL perguntar "Iniciar outra? [s/N]" antes da verificação de memória. Sem pesquisa para consultar, o texto livre SHALL ser recusado com a indicação de `nova-pesquisa <tarefa>`, sem chamada ao modelo (decisão do pesquisador, 2026-10-15; ADR 023 §3).
 
 #### Scenario: Texto livre é conversa
 - **GIVEN** a sessão `iris-01` em execução e a entrada simulada "quais hipóteses foram refutadas?"
@@ -62,7 +62,7 @@ O REPL SHALL tratar o texto livre sem comando como conversa com o Researcher, eq
 #### Scenario: Texto livre sem pesquisa
 - **GIVEN** nenhuma pesquisa para consultar
 - **WHEN** o pesquisador digita texto livre
-- **THEN** o terminal recusa, sugere `nova <tarefa>` e nenhum provedor é chamado
+- **THEN** o terminal recusa, sugere `nova-pesquisa <tarefa>` e nenhum provedor é chamado
 
 ### Requirement: Orientação vinda da conversa só com confirmação
 Quando a resposta da consulta trouxer `orientacao_sugerida`, o terminal SHALL propor transformá-la em mensagem à sessão e SHALL gravá-la pela caixa de entrada somente se o pesquisador confirmar; sem confirmação, nada SHALL ser gravado (ADR 023 §3 e §5).

@@ -15,7 +15,7 @@ Com a sessão em processo próprio, o pesquisador precisa ver o progresso e agir
 - **Novo:** comandos `pesquisas`, `acompanhar <apelido>`, `pausar <apelido>`, `retomar <apelido>`, `parar <apelido>`, `cancelar <apelido> <subtarefa>`, `replanejar <apelido>`; os de ação vão à sessão pela caixa de entrada (`tipo='comando'`).
 - **Novo:** `perguntar <texto>` (ou `? <texto>`, ou texto livre sem comando): o Researcher responde em modo consulta só leitura (transação somente leitura, papel `knowledge_reader` no grafo, Qdrant sem escrita); quando a resposta sugere uma orientação, o terminal propõe transformá-la em mensagem à sessão e o pesquisador confirma.
 - **Novo:** motivos `pausada_pesquisador` (pausa ao fim da subtarefa) e `cancelada_pesquisador` (subtarefa cancelada antes de começar).
-- **Modificado (decisão do pesquisador, 2026-10-15):** o texto livre no REPL deixa de iniciar pesquisa e passa a ser conversa com o Researcher (`perguntar`); iniciar uma pesquisa exige o comando explícito `nova <tarefa>`; com outra pesquisa em execução, o terminal confirma antes.
+- **Modificado (decisão do pesquisador, 2026-10-15):** o texto livre no REPL deixa de iniciar pesquisa e passa a ser conversa com o Researcher (`perguntar`); iniciar uma pesquisa exige o comando explícito `nova-pesquisa <tarefa>`; com outra pesquisa em execução, o terminal confirma antes.
 - **Fora do escopo:** painel de monitoramento (roadmap de frontend, que consumirá a mesma tabela); notificação do PostgreSQL (`LISTEN/NOTIFY`); várias pesquisas acompanhadas por vários terminais (ADR 023, Evolução prevista).
 
 ## Impacto

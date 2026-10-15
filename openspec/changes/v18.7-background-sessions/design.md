@@ -23,7 +23,7 @@
 
 ### 1.1 Um caminho só: toda sessão roda no processo da sessão
 
-O REPL (pelo comando `nova <tarefa>`, e não mais por texto livre) e o comando direto criam o processo da sessão do mesmo jeito; a diferença é só se o terminal espera por ele. Rodar o comando direto em primeiro plano dentro do processo do terminal (como hoje) deixaria dois caminhos a manter e faria o processo que carrega a credencial do terminal (`v18.7-persistent-human-gate`) executar os agentes, o que o ADR 023 §4.3 proíbe. Assim, no comando direto em primeiro plano o "próprio comando é o terminal" (ADR 023 §1.2, item 4): ele cria o processo, registra presença, repassa as linhas e o código de saída do processo da sessão.
+O REPL (pelo comando `nova-pesquisa <tarefa>`, e não mais por texto livre) e o comando direto criam o processo da sessão do mesmo jeito; a diferença é só se o terminal espera por ele. Rodar o comando direto em primeiro plano dentro do processo do terminal (como hoje) deixaria dois caminhos a manter e faria o processo que carrega a credencial do terminal (`v18.7-persistent-human-gate`) executar os agentes, o que o ADR 023 §4.3 proíbe. Assim, no comando direto em primeiro plano o "próprio comando é o terminal" (ADR 023 §1.2, item 4): ele cria o processo, registra presença, repassa as linhas e o código de saída do processo da sessão.
 
 | | REPL | Comando direto (padrão) | Comando direto `--background` |
 |---|---|---|---|

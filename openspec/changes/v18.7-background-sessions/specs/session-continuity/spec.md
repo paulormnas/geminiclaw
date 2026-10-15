@@ -7,7 +7,7 @@ Valores reduzidos nos testes de integração (cada teste em até 15 s, regra do 
 ## ADDED Requirements
 
 ### Requirement: Sessão em processo próprio
-Iniciar (no REPL, pelo comando `nova <tarefa>`; decisão do pesquisador de 2026-10-15) ou retomar uma pesquisa pelo REPL ou pelo comando direto SHALL criar um processo de sessão separado do terminal, que executa o orquestrador, os agentes e o laço autônomo; o processo SHALL gravar na sessão `pid`, `host`, `process_started_at`, `alias` e o batimento. No REPL, o processo SHALL estar em grupo de processos próprio, com `stdout` e `stderr` em `SESSION_LOG_DIR`, e o REPL SHALL voltar ao prompt sem esperar o fim da sessão (ADR 023 §1).
+Iniciar (no REPL, pelo comando `nova-pesquisa <tarefa>`; decisão do pesquisador de 2026-10-15) ou retomar uma pesquisa pelo REPL ou pelo comando direto SHALL criar um processo de sessão separado do terminal, que executa o orquestrador, os agentes e o laço autônomo; o processo SHALL gravar na sessão `pid`, `host`, `process_started_at`, `alias` e o batimento. No REPL, o processo SHALL estar em grupo de processos próprio, com `stdout` e `stderr` em `SESSION_LOG_DIR`, e o REPL SHALL voltar ao prompt sem esperar o fim da sessão (ADR 023 §1).
 
 #### Scenario: REPL livre durante a pesquisa
 - **GIVEN** um REPL com entrada simulada "nova tarefa de teste" seguida de "sair", modo `auto` e provedor gravado que demora 3 s por chamada
@@ -48,13 +48,13 @@ Antes de criar o processo da sessão, o terminal SHALL ler a memória disponíve
 
 #### Scenario: REPL abaixo do mínimo, desiste
 - **GIVEN** `MIN_AVAILABLE_MEMORY_MB=512`, leitura simulada de 300 MB, uma sessão `iris-01` em execução e entrada simulada "n"
-- **WHEN** o pesquisador inicia uma pesquisa no REPL com `nova <tarefa>`
+- **WHEN** o pesquisador inicia uma pesquisa no REPL com `nova-pesquisa <tarefa>`
 - **THEN** o aviso mostra `300` MB e lista `iris-01`
 - **AND** nenhum processo é criado e nenhuma sessão nova existe
 
 #### Scenario: REPL abaixo do mínimo, inicia mesmo assim
 - **GIVEN** a mesma leitura e entrada simulada "s"
-- **WHEN** o pesquisador inicia uma pesquisa no REPL com `nova <tarefa>`
+- **WHEN** o pesquisador inicia uma pesquisa no REPL com `nova-pesquisa <tarefa>`
 - **THEN** o processo da sessão é criado
 
 #### Scenario: Comando direto abaixo do mínimo

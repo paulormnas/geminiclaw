@@ -56,13 +56,13 @@ Sem dependência nova: uma thread lê os eventos e, para imprimir, escreve `\r\x
 | `parar <apelido>` | fechamento gracioso com checkpoint, como o 1º Ctrl+C (`interrompida_pesquisador`) | caixa, `comando` |
 | `cancelar <apelido> <subtarefa>` | retira a subtarefa que ainda não começou, motivo `cancelada_pesquisador`; recusada se já começou ou terminou | caixa, `comando` |
 | `replanejar <apelido>` | ao fim das subtarefas em curso, o Researcher replaneja (`MODO: REPLAN`) | caixa, `comando` |
-| `nova <tarefa>` | inicia uma pesquisa nova (o que o texto livre fazia antes), com a verificação de memória de `v18.7-background-sessions` e a confirmação do item abaixo | processo novo (`v18.7-background-sessions`) |
+| `nova-pesquisa <tarefa>` | inicia uma pesquisa nova (o que o texto livre fazia antes), com a verificação de memória de `v18.7-background-sessions` e a confirmação do item abaixo | processo novo (`v18.7-background-sessions`) |
 | `perguntar <texto>` / `? <texto>` / texto livre sem comando | consulta só leitura (§1.6) | processo filho criado pelo terminal, sem a credencial do terminal (parecer, item 1) |
 
 - Os comandos de ação só valem para sessão com processo vivo; para outra, o terminal recusa com o estado atual e sugere `retomar`.
 - O conteúdo do comando na caixa é JSON validado: `{"comando": "pausar" | "parar" | "cancelar" | "replanejar", "subtarefa"?: str}`; a sessão o lê a cada `SESSION_INBOX_POLL_SECONDS` e emite `comando_recebido`. Comando que a sessão não conhece é consumido e registrado como ignorado.
 - `cancelar` e `replanejar` não são decisões reservadas (ADR 023 §3): não passam pelo gate.
-- Texto livre no REPL é conversa com o Researcher (decisão do pesquisador, 2026-10-15): equivale a `perguntar` e segue a escolha de sessão do §1.6. Iniciar pesquisa exige `nova <tarefa>`; com outra em execução, o terminal pergunta "Já há pesquisa em execução (iris-01). Iniciar outra? [s/N]" antes da verificação de memória. Sem nenhuma pesquisa para consultar, o texto livre é recusado com a mensagem "Não há pesquisa para consultar; use 'nova <tarefa>' para iniciar uma." (sem chamada ao modelo). Verificado em `src/cli.py` e `src/cli_*.py`: `nova` não colide com comando do REPL (`sair`/`exit`/`quit`, `sessions`, `stop`, `clear-context`, `resume`); `new` existe só como subcomando de `geminiclaw project`, fora do REPL.
+- Texto livre no REPL é conversa com o Researcher (decisão do pesquisador, 2026-10-15): equivale a `perguntar` e segue a escolha de sessão do §1.6. Iniciar pesquisa exige `nova-pesquisa <tarefa>`; com outra em execução, o terminal pergunta "Já há pesquisa em execução (iris-01). Iniciar outra? [s/N]" antes da verificação de memória. Sem nenhuma pesquisa para consultar, o texto livre é recusado com a mensagem "Não há pesquisa para consultar; use 'nova-pesquisa <tarefa>' para iniciar uma." (sem chamada ao modelo). Verificado em `src/cli.py` e `src/cli_*.py`: `nova-pesquisa` não colide com comando do REPL (`sair`/`exit`/`quit`, `sessions`, `stop`, `clear-context`, `resume`); `new` existe só como subcomando de `geminiclaw project`, fora do REPL.
 
 ### 1.6 Consulta só leitura ao Researcher
 
@@ -179,7 +179,7 @@ Pontos para o parecer:
 
 ## 8. Questões em aberto
 
-1. **Texto livre no REPL.** Decidido pelo pesquisador em 2026-10-15: o texto livre continua sendo conversa com o Researcher (`perguntar`) e iniciar uma pesquisa exige o comando explícito `nova <tarefa>`. Regra adotada: §1.5.
+1. **Texto livre no REPL.** Decidido pelo pesquisador em 2026-10-15: o texto livre continua sendo conversa com o Researcher (`perguntar`) e iniciar uma pesquisa exige o comando explícito `nova-pesquisa <tarefa>`. Regra adotada: §1.5.
 2. **Consumo da consulta.** Decidido pelo pesquisador em 2026-10-15: conta no orçamento da sessão (uso, `limite_custo`, `limite_tokens`), por ser parte da pesquisa; as métricas a mantêm identificável como `consulta`. Regra adotada: §1.6.
 3. **`pausar` grava `suspended`**, estado legado retomável. Prefere um estado próprio (`pausada`)? Exigiria mais um valor de status no schema.
-4. **Nomes dos comandos** em português (`pesquisas`, `acompanhar`, `pausar`, `retomar`, `parar`, `cancelar`, `replanejar`, `perguntar`, `nova`, `decidir`, `pendentes`, `mensagem`) convivem com `sessions`, `stop` e `resume` em inglês. Manter `resume` como sinônimo de `retomar`?
+4. **Nomes dos comandos** em português (`pesquisas`, `acompanhar`, `pausar`, `retomar`, `parar`, `cancelar`, `replanejar`, `perguntar`, `nova-pesquisa`, `decidir`, `pendentes`, `mensagem`) convivem com `sessions`, `stop` e `resume` em inglês. Manter `resume` como sinônimo de `retomar`?

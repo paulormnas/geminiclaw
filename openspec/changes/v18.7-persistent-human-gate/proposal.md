@@ -20,7 +20,7 @@ O gate de decisões reservadas guarda os pedidos em memória (`src/human_gate.py
 - **Modificado:** enquanto há pedido pendente, a sessão segue com o que não depende dele; a espera não conta como ciclo ocioso nem estagnação.
 - **Modificado:** comandos de CLI que hoje autorizam em memória (`vocab approve`, `opportunities approve`, `graph edit`, `project confirm`) registram e resolvem o pedido no gate persistente com o papel do terminal.
 - **Removido:** `HumanGate` em memória, `ask_in_terminal`, `terminal_approver`, `terminal_solution_confirmer` e a leitura de `stdin` em `_ask_researcher_core`.
-- **Fora do escopo:** quem produz os pedidos de estagnação, saturação e restrição de direção (`v18.7-exploration-limits`); evento "decisão pendente" na tabela de eventos e comandos de acompanhamento (`v18.7-session-events-terminal`); usuário de sistema operacional separado para o processo da sessão (endurecimento opcional, ADR 023 §4.3).
+- **Fora do escopo:** quem produz os pedidos de estagnação, saturação e restrição de direção (`v18.7-exploration-limits`); evento "decisão pendente" na tabela de eventos e comandos de acompanhamento (`v18.7-session-events-terminal`); usuário de sistema operacional separado para o processo da sessão (endurecimento opcional, ADR 023 §4.3; antes de produção, decisão do pesquisador de 2026-10-15).
 
 ## Impacto
 

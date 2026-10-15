@@ -55,12 +55,12 @@ Valores e quem os grava (detalhado em `v18.7-hypothesis-linking`):
 | Valor | Quem grava | Situação | Bloqueia novos testes? |
 |---|---|---|---|
 | `pesquisador` | `Actor(kind="pesquisador")` | rejeição no lote do `assisted` (`hypothesis_cycle.py:401`) e abandono pelo pesquisador | sim |
-| `sistema` | orquestrador | ciclo de vida da hipótese do sistema (ADR 021 §3.5) | não; reabre pela chave |
-| `agente` | Researcher (via orquestrador) | sugestão do Curator recusada (`hypotheses.py:711`) e alternativa descartada numa decisão (`hypotheses.py:786`) | ver questão 2 |
+| `sistema` | orquestrador | só retiradas por regra determinística do orquestrador (ciclo de vida da hipótese do sistema, ADR 021 §3.5) | não; reabre pela chave |
+| `agente` | Researcher (via orquestrador) | decisão do Researcher de não explorar um caminho: sugestão do Curator recusada (`hypotheses.py:711`) e alternativa descartada numa decisão (`hypotheses.py:786`) | não; a hipótese pode voltar como `proposta` pela governança do modo (decisão do pesquisador, 2026-10-15) |
 
 ### 2.4 Leitura compatível
 
-`abandoned_by(node) -> str | None`: `None` se a hipótese não está `abandonada`; o valor gravado se existir; senão `"pesquisador"`. Esta é a regra provisória adotada na spec (requisito "Autor do abandono", cenário "Hipótese abandonada antiga (regra provisória da questão 1)") até a decisão da questão 1: mantém o bloqueio que essas hipóteses têm hoje, e a decisão pode trocar só esta função, sem mudar o schema. `Hipotese.origem` existente não muda.
+`abandoned_by(node, audit_history) -> str | None`: `None` se a hipótese não está `abandonada`; o valor gravado em `abandonada_por`, se existir; senão (nó antigo) `"pesquisador"` quando `audit_history` (lista devolvida por `audit_history(node.id)` do repositório, lida inteira pelo chamador) tem uma nota do `Actor` pesquisador com `decisao = "rejeitada"` (a nota gravada por `hypothesis_cycle.py:403`), e `"agente"` em caso contrário. Esta é a regra decidida pelo pesquisador em 2026-10-15 (requisito "Autor do abandono", cenários "Hipótese abandonada antiga com rejeição do pesquisador" e "... sem nota de rejeição"): só a rejeição do pesquisador bloqueia, e as alternativas descartadas pelo Researcher em sessões antigas deixam de ficar bloqueadas. A leitura nunca reescreve o nó. Inconsistência (por exemplo, `abandonada_por = "agente"` ou `"sistema"` gravado em hipótese com nota de rejeição do pesquisador; `"pesquisador"` sem nota é válido, pois a retirada por restrição e a edição pelo `graph edit` não gravam essa nota) é registrada em `WARNING` pelo leitor e mantém o valor gravado. `Hipotese.origem` existente não muda.
 
 ## 3. Relações novas
 
@@ -86,7 +86,7 @@ O `InMemoryGraphStore` não precisa de migração.
 ## 5. Contratos
 
 - `src/knowledge/schema.py`: `IMMUTABLE_LABEL_FIELDS: dict[str, frozenset[str]]`; constantes `PAPEIS_EXPERIMENTO = ("teste", "preparacao", "referencia")`, `ORIGEM_SISTEMA = "sistema"`, `ABANDONADA_POR = ("pesquisador", "sistema", "agente")`, `ORIGENS_REFERENCIA = ("referencia_medida", "criterio_problema", "indisponivel")`.
-- `src/knowledge/exploration_reads.py` (novo, só leitura): `experiment_role(node: Node) -> str`, `abandoned_by(node: Node) -> str | None`, `structured_key(problem_id: str, approach_id: str, metric_id: str) -> str`.
+- `src/knowledge/exploration_reads.py` (novo, só leitura): `experiment_role(node: Node) -> str`, `abandoned_by(node: Node, audit_history: Sequence[dict[str, Any]]) -> str | None`, `structured_key(problem_id: str, approach_id: str, metric_id: str) -> str`.
 - Nenhum evento novo.
 
 ### 5.1 Construtores compartilhados de grafo em memória para testes
@@ -122,7 +122,7 @@ Parecer do Analista de Segurança (2026-10-15): **Aprovado.** Respostas aos pont
 - (b) Adequado: a chave usa só ids validados por `^[A-Za-z0-9._-]{1,128}$`.
 - (c) `ALTER DEFAULT PRIVILEGES` só cobre tabelas criadas pelo papel que o executou. A migração roda com esse mesmo papel, e a tarefa 4.2 confirma, nas arestas novas, que o `knowledge_reader` lê e não grava.
 
-Sobre a Questão 1, ler as hipóteses antigas como `pesquisador` é a escolha segura.
+Sobre a Questão 1, decidida pelo pesquisador em 2026-10-15, a leitura de hipóteses antigas pela trilha de auditoria libera as alternativas descartadas pelo Researcher; o risco é a nota de rejeição ausente (ver riscos).
 
 Rastreio: item (a) no requisito "Autoridade sobre o abandono em todos os caminhos de escrita" (tarefa 2.7); item (b) no requisito "Hipótese de origem sistema com chave e referência fixadas", cenário "Chave com componente inválido" (tarefa 2.6); item (c) no cenário "Grafo anterior à V18.7" (tarefa 4.2).
 
@@ -132,13 +132,13 @@ Pontos para o parecer: (a) a regra de autoridade do §2.3 cobre todos os caminho
 
 | Risco | Mitigação |
 |---|---|
-| Hipóteses antigas abandonadas pelo Researcher (alternativas descartadas) ficam bloqueadas para sempre se lidas como `pesquisador` | Proposta conservadora mantém o comportamento atual; a questão 1 pede a decisão do pesquisador |
+| Hipótese antiga rejeitada pelo pesquisador sem a nota de auditoria (nota perdida) passaria a ser lida como `agente` e deixaria de bloquear | A nota é gravada na mesma operação da rejeição (`hypothesis_cycle.py:401-403`); inconsistências vão a `WARNING`; migração opcional de `abandonada_por` fica fora desta mudança |
 | Leitor do grafo que assume `origem` em quatro valores quebra com `sistema` | Busca por usos de `origem` nos leitores (tarefa 2.4) e teste de cada um com uma hipótese do sistema |
 | Migração não roda no Pi e a escrita de `PREPARA` falha no AGE | A ingestão já enfileira falhas do grafo (`knowledge_pending.jsonl`); a tarefa 4.3 inclui a migração no roteiro de preparação do Pi |
 | Ciclo `DERIVADA_DE` entre hipóteses distintas | Leituras de árvore com profundidade limitada; questão 3 |
 
 ## 9. Questões em aberto
 
-1. **Hipóteses `abandonada` antigas sem `abandonada_por`.** Proposta: ler como `pesquisador` (continuam bloqueando, como hoje). Até a decisão, a spec adota essa proposta como regra provisória (requisito "Autor do abandono"); a alternativa, se escolhida, muda só `abandoned_by` e esse cenário. Alternativa: inspecionar a trilha de auditoria (`record_audit_note` com `decisao = "rejeitada"` pelo pesquisador, `hypothesis_cycle.py:403`) e ler como `agente` as que não têm essa nota. A alternativa libera alternativas descartadas pelo Researcher em sessões antigas.
-2. **Abandono pelo agente (`agente`) bloqueia?** O ADR 021 diz que só o abandono pelo pesquisador bloqueia, mas não trata a sugestão do Curator recusada pelo Researcher nem a alternativa descartada numa decisão, que hoje nascem `abandonada`. Proposta: não bloqueia; se um plano posterior trouxer a mesma hipótese, ela volta como `proposta` e passa pela governança do modo. Alternativa: bloqueia, como hoje. A regra de reabertura fica em `v18.7-hypothesis-linking`; aqui só existe o valor do enum.
+1. **Hipóteses `abandonada` antigas sem `abandonada_por`.** Decidido pelo pesquisador em 2026-10-15: adota-se a trilha de auditoria. Regra adotada (§2.4): lê-se como `pesquisador` só quando há nota de rejeição do pesquisador (`record_audit_note` com `decisao = "rejeitada"`, `hypothesis_cycle.py:403`); sem essa nota, lê-se como `agente`. Inconsistências são registradas, não corrigidas.
+2. **Abandono pelo agente (`agente`) bloqueia?** Decidido pelo pesquisador em 2026-10-15: não. O abandono é a decisão do Researcher de não explorar um caminho (`abandonada_por = "agente"`) e não bloqueia: se um plano posterior trouxer a mesma hipótese, ela volta como `proposta` e passa pela governança do modo. Só a rejeição do pesquisador (`pesquisador`) bloqueia; `sistema` fica para retiradas por regra determinística do orquestrador. A regra de reabertura é de `v18.7-hypothesis-linking`; aqui existe o valor do enum e a leitura.
 3. **Ciclos em `DERIVADA_DE` entre hipóteses.** Proposta: só recusar o laço para o próprio nó nesta etapa. Alternativa: recusar qualquer ciclo na escrita (consulta de alcance a cada aresta nova).

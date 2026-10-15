@@ -61,12 +61,12 @@ ADRs de origem: [021](../docs/decisions/adr_021_exploracao_rastreavel_por_hipote
 
 ### Tarefa 6: Eventos de progresso e terminal
 - **Spec:** [`v18.7-session-events-terminal`](../openspec/changes/v18.7-session-events-terminal/proposal.md)
-- **Critérios de aceite:** [ ] eventos gravados na hora e filtrados · [ ] atualizações no REPL sem apagar a digitação · [ ] comandos de acompanhamento e ações imediatas · [ ] consulta só leitura ao Researcher
+- **Critérios de aceite:** [ ] eventos gravados na hora e filtrados · [ ] atualizações no REPL sem apagar a digitação · [ ] comandos de acompanhamento e ações imediatas · [ ] consulta só leitura ao Researcher, contada no orçamento da sessão · [ ] texto livre é conversa e `nova <tarefa>` inicia a pesquisa
 - **Complexidade estimada:** Média
 
 ### Tarefa 7: Limites da exploração e parada pelo objetivo
 - **Spec:** [`v18.7-exploration-limits`](../openspec/changes/v18.7-exploration-limits/proposal.md)
-- **Critérios de aceite:** [ ] sem teto de hipóteses e ciclos como parada · [ ] limite de custo por sessão (`limite_custo`) · [ ] objetivo tipado e política ao atingir o objetivo · [ ] estagnação como intervenção do Curator e saturação · [ ] restrições por direção
+- **Critérios de aceite:** [ ] sem teto de hipóteses e ciclos como parada · [ ] limite de custo por sessão (`limite_custo`, padrão US$ 20) · [ ] objetivo tipado e política ao atingir o objetivo · [ ] estagnação como intervenção do Curator e saturação · [ ] restrições por direção
 - **Complexidade estimada:** Alta
 
 ### Tarefa 8: Contrato da subtarefa

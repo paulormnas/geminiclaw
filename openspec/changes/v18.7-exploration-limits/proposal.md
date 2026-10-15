@@ -58,8 +58,8 @@ O pesquisador decidiu (ADR 021 §5): sem teto de hipóteses nem de ciclos; limit
 - Gate persistente, papel de banco do terminal, estados `aguarda_pesquisador` e `suspensa_sem_pesquisador`, processo da sessão: `v18.7-persistent-human-gate` e `v18.7-background-sessions`.
 - Texto do regimento e dos prompts: `v18.7-agent-system-prompts`; aqui só se define o comportamento e os códigos que a parte estruturada declara.
 - Tipo `fronteira` além da declaração (V19).
-- Direção `o` do veredito a partir da predição nos tipos sem alvo e termo `m` neutro (ADR 015 §9 alterado pelo ADR 021): não estão atribuídos a nenhuma mudança na tabela do ADR 021; ver "Questões em aberto" no `design.md`.
-- Calibração do veredito e dos limiares de saturação (Etapa 2).
+- Direção `o` do veredito a partir da predição nos tipos sem alvo e termo `m` neutro (ADR 015 §9 alterado pelo ADR 021): não estão atribuídos a nenhuma mudança na tabela do ADR 021; a direção pela predição passa a ser dona da mudança futura do ADR 025 (`docs/decisions/adr_025_calibracao_do_veredito.md`, rascunho); ver "Questões em aberto" no `design.md`.
+- Calibração do veredito: ADR 025 (`docs/decisions/adr_025_calibracao_do_veredito.md`, rascunho) e sua mudança futura. Limiares de saturação: calibração da Etapa 2.
 
 ## Impacto
 

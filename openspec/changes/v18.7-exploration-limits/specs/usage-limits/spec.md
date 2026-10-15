@@ -19,7 +19,7 @@ O sistema SHALL executar toda sessão sob um orçamento de tokens, tempo, custo 
 ## ADDED Requirements
 
 ### Requirement: Limite de custo por sessão
-O sistema SHALL somar o custo estimado de todas as chamadas da sessão, por provedor, e SHALL, ao atingir `SESSION_MAX_COST_USD × (1 − SESSION_CLOSING_RESERVE_PCT)` no total, ou o valor de um provedor em `SESSION_MAX_COST_USD_BY_PROVIDER`, parar de despachar trabalho e fechar a sessão com `motivo_parada = "limite_custo"`, checkpoint e consolidação (ADR 021 §5.4). Padrões: `SESSION_MAX_COST_USD=10.0`; `SESSION_MAX_COST_USD_BY_PROVIDER` vazio (só o total). O motivo `limite_cota_provedor` de `v18.7-benchmark-fixes` SHALL continuar existindo, com precedência menor que `limite_custo` no mesmo ponto de verificação.
+O sistema SHALL somar o custo estimado de todas as chamadas da sessão, por provedor, inclusive as da consulta do terminal ao Researcher (origem `consulta_terminal`, de `v18.7-session-events-terminal`; decisão do pesquisador, 2026-10-15), e SHALL, ao atingir `SESSION_MAX_COST_USD × (1 − SESSION_CLOSING_RESERVE_PCT)` no total, ou o valor de um provedor em `SESSION_MAX_COST_USD_BY_PROVIDER`, parar de despachar trabalho e fechar a sessão com `motivo_parada = "limite_custo"`, checkpoint e consolidação (ADR 021 §5.4). Padrões: `SESSION_MAX_COST_USD=20.0`; `SESSION_MAX_COST_USD_BY_PROVIDER` vazio (só o total). O motivo `limite_cota_provedor` de `v18.7-benchmark-fixes` SHALL continuar existindo, com precedência menor que `limite_custo` no mesmo ponto de verificação.
 
 #### Scenario: Teto total atingido
 - **GIVEN** `max_cost_usd = 2.0`, `closing_reserve_pct = 0.05` e um leitor de custo simulado que devolve `{"anthropic": 1.20, "openai": 0.71}`

@@ -42,7 +42,7 @@
 ## 6. Ciclo de vida, aprovação e derivação entre hipóteses
 - [ ] 6.1 `system_origin` no `ExplorationSession` e no checkpoint; abandono pelo sistema nos três casos (design §4.4), com aviso do laço quando o DAG marca `abandonada` por retentativas.
 - [ ] 6.2 Reabertura pela chave (design §4.5).
-- [ ] 6.3 `_reject` grava `abandonada_por = "pesquisador"`; recusas e alternativas descartadas pelo Researcher gravam `abandonada_por = "agente"`; `resolve_ref`, `_record_hypothesis` e `ingestion.hipotese` passam a decidir pelo autor do abandono (leitura `abandoned_by`).
+- [ ] 6.3 `_reject` grava `abandonada_por = "pesquisador"`; recusas e alternativas descartadas pelo Researcher (decisão de não explorar o caminho) gravam `abandonada_por = "agente"` e não bloqueiam: a hipótese volta como `proposta` pela governança do modo (cenário "Hipótese abandonada pelo agente"); `resolve_ref`, `_record_hypothesis` e `ingestion.hipotese` passam a decidir pelo autor do abandono (leitura `abandoned_by`).
 - [ ] 6.4 Origem `sistema` no lote do `assisted` e no caminho autônomo (design §5.1).
 - [ ] 6.5 `derivada_de` aceita `Hipotese` do projeto e `ref` declarada antes no mesmo plano.
 - [ ] 6.6 Testes: cenários de "Ciclo de vida da hipótese do sistema", "Aprovação da hipótese do sistema por modo" e "Hipótese derivada de outra hipótese".

@@ -5,6 +5,7 @@
 ## 0. Pré-requisitos
 - [ ] 0.1 `v18.7-resource-monitor-config` mergeada; revisar esta mudança contra o código de `dev` (referências de linha de 2026-10-15). Merge junto com `v18.7-persistent-human-gate` (PRs em sequência no mesmo dia).
 - [ ] 0.2 Aprovação do pesquisador para o schema (proposal, "Aprovações necessárias") e resposta às Questões em aberto 1 e 3 do design.
+- [ ] 0.9 Divisão do módulo grande antes do comportamento novo (ADR 024 §5), só movendo código, com a suíte verde antes de seguir: `src/cli/main.py`: extrair para módulos próprios em `src/cli/` o lançamento do processo da sessão e o laço do REPL. Os caminhos citados nesta mudança valem pela tabela de `v18.7-source-layout`.
 
 ## 1. Schema e sessão
 - [ ] 1.1 `scripts/init_db.sql` e `scripts/migrations/v18_7_001_session_process.sql` (idempotente) com o DDL do design §2.1.

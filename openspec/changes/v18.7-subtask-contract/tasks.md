@@ -7,6 +7,7 @@
 - [ ] 0.2 Parecer do Analista de Segurança registrado no design §8.
 - [ ] 0.3 `v18.7-hypothesis-linking` mergeada (papel do experimento e hipótese do sistema); conferir no código os nomes reais dos campos usados nos itens 1 e 4. Se `v18.7-exploration-limits` já estiver mergeada (recomendado, mesma onda), rebase: o parecer tipado de revisão (design §6.3) preserva os campos `predicoes` e `viola_restricao` que aquela mudança acrescentou, e o item 6 usa o tipo do objetivo.
 - [ ] 0.4 Revisar a spec contra o código (`src/autonomous_loop.py`, `src/llm/agent_loop.py`, `src/agents/validator_agent.py`) e ajustar as referências de linha; criar o worktree `.worktrees/feat-v18.7-subtask-contract`.
+- [ ] 0.9 Divisão do módulo grande antes do comportamento novo (ADR 024 §5), só movendo código, com a suíte verde antes de seguir: `src/orchestration/orchestrator.py`: extrair para módulo próprio em `src/orchestration/` os construtores de contexto por papel e o contrato da subtarefa. Os caminhos citados nesta mudança valem pela tabela de `v18.7-source-layout`.
 
 ## 1. Configuração
 - [ ] 1.1 `SUBTASK_CONTRACT_ENABLED`, `CONTRACT_TASK_MAX_CHARS`, `CONTRACT_FIELD_MAX_CHARS`, `REVIEW_INTEGRITY_ALWAYS`, `REVIEW_SCRIPT_MAX_CHARS`, `REVIEW_OBSERVATIONS_MAX` e `PLAN_ARTIFACT_COLLISION_CHECK` em `src/config.py` e `.env.example` (design §9).

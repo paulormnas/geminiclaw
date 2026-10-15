@@ -1,6 +1,6 @@
 # Roadmap V18.7 — Exploração Rastreável, Contrato de Contexto e Pesquisa em Segundo Plano
 
-> **Estado (2026-10-15):** mudanças OpenSpec escritas e em revisão; nenhuma implementada. ADRs 021, 022 e 023 aprovados; ADR 024 proposto (Tarefa 0 só começa depois da aprovação dele).
+> **Estado (2026-10-15):** mudanças OpenSpec escritas e em revisão; nenhuma implementada. ADRs 021, 022, 023 e 024 aprovados.
 
 ## Objetivo
 
@@ -11,7 +11,7 @@ Fazer os agentes explorarem livremente, com toda exploração rastreável até u
 - o laço replanejava em erro de cota do provedor; a cadeia de proveniência saía divergente com retentativas; o relatório comparava o limite de egresso com o total errado;
 - o REPL ficava ocupado durante a pesquisa, e decisões do pesquisador liam o terminal de dentro da sessão.
 
-ADRs de origem: [021](../docs/decisions/adr_021_exploracao_rastreavel_por_hipoteses.md) (exploração rastreável por hipóteses), [022](../docs/decisions/adr_022_contrato_contexto_por_chamada.md) (contrato de contexto por chamada e regimento da pesquisa), [023](../docs/decisions/adr_023_pesquisa_em_segundo_plano.md) (pesquisa em segundo plano) e [024](../docs/decisions/adr_024_organizacao_do_codigo.md) (organização do código, proposto).
+ADRs de origem: [021](../docs/decisions/adr_021_exploracao_rastreavel_por_hipoteses.md) (exploração rastreável por hipóteses), [022](../docs/decisions/adr_022_contrato_contexto_por_chamada.md) (contrato de contexto por chamada e regimento da pesquisa), [023](../docs/decisions/adr_023_pesquisa_em_segundo_plano.md) (pesquisa em segundo plano) e [024](../docs/decisions/adr_024_organizacao_do_codigo.md) (organização do código).
 
 ## Decisões do pesquisador (2026-10-15)
 
@@ -25,13 +25,12 @@ ADRs de origem: [021](../docs/decisions/adr_021_exploracao_rastreavel_por_hipote
 ## Dependências
 
 - V18.6 arquivada (atendido em 2026-10-14).
-- ADR 024 aprovado, para a Tarefa 0.
 - Nenhuma outra branch com código Python aberta durante a Tarefa 0 (ADR 024 §1).
 
 ## Tarefas
 
-### Tarefa 0: Organização do código (ADR 024, aguarda aprovação)
-- **Spec:** `v18.7-source-layout` e `v18.7-layer-cycles`, escritas depois da aprovação do ADR 024.
+### Tarefa 0: Organização do código (ADR 024)
+- **Specs:** [`v18.7-source-layout`](../openspec/changes/v18.7-source-layout/proposal.md) e, logo depois, [`v18.7-layer-cycles`](../openspec/changes/v18.7-layer-cycles/proposal.md)
 - **Critérios de aceite:** [ ] raiz de `src/` só com `__init__.py`, `config.py`, `logger.py`, `db.py` · [ ] suíte inteira verde sem alterar asserções · [ ] regra de camadas verificada a cada commit · [ ] lista de exceções vazia ao fim de `v18.7-layer-cycles`
 - **Complexidade estimada:** Alta (volume), baixa em lógica
 
@@ -99,7 +98,84 @@ Os motivos de parada e os códigos de saída têm uma tabela única em `v18.7-ba
 
 As ajudas de teste compartilhadas são criadas pela primeira mudança que precisa delas e reaproveitadas pelas seguintes: provedor simulado com respostas roteirizadas e erros de cota (Tarefa 1); leituras de recursos simuladas e importação isolada de `src.config` (Tarefa 2); construtores de grafo em memória (Tarefa 3); processo de sessão de teste, relógio controlável, PostgreSQL com o papel do terminal e REPL com entrada simulada (Tarefa 5); gate simulado com a interface comum de aprovação (Tarefa 5).
 
-As mudanças foram escritas antes da reorganização do código: os caminhos de arquivo citados nelas valem pela tabela "caminho antigo → caminho novo" da `v18.7-source-layout`, copiada aqui quando a Tarefa 0 for especificada. Cada desenvolvedor confere a spec com o código antes de começar (AGENTS.md §1.10).
+As mudanças foram escritas antes da reorganização do código: os caminhos de arquivo citados nelas valem pela tabela abaixo (cópia de `v18.7-source-layout`, design §2). Cada uma das mudanças que alteram `autonomous_loop`, `orchestrator`, `cli/main` ou `human_gate` começa pela divisão do módulo (tarefa 0.9, ADR 024 §5).
+
+### Caminho antigo → caminho novo
+
+| Caminho antigo | Caminho novo |
+|---|---|
+| `src/agent_runtime/context.py` | `src/utils/agent_context.py` |
+| `src/agents/validator_agent.py` | `src/agents/validator/agent.py` |
+| `src/artifact_match.py` | `src/artifacts/match.py` |
+| `src/artifact_profile.py` | `src/artifacts/profile.py` |
+| `src/autonomous_loop.py` | `src/orchestration/autonomous_loop.py` |
+| `src/claims/report.py` | `src/report/claims_report.py` |
+| `src/cli.py` | `src/cli/main.py` |
+| `src/cli_claims.py` | `src/cli/claims.py` |
+| `src/cli_graph.py` | `src/cli/graph.py` |
+| `src/cli_opportunities.py` | `src/cli/opportunities.py` |
+| `src/cli_project.py` | `src/cli/project.py` |
+| `src/cli_provenance.py` | `src/cli/provenance.py` |
+| `src/context_loader.py` | `src/research_data/context_loader.py` |
+| `src/continuity.py` | `src/session/continuity.py` |
+| `src/egress/fragments.py` | `src/utils/egress_fragments.py` |
+| `src/embeddings/reindex.py` | `src/documents/reindex.py` |
+| `src/exploration.py` | `src/orchestration/exploration.py` |
+| `src/health.py` | `src/host/health.py` |
+| `src/heartbeat.py` | `src/session/heartbeat.py` |
+| `src/history.py` | `src/session/history.py` |
+| `src/human_gate.py` | `src/gate/human_gate.py` |
+| `src/infrastructure.py` | `src/cli/infrastructure.py` |
+| `src/knowledge/normalization.py` | `src/utils/normalization.py` |
+| `src/llm_cache.py` | `src/llm/cache.py` |
+| `src/metrics_file.py` | `src/artifacts/metrics_file.py` |
+| `src/model_config.py` | `src/llm/model_config.py` |
+| `src/model_router.py` | `src/llm/model_router.py` |
+| `src/operation_metrics.py` | `src/report/operation_metrics.py` |
+| `src/orchestrator.py` | `src/orchestration/orchestrator.py` |
+| `src/output_manager.py` | `src/artifacts/output_manager.py` |
+| `src/pipeline_errors.py` | `src/orchestration/errors.py` |
+| `src/plan_normalizer.py` | `src/orchestration/plan_normalizer.py` |
+| `src/platform_images.py` | `src/host/platform_images.py` |
+| `src/platform_info.py` | `src/host/platform_info.py` |
+| `src/project_session.py` | `src/cli/project_session.py` |
+| `src/prompts.py` | `src/agents/prompts.py` |
+| `src/rate_limiter.py` | `src/llm/rate_limiter.py` |
+| `src/reserved_files.py` | `src/artifacts/reserved_files.py` |
+| `src/resume.py` | `src/session/resume.py` |
+| `src/session.py` | `src/session/manager.py` |
+| `src/skills/code/manifest.py` | `src/utils/workspace_manifest.py` |
+| `src/skills/document_processor/chunker.py` | `src/documents/chunker.py` |
+| `src/skills/document_processor/descriptors.py` | `src/documents/descriptors.py` |
+| `src/skills/document_processor/enrichment.py` | `src/documents/enrichment.py` |
+| `src/skills/document_processor/extractors/` | `src/documents/extractors/` |
+| `src/skills/document_processor/extractors/base.py` | `src/documents/extractors/base.py` |
+| `src/skills/document_processor/extractors/csv_extractor.py` | `src/documents/extractors/csv_extractor.py` |
+| `src/skills/document_processor/extractors/docling_extractor.py` | `src/documents/extractors/docling_extractor.py` |
+| `src/skills/document_processor/extractors/fallback_extractor.py` | `src/documents/extractors/fallback_extractor.py` |
+| `src/skills/document_processor/extractors/registry.py` | `src/documents/extractors/registry.py` |
+| `src/skills/document_processor/extractors/text_extractor.py` | `src/documents/extractors/text_extractor.py` |
+| `src/skills/document_processor/indexer.py` | `src/documents/indexer.py` |
+| `src/skills/document_processor/pipeline.py` | `src/documents/pipeline.py` |
+| `src/skills/document_processor/registry_store.py` | `src/documents/registry_store.py` |
+| `src/subtask_output.py` | `src/artifacts/subtask_output.py` |
+| `src/task_scheduler.py` | `src/orchestration/task_scheduler.py` |
+| `src/telemetry.py` | `src/observability/telemetry.py` |
+| `src/triage.py` | `src/orchestration/triage.py` |
+| `src/unlimited_mode.py` | `src/orchestration/unlimited_mode.py` |
+| `src/usage.py` | `src/orchestration/usage.py` |
+| `agents/<subpacote>/...` (todo o pacote da raiz) | `src/agents/<subpacote>/...` |
+
+| Definição (módulo antigo) | Módulo novo |
+|---|---|
+| `_METRIC_ALIASES`, `_metric_key`, `MetricCriterion`, `_comparisons`, `_metric_criteria`, `_OPERATORS`, `_compare`, `_group_named`, `_evaluate_comparison`, `_evaluate_comparison_found`, `_evaluate_metric_criteria`, `evaluated_metric_names`, `Comparison` (`src/agents/validator_agent.py`) | `src/knowledge/metric_criteria.py` |
+| `Checkpoint` (`src/continuity.py`) | sob `TYPE_CHECKING` (só anotação) |
+| `ST_CONCLUIDA`, `ST_EM_ANDAMENTO`, `ST_PENDENTE`, `ST_ABANDONADA`, `ST_FALHOU` (`src/continuity.py`) | `src/knowledge/subtask_states.py` |
+| `_make_client` (`src/embeddings/reindex.py`) | `src/utils/qdrant.py` |
+| `get_or_create_node_id`, `generate_node_id`, `_node_id_config_dir`, `uuid7` (`src/knowledge/ids.py`) | `src/utils/node_id.py` |
+| `insumo_tipo` (`src/knowledge/ingestion.py`) | `src/documents/hashing.py` |
+| `sha256_file`, `MAX_HASH_BYTES` (`src/knowledge/ingestion_io.py`) | `src/documents/hashing.py` |
+| `AgentResult`, `AgentTask` (`src/orchestrator.py`) | `src/agent_runtime/types.py` | Cada desenvolvedor confere a spec com o código antes de começar (AGENTS.md §1.10).
 
 ## Aprovações necessárias
 

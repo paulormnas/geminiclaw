@@ -12,8 +12,8 @@
 - [ ] 1.1 Refazer a auditoria do design §1 contra o código mergeado (prompts, `_is_bound` ou o que o substituiu, ids de parada e retirada, construtores de contexto) e registrar a versão final no design §1, com as referências de linha atualizadas.
 
 ## 2. Regimento v1
-- [ ] 2.1 `agents/regimento/regimento.md` com as seções do design §2.1, escrito de forma direta, sem tabelas nem listas de códigos.
-- [ ] 2.2 `agents/regimento/regimento.yaml` com a estrutura do design §2.2 e os textos tirados dos ADRs 021 e 022, inclusive `regras_seguranca` com ids estáveis e destino, e `decisoes_reservadas` com os tipos do gate persistente.
+- [ ] 2.1 `src/agents/regimento/regimento.md` com as seções do design §2.1, escrito de forma direta, sem tabelas nem listas de códigos.
+- [ ] 2.2 `src/agents/regimento/regimento.yaml` com a estrutura do design §2.2 e os textos tirados dos ADRs 021 e 022, inclusive `regras_seguranca` com ids estáveis e destino, e `decisoes_reservadas` com os tipos do gate persistente.
 - [ ] 2.3 Texto do regimento apresentado ao pesquisador no PR para aprovação (ADR 022 §4.4).
 
 ## 3. Carga, recorte e registro

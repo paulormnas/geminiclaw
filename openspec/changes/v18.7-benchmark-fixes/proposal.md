@@ -3,7 +3,7 @@
 **ID:** `v18.7-benchmark-fixes` · **Versão:** V18.7 · **Capacidades:** `llm-providers`, `usage-limits`, `session-continuity`, `execution-provenance`, `operation-metrics`, `benchmark`
 **ADRs de origem:** nenhum novo (correção). Requisitos relacionados: [ADR 011](../../../docs/decisions/adr_011_provedores_agnosticos.md) (provedores agnósticos), [ADR 017](../../../docs/decisions/adr_017_catalogo_modelos_roteador.md) (roteador e reserva do 429), [ADR 019](../../../docs/decisions/adr_019_localidade_dados_proveniencia_resultados.md) §4 (registro de execuções encadeado), §8 (métricas de operação) e §11 (limites de uso), [ADR 010](../../../docs/decisions/adr_010_proposito_assistente_digital_pesquisa.md) (exploração contínua com parada explícita).
 **Origem:** achados 4, 5 e 6 de [`docs/benchmarks/2026-10-15-bateria-v18-6-resultados.md`](../../../docs/benchmarks/2026-10-15-bateria-v18-6-resultados.md).
-**Depende de:** nenhuma mudança em aberto. Base: specs consolidadas de V18.5 e V18.6 (`usage-limits`, `execution-provenance`, `operation-metrics`, `benchmark`, `llm-providers`). Independente dos ADRs 021 e 022.
+**Depende de:** nenhuma mudança em aberto. Base: specs consolidadas de V18.5 e V18.6 (`usage-limits`, `execution-provenance`, `operation-metrics`, `benchmark`, `llm-providers`). Independente dos ADRs 021 e 022. Implementada depois de `v18.7-source-layout` e `v18.7-layer-cycles` (onda 0, ADR 024), cujos caminhos novos valem para os citados aqui.
 
 ## Por quê
 

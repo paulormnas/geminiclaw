@@ -2,7 +2,7 @@
 
 **ID:** `v18.7-graph-exploration-relations` · **Versão:** V18.7 · **Capacidade:** `knowledge-graph` (reutilizada de `v17-graph-store`)
 **ADRs de origem:** [ADR 021](../../../docs/decisions/adr_021_exploracao_rastreavel_por_hipoteses.md) §2 (três papéis de `Experimento`), §3 (ligações derivadas, hipótese do sistema, chave estruturada, referência R fixada, ciclo de vida com `abandonada_por`), §4 (`DERIVADA_DE` entre hipóteses, transições de status de hipóteses concluídas) e §9 (compatibilidade); emenda ao [ADR 015](../../../docs/decisions/adr_015_modelo_dados_grafo_conhecimento.md) §2, §4 e §5 registrada no ADR 021.
-**Depende de:** nenhuma mudança em aberto (V18.6 arquivada). É pré-requisito de [`v18.7-hypothesis-linking`](../v18.7-hypothesis-linking/proposal.md), que escreve os nós e arestas definidos aqui.
+**Depende de:** nenhuma mudança em aberto (V18.6 arquivada). É pré-requisito de [`v18.7-hypothesis-linking`](../v18.7-hypothesis-linking/proposal.md), que escreve os nós e arestas definidos aqui. Implementada depois de `v18.7-source-layout` e `v18.7-layer-cycles` (onda 0, ADR 024), cujos caminhos novos valem para os citados aqui.
 
 ## Por quê
 

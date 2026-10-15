@@ -2,7 +2,7 @@
 
 **ID:** `v18.7-background-sessions` · **Versão:** V18.7 · **Capacidade:** `session-continuity`, `benchmark`
 **ADRs de origem:** [ADR 023](../../../docs/decisions/adr_023_pesquisa_em_segundo_plano.md) §1 (processo da sessão, verificação de memória, comando direto), §1.2 (fim da sessão conforme o modo, presença do terminal, suspensão do `assisted`, pergunta de retomada, um terminal por vez), §6 (falhas), §7 (segurança e recursos); casos de aceite 1 a 12, 14 e 15
-**Depende de:** `v18.7-resource-monitor-config` (leitura de memória multiplataforma, `MIN_AVAILABLE_MEMORY_MB`, `psutil` para conferir PID); `v18-research-continuity` (checkpoint, `resume`, `continued_by`), já arquivada
+**Depende de:** `v18.7-resource-monitor-config` (leitura de memória multiplataforma, `MIN_AVAILABLE_MEMORY_MB`, `psutil` para conferir PID); `v18-research-continuity` (checkpoint, `resume`, `continued_by`), já arquivada Implementada depois de `v18.7-source-layout` e `v18.7-layer-cycles` (onda 0, ADR 024), cujos caminhos novos valem para os citados aqui.
 **Mergeada junto com:** `v18.7-persistent-human-gate` (PRs em sequência no mesmo dia, sem uso intermediário em `dev` nem no Pi): a presença do terminal passa a ser gravada só pelo papel `terminal_writer` daquela mudança, e a janela em que o papel principal a grava (design §8, risco 1) não chega a ser usada.
 **É pré-requisito de:** `v18.7-persistent-human-gate`, `v18.7-session-events-terminal` e `v18.7-exploration-limits` (estado `aguarda_pesquisador` e motivo `encerrada_pesquisador`). Esta mudança é a dona da tabela única de códigos de saída por motivo de parada (design §1.4).
 

@@ -8,6 +8,7 @@
 - [ ] 0.3 Revisar esta mudança contra o código atual (`src/exploration.py`, `src/knowledge/hypotheses.py`, `src/knowledge/hypothesis_cycle.py`, `src/knowledge/ingestion.py`, `src/autonomous_loop.py`, `src/agents/validator_agent.py`) e contra o estado de `v18.7-exploration-limits` (mesmos `prepare_cycle` e `select`); registrar divergências no PR.
 - [ ] 0.4 Worktree `.worktrees/feat-v18.7-hypothesis-linking`.
 - [ ] 0.5 Conferir se `v18.7-persistent-human-gate` já foi mergeada: se sim, usar `ApprovalPort` e `PersistentGateApprover` de `src/human_approval.py`; se não, criar `src/human_approval.py` com o `Protocol` exatamente como no design §2.4 daquela mudança e a implementação provisória `NoGateApprovalPort` (design §4.5).
+- [ ] 0.9 Divisão do módulo grande antes do comportamento novo (ADR 024 §5), só movendo código, com a suíte verde antes de seguir: `src/orchestration/exploration.py` e `src/orchestration/autonomous_loop.py`: extrair para módulo próprio o papel do experimento e a ligação a hipóteses. Os caminhos citados nesta mudança valem pela tabela de `v18.7-source-layout`.
 
 ## 1. Configuração e campos
 - [ ] 1.1 `LINKAGE_FEEDBACK_MAX_ITEMS` e `HYPOTHESIS_TEXT_NEGATION_PREFIXES` em `src/config.py` e `.env.example` (design §11).

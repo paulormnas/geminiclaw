@@ -62,7 +62,7 @@ O sistema SHALL <comportamento obrigatório>.
 
 **Arquivadas em 2026-10-13 e 2026-10-14:** as 32 mudanças de V16 a V18.5 e as 8 da V18.6 (links para
 `changes/archive/`), com os requisitos consolidados em [`specs/`](specs/README.md) e os itens
-abertos em [`changes/archive/PENDENCIAS.md`](changes/archive/PENDENCIAS.md). Em aberto: V18.7 (11 mudanças, roadmap [`roadmap_V18.7.md`](../roadmaps/roadmap_V18.7.md)), V19 e V20.
+abertos em [`changes/archive/PENDENCIAS.md`](changes/archive/PENDENCIAS.md). Em aberto: V18.7 (13 mudanças, roadmap [`roadmap_V18.7.md`](../roadmaps/roadmap_V18.7.md)), V19 e V20.
 
 | Versão | Mudança | Capacidade | ADRs | Depende de |
 |---|---|---|---|---|
@@ -106,6 +106,8 @@ abertos em [`changes/archive/PENDENCIAS.md`](changes/archive/PENDENCIAS.md). Em 
 | V18.6 | [v18.6-profile-hardening](changes/archive/v18.6-profile-hardening/proposal.md) | `pipeline-robustness`, `data-egress` | 019 | v18.6-review-evidence |
 | V18.6 | [v18.6-auto-metrics-and-stop-reasons](changes/archive/v18.6-auto-metrics-and-stop-reasons/proposal.md) | `hypothesis-loop`, `vocabulary`, `operation-metrics`, `benchmark` | 010, 012, 015, 020 | v18.6-hypothesis-closure |
 | V18.6 | [v18.6-models-gemini4-gpt6](changes/archive/v18.6-models-gemini4-gpt6/proposal.md) | `llm-providers`, `benchmark` | 017, 019, 020 | v18.6-benchmark-harness, v18.6-validator-independence |
+| V18.7 | [v18.7-source-layout](changes/v18.7-source-layout/proposal.md) | `project-structure` (nova) | 024 | — (onda 0, antes de todas) |
+| V18.7 | [v18.7-layer-cycles](changes/v18.7-layer-cycles/proposal.md) | `project-structure`, `data-egress`, `llm-providers` | 024, 019, 017 | v18.7-source-layout |
 | V18.7 | [v18.7-benchmark-fixes](changes/v18.7-benchmark-fixes/proposal.md) | `llm-providers`, `usage-limits`, `session-continuity`, `execution-provenance`, `operation-metrics`, `benchmark` | 011, 017, 019 (correção) | — |
 | V18.7 | [v18.7-resource-monitor-config](changes/v18.7-resource-monitor-config/proposal.md) | `agent-runtime`, `llm-providers`, `operation-metrics` | 023 | — |
 | V18.7 | [v18.7-graph-exploration-relations](changes/v18.7-graph-exploration-relations/proposal.md) | `knowledge-graph` | 021 | — |

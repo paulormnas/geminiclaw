@@ -2,7 +2,7 @@
 
 **ID:** `v18.7-session-events-terminal` · **Versão:** V18.7 · **Capacidade:** `session-continuity`, `researcher-consult`
 **ADRs de origem:** [ADR 023](../../../docs/decisions/adr_023_pesquisa_em_segundo_plano.md) §2 (eventos de progresso), §3 (terminal: conversar e acompanhar), §7 (filtros de exibição e egresso); casos de aceite 1, 4 e 10 (evento final, de suspensão e de falha); [ADR 019](../../../docs/decisions/adr_019_localidade_dados_proveniencia_resultados.md) (nada de dado bruto nos eventos e na consulta); [ADR 022](../../../docs/decisions/adr_022_contrato_contexto_por_chamada.md) (contexto da consulta delimitado como dado)
-**Depende de:** `v18.7-background-sessions` (processo da sessão, apelido, presença, REPL livre); `v18.7-persistent-human-gate` (pedido pendente que vira evento, caixa de entrada usada pelos comandos e pela orientação vinda da conversa)
+**Depende de:** `v18.7-background-sessions` (processo da sessão, apelido, presença, REPL livre); `v18.7-persistent-human-gate` (pedido pendente que vira evento, caixa de entrada usada pelos comandos e pela orientação vinda da conversa) Implementada depois de `v18.7-source-layout` e `v18.7-layer-cycles` (onda 0, ADR 024), cujos caminhos novos valem para os citados aqui.
 
 ## Por quê
 

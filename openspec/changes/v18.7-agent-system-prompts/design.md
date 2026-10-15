@@ -74,7 +74,7 @@ O prompt do `base` afirma rodar "em um Raspberry Pi 5" e manda usar `quick_searc
 ## 2. Estrutura do regimento (ADR 022 §4.1, §5)
 
 ```
-agents/regimento/
+src/agents/regimento/
   regimento.md     prosa: orientação, uma seção por assunto
   regimento.yaml   parte estruturada: regras com efeito no código
 ```
@@ -268,7 +268,7 @@ O Developer recebe a regra de seed: a do enunciado da subtarefa quando houver (r
 | `REGIMENTO_EXCERPT_MAX_CHARS` | `8000` | Teto do recorte de cada combinação de tipo e modo e da saída de `ler_regimento` |
 | `REGIMENTO_ADDENDUM_FILE` | `regimento_adendo.yaml` | Nome do adendo de projeto, procurado nos insumos do pesquisador |
 
-O diretório do regimento é fixo (`agents/regimento/`), não configurável, para que a versão registrada seja sempre a do repositório. Ambas as variáveis em `src/config.py` e `.env.example`.
+O diretório do regimento é fixo (`src/agents/regimento/`), não configurável, para que a versão registrada seja sempre a do repositório. Ambas as variáveis em `src/config.py` e `.env.example`.
 
 ## 9. Análise de impacto nos 6 eixos
 

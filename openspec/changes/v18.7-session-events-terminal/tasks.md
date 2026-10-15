@@ -7,6 +7,7 @@
 - [ ] 0.2 Aprovação do pesquisador para o schema e respostas às Questões em aberto 1 a 4 do design.
 
 - [ ] 0.3 Testes reaproveitam as ajudas de `v18.7-background-sessions` (tasks §3.4: harness do processo da sessão, provedor gravado, `FakeClock`, fixture de PostgreSQL com `terminal_writer`, REPL com entrada simulada e em pseudo-terminal) e o `FakeGate` de `v18.7-persistent-human-gate`; nenhuma ajuda nova. Cada teste de integração em até 15 s (marcador `pytest-timeout`), com `SESSION_EVENTS_POLL_SECONDS=1`, `SESSION_INBOX_POLL_SECONDS=1` e os valores reduzidos de `v18.7-background-sessions` definidos pelo harness por variável de ambiente; os padrões (2 s etc.) só em testes de unidade com `FakeClock`.
+- [ ] 0.9 Divisão do módulo grande antes do comportamento novo (ADR 024 §5), só movendo código, com a suíte verde antes de seguir: `src/cli/main.py`: extrair para módulos próprios em `src/cli/` os comandos de acompanhamento e a exibição de eventos. Os caminhos citados nesta mudança valem pela tabela de `v18.7-source-layout`.
 
 ## 1. Eventos
 - [ ] 1.1 `scripts/init_db.sql` e `scripts/migrations/v18_7_003_session_events.sql` (idempotente) com o DDL do design §2.1.

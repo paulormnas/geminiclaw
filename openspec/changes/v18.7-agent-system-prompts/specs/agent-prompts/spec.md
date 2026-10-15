@@ -5,10 +5,10 @@ Os cenários com chamada a modelo usam o `FakeRecordingProvider` (ajuda comparti
 ## ADDED Requirements
 
 ### Requirement: Regimento da pesquisa comum a todos os agentes
-O sistema SHALL manter um único regimento da pesquisa versionado em `agents/regimento/`, com uma parte em prosa (`regimento.md`, seções com id e aplicabilidade `comum`, `objetivo:<tipo>` ou `modo:<modo>`) e uma parte estruturada (`regimento.yaml`: papéis de experimento e ordem de decisão, tipos de objetivo com critérios de atingimento, avanço e saturação, motivos de parada e de retirada, regras de integridade, decisões reservadas e regras por modo) (ADR 022 §4.1). O regimento MUST conter só o que vale para todos os papéis; regras de comportamento e formatos de um papel MUST ficar no prompt desse papel (ADR 022 §4.2).
+O sistema SHALL manter um único regimento da pesquisa versionado em `src/agents/regimento/`, com uma parte em prosa (`regimento.md`, seções com id e aplicabilidade `comum`, `objetivo:<tipo>` ou `modo:<modo>`) e uma parte estruturada (`regimento.yaml`: papéis de experimento e ordem de decisão, tipos de objetivo com critérios de atingimento, avanço e saturação, motivos de parada e de retirada, regras de integridade, decisões reservadas e regras por modo) (ADR 022 §4.1). O regimento MUST conter só o que vale para todos os papéis; regras de comportamento e formatos de um papel MUST ficar no prompt desse papel (ADR 022 §4.2).
 
 #### Scenario: Carga do regimento
-- **WHEN** `carregar_regimento()` lê `agents/regimento/`
+- **WHEN** `carregar_regimento()` lê `src/agents/regimento/`
 - **THEN** o resultado tem `versao = 1`, seções `fluxo`, `exploracao`, `paradas`, `integridade`, `objetivo_limiar`, `objetivo_discriminacao`, `objetivo_cobertura`, `objetivo_fronteira`, `modo_assisted`, `modo_semi` e `modo_auto`, e um `sha256` de 64 caracteres hexadecimais
 
 #### Scenario: Metadados inválidos

@@ -1,6 +1,6 @@
 # ADR 024 — Organização do Código por Responsabilidade e Regra de Camadas
 
-**Status:** Proposto
+**Status:** Aprovado (2026-10-15)
 **Data:** 2026-10-15
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** `roadmaps/roadmap_V18.7.md`
@@ -71,7 +71,7 @@ Pacotes por responsabilidade dentro de `src/`. Ficam na raiz só os três módul
 | `src/orchestration/` | Planejamento, execução e laço de pesquisa | `orchestrator`, `autonomous_loop`, `exploration`, `triage`, `plan_normalizer`, `task_scheduler`, `usage`, `unlimited_mode`, `pipeline_errors` (vira `errors.py`) |
 | `src/session/` | Ciclo de vida da sessão | `session`, `resume`, `continuity`, `heartbeat`, `history` |
 | `src/gate/` | Decisões reservadas ao pesquisador | `human_gate` (que o ADR 023 torna persistente) |
-| `src/artifacts/` | Arquivos produzidos pelas subtarefas | `artifact_profile`, `artifact_match`, `subtask_output`, `output_manager`, `metrics_file`, `reserved_files`, e o manifesto do espaço de trabalho (`skills/code/manifest.py`) |
+| `src/artifacts/` | Arquivos produzidos pelas subtarefas | `artifact_profile`, `artifact_match`, `subtask_output`, `output_manager`, `metrics_file`, `reserved_files` |
 | `src/documents/` | Processamento de documentos como biblioteca | o núcleo de `skills/document_processor` (extratores, enriquecimento, indexação) e `embeddings/reindex.py`; a ferramenta de agente (`skill.py`) fica em `skills/` |
 | `src/observability/` | Telemetria | `telemetry` |
 | `src/report/` (existente) | Relatórios e agregações | recebe `operation_metrics` e `claims/report.py` |
@@ -79,7 +79,7 @@ Pacotes por responsabilidade dentro de `src/`. Ficam na raiz só os três módul
 | `src/llm/` (existente) | Provedores, roteamento e cache | recebe `model_router`, `model_config`, `llm_cache`, `rate_limiter` |
 | `src/agents/` (existente) | Agentes e seus prompts | recebe todo o pacote `agents/` da raiz (`base`, `researcher`, `developer`, `curator`, `summarizer`); `validator_agent.py` vira `src/agents/validator/`; `prompts.py` entra aqui |
 | `src/research_data/` (existente) | Insumos da pesquisa | recebe `context_loader` |
-| `src/utils/` (existente) | Utilitários sem dependências do projeto | recebe o contexto da execução (`agent_runtime/context.py`), a normalização de termos (`knowledge/normalization.py`), os tipos de fragmento do egresso (`egress/fragments.py`), a geração do identificador do nó (de `knowledge/ids.py`) e o cliente do Qdrant de `embeddings/reindex.py` (em `utils/qdrant.py`); `terminal.py` continua aqui |
+| `src/utils/` (existente) | Utilitários sem dependências do projeto | recebe o contexto da execução (`agent_runtime/context.py`), a normalização de termos (`knowledge/normalization.py`), os tipos de fragmento do egresso (`egress/fragments.py`), o manifesto do espaço de trabalho (`skills/code/manifest.py`; ajustado na spec em 2026-10-15: em `artifacts` formaria um ciclo com `llm` e `egress`), a geração do identificador do nó (de `knowledge/ids.py`) e o cliente do Qdrant de `embeddings/reindex.py` (em `utils/qdrant.py`); `terminal.py` continua aqui |
 
 Definições movidas sem alterar o corpo, para desfazer ciclos: as constantes de estado de subtarefa de `continuity` vão para `knowledge`; o núcleo de avaliação de critérios de métrica sai de `validator_agent` para `knowledge` (junto de `metric_definition.py`); `insumo_tipo`, `sha256_file` e `MAX_HASH_BYTES` saem de `knowledge/ingestion*` para `documents`; o tipo de `orchestrator` usado por `agent_runtime/runtime.py` (`AgentResult`) vai para um módulo de tipos abaixo do runtime. Importações usadas só em anotações passam para `TYPE_CHECKING` (caso de `Checkpoint` em `knowledge/resume_context.py`). A lista exata de definições é gerada na spec por uma simulação do grafo depois das movimentações; o que a simulação mostrar que ainda forma ciclo e não se resolve assim vai para a Etapa 2 (§4).
 

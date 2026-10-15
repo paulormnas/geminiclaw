@@ -16,7 +16,7 @@ por chamada), ADR 023 (pesquisa em segundo plano)
 | 015 §4 | `Hipotese.origem` ganha o valor `sistema`; `Hipotese` ganha a chave estruturada `(problema, abordagem, metrica)` para hipóteses do sistema, a referência R fixada e `abandonada_por`; as transições de status passam a valer também para hipóteses concluídas (§4.4). |
 | 015 §5 | Novas relações `PREPARA` e `REFERENCIA_DE`; o destino de `DERIVADA_DE` passa a aceitar `Hipotese`. |
 | Spec `curator` | O requisito "Veredito calculado sem LLM" passa a recalcular também hipóteses concluídas, com os efeitos do §4.4 sobre oportunidades, decisões e atalhos. |
-| 015 §8 (emenda de 2026-10-08, motivos de parada) | `limite_ciclos` e `limite_execucoes` deixam de existir como motivos; entram `limite_custo` e `estagnacao`; `solucao_encontrada` passa a vir do resultado aprovado pelo Validator que atinge o objetivo, sem o filtro de veredito, e respeita a política `ao_atingir_objetivo` (§5.2–§5.5). |
+| 015 §8 (emenda de 2026-10-08, motivos de parada) | `limite_ciclos` e `limite_execucoes` deixam de existir como motivos; entram `limite_custo` e `saturacao`; `solucao_encontrada` passa a vir do critério do tipo de objetivo (no `limiar`, resultado aprovado pelo Validator que atinge o alvo, sem o filtro de veredito), e respeita a política `ao_atingir_objetivo` (§5.2–§5.5). |
 | 012 | O Curator passa a ver as hipóteses `origem=sistema` e pode sugerir reformulação ao Researcher pelo canal de sugestões existente (não há fusão de hipóteses pelo Curator). |
 | Spec `hypothesis-loop` | A exigência "cada subtarefa referencia a hipótese que testa" vira registro; a retirada por `sem_hipotese` deixa de existir; `HYPOTHESES_PER_CYCLE`, o teto de ciclos e o filtro `SOLUTION_MIN_VERDICT` saem (cenários "Modo autônomo", "Teto de ciclos" e o critério de solução); hipóteses concluídas podem receber novos testes. |
 | Spec `agent-runtime` | O circuit breaker por `MAX_AGENT_RUNS_PER_SESSION` deixa de encerrar a sessão (§5.1). |
@@ -197,15 +197,29 @@ problema deve ter um objetivo, e o Validator verifica se já o atingiu ao avalia
    nenhuma subtarefa é retirada por `hipotese_adiada_por_prioridade`. `MAX_EXPLORATION_CYCLES`
    (`limite_ciclos`) e `MAX_AGENT_RUNS_PER_SESSION` (`limite_execucoes`) deixam de ser condições de parada
    (continuam medidos e relatados).
-2. **Parada pelo objetivo.** Todo `Problema` tem um objetivo: métrica, sentido, alvo e ganho mínimo sobre a
-   referência (o critério de sucesso que já existe). No `auto`, o objetivo proposto no plano vale depois de
-   aprovado pelo Validator e é exibido ao pesquisador como evento; no `assisted` e no `semi`, confirmá-lo é
-   decisão reservada (`confirmar_problema`) e passa pelo gate. O objetivo pode ser revisto depois pelo mesmo
-   caminho. **O objetivo é atingido** quando um resultado **aprovado pelo Validator** na revisão da subtarefa
-   alcança o alvo e o ganho mínimo: a verificação do Validator é a aprovação do resultado, e a comparação
-   com o alvo é determinística (a que `check_solution` já faz, `src/knowledge/hypothesis_cycle.py:508-514`),
-   **sem o filtro de veredito** (`hypothesis_cycle.py:509`), que sai. O veredito continua sendo a medida de
-   confiança do conhecimento no grafo.
+2. **Parada pelo objetivo, conforme o tipo.** Todo `Problema` tem um objetivo, e o objetivo tem um **tipo**.
+   No `auto`, o objetivo proposto no plano vale depois de aprovado pelo Validator e é exibido ao pesquisador
+   como evento; no `assisted` e no `semi`, confirmá-lo é decisão reservada (`confirmar_problema`) e passa
+   pelo gate. O objetivo pode ser revisto depois pelo mesmo caminho. Cada tipo define três critérios, que o
+   regimento da pesquisa (ADR 022 §4) descreve e o código aplica: quando o objetivo é atingido, o que conta
+   como avanço rumo a ele e como se mede a saturação.
+
+   | Tipo | Atingido quando | Avanço | Saturação |
+   |---|---|---|---|
+   | `limiar` | um resultado aprovado pelo Validator alcança o alvo e o ganho mínimo sobre a referência | melhora do melhor resultado validado acima da incerteza da medida | a melhora ainda possível fica abaixo do erro estatístico da medida |
+   | `discriminacao` | entre hipóteses concorrentes, resta uma sustentada e as demais estão refutadas pelo veredito | mudança de veredito de alguma concorrente | nenhum experimento disponível distingue as que restam |
+   | `cobertura` | o pesquisador considera o mapeamento suficiente | hipótese nova que não repete as existentes (abaixo do limiar de similaridade) | a taxa de hipóteses novas cai a quase zero |
+   | `fronteira` | o pesquisador aceita o conjunto, ou há k soluções não dominadas | nova solução não dominada pelas já encontradas | as tentativas recentes não ampliam a fronteira |
+
+   - No tipo `limiar`, a comparação com o alvo é determinística (a que `check_solution` já faz,
+     `src/knowledge/hypothesis_cycle.py:508-514`), **sem o filtro de veredito**
+     (`hypothesis_cycle.py:509`), que sai; a verificação do Validator é a aprovação do resultado.
+   - No tipo `discriminacao`, o veredito das hipóteses (ADR 015 §9) é o próprio critério, com os limiares de
+     `DECISION_EVAL_MIN_VERDICT`; a calibração da Etapa 2 vale para ele.
+   - Nesta etapa são implementados `limiar` e `discriminacao`, que o grafo já sustenta; `cobertura` em
+     seguida (reaproveita a deduplicação por similaridade); `fronteira` fica declarado e é especificado
+     junto com a V19 (equipamentos), quando houver experimentos físicos para validá-lo.
+   - O veredito continua sendo, em todos os tipos, a medida de confiança do conhecimento no grafo.
 3. **O que acontece ao atingir o objetivo.** Atingir o objetivo é sempre um evento e um marco registrado.
    Se a sessão fecha depende da política do Problema `ao_atingir_objetivo`: `parar` (padrão no `semi` e no
    `auto`), `perguntar` (padrão no `assisted`: o pesquisador escolhe encerrar ou continuar, pelo gate) ou
@@ -217,16 +231,30 @@ problema deve ter um objetivo, e o Validator verifica se já o atingiu ao avalia
    o modo sem limite"): exige confirmação do pesquisador no terminal ou pelo gate persistente (ADR 023),
    nunca por variável de ambiente ou arquivo de configuração (spec `operation-metrics`). Com os limites
    desligados, a exploração segue até o objetivo (conforme a política do item 3), até não haver caminho, até
-   a estagnação (item 5), até o pesquisador parar ou até uma falha.
-5. **Estagnação (sinal, não teto).** Para que uma exploração sem limites não gaste sem fim atrás de um alvo
-   inatingível, a sessão detecta estagnação depois de `EXPLORATION_STALL_CYCLES` ciclos (padrão 5) sem
-   melhorar o melhor resultado validado da métrica do objetivo **e** sem nenhum resultado novo que mude o
-   veredito de alguma hipótese (refutações, resultados negativos e replicações que confirmam ou contestam
-   contam como avanço). Ao detectar: no `assisted` e no `semi`, registra um pedido ao pesquisador
-   (continuar, orientar ou parar) e segue enquanto ele não responde; no `auto`, fecha com `estagnacao`. Não
-   se aplica enquanto a política `ao_atingir_objetivo` for `continuar` e o objetivo já tiver sido atingido.
-   O limiar é configurável e desligável **sozinho**, sem afetar os limites de custo, tokens e tempo; o modo
-   sem limite **não** desliga a estagnação (desligá-la é uma escolha própria do pesquisador).
+   a saturação (item 5), até o pesquisador parar ou até uma falha.
+5. **Estagnação leva a intervenção; saturação leva a parada.** Os sistemas revisados não deixam o agente
+   decidir quando parar: usam orçamento externo, tratam a estagnação como sinal para mudar de tática
+   (CostAda, arXiv:2607.26828; RankEvolve, arXiv:2609.39551) e, quando há incerteza medida, param quando a
+   melhora ainda possível fica abaixo do erro da medida (Makarova et al., AutoML 2022). Aqui:
+   - **Dois progressos distintos.** Resultados negativos, refutações e replicações são progresso do
+     conhecimento e ficam no grafo e no veredito. Só o **avanço rumo ao objetivo**, conforme o tipo
+     (item 2), zera o contador de estagnação; criar hipóteses ou executar experimentos, sozinho, não zera.
+   - **Estagnação.** Depois de `EXPLORATION_STALL_CYCLES` ciclos (padrão 5) sem avanço rumo ao objetivo, a
+     sessão **intervém**, não fecha: o Curator é acionado para sugerir direções novas (abordagens não
+     tentadas, hipóteses derivadas, diversificação), e o Researcher deve responder a cada sugestão no plano
+     seguinte; no `assisted`, vira também um pedido ao pesquisador. A paciência cresce com o número de
+     intervenções já feitas e, quando há limite de orçamento, com a fração já gasta.
+   - **Saturação.** Esgotadas as intervenções (`EXPLORATION_MAX_INTERVENTIONS`, padrão 3) sem avanço, e se o
+     critério de saturação do tipo (item 2) se confirmar, a sessão fecha com `saturacao` no `auto`; no
+     `assisted` e no `semi`, registra um pedido ao pesquisador (continuar, orientar ou parar) e segue
+     enquanto ele não responde. Sem incerteza medida (por exemplo, sem réplicas), a saturação não é
+     avaliada e o fato é registrado; valem o objetivo, os limites e o pesquisador.
+   - Não se aplica enquanto a política `ao_atingir_objetivo` for `continuar` e o objetivo já tiver sido
+     atingido. Os limiares são configuráveis e desligáveis **sozinhos**, sem afetar os limites de custo,
+     tokens e tempo; o modo sem limite **não** os desliga.
+   - **Restrições.** Uma direção pode ser encerrada por segurança, ética ou recurso (reagente perigoso,
+     nível de biossegurança indisponível, risco de uso dual): é decisão do pesquisador, pelo gate, e retira
+     as hipóteses daquela direção com motivo registrado.
 6. **Proteções contra falha, ajustadas à exploração longa.**
    - O disjuntor de zero progresso passa a medir progresso por novos `Experimento` e `Resultado`
      (inclusive replicações e variações com o mesmo nome de subtarefa), e não por nomes de subtarefa novos
@@ -349,6 +377,17 @@ resultado; a comparação com o alvo é feita pelo código.
 **Rejeitada na revisão:** contornaria a decisão reservada do modo sem limite; desligar limites continua
 exigindo a confirmação do pesquisador (§5.4).
 
+### M. Um único tipo de objetivo (limiar numa métrica)
+**Rejeitada pelo pesquisador:** pesquisas em química e biologia nem sempre têm uma métrica contínua com
+alvo; elucidar um mecanismo termina por eliminação de hipóteses, buscar rotas de síntese termina numa
+fronteira de compromissos, e uma descoberta aberta termina por saturação de novidade. Experimentos de
+bancada têm poucas réplicas, e a incerteza nem sempre é medível. O objetivo passa a ter tipo (§5.2).
+
+### N. Estagnação como parada (N ciclos sem melhora)
+**Rejeitada:** seria um teto de ciclos com outro nome; os sistemas revisados usam a estagnação para mudar
+de tática. A parada automática, além do objetivo e dos limites, é a saturação estatística depois das
+intervenções (§5.5).
+
 ---
 
 ## Consequências
@@ -388,6 +427,9 @@ exigindo a confirmação do pesquisador (§5.4).
    pelo Validator (§5).
 4. **Sessão livre.** O trabalho longo ocorre em segundo plano, com acompanhamento à parte, enquanto o
    pesquisador continua conversando com os agentes (ADR 023).
+5. **Objetivo tipado e regras comuns (2026-10-15).** O objetivo do Problema tem tipo, porque pesquisas de
+   outros contextos (química, biologia) não param por um limiar; os critérios de cada tipo ficam no
+   regimento da pesquisa, comum a todos os agentes e injetado em toda chamada (ADR 022 §4).
 
 ---
 
@@ -397,7 +439,7 @@ exigindo a confirmação do pesquisador (§5.4).
 |---|---|---|
 | `v18.7-hypothesis-linking` | `hypothesis-loop` | §2–§4, §6–§8: papel do experimento, ligações derivadas, hipótese do sistema (chave, ciclo de vida, R fixada, aprovação por modo), novos testes de hipótese concluída, fila substituída no replanejamento, retorno ao Researcher, motivos de retirada |
 | `v18.7-graph-exploration-relations` | `knowledge-graph` | §2–§4, §9: `papel`, `origem=sistema`, chave estruturada, referência R fixada, `abandonada_por`, `PREPARA`, `REFERENCIA_DE`, `DERIVADA_DE -> Hipotese`, leitura compatível |
-| `v18.7-exploration-limits` | `hypothesis-loop`, `usage-limits`, `agent-runtime`, `operation-metrics`, `benchmark`, `session-continuity` | §5: fim de `HYPOTHESES_PER_CYCLE`, `MAX_EXPLORATION_CYCLES` e `MAX_AGENT_RUNS_PER_SESSION` como parada; limite de custo por sessão (`limite_custo`); modo sem limite cobrindo custo; parada pelo objetivo sem filtro de veredito; política `ao_atingir_objetivo`; estagnação; disjuntor por novos experimentos; espera do gate fora dos ciclos ociosos; objetivo obrigatório no `Problema` (confirmado pelo gate no `assisted`/`semi`); motivos novos na classificação do benchmark (`limite_custo` como limite, `estagnacao` como critério de pesquisa) e na retomada (`src/continuity.py:64-67`: `limite_custo` retoma sem perguntar, como os demais limites; `estagnacao` pergunta) |
+| `v18.7-exploration-limits` | `hypothesis-loop`, `usage-limits`, `agent-runtime`, `operation-metrics`, `benchmark`, `session-continuity` | §5: fim de `HYPOTHESES_PER_CYCLE`, `MAX_EXPLORATION_CYCLES` e `MAX_AGENT_RUNS_PER_SESSION` como parada; limite de custo por sessão (`limite_custo`); modo sem limite cobrindo custo; objetivo tipado (`limiar` e `discriminacao` nesta etapa, `cobertura` em seguida, `fronteira` declarado para a V19) e parada pelo critério do tipo, sem filtro de veredito no `limiar`; política `ao_atingir_objetivo`; estagnação como intervenção do Curator; saturação; restrições por direção; disjuntor por novos experimentos; espera do gate fora dos ciclos ociosos; objetivo obrigatório no `Problema` (confirmado pelo gate no `assisted`/`semi`); motivos novos na classificação do benchmark (`limite_custo` como limite, `saturacao` como critério de pesquisa) e na retomada (`src/continuity.py:64-67`: `limite_custo` retoma sem perguntar, como os demais limites; `saturacao` pergunta) |
 | `v18.7-exploration-metrics` | `operation-metrics`, `benchmark` | §8.4: contadores por papel e origem, substituição de `reprovacoes_sem_hipotese`; também ADR 022 §6.3 e §7 (hash do contrato por tentativa, tokens do contrato por execução) |
 
 A mudança `v18.7-hypothesis-linking` também atualiza o cenário "Baseline sem hipótese" de

@@ -1,4 +1,4 @@
-# ADR 022 — Contrato de Contexto por Chamada: o que Cada Agente Recebe e Fonte Única das Regras
+# ADR 022 — Contrato de Contexto por Chamada e Regimento da Pesquisa
 
 **Status:** Proposto
 **Data:** 2026-10-15
@@ -15,7 +15,7 @@ ADR 015 §8 (vocabulário de métricas), ADR 019 (localidade e egresso), ADR 020
 | 007 | O Developer passa a receber o contrato da subtarefa, não só o enunciado (§2). |
 | 019 | O contrato herda a marcação de origem e contaminação do texto do Researcher e a regra de nomes de artefato (§6). |
 | 020 | A revisão de subtarefa separa critérios de aceite (do contrato) de regras de integridade (sempre ativas) (§3). |
-| Spec `agent-prompts` | O prompt de sistema de todos os papéis passa a descrever o sistema, o que o papel recebe, produz e por que é avaliado, e as regras geradas pela fonte única (§4–§5). |
+| Spec `agent-prompts` | Toda chamada passa a levar o recorte do regimento da pesquisa (comum a todos os agentes) e o prompt do papel com o que só ele faz, recebe, produz e por que é avaliado; regras com efeito no código vêm de uma fonte só (§4–§5). |
 | Spec `pipeline-robustness` | "Propagação dos nomes reais" e "Revisão de critérios quantitativos" passam a usar o contrato (§2–§3). |
 
 ---
@@ -72,9 +72,9 @@ de sistema; o que é da tarefa vai num bloco estável no início da conversa da 
 
 | Papel | Sempre tem diante de si |
 |---|---|
-| Researcher (plano) | tarefa original; projeto e critério do `Problema`; formato do plano e regras de governança (§5); hipóteses e sugestões abertas; retiradas e ligações derivadas do ciclo anterior (ADR 021 §7) |
+| Researcher (plano) | tarefa original; projeto e critério do `Problema`; formato do plano (prompt do papel); recorte do regimento (§4); hipóteses e sugestões abertas; retiradas e ligações derivadas do ciclo anterior (ADR 021 §7) |
 | Developer | prompt de sistema do papel; contrato da subtarefa (§2); contexto do workspace |
-| Validator (plano) | tarefa original; critério do `Problema`; regras de governança (§5); o plano |
+| Validator (plano) | tarefa original; critério do `Problema`; recorte do regimento (§4); o plano |
 | Validator (revisão de subtarefa) | o contrato da subtarefa (§2, completo), as regras de integridade (§3) e a evidência em disco |
 
 **Como o contrato é reenviado.** O bloco do contrato entra **uma vez** no início da conversa de cada
@@ -126,40 +126,70 @@ Problema. Um problema que o Validator veja fora dos critérios de aceite e das r
 exemplo, um critério fraco escrito pelo Researcher) não reprova a subtarefa: volta ao Researcher como
 observação, no replanejamento seguinte.
 
-### 4. Prompts que descrevem o sistema para cada papel
+### 4. Regimento da pesquisa e prompts por papel
 
-Decisão do pesquisador (2026-10-15): *"Um ponto importante é atualizar os prompts dos agentes para que
-eles tenham conhecimento de como funciona o sistema e as regras pertinentes para cada papel. Sem essa
-atualização, informando a estrutura correta do que cada agente precisa e avalia, continuaremos tendo
-falhas nos testes."*
+Decisões do pesquisador (2026-10-15): *"Um ponto importante é atualizar os prompts dos agentes para que
+eles tenham conhecimento de como funciona o sistema e as regras pertinentes para cada papel."* *"Faz
+sentido que parte do prompt seja uma consulta a um documento que estabeleça as regras para condução da
+pesquisa (exploração, critérios de parada etc.) de acordo com o tipo, além de regras comuns."* *"Esse deve
+ser um arquivo comum para todos os agentes; regras de comportamento e estruturas de comunicação
+específicas de cada agente devem ser inseridas em seus respectivos prompts iniciais."*
 
 Hoje cada prompt descreve o papel isoladamente e não o lugar dele no fluxo: o Developer não sabe que um
 Validator vai conferir artefatos e chaves de métrica; o Validator do plano não sabe que a governança
-retira subtarefas; o Researcher não sabe como o papel de cada subtarefa é decidido. Por isso, o prompt de
-sistema de **cada** papel (Researcher, Developer, Validator de plano e de subtarefa, Curator, Summarizer)
-passa a ter quatro partes obrigatórias:
+retira subtarefas; o Researcher não sabe como o papel de cada subtarefa é decidido. A instrução passa a ter
+duas fontes, com fronteira clara:
 
-1. **Como o sistema funciona**, num texto curto e comum a todos: plano → validação do plano → governança
-   das hipóteses → execução no sandbox → revisão → ingestão no grafo → veredito → próxima volta ou parada,
-   e quem faz cada passo.
-2. **O que este papel recebe e produz**, e quem consome o que ele produz (por exemplo, o Developer produz
-   `metrics.json` e artefatos, que o Validator confere e a ingestão grava como `Resultado`).
-3. **Por quais critérios este papel é avaliado** e o que acontece quando falha (reprovação, nova tentativa,
-   retirada, motivo de parada).
-4. **As regras pertinentes ao papel**, geradas pela fonte única (§5).
+**4.1 Regimento da pesquisa (comum a todos os agentes).** Um único documento versionado no repositório
+(`agents/regimento/`), que contém só o que vale para todos:
 
-A parte 1 é a mesma para todos; as partes 2 e 3 são por papel e mantidas junto do código que as aplica.
-A mudança que implementa esta seção começa por uma **auditoria de cada prompt atual contra o código**
-(o que cada um afirma, o que o código faz, o que falta), registrada no `design.md` da mudança, e termina
-com uma bateria curta comparada à V18.6.
+1. como o sistema funciona: plano, validação do plano, governança das hipóteses, execução no sandbox,
+   revisão, ingestão no grafo, veredito, próxima volta ou parada, e qual papel faz cada passo;
+2. como conduzir a exploração: hipóteses, papéis de experimento, variações e derivações, o que impede a
+   execução (ADR 021);
+3. os tipos de objetivo do Problema e, para cada um, quando o objetivo é atingido, o que conta como
+   avanço e como se mede a saturação (ADR 021 §5);
+4. os critérios e motivos de parada e de retirada;
+5. as regras de integridade comuns (métricas calculadas, sem ajuste no conjunto de teste, honestidade de
+   resultados, dados de pesquisa e egresso).
 
-### 5. Fonte única das regras de governança
+O regimento tem uma parte em prosa e uma parte estruturada (tipos de objetivo e seus critérios, papéis de
+experimento, códigos de motivo). O código lê a parte estruturada; um teste falha se o código aplicar uma
+regra que o regimento não declara, ou o contrário.
 
-As regras que mais de um papel precisa conhecer (papéis de experimento e como são decididos, o que exige
-hipótese, o que impede a execução, chaves de métrica, formato do plano) são **geradas a partir das mesmas
-constantes que o código aplica** e inseridas em cada prompt por um único módulo. Um teste falha se o texto
-gerado não corresponder às constantes. Texto livre nos prompts continua permitido para estilo e
-orientação; regras com efeito no código vêm do módulo.
+**4.2 Prompt de sistema de cada papel (específico).** Fica no prompt do papel, e não no regimento, o que só
+aquele papel faz: comportamento, ferramentas, o que recebe e produz, os formatos que produz (por exemplo,
+o JSON do plano no Researcher, o parecer no Validator, `metrics.json` no Developer) e os critérios pelos
+quais é avaliado. Os formatos estruturados do prompt de cada papel são gerados dos mesmos esquemas que o
+código valida, com o mesmo teste de coerência.
+
+**4.3 Injeção, não consulta.** O sistema monta o prompt de cada chamada com o prompt do papel e o
+**recorte do regimento** que se aplica àquela chamada: as seções comuns e só as do tipo de objetivo do
+Problema e do modo da sessão (um Problema de `discriminacao` no `auto` não recebe as regras de `fronteira`
+nem as do `assisted`). O agente não precisa decidir consultar nada para receber o essencial. O texto
+completo fica disponível por uma ferramenta de leitura, para quando o agente precisar de algo fora do
+recorte.
+
+**4.4 Versão e adendo de projeto.** Mudanças no regimento passam por PR com aprovação do pesquisador. Cada
+sessão registra a versão (hash) do regimento e do recorte usados, junto com o contrato de cada subtarefa
+(§7). Regras próprias de um projeto (por exemplo, restrições de segurança de um laboratório) entram como
+adendo do projeto, nos insumos do pesquisador e fora do repositório, e são injetadas junto do recorte.
+
+**4.5 Redação.** Regimento e prompts são escritos de forma direta: frases curtas, sem emojis, sem
+decoração tipográfica e sem repetir a mesma regra em lugares diferentes. Cada regra aparece uma vez, na
+fonte a que pertence (regimento ou prompt do papel).
+
+**4.6 Auditoria.** A mudança que implementa esta seção começa por uma auditoria de cada prompt atual contra
+o código (o que cada um afirma, o que o código faz, o que falta), registrada no `design.md` da mudança;
+dela saem o regimento v1 e os prompts revisados. Termina com uma bateria curta comparada à V18.6.
+
+### 5. Coerência entre regimento, prompts e código
+
+A fronteira do §4 vale também para o teste: as regras com efeito no código (papéis de experimento, o que
+exige hipótese, o que impede a execução, chaves de métrica, critérios de parada por tipo de objetivo,
+formatos de mensagem) existem uma vez, na parte estruturada do regimento ou nos esquemas dos papéis, e o
+texto injetado é gerado delas. Texto livre continua permitido para orientação, nunca para uma regra que o
+código aplica.
 
 ### 6. Egresso, contaminação e tamanho
 
@@ -221,6 +251,15 @@ Evitaria o incentivo a ajustar o modelo no conjunto de teste.
 é o ajuste no teste, que passa a ser regra de integridade explícita (§2.9, §3). Decidido pelo pesquisador
 (2026-10-15): enviar chave e limiar.
 
+### G. Regimento consultado por ferramenta, quando o agente quiser
+**Rejeitada:** alguns modelos não chamam a ferramenta e seguem só a letra do prompt (bateria V18.6); o
+essencial é injetado em toda chamada (§4.3), e a ferramenta fica para o que está fora do recorte.
+
+### H. Regimento com as regras e formatos de cada papel
+**Rejeitada pelo pesquisador:** o regimento é comum a todos; o que é de um papel fica no prompt dele
+(§4.2), para não inflar todas as chamadas com regras que só um agente usa.
+
+
 ---
 
 ## Consequências
@@ -252,7 +291,7 @@ Evitaria o incentivo a ajustar o modelo no conjunto de teste.
 | Mudança | Capacidade | O que cobre |
 |---|---|---|
 | `v18.7-subtask-contract` | `agent-prompts`, `pipeline-robustness`, `data-egress` | §1–§3, §6, §8: construtores de contexto por papel, contrato da subtarefa, separação critérios × integridade, chaves de métrica, contaminação e tamanho do contrato, colisão de artefatos |
-| `v18.7-agent-system-prompts` | `agent-prompts` | §4–§5: auditoria de cada prompt contra o código; descrição comum do sistema; o que cada papel recebe, produz e por que é avaliado; módulo único das regras e teste de coerência; inserção nos prompts de todos os papéis |
+| `v18.7-agent-system-prompts` | `agent-prompts` | §4–§5: auditoria de cada prompt contra o código; regimento da pesquisa v1 (prosa e parte estruturada); prompts revisados de todos os papéis; recorte por tipo de objetivo e modo; ferramenta de leitura do regimento; versão por sessão; adendo de projeto; teste de coerência |
 | (dentro de `v18.7-exploration-metrics`, ADR 021) | `operation-metrics` | §6.3, §7: hash do contrato por tentativa, tokens do contrato por execução |
 
 ---

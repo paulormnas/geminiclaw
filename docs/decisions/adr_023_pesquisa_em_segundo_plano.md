@@ -115,7 +115,7 @@ O REPL deixa de esperar a sessão terminar. Enquanto as pesquisas rodam:
    Problema, aprovar termo, autorizar escrita em instrumento, ativar modo sem limite) e os que hoje leem o
    terminal dentro da sessão: aprovar hipótese no `assisted`; escolher encerrar ou continuar ao atingir o
    objetivo (política `perguntar`, ADR 021 §5.3); responder a `ask_researcher` no `assisted`; continuar,
-   orientar ou parar em estagnação ou após planos rejeitados no `assisted`/`semi` (ADR 021 §5.5–§5.6).
+   orientar ou parar em estagnação, em saturação ou após planos rejeitados no `assisted`/`semi` (ADR 021 §5.5–§5.6).
    Nenhum caminho dentro do processo da sessão lê a entrada padrão.
 2. **Persistência.** Os pedidos ficam no banco com estado `pendente` e sobrevivem à queda do processo da
    sessão e à do terminal.

@@ -31,7 +31,7 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 | [019](adr_019_localidade_dados_proveniencia_resultados.md) | Localidade dos Dados de Pesquisa e Proveniência dos Resultados | 🟠 Parcialmente implementado (8 mudanças V18.5 e 5 da V18.6 concluídas e arquivadas, incluindo as correções do parecer do perfil estrutural; §10 na V19; validação real e revisões de segurança da V18.5 pendentes) | 2026-09-29 |
 | [020](adr_020_independencia_validator.md) | Independência do Julgamento: Família de Modelo do Validator Diferente da do Developer | ✅ Aceito (2026-10-13; `v18.6-validator-independence`, `v18.6-benchmark-harness`, `v18.6-remove-unused-agents` e `v18.6-models-gemini4-gpt6` concluídas e arquivadas; matriz com bancos isolados e 3 repetições no Pi 5 e revisão do ADR depois dela ficam como acompanhamento) | 2026-10-13 |
 | [021](adr_021_exploracao_rastreavel_por_hipoteses.md) | Exploração Rastreável por Hipóteses: Estrutura dos Nós e Governança por Registro | 🔵 Proposto | 2026-10-15 |
-| [022](adr_022_contrato_contexto_por_chamada.md) | Contrato de Contexto por Chamada: o que Cada Agente Recebe e Fonte Única das Regras | 🔵 Proposto | 2026-10-15 |
+| [022](adr_022_contrato_contexto_por_chamada.md) | Contrato de Contexto por Chamada e Regimento da Pesquisa | 🔵 Proposto | 2026-10-15 |
 | [023](adr_023_pesquisa_em_segundo_plano.md) | Pesquisa em Segundo Plano com Acompanhamento pelo Terminal | 🔵 Proposto | 2026-10-15 |
 
 

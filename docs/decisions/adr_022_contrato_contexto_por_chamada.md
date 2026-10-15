@@ -1,6 +1,6 @@
 # ADR 022 — Contrato de Contexto por Chamada e Regimento da Pesquisa
 
-**Status:** Proposto
+**Status:** Aprovado (2026-10-15)
 **Data:** 2026-10-15
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** `roadmaps/roadmap_V18.7.md` (criado junto com as mudanças OpenSpec)

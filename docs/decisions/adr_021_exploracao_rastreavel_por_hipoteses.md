@@ -1,6 +1,6 @@
 # ADR 021 — Exploração Rastreável por Hipóteses: Estrutura dos Nós e Governança por Registro
 
-**Status:** Proposto
+**Status:** Aprovado (2026-10-15)
 **Data:** 2026-10-15
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** `roadmaps/roadmap_V18.7.md` (criado junto com as mudanças OpenSpec)

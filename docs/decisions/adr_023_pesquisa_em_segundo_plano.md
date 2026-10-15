@@ -14,7 +14,7 @@
 | 012 §8 | O gate de decisões reservadas passa a ser persistente e só o terminal o responde (§4); `DECISOES_RESERVADAS` ganha os pedidos que hoje leem o terminal dentro da sessão (§4.1). |
 | 014 | Os agentes continuam em processo, mas no processo da sessão, não no do terminal (§1). O controle de recursos do runtime (`ResourceGuard`) deixa de ser específico do Raspberry Pi (§1.1); o texto do ADR 014 não muda. |
 | 017 §4 | A prioridade padrão de provedores deixa de depender de `DEPLOYMENT_PROFILE=pi5`, que é removida; quem quiser outra ordem declara `LLM_PROVIDER_PRIORITY` (§1.1, item 10). |
-| Spec `session-continuity` | Detecção de sessão parada pelo terminal, recusa de reativar sessão já continuada, verificação do PID e do laço de eventos (§6). |
+| Spec `session-continuity` | Fim da sessão conforme o modo, estados `aguarda_pesquisador` e `suspensa_sem_pesquisador`, presença do terminal e pergunta de retomada ao abrir o REPL (§1.2); detecção de sessão parada pelo terminal, recusa de reativar sessão já continuada, verificação do PID e do laço de eventos (§6). |
 | Spec `researcher-consult` | O Researcher passa a responder ao pesquisador durante a execução, em modo só leitura (§3), além de responder a `ask_researcher`. |
 | Spec `benchmark` | O runner continua usando o comando direto em primeiro plano (§1). |
 | Spec `agent-runtime` | Monitor de recursos multiplataforma, limite de agentes pela memória recalculado a cada vaga, espera abaixo do piso sem falha da subtarefa (§1.1). |
@@ -30,6 +30,8 @@
 
 A sessão deve ficar livre, mas o trabalho deve ocorrer em segundo plano, como uma visualização à parte, como acontece no Claude Code quando novos subagentes são instanciados. Assim, pequenas atualizações aparecem no terminal enquanto o pesquisador pode continuar trabalhando e conversando com os agentes.
 
+Decisão posterior, na revisão deste ADR: nos modos autônomos, o laço deve executar toda a exploração e encerrar o processo ao terminar. Numa pesquisa acompanhada pelo pesquisador, quando o terminal estiver fechado, a sessão registra o estado da pesquisa no banco e, quando o pesquisador voltar à aplicação, ele é avisado e perguntado se deseja retomar a exploração que não foi finalizada.
+
 ### Por que agora
 
 O ADR 021 §5 remove os tetos de hipóteses e de ciclos e permite, por decisão do pesquisador, desligar os limites de custo, tokens, tempo e egresso: uma exploração pode durar horas. Hoje, `execute_prompt` é aguardado dentro do REPL (`src/cli.py:1249-1318`): enquanto a sessão roda, o pesquisador não digita nada. Várias decisões leem a entrada padrão de dentro da sessão: aprovação de hipóteses no `assisted` (`terminal_approver`, `src/knowledge/hypothesis_cycle.py:577`), confirmação de solução (`src/exploration.py:129-155`), `ask_researcher` no `assisted` (`src/orchestrator.py:1468`). O gate de decisões reservadas (`src/human_gate.py`) guarda os pedidos em memória: uma sessão longa sem ninguém diante do terminal fica parada, e um pedido se perde se o processo cair.
@@ -44,7 +46,7 @@ O que já existe e este ADR reaproveita: estado da sessão no PostgreSQL (`agent
 
 No REPL, iniciar uma pesquisa cria um **processo de sessão** separado do terminal, que executa o orquestrador, os agentes e o laço autônomo como hoje. O processo:
 
-- não depende do terminal: fechar o REPL não interrompe a pesquisa;
+- nos modos `semi` e `auto`, não depende do terminal: fechar o REPL não interrompe a pesquisa, que roda até o fim e encerra o processo; no `assisted`, a sessão se suspende quando o pesquisador sai (§1.2);
 - registra o PID, o início e o batimento na própria sessão;
 - grava o progresso como eventos (§2);
 - nunca lê da entrada padrão: tudo o que hoje pergunta no terminal passa a ser pedido ao gate (§4).
@@ -93,6 +95,13 @@ O **comando direto** (`geminiclaw "tarefa"`) continua em primeiro plano por padr
 
     Sem nomes antigos aceitos como sinônimo: se um nome removido estiver definido no ambiente, a inicialização falha com a mensagem do nome novo, em vez de ignorá-lo em silêncio. Como o `.env.example` traz hoje `DEPLOYMENT_PROFILE=default` e as duas variáveis `PI_*`, todo `.env` derivado dele precisa ser migrado, em qualquer máquina; a mensagem de erro diz o que fazer em cada caso (com `DEPLOYMENT_PROFILE=default`, só remover a linha). O `.env` do Raspberry Pi usado nos testes é migrado junto com a mudança, declarando explicitamente os quatro valores do antigo perfil e `TEMPERATURE_LIMIT` e `MIN_AVAILABLE_MEMORY_MB` com os valores efetivos de hoje, para preservar o comportamento atual. A classe `PiHealthMonitor` passa a se chamar `HealthMonitor`. Continuam, por não serem configuração: a detecção de plataforma para escolher imagens (`src/platform_info.py`, `scripts.platform_images`) e os scripts de instalação no Pi (`scripts/setup_pi.sh`, `scripts/setup_ollama_pi5.sh`).
 
+### 1.2 Fim da sessão e ausência do pesquisador, conforme o modo
+
+1. **Modos `semi` e `auto`: a exploração roda até o fim e o processo se encerra.** O laço executa a exploração inteira sem depender do terminal. Ao chegar a um motivo de parada do ADR 021 §5 (objetivo atingido com a política `parar`, limite de custo, tokens, tempo ou egresso, saturação, planos rejeitados), a sessão grava o motivo de parada, o relatório e o evento final, avalia a fila (§1.1, item 5) e encerra o processo. O processo nunca fica vivo sem trabalho: se só restarem pedidos ao pesquisador (por exemplo, a política `perguntar` ao atingir o objetivo, intervenções esgotadas ou uma decisão reservada), a sessão grava checkpoint, passa ao estado `aguarda_pesquisador` e encerra o processo, em vez de esperar com ele vivo. A resposta do pesquisador no terminal reabre a sessão pelo mecanismo de retomada (§1.2, item 3).
+2. **Modo `assisted`: a sessão acompanha a presença do pesquisador.** O processo do terminal registra a presença no banco com batimento próprio, gravado pelo papel de banco do terminal (§4.3); com vários terminais abertos, basta um. Quando o terminal fecha, seja pela saída normal (que avisa a sessão) ou por queda (o batimento de presença envelhece além de um prazo configurável), a sessão `assisted` termina a subtarefa em curso, sem interrompê-la no meio, grava checkpoint e o estado da pesquisa (plano, hipóteses e seus estados, pedidos pendentes, último evento, custo até ali), passa ao estado `suspensa_sem_pesquisador` e encerra o processo.
+3. **Ao abrir a aplicação.** O REPL mostra o resumo do que mudou desde a última vez e lista as pesquisas não finalizadas (`suspensa_sem_pesquisador`, `aguarda_pesquisador`, `interrompida` e as que estão na fila), com os pedidos pendentes de cada uma, e pergunta se o pesquisador deseja retomar cada exploração. Retomar cria um novo processo de sessão pelo mecanismo existente (`resume`), que passa pela admissão (§1.1). Não retomar mantém a sessão como está; o pesquisador pode também encerrá-la explicitamente, com relatório. Pesquisas autônomas concluídas aparecem só no resumo.
+4. **Comando direto em primeiro plano.** O próprio comando é o terminal: a sessão termina quando a exploração termina, como no item 1, e interromper o comando (Ctrl+C) faz o fechamento gracioso com checkpoint, como hoje.
+
 ### 2. Eventos de progresso
 
 O PostgreSQL é o canal entre o processo da sessão e o terminal, sem infraestrutura nova (ADR 005). Os eventos de progresso vão para uma **tabela própria, com escrita imediata** (não pelo buffer da telemetria, que só grava a cada 50 registros, `src/telemetry.py:41`), indexada por sessão e ordem, com retenção configurável. Cada evento tem tipo, momento e um resumo curto que passa pelos filtros de egresso e de exibição (nada de dados brutos, ADR 019):
@@ -123,7 +132,7 @@ O REPL deixa de esperar a sessão terminar. Enquanto as pesquisas rodam:
 1. **O que passa pelo gate.** Os pedidos de `DECISOES_RESERVADAS` (aprovar Oportunidade, confirmar Problema, aprovar termo, autorizar escrita em instrumento, ativar modo sem limite) e os que hoje leem o terminal dentro da sessão: aprovar hipótese no `assisted`; escolher encerrar ou continuar ao atingir o objetivo (política `perguntar`, ADR 021 §5.3); responder a `ask_researcher` no `assisted`; continuar, orientar ou parar em estagnação no `assisted`, em saturação, intervenções esgotadas ou planos rejeitados (ADR 021 §5.5–§5.6); restringir uma direção (ADR 021 §5.5). Nenhum caminho dentro do processo da sessão lê a entrada padrão.
 2. **Persistência.** Os pedidos ficam no banco com estado `pendente` e sobrevivem à queda do processo da sessão e à do terminal.
 3. **Quem responde.** Só o processo do terminal resolve pedidos. As respostas são gravadas por um **papel de banco próprio do terminal**, cujas credenciais o processo da sessão não carrega; a resposta é uma transição condicional (de `pendente` para `autorizada`/`negada`, só se ainda estiver `pendente`), o que resolve dois terminais respondendo ao mesmo tempo (vale a primeira). Uma mensagem de agente, um documento ou a caixa de entrada nunca autorizam (regra atual de `HUMAN_SOURCES`). A credencial desse papel fica num arquivo separado do `.env` principal, lido por uma função própria de `src/config.py` só no processo do terminal (o carregamento automático do `.env` na importação não a inclui), e o processo da sessão é iniciado com um ambiente filtrado, sem ela. Risco residual: os dois processos rodam com o mesmo usuário do sistema operacional, e código no host com esse usuário poderia ler o arquivo; os agentes não executam código no host (ADR 014: código só no sandbox), o que limita o risco. Um usuário de sistema separado para o processo da sessão fica como endurecimento opcional.
-4. **A sessão não para por um pedido.** Enquanto um pedido está pendente, a sessão segue com o que não depende dele e só espera quando não houver mais nada a fazer. A espera não conta como ciclo ocioso nem como estagnação (ADR 021 §5.6). O terminal lembra o pedido periodicamente e o mostra na lista de pesquisas. Opcionalmente, depois de um prazo configurável de espera, a sessão pausa com checkpoint, libera recursos e a fila é reavaliada.
+4. **A sessão não para por um pedido.** Enquanto um pedido está pendente, a sessão segue com o que não depende dele e só espera quando não houver mais nada a fazer. A espera não conta como ciclo ocioso nem como estagnação (ADR 021 §5.6). O terminal lembra o pedido periodicamente e o mostra na lista de pesquisas. Quando só restam pedidos pendentes: nos modos `semi` e `auto`, a sessão passa a `aguarda_pesquisador` e encerra o processo (§1.2, item 1); no `assisted`, com o terminal aberto, espera e, opcionalmente, depois de um prazo configurável, pausa com checkpoint, libera recursos e a fila é reavaliada.
 
 ### 5. Caixa de entrada da sessão
 
@@ -140,7 +149,7 @@ O pesquisador pode mandar uma mensagem a uma sessão em execução (orientação
 - **Comando direto morto na espera.** O registro de espera de um comando direto em primeiro plano cujo PID não existe mais ou cujo batimento envelheceu é removido, e a fila volta a andar (§1).
 - **Admitida sem processo.** Uma sessão `admitida` cujo processo não registra PID dentro de um prazo volta para `na_fila` e libera a reserva (§1.1, item 6).
 - **Duas instâncias.** Reativar uma sessão que já foi continuada por outra (`continued_by`) é recusado (hoje `reassert_active` não confere, `src/session.py:349-361`); o processo antigo que perde a sessão se encerra.
-- **Terminal fechado:** nada acontece com a sessão; ao abrir de novo, o REPL mostra o resumo do que mudou.
+- **Terminal fechado:** nos modos `semi` e `auto`, nada acontece com a sessão; no `assisted`, a sessão se suspende (§1.2, item 2). Ao abrir de novo, o REPL mostra o resumo e pergunta sobre as pesquisas não finalizadas (§1.2, item 3).
 
 ### 7. Segurança e recursos
 
@@ -151,7 +160,7 @@ O pesquisador pode mandar uma mensagem a uma sessão em execução (orientação
 
 ### 8. Aprovações necessárias
 
-Este ADR exige **alteração de schema** (tabelas de eventos de progresso, de pedidos do gate e da caixa de entrada; estado de fila, PID, momento e custo da admissão, reserva e consumo de pico na sessão; papel de banco do terminal), que depende de aprovação explícita do pesquisador na mudança OpenSpec correspondente (AGENTS.md §1.5).
+Este ADR exige **alteração de schema** (tabelas de eventos de progresso, de pedidos do gate e da caixa de entrada; estado de fila, PID, momento e custo da admissão, reserva, consumo de pico e os estados `aguarda_pesquisador` e `suspensa_sem_pesquisador` na sessão; presença do terminal; papel de banco do terminal), que depende de aprovação explícita do pesquisador na mudança OpenSpec correspondente (AGENTS.md §1.5).
 
 ---
 
@@ -191,7 +200,7 @@ O agente rodaria comandos como `free` ou `top`. **Rejeitada:** os agentes não e
 ### Positivas
 - O pesquisador conversa com os agentes enquanto a pesquisa roda; explorações longas ficam viáveis.
 - Decisões reservadas não se perdem e não travam a sessão inteira.
-- A queda do terminal não afeta a pesquisa; a queda da sessão é detectada e retomável.
+- Nos modos autônomos, a queda do terminal não afeta a pesquisa, que roda até o fim e libera a máquina ao terminar; no `assisted`, nada roda sem o pesquisador, e a pesquisa é retomada de onde parou; a queda da sessão é detectada e retomável.
 - Os eventos ficam prontos para um painel futuro.
 
 ### Negativas / Trade-offs
@@ -205,11 +214,39 @@ O agente rodaria comandos como `free` ou `top`. **Rejeitada:** os agentes não e
 
 ---
 
+## Casos de uso e testes de aceite
+
+Cada caso vira ao menos um cenário na spec da mudança OpenSpec correspondente e um teste. Os testes de integração rodam o processo da sessão de verdade, em processo separado, com PostgreSQL real e provedores LLM simulados por respostas gravadas (sem chamadas pagas); o sandbox de código só entra onde o caso exige.
+
+| # | Caso | Como o teste verifica | Tipo |
+|---|---|---|---|
+| 1 | Pesquisa `auto` em segundo plano chega ao objetivo com a política `parar` | Inicia pelo REPL, fecha o terminal; o processo da sessão grava `solucao_encontrada`, o relatório e o evento final, e o PID deixa de existir sem intervenção | integração |
+| 2 | Pesquisa `auto` para por limite (custo, tokens ou tempo) | Limite baixo; motivo de parada correto, checkpoint gravado, processo encerrado | integração |
+| 3 | Pesquisa `semi` ou `auto` fica só com pedidos pendentes (política `perguntar`) | Estado `aguarda_pesquisador`, checkpoint gravado, processo encerrado; a resposta no terminal reabre a sessão e ela continua do checkpoint | integração |
+| 4 | Pesquisa `assisted`: o terminal sai normalmente | A subtarefa em curso termina; estado `suspensa_sem_pesquisador` com plano, hipóteses e pedidos gravados; processo encerrado | integração |
+| 5 | Pesquisa `assisted`: o terminal cai (processo morto) | O batimento de presença envelhece; a sessão se suspende como no caso 4, sem interromper a subtarefa no meio | integração |
+| 6 | Pesquisa `assisted` com dois terminais e um fecha | A sessão continua enquanto houver um terminal presente | integração |
+| 7 | Reabrir a aplicação com pesquisas não finalizadas | O REPL lista as sessões `suspensa_sem_pesquisador`, `aguarda_pesquisador`, `interrompida` e na fila, com os pedidos pendentes, e pergunta sobre a retomada de cada uma; pesquisas concluídas aparecem só no resumo | unidade (REPL com entrada simulada) |
+| 8 | Retomar a exploração | Cria um processo novo pelo `resume`, passa pela admissão, segue do checkpoint sem repetir subtarefas concluídas; a sessão antiga fica com `continued_by` | integração |
+| 9 | Não retomar, ou encerrar explicitamente | Não retomar mantém o estado; encerrar grava relatório e motivo de parada | unidade |
+| 10 | Processo da sessão morre no meio (SIGKILL) | O terminal marca `interrompida` pelo PID ou pelo batimento e oferece a retomada (caso 7) | integração |
+| 11 | Reativar uma sessão já continuada | Recusado; o processo antigo se encerra | unidade |
+| 12 | Comando direto em primeiro plano | Termina quando a exploração termina, com o código de saída do motivo de parada; Ctrl+C faz o fechamento gracioso com checkpoint | integração |
+| 13 | Decisão reservada respondida pelo terminal | Só o papel do terminal grava a resposta; o processo da sessão não consegue gravar; dois terminais respondendo, vale o primeiro | integração |
+| 14 | Admissão com outra sessão ativa | Leituras de recursos simuladas: acima do piso, o agente decide e o evento traz leituras e justificativa; abaixo do piso, recusa sem chamar o agente; sem outra sessão, admissão direta | unidade |
+| 15 | Provedor sem cota na admissão | A sessão segue na fila, o terminal mostra o motivo e oferece a admissão manual | unidade |
+| 16 | Duas avaliações de admissão ao mesmo tempo | Só uma obtém a trava; a mesma memória não é contada duas vezes | integração |
+| 17 | Duas sessões esperando memória uma pela outra | Vencido o prazo, uma pausa com checkpoint e volta à fila; a outra prossegue | integração |
+| 18 | Nomes antigos de configuração no ambiente (`PI_*`, `DEPLOYMENT_PROFILE`) | A inicialização falha com a mensagem do nome novo | unidade |
+| 19 | Monitor de recursos em plataforma sem uma leitura (temperatura no macOS) | O valor vem como desconhecido, nunca fixo, e o piso ignora a temperatura | unidade |
+
+---
+
 ## Mudanças OpenSpec exigidas
 
 | Mudança | Capacidade | O que cobre |
 |---|---|---|
-| `v18.7-background-sessions` | `session-continuity`, `agent-runtime`, `benchmark` | §1, §6, §7: processo da sessão, fila de sessões, PID, batimento com sinal do laço, recusa de reativar sessão continuada, comando direto em primeiro plano |
+| `v18.7-background-sessions` | `session-continuity`, `agent-runtime`, `benchmark` | §1, §1.2, §6, §7: fim da sessão conforme o modo, presença do terminal, suspensão do `assisted`, pergunta de retomada ao abrir o REPL, processo da sessão, fila de sessões, PID, batimento com sinal do laço, recusa de reativar sessão continuada, comando direto em primeiro plano |
 | `v18.7-resource-admission` | `agent-runtime`, `researcher-consult`, `llm-providers`, `operation-metrics` | §1.1: monitor de recursos multiplataforma (substitui a leitura específica do Pi em `src/health.py`, `src/agent_runtime/resources.py` e `src/autonomous_loop.py`; remove os valores fixos fora do Linux e o `vcgencmd`), ferramentas só de leitura, ordem da admissão (piso, teto, direta, agente), admissão condicional com reserva, limite de agentes pela memória, histórico de consumo, remoção de `DEPLOYMENT_PROFILE` e do prefixo `PI_`, `AGENT_TIMEOUT_SECONDS=0`, migração do `.env.example`, do `.env` do Pi e dos testes (`tests/unit/test_config.py`, `tests/unit/llm/test_availability.py`, `tests/unit/test_health.py`, `tests/unit/test_agent_runtime_resources.py`) |
 | `v18.7-session-events-terminal` | `session-continuity`, `researcher-consult` | §2, §3: tabela de eventos, atualizações no REPL, comandos e ações imediatas, consulta só leitura ao Researcher |
 | `v18.7-persistent-human-gate` | `researcher-consult`, `hypothesis-loop` | §4, §5, §8: gate persistente, papel de banco do terminal, migração de todas as leituras da entrada padrão, caixa de entrada |

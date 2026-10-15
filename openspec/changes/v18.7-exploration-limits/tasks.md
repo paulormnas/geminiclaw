@@ -4,13 +4,13 @@
 
 ## 0. Pré-requisitos
 - [ ] 0.1 Mudança aprovada pelo pesquisador, inclusive o schema aditivo do grafo (`Restricao`, `RESTRINGE`, motivos, propriedades) e a remoção das variáveis de teto com falha na inicialização.
-- [ ] 0.2 Questões em aberto do `design.md` §17 respondidas ou mantidas com a proposta registrada (em especial o padrão de `SESSION_MAX_COST_USD`, o agrupamento do catálogo de pedidos com `v18.7-persistent-human-gate` e `MAX_PLANNING_RUNS_PER_SESSION`).
+- [ ] 0.2 Questões em aberto do `design.md` §17 respondidas ou mantidas com a proposta registrada (decididas pelo pesquisador em 2026-10-15: padrão de `SESSION_MAX_COST_USD` em 20.0, agrupamento do catálogo de pedidos com `v18.7-persistent-human-gate`, remoção de `MAX_PLANNING_RUNS_PER_SESSION` e reabertura por `graph edit`; ficam abertas as Questões 4 e 5).
 - [ ] 0.3 Mergeadas antes: `v18.7-graph-exploration-relations`, `v18.7-hypothesis-linking`, `v18.7-resource-monitor-config` (mecanismo `_REMOVED_VARIABLES`), `v18.7-benchmark-fixes` (`limite_cota_provedor`) e o par `v18.7-background-sessions` + `v18.7-persistent-human-gate` (catálogo `decisao`/`motivo` do gate, `aguarda_pesquisador`, `encerrada_pesquisador`); rebase sobre todas.
 - [ ] 0.4 Worktree `.worktrees/feat-v18.7-exploration-limits`; spec confrontada com o código (design §1). Os testes com grafo em memória usam e estendem `tests/support/exploration_graph.py` de `v18.7-graph-exploration-relations` (design §5.1 daquela mudança).
 - [ ] 0.9 Divisão do módulo grande antes do comportamento novo (ADR 024 §5), só movendo código, com a suíte verde antes de seguir: `src/orchestration/autonomous_loop.py`: extrair para módulos próprios em `src/orchestration/` os critérios de parada, o objetivo tipado e a política ao atingir o objetivo, a estagnação e a saturação. Os caminhos citados nesta mudança valem pela tabela de `v18.7-source-layout`.
 
 ## 1. Configuração e variáveis removidas
-- [ ] 1.1 `src/config.py`: `SESSION_MAX_COST_USD`, `SESSION_MAX_COST_USD_BY_PROVIDER`, `OPERATIONAL_THRESHOLD_COST_USAGE_PCT`, `EXPLORATION_STALL_CYCLES`, `EXPLORATION_MAX_INTERVENTIONS`, `EXPLORATION_PATIENCE_GROWTH`, `SATURATION_MIN_REPLICATES`, `SATURATION_SE_MULTIPLIER`, `COVERAGE_NOVELTY_WINDOW`, `COVERAGE_NOVELTY_MIN_RATE`, `RESTRICTION_SIMILARITY`, com validação (design §13).
+- [ ] 1.1 `src/config.py`: `ON_PLAN_REJECTIONS`, `SESSION_MAX_COST_USD`, `SESSION_MAX_COST_USD_BY_PROVIDER`, `OPERATIONAL_THRESHOLD_COST_USAGE_PCT`, `EXPLORATION_STALL_CYCLES`, `EXPLORATION_MAX_INTERVENTIONS`, `EXPLORATION_PATIENCE_GROWTH`, `SATURATION_MIN_REPLICATES`, `SATURATION_SE_MULTIPLIER`, `COVERAGE_NOVELTY_WINDOW`, `COVERAGE_NOVELTY_MIN_RATE`, `RESTRICTION_SIMILARITY`, com validação (design §13).
 - [ ] 1.2 Remover `HYPOTHESES_PER_CYCLE`, `MAX_EXPLORATION_CYCLES`, `SOLUTION_MIN_VERDICT`, `MAX_AGENT_RUNS_PER_SESSION`, `MAX_PLANNING_RUNS_PER_SESSION`, `OPERATIONAL_THRESHOLDS["agent_runs_pct"]` e `["cost_usd"]`; nomes acrescentados a `_REMOVED_VARIABLES` de `v18.7-resource-monitor-config` (design §12), sem mecanismo próprio.
 - [ ] 1.3 `.env.example` atualizado.
 - [ ] 1.4 Testes: cenários "Zero não desliga", "Formato inválido" e "Teto de ciclos antigo no .env".
@@ -58,13 +58,13 @@
 ## 8. Proteções contra falha
 - [ ] 8.1 `CycleProgress` por contagem de `Experimento` e `Resultado` (design §9.1).
 - [ ] 8.2 Ciclos de espera fora de `idle_cycles`, da estagnação e do disjuntor (design §9.2).
-- [ ] 8.3 `MAX_PLAN_RETRIES` conforme o modo (design §9.3).
-- [ ] 8.4 Testes de `specs/pipeline-robustness/spec.md`, "Disjuntor por novos experimentos e resultados", "Espera por pedido do pesquisador fora dos contadores" e dos cenários de planos rejeitados.
+- [ ] 8.3 `ON_PLAN_REJECTIONS` (`explorar` padrão | `parar`) em `src/config.py` e `.env.example`, com validação; `MAX_PLAN_RETRIES` conforme a política (design §9.3): `explorar` aciona a intervenção do Curator com as últimas `issues` e zera `rejected_plans`; `parar` fecha no `auto` e pede no `assisted`/`semi`.
+- [ ] 8.4 Testes de `specs/pipeline-robustness/spec.md`, "Disjuntor por novos experimentos e resultados", "Espera por pedido do pesquisador fora dos contadores" e dos cenários de planos rejeitados (um por política).
 
 ## 9. Retomada, métricas e benchmark
 - [ ] 9.1 `src/continuity.py`: `limite_custo` retomável, `saturacao` com confirmação, antigos mantidos, `limite_cota_provedor` preservado.
 - [ ] 9.2 `describe_stop_reason` e `custo_recursos` (custo por provedor, limites, execuções).
-- [ ] 9.3 `scripts/benchmark/run_benchmark.py`: `stop_class` explícito, recusa da matriz sem `SESSION_MAX_COST_USD`; matriz atualizada.
+- [ ] 9.3 `scripts/benchmark/run_benchmark.py`: `stop_class` explícito (inclui `planos_rejeitados` com classe própria e `versao_modelo` → `limite`), `build_env` define `ON_PLAN_REJECTIONS=parar` no ambiente do subprocesso (junto de `ON_MODEL_VERSION_CHANGE=parar` de `v18.7-benchmark-fixes`); recusa da matriz sem `SESSION_MAX_COST_USD`; matriz atualizada.
 - [ ] 9.4 Testes de `specs/session-continuity/spec.md` e `specs/benchmark/spec.md`.
 
 ## 10. Validação

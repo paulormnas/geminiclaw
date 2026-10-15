@@ -25,6 +25,9 @@
 - [ ] 3.7 `MOTIVOS_RETOMAVEIS` e enumeração `Sessao.motivo_parada` com `limite_cota_provedor`; `describe_stop_reason`.
 - [ ] 3.8 Testes: um por cenário de `specs/llm-providers`, `specs/usage-limits` e `specs/session-continuity`, com `FakeRecordingProvider` (tarefa 3.0) ou clientes HTTP simulados (nenhuma chamada paga); o teste do teto do resfriamento confere a sequência 30, 60, 120, 240, 300, 300.
 
+- [ ] 3.9 `ON_MODEL_VERSION_CHANGE` (`retomar` padrão | `parar`) em `src/config.py` e `.env.example`, com validação (design §1.7).
+- [ ] 3.10 Política `retomar` com `LLM_ROUTING=strict`: checkpoint e continuação no ponto de verificação de limites (`src/orchestrator.py`, `src/llm/versions.py`, `src/usage.py`, `src/continuity.py`); nova versão registrada na proveniência; substituição pelo próximo modelo elegível da `preferencia` do papel (ADR 017, ADR 020, ADR 019) com o evento `modelo_substituido`; sem elegível, fecha com `versao_modelo`. Testes: um por cenário do requisito "Mudança de versão dentro da sessão" de `specs/llm-providers`, com `FakeRecordingProvider` e catálogo de teste (nenhuma chamada paga).
+
 ## 4. Cadeia de proveniência (design §2)
 - [ ] 4.1 `_check_files`: entrada reescrita pela mesma execução vira `substituido`.
 - [ ] 4.2 `ProvenanceChainReader`: `cadeia.motivos` e `cadeia.arquivos_alterados_exemplos`.
@@ -32,7 +35,7 @@
 
 ## 5. Egresso no relatório (design §3)
 - [ ] 5.1 `EgressMetricsReader.bytes_limitados`; seção Markdown com as duas grandezas.
-- [ ] 5.2 `scripts/benchmark/report.py`: três colunas de egresso, causa da cadeia; `run_benchmark.py`: `limite_cota_provedor` listado com provedor e modelo.
+- [ ] 5.2 `scripts/benchmark/report.py`: três colunas de egresso, causa da cadeia; `run_benchmark.py`: `limite_cota_provedor` listado com provedor e modelo; `stop_class` devolve `limite` para `versao_modelo`; `build_env` define `ON_MODEL_VERSION_CHANGE=parar` no ambiente do subprocesso (junto de `LLM_ROUTING` e `LLM_DATA_POLICY`).
 - [ ] 5.3 Testes: cenários de `specs/operation-metrics` e `specs/benchmark`.
 
 ## 6. Validação

@@ -23,7 +23,7 @@
 
 ### 1.1 Um caminho só: toda sessão roda no processo da sessão
 
-O REPL e o comando direto criam o processo da sessão do mesmo jeito; a diferença é só se o terminal espera por ele. Rodar o comando direto em primeiro plano dentro do processo do terminal (como hoje) deixaria dois caminhos a manter e faria o processo que carrega a credencial do terminal (`v18.7-persistent-human-gate`) executar os agentes, o que o ADR 023 §4.3 proíbe. Assim, no comando direto em primeiro plano o "próprio comando é o terminal" (ADR 023 §1.2, item 4): ele cria o processo, registra presença, repassa as linhas e o código de saída do processo da sessão.
+O REPL (pelo comando `nova-pesquisa <tarefa>`, e não mais por texto livre) e o comando direto criam o processo da sessão do mesmo jeito; a diferença é só se o terminal espera por ele. Rodar o comando direto em primeiro plano dentro do processo do terminal (como hoje) deixaria dois caminhos a manter e faria o processo que carrega a credencial do terminal (`v18.7-persistent-human-gate`) executar os agentes, o que o ADR 023 §4.3 proíbe. Assim, no comando direto em primeiro plano o "próprio comando é o terminal" (ADR 023 §1.2, item 4): ele cria o processo, registra presença, repassa as linhas e o código de saída do processo da sessão.
 
 | | REPL | Comando direto (padrão) | Comando direto `--background` |
 |---|---|---|---|
@@ -89,7 +89,7 @@ Contrato fixo (não configurável: scripts e o benchmark dependem dele). A class
 | 6 | sessão perdida | a sessão foi continuada por outra (§1.8) |
 | 130 | interrupção pelo pesquisador | `interrompida_pesquisador` (Ctrl+C), `interrompida` (marcada pelo terminal; o processo já não existe), `encerrada_pesquisador` (gravado pelo terminal com a sessão parada; não há processo para sair, o código só existe para o teste de cobertura) |
 
-`exit_code_for(motivo)` é testado contra todos os valores de `Sessao.motivo_parada` (`src/knowledge/schema.py`): um motivo novo sem classe faz o teste falhar. Esta tabela é a única fonte dos códigos de saída da V18.7; cada mudança que acrescenta um motivo acrescenta a linha aqui no próprio PR. `planos_rejeitados` e `versao_modelo` ficam em "limite" porque a sessão parou sem chegar a um critério de pesquisa e a retomada de `planos_rejeitados` pede confirmação (`src/continuity.py:1118`). O código de saída e a classe do benchmark (`stop_class`, requisito "Classificação dos motivos de parada") são eixos diferentes: o benchmark continua classificando `planos_rejeitados` e `versao_modelo` como `criterio_pesquisa` (`scripts/benchmark/run_benchmark.py:270-289`), e a anomalia por código divergente (§1.11) compara o código com `exit_code_for`, não com `stop_class`.
+`exit_code_for(motivo)` é testado contra todos os valores de `Sessao.motivo_parada` (`src/knowledge/schema.py`): um motivo novo sem classe faz o teste falhar. Esta tabela é a única fonte dos códigos de saída da V18.7; cada mudança que acrescenta um motivo acrescenta a linha aqui no próprio PR. `planos_rejeitados` e `versao_modelo` ficam no código 3 porque a sessão parou sem chegar a um critério de pesquisa e a retomada de `planos_rejeitados` pede confirmação (`src/continuity.py:1118`); os dois só ocorrem com as políticas `ON_PLAN_REJECTIONS=parar` (`v18.7-exploration-limits`) e `ON_MODEL_VERSION_CHANGE=parar` (`v18.7-benchmark-fixes`), que a bateria define; no uso normal (`explorar` e `retomar`) a sessão segue e nenhum dos dois é gravado. O código de saída e a classe do benchmark (`stop_class`, requisito "Classificação dos motivos de parada") são eixos diferentes: o benchmark classifica `versao_modelo` como `limite` (anomalia: a comparação exige sessões completas com a versão declarada) e `planos_rejeitados` na classe própria `planos_rejeitados` (identificável nos relatórios, não anomalia, como `hipoteses_nao_testadas`), `scripts/benchmark/run_benchmark.py:270-289`, e a anomalia por código divergente (§1.11) compara o código com `exit_code_for`, não com `stop_class`.
 
 **Dono de cada motivo de parada novo da V18.7** (valor no enum de `Sessao.motivo_parada`, `describe_stop_reason`, retomada e `stop_class`):
 
@@ -98,6 +98,8 @@ Contrato fixo (não configurável: scripts e o benchmark dependem dele). A class
 | `limite_cota_provedor` | `v18.7-benchmark-fixes` | sem confirmação | `limite` |
 | `limite_custo` | `v18.7-exploration-limits` | sem confirmação | `limite` |
 | `saturacao` | `v18.7-exploration-limits` | com confirmação | `criterio_pesquisa` |
+| `planos_rejeitados` (existente) | `v18.7-exploration-limits` (política `parar`) | com confirmação | `planos_rejeitados` |
+| `versao_modelo` (existente) | `v18.7-benchmark-fixes` (política `parar`) | sem confirmação | `limite` |
 | `aguarda_pesquisador` | esta mudança | sem confirmação | `interrupcao` |
 | `suspensa_sem_pesquisador` | esta mudança | sem confirmação | `interrupcao` |
 | `encerrada_pesquisador` | esta mudança | com confirmação | `interrupcao` |

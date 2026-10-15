@@ -76,6 +76,15 @@ Cada classificação positiva registra `logger.error` com provedor, modelo, stat
 
 `emit_connection_retry` resolve o contexto na ordem: `AgentContext` corrente (`execution_id or session_id`), `bound_execution_id()` (`src/llm/metering.py:34-36`), depois `os.environ`, por fim `"unknown"`, a mesma ordem de `_task_env` em `src/llm/agent_loop.py:23-61`. A função de resolução é extraída para um ponto único e reutilizada pelos dois. Com isso, um 429 não classificado (marcador desconhecido) fecha a sessão com `limite_conexao` em no máximo `SESSION_MAX_CONNECTION_RETRIES` retentativas, em vez de rodar até o tempo da sessão.
 
+### 1.7 Mudança de versão do modelo (decisão do pesquisador de 2026-10-15)
+
+Estado atual: com `LLM_ROUTING=strict`, versão alterada ou `desconhecida` fecha a sessão com `versao_modelo` (`src/llm/versions.py`, `src/orchestrator.py:1596-1620`, `src/usage.py:34`, `src/continuity.py:68`). No uso normal isso interrompe pesquisa por um evento que o pesquisador não controla. A política `ON_MODEL_VERSION_CHANGE` (`retomar` padrão | `parar`) vale só no modo `strict`; no flexível nada muda (registra e avisa).
+
+- `retomar`: no próximo ponto de verificação de limites grava checkpoint e o evento `versao_modelo_alterada` (provedor, modelo, versão anterior e nova) e continua. Versão nova informada: continua com o mesmo modelo, com a versão nova nos registros de proveniência (a versão é declarada por registro, então a comparação futura distingue antes e depois). Versão `desconhecida` ou modelo indisponível: escolhe o próximo modelo da `preferencia` do papel em `src/llm/catalog.yaml` que seja elegível (ADR 017), de família diferente da do Developer se o papel for Validator (ADR 020) e compatível com a localidade dos dados (ADR 019); grava `modelo_substituido` (papel, modelo anterior, modelo novo, motivo) e atualiza a alocação da sessão. Sem elegível: fecha com `versao_modelo` e checkpoint, retomável.
+- `parar`: comportamento anterior. A bateria usa este valor, porque a comparação entre combinações exige sessões completas com a versão declarada.
+
+Diferença para a troca automática de provedor por cota, que continua fora do escopo: aqui o modelo muda por falta de informação de versão ou indisponibilidade, dentro das regras de elegibilidade e com evento registrado; na cota, o gasto é do pesquisador e a decisão continua dele.
+
 ## 2. Cadeia de proveniência `divergente`
 
 ### 2.1 Mecanismo confirmado no código
@@ -116,12 +125,14 @@ Em `_check_files`, para cada registro: um caminho presente em `saidas` do mesmo 
 | `LLM_QUOTA_MARKERS_OPENAI` | `insufficient_quota` | §1.2 |
 | `LLM_QUOTA_MARKERS_OPENAI_COMPATIBLE` | vazio | §1.2 |
 | `LLM_RATE_LIMIT_MAX_COOLDOWN_SECONDS` | `300` | §1.5 |
+| `ON_MODEL_VERSION_CHANGE` | `retomar` | §1.7; `retomar` ou `parar`; a bateria define `parar` |
 
 Todas em `src/config.py` e `.env.example`.
 
 ## 5. Testes (sem chamada paga)
 
 - Provedores: clientes simulados (`AsyncMock` do `genai.Client.aio.models.generate_content`, do `anthropic.AsyncAnthropic.messages.create` e `httpx.MockTransport`) que respondem 429 com e sem marcador, 400 de saldo e 200.
+- Versão do modelo: `VersionTracker` com provedor simulado que muda ou deixa de informar a versão; catálogo de teste com `preferencia` de três modelos de famílias e localidades distintas; confere checkpoint, eventos e proveniência sem chamada paga.
 - Laço: `UsageTracker` com leitores injetados e `quota_stop_for` preenchido por um provedor falso que levanta `ProviderQuotaExhausted`; confere `motivo_parada`, ausência de replanejamento e de chamada ao Summarizer.
 - Telemetria: `emit_connection_retry` dentro de um `AgentContext` vinculado, com `get_telemetry` simulado.
 - Proveniência: `LedgerStore` em memória com dois registros reais de `termino` montados por `termino_body` sobre uma pasta temporária.
@@ -171,3 +182,4 @@ Pontos para o parecer:
 3. **Cota de um papel só** (ex.: acabou o saldo da Anthropic, que é só o Validator). Proposta: parar a sessão inteira, porque trocar o juiz quebraria a regra de família do ADR 020; a retomada continua possível depois do ajuste.
 4. **Checkpoint de outra cadeia** (§2.3): corrigir só se a tarefa 1.2 mostrar o caso.
 5. **Padrão de `LLM_RATE_LIMIT_MAX_COOLDOWN_SECONDS`**: 300 s proposto; com `SESSION_MAX_CONNECTION_RETRIES=20` o pior caso de espera fica em torno de 20 minutos antes de `limite_conexao`.
+6. **Mudança de versão do modelo em `strict`.** Decidido pelo pesquisador em 2026-10-15: no uso normal a sessão retoma (nova versão registrada; substituição pelo próximo modelo elegível da `preferencia` quando a versão é desconhecida ou o modelo está indisponível); `parar` fica para a bateria. Regra adotada: §1.7.

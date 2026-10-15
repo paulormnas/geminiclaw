@@ -18,8 +18,8 @@
 - [ ] 2.2 Regra condicional de `origem = "sistema"`, forma de `referencia_fixada` e `IMMUTABLE_LABEL_FIELDS` em `src/knowledge/validation.py` (design §2.2).
 - [ ] 2.3 Autoridade sobre `abandonada_por = "pesquisador"` e sobre o `status` dessas hipóteses (design §2.3).
 - [ ] 2.4 Levantar os leitores de `Hipotese.origem` (Curator, `graph-cli`, relatório, `suggestions.py`) e conferir que aceitam `sistema`; registrar a lista no PR.
-- [ ] 2.5 `abandoned_by` e `structured_key` em `src/knowledge/exploration_reads.py`.
-- [ ] 2.6 Validação do padrão `^[A-Za-z0-9._-]{1,128}$` em cada componente de `chave_estruturada`. Testes: os seis cenários de "Hipótese de origem sistema com chave e referência fixadas" (inclusive "Chave com componente inválido") e os quatro de "Autor do abandono" ("Hipótese abandonada antiga" pela regra provisória da questão 1).
+- [ ] 2.5 `abandoned_by(node, audit_history)` (trilha de auditoria; `WARNING` nas inconsistências) e `structured_key` em `src/knowledge/exploration_reads.py`.
+- [ ] 2.6 Validação do padrão `^[A-Za-z0-9._-]{1,128}$` em cada componente de `chave_estruturada`. Testes: os seis cenários de "Hipótese de origem sistema com chave e referência fixadas" (inclusive "Chave com componente inválido") e os seis de "Autor do abandono" ("Hipótese abandonada antiga com rejeição do pesquisador" e "... sem nota de rejeição", pela trilha de auditoria decidida em 2026-10-15, e "Abandono pelo agente não bloqueia").
 - [ ] 2.7 Testes dos cinco cenários de "Autoridade sobre o abandono em todos os caminhos de escrita": `KnowledgeService`, ingestão, ferramentas do Curator, `graph edit` e `Actor` declarado pelo LLM ignorado (parecer de segurança, item a).
 
 ## 3. Relações

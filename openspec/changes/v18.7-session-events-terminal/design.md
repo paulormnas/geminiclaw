@@ -56,12 +56,13 @@ Sem dependência nova: uma thread lê os eventos e, para imprimir, escreve `\r\x
 | `parar <apelido>` | fechamento gracioso com checkpoint, como o 1º Ctrl+C (`interrompida_pesquisador`) | caixa, `comando` |
 | `cancelar <apelido> <subtarefa>` | retira a subtarefa que ainda não começou, motivo `cancelada_pesquisador`; recusada se já começou ou terminou | caixa, `comando` |
 | `replanejar <apelido>` | ao fim das subtarefas em curso, o Researcher replaneja (`MODO: REPLAN`) | caixa, `comando` |
-| `perguntar <texto>` / `? <texto>` | consulta só leitura (§1.6) | processo filho criado pelo terminal, sem a credencial do terminal (parecer, item 1) |
+| `nova-pesquisa <tarefa>` | inicia uma pesquisa nova (o que o texto livre fazia antes), com a verificação de memória de `v18.7-background-sessions` e a confirmação do item abaixo | processo novo (`v18.7-background-sessions`) |
+| `perguntar <texto>` / `? <texto>` / texto livre sem comando | consulta só leitura (§1.6) | processo filho criado pelo terminal, sem a credencial do terminal (parecer, item 1) |
 
 - Os comandos de ação só valem para sessão com processo vivo; para outra, o terminal recusa com o estado atual e sugere `retomar`.
 - O conteúdo do comando na caixa é JSON validado: `{"comando": "pausar" | "parar" | "cancelar" | "replanejar", "subtarefa"?: str}`; a sessão o lê a cada `SESSION_INBOX_POLL_SECONDS` e emite `comando_recebido`. Comando que a sessão não conhece é consumido e registrado como ignorado.
 - `cancelar` e `replanejar` não são decisões reservadas (ADR 023 §3): não passam pelo gate.
-- Texto livre no REPL continua iniciando uma pesquisa; com outra em execução, o terminal pergunta "Já há pesquisa em execução (iris-01). Iniciar outra? [s/N]" antes da verificação de memória.
+- Texto livre no REPL é conversa com o Researcher (decisão do pesquisador, 2026-10-15): equivale a `perguntar` e segue a escolha de sessão do §1.6. Iniciar pesquisa exige `nova-pesquisa <tarefa>`; com outra em execução, o terminal pergunta "Já há pesquisa em execução (iris-01). Iniciar outra? [s/N]" antes da verificação de memória. Sem nenhuma pesquisa para consultar, o texto livre é recusado com a mensagem "Não há pesquisa para consultar; use 'nova-pesquisa <tarefa>' para iniciar uma." (sem chamada ao modelo). Verificado em `src/cli.py` e `src/cli_*.py`: `nova-pesquisa` não colide com comando do REPL (`sair`/`exit`/`quit`, `sessions`, `stop`, `clear-context`, `resume`); `new` existe só como subcomando de `geminiclaw project`, fora do REPL.
 
 ### 1.6 Consulta só leitura ao Researcher
 
@@ -70,7 +71,7 @@ Sem dependência nova: uma thread lê os eventos e, para imprimir, escreve `\r\x
 - **Só leitura:** o grafo pelo pool do `knowledge_reader` (transação `READ ONLY`, existente); o banco relacional por conexão com `SET default_transaction_read_only = on`; o Qdrant por um invólucro que expõe só busca, `scroll`, `count` e `retrieve` e levanta erro em qualquer escrita. Ferramentas do modelo: as do consultor (`quick_search`, `web_reader`), com os limites `RESEARCHER_CONSULT_MAX_SEARCHES` e `RESEARCHER_CONSULT_MAX_READS`; nenhuma ferramenta de escrita, sandbox ou `ask_researcher`.
 - **Egresso e localidade:** o contexto passa pelo mesmo `EgressGate` e pela mesma política de dados da sessão consultada (ADR 019); com o papel `researcher` resolvido para provedor não permitido pela localidade do projeto, a consulta é recusada com o motivo.
 - **Resposta:** JSON `{"resposta": str, "orientacao_sugerida": str | null}`; a resposta é exibida após `sanitize_text`; com `orientacao_sugerida`, o terminal pergunta "Enviar como mensagem a iris-01? [s/N]"; "s" grava pela caixa de entrada (`v18.7-persistent-human-gate`), com os mesmos limites.
-- **Custo:** consumo registrado em `token_usage` com o `execution_id` da sessão e origem `consulta_terminal`, visível nas métricas de operação; cada pergunta limitada por `TERMINAL_CONSULT_MAX_TOKENS` (20000). Não conta para os limites da sessão em execução (ver Questão 2).
+- **Custo:** consumo registrado em `token_usage` com o `execution_id` da sessão e origem `consulta_terminal`, visível nas métricas de operação; cada pergunta limitada por `TERMINAL_CONSULT_MAX_TOKENS` (20000). Conta no orçamento da sessão consultada (decisão do pesquisador, 2026-10-15; Questão 2): o leitor de consumo da sessão soma `token_usage` pelo `execution_id`, então a consulta entra em `usage`, em `limite_tokens` e em `limite_custo` sem mecanismo novo; as métricas de operação a mantêm identificável como `consulta`. A consulta não é recusada por orçamento esgotado (é leitura do pesquisador); o gasto vale no próximo ponto de verificação dos limites.
 - **Recursos:** embeddings, cliente do Qdrant e cliente LLM só são carregados na primeira `perguntar` (ADR 023 §7).
 
 ## 2. Contratos
@@ -158,7 +159,7 @@ Parecer do Analista de Segurança (2026-10-15): **Aprovado com ressalvas.**
 1. **Médio: a consulta executa um agente no processo que tem a credencial do terminal.** `perguntar` roda o Researcher com `quick_search` e `web_reader` (conteúdo web não confiável) no processo do terminal, que carrega a credencial de `terminal_writer`. Isso contraria a regra adotada em `v18.7-background-sessions` §1.1, segundo a qual esse processo não executa agentes. Requisito: a consulta roda num processo filho criado como o da sessão, com ambiente filtrado sem as credenciais do terminal e `stdin` fechado, e devolve o JSON da resposta. A gravação da orientação confirmada continua no terminal. Adotado (§1.6; requisito "Consulta ao Researcher durante a execução, só leitura", cenário "Consulta em processo filho sem a credencial"; tarefa 4.0).
 2. **Médio: saneamento no ponto de exibição.** `session_events.resumo` é gravado pelo papel principal, a que o processo da sessão tem acesso. Antes de imprimir, o terminal aplica de novo `sanitize_text`, que remove ESC, C1 e marcas bidi (`src/knowledge/graph_views.py:89-108`), e o limite de 300 caracteres. O mesmo vale para a resposta da consulta e para a listagem `pesquisas`. Um teste grava diretamente na tabela uma sequência ANSI/OSC e confere que ela não chega ao terminal; outro faz o processo filho da consulta devolver uma sequência de controle (requisito "Texto saneado de novo na exibição").
 3. **Baixo: `dados` com chaves fechadas.** Cada `tipo` tem uma lista fechada de chaves permitidas (ids, contagens, códigos), validada na escrita; nada de texto livre.
-4. **Baixo: custo da consulta.** Além do teto por pergunta, o consumo conta para o limite de custo da sessão consultada. Recomendo essa resposta para a Questão 2.
+4. **Baixo: custo da consulta.** Além do teto por pergunta, o consumo conta para os limites de custo e de tokens da sessão consultada (decidido pelo pesquisador em 2026-10-15; Questão 2).
 5. **Baixo: transação somente leitura no papel principal.** Para superusuário ela é só indicativa, já que o código pode reabrir a transação para escrita. É aceitável porque o modelo não tem ferramenta de SQL. A garantia efetiva é a ausência de ferramentas de escrita, coberta por teste.
 6. **Informativo (pré-existente, fora do escopo):** o Qdrant está publicado em `0.0.0.0:6333/6334` sem autenticação (`docker-compose.yml`, com TODO de segurança). O invólucro somente leitura protege contra o código, não contra a rede local. Restringir a `127.0.0.1`, ou exigir chave, antes de uma bateria em rede compartilhada, numa mudança própria.
 
@@ -173,12 +174,12 @@ Pontos para o parecer:
 
 1. **Linha impressa no meio da digitação em terminais sem `readline` completo** (libedit no macOS). Mitigação: teste com pseudo-terminal; se o redesenho falhar, a linha é impressa e o prompt é reescrito inteiro (a entrada não se perde, só é redesenhada).
 2. **Eventos atrasados até 2 s.** Aceito; o pedido pendente é lembrado pelo gate independentemente.
-3. **Custo da consulta fora do orçamento da sessão.** Limitado por pergunta; registrado nas métricas.
+3. **Custo da consulta.** Limitado por pergunta e contado no orçamento da sessão consultada (decisão do pesquisador, 2026-10-15), de modo que perguntas em excesso podem antecipar `limite_custo`; registrado nas métricas como `consulta`.
 4. **Pausa ou parada com o laço travado:** o comando não é lido. A varredura de `v18.7-background-sessions` detecta o laço sem sinal e marca `interrompida`.
 
 ## 8. Questões em aberto
 
-1. **Texto livre no REPL:** esta spec mantém o texto livre iniciando pesquisa e usa `perguntar`/`?` para conversar. A alternativa (texto livre conversa enquanto há pesquisa em execução, `nova <tarefa>` inicia outra) é mais fluida, mas muda o significado do texto conforme o estado. Qual o pesquisador prefere?
-2. **Consumo da consulta** fica fora dos limites da sessão consultada (registrado com origem `consulta_terminal`). Deve contar para o limite de custo e tokens da sessão (ADR 021 §5.4)?
+1. **Texto livre no REPL.** Decidido pelo pesquisador em 2026-10-15: o texto livre continua sendo conversa com o Researcher (`perguntar`) e iniciar uma pesquisa exige o comando explícito `nova-pesquisa <tarefa>`. Regra adotada: §1.5.
+2. **Consumo da consulta.** Decidido pelo pesquisador em 2026-10-15: conta no orçamento da sessão (uso, `limite_custo`, `limite_tokens`), por ser parte da pesquisa; as métricas a mantêm identificável como `consulta`. Regra adotada: §1.6.
 3. **`pausar` grava `suspended`**, estado legado retomável. Prefere um estado próprio (`pausada`)? Exigiria mais um valor de status no schema.
-4. **Nomes dos comandos** em português (`pesquisas`, `acompanhar`, `pausar`, `retomar`, `parar`, `cancelar`, `replanejar`, `perguntar`, `decidir`, `pendentes`, `mensagem`) convivem com `sessions`, `stop` e `resume` em inglês. Manter `resume` como sinônimo de `retomar`?
+4. **Nomes dos comandos** em português (`pesquisas`, `acompanhar`, `pausar`, `retomar`, `parar`, `cancelar`, `replanejar`, `perguntar`, `nova-pesquisa`, `decidir`, `pendentes`, `mensagem`) convivem com `sessions`, `stop` e `resume` em inglês. Manter `resume` como sinônimo de `retomar`?

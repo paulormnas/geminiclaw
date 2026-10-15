@@ -297,7 +297,7 @@ O sistema SHALL aceitar em `derivada_de` de uma hipótese declarada o `id` de um
 
 ### Requirement: Hipótese concluída recebe novos testes
 _Origem: ADR 021 §4.3_
-A governança SHALL deixar executar testes de hipóteses `validada` e `refutada`, sem mudar o status no meio do ciclo. Só MUST NOT executar testes de hipótese abandonada ou rejeitada pelo pesquisador.
+A governança SHALL deixar executar testes de hipóteses `validada` e `refutada`, sem mudar o status no meio do ciclo. Só MUST NOT executar testes de hipótese abandonada ou rejeitada pelo pesquisador (`abandonada_por = "pesquisador"`); a abandonada pelo agente não bloqueia e volta como `proposta` pela governança do modo (decisão do pesquisador, 2026-10-15).
 
 #### Scenario: Replicação de hipótese validada
 - **GIVEN** `h1` `validada` e um plano com `treinar_knn_seed2` (`hypothesis_ref = "<h1.id>"`)
@@ -309,6 +309,12 @@ A governança SHALL deixar executar testes de hipóteses `validada` e `refutada`
 - **GIVEN** `h5` `abandonada` com `abandonada_por = "pesquisador"` e um plano com `hypothesis_ref = "<h5.id>"`
 - **WHEN** `prepare_cycle` roda
 - **THEN** a subtarefa é retirada com `hipotese_hipotese_abandonada`
+
+#### Scenario: Hipótese abandonada pelo agente
+- **GIVEN** `h6` `abandonada` com `abandonada_por = "agente"` (alternativa descartada pelo Researcher), modo `assisted` e um plano com `hypothesis_ref = "<h6.id>"`
+- **WHEN** `prepare_cycle` roda
+- **THEN** `h6` volta a `proposta` e a subtarefa é retirada com `hipotese_aguarda_aprovacao`
+- **AND** a retirada não grava `abandonada_por = "pesquisador"`
 
 ### Requirement: Transições de status nos dois sentidos ao fim do ciclo
 _Origem: ADR 021 §4.4_

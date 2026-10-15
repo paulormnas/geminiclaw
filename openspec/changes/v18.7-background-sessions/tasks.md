@@ -42,7 +42,7 @@
 - [ ] 4.6 Teste de integração "Saída normal": `sair` no REPL grava `ended_at` e `end_reason="saida"` na presença.
 
 ## 5. REPL e comando direto
-- [ ] 5.1 `src/cli.py` `interactive_mode`: lançar em segundo plano; varredura de sessões paradas ao abrir e periódica (`src/session_watch.py`); resumo desde a última vez; pergunta retomar/manter/encerrar; relatório determinístico de encerramento; carga sob demanda de embeddings e clientes.
+- [ ] 5.1 `src/cli.py` `interactive_mode`: iniciar pesquisa pelo comando `nova-pesquisa <tarefa>` (texto livre sem comando recusado com a dica de `nova-pesquisa` até `v18.7-session-events-terminal`) e lançar em segundo plano; varredura de sessões paradas ao abrir e periódica (`src/session_watch.py`); resumo desde a última vez; pergunta retomar/manter/encerrar; relatório determinístico de encerramento; carga sob demanda de embeddings e clientes.
 - [ ] 5.2 `src/cli.py` `main`: comando direto em primeiro plano com presença, repasse de `SIGINT` e código de saída; `--background`; recusa de `--background` com `assisted`.
 - [ ] 5.3 Testes de unidade (entrada simulada): lista e pergunta do caso 7; manter e encerrar do caso 9 (sem chamada a LLM); `fastembed` não importado depois de abrir e sair do REPL.
 - [ ] 5.4 Testes de integração: retomar do caso 8 (`continued_by`, sem reexecutar concluídas, apelido herdado); `SIGKILL` no processo da sessão do caso 10; reuso de PID e outro host (unidade); laço travado com `SESSION_LOOP_STALE_SECONDS=2`; comando direto do caso 12 (código 0, código 3, Ctrl+C com 130) e, também do caso 12, "Interrupção da sessão lançada pelo REPL" (`SIGINT` ao processo da sessão: `interrompida_pesquisador`, checkpoint, saída 130, REPL aberto).
@@ -50,7 +50,7 @@
 
 ## 6. Benchmark
 - [ ] 6.1 `scripts/benchmark/run_benchmark.py`: `start_new_session=True`, `killpg` no tempo limite; `anomalies()` com código 4 e código divergente; `stop_class` devolve `interrupcao` para todo motivo terminado em `_pesquisador`.
-- [ ] 6.2 Testes de unidade do benchmark: tempo limite encerra o grupo (`kill_grace_seconds=1`); código 4; código divergente; `exit 0` com `solucao_encontrada` sem anomalia; `stop_class` dos motivos `*_pesquisador`.
+- [ ] 6.2 Testes de unidade do benchmark: tempo limite encerra o grupo (`kill_grace_seconds=1`); código 4; código divergente; `exit 0` com `solucao_encontrada` sem anomalia; `stop_class` dos motivos `*_pesquisador`; código 3 para `versao_modelo` e `planos_rejeitados` sem anomalia de código.
 - [ ] 6.3 Teste "Uma sessão por vez": dois comandos simulados que gravam PID, início e fim; o início da segunda é posterior ao fim da primeira e o grupo da primeira não existe mais.
 
 ## 7. Configuração e documentação

@@ -37,11 +37,11 @@ O pesquisador decidiu (ADR 021 §5): sem teto de hipóteses nem de ciclos; limit
 - **Critério de solução no `limiar`:** resultado aprovado pelo Validator que atinge o alvo e o ganho mínimo sobre a referência, sem filtro de veredito.
 - **Disjuntor de zero progresso:** mede progresso por novos `Experimento` e `Resultado` gravados no grafo, inclusive replicações e variações com o mesmo nome de subtarefa.
 - **Ciclos ociosos e estagnação:** ciclos em que o único trabalho restante depende de pedido pendente ao pesquisador não contam.
-- **`MAX_PLAN_RETRIES`:** fecha com `planos_rejeitados` no `auto`; no `assisted` e no `semi` registra um pedido ao pesquisador antes de fechar.
+- **`MAX_PLAN_RETRIES` e `ON_PLAN_REJECTIONS`:** com `explorar` (padrão), atingir `MAX_PLAN_RETRIES` rejeições consecutivas é sinal de estagnação: aciona o Curator com as últimas `issues`, zera a contagem e a sessão segue, sem fechar nem pedir decisão; com `parar` (bateria), fecha com `planos_rejeitados` no `auto` e registra pedido ao pesquisador no `assisted` e no `semi`.
 - **Modo sem limite:** cobre também o custo; a confirmação informa que, sem limites, não há parada automática garantida; não desliga estagnação nem saturação.
 - **Aviso G5 de custo:** passa a ser percentual do limite de custo (`OPERATIONAL_THRESHOLD_COST_USAGE_PCT`).
 - **Retomada:** `limite_custo` retoma sem perguntar; `saturacao` pergunta; `limite_ciclos` e `limite_execucoes` de sessões antigas continuam retomáveis.
-- **Benchmark:** `limite_custo` classificado como `limite`; `saturacao` como `criterio_pesquisa`; a matriz declara o teto de custo da sessão.
+- **Benchmark:** `limite_custo` classificado como `limite`; `saturacao` como `criterio_pesquisa`; `planos_rejeitados` com classe própria (não anomalia; só ocorre com `ON_PLAN_REJECTIONS=parar`); a matriz declara o teto de custo da sessão.
 - **Rascunho do `Problema`:** traz o tipo de objetivo; `delta_min` só é exigido no `limiar`.
 
 ### Removido
@@ -58,8 +58,8 @@ O pesquisador decidiu (ADR 021 §5): sem teto de hipóteses nem de ciclos; limit
 - Gate persistente, papel de banco do terminal, estados `aguarda_pesquisador` e `suspensa_sem_pesquisador`, processo da sessão: `v18.7-persistent-human-gate` e `v18.7-background-sessions`.
 - Texto do regimento e dos prompts: `v18.7-agent-system-prompts`; aqui só se define o comportamento e os códigos que a parte estruturada declara.
 - Tipo `fronteira` além da declaração (V19).
-- Direção `o` do veredito a partir da predição nos tipos sem alvo e termo `m` neutro (ADR 015 §9 alterado pelo ADR 021): não estão atribuídos a nenhuma mudança na tabela do ADR 021; ver "Questões em aberto" no `design.md`.
-- Calibração do veredito e dos limiares de saturação (Etapa 2).
+- Direção `o` do veredito a partir da predição nos tipos sem alvo e termo `m` neutro (ADR 015 §9 alterado pelo ADR 021): não estão atribuídos a nenhuma mudança na tabela do ADR 021; a direção pela predição passa a ser dona da mudança futura do ADR 025 (`docs/decisions/adr_025_calibracao_do_veredito.md`, rascunho); ver "Questões em aberto" no `design.md`.
+- Calibração do veredito: ADR 025 (`docs/decisions/adr_025_calibracao_do_veredito.md`, rascunho) e sua mudança futura. Limiares de saturação: calibração da Etapa 2.
 
 ## Impacto
 

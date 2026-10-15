@@ -29,7 +29,7 @@ O ADR 021 troca o bloqueio por falta de `hypothesis_ref` pelo registro da ligaç
   - Regra de autoridade: só o `Actor` `pesquisador` grava `abandonada_por = "pesquisador"` ou tira a hipótese desse estado (mesmo mecanismo de `HUMAN_ONLY_TRANSITIONS`, `validation.py:263`).
   - Relações `Experimento-PREPARA->(Hipotese | Problema)` e `Resultado-REFERENCIA_DE->Problema`.
   - Construtores compartilhados de grafo em memória para testes (`tests/support/exploration_graph.py`: `Problema` por tipo de objetivo, hipóteses, `Experimento`, `Resultado` e referência), reutilizados pelas mudanças seguintes da V18.7 (design §5.1).
-  - Funções de leitura compatível: `experiment_role(node)` (ausente = `teste`) e `abandoned_by(node)` (ausente = `pesquisador`, proposta do design §6, sujeita à questão 1).
+  - Funções de leitura compatível: `experiment_role(node)` (ausente = `teste`) e `abandoned_by(node, audit_history)` (ausente = `pesquisador` só com nota de rejeição do pesquisador na trilha de auditoria, senão `agente`; decisão do pesquisador de 2026-10-15, design §2.4).
 - **Modificado:**
   - `Hipotese-DERIVADA_DE->` passa a aceitar `Hipotese` como destino, sem laço para o próprio nó.
   - A migração idempotente `scripts/migrate_v17_knowledge.py` passa a criar os rótulos de aresta `PREPARA` e `REFERENCIA_DE` (já gera os rótulos a partir de `schema.RELATION_TYPES`; nenhuma linha nova de SQL).
@@ -51,5 +51,5 @@ O ADR 021 troca o bloqueio por falta de `hypothesis_ref` pelo registro da ligaç
 
 - **Mudança de schema do grafo** (AGENTS.md §1.5): novo valor de enum `Hipotese.origem = "sistema"`, propriedades `Experimento.papel`, `Hipotese.chave_estruturada`, `Hipotese.referencia_fixada`, `Hipotese.abandonada_por`, `Hipotese.motivo_abandono`, relações `PREPARA` e `REFERENCIA_DE`, e destino `Hipotese` em `DERIVADA_DE`. Exige aprovação explícita do pesquisador antes da implementação.
 - **Execução da migração** no banco de desenvolvimento e no Pi 5 (cria rótulos de aresta; não apaga nem reescreve nós): confirmação do pesquisador antes de rodar no Pi.
-- **Decisão do pesquisador** sobre as questões em aberto do `design.md` §9, em especial a leitura de hipóteses `abandonada` antigas sem `abandonada_por` (questão 1).
+- **Decisão do pesquisador** sobre as questões em aberto do `design.md` §9: as questões 1 (leitura de hipóteses `abandonada` antigas pela trilha de auditoria) e 2 (o abandono pelo agente não bloqueia) foram decididas em 2026-10-15; a 3 segue aberta.
 - Nenhuma alteração de Dockerfile, `docker-compose.yml`, exclusão de arquivos ou `AGENTS.md`.

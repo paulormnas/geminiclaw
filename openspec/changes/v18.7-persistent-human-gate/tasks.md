@@ -4,7 +4,7 @@
 
 ## 0. Pré-requisitos
 - [ ] 0.1 `v18.7-background-sessions` pronta para merge; as duas são mergeadas juntas (PRs em sequência no mesmo dia, sem uso intermediário). Revisar esta mudança contra o código de `dev` (referências de linha de 2026-10-15).
-- [ ] 0.2 Aprovação do pesquisador para o schema, o papel `terminal_writer` e o arquivo de credencial; respostas às Questões em aberto 1 a 5 do design (a 1 com o prazo da mudança de endurecimento antes da V20); parecer do Analista de Segurança (registrado no design §6).
+- [ ] 0.2 Aprovação do pesquisador para o schema, o papel `terminal_writer` e o arquivo de credencial; respostas às Questões em aberto 1 a 5 do design (a 1 decidida em 2026-10-15: endurecimento antes de produção, sem prazo de versão; a 5 decidida em 2026-10-15: agrupamento aceito); parecer do Analista de Segurança (registrado no design §6).
 - [ ] 0.9 Divisão do módulo grande antes do comportamento novo (ADR 024 §5), só movendo código, com a suíte verde antes de seguir: `src/gate/human_gate.py`: separar o gate persistente e os pedidos ao pesquisador em módulos próprios em `src/gate/`. Os caminhos citados nesta mudança valem pela tabela de `v18.7-source-layout`.
 
 ## 1. Schema, papel e credencial

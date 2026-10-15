@@ -97,8 +97,8 @@ Antes de criar, `find_nodes("Hipotese", {"projeto_id": ..., "chave_estruturada":
 | nenhuma | cria |
 | não abandonada (qualquer status, inclusive `validada`/`refutada`) | reutiliza: a subtarefa é novo teste da mesma hipótese (variação, réplica; ADR 021 §4.1, §4.3) |
 | `abandonada` com `abandonada_por = "sistema"` | reabre (§4.5) e reutiliza |
-| `abandonada` com `abandonada_por = "pesquisador"` (inclusive leitura compatível) | subtarefa retirada com `hipotese_equivalente_a_hipotese_abandonada` |
-| `abandonada` com `abandonada_por = "agente"` | conforme a questão 2 do design de `v18.7-graph-exploration-relations` (proposta: reabre como `proposta`) |
+| `abandonada` com `abandonada_por = "pesquisador"` (inclusive a leitura compatível: nó antigo com nota de rejeição do pesquisador na trilha de auditoria) | subtarefa retirada com `hipotese_equivalente_a_hipotese_abandonada` |
+| `abandonada` com `abandonada_por = "agente"` | não bloqueia (decisão do pesquisador de 2026-10-15, questão 2 de `v18.7-graph-exploration-relations`): reabre como `proposta` e passa pela governança do modo (no `assisted`, `hipotese_aguarda_aprovacao` até a aprovação) |
 
 Duas subtarefas do mesmo plano com a mesma chave usam a mesma hipótese. A deduplicação por similaridade (`HYPOTHESIS_DEDUP_SIMILARITY`) continua valendo só para hipóteses declaradas; hipótese declarada semelhante a uma do sistema é tratada na questão 5.
 

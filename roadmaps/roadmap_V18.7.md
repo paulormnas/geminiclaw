@@ -61,12 +61,12 @@ ADRs de origem: [021](../docs/decisions/adr_021_exploracao_rastreavel_por_hipote
 
 ### Tarefa 6: Eventos de progresso e terminal
 - **Spec:** [`v18.7-session-events-terminal`](../openspec/changes/v18.7-session-events-terminal/proposal.md)
-- **Critérios de aceite:** [ ] eventos gravados na hora e filtrados · [ ] atualizações no REPL sem apagar a digitação · [ ] comandos de acompanhamento e ações imediatas · [ ] consulta só leitura ao Researcher
+- **Critérios de aceite:** [ ] eventos gravados na hora e filtrados · [ ] atualizações no REPL sem apagar a digitação · [ ] comandos de acompanhamento e ações imediatas · [ ] consulta só leitura ao Researcher, contada no orçamento da sessão · [ ] texto livre é conversa e `nova-pesquisa <tarefa>` inicia a pesquisa
 - **Complexidade estimada:** Média
 
 ### Tarefa 7: Limites da exploração e parada pelo objetivo
 - **Spec:** [`v18.7-exploration-limits`](../openspec/changes/v18.7-exploration-limits/proposal.md)
-- **Critérios de aceite:** [ ] sem teto de hipóteses e ciclos como parada · [ ] limite de custo por sessão (`limite_custo`) · [ ] objetivo tipado e política ao atingir o objetivo · [ ] estagnação como intervenção do Curator e saturação · [ ] restrições por direção
+- **Critérios de aceite:** [ ] sem teto de hipóteses e ciclos como parada · [ ] limite de custo por sessão (`limite_custo`, padrão US$ 20) · [ ] objetivo tipado e política ao atingir o objetivo · [ ] estagnação como intervenção do Curator e saturação · [ ] restrições por direção
 - **Complexidade estimada:** Alta
 
 ### Tarefa 8: Contrato da subtarefa
@@ -187,6 +187,15 @@ Listadas em cada `proposal.md`, em resumo:
 - **Configuração:** remoção de variáveis com falha na inicialização e migração de todo `.env`, inclusive o do Pi (Tarefas 2 e 7).
 - **Texto do regimento v1** e a decisão reservada nova para o adendo de projeto (Tarefa 9).
 - **`AGENTS.md`** e remoção de `agents/` da raiz (Tarefa 0).
+
+## Cenários para testes futuros
+
+Anotados a pedido do pesquisador (2026-10-15); nenhum bloqueia a V18.7.
+
+- **Limiar mascarado para o Developer** (`v18.7-subtask-contract`, design §11.1): Researcher local (aceita dados brutos) e Developer de nuvem sobre dados sintéticos tratados como confidenciais, comparado a um Developer auto-hospedado; medir o sucesso do Developer com o limiar mascarado. Exige o caso de pesquisa e os dados sintéticos que o pesquisador pretende construir.
+- **Dados completos para o Developer:** pesquisas que exigem olhar registros, texto, imagem ou espectros, com Developer auto-hospedado.
+- **Políticas de parada na bateria:** `ON_PLAN_REJECTIONS=parar` e `ON_MODEL_VERSION_CHANGE=parar` no benchmark; no uso normal, `explorar` e `retomar` (troca de versão com checkpoint e retomada, ou substituição por outro modelo previsto no catálogo).
+- **Calibração do veredito:** ADR 025.
 
 ## Validação da Etapa
 

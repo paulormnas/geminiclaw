@@ -13,6 +13,7 @@ Hoje `execute_prompt` é aguardado dentro do REPL (`src/cli.py:1189-1246`, chama
 ## O que muda
 
 - **Novo:** processo de sessão (`python -m src.session_process`), criado pelo terminal com `stdin` fechado, ambiente filtrado e, no REPL, desligado do grupo de processos do terminal; registra PID, host, início e batimento na sessão.
+- **Novo:** no REPL, a pesquisa é iniciada pelo comando explícito `nova-pesquisa <tarefa>`; o texto livre sem comando deixa de iniciar pesquisa e vira conversa com o Researcher, em `v18.7-session-events-terminal` (decisão do pesquisador, 2026-10-15). Até essa mudança, o texto livre é recusado com a indicação de `nova-pesquisa` (as duas são mergeadas sem uso intermediário).
 - **Novo:** verificação de memória disponível antes de iniciar ou retomar (`MIN_AVAILABLE_MEMORY_MB`): o REPL avisa e pergunta; o comando direto falha com código 5.
 - **Novo:** fim da sessão conforme o modo: `semi` e `auto` rodam até um motivo de parada e encerram o processo; só com pedidos ao pesquisador, gravam checkpoint, passam a `aguarda_pesquisador` e encerram o processo.
 - **Novo:** presença do terminal (tabela `terminal_presence`) com batimento próprio; a sessão `assisted` termina as subtarefas em curso, grava checkpoint e passa a `suspensa_sem_pesquisador` quando o terminal sai ou cai.

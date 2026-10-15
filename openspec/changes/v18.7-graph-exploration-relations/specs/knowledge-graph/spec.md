@@ -52,7 +52,7 @@ O schema SHALL aceitar `Hipotese.origem = "sistema"`. Uma `Hipotese` com essa or
 - **THEN** a alteração é recusada com `ImmutableFieldError`
 
 ### Requirement: Autor do abandono
-O schema SHALL aceitar as propriedades opcionais `Hipotese.abandonada_por` (`pesquisador`, `sistema`, `agente`) e `Hipotese.motivo_abandono`. Somente uma escrita com `Actor` `pesquisador` MUST gravar `abandonada_por = "pesquisador"`, trocar esse valor ou mudar o `status` de uma hipótese abandonada pelo pesquisador. Enquanto a questão 1 do design não for decidida pelo pesquisador, SHALL valer a regra provisória: a leitura do autor de uma hipótese `abandonada` sem a propriedade devolve `pesquisador`, sem reescrever o nó; a decisão da questão 1 pode trocar só essa leitura, sem mudar o schema (ADR 021 §3.5, §6 e §9).
+O schema SHALL aceitar as propriedades opcionais `Hipotese.abandonada_por` (`pesquisador`, `sistema`, `agente`) e `Hipotese.motivo_abandono`. Somente uma escrita com `Actor` `pesquisador` MUST gravar `abandonada_por = "pesquisador"`, trocar esse valor ou mudar o `status` de uma hipótese abandonada pelo pesquisador. O abandono pelo Researcher (`agente`, decisão de não explorar um caminho) MUST NOT bloquear novos testes; só `pesquisador` bloqueia, e `sistema` SHALL ser usado apenas em retiradas por regra determinística do orquestrador. A leitura do autor de uma hipótese `abandonada` sem a propriedade (nó antigo) SHALL devolver `pesquisador` somente quando a trilha de auditoria do nó tiver uma nota do `Actor` pesquisador com `decisao = "rejeitada"`, e `agente` em caso contrário, sem reescrever o nó (decisão do pesquisador, 2026-10-15; ADR 021 §3.5, §6 e §9).
 
 #### Scenario: Orquestrador não grava abandono do pesquisador
 - **WHEN** o `Actor` `orquestrador` atualiza uma hipótese com `status = "abandonada"` e `abandonada_por = "pesquisador"`
@@ -68,11 +68,22 @@ O schema SHALL aceitar as propriedades opcionais `Hipotese.abandonada_por` (`pes
 - **THEN** a escrita é aceita
 - **AND** um registro em `knowledge_audit` guarda a mudança
 
-#### Scenario: Hipótese abandonada antiga (regra provisória da questão 1)
-- **GIVEN** uma hipótese `abandonada` sem `abandonada_por`
-- **WHEN** `abandoned_by(node)` é chamado
+#### Scenario: Hipótese abandonada antiga com rejeição do pesquisador
+- **GIVEN** uma hipótese `abandonada` sem `abandonada_por` e uma nota de auditoria do `Actor` pesquisador com `decisao = "rejeitada"`
+- **WHEN** `abandoned_by(node, audit_history)` é chamado
 - **THEN** devolve `"pesquisador"`
 - **AND** o nó continua sem a propriedade `abandonada_por`
+
+#### Scenario: Hipótese abandonada antiga sem nota de rejeição
+- **GIVEN** uma hipótese `abandonada` sem `abandonada_por` e sem nota de rejeição do pesquisador na trilha de auditoria (alternativa descartada pelo Researcher)
+- **WHEN** `abandoned_by(node, audit_history)` é chamado
+- **THEN** devolve `"agente"`
+- **AND** o nó continua sem a propriedade `abandonada_por`
+
+#### Scenario: Abandono pelo agente não bloqueia
+- **GIVEN** uma hipótese com `status = "abandonada"` e `abandonada_por = "agente"`
+- **WHEN** o `Actor` `orquestrador` atualiza `status` para `proposta`
+- **THEN** a escrita é aceita
 
 ### Requirement: Autoridade sobre o abandono em todos os caminhos de escrita
 A regra do requisito "Autor do abandono" SHALL ser aplicada na validação do grafo e, por isso, em todos os caminhos que escrevem `Hipotese.status` ou `Hipotese.abandonada_por`: `KnowledgeService`, ingestão (`FactIngestor`), ferramentas de agente do Curator e `geminiclaw graph edit`. O `Actor` de cada escrita MUST ser fixado pelo código do caminho, nunca derivado de saída de LLM; as ferramentas de agente MUST usar sempre um `Actor` de agente (parecer de segurança, item a).

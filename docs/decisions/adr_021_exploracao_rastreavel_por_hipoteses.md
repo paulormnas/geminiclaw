@@ -218,11 +218,15 @@ problema deve ter um objetivo, e o Validator verifica se já o atingiu ao avalia
    nunca por variável de ambiente ou arquivo de configuração (spec `operation-metrics`). Com os limites
    desligados, a exploração segue até o objetivo (conforme a política do item 3), até não haver caminho, até
    a estagnação (item 5), até o pesquisador parar ou até uma falha.
-5. **Estagnação.** Para que uma exploração sem limites não gaste sem fim atrás de um alvo inatingível, a
-   sessão fecha com `estagnacao` depois de `EXPLORATION_STALL_CYCLES` ciclos (padrão 5) sem melhorar o
-   melhor resultado validado da métrica do objetivo nem criar hipótese nova. O limiar é configurável;
-   desligá-lo faz parte do modo sem limite (item 4). No `assisted`, em vez de fechar, a sessão registra um
-   pedido ao pesquisador (continuar, orientar ou parar).
+5. **Estagnação (sinal, não teto).** Para que uma exploração sem limites não gaste sem fim atrás de um alvo
+   inatingível, a sessão detecta estagnação depois de `EXPLORATION_STALL_CYCLES` ciclos (padrão 5) sem
+   melhorar o melhor resultado validado da métrica do objetivo **e** sem nenhum resultado novo que mude o
+   veredito de alguma hipótese (refutações, resultados negativos e replicações que confirmam ou contestam
+   contam como avanço). Ao detectar: no `assisted` e no `semi`, registra um pedido ao pesquisador
+   (continuar, orientar ou parar) e segue enquanto ele não responde; no `auto`, fecha com `estagnacao`. Não
+   se aplica enquanto a política `ao_atingir_objetivo` for `continuar` e o objetivo já tiver sido atingido.
+   O limiar é configurável e desligável **sozinho**, sem afetar os limites de custo, tokens e tempo; o modo
+   sem limite **não** desliga a estagnação (desligá-la é uma escolha própria do pesquisador).
 6. **Proteções contra falha, ajustadas à exploração longa.**
    - O disjuntor de zero progresso passa a medir progresso por novos `Experimento` e `Resultado`
      (inclusive replicações e variações com o mesmo nome de subtarefa), e não por nomes de subtarefa novos
@@ -393,7 +397,7 @@ exigindo a confirmação do pesquisador (§5.4).
 |---|---|---|
 | `v18.7-hypothesis-linking` | `hypothesis-loop` | §2–§4, §6–§8: papel do experimento, ligações derivadas, hipótese do sistema (chave, ciclo de vida, R fixada, aprovação por modo), novos testes de hipótese concluída, fila substituída no replanejamento, retorno ao Researcher, motivos de retirada |
 | `v18.7-graph-exploration-relations` | `knowledge-graph` | §2–§4, §9: `papel`, `origem=sistema`, chave estruturada, referência R fixada, `abandonada_por`, `PREPARA`, `REFERENCIA_DE`, `DERIVADA_DE -> Hipotese`, leitura compatível |
-| `v18.7-exploration-limits` | `hypothesis-loop`, `usage-limits`, `agent-runtime`, `operation-metrics` | §5: fim de `HYPOTHESES_PER_CYCLE`, `MAX_EXPLORATION_CYCLES` e `MAX_AGENT_RUNS_PER_SESSION` como parada; limite de custo por sessão (`limite_custo`); modo sem limite cobrindo custo; parada pelo objetivo sem filtro de veredito; política `ao_atingir_objetivo`; estagnação; disjuntor por novos experimentos; espera do gate fora dos ciclos ociosos; objetivo obrigatório no `Problema` (confirmado pelo gate no `assisted`/`semi`); motivos em `src/continuity.py` |
+| `v18.7-exploration-limits` | `hypothesis-loop`, `usage-limits`, `agent-runtime`, `operation-metrics`, `benchmark`, `session-continuity` | §5: fim de `HYPOTHESES_PER_CYCLE`, `MAX_EXPLORATION_CYCLES` e `MAX_AGENT_RUNS_PER_SESSION` como parada; limite de custo por sessão (`limite_custo`); modo sem limite cobrindo custo; parada pelo objetivo sem filtro de veredito; política `ao_atingir_objetivo`; estagnação; disjuntor por novos experimentos; espera do gate fora dos ciclos ociosos; objetivo obrigatório no `Problema` (confirmado pelo gate no `assisted`/`semi`); motivos novos na classificação do benchmark (`limite_custo` como limite, `estagnacao` como critério de pesquisa) e na retomada (`src/continuity.py:64-67`: `limite_custo` retoma sem perguntar, como os demais limites; `estagnacao` pergunta) |
 | `v18.7-exploration-metrics` | `operation-metrics`, `benchmark` | §8.4: contadores por papel e origem, substituição de `reprovacoes_sem_hipotese`; também ADR 022 §6.3 e §7 (hash do contrato por tentativa, tokens do contrato por execução) |
 
 A mudança `v18.7-hypothesis-linking` também atualiza o cenário "Baseline sem hipótese" de

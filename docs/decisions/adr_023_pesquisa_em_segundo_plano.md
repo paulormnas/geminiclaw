@@ -18,6 +18,7 @@ egresso), ADR 021 §5 (limites e parada pelo objetivo), ADR 022 (contrato de con
 | Spec `session-continuity` | Detecção de sessão parada pelo terminal, recusa de reativar sessão já continuada, verificação do PID e do laço de eventos (§6). |
 | Spec `researcher-consult` | O Researcher passa a responder ao pesquisador durante a execução, em modo só leitura (§3), além de responder a `ask_researcher`. |
 | Spec `benchmark` | O runner continua usando o comando direto em primeiro plano (§1). |
+| Spec `hypothesis-loop` | A aprovação em lote do `assisted` e a confirmação de solução no `assisted` passam pelo gate persistente (§4.1). |
 
 ---
 
@@ -36,8 +37,7 @@ limites de custo, tokens, tempo e egresso: uma exploração pode durar horas. Ho
 aguardado dentro do REPL (`src/cli.py:1249-1318`): enquanto a sessão roda, o pesquisador não digita nada.
 Várias decisões leem a entrada padrão de dentro da sessão: aprovação de hipóteses no `assisted`
 (`terminal_approver`, `src/knowledge/hypothesis_cycle.py:577`), confirmação de solução
-(`src/exploration.py:129-155`), `ask_researcher` no `assisted` (`src/orchestrator.py:1468`), confirmações do
-índice semântico (`src/knowledge/semantic_runtime.py:151,216`). O gate de decisões reservadas
+(`src/exploration.py:129-155`), `ask_researcher` no `assisted` (`src/orchestrator.py:1468`). O gate de decisões reservadas
 (`src/human_gate.py`) guarda os pedidos em memória: uma sessão longa sem ninguém diante do terminal fica
 parada, e um pedido se perde se o processo cair.
 
@@ -115,8 +115,8 @@ O REPL deixa de esperar a sessão terminar. Enquanto as pesquisas rodam:
    Problema, aprovar termo, autorizar escrita em instrumento, ativar modo sem limite) e os que hoje leem o
    terminal dentro da sessão: aprovar hipótese no `assisted`; escolher encerrar ou continuar ao atingir o
    objetivo (política `perguntar`, ADR 021 §5.3); responder a `ask_researcher` no `assisted`; continuar,
-   orientar ou parar em estagnação ou após planos rejeitados no `assisted`/`semi` (ADR 021 §5.5–§5.6);
-   confirmações do índice semântico. Nenhum caminho dentro do processo da sessão lê a entrada padrão.
+   orientar ou parar em estagnação ou após planos rejeitados no `assisted`/`semi` (ADR 021 §5.5–§5.6).
+   Nenhum caminho dentro do processo da sessão lê a entrada padrão.
 2. **Persistência.** Os pedidos ficam no banco com estado `pendente` e sobrevivem à queda do processo da
    sessão e à do terminal.
 3. **Quem responde.** Só o processo do terminal resolve pedidos. As respostas são gravadas por um **papel
@@ -124,6 +124,12 @@ O REPL deixa de esperar a sessão terminar. Enquanto as pesquisas rodam:
    transição condicional (de `pendente` para `autorizada`/`negada`, só se ainda estiver `pendente`), o que
    resolve dois terminais respondendo ao mesmo tempo (vale a primeira). Uma mensagem de agente, um
    documento ou a caixa de entrada nunca autorizam (regra atual de `HUMAN_SOURCES`).
+   A credencial desse papel fica num arquivo separado do `.env` principal, lido por uma função própria de
+   `src/config.py` só no processo do terminal (o carregamento automático do `.env` na importação não a
+   inclui), e o processo da sessão é iniciado com um ambiente filtrado, sem ela. Risco residual: os dois
+   processos rodam com o mesmo usuário do sistema operacional, e código no host com esse usuário poderia ler
+   o arquivo; os agentes não executam código no host (ADR 014: código só no sandbox), o que limita o risco.
+   Um usuário de sistema separado para o processo da sessão fica como endurecimento opcional.
 4. **A sessão não para por um pedido.** Enquanto um pedido está pendente, a sessão segue com o que não
    depende dele e só espera quando não houver mais nada a fazer. A espera não conta como ciclo ocioso nem
    como estagnação (ADR 021 §5.6). O terminal lembra o pedido periodicamente e o mostra na lista de
@@ -223,7 +229,7 @@ do REPL e opção do comando direto.
 |---|---|---|
 | `v18.7-background-sessions` | `session-continuity`, `agent-runtime`, `benchmark` | §1, §6, §7: processo da sessão, fila de sessões, PID, batimento com sinal do laço, recusa de reativar sessão continuada, comando direto em primeiro plano, orçamento de memória |
 | `v18.7-session-events-terminal` | `session-continuity`, `researcher-consult` | §2, §3: tabela de eventos, atualizações no REPL, comandos e ações imediatas, consulta só leitura ao Researcher |
-| `v18.7-persistent-human-gate` | `researcher-consult` | §4, §5, §8: gate persistente, papel de banco do terminal, migração de todas as leituras da entrada padrão, caixa de entrada |
+| `v18.7-persistent-human-gate` | `researcher-consult`, `hypothesis-loop` | §4, §5, §8: gate persistente, papel de banco do terminal, migração de todas as leituras da entrada padrão, caixa de entrada |
 
 ---
 

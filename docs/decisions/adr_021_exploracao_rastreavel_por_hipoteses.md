@@ -15,7 +15,7 @@ por chamada), ADR 023 (pesquisa em segundo plano)
 | 015 §2 | `Experimento` ganha a propriedade `papel` (`teste` / `preparacao` / `referencia`). |
 | 015 §4 | `Hipotese.origem` ganha o valor `sistema`; `Hipotese` ganha a chave estruturada `(problema, abordagem, metrica)` para hipóteses do sistema, a referência R fixada e `abandonada_por`; as transições de status passam a valer também para hipóteses concluídas (§4.4). |
 | 015 §4 (`Problema`) | `criterio_sucesso` ganha `tipo` (`limiar`, `discriminacao`, `cobertura`, `fronteira`) e `ao_atingir_objetivo`; os campos passam a depender do tipo (alvo e `delta_min` só no `limiar`; hipóteses concorrentes e predições no `discriminacao`). |
-| 015 §9 (veredito) | Sem alvo (tipos que não são `limiar`), o termo de magnitude `m` usa o valor neutro já usado sem baseline, revisto na calibração da Etapa 2. |
+| 015 §9 (veredito) | Nos tipos sem alvo, a direção `o` de cada evidência vem da predição declarada da hipótese, conferida pelo Validator contra o resultado aprovado (confirma: `o = +1`; contraria: `o = −1`); sem predição declarada, a tentativa conta como inconclusiva (§9.3). O termo de magnitude `m` usa o valor neutro já usado sem baseline. Ambos revistos na calibração da Etapa 2. O veredito continua sendo medida de confiança: a parada do `discriminacao` usa as evidências validadas, não o valor do veredito (§5.2). |
 | Spec `research-project` | O rascunho do Problema passa a ter o tipo de objetivo; `delta_min` só é exigido no `limiar`. |
 | 012 §8 / spec `researcher-consult` | Nova decisão reservada `restringir_direcao` (§5.5). |
 | 015 §5 | Novas relações `PREPARA` e `REFERENCIA_DE`; o destino de `DERIVADA_DE` passa a aceitar `Hipotese`. |
@@ -269,6 +269,9 @@ problema deve ter um objetivo, e o Validator verifica se já o atingiu ao avalia
      hipóteses daquela direção (`hipotese_direcao_restrita`) e é aplicada pela governança a todo plano novo,
      por chave estruturada e abordagem e por similaridade com a direção encerrada. O Validator do plano
      recebe as restrições ativas; um caso duvidoso vira pedido ao pesquisador e não executa enquanto pendente.
+     O Validator da revisão também confere a subtarefa executada contra as restrições ativas. Risco residual:
+     a verificação é sobre o plano e sobre o que foi executado, não um bloqueio dentro do sandbox. As
+     retiradas por similaridade são contadas e listadas no relatório da sessão, para auditar a regra.
 6. **Proteções contra falha, ajustadas à exploração longa.**
    - O disjuntor de zero progresso passa a medir progresso por novos `Experimento` e `Resultado`
      (inclusive replicações e variações com o mesmo nome de subtarefa), e não por nomes de subtarefa novos

@@ -114,6 +114,8 @@ ADR 010 (Propósito: Assistente de Pesquisa) ← define o escopo de tudo (substi
 
 ## Lacunas de especificação (2026-10-01)
 
+**Atualização 2026-10-15 (V18.7):** os ADRs 021, 022 e 023 (aprovados) têm as 11 mudanças OpenSpec `v18.7-*` em `openspec/changes/`, com o roadmap `roadmaps/roadmap_V18.7.md`; nenhuma implementada. O ADR 024 (proposto) exige `v18.7-source-layout` e `v18.7-layer-cycles`, escritas depois da aprovação dele.
+
 **Atualização 2026-10-14 (V18.6, fechamento 3):** `v18.6-auto-metrics-and-stop-reasons` (#157: métricas definidas pelo
 Researcher e validadas pelo Validator no modo `auto`, motivo de parada `hipoteses_nao_testadas` e motivo de reprovação
 `sem_hipotese`) foi arquivada e os requisitos consolidados em `openspec/specs/`. Notas e tabelas de estado nos ADRs 010, 012,

@@ -5,16 +5,27 @@ Este delta parte do texto do requisito "Classificação dos motivos de parada" c
 ## MODIFIED Requirements
 
 ### Requirement: Classificação dos motivos de parada
-O benchmark SHALL classificar o `motivo_parada` de cada execução em `limite`, `erro`, `interrupcao`, `criterio_pesquisa` ou `hipoteses_nao_testadas`. Somente `limite`, `erro` e `interrupcao` SHALL ser anomalia. `limite_custo` SHALL ser `limite`; `limite_cota_provedor` SHALL ser `limite` e listado no relatório com o provedor e o modelo do evento `cota_provedor_esgotada`; `saturacao` SHALL ser `criterio_pesquisa`; `limite_ciclos` e `limite_execucoes`, presentes só em resultados antigos, SHALL continuar `limite`. `hipoteses_nao_testadas` SHALL ser tratado como parada de pesquisa, listado no relatório e nunca contado como erro. O resumo de interações SHALL contar os motivos de reprovação de subtarefa registrados (ADR 021 §5, "Mudanças OpenSpec exigidas").
+_Redação final da V18.7: substitui a de `v18.7-benchmark-fixes` (mergeada antes, onda 1) e a contém por inteiro; quem implementar esta mudança parte do texto já aplicado por aquela._
+O benchmark SHALL classificar o `motivo_parada` de cada execução em `limite`, `erro`, `interrupcao`, `criterio_pesquisa`, `hipoteses_nao_testadas` ou `planos_rejeitados`. Somente `limite`, `erro` e `interrupcao` SHALL ser anomalia. `versao_modelo` SHALL ser `limite` (anomalia: a comparação exige sessões completas com a versão declarada; `v18.7-benchmark-fixes`). `planos_rejeitados` SHALL ter classe própria `planos_rejeitados`, identificável nos relatórios e não anomalia, como `hipoteses_nao_testadas`; os dois motivos só ocorrem na bateria com `ON_PLAN_REJECTIONS=parar` e `ON_MODEL_VERSION_CHANGE=parar`. `limite_custo` SHALL ser `limite`; `limite_cota_provedor` SHALL ser `limite` e listado no relatório com o provedor e o modelo do evento `cota_provedor_esgotada`; `saturacao` SHALL ser `criterio_pesquisa`; `limite_ciclos` e `limite_execucoes`, presentes só em resultados antigos, SHALL continuar `limite`. `hipoteses_nao_testadas` SHALL ser tratado como parada de pesquisa, listado no relatório e nunca contado como erro. O resumo de interações SHALL contar os motivos de reprovação de subtarefa registrados (ADR 021 §5, "Mudanças OpenSpec exigidas").
 
 #### Scenario: Classificação
-- **WHEN** `stop_class` recebe `limite_tokens`, `limite_custo`, `limite_cota_provedor`, `limite_ciclos`, `erro`, `interrompida_pesquisador`, `solucao_encontrada`, `saturacao` e `hipoteses_nao_testadas`
-- **THEN** devolve `limite`, `limite`, `limite`, `limite`, `erro`, `interrupcao`, `criterio_pesquisa`, `criterio_pesquisa` e `hipoteses_nao_testadas`
+- **WHEN** `stop_class` recebe `limite_tokens`, `limite_custo`, `limite_cota_provedor`, `limite_ciclos`, `erro`, `interrompida_pesquisador`, `solucao_encontrada`, `saturacao`, `hipoteses_nao_testadas`, `versao_modelo` e `planos_rejeitados`
+- **THEN** devolve `limite`, `limite`, `limite`, `limite`, `erro`, `interrupcao`, `criterio_pesquisa`, `criterio_pesquisa`, `hipoteses_nao_testadas`, `limite` e `planos_rejeitados`
+
+#### Scenario: Bateria usa a política parar para planos rejeitados
+- **GIVEN** um ambiente base com `ON_PLAN_REJECTIONS=explorar`
+- **WHEN** `build_env` monta o ambiente do subprocesso de uma combinação
+- **THEN** o ambiente devolvido tem `ON_PLAN_REJECTIONS == "parar"` e o ambiente base não é alterado
 
 #### Scenario: Saturação não é anomalia
 - **GIVEN** uma execução com `stop_reason = "saturacao"` e `exit 0`
 - **WHEN** `anomalies()` avalia a execução
 - **THEN** nenhum problema de parada é reportado
+
+#### Scenario: Planos rejeitados não é anomalia
+- **GIVEN** uma execução com `stop_reason = "planos_rejeitados"` e `status="exit 3"`
+- **WHEN** `anomalies()` avalia a execução
+- **THEN** nenhum problema de parada é reportado e o relatório a lista como `planos_rejeitados`
 
 #### Scenario: Limite de custo é anomalia
 - **GIVEN** uma execução com `stop_reason = "limite_custo"`

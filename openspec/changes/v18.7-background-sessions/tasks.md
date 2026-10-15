@@ -50,7 +50,7 @@
 
 ## 6. Benchmark
 - [ ] 6.1 `scripts/benchmark/run_benchmark.py`: `start_new_session=True`, `killpg` no tempo limite; `anomalies()` com código 4 e código divergente; `stop_class` devolve `interrupcao` para todo motivo terminado em `_pesquisador`.
-- [ ] 6.2 Testes de unidade do benchmark: tempo limite encerra o grupo (`kill_grace_seconds=1`); código 4; código divergente; `exit 0` com `solucao_encontrada` sem anomalia; `stop_class` dos motivos `*_pesquisador`.
+- [ ] 6.2 Testes de unidade do benchmark: tempo limite encerra o grupo (`kill_grace_seconds=1`); código 4; código divergente; `exit 0` com `solucao_encontrada` sem anomalia; `stop_class` dos motivos `*_pesquisador`; código 3 para `versao_modelo` e `planos_rejeitados` sem anomalia de código.
 - [ ] 6.3 Teste "Uma sessão por vez": dois comandos simulados que gravam PID, início e fim; o início da segunda é posterior ao fim da primeira e o grupo da primeira não existe mais.
 
 ## 7. Configuração e documentação

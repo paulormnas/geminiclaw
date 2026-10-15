@@ -20,7 +20,7 @@ O sistema SHALL exigir aprovação do pesquisador, no modo `assisted`, para hip�
 - **AND** o evento `hypothesis_cycle` não contém o motivo `hipotese_adiada_por_prioridade` em `retiradas_por_motivo`
 
 ### Requirement: Exploração contínua até solução, falta de caminhos ou limite
-O sistema SHALL repetir o ciclo planejar → executar → consolidar → sugerir até que ocorra um destes: objetivo atingido com a política `parar` (ou o pesquisador encerrar ao ser perguntado), falta de caminhos promissores, limite de uso (tokens, tempo, custo, egresso, retentativas, conexão), saturação no modo `auto`, planos rejeitados conforme o modo, interrupção pelo pesquisador ou falha. O sistema MUST NOT encerrar a sessão por número de ciclos nem por número de execuções de agente (ADR 021 §5.1, §5.4).
+O sistema SHALL repetir o ciclo planejar → executar → consolidar → sugerir até que ocorra um destes: objetivo atingido com a política `parar` (ou o pesquisador encerrar ao ser perguntado), falta de caminhos promissores, limite de uso (tokens, tempo, custo, egresso, retentativas, conexão), saturação no modo `auto`, planos rejeitados somente com `ON_PLAN_REJECTIONS=parar` (com `explorar`, o padrão, a rejeição consecutiva aciona o Curator e a sessão segue), interrupção pelo pesquisador ou falha. O sistema MUST NOT encerrar a sessão por número de ciclos nem por número de execuções de agente (ADR 021 §5.1, §5.4).
 (Antes: também fechava com `limite_ciclos` ao atingir `MAX_EXPLORATION_CYCLES` e o critério de solução exigia veredito ≥ `SOLUTION_MIN_VERDICT`.)
 
 #### Scenario: Sem teto de ciclos
@@ -32,17 +32,34 @@ O sistema SHALL repetir o ciclo planejar → executar → consolidar → sugerir
 - **WHEN** não há hipótese nova, nem aprovada pendente, nem sugestão do Curator
 - **THEN** a sessão fecha com `motivo_parada="sem_caminhos_promissores"`
 
-#### Scenario: Planos rejeitados em sequência no modo automático
-- **GIVEN** modo `auto` e `MAX_PLAN_RETRIES=5`
+#### Scenario: Planos rejeitados com a política explorar
+- **GIVEN** `ON_PLAN_REJECTIONS=explorar` (padrão), `MAX_PLAN_RETRIES=5`, `EXPLORATION_MAX_INTERVENTIONS=3` e nenhuma intervenção feita, em qualquer modo
+- **WHEN** o Validator rejeita 5 planos consecutivos com `issues` conhecidas
+- **THEN** a sessão não fecha e nenhum pedido `planos_rejeitados` é registrado
+- **AND** o Curator simulado é chamado em modo intervenção com as últimas `issues`, o evento `estagnacao_intervencao` registra `origem = "planos_rejeitados"` e `intervencao = 1`, e as `issues` e as sugestões chegam ao Researcher no plano seguinte
+- **AND** `rejected_plans` volta a 0
+
+#### Scenario: Planos rejeitados com intervenções esgotadas na política explorar
+- **GIVEN** `ON_PLAN_REJECTIONS=explorar`, `MAX_PLAN_RETRIES=5` e `intervencoes = EXPLORATION_MAX_INTERVENTIONS`
+- **WHEN** o Validator rejeita 5 planos consecutivos
+- **THEN** o Curator não é chamado, o evento `intervencoes_esgotadas` e o pedido `intervencoes_esgotadas` são registrados sem bloquear a sessão, `rejected_plans` volta a 0 e a sessão não fecha por `planos_rejeitados`
+
+#### Scenario: Planos rejeitados em sequência no modo automático com a política parar
+- **GIVEN** `ON_PLAN_REJECTIONS=parar`, modo `auto` e `MAX_PLAN_RETRIES=5`
 - **WHEN** o Validator rejeita 5 planos consecutivos
 - **THEN** a sessão fecha com `motivo_parada="planos_rejeitados"`, com checkpoint
 - **AND** retomar essa sessão exige confirmação do pesquisador
 
-#### Scenario: Planos rejeitados em sequência no modo assistido
-- **GIVEN** modo `assisted` (ou `semi`) e `MAX_PLAN_RETRIES=5`
+#### Scenario: Planos rejeitados em sequência no modo assistido com a política parar
+- **GIVEN** `ON_PLAN_REJECTIONS=parar`, modo `assisted` (ou `semi`) e `MAX_PLAN_RETRIES=5`
 - **WHEN** o Validator rejeita 5 planos consecutivos
 - **THEN** um pedido `planos_rejeitados` com as últimas `issues` é registrado e a sessão não fecha antes da resposta
 - **AND** a resposta `continuar` zera a contagem e a resposta `parar` fecha com `planos_rejeitados`
+
+#### Scenario: Valor inválido de ON_PLAN_REJECTIONS
+- **GIVEN** `ON_PLAN_REJECTIONS=sempre`
+- **WHEN** `src/config.py` é importado
+- **THEN** a inicialização falha com `ConfigurationError` que cita `ON_PLAN_REJECTIONS` e os valores `explorar` e `parar`
 
 ## ADDED Requirements
 

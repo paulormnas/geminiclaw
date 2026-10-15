@@ -19,6 +19,7 @@ A bateria V18.6 (2026-10-14/15) mostrou três defeitos que não são decisões d
 
 - **Classificação de erro de cota ou gasto** (`src/llm/quota.py`): cada provedor de nuvem distingue esgotamento de cota/gasto (não recuperável na sessão) de limite de taxa (transitório). O esgotamento levanta `ProviderQuotaExhausted`, sem retentativa e sem modelo de reserva, e registra a parada para a sessão corrente. Marcadores por provedor configuráveis.
 - **Motivo de parada `limite_cota_provedor`** em `StopReason` e em `Sessao.motivo_parada`, com evento `cota_provedor_esgotada`, fechamento com checkpoint determinístico sem consolidação por LLM, mensagem acionável na CLI e no relatório, retomável com `geminiclaw resume --session <id>` depois que o pesquisador ajustar o teto ou trocar o provedor.
+- **Política `ON_MODEL_VERSION_CHANGE`** (`retomar` padrão | `parar`): com `LLM_ROUTING=strict`, versão alterada ou desconhecida deixa de fechar a sessão; ela grava checkpoint, registra `versao_modelo_alterada` e continua, substituindo o modelo pelo próximo elegível da `preferencia` quando a versão é desconhecida ou o modelo está indisponível (`modelo_substituido`). A bateria define `parar`.
 - **Teto do resfriamento do limitador de taxa** (`LLM_RATE_LIMIT_MAX_COOLDOWN_SECONDS`).
 - **Causas da cadeia `divergente`** nas métricas de operação (`proveniencia.cadeia.motivos`) e no relatório do benchmark, para que a próxima bateria diga por que a cadeia divergiu.
 - **Egresso limitado separado do total**: `egresso.bytes_limitados` (soma de `bytes_saida_execucao_novos`, a mesma que o `UsageTracker` compara com o limite) nas métricas de operação, na seção Markdown e em colunas próprias do relatório do benchmark.
@@ -28,7 +29,8 @@ A bateria V18.6 (2026-10-14/15) mostrou três defeitos que não são decisões d
 - **Retentativa dos provedores:** 429 continua transitório, exceto quando classificado como cota/gasto. O provedor `openai_compatible` passa a ler o corpo do 429 antes de decidir (hoje o descarta, `src/llm/providers/openai_compatible.py:166-171`). Erros 400/402 de saldo esgotado da Anthropic deixam de virar falha de subtarefa.
 - **Contagem de `connection_retry`:** o evento passa a usar a sessão do `AgentContext` (ou o id vinculado por `bound_execution_id`) antes de `os.environ`, de modo que `limite_conexao` volta a funcionar como rede de segurança para 429 não classificado.
 - **Verificação da cadeia:** em um mesmo registro, um caminho que aparece em `entradas` e em `saidas` é conferido só pela saída; a entrada vira `substituido` ("consumida e reescrita pela mesma execução").
-- **Classificação no benchmark:** `limite_cota_provedor` cai em `limite` (anomalia), com linha própria no relatório.
+- **Classificação no benchmark:** `limite_cota_provedor` cai em `limite` (anomalia), com linha própria no relatório; `versao_modelo` passa de `criterio_pesquisa` a `limite` (anomalia); `build_env` define `ON_MODEL_VERSION_CHANGE=parar` no subprocesso.
+- **Mudança de versão dentro da sessão** (`llm-providers`): requisito modificado conforme a política acima.
 
 ### Removido
 
@@ -37,14 +39,14 @@ A bateria V18.6 (2026-10-14/15) mostrou três defeitos que não são decisões d
 ### Fora do escopo
 
 - Achados 1, 2 e 3 da bateria (ADRs 021 e 022 e calibração do veredito).
-- Troca automática de provedor quando a cota acaba (quebraria a independência do julgamento, ADR 020, e a alocação da sessão, ADR 017); a decisão continua do pesquisador.
+- Troca automática de provedor quando a cota acaba (distinta da substituição de modelo por versão desconhecida, que está no escopo) (quebraria a independência do julgamento, ADR 020, e a alocação da sessão, ADR 017); a decisão continua do pesquisador.
 - Consultar saldo ou teto de gasto nas APIs dos provedores antes da sessão.
 - Temperatura do Pi 5 (achado 7).
 
 ## Impacto
 
 - **Código:** novo `src/llm/quota.py`; `src/llm/retry.py`, `src/llm/providers/{google,anthropic,openai_compatible}.py`, `src/agent_runtime/runtime.py`, `src/rate_limiter.py`, `src/orchestrator.py` (relato ao limitador), `src/usage.py`, `src/autonomous_loop.py` (`_pending_model_stop`, `_close_session`), `src/continuity.py` (`MOTIVOS_RETOMAVEIS`), `src/knowledge/schema.py` (enumeração), `src/provenance/verify.py`, `src/operation_metrics.py`, `src/cli.py` (mensagem de parada), `scripts/benchmark/{report,run_benchmark}.py`, `src/config.py`, `.env.example`.
-- **Contratos:** exceção `ProviderQuotaExhausted`; `AgentResult.error_category = "cota_provedor"`; evento `cota_provedor_esgotada`; chaves novas `egresso.bytes_limitados` e `proveniencia.cadeia.motivos` (aditivas, `versao` das métricas de operação continua 1).
+- **Contratos:** exceção `ProviderQuotaExhausted`; `AgentResult.error_category = "cota_provedor"`; evento `cota_provedor_esgotada`; evento `modelo_substituido` e variável `ON_MODEL_VERSION_CHANGE`; chaves novas `egresso.bytes_limitados` e `proveniencia.cadeia.motivos` (aditivas, `versao` das métricas de operação continua 1).
 - **Schema:** um valor novo na enumeração `Sessao.motivo_parada` do grafo (aditivo, sem migração). Nenhuma tabela nova; `egress_log` e `execution_records` não mudam.
 - **Testes:** novo auxiliar compartilhado `tests/support/fake_recording_provider.py` (`FakeRecordingProvider`: registra `system` e `messages`, respostas roteirizadas, latência, erros 429, 503 e de cota), criado aqui e reutilizado pelas mudanças V18.7 seguintes. Sem dependência de desenvolvimento nova.
 - **Custo:** reduz gasto e tempo perdido (a sessão para na primeira resposta de cota). Nenhuma chamada de LLM a mais.

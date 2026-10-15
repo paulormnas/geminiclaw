@@ -20,6 +20,67 @@ O provedor SHALL levantar `ProviderRefusalError` com a categoria quando a respos
 - **THEN** `ProviderQuotaExhausted` é levantado com `provider="anthropic"`, o modelo e `status_code=400`
 - **AND** o cliente foi chamado uma única vez e nenhum `connection_retry` foi emitido
 
+### Requirement: Mudança de versão dentro da sessão
+_Origem: [`v18.5-model-catalog-locality`](../../../archive/v18.5-model-catalog-locality/proposal.md); modificado por `v18.7-benchmark-fixes` (decisão do pesquisador de 2026-10-15)._
+O sistema SHALL, quando a versão efetiva de um `provedor/modelo` mudar dentro da sessão, gravar o evento `versao_modelo_alterada` (provedor, modelo, versão anterior e nova), acrescentá-lo a `payload["eventos_versao_modelo"]` e emitir `WARNING`. A política `ON_MODEL_VERSION_CHANGE` (`src/config.py`; variável de ambiente de mesmo nome; `retomar` padrão | `parar`; outro valor falha na inicialização) SHALL valer somente com `LLM_ROUTING=strict`; no modo flexível a sessão apenas registra, avisa e continua.
+
+Com `LLM_ROUTING=strict` e `ON_MODEL_VERSION_CHANGE=retomar`, versão alterada ou `desconhecida`, ou modelo indisponível, após a primeira chamada do papel SHALL, no próximo ponto de verificação de limites, gravar um checkpoint e continuar a sessão:
+
+- versão nova informada: a sessão continua com o mesmo modelo e a nova versão fica registrada na proveniência;
+- versão `desconhecida` ou modelo indisponível: o papel passa ao próximo modelo elegível da lista `preferencia` do papel no catálogo (`src/llm/catalog.yaml`), respeitando a elegibilidade do ADR 017, a família do Validator diferente da do Developer (ADR 020) e a localidade (ADR 019), e o evento `modelo_substituido` (papel, modelo anterior, modelo novo, motivo) é gravado;
+- sem modelo elegível: a sessão fecha com `motivo_parada="versao_modelo"` e checkpoint, retomável.
+
+Com `LLM_ROUTING=strict` e `ON_MODEL_VERSION_CHANGE=parar`, versão alterada ou `desconhecida` após a primeira chamada do papel SHALL encerrar a execução no próximo ponto de verificação de limites, com fechamento e `motivo_parada="versao_modelo"`, mantendo a sessão retomável (comportamento anterior; usado pela bateria do benchmark).
+(Antes: o modo `strict` sempre fechava com `versao_modelo`.)
+
+#### Scenario: Troca de versão em modo flexível
+- **GIVEN** `LLM_ROUTING` diferente de `strict`
+- **WHEN** duas chamadas ao mesmo modelo retornam versões diferentes
+- **THEN** o evento é gravado e a sessão continua, qualquer que seja `ON_MODEL_VERSION_CHANGE`
+
+#### Scenario: Versão nova informada com a política retomar
+- **GIVEN** `LLM_ROUTING=strict`, `ON_MODEL_VERSION_CHANGE=retomar` e um provedor simulado que informa `v1` na primeira chamada e `v2` na segunda
+- **WHEN** o próximo ponto de verificação de limites é alcançado
+- **THEN** o checkpoint é gravado, o evento `versao_modelo_alterada` registra provedor, modelo, `anterior="v1"` e `nova="v2"`, e novas subtarefas continuam sendo despachadas
+- **AND** os registros de proveniência posteriores ao evento trazem a versão `v2` e a sessão não fecha
+
+#### Scenario: Versão desconhecida com substituição de modelo
+- **GIVEN** `LLM_ROUTING=strict`, `ON_MODEL_VERSION_CHANGE=retomar`, um catálogo de teste em que o papel Researcher tem `preferencia` com os modelos `m1` e `m2` (ambos elegíveis), e um provedor simulado que deixa de informar a versão de `m1`
+- **WHEN** o próximo ponto de verificação de limites é alcançado
+- **THEN** o papel Researcher passa a usar `m2` e o evento `modelo_substituido` registra `papel="researcher"`, `anterior="m1"`, `novo="m2"` e `motivo="versao_desconhecida"`
+- **AND** a sessão não fecha
+
+#### Scenario: Substituição respeita a família do Validator
+- **GIVEN** as condições do cenário anterior para o papel Validator, em que o próximo modelo da `preferencia` é da mesma família do Developer e o seguinte é de família diferente
+- **WHEN** o ponto de verificação é alcançado
+- **THEN** o Validator passa ao modelo de família diferente e `modelo_substituido` registra esse modelo
+
+#### Scenario: Substituição respeita a localidade
+- **GIVEN** as condições do cenário "Versão desconhecida com substituição de modelo", com dados de pesquisa contaminados e o próximo modelo da `preferencia` na nuvem sem `aceita_dados_brutos`
+- **WHEN** o ponto de verificação é alcançado
+- **THEN** esse modelo é descartado e o seguinte elegível pela localidade é escolhido
+
+#### Scenario: Sem modelo elegível
+- **GIVEN** `LLM_ROUTING=strict`, `ON_MODEL_VERSION_CHANGE=retomar` e um papel cujos modelos restantes na `preferencia` são todos inelegíveis
+- **WHEN** a versão do modelo atual deixa de ser informada e o ponto de verificação é alcançado
+- **THEN** a sessão fecha com `motivo_parada="versao_modelo"` com checkpoint e continua retomável, e nenhum evento `modelo_substituido` é gravado
+
+#### Scenario: Troca de versão em modo strict com a política parar
+- **GIVEN** `LLM_ROUTING=strict` e `ON_MODEL_VERSION_CHANGE=parar`
+- **WHEN** a versão de um modelo muda durante a sessão
+- **THEN** nenhuma nova subtarefa é despachada
+- **AND** o fechamento é executado com `motivo_parada="versao_modelo"`
+
+#### Scenario: Versão desconhecida em modo strict com a política parar
+- **GIVEN** `LLM_ROUTING=strict`, `ON_MODEL_VERSION_CHANGE=parar` e um servidor compatível que não informa versão
+- **WHEN** a primeira chamada desse papel termina
+- **THEN** a sessão entra em fechamento no próximo ponto de verificação com `motivo_parada="versao_modelo"`
+
+#### Scenario: Valor inválido de ON_MODEL_VERSION_CHANGE
+- **GIVEN** `ON_MODEL_VERSION_CHANGE=talvez`
+- **WHEN** `src/config.py` é importado
+- **THEN** a inicialização falha com `ConfigurationError` que cita `ON_MODEL_VERSION_CHANGE` e os valores `retomar` e `parar`
+
 ## ADDED Requirements
 
 ### Requirement: Esgotamento de cota distinto de limite de taxa

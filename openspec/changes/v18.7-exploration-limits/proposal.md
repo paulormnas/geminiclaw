@@ -37,11 +37,11 @@ O pesquisador decidiu (ADR 021 §5): sem teto de hipóteses nem de ciclos; limit
 - **Critério de solução no `limiar`:** resultado aprovado pelo Validator que atinge o alvo e o ganho mínimo sobre a referência, sem filtro de veredito.
 - **Disjuntor de zero progresso:** mede progresso por novos `Experimento` e `Resultado` gravados no grafo, inclusive replicações e variações com o mesmo nome de subtarefa.
 - **Ciclos ociosos e estagnação:** ciclos em que o único trabalho restante depende de pedido pendente ao pesquisador não contam.
-- **`MAX_PLAN_RETRIES`:** fecha com `planos_rejeitados` no `auto`; no `assisted` e no `semi` registra um pedido ao pesquisador antes de fechar.
+- **`MAX_PLAN_RETRIES` e `ON_PLAN_REJECTIONS`:** com `explorar` (padrão), atingir `MAX_PLAN_RETRIES` rejeições consecutivas é sinal de estagnação: aciona o Curator com as últimas `issues`, zera a contagem e a sessão segue, sem fechar nem pedir decisão; com `parar` (bateria), fecha com `planos_rejeitados` no `auto` e registra pedido ao pesquisador no `assisted` e no `semi`.
 - **Modo sem limite:** cobre também o custo; a confirmação informa que, sem limites, não há parada automática garantida; não desliga estagnação nem saturação.
 - **Aviso G5 de custo:** passa a ser percentual do limite de custo (`OPERATIONAL_THRESHOLD_COST_USAGE_PCT`).
 - **Retomada:** `limite_custo` retoma sem perguntar; `saturacao` pergunta; `limite_ciclos` e `limite_execucoes` de sessões antigas continuam retomáveis.
-- **Benchmark:** `limite_custo` classificado como `limite`; `saturacao` como `criterio_pesquisa`; a matriz declara o teto de custo da sessão.
+- **Benchmark:** `limite_custo` classificado como `limite`; `saturacao` como `criterio_pesquisa`; `planos_rejeitados` com classe própria (não anomalia; só ocorre com `ON_PLAN_REJECTIONS=parar`); a matriz declara o teto de custo da sessão.
 - **Rascunho do `Problema`:** traz o tipo de objetivo; `delta_min` só é exigido no `limiar`.
 
 ### Removido

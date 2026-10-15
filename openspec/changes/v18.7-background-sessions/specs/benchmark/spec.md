@@ -16,7 +16,7 @@ O runner SHALL continuar executando cada combinação pelo comando direto em pri
 - **THEN** o início da segunda é posterior ao fim da primeira e nenhum processo do grupo da primeira existe quando a segunda começa
 
 ### Requirement: Código de saída coerente com o motivo de parada
-`anomalies()` SHALL tratar como anomalia o código de saída 4 ("aguarda o pesquisador": a sessão `auto` não terminou) e todo código de saída que não corresponda à classe do `motivo_parada` gravado (`exit_code_for`, ADR 023 §1, contrato de `v18.7-background-sessions`); código 0 com motivo de parada de pesquisa continua sem anomalia. `stop_class` SHALL classificar como `interrupcao` todo motivo terminado em `_pesquisador` (`interrompida_pesquisador`, `aguarda_pesquisador`, `suspensa_sem_pesquisador`, `encerrada_pesquisador` e `pausada_pesquisador`, este de `v18.7-session-events-terminal`), sem mudar as demais classes do requisito "Classificação dos motivos de parada".
+`anomalies()` SHALL tratar como anomalia o código de saída 4 ("aguarda o pesquisador": a sessão `auto` não terminou) e todo código de saída que não corresponda à classe do `motivo_parada` gravado (`exit_code_for`, ADR 023 §1, contrato de `v18.7-background-sessions`); código 0 com motivo de parada de pesquisa continua sem anomalia. `stop_class` SHALL classificar como `interrupcao` todo motivo terminado em `_pesquisador` (`interrompida_pesquisador`, `aguarda_pesquisador`, `suspensa_sem_pesquisador`, `encerrada_pesquisador` e `pausada_pesquisador`, este de `v18.7-session-events-terminal`), sem mudar as demais classes do requisito "Classificação dos motivos de parada" (`versao_modelo` é `limite` e `planos_rejeitados` tem classe própria `planos_rejeitados`, definidos em `v18.7-benchmark-fixes` e `v18.7-exploration-limits`). Os motivos `versao_modelo` e `planos_rejeitados` só ocorrem na bateria, que define as políticas `ON_MODEL_VERSION_CHANGE=parar` e `ON_PLAN_REJECTIONS=parar`; o código de saída de ambos continua 3.
 
 #### Scenario: Aguarda o pesquisador
 - **GIVEN** uma execução com `status="exit 4"` e `stop_reason="aguarda_pesquisador"`
@@ -32,6 +32,11 @@ O runner SHALL continuar executando cada combinação pelo comando direto em pri
 - **GIVEN** uma execução com `status="exit 0"` e `stop_reason="solucao_encontrada"`
 - **WHEN** `anomalies()` avalia a execução
 - **THEN** nenhum problema de parada ou de código é reportado
+
+#### Scenario: Código de saída de versao_modelo e planos_rejeitados
+- **GIVEN** uma execução com `status="exit 3"` e `stop_reason="versao_modelo"`, e outra com `status="exit 3"` e `stop_reason="planos_rejeitados"`
+- **WHEN** `anomalies()` avalia as duas
+- **THEN** nenhuma reporta "código de saída divergente" (`exit_code_for` devolve 3 para ambos)
 
 #### Scenario: Motivos de ausência do pesquisador são interrupção
 - **WHEN** `stop_class` recebe `aguarda_pesquisador`, `suspensa_sem_pesquisador`, `encerrada_pesquisador` e `pausada_pesquisador`

@@ -13,7 +13,7 @@
 | Custo | Estimado por chamada (`src/llm/pricing.py:98-121`), somado em `get_token_summary` com o buffer (`src/telemetry.py:825-889`); só aviso G5 absoluto `OPERATIONAL_THRESHOLD_COST_USD` (`src/config.py:399`) | Vira limite de parada no `UsageTracker` (`src/usage.py:328-520`) |
 | Disjuntor | `CycleProgress` por nomes de subtarefa bem-sucedidas e assinaturas de erro (`src/autonomous_loop.py:63-72`, `1790-1845`) | Progresso por contagem de `Experimento` e `Resultado` da sessão no grafo, mais as assinaturas de erro |
 | Ciclo ocioso e pedido pendente | `exploration.idle_cycles` (`src/autonomous_loop.py:1081-1127`); aprovação pendente suspende a sessão (`:1083-1087`) | Ciclo bloqueado só por pedido pendente não incrementa `idle_cycles` nem a estagnação |
-| Planos rejeitados | `rejected_plans >= MAX_PLAN_RETRIES` fecha em todos os modos (`src/autonomous_loop.py:987-994`) | Só o `auto` fecha direto; `assisted` e `semi` registram pedido antes |
+| Planos rejeitados | `rejected_plans >= MAX_PLAN_RETRIES` fecha em todos os modos (`src/autonomous_loop.py:987-994`) | Política `ON_PLAN_REJECTIONS`: `explorar` (padrão) trata como estagnação e aciona o Curator, sem fechar; `parar` (bateria) fecha no `auto` e pede ao pesquisador no `assisted`/`semi` |
 | Retomada | `MOTIVOS_RETOMAVEIS` (`src/continuity.py:64-70`), `evaluate_resumability` (`:1083-1135`) | `limite_custo` retomável; `saturacao` pede confirmação |
 | Motivos no grafo | `Sessao.motivo_parada` (`src/knowledge/schema.py:134-150`) | Ganha `limite_custo` e `saturacao`; `limite_ciclos` e `limite_execucoes` ficam só para leitura de dados antigos |
 | Benchmark | `stop_class` (`scripts/benchmark/run_benchmark.py:270-289`) já classifica qualquer `limite_*` como `limite` e o resto como `criterio_pesquisa` | Classificação explícita e testada; matriz declara o teto de custo |
@@ -209,7 +209,10 @@ Ciclo em que todas as subtarefas novas foram retiradas só por pedido pendente (
 
 ### 9.3 Planos rejeitados
 
-`rejected_plans >= MAX_PLAN_RETRIES`: `auto` fecha com `planos_rejeitados` (como hoje). `assisted` e `semi`: pedido `decidir_continuidade` com motivo `planos_rejeitados` (continuar, orientar, parar) com as últimas `issues`; sem outro trabalho, a sessão espera conforme 9.2; `continuar`/`orientar` zera `rejected_plans`; `parar` fecha com `planos_rejeitados`.
+Variável `ON_PLAN_REJECTIONS` (`src/config.py`; variável de ambiente de mesmo nome; padrão `explorar`; valores `explorar` ou `parar`; outro valor falha na inicialização). Decidido pelo pesquisador em 2026-10-15: no uso normal o sistema não para por planos rejeitados; os limites de custo, tokens e tempo continuam sendo o teto.
+
+- `explorar` (padrão): `rejected_plans >= MAX_PLAN_RETRIES` é sinal de estagnação, não parada. O sistema aciona a intervenção do Curator do §7 passo 3 com as últimas `issues` do Validator (dado delimitado) e o pedido de abordagem ou variação diferente; o Researcher recebe as `issues` e as sugestões no plano seguinte e deve propor abordagem diferente. Evento `estagnacao_intervencao` com `origem="planos_rejeitados"`; `intervencoes += 1` e `rejected_plans = 0` (a contagem de rejeições consecutivas zera depois da intervenção). Valem depois as regras do §7: com `intervencoes >= EXPLORATION_MAX_INTERVENTIONS` não há nova chamada ao Curator; o sistema avalia como no passo 4 (`saturacao_avaliada`, evento e pedido `intervencoes_esgotadas`, que não bloqueia a sessão), zera `rejected_plans` e segue; a espera do gate segue o §9.2. Nenhum pedido `planos_rejeitados` é criado e nenhum fechamento por `planos_rejeitados` ocorre. Com `EXPLORATION_STALL_CYCLES = 0` (intervenção desligada) a contagem só zera e a sessão segue.
+- `parar`: comportamento anterior. `auto` fecha com `planos_rejeitados`, com checkpoint. `assisted` e `semi`: pedido `decidir_continuidade` com motivo `planos_rejeitados` (continuar, orientar, parar) com as últimas `issues`; sem outro trabalho, a sessão espera conforme 9.2; `continuar`/`orientar` zera `rejected_plans`; `parar` fecha com `planos_rejeitados`. A bateria do benchmark usa este valor (`v18.7-benchmark-fixes`).
 
 ## 10. Pedidos ao pesquisador
 
@@ -224,7 +227,7 @@ Esta mudança só produz pedidos; a persistência, a resposta pelo terminal e o 
 | `decidir_continuidade` | `cobertura_saturada` | `continuar`, `orientar`, `parar`, `objetivo_atingido` | §5.3 |
 | `decidir_continuidade` | `varias_compativeis` | `aceitar_conjunto`, `continuar`, `orientar`, `parar` | §5.2 |
 | `decidir_continuidade` | `aguarda_experimento_fisico` | `continuar`, `orientar`, `parar` | §5.2 |
-| `decidir_continuidade` | `planos_rejeitados` | `continuar`, `orientar`, `parar` | §9.3 |
+| `decidir_continuidade` | `planos_rejeitados` | `continuar`, `orientar`, `parar` | §9.3 (só com `ON_PLAN_REJECTIONS=parar`, `assisted` e `semi`) |
 | `restringir_direcao` | `restricao_duvidosa` | `restringir`, `liberar` | §8.3 |
 | `confirmar_problema` | `revisao_objetivo` | `autorizar`, `negar` | §4.3 (revisão do objetivo) |
 
@@ -237,7 +240,7 @@ Esta mudança só produz pedidos; a persistência, a resposta pelo terminal e o 
 - Dono de cada motivo de parada novo da V18.7: `limite_cota_provedor` (`v18.7-benchmark-fixes`); `limite_custo` e `saturacao` (esta mudança); `aguarda_pesquisador`, `suspensa_sem_pesquisador` e `encerrada_pesquisador` (`v18.7-background-sessions`); `pausada_pesquisador` (`v18.7-session-events-terminal`). O código de saída do comando direto de cada um está na tabela única de `v18.7-background-sessions` (design §1.4): `limite_custo` → 3 (limite); `saturacao` → 0 (parada de pesquisa).
 - `MOTIVOS_RETOMAVEIS` ganha `limite_custo` e mantém os antigos. `saturacao` → `RESUME_CONFIRM` com a mensagem "a exploração saturou (saturacao): a melhora possível ficou abaixo do erro da medida; continuar explorando?".
 - `describe_stop_reason` ganha `limite_custo` e `saturacao`.
-- Benchmark: `stop_class` ganha os casos explícitos (`limite_custo` → `limite`; `saturacao` → `criterio_pesquisa`; `limite_ciclos` e `limite_execucoes` continuam `limite` em resultados antigos). A matriz declara `SESSION_MAX_COST_USD` em `env`; o runner recusa a matriz sem ele, antes de qualquer execução.
+- Benchmark: `stop_class` ganha os casos explícitos (`limite_custo` → `limite`; `saturacao` → `criterio_pesquisa`; `planos_rejeitados` → classe própria `planos_rejeitados`, não anomalia (2026-10-15); `versao_modelo` → `limite` (`v18.7-benchmark-fixes`); `limite_ciclos` e `limite_execucoes` continuam `limite` em resultados antigos). `build_env` define `ON_PLAN_REJECTIONS=parar` no subprocesso. A matriz declara `SESSION_MAX_COST_USD` em `env`; o runner recusa a matriz sem ele, antes de qualquer execução.
 
 ## 12. Variáveis removidas
 
@@ -260,6 +263,7 @@ O mecanismo é de `v18.7-resource-monitor-config` (design §1.5 daquela mudança
 | `COVERAGE_NOVELTY_WINDOW` | `5` | inteiro ≥ 1 |
 | `COVERAGE_NOVELTY_MIN_RATE` | `0.2` | ≥ 0 (hipóteses novas por ciclo) |
 | `RESTRICTION_SIMILARITY` | `0.80` | em (0, 1] |
+| `ON_PLAN_REJECTIONS` | `explorar` | `explorar` ou `parar` (§9.3); a bateria do benchmark define `parar` |
 
 Mantidas: `SESSION_MAX_TOKENS`, `SESSION_MAX_MINUTES`, `EGRESS_SESSION_MAX_BYTES`, `SESSION_MAX_TASK_RETRIES`, `SESSION_MAX_CONNECTION_RETRIES`, `MAX_PLAN_RETRIES`, `CIRCUIT_BREAKER_STALL_CYCLES`, `DECISION_EVAL_MIN_VERDICT`, `HYPOTHESIS_DEDUP_SIMILARITY`, `CURATOR_MAX_SUGGESTIONS`. O valor padrão de `SESSION_MAX_COST_USD` (US$ 20) é decisão do pesquisador de 2026-10-15.
 
@@ -314,3 +318,4 @@ Rastreio dos itens nas specs e tarefas: item 1 no requisito "Campos do pesquisad
 6. **`MAX_PLANNING_RUNS_PER_SESSION`.** Decidido pelo pesquisador em 2026-10-15: a remoção está confirmada, sem teto de planejamento e sem motivo de parada novo. Regra adotada (§12): remoção, pelo ADR 021 §5.1 (sem teto de ciclos) e pela eliminação de `limite_execucoes` como motivo no cabeçalho do ADR 021 (justificativa no §12). O nome não aparece no texto do ADR 021; manter um teto de planejamento exigiria motivo de parada novo e emenda ao ADR, e foi descartado.
 7. **Catálogo de pedidos** (§10). Decidido pelo pesquisador em 2026-10-15: o agrupamento em três decisões com coluna `motivo` e opções por motivo, de `v18.7-persistent-human-gate`, está aceito (Questão 5 daquela mudança). Regra adotada: a tabela do §10, sem alternativa de uma `decisao` por motivo.
 8. **Reabertura de hipótese retirada por restrição revogada.** Decidido pelo pesquisador em 2026-10-15: não reabrir automaticamente e não criar comando dedicado de hipóteses. Regra adotada (§8.2): o pesquisador reabre por `geminiclaw graph edit`, como pesquisador; ou, se acha o caminho promissor, inicia uma conversa pedindo ao Researcher que o explore (mensagem da caixa de entrada, ADR 023 §5), e o Researcher propõe a hipótese pela governança do modo.
+8. **Parada por planos rejeitados.** Decidido pelo pesquisador em 2026-10-15: no uso normal o sistema não para por planos rejeitados (política `ON_PLAN_REJECTIONS=explorar`, padrão); `parar` existe para a bateria. Regra adotada: §9.3 (substitui o fechamento no `auto` e o pedido no `assisted`/`semi` do ADR 021 §5.6).

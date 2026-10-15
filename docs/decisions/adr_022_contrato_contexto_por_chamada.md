@@ -218,7 +218,8 @@ afirmações), que não são critérios do plano.
 ### F. Não enviar o limiar ao Developer (só a chave e o sentido)
 Evitaria o incentivo a ajustar o modelo no conjunto de teste.
 **Não adotada:** o Developer precisa saber o alvo para escolher o protocolo de avaliação, e o problema real
-é o ajuste no teste, que passa a ser regra de integridade explícita (§2.9, §3). Ver questão em aberto 1.
+é o ajuste no teste, que passa a ser regra de integridade explícita (§2.9, §3). Decidido pelo pesquisador
+(2026-10-15): enviar chave e limiar.
 
 ---
 
@@ -238,10 +239,11 @@ Evitaria o incentivo a ajustar o modelo no conjunto de teste.
 
 ---
 
-## Questões em aberto (para o pesquisador)
+## Decisão do pesquisador sobre a questão levantada (2026-10-15)
 
-1. **Limiar visível ao Developer.** Proposta: enviar o limiar com a proibição explícita de ajuste no teste
-   (§2.9). Alternativa: enviar só a chave e o sentido da métrica.
+1. **Chave e limiar visíveis ao Developer.** Enviar os dois, com regras: *"A ideia é sempre explorar, mas é
+   importante para o Developer também ter um norte, um objetivo a alcançar."* O limiar vai com a proibição
+   explícita de ajuste no conjunto de teste (§2.9), verificada pelo Validator como regra de integridade (§3).
 
 ---
 

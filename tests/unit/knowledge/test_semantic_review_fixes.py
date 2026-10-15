@@ -247,7 +247,7 @@ class TestI5LigacaoNaFactory:
         monkeypatch.setattr(config, "KNOWLEDGE_SEMANTIC_INDEX_ENABLED", True)
         from qdrant_client import QdrantClient
 
-        monkeypatch.setattr("src.embeddings.reindex._make_client", lambda url: QdrantClient(location=":memory:"))
+        monkeypatch.setattr("src.utils.qdrant._make_client", lambda url: QdrantClient(location=":memory:"))
         store = factory.open_graph_store()
         assert isinstance(store, IndexedGraphStore)
 
@@ -257,7 +257,7 @@ class TestI5LigacaoNaFactory:
         from qdrant_client import QdrantClient
 
         client = QdrantClient(location=":memory:")
-        monkeypatch.setattr("src.embeddings.reindex._make_client", lambda url: client)
+        monkeypatch.setattr("src.utils.qdrant._make_client", lambda url: client)
         store = factory.open_graph_store()
         node_id = store.create_node(
             "Dominio",

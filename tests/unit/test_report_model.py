@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.autonomous_loop import AutonomousLoop
-from src.orchestrator import AgentResult
+from src.orchestration.autonomous_loop import AutonomousLoop
+from src.orchestration.orchestrator import AgentResult
 from src.report.report_model import (
     NarrativeError,
     ReportMetadata,
@@ -118,7 +118,7 @@ def _loop(tmp_path, responses):
 
 async def _synth(loop):
     results = [AgentResult(agent_id="developer", session_id="s", status="success", response={"text": "ok"})]
-    with patch("src.autonomous_loop.get_telemetry") as tel:
+    with patch("src.orchestration.autonomous_loop.get_telemetry") as tel:
         tel.return_value.flush = AsyncMock()
         tel.return_value.get_token_summary.return_value = {"by_provider_model": [
             {"total_prompt_tokens": 10, "total_completion_tokens": 5, "total_cost_usd": 0.5}]}
@@ -174,7 +174,7 @@ async def test_summarizer_nao_recebe_ferramentas_e_o_prompt_traz_os_dados(tmp_pa
 def test_sandbox_run_emite_evento_sem_o_conteudo_do_script():
     """Scenario: Execução com falha."""
     result = SandboxResult(stdout="", stderr="boom", exit_code=1)
-    with patch("src.telemetry.get_telemetry") as tel:
+    with patch("src.observability.telemetry.get_telemetry") as tel:
         CodeSkill._record_sandbox_run("sess", "treinar", result, 250)
     kwargs = tel.return_value.record_agent_event.call_args.kwargs
     assert kwargs["event_type"] == "sandbox_run"

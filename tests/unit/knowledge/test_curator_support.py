@@ -7,9 +7,8 @@ import os
 
 import pytest
 
-from agents.base.tools import flag_for_curator
 from src import config
-from src.agent_runtime.context import AgentContext, bind_agent_context, current_context
+from src.agents.base.tools import flag_for_curator
 from src.knowledge import schema
 from src.knowledge.curator_flags import FLAGS_FILENAME, FlagError, FlagStore, record_flag
 from src.knowledge.errors import GraphStoreError, UnknownPropertyError
@@ -18,6 +17,7 @@ from src.knowledge.ingestion import SessionContext, ingest_session_start
 from src.knowledge.semantic_index import IGNORED_STATUSES
 from src.llm.catalog import OPTIONAL_ROLES, REQUIRED_ROLES
 from src.llm.routing import NoEligibleModelError, resolve_session
+from src.utils.agent_context import AgentContext, bind_agent_context, current_context
 from tests.support import catalog_fixtures as cf
 from tests.support.curator_graph import ORQ, CuratorGraph
 

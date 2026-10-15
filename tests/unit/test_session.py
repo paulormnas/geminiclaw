@@ -1,4 +1,4 @@
-"""Testes unitários para src/session.py (PostgreSQL via mock).
+"""Testes unitários para src/session/manager.py (PostgreSQL via mock).
 
 Usa unittest.mock para simular get_connection sem precisar de banco real.
 """
@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.session import Session, SessionManager
+from src.session.manager import Session, SessionManager
 
 _SENTINEL = object()  # Sentinela para distinguir fetchone_result=None do padrão
 
@@ -73,9 +73,9 @@ class TestSessionCreate:
         """create() deve chamar INSERT com os dados corretos."""
         ctx, mock_conn = _make_ctx_with_fetchone(None)
 
-        # LongTermMemory é importédo no nível do módulo — patch direto em src.session
-        with patch("src.session.get_connection", return_value=ctx), \
-             patch("src.session.LongTermMemory") as mock_ltm:
+        # LongTermMemory é importédo no nível do módulo — patch direto em src.session.manager
+        with patch("src.session.manager.get_connection", return_value=ctx), \
+             patch("src.session.manager.LongTermMemory") as mock_ltm:
             mock_ltm.return_value.summarize_for_context.return_value = ""
             session = manager.create("agent-1")
 
@@ -89,8 +89,8 @@ class TestSessionCreate:
         """Se LongTermMemory retornar sumário, deve estar no payload."""
         ctx, _ = _make_ctx_with_fetchone(None)
 
-        with patch("src.session.get_connection", return_value=ctx), \
-             patch("src.session.LongTermMemory") as mock_ltm:
+        with patch("src.session.manager.get_connection", return_value=ctx), \
+             patch("src.session.manager.LongTermMemory") as mock_ltm:
             mock_ltm.return_value.summarize_for_context.return_value = "Memória importante"
             session = manager.create("agent-1")
 
@@ -104,7 +104,7 @@ class TestSessionGet:
         row = _session_row()
         ctx, _ = _make_ctx_with_fetchone(row)
 
-        with patch("src.session.get_connection", return_value=ctx):
+        with patch("src.session.manager.get_connection", return_value=ctx):
             session = manager.get("sid-1")
 
         assert session is not None
@@ -116,7 +116,7 @@ class TestSessionGet:
         """get() deve retornar None se a row não existir."""
         ctx, _ = _make_ctx_with_fetchone(None)
 
-        with patch("src.session.get_connection", return_value=ctx):
+        with patch("src.session.manager.get_connection", return_value=ctx):
             result = manager.get("inexistente")
 
         assert result is None
@@ -129,7 +129,7 @@ class TestSessionUpdate:
         row = _session_row()
         ctx, mock_conn = _make_ctx_with_fetchone(row)
 
-        with patch("src.session.get_connection", return_value=ctx):
+        with patch("src.session.manager.get_connection", return_value=ctx):
             session = manager.update("sid-1", status="processing")
 
         assert session.status == "processing"
@@ -140,7 +140,7 @@ class TestSessionUpdate:
         """update() deve levantar ValueError se a sessão não existir."""
         ctx, _ = _make_ctx_with_fetchone(None)
 
-        with patch("src.session.get_connection", return_value=ctx):
+        with patch("src.session.manager.get_connection", return_value=ctx):
             with pytest.raises(ValueError, match="não encontrada"):
                 manager.update("ghost", status="closed")
 
@@ -152,7 +152,7 @@ class TestSessionList:
         rows = [_session_row("s1", "ag1"), _session_row("s2", "ag2")]
         ctx, _ = _make_ctx_with_fetchall(rows)
 
-        with patch("src.session.get_connection", return_value=ctx):
+        with patch("src.session.manager.get_connection", return_value=ctx):
             sessions = manager.list_active()
 
         assert len(sessions) == 2
@@ -162,7 +162,7 @@ class TestSessionList:
         """list_recent() deve passar o limit para o SQL."""
         ctx, mock_conn = _make_ctx_with_fetchall([])
 
-        with patch("src.session.get_connection", return_value=ctx):
+        with patch("src.session.manager.get_connection", return_value=ctx):
             manager.list_recent(limit=5)
 
         sql, params = mock_conn.execute.call_args[0]

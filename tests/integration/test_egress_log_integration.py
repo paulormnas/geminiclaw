@@ -94,8 +94,8 @@ def _rows(conninfo, sid):
 
 
 def test_envio_gera_uma_linha_com_jsonb_e_cobre_os_campos_do_design(conninfo, session_id, tmp_path):
-    from src.egress.fragments import ContentOrigin, PromptFragment, labeled
     from src.egress.gate import EgressGate
+    from src.utils.egress_fragments import ContentOrigin, PromptFragment, labeled
 
     gate = EgressGate(session_id, output_dir=tmp_path, min_group_size=10)
     mensagem = labeled("tool", PromptFragment("max: 12.537", ContentOrigin.SAIDA_EXECUCAO, source="step_01:stdout"))
@@ -119,8 +119,8 @@ def test_envio_gera_uma_linha_com_jsonb_e_cobre_os_campos_do_design(conninfo, se
 
 
 def test_volume_da_sessao_soma_so_saidas_novas_fora_do_no(conninfo, session_id, tmp_path):
-    from src.egress.fragments import ContentOrigin, PromptFragment, labeled
     from src.egress.gate import EgressGate
+    from src.utils.egress_fragments import ContentOrigin, PromptFragment, labeled
 
     gate = EgressGate(session_id, output_dir=tmp_path, min_group_size=10)
     historico = [labeled("tool", PromptFragment("saida longa " * 10, ContentOrigin.SAIDA_EXECUCAO))]
@@ -143,9 +143,9 @@ def test_recusa_e_registrada_sem_o_conteudo_recusado(conninfo, session_id, tmp_p
 
 
 def test_tracker_le_o_limite_do_banco_e_fecha_com_limite_egresso(conninfo, session_id, tmp_path):
-    from src.egress.fragments import ContentOrigin, PromptFragment, labeled
     from src.egress.gate import EgressGate
-    from src.usage import StopReason, UsageBudget, UsageTracker
+    from src.orchestration.usage import StopReason, UsageBudget, UsageTracker
+    from src.utils.egress_fragments import ContentOrigin, PromptFragment, labeled
 
     gate = EgressGate(session_id, output_dir=tmp_path, min_group_size=10, output_max_chars=50_000)
     gate.prepare_llm([labeled("tool", PromptFragment("x" * 200, ContentOrigin.SAIDA_EXECUCAO))], None, _dest())
@@ -159,9 +159,9 @@ def test_tracker_le_o_limite_do_banco_e_fecha_com_limite_egresso(conninfo, sessi
 def test_falha_do_banco_impede_o_envio(session_id, tmp_path, monkeypatch):
     """Fail-fast contra o pool real: apontar a conexão para um banco inexistente barra o envio."""
     import src.db as db_module
-    from src.egress.fragments import ContentOrigin, PromptFragment, labeled
     from src.egress.gate import EgressGate
     from src.egress.log import EgressLogError
+    from src.utils.egress_fragments import ContentOrigin, PromptFragment, labeled
 
     if db_module._pool is not None:
         db_module.close_pool()

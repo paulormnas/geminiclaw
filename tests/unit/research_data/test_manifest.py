@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from src.context_loader import ContextLoader
 from src.egress.classification import classify_path
-from src.egress.fragments import ContentOrigin
+from src.research_data.context_loader import ContextLoader
 from src.research_data.manifest import ManifestError, load_manifest
+from src.utils.egress_fragments import ContentOrigin
 
 from .conftest import write_manifest
 

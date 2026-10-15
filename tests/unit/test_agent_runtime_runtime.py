@@ -11,14 +11,14 @@ from typing import Any
 
 import pytest
 
-from src.agent_runtime.context import AgentContext, get_agent_context_optional
 from src.agent_runtime.definitions import reset_definitions_cache
 from src.agent_runtime.runtime import AgentRuntime
+from src.utils.agent_context import AgentContext, get_agent_context_optional
 
 
 @dataclass
 class _FakeAgentTask:
-    """Duble mínimo de src.orchestrator.AgentTask (evita import circular no teste)."""
+    """Duble mínimo de src.orchestration.orchestrator.AgentTask (evita import circular no teste)."""
 
     agent_id: str
     prompt: str

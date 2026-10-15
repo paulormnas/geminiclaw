@@ -4,10 +4,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.autonomous_loop import AutonomousLoop, CycleProgress, error_signature
-from src.orchestrator import AgentResult, AgentTask, Orchestrator
-from src.pipeline_errors import AgentRunLimitReached
-from src.usage import StopReason
+from src.orchestration.autonomous_loop import AutonomousLoop, CycleProgress, error_signature
+from src.orchestration.errors import AgentRunLimitReached
+from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
+from src.orchestration.usage import StopReason
 
 pytestmark = pytest.mark.unit
 
@@ -69,9 +69,9 @@ def _stalling_loop():
 async def test_dois_ciclos_identicos_encerram_com_stalled_cycles():
     """Scenario: Dois ciclos idênticos / Primeiro ciclo."""
     loop, calls = _stalling_loop()
-    with patch("src.autonomous_loop.get_telemetry") as tel, \
-            patch("src.autonomous_loop.asyncio.sleep", AsyncMock()), \
-            patch("src.autonomous_loop.CIRCUIT_BREAKER_STALL_CYCLES", 2):
+    with patch("src.orchestration.autonomous_loop.get_telemetry") as tel, \
+            patch("src.orchestration.autonomous_loop.asyncio.sleep", AsyncMock()), \
+            patch("src.orchestration.autonomous_loop.CIRCUIT_BREAKER_STALL_CYCLES", 2):
         with patch.object(loop, "_is_complex_triage", AsyncMock(return_value=True)):
             result = await loop.run("tarefa", "exec_stall")
     assert calls["planning"] == 3  # ciclo 1 nunca dispara; 2 e 3 contam como estagnados
@@ -84,8 +84,8 @@ async def test_dois_ciclos_identicos_encerram_com_stalled_cycles():
 @pytest.mark.asyncio
 async def test_um_ciclo_identico_nao_encerra_com_padrao_dois():
     loop, calls = _stalling_loop()
-    with patch("src.autonomous_loop.get_telemetry"), patch("src.autonomous_loop.asyncio.sleep", AsyncMock()), \
-            patch("src.autonomous_loop.CIRCUIT_BREAKER_STALL_CYCLES", 3):
+    with patch("src.orchestration.autonomous_loop.get_telemetry"), patch("src.orchestration.autonomous_loop.asyncio.sleep", AsyncMock()), \
+            patch("src.orchestration.autonomous_loop.CIRCUIT_BREAKER_STALL_CYCLES", 3):
         with patch.object(loop, "_is_complex_triage", AsyncMock(return_value=True)):
             await loop.run("tarefa", "exec_stall2")
     assert calls["planning"] == 4
@@ -112,7 +112,7 @@ def _task():
 async def test_planejamento_nao_consome_o_limite_de_subtarefas():
     """Scenario: Planejamento não consome o limite de subtarefas."""
     orch = _orch()
-    with patch("src.orchestrator.get_telemetry"):
+    with patch("src.orchestration.orchestrator.get_telemetry"):
         for _ in range(12):
             await orch._execute_agent(_task(), "m", run_kind="planning")
     assert orch._session_planning_run_counts["m"] == 12
@@ -123,8 +123,8 @@ def test_limite_acompanha_o_plano():
     """Scenario: Limite acompanha o plano."""
     orch = _orch()
     orch._session_plan_size["m"] = 10
-    with patch("src.orchestrator.MAX_AGENT_RUNS_PER_SESSION", 30), \
-            patch("src.orchestrator.SESSION_MAX_TASK_RETRIES", 3):
+    with patch("src.orchestration.orchestrator.MAX_AGENT_RUNS_PER_SESSION", 30), \
+            patch("src.orchestration.orchestrator.SESSION_MAX_TASK_RETRIES", 3):
         assert orch.effective_run_limit("m") == 42
         assert orch.effective_run_limit("sem_plano") == 30
 
@@ -132,7 +132,7 @@ def test_limite_acompanha_o_plano():
 @pytest.mark.asyncio
 async def test_limite_de_planejamento_levanta_erro_tipado():
     orch = _orch()
-    with patch("src.orchestrator.MAX_PLANNING_RUNS_PER_SESSION", 2), patch("src.orchestrator.get_telemetry"):
+    with patch("src.orchestration.orchestrator.MAX_PLANNING_RUNS_PER_SESSION", 2), patch("src.orchestration.orchestrator.get_telemetry"):
         await orch._execute_agent(_task(), "m", run_kind="planning")
         await orch._execute_agent(_task(), "m", run_kind="planning")
         with pytest.raises(AgentRunLimitReached) as err:
@@ -149,7 +149,7 @@ async def test_sessao_fecha_com_limite_execucoes_ao_estourar_o_planejamento():
     orch.output_manager.list_artifacts.return_value = []
     loop = AutonomousLoop(orch)
     close = AsyncMock(return_value="fechada")
-    with patch("src.autonomous_loop.get_telemetry") as tel, patch.object(loop, "_close_session", close):
+    with patch("src.orchestration.autonomous_loop.get_telemetry") as tel, patch.object(loop, "_close_session", close):
         with patch.object(loop, "_is_complex_triage", AsyncMock(return_value=True)):
             result = await loop.run("tarefa", "exec_lim")
     assert result == "fechada"
@@ -169,7 +169,7 @@ async def test_sessao_fecha_com_consolidacao_ao_estourar_a_execucao_sem_excecao(
     orch.output_manager.list_artifacts.return_value = []
     loop = AutonomousLoop(orch)
     close = AsyncMock(return_value="fechada")
-    with patch("src.autonomous_loop.get_telemetry"), patch.object(loop, "_close_session", close):
+    with patch("src.orchestration.autonomous_loop.get_telemetry"), patch.object(loop, "_close_session", close):
         with patch.object(loop, "_is_complex_triage", AsyncMock(return_value=True)):
             result = await loop.run("tarefa", "exec_lim2")
     assert result == "fechada" and close.call_args.args[0] == StopReason.RUNS

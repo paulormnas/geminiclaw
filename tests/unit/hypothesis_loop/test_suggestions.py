@@ -6,9 +6,8 @@ import json
 
 import pytest
 
-from agents.curator.runner import Curator
-from src.exploration import ExplorationSession
-from src.human_gate import HumanGate
+from src.agents.curator.runner import Curator
+from src.gate.human_gate import HumanGate
 from src.knowledge import opportunities
 from src.knowledge.suggestions import (
     FILENAME,
@@ -18,6 +17,7 @@ from src.knowledge.suggestions import (
     build_candidates,
     suggest_paths,
 )
+from src.orchestration.exploration import ExplorationSession
 from tests.support.controlled_embedding_provider import pair_vectors
 from tests.support.hypothesis_world import AGENTE, DIM, ORQ, PESQUISADOR, HypothesisWorld
 

@@ -2,15 +2,15 @@ import asyncio
 from pathlib import Path
 from typing import Any, Dict
 
-from src.agent_runtime.context import get_agent_context_optional
+from src.documents.enrichment import ProjectMeta
+from src.documents.extractors.registry import ExtractorRegistry
+from src.documents.indexer import DocumentIndexer
+from src.documents.pipeline import ORIGEM_ARTEFATO, SEM_PROJETO, index_file
 from src.egress.classification import classify_path, ensure_not_research_data
-from src.egress.fragments import ContentOrigin
 from src.logger import get_logger
 from src.skills.base import BaseSkill
-from src.skills.document_processor.enrichment import ProjectMeta
-from src.skills.document_processor.extractors.registry import ExtractorRegistry
-from src.skills.document_processor.indexer import DocumentIndexer
-from src.skills.document_processor.pipeline import ORIGEM_ARTEFATO, SEM_PROJETO, index_file
+from src.utils.agent_context import get_agent_context_optional
+from src.utils.egress_fragments import ContentOrigin
 
 logger = get_logger(__name__)
 
@@ -21,7 +21,7 @@ _TITLE_LIMIT = 200
 def _untrusted(origem: str, text: object, limit: int) -> str:
     """Texto livre de insumo, em uma linha e entre delimitadores: dado não confiável, nunca instrução."""
     from src.knowledge.curator_tools import wrap_data
-    from src.knowledge.normalization import clean_free_text
+    from src.utils.normalization import clean_free_text
 
     return wrap_data(origem, clean_free_text(str(text if text is not None else "")), limit)
 

@@ -13,12 +13,12 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src import config
+from src.documents.enrichment import ProjectMeta
+from src.documents.extractors.registry import ExtractorRegistry
+from src.documents.indexer import DocumentIndexer
+from src.documents.pipeline import ORIGEM_INPUT, IndexDeadlineExceeded, index_file, recover_pending
 from src.knowledge.ingestion_io import list_regular_files
 from src.logger import get_logger
-from src.skills.document_processor.enrichment import ProjectMeta
-from src.skills.document_processor.extractors.registry import ExtractorRegistry
-from src.skills.document_processor.indexer import DocumentIndexer
-from src.skills.document_processor.pipeline import ORIGEM_INPUT, IndexDeadlineExceeded, index_file, recover_pending
 
 logger = get_logger(__name__)
 

@@ -37,7 +37,7 @@ def code(codigo: str, valor: float, metrica: str | None = None, unidade: str | N
 
 def evidence_for(*refs: str) -> Callable[[Any, list], list[EvidenceItem]]:
     """Construtor de pacote com um item global por ``ref``."""
-    from src.egress.fragments import ContentOrigin
+    from src.utils.egress_fragments import ContentOrigin
 
     def build(_conclusao: Any, _sentences: list) -> list[EvidenceItem]:
         return [

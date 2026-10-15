@@ -7,11 +7,11 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from bs4 import BeautifulSoup
 
-from src.egress.fragments import ContentOrigin
 from src.egress.gate import EgressRefused, caller_tainted, external_destination, get_gate
 from src.logger import get_logger
 from src.skills.base import BaseSkill, SkillResult
 from src.skills.search_quick.cache import SearchCache
+from src.utils.egress_fragments import ContentOrigin
 
 logger = get_logger(__name__)
 

@@ -129,7 +129,7 @@ def project_graph_full(project_id: str, store: Any | None = None) -> dict[str, A
 def session_operation_metrics(session_id: str) -> dict[str, Any] | None:
     """``payload["operation_metrics"]`` da sessão mestra, ou ``None`` se a sessão não o gravou."""
     try:
-        from src.session import SessionManager
+        from src.session.manager import SessionManager
 
         session = SessionManager().get(session_id)
         payload = getattr(session, "payload", None)
@@ -142,7 +142,7 @@ def session_operation_metrics(session_id: str) -> dict[str, Any] | None:
 def embedding_events(session_id: str) -> dict[str, Any]:
     """Eventos de telemetria ligados a vetorização na sessão (contagens por tipo; vazio se não houver)."""
     try:
-        from src.telemetry import get_telemetry
+        from src.observability.telemetry import get_telemetry
 
         counts = get_telemetry().get_event_counts(
             session_id, ("knowledge_ingestion", "knowledge_recompute", "input_index", "memory_promotion")

@@ -29,7 +29,10 @@ from urllib.parse import parse_qsl, urlparse
 from src import config
 from src.egress import filters
 from src.egress.filters import FilterContext
-from src.egress.fragments import (
+from src.egress.log import EgressError, EgressLog, EgressRecord, egress_bytes_for_session
+from src.llm.base import LLMProvider, LLMResponse
+from src.logger import get_logger
+from src.utils.egress_fragments import (
     ARTIFACT_NAMES_SOURCE,
     ARTIFACT_PROFILE_SOURCE,
     FRAGMENT_SEPARATOR,
@@ -42,9 +45,6 @@ from src.egress.fragments import (
     public_message,
     strip_taint_marks,
 )
-from src.egress.log import EgressError, EgressLog, EgressRecord, egress_bytes_for_session
-from src.llm.base import LLMProvider, LLMResponse
-from src.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -393,7 +393,7 @@ class EgressGate:
             else:
                 raise EgressRefused(
                     "Mensagem com conteúdo não textual e sem rótulo de origem: a camada de saída não a envia "
-                    "(rotule o conteúdo com src.egress.fragments.labeled)."
+                    "(rotule o conteúdo com src.utils.egress_fragments.labeled)."
                 )
         if fragments:
             public["content"] = FRAGMENT_SEPARATOR.join(
@@ -765,9 +765,9 @@ def caller_tainted() -> bool:
     if override:
         return role_tainted(override)
     try:
-        from src.agent_runtime.context import get_agent_context_optional
         from src.llm.allocation import current_allocation
         from src.llm.session import get_session_routing
+        from src.utils.agent_context import get_agent_context_optional
 
         ctx = get_agent_context_optional()
         if ctx is None:
@@ -831,7 +831,7 @@ def caller_role() -> str | None:
     if override:
         return override
     try:
-        from src.agent_runtime.context import get_agent_context_optional
+        from src.utils.agent_context import get_agent_context_optional
 
         ctx = get_agent_context_optional()
         return ctx.agent_id if ctx is not None else None

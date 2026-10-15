@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from src.skills.document_processor.enrichment import ProjectMeta
-from src.skills.document_processor.extractors.registry import ExtractorRegistry
-from src.skills.document_processor.indexer import DocumentIndexer
-from src.skills.document_processor.registry_store import InMemoryDocumentRegistry
+from src.documents.enrichment import ProjectMeta
+from src.documents.extractors.registry import ExtractorRegistry
+from src.documents.indexer import DocumentIndexer
+from src.documents.registry_store import InMemoryDocumentRegistry
 from tests.support.fake_embedding_provider import FakeEmbeddingProvider
 
 

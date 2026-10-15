@@ -7,7 +7,7 @@ import threading
 import uuid
 from typing import Any
 
-from src.session import Session
+from src.session.manager import Session
 
 
 def _now(delta: float = 0.0) -> str:

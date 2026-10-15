@@ -16,17 +16,17 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agents.researcher.consult import consult_tools, run_consult
 from src import config as cfg
-from src.agent_runtime.context import AgentContext, bind_agent_context, current_context
+from src.agents.researcher.consult import consult_tools, run_consult
+from src.artifacts.output_manager import OutputManager
 from src.llm.base import LLMProvider, LLMResponse, ToolCall
-from src.orchestrator import AgentTask, Orchestrator
-from src.output_manager import OutputManager
+from src.orchestration.orchestrator import AgentTask, Orchestrator
+from src.orchestration.usage import UsageBudget, UsageTracker
 from src.research_consult import DECISOES_RESERVADAS
 from src.research_consult.query_guard import Ok, Recusa, check_query, protected_file_names
 from src.skills.base import SkillResult
 from src.skills.human_feedback.skill import HumanFeedbackSkill
-from src.usage import UsageBudget, UsageTracker
+from src.utils.agent_context import AgentContext, bind_agent_context, current_context
 
 SESSION = "sess_consult"
 
@@ -146,7 +146,7 @@ class Harness:
 def _isolate(monkeypatch):
     token = current_context.set(None)
     tel = MagicMock()
-    monkeypatch.setattr("src.orchestrator.get_telemetry", lambda: tel)
+    monkeypatch.setattr("src.orchestration.orchestrator.get_telemetry", lambda: tel)
     monkeypatch.setattr("src.llm.metering.get_telemetry", lambda: tel)
     yield tel
     current_context.reset(token)
@@ -446,7 +446,7 @@ class TestSemiNaoLeTerminal:
 
 # --------------------------------------------------------------------------- revisão de segurança (PR #97)
 
-from agents.researcher.consult import CONSULT_SYSTEM_PROMPT, format_answer  # noqa: E402
+from src.agents.researcher.consult import CONSULT_SYSTEM_PROMPT, format_answer  # noqa: E402
 from src.research_consult import classify_reserved  # noqa: E402
 
 

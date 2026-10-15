@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.autonomous_loop import AutonomousLoop
-from src.orchestrator import AgentResult, AgentTask
-from src.usage import StopReason, UsageBudget, UsageTracker
+from src.orchestration.autonomous_loop import AutonomousLoop
+from src.orchestration.orchestrator import AgentResult, AgentTask
+from src.orchestration.usage import StopReason, UsageBudget, UsageTracker
 
 
 def _narrative(resumo: str = "Summary") -> str:
@@ -19,7 +19,7 @@ def _narrative(resumo: str = "Summary") -> str:
 
 @pytest.fixture
 def mock_telemetry():
-    with patch("src.autonomous_loop.get_telemetry") as mock:
+    with patch("src.orchestration.autonomous_loop.get_telemetry") as mock:
         instance = MagicMock()
         mock.return_value = instance
         yield instance
@@ -77,7 +77,7 @@ async def test_autonomous_loop_complex_path_success(mock_telemetry):
     orchestrator._execute_agent.side_effect = [success_result, promo_result, synth_result]
     
     with patch.object(AutonomousLoop, "_is_complex_triage", AsyncMock(return_value=True)), \
-         patch("src.autonomous_loop.get_telemetry", return_value=mock_telemetry), \
+         patch("src.orchestration.autonomous_loop.get_telemetry", return_value=mock_telemetry), \
          patch("src.config.REVIEW_ENABLED", False):
         loop = AutonomousLoop(orchestrator)
         result = await loop.run("Complex task", "m1")
@@ -111,7 +111,7 @@ async def test_autonomous_loop_complex_path_retry_success(mock_telemetry):
     orchestrator._execute_agent.side_effect = [fail_result, success_result, promo_result, synth_result]
     
     with patch.object(AutonomousLoop, "_is_complex_triage", AsyncMock(return_value=True)), \
-         patch("src.autonomous_loop.get_telemetry", return_value=mock_telemetry), \
+         patch("src.orchestration.autonomous_loop.get_telemetry", return_value=mock_telemetry), \
          patch("src.config.REVIEW_ENABLED", False):
         loop = AutonomousLoop(orchestrator)
         loop.max_retries = 2
@@ -242,7 +242,7 @@ async def test_autonomous_loop_synthesis(mock_orchestrator, mock_telemetry):
 
 # ---------------------------------------------------------------------------
 # V18/usage-limits — fechamento gracioso por limite de orçamento
-# (src/usage.py UsageBudget/UsageTracker como condições de parada reais)
+# (src/orchestration/usage.py UsageBudget/UsageTracker como condições de parada reais)
 # ---------------------------------------------------------------------------
 
 
@@ -286,7 +286,7 @@ async def test_autonomous_loop_closes_session_when_token_budget_exhausted():
         clock=lambda: 0.0,
     )
 
-    with patch("src.autonomous_loop.get_telemetry", return_value=MagicMock()), \
+    with patch("src.orchestration.autonomous_loop.get_telemetry", return_value=MagicMock()), \
          patch.object(AutonomousLoop, "_is_complex_triage", AsyncMock(return_value=True)):
         result = await loop._run_complex_path("tarefa", "exec_tokens")
 
@@ -320,7 +320,7 @@ async def test_autonomous_loop_closes_session_when_connection_retries_exhausted(
         clock=lambda: 0.0,
     )
 
-    with patch("src.autonomous_loop.get_telemetry", return_value=MagicMock()), \
+    with patch("src.orchestration.autonomous_loop.get_telemetry", return_value=MagicMock()), \
          patch.object(AutonomousLoop, "_is_complex_triage", AsyncMock(return_value=True)):
         result = await loop._run_complex_path("tarefa", "exec_conn")
 
@@ -363,8 +363,8 @@ async def test_autonomous_loop_time_limit_cancels_pending_and_closes_session():
         connection_retry_reader=lambda: 0,
     )
 
-    with patch("src.autonomous_loop.get_telemetry", return_value=MagicMock()), \
-         patch("src.autonomous_loop.LIMIT_GRACE_SECONDS", 0.05), \
+    with patch("src.orchestration.autonomous_loop.get_telemetry", return_value=MagicMock()), \
+         patch("src.orchestration.autonomous_loop.LIMIT_GRACE_SECONDS", 0.05), \
          patch.object(AutonomousLoop, "_is_complex_triage", AsyncMock(return_value=True)):
         result = await loop._run_complex_path("tarefa lenta", "exec_time")
 
@@ -401,7 +401,7 @@ async def test_autonomous_loop_all_tasks_abandoned_closes_session_with_retries_r
         clock=lambda: 0.0,
     )
 
-    with patch("src.autonomous_loop.get_telemetry", return_value=MagicMock()), \
+    with patch("src.orchestration.autonomous_loop.get_telemetry", return_value=MagicMock()), \
          patch.object(AutonomousLoop, "_is_complex_triage", AsyncMock(return_value=True)):
         result = await loop._run_complex_path("tarefa", "exec_retries")
 
@@ -463,7 +463,7 @@ async def test_autonomous_loop_does_not_redispatch_task_abandoned_in_earlier_cyc
         clock=lambda: 0.0,
     )
 
-    with patch("src.autonomous_loop.get_telemetry", return_value=MagicMock()), \
+    with patch("src.orchestration.autonomous_loop.get_telemetry", return_value=MagicMock()), \
          patch.object(AutonomousLoop, "_is_complex_triage", AsyncMock(return_value=True)):
         result = await loop._run_complex_path("tarefa", "exec_reintro")
 

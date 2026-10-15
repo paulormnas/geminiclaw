@@ -24,9 +24,9 @@ from src.claims.graph import update_discovery_claim, write_discovery_claim
 from src.claims.model import Afirmacao, Conclusao
 from src.claims.service import ClaimService
 from src.claims.store import FILENAME, ClaimStore
-from src.knowledge.normalization import normalize_metric_name
 from src.logger import get_logger
 from src.numeric_refs.provenance_file import FILE_NAME as NUMERIC_FILE
+from src.utils.normalization import normalize_metric_name
 
 logger = get_logger(__name__)
 

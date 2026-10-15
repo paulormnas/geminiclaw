@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.platform_info import detect_board, detect_platform, normalize_arch
+from src.host.platform_info import detect_board, detect_platform, normalize_arch
 
 pytestmark = pytest.mark.unit
 

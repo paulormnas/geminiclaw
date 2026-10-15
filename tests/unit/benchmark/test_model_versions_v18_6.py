@@ -90,7 +90,7 @@ def test_indice_semantico_recria_a_colecao_depois_do_reset() -> None:
 
 
 def test_indexador_de_documentos_recria_a_colecao_depois_do_reset() -> None:
-    from src.skills.document_processor.indexer import DocumentIndexer
+    from src.documents.indexer import DocumentIndexer
     from tests.support.fake_embedding_provider import FakeEmbeddingProvider
 
     kwargs = {"embedding_provider": FakeEmbeddingProvider(), "registry": object()}

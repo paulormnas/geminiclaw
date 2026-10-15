@@ -7,11 +7,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.context_loader import ContextBundle, ContextLoader
-from src.egress.fragments import ContentOrigin, PromptFragment, expand_marks, mark_fragment
 from src.llm.vision import VisionConfigError
-from src.orchestrator import Orchestrator
+from src.orchestration.orchestrator import Orchestrator
 from src.report.report_model import build_report_data, parse_narrative, render_report_markdown
+from src.research_data.context_loader import ContextBundle, ContextLoader
+from src.utils.egress_fragments import ContentOrigin, PromptFragment, expand_marks, mark_fragment
 
 from .conftest import write_manifest
 
@@ -177,7 +177,7 @@ def test_marcacoes_do_payload(context_dir: Path):
 
 
 def test_banner_com_contagens_e_compartilhaveis(context_dir: Path):
-    from src.cli import data_banner_lines
+    from src.cli.main import data_banner_lines
 
     bundle = _bundle_com_tres_arquivos(context_dir)
     lines = data_banner_lines(bundle)
@@ -241,7 +241,7 @@ def test_relatorio_sem_arquivos_de_entrada():
 
 
 def test_cli_nao_inicia_com_manifesto_invalido(context_dir: Path, capsys):
-    from src.cli import load_context_with_confirmation
+    from src.cli.main import load_context_with_confirmation
 
     write_manifest(context_dir, "versao: 1\narquivos:\n  - caminho: ../fora.csv\n    marcacao: dado_de_pesquisa\n")
     assert load_context_with_confirmation(str(context_dir)) is None

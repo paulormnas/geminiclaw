@@ -7,12 +7,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.cli_opportunities import handle_opportunities_command
-from src.human_gate import HumanGate, Source
+from src.artifacts.output_manager import OutputManager
+from src.cli.opportunities import handle_opportunities_command
+from src.gate.human_gate import HumanGate, Source
 from src.knowledge import opportunities, validation
 from src.knowledge.errors import HumanConfirmationRequiredError
-from src.orchestrator import AgentTask, Orchestrator
-from src.output_manager import OutputManager
+from src.orchestration.orchestrator import AgentTask, Orchestrator
 from src.research_consult import DECISOES_RESERVADAS, PENDENTE_PESQUISADOR
 from tests.support.hypothesis_world import AGENTE, CURATOR, ORQ, PESQUISADOR, HypothesisWorld
 

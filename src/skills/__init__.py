@@ -1,6 +1,6 @@
 from typing import Any, Callable, Dict, List, Optional
 
-from src.egress.fragments import ContentOrigin, ToolOutput
+from src.utils.egress_fragments import ContentOrigin, ToolOutput
 
 from .base import BaseSkill
 from .search_quick.skill import QuickSearchSkill

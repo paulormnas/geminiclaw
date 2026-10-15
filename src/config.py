@@ -198,7 +198,7 @@ COMM_EVAL_MIN_KAPPA = float(get_env("COMM_EVAL_MIN_KAPPA", default="0.6"))
 COMM_EVAL_LOOP_MIN_LENGTH = int(get_env("COMM_EVAL_LOOP_MIN_LENGTH", default="3"))
 
 # --- Orçamento de Uso da Sessão (V18 / Spec usage-limits) ---
-# UsageBudget/UsageTracker (src/usage.py) transformam estes limites em condições de
+# UsageBudget/UsageTracker (src/orchestration/usage.py) transformam estes limites em condições de
 # parada reais (não apenas avisos — ver OPERATIONAL_THRESHOLDS abaixo). Fonte única:
 # o AutonomousLoop lê estes limites exclusivamente daqui, nunca de os.environ direto.
 #
@@ -387,7 +387,7 @@ SKILL_HUMAN_FEEDBACK_ENABLED = get_env_bool("SKILL_HUMAN_FEEDBACK_ENABLED", defa
 # apenas o modo 'assisted' pausa e pergunta se o pesquisador quer suspender a sessão).
 # V18/usage-limits — os avisos agora são percentuais dos limites reais de UsageBudget
 # (SESSION_MAX_TOKENS, SESSION_MAX_MINUTES), que passam a ser condições de parada
-# (ver src/usage.py). session_duration_min (antigo, em minutos absolutos) vira alias:
+# (ver src/orchestration/usage.py). session_duration_min (antigo, em minutos absolutos) vira alias:
 # se definido, é convertido para percentual de SESSION_MAX_MINUTES.
 _session_duration_min_env = get_env("OPERATIONAL_THRESHOLD_SESSION_DURATION_MIN")
 if _session_duration_min_env is not None and SESSION_MAX_MINUTES:
@@ -682,7 +682,7 @@ _node_id_env = get_env("NODE_ID")
 if _node_id_env:
     NODE_ID = _node_id_env
 else:
-    from src.knowledge.ids import get_or_create_node_id
+    from src.utils.node_id import get_or_create_node_id
     NODE_ID = get_or_create_node_id()
 
 

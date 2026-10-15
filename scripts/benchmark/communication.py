@@ -23,14 +23,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from src.agents.validator_agent import (
-    _evaluate_metric_criteria,
-    _find_metrics_file,
-    _metric_criteria,
-    issue_signature,
-)
-from src.artifact_match import resolve_artifacts
+from src.agents.validator.agent import _find_metrics_file, issue_signature
+from src.artifacts.match import resolve_artifacts
 from src.config import COMM_EVAL_CALIBRATION_SIZE, COMM_EVAL_LOOP_MIN_LENGTH
+from src.knowledge.metric_criteria import _evaluate_metric_criteria, _metric_criteria
 
 APPROVED_REVIEW = ("pass", "divergent_but_documented")
 Verdict = Literal["fulfilled", "unfulfilled", "indeterminate"]

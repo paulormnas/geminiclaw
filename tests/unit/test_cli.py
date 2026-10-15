@@ -1,4 +1,4 @@
-"""Testes unitários para src/cli.py.
+"""Testes unitários para src/cli/main.py.
 
 Cobre parsing de argumentos, formatação de resultados,
 e comportamento do handler de SIGINT.
@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.cli import (
+from src.cli.main import (
     BANNER,
     EXIT_COMMANDS,
     STATUS_ICONS,
@@ -18,7 +18,7 @@ from src.cli import (
     format_agent_result,
     format_result,
 )
-from src.orchestrator import AgentResult, OrchestratorResult
+from src.orchestration.orchestrator import AgentResult, OrchestratorResult
 
 # ─── Helpers ────────────────────────────────────────────────────────
 
@@ -243,8 +243,8 @@ class TestConstants:
 class TestSignalHandler:
     """Testes do comportamento do handler SIGINT."""
 
-    @patch("src.cli._create_orchestrator")
-    @patch("src.cli.signal.signal")
+    @patch("src.cli.main._create_orchestrator")
+    @patch("src.cli.main.signal.signal")
     def test_sigint_handler_registrado(
         self,
         mock_signal: MagicMock,
@@ -254,17 +254,17 @@ class TestSignalHandler:
         mock_orchestrator = MagicMock()
         mock_create.return_value = mock_orchestrator
 
-        with patch("src.llm.session.build_session_routing"), patch("src.cli.print_session_banner"), \
-             patch("src.cli.asyncio.run"):
-            with patch("src.cli.execute_prompt", new_callable=MagicMock):
+        with patch("src.llm.session.build_session_routing"), patch("src.cli.main.print_session_banner"), \
+             patch("src.cli.main.asyncio.run"):
+            with patch("src.cli.main.execute_prompt", new_callable=MagicMock):
                 with patch("sys.argv", ["geminiclaw", "teste"]):
-                    from src.cli import main
+                    from src.cli.main import main
                     main()
 
         # Verifica que signal.signal foi chamado com SIGINT
         mock_signal.assert_any_call(signal.SIGINT, pytest.approx(None, abs=None) if False else mock_signal.call_args_list[0][0][1])
 
-    @patch("src.cli._create_orchestrator")
+    @patch("src.cli.main._create_orchestrator")
     def test_main_prompt_direto(
         self,
         mock_create: MagicMock,
@@ -273,16 +273,16 @@ class TestSignalHandler:
         mock_orchestrator = MagicMock()
         mock_create.return_value = mock_orchestrator
 
-        with patch("src.llm.session.build_session_routing"), patch("src.cli.print_session_banner"), \
-             patch("src.cli.asyncio.run") as mock_run:
-            with patch("src.cli.execute_prompt", new_callable=MagicMock) as mock_execute:
+        with patch("src.llm.session.build_session_routing"), patch("src.cli.main.print_session_banner"), \
+             patch("src.cli.main.asyncio.run") as mock_run:
+            with patch("src.cli.main.execute_prompt", new_callable=MagicMock) as mock_execute:
                 with patch("sys.argv", ["geminiclaw", "meu prompt"]):
-                    from src.cli import main
+                    from src.cli.main import main
                     main()
 
         mock_run.assert_any_call(mock_execute.return_value)
 
-    @patch("src.cli._create_orchestrator")
+    @patch("src.cli.main._create_orchestrator")
     def test_main_modo_interativo(
         self,
         mock_create: MagicMock,
@@ -291,15 +291,15 @@ class TestSignalHandler:
         mock_orchestrator = MagicMock()
         mock_create.return_value = mock_orchestrator
 
-        with patch("src.cli.asyncio.run") as mock_run:
-            with patch("src.cli.interactive_mode", new_callable=MagicMock) as mock_interactive:
+        with patch("src.cli.main.asyncio.run") as mock_run:
+            with patch("src.cli.main.interactive_mode", new_callable=MagicMock) as mock_interactive:
                 with patch("sys.argv", ["geminiclaw"]):
-                    from src.cli import main
+                    from src.cli.main import main
                     main()
 
         mock_run.assert_any_call(mock_interactive.return_value)
 
-    @patch("src.cli._create_orchestrator")
+    @patch("src.cli.main._create_orchestrator")
     def test_main_falha_inicializacao(
         self,
         mock_create: MagicMock,
@@ -309,6 +309,6 @@ class TestSignalHandler:
 
         with patch("sys.argv", ["geminiclaw", "teste"]):
             with pytest.raises(SystemExit) as exc_info:
-                from src.cli import main
+                from src.cli.main import main
                 main()
             assert exc_info.value.code == 1

@@ -7,13 +7,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.agent_runtime.context import AgentContext, current_context
-from src.embeddings.reindex import CollectionReindexer, text_to_embed
-from src.orchestrator import Orchestrator
-from src.skills.document_processor.extractors.registry import ExtractorRegistry
-from src.skills.document_processor.indexer import DocumentIndexer
-from src.skills.document_processor.registry_store import InMemoryDocumentRegistry
+from src.documents.extractors.registry import ExtractorRegistry
+from src.documents.indexer import DocumentIndexer
+from src.documents.registry_store import InMemoryDocumentRegistry
+from src.documents.reindex import CollectionReindexer, text_to_embed
+from src.orchestration.orchestrator import Orchestrator
 from src.skills.document_processor.skill import DocumentProcessorSkill
+from src.utils.agent_context import AgentContext, current_context
 from tests.support.fake_embedding_provider import FakeEmbeddingProvider
 from tests.unit.input_index.conftest import PROJ_A, PROJ_B
 

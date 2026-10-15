@@ -13,17 +13,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.autonomous_loop import AutonomousLoop
+from src.artifacts.output_manager import OutputManager
 from src.knowledge.graph_store import InMemoryGraphStore
 from src.knowledge.ingestion_queue import PENDING_FILENAME
 from src.knowledge.projects import create_project
-from src.orchestrator import AgentResult, AgentTask, Orchestrator
-from src.output_manager import OutputManager
-from src.plan_normalizer import normalize_plan
-from src.session import Session
-from src.skills.code.manifest import WorkspaceManifest
+from src.orchestration.autonomous_loop import AutonomousLoop
+from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
+from src.orchestration.plan_normalizer import normalize_plan
+from src.session.manager import Session
 from src.skills.code.sandbox import PythonSandbox, extract_exception_type
 from src.skills.code.scientific_helpers import save_experiment_artifacts
+from src.utils.workspace_manifest import WorkspaceManifest
 from tests.support.task_loop import run_tasks
 
 # --- 1.1 contrato de artefatos ------------------------------------------------
@@ -83,8 +83,8 @@ def test_agent_task_tem_approach_opcional():
 
 @pytest.mark.unit
 def test_instrucoes_pedem_approach_datasets_e_baselines():
-    from agents.developer.agent import AGENT_INSTRUCTION as dev
-    from agents.researcher.agent import AGENT_INSTRUCTION as res
+    from src.agents.developer.agent import AGENT_INSTRUCTION as dev
+    from src.agents.researcher.agent import AGENT_INSTRUCTION as res
 
     assert "datasets" in dev and "baselines" in dev
     assert '"approach"' in res
@@ -302,8 +302,8 @@ def test_cli_knowledge_sync_aplica_pendentes(tmp_path, capsys):
 @pytest.mark.parametrize("exc,category", [(ConnectionError("rede"), "llm_connection"), (ValueError("x"), None)])
 async def test_agent_runtime_marca_categoria_do_erro(monkeypatch, exc, category):
     """Erro de conexão com o provedor vira ``error_category`` estruturada (sem heurística de texto)."""
-    from src.agent_runtime.context import AgentContext
     from src.agent_runtime.runtime import AgentRuntime
+    from src.utils.agent_context import AgentContext
 
     async def failing(**kwargs):
         raise exc

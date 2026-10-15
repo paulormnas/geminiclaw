@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.agents.validator_agent import ValidatorAgent, build_artifact_evidence
+from src.agents.validator.agent import ValidatorAgent, build_artifact_evidence
 from src.llm.base import LLMResponse
-from src.orchestrator import AgentResult, AgentTask, Orchestrator
+from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
 
 pytestmark = pytest.mark.unit
 
@@ -36,7 +36,7 @@ async def test_review_prompt_carries_evidence_and_path_rule(tmp_path):
     agent = ValidatorAgent(provider=provider)
     task = AgentTask(agent_id="developer", prompt="x", task_name="t", expected_artifacts=["metrics.json"],
                      validation_criteria=["A acurácia é reportada"])
-    with patch("src.agents.validator_agent.record_llm_call"):
+    with patch("src.agents.validator.agent.record_llm_call"):
         review = await agent.review_result(
             task=task, response_text="salvei /outputs/metrics.json", output_dir=tmp_path
         )
@@ -56,7 +56,7 @@ async def test_planning_task_inherits_session_mode():
     )
     orch.session_manager.create.return_value = MagicMock(id="agent-session")
     orch.output_manager.base_dir = MagicMock()
-    with patch("src.orchestrator.get_telemetry"):
+    with patch("src.orchestration.orchestrator.get_telemetry"):
         await orch._execute_agent(AgentTask(agent_id="researcher", prompt="planeje"), "sess")
     ctx = orch.agent_runtime.run.call_args.args[1]
     assert ctx.mode == "auto"
@@ -64,14 +64,14 @@ async def test_planning_task_inherits_session_mode():
 
 @pytest.mark.asyncio
 async def test_ask_researcher_in_auto_mode_records_the_question():
-    from src.agent_runtime.context import AgentContext, current_context
     from src.skills.human_feedback.skill import HumanFeedbackSkill
+    from src.utils.agent_context import AgentContext, current_context
 
     ctx = AgentContext(session_id="s", agent_session_id="a", agent_id="researcher", task_name="t", mode="auto",
                        output_dir=None, model="m", enable_thinking=False, execution_id="e1")
     token = current_context.set(ctx)
     try:
-        with patch("src.telemetry.get_telemetry") as tel:
+        with patch("src.observability.telemetry.get_telemetry") as tel:
             result = await HumanFeedbackSkill().run(
                 question="Qual split?", why_cant_proceed="ambíguo", options=["80/20"]
             )
@@ -96,7 +96,7 @@ async def test_plan_rejection_message_is_actionable_and_llm_is_told_not_to_rejec
 
     good = [{"agent_id": "developer", "task_name": "avaliar", "prompt": "p", "task_type": "validation",
              "validation_criteria": ["acurácia >= 0.80"]}]
-    with patch("src.agents.validator_agent.record_llm_call"):
+    with patch("src.agents.validator.agent.record_llm_call"):
         await agent.validate_plan(good, "tarefa")
     system = provider.generate.call_args.kwargs["system"]
     assert "Não reprove por causa de limiares" in system and "no máximo 3 problemas" in system

@@ -8,9 +8,9 @@ import logging
 
 import pytest
 
+import src.cli.infrastructure as infrastructure
 from scripts import platform_images as cli
-from src import infrastructure
-from src.platform_images import (
+from src.host.platform_images import (
     ENSURE_COMMAND,
     MANIFEST_PATH,
     PlatformImageError,
@@ -67,7 +67,7 @@ def test_plan_com_ollama_e_json() -> None:
 
 
 def test_plan_estrito_devolve_2_quando_ha_nao_validada(monkeypatch) -> None:
-    from src.platform_info import detect_platform
+    from src.host.platform_info import detect_platform
 
     other = detect_platform(system="Linux", machine="x86_64", page_size=4096,
                             daemon_info={"OSType": "linux", "Architecture": "x86_64"})
@@ -124,11 +124,11 @@ def test_arquitetura_errada_impede_a_sessao_citando_as_duas(sandbox_ref) -> None
 
 
 def test_plataforma_nao_validada_gera_um_unico_warning(sandbox_ref, caplog, monkeypatch) -> None:
-    from src.platform_info import detect_platform
+    from src.host.platform_info import detect_platform
 
     other = detect_platform(system="Linux", machine="aarch64", page_size=4096,
                             daemon_info={"OSType": "linux", "Architecture": "aarch64"})
-    monkeypatch.setattr("src.platform_images.current_platform", lambda _client: other)  # arm64 genérico
+    monkeypatch.setattr("src.host.platform_images.current_platform", lambda _client: other)  # arm64 genérico
     client = FakeClient("aarch64", {sandbox_ref: "arm64"})
     with caplog.at_level(logging.WARNING):
         check_sandbox_image(client)
@@ -145,13 +145,13 @@ def test_daemon_inacessivel_nao_bloqueia(monkeypatch) -> None:
     def no_daemon(timeout=10):
         raise PlatformImageError("sem daemon")
 
-    monkeypatch.setattr("src.platform_images.docker_client", no_daemon)
+    monkeypatch.setattr("src.host.platform_images.docker_client", no_daemon)
     check_sandbox_image()  # não levanta: ensure_infrastructure já avisa
 
 
 def test_infraestrutura_chama_a_checagem_so_com_a_skill_de_codigo(monkeypatch) -> None:
     calls: list[str] = []
-    monkeypatch.setattr("src.platform_images.check_sandbox_image", lambda *a, **k: calls.append("x"))
+    monkeypatch.setattr("src.host.platform_images.check_sandbox_image", lambda *a, **k: calls.append("x"))
     monkeypatch.setattr(infrastructure, "SKILL_CODE_ENABLED", False)
     infrastructure.check_sandbox_image_for_session()
     assert calls == []

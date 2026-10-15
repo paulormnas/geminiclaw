@@ -21,9 +21,9 @@ from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
 
 from src import config
+from src.artifacts.reserved_files import is_reserved_name
 from src.llm.retry import RETRY_BACKOFFS_SECONDS, emit_connection_retry, is_retryable_status
 from src.logger import get_logger
-from src.reserved_files import is_reserved_name
 from src.skills.code import fetch_assets as _fetch_script
 from src.skills.code.assets import AssetRecord, AssetSpec, cached_path, parse_assets, read_origin, verify_and_cache
 from src.skills.code.inputs import (

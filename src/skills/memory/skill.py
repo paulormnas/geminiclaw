@@ -1,11 +1,11 @@
 from typing import List, Optional
 
-from src.egress.fragments import ContentOrigin
 from src.egress.persisted import tags_tainted, with_taint_tag
 from src.logger import get_logger
 from src.skills.base import BaseSkill, SkillResult
 from src.skills.memory.long_term import LongTermMemory
 from src.skills.memory.short_term import ShortTermMemory
+from src.utils.egress_fragments import ContentOrigin
 
 logger = get_logger(__name__)
 

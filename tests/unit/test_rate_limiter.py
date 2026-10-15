@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from src.rate_limiter import AdaptiveRateLimiter
+from src.llm.rate_limiter import AdaptiveRateLimiter
 
 
 @pytest.fixture

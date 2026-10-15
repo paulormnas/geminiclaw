@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.triage import TriageClassifier
+from src.orchestration.triage import TriageClassifier
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -202,7 +202,7 @@ class TestAutonomousLoopTriageMode:
 
     async def test_heuristic_mode_never_calls_llm(self) -> None:
         """No modo heuristic, _llm_triage_direct nunca deve ser chamado."""
-        from src.autonomous_loop import AutonomousLoop
+        from src.orchestration.autonomous_loop import AutonomousLoop
 
         mock_orchestrator = MagicMock()
         loop = AutonomousLoop(orchestrator=mock_orchestrator)
@@ -215,7 +215,7 @@ class TestAutonomousLoopTriageMode:
 
     async def test_heuristic_mode_short_prompt_is_simple(self) -> None:
         """No modo heuristic, prompt curto deve ser classificado como SIMPLE."""
-        from src.autonomous_loop import AutonomousLoop
+        from src.orchestration.autonomous_loop import AutonomousLoop
 
         mock_orchestrator = MagicMock()
         loop = AutonomousLoop(orchestrator=mock_orchestrator)
@@ -227,7 +227,7 @@ class TestAutonomousLoopTriageMode:
 
     async def test_heuristic_mode_research_prompt_is_complex(self) -> None:
         """No modo heuristic, prompt de pesquisa deve ser classificado como COMPLEX."""
-        from src.autonomous_loop import AutonomousLoop
+        from src.orchestration.autonomous_loop import AutonomousLoop
 
         mock_orchestrator = MagicMock()
         loop = AutonomousLoop(orchestrator=mock_orchestrator)
@@ -243,7 +243,7 @@ class TestAutonomousLoopTriageMode:
 
     async def test_hybrid_mode_high_confidence_no_llm_call(self) -> None:
         """No modo hybrid com alta confiança, LLM não deve ser chamado."""
-        from src.autonomous_loop import AutonomousLoop
+        from src.orchestration.autonomous_loop import AutonomousLoop
 
         mock_orchestrator = MagicMock()
         loop = AutonomousLoop(orchestrator=mock_orchestrator)
@@ -261,7 +261,7 @@ class TestAutonomousLoopTriageMode:
 
     async def test_llm_mode_always_calls_llm(self) -> None:
         """No modo llm, _llm_triage_direct deve sempre ser chamado."""
-        from src.autonomous_loop import AutonomousLoop
+        from src.orchestration.autonomous_loop import AutonomousLoop
 
         mock_orchestrator = MagicMock()
         loop = AutonomousLoop(orchestrator=mock_orchestrator)

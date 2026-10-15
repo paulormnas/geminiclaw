@@ -25,7 +25,7 @@ from src.config import (
     PI_MIN_AVAILABLE_MEMORY_MB,
     PI_TEMPERATURE_LIMIT,
 )
-from src.health import PiHealthMonitor
+from src.host.health import PiHealthMonitor
 from src.logger import get_logger
 
 logger = get_logger(__name__)

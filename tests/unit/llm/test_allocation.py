@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.llm.allocation import allocation_banner_lines, build_allocation_profile, current_allocation
+from src.llm.model_router import ModelRouter
 from src.llm.session import bind_session_routing, build_session_routing
-from src.model_router import ModelRouter
 from tests.support.task_loop import run_tasks
 
 pytestmark = pytest.mark.unit
@@ -69,8 +69,8 @@ async def test_perfil_no_payload(nuvem):
 @pytest.mark.asyncio
 async def test_orquestrador_grava_o_perfil_antes_do_primeiro_envio(nuvem):
     """Cenário: Perfil no payload (gravado pelo orquestrador ao iniciar a sessão, antes de qualquer envio)."""
-    from src.orchestrator import AgentTask, Orchestrator
-    from src.session import Session
+    from src.orchestration.orchestrator import AgentTask, Orchestrator
+    from src.session.manager import Session
 
     session_manager = MagicMock()
     session_manager.create.return_value = Session(
@@ -94,7 +94,7 @@ async def test_orquestrador_grava_o_perfil_antes_do_primeiro_envio(nuvem):
 @pytest.mark.asyncio
 async def test_banner_com_bloco_alocacao(nuvem, capsys):
     """Cenário: Perfil no banner (uma linha por papel com trust, localidade e aceitação de dados brutos)."""
-    from src.cli import print_session_banner
+    from src.cli.main import print_session_banner
 
     routing = await build_session_routing()
     print_session_banner("assisted", context_dir="/inexistente", llm_routing=routing)

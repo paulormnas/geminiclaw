@@ -12,10 +12,10 @@ from src.claims.evidence import (
     report_evidence_builder,
 )
 from src.claims.model import Conclusao
-from src.egress.fragments import ContentOrigin
 from src.knowledge.graph_store import InMemoryGraphStore
 from src.knowledge.provenance import Actor
 from src.numeric_refs.render import RenderedCode
+from src.utils.egress_fragments import ContentOrigin
 from tests.support.curator_graph import ORQ, CuratorGraph
 
 pytestmark = pytest.mark.unit

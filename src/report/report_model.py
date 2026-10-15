@@ -11,8 +11,8 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from src.metrics_file import metrics_of
-from src.operation_metrics import describe_stop_reason
+from src.artifacts.metrics_file import metrics_of
+from src.report.operation_metrics import describe_stop_reason
 from src.utils.json_parser import extract_json
 
 NARRATIVE_FIELDS = (

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from src.knowledge.hypotheses import PlanExtras, legacy_hypotheses, split_plan
-from src.plan_normalizer import normalize_plan
+from src.orchestration.plan_normalizer import normalize_plan
 
 pytestmark = pytest.mark.unit
 

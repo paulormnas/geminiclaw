@@ -1,6 +1,6 @@
 import pytest
 
-from agents.base.agent import (
+from src.agents.base.agent import (
     AGENT_DESCRIPTION,
     AGENT_INSTRUCTION,
     AGENT_NAME,

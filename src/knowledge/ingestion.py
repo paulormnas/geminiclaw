@@ -30,6 +30,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src import config
+from src.artifacts.metrics_file import metrics_of
+from src.documents.hashing import IngestionFileError, insumo_tipo, sha256_file
 from src.knowledge import schema
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.failure_cause import classify_failure
@@ -38,11 +40,9 @@ from src.knowledge.ingestion_io import (
     MAX_DATASETS,
     MAX_METRICS,
     MAX_NAME_CHARS,
-    IngestionFileError,
     collect_evidence,
     finite_number,
     list_regular_files,
-    sha256_file,
     stat_regular,
 )
 from src.knowledge.ingestion_queue import (
@@ -53,17 +53,16 @@ from src.knowledge.ingestion_queue import (
     PendingQueue,
     event_key,
 )
-from src.knowledge.normalization import (
+from src.knowledge.projects import get_active_problem, validate_project_id
+from src.knowledge.provenance import Actor
+from src.knowledge.vocabulary import VocabularyError, resolve_metric
+from src.logger import get_logger
+from src.utils.normalization import (
     clean_free_text,
     normalize_domain_term,
     normalize_metric_name,
     split_metric_name,
 )
-from src.knowledge.projects import get_active_problem, validate_project_id
-from src.knowledge.provenance import Actor
-from src.knowledge.vocabulary import VocabularyError, resolve_metric
-from src.logger import get_logger
-from src.metrics_file import metrics_of
 
 logger = get_logger(__name__)
 
@@ -78,8 +77,6 @@ MODOS = schema.NODE_SCHEMAS["Sessao"].properties["modo"].enum or ()
 MOTIVOS_PARADA = schema.NODE_SCHEMAS["Sessao"].properties["motivo_parada"].enum or ()
 TIPOS_ABORDAGEM = schema.NODE_SCHEMAS["Abordagem"].properties["tipo"].enum or ()
 
-_DATASET_EXT = frozenset({".csv", ".tsv", ".xlsx", ".xls", ".ods", ".json", ".jsonl", ".parquet"})
-_ARTIGO_EXT = frozenset({".pdf", ".docx", ".md", ".txt", ".rst"})
 EXPERIMENTAL_TASK_TYPES = frozenset({"reproduction", "eda", "model_impl", "validation"})
 
 # Chaves que não descrevem o método (design §4).
@@ -293,16 +290,6 @@ def _clean(text: object, limit: int = _MAX_TEXT) -> str:
 # ---------------------------------------------------------------------------
 # Mapeamentos puros (design §2, §4)
 # ---------------------------------------------------------------------------
-
-
-def insumo_tipo(filename: str) -> str:
-    """``Insumo.tipo`` pela extensão: dataset, artigo ou outro."""
-    ext = Path(filename).suffix.lower()
-    if ext in _DATASET_EXT:
-        return "dataset"
-    if ext in _ARTIGO_EXT:
-        return "artigo"
-    return "outro"
 
 
 def _json_safe(value: Any, depth: int) -> tuple[bool, Any]:
@@ -822,7 +809,7 @@ class _Writer:
             for n in self.store.neighbors(exp_id, ["PRODUZIU"], direction="out", depth=1).nodes
             if n.label == "Resultado"
         }
-        from src.agents.validator_agent import evaluated_metric_names  # import tardio: módulo pesado
+        from src.knowledge.metric_criteria import evaluated_metric_names
 
         evaluated = set(evaluated_metric_names(sub.validation_criteria, metrics))
         for raw_name in list(metrics)[:MAX_METRICS]:
@@ -870,7 +857,7 @@ class _Writer:
             extra={"extra": {"exec_id": prov.exec_id, "subtarefa": task_name}},
         )
         try:
-            from src.telemetry import get_telemetry
+            from src.observability.telemetry import get_telemetry
 
             get_telemetry().record_agent_event(
                 execution_id=self.ctx.session_id,
@@ -951,7 +938,7 @@ class _Writer:
         metric = self._problem_metric()
         if metric is None:
             return
-        from src.agents.validator_agent import _METRIC_ALIASES  # import tardio: módulo pesado
+        from src.knowledge.metric_criteria import _METRIC_ALIASES
 
         def canon(text: str) -> str:
             key = normalize_metric_name(text)
@@ -976,7 +963,7 @@ class _Writer:
             "Resultado da métrica do Problema sem MEDE", extra={"extra": {"resultado": nome, "motivo": reason}}
         )
         try:
-            from src.telemetry import get_telemetry
+            from src.observability.telemetry import get_telemetry
 
             get_telemetry().record_agent_event(
                 execution_id=self.ctx.session_id,
@@ -1015,7 +1002,7 @@ class _Writer:
 
 def _has_quantitative(criteria: list[str]) -> bool:
     """Algum critério de aceite compara uma métrica conhecida com um limiar (decidido pelo revisor)."""
-    from src.agents.validator_agent import _metric_criteria  # import tardio: módulo pesado
+    from src.knowledge.metric_criteria import _metric_criteria
 
     return bool(_metric_criteria(list(criteria)))
 

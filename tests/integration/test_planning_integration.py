@@ -2,9 +2,9 @@ import os
 
 import pytest
 
-from src.orchestrator import Orchestrator
-from src.output_manager import OutputManager
-from src.session import SessionManager
+from src.artifacts.output_manager import OutputManager
+from src.orchestration.orchestrator import Orchestrator
+from src.session.manager import SessionManager
 
 
 @pytest.fixture

@@ -13,11 +13,11 @@ from pathlib import Path
 
 import pytest
 
+from src.documents.enrichment import ProjectMeta
+from src.documents.extractors.registry import ExtractorRegistry
+from src.documents.indexer import DocumentIndexer
+from src.documents.registry_store import PostgresDocumentRegistry
 from src.knowledge.input_index import index_input_snapshot
-from src.skills.document_processor.enrichment import ProjectMeta
-from src.skills.document_processor.extractors.registry import ExtractorRegistry
-from src.skills.document_processor.indexer import DocumentIndexer
-from src.skills.document_processor.registry_store import PostgresDocumentRegistry
 from tests.support.fake_embedding_provider import FakeEmbeddingProvider
 
 

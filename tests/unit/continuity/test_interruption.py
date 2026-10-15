@@ -9,12 +9,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.continuity import CheckpointRecorder, plan_entry, read_checkpoint
+from src.artifacts.output_manager import OutputManager
 from src.knowledge.graph_store import InMemoryGraphStore
 from src.knowledge.projects import create_project
-from src.orchestrator import AgentTask, Orchestrator
-from src.output_manager import OutputManager
-from src.session import SessionManager
+from src.orchestration.orchestrator import AgentTask, Orchestrator
+from src.session.continuity import CheckpointRecorder, plan_entry, read_checkpoint
+from src.session.manager import SessionManager
 from tests.support.session_fakes import FakeSessionManager
 
 pytestmark = pytest.mark.unit
@@ -108,7 +108,7 @@ def test_batimento_periodico_em_thread_independe_do_laco(tmp_path):
     """Batimento (I-5): a thread bate mesmo com o laço de eventos bloqueado e para ao ser interrompida."""
     import time
 
-    from src.heartbeat import SessionHeartbeat
+    from src.session.heartbeat import SessionHeartbeat
 
     calls: list[int] = []
     hb = SessionHeartbeat(lambda: calls.append(1) or True, interval=0.01).start()
@@ -124,7 +124,7 @@ def test_falso_positivo_de_obsolescencia_e_reafirmado(tmp_path):
     """I-5: sessão viva marcada `interrompida` por engano volta a `active` e perde o motivo herdado."""
     import time
 
-    from src.heartbeat import SessionHeartbeat
+    from src.session.heartbeat import SessionHeartbeat
 
     sm = FakeSessionManager()
     sm.add("viva", "active", {"prompt": "p"}, updated_delta=-3600)
@@ -154,12 +154,12 @@ def test_heartbeat_atualiza_so_updated_at_de_sessao_ativa():
     cursor = MagicMock()
     cursor.fetchone.return_value = {"id": "s1"}
     ctx, conn = _ctx(cursor)
-    with patch("src.session.get_connection", return_value=ctx):
+    with patch("src.session.manager.get_connection", return_value=ctx):
         assert SessionManager().heartbeat("s1") is True
     sql = conn.execute.call_args.args[0]
     assert "SET updated_at" in sql and "payload" not in sql and "status = 'active'" in sql
     cursor.fetchone.return_value = None
-    with patch("src.session.get_connection", return_value=ctx):
+    with patch("src.session.manager.get_connection", return_value=ctx):
         assert SessionManager().heartbeat("s1") is False
 
 
@@ -170,7 +170,7 @@ def test_mark_stale_e_atomico_e_condicional():
     cursor = MagicMock()
     cursor.fetchall.return_value = [row]
     ctx, conn = _ctx(cursor)
-    with patch("src.session.get_connection", return_value=ctx):
+    with patch("src.session.manager.get_connection", return_value=ctx):
         out = SessionManager().mark_stale(300)
     sql, params = conn.execute.call_args.args
     assert "status = 'active'" in sql and "updated_at <" in sql and "agent_id = 'orchestrator'" in sql

@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.cli import build_parser, main, show_sessions, stop_sessions
+from src.cli.main import build_parser, main, show_sessions, stop_sessions
 
 
 def _make_mock_container(
@@ -129,7 +129,7 @@ class TestCliStopSessions:
 class TestCliMainCommands:
     """Valida despache dos comandos sessions e stop na função main()."""
 
-    @patch("src.cli.show_sessions")
+    @patch("src.cli.main.show_sessions")
     def test_main_sessions_command(self, mock_show):
         with patch("sys.argv", ["geminiclaw", "sessions"]):
             with pytest.raises(SystemExit) as exc:
@@ -137,7 +137,7 @@ class TestCliMainCommands:
             assert exc.value.code == 0
             mock_show.assert_called_once()
 
-    @patch("src.cli.stop_sessions")
+    @patch("src.cli.main.stop_sessions")
     def test_main_stop_all_command(self, mock_stop):
         with patch("sys.argv", ["geminiclaw", "stop"]):
             with pytest.raises(SystemExit) as exc:
@@ -145,7 +145,7 @@ class TestCliMainCommands:
             assert exc.value.code == 0
             mock_stop.assert_called_once_with(session_id=None)
 
-    @patch("src.cli.stop_sessions")
+    @patch("src.cli.main.stop_sessions")
     def test_main_stop_with_flag(self, mock_stop):
         with patch("sys.argv", ["geminiclaw", "stop", "--session", "sess_123"]):
             with pytest.raises(SystemExit) as exc:
@@ -158,8 +158,8 @@ class TestCliMainCommands:
 class TestCliSigintCleanup:
     """Valida que o handler de SIGINT remove os sandboxes de código que ficaram para trás."""
 
-    @patch("src.cli._create_orchestrator")
-    @patch("src.cli.signal.signal")
+    @patch("src.cli.main._create_orchestrator")
+    @patch("src.cli.main.signal.signal")
     def test_sigint_handler_cleans_up_sandbox_containers(
         self,
         mock_signal: MagicMock,
@@ -167,9 +167,9 @@ class TestCliSigintCleanup:
     ):
         mock_create.return_value = MagicMock()
 
-        with patch("src.llm.session.build_session_routing"), patch("src.cli.print_session_banner"), \
-             patch("src.cli.asyncio.run"):
-            with patch("src.cli.execute_prompt", new_callable=MagicMock):
+        with patch("src.llm.session.build_session_routing"), patch("src.cli.main.print_session_banner"), \
+             patch("src.cli.main.asyncio.run"):
+            with patch("src.cli.main.execute_prompt", new_callable=MagicMock):
                 with patch("sys.argv", ["geminiclaw", "teste"]):
                     main()
 
@@ -180,7 +180,7 @@ class TestCliSigintCleanup:
         # Simula o disparo do sinal SIGINT
         with patch("sys.exit") as mock_exit:
             with patch("src.skills.code.sandbox.cleanup_sandbox_containers", return_value=2) as mock_cleanup:
-                with patch("src.telemetry.get_telemetry") as mock_tel:
+                with patch("src.observability.telemetry.get_telemetry") as mock_tel:
                     mock_tel.return_value.flush = AsyncMock()
                     handler(signal.SIGINT, None)
 

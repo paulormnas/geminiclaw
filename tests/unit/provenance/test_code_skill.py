@@ -8,13 +8,13 @@ from unittest.mock import patch
 
 import pytest
 
-from src.agent_runtime.context import AgentContext, bind_agent_context, current_context
 from src.provenance.ledger import ExecutionLedger, get_ledger, set_ledger
 from src.provenance.records import status_of
 from src.provenance.store import TIPO_INICIO, TIPO_TERMINO, MemoryStore
 from src.skills.code.assets import AssetRecord
 from src.skills.code.sandbox import ImageInfo, PhaseTiming, SandboxResult
 from src.skills.code.skill import PROVENANCE_BEGIN_ERROR, CodeSkill
+from src.utils.agent_context import AgentContext, bind_agent_context, current_context
 
 pytestmark = pytest.mark.unit
 

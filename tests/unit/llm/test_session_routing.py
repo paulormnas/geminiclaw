@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.llm.model_router import ModelRouter
 from src.llm.session import (
     SessionRouting,
     bind_session_routing,
@@ -15,7 +16,6 @@ from src.llm.session import (
     build_session_routing,
     get_catalog,
 )
-from src.model_router import ModelRouter
 from tests.support.task_loop import run_tasks
 
 pytestmark = pytest.mark.unit
@@ -60,8 +60,8 @@ async def test_mapa_no_payload(nuvem):
 @pytest.mark.asyncio
 async def test_handle_request_grava_llm_routing_no_payload_da_sessao(nuvem):
     """Cenário: Mapa no payload, gravado pelo orquestrador ao iniciar a sessão."""
-    from src.orchestrator import AgentTask, Orchestrator
-    from src.session import Session
+    from src.orchestration.orchestrator import AgentTask, Orchestrator
+    from src.session.manager import Session
 
     session_manager = MagicMock()
     session_manager.create.return_value = Session(
@@ -85,7 +85,7 @@ async def test_handle_request_grava_llm_routing_no_payload_da_sessao(nuvem):
 async def test_sessao_nao_comeca_sem_modelo_elegivel(monkeypatch):
     """Cenário: Nenhum modelo sob a política (a sessão não começa; nenhuma sessão é criada)."""
     from src.llm.routing import NoEligibleModelError
-    from src.orchestrator import AgentTask, Orchestrator
+    from src.orchestration.orchestrator import AgentTask, Orchestrator
 
     monkeypatch.setattr("src.config.OLLAMA_BASE_URL", "")
     session_manager = MagicMock()
@@ -101,7 +101,7 @@ async def test_sessao_nao_comeca_sem_modelo_elegivel(monkeypatch):
 @pytest.mark.asyncio
 async def test_banner_sem_segredos(nuvem, capsys):
     """Cenário: Banner (uma linha por papel, sem nenhum valor de *_API_KEY)."""
-    from src.cli import print_session_banner
+    from src.cli.main import print_session_banner
 
     routing = await build_session_routing()
     print_session_banner("assisted", context_dir="/inexistente", llm_routing=routing)
@@ -133,7 +133,7 @@ async def test_mapa_e_resolvido_uma_vez_e_nao_muda_na_sessao(nuvem, monkeypatch)
     # Mudanças posteriores de ambiente/chaves não alteram o mapa da sessão em curso.
     monkeypatch.setattr("src.config.LLM_DATA_POLICY", "self_hosted_only")
     monkeypatch.setattr("src.config.GEMINI_API_KEY", None)
-    from src.model_config import get_role_model_config
+    from src.llm.model_config import get_role_model_config
 
     assert get_role_model_config("researcher").provider == "anthropic"
     assert routing.payload() == before
@@ -195,7 +195,7 @@ async def test_dica_sem_provedor_na_subtarefa_despachada(nuvem, monkeypatch, cap
     """Cenário: Dica sem provedor (o Developer usa o modelo resolvido e um WARNING cita a dica)."""
     import logging
 
-    from src.orchestrator import AgentTask, Orchestrator
+    from src.orchestration.orchestrator import AgentTask, Orchestrator
 
     routing = await build_session_routing()
     bind_session_routing(routing)
@@ -222,7 +222,7 @@ async def test_dica_sem_provedor_na_subtarefa_despachada(nuvem, monkeypatch, cap
 @pytest.mark.asyncio
 async def test_dica_valida_na_subtarefa_despachada(nuvem):
     """Cenário: Dica válida (a subtarefa do Developer usa ollama/qwen3:8b)."""
-    from src.orchestrator import AgentTask, Orchestrator
+    from src.orchestration.orchestrator import AgentTask, Orchestrator
 
     routing = await build_session_routing()
     bind_session_routing(routing)
@@ -258,8 +258,8 @@ def test_resolucao_fora_de_sessao_nao_faz_health_check(monkeypatch):
 @pytest.mark.asyncio
 async def test_session_start_registra_catalog_hash_na_telemetria(nuvem):
     """Cenário: Início de sessão na telemetria (catalog_hash, sem segredos)."""
-    from src.orchestrator import AgentTask, Orchestrator
-    from src.session import Session
+    from src.orchestration.orchestrator import AgentTask, Orchestrator
+    from src.session.manager import Session
 
     session_manager = MagicMock()
     session_manager.create.return_value = Session(
@@ -268,7 +268,7 @@ async def test_session_start_registra_catalog_hash_na_telemetria(nuvem):
     orchestrator = Orchestrator(session_manager=session_manager, agent_runtime=MagicMock())
     telemetry = MagicMock()
 
-    with patch("src.orchestrator.get_telemetry", return_value=telemetry), \
+    with patch("src.orchestration.orchestrator.get_telemetry", return_value=telemetry), \
          patch.object(orchestrator, "_execute_agent", AsyncMock(side_effect=RuntimeError("parou"))):
         with pytest.raises(RuntimeError, match="parou"):
             await run_tasks(orchestrator, "teste", [AgentTask(agent_id="developer", prompt="p")])

@@ -11,8 +11,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.skills.document_processor.chunker import DocumentChunk
-from src.skills.document_processor.indexer import DocumentIndexer
+from src.documents.chunker import DocumentChunk
+from src.documents.indexer import DocumentIndexer
 from tests.support.fake_embedding_provider import FakeEmbeddingProvider
 
 
@@ -31,7 +31,7 @@ def _chunk(chunk_id: str, document_id: str, content: str, index: int = 0) -> Doc
 
 
 def _mocked_qdrant_client(existing_collections=None):
-    patcher = patch("src.skills.document_processor.indexer.QdrantClient")
+    patcher = patch("src.documents.indexer.QdrantClient")
     mock_cls = patcher.start()
     mock_client = MagicMock()
     mock_cls.return_value = mock_client

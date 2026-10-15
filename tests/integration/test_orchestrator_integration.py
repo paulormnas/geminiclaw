@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.orchestrator import AgentResult, AgentTask, Orchestrator
-from src.output_manager import OutputManager
-from src.session import SessionManager
+from src.artifacts.output_manager import OutputManager
+from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
+from src.session.manager import SessionManager
 from tests.support.task_loop import run_tasks
 
 

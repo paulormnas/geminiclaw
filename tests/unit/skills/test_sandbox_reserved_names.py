@@ -77,8 +77,8 @@ def test_arquivo_reservado_criado_no_container_e_removido_com_erro_explicito(san
 
 @pytest.mark.unit
 def test_nomes_reservados_coincidem_com_os_arquivos_do_curator():
+    from src.artifacts.reserved_files import RESERVED_SESSION_FILES
     from src.knowledge.curator_flags import FLAGS_FILENAME
     from src.knowledge.suggestions import FILENAME
-    from src.reserved_files import RESERVED_SESSION_FILES
 
     assert RESERVED_SESSION_FILES == {FILENAME, FLAGS_FILENAME}

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.usage import LimitStatus, StopReason, UsageBudget, UsageTracker
+from src.orchestration.usage import LimitStatus, StopReason, UsageBudget, UsageTracker
 
 pytestmark = pytest.mark.unit
 

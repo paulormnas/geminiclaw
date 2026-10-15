@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agents.base.agent import AGENT_NAME, Agent, root_agent
+from src.agents.base.agent import AGENT_NAME, Agent, root_agent
 
 
 @pytest.mark.unit
@@ -21,8 +21,8 @@ class TestAgentSmoke:
     @pytest.mark.asyncio
     async def test_before_callback_loads_session(self) -> None:
         """before_agent_callback deve carregar payload da sessão no state."""
-        from agents.base.agent import _load_session_context
-        from src.session import Session
+        from src.agents.base.agent import _load_session_context
+        from src.session.manager import Session
 
         mock_session = Session(
             id="test_sess",
@@ -38,7 +38,7 @@ class TestAgentSmoke:
         mock_ctx.state = {}
 
         with patch.dict("os.environ", {"SESSION_ID": "test_sess", "AGENT_ID": "test_agent"}):
-            with patch("agents.base.agent.SessionManager") as MockManager:
+            with patch("src.agents.base.agent.SessionManager") as MockManager:
                 mock_manager_instance = MagicMock()
                 mock_manager_instance.get.return_value = mock_session
                 MockManager.return_value = mock_manager_instance
@@ -51,14 +51,14 @@ class TestAgentSmoke:
     @pytest.mark.asyncio
     async def test_after_callback_persists_session(self) -> None:
         """after_agent_callback deve persistir state no SessionManager."""
-        from agents.base.agent import _persist_session_context
+        from src.agents.base.agent import _persist_session_context
 
         # Mock do contexto ADK com state (dict real, iterável nativamente)
         mock_ctx = MagicMock()
         mock_ctx.state = {"result": "done", "count": 42}
 
         with patch.dict("os.environ", {"SESSION_ID": "test_sess", "AGENT_ID": "test_agent"}):
-            with patch("agents.base.agent.SessionManager") as MockManager:
+            with patch("src.agents.base.agent.SessionManager") as MockManager:
                 mock_manager_instance = MagicMock()
                 MockManager.return_value = mock_manager_instance
 
@@ -72,7 +72,7 @@ class TestAgentSmoke:
     @pytest.mark.asyncio
     async def test_before_callback_no_session_id(self) -> None:
         """before_agent_callback sem SESSION_ID deve pular sem erro."""
-        from agents.base.agent import _load_session_context
+        from src.agents.base.agent import _load_session_context
 
         mock_ctx = MagicMock()
         mock_ctx.state = {}
@@ -85,13 +85,13 @@ class TestAgentSmoke:
     @pytest.mark.asyncio
     async def test_before_callback_session_not_found(self) -> None:
         """before_agent_callback com sessão inexistente deve logar warning sem erro."""
-        from agents.base.agent import _load_session_context
+        from src.agents.base.agent import _load_session_context
 
         mock_ctx = MagicMock()
         mock_ctx.state = {}
 
         with patch.dict("os.environ", {"SESSION_ID": "nonexistent", "AGENT_ID": "test"}):
-            with patch("agents.base.agent.SessionManager") as MockManager:
+            with patch("src.agents.base.agent.SessionManager") as MockManager:
                 mock_manager_instance = MagicMock()
                 mock_manager_instance.get.return_value = None
                 MockManager.return_value = mock_manager_instance

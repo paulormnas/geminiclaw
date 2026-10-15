@@ -1,0 +1,1 @@
+"""Decisões reservadas ao pesquisador."""

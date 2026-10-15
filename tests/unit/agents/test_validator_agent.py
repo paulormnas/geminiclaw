@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.agents.validator_agent import ValidatorAgent
+from src.agents.validator.agent import ValidatorAgent
 from src.llm.base import LLMResponse
 
 
@@ -377,7 +377,7 @@ async def test_review_result_sem_criterio_quantitativo_nao_exige_metrics_json(tm
 def test_instrucao_de_schema_lista_hypothesis_ref_e_approach_como_campos_validos():
     """Regressão do benchmark de 2026-10-12: com 'estritamente', o Luna reprovava planos por `approach` e
     `hypothesis_ref`, campos que o próprio orquestrador pede ao Researcher."""
-    from src.agents.validator_agent import SCHEMA_INSTRUCTION
+    from src.agents.validator.agent import SCHEMA_INSTRUCTION
 
     assert "hypothesis_ref" in SCHEMA_INSTRUCTION and "approach" in SCHEMA_INSTRUCTION
     assert "NUNCA são motivo de reprovação" in SCHEMA_INSTRUCTION
@@ -386,7 +386,8 @@ def test_instrucao_de_schema_lista_hypothesis_ref_e_approach_como_campos_validos
 def test_metrics_json_plano_vale_como_metricas_do_contrato():
     """Regressão do benchmark de 2026-10-12: `{"accuracy": 0.9}` sem o objeto `metrics` reprovava com 'a métrica não
     está em metrics.json' e derrubava a sessão pelo disjuntor de zero progresso."""
-    from src.agents.validator_agent import _evaluate_metric_criteria, _metric_criteria, metrics_of
+    from src.agents.validator.agent import metrics_of
+    from src.knowledge.metric_criteria import _evaluate_metric_criteria, _metric_criteria
 
     flat = {"accuracy": 0.96, "cv_accuracy": 0.95, "seed": 42, "parameters": {"k": 1}, "ok": True, "nota": "x"}
     assert metrics_of(flat) == {"accuracy": 0.96, "cv_accuracy": 0.95}

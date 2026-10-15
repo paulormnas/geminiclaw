@@ -17,13 +17,13 @@ import importlib
 import pytest
 
 from src import config
-from src.prompts import render_instruction
+from src.agents.prompts import render_instruction
 
 AGENT_MODULE_NAMES = [
-    "agents.base.agent",
-    "agents.developer.agent",
-    "agents.researcher.agent",
-    "agents.summarizer.agent",
+    "src.agents.base.agent",
+    "src.agents.developer.agent",
+    "src.agents.researcher.agent",
+    "src.agents.summarizer.agent",
 ]
 
 FORBIDDEN_LITERAL_SUBSTRINGS = ("ADR 001", "Google ADK", "subprocess", "pip install")
@@ -67,7 +67,7 @@ class TestPromptPolicyOnRenderedInstructions:
                 )
 
     def test_developer_instruction_states_sandbox_only_execution(self) -> None:
-        from agents.developer.agent import AGENT_INSTRUCTION as DEVELOPER_INSTRUCTION
+        from src.agents.developer.agent import AGENT_INSTRUCTION as DEVELOPER_INSTRUCTION
 
         instr_lower = DEVELOPER_INSTRUCTION.lower()
         assert "python_interpreter" in DEVELOPER_INSTRUCTION
@@ -83,21 +83,21 @@ class TestResearcherKeepsBibliographicSearchBan:
     """O Researcher continua proibido de fazer busca bibliográfica autônoma."""
 
     def test_researcher_forbids_autonomous_bibliographic_search(self) -> None:
-        from agents.researcher.agent import AGENT_INSTRUCTION as RESEARCHER_INSTRUCTION
+        from src.agents.researcher.agent import AGENT_INSTRUCTION as RESEARCHER_INSTRUCTION
 
         instr_lower = RESEARCHER_INSTRUCTION.lower()
         assert "busca bibliográfica" in instr_lower
         assert "nunca" in instr_lower
 
     def test_researcher_allows_hypothesis_formulation_with_rationale(self) -> None:
-        from agents.researcher.agent import AGENT_INSTRUCTION as RESEARCHER_INSTRUCTION
+        from src.agents.researcher.agent import AGENT_INSTRUCTION as RESEARCHER_INSTRUCTION
 
         instr_lower = RESEARCHER_INSTRUCTION.lower()
         assert "hipótese" in instr_lower
         assert "scientific_rationale" in RESEARCHER_INSTRUCTION
 
     def test_researcher_cites_adr_010_not_adr_001(self) -> None:
-        from agents.researcher.agent import AGENT_INSTRUCTION as RESEARCHER_INSTRUCTION
+        from src.agents.researcher.agent import AGENT_INSTRUCTION as RESEARCHER_INSTRUCTION
 
         assert "ADR 010" in RESEARCHER_INSTRUCTION
         assert "ADR 001" not in RESEARCHER_INSTRUCTION

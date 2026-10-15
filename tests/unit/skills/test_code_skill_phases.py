@@ -7,9 +7,9 @@ from unittest.mock import patch
 
 import pytest
 
-from src.agent_runtime.context import AgentContext, current_context
 from src.skills.code.sandbox import NETWORK_UNDECLARED_MESSAGE, SandboxResult
 from src.skills.code.skill import CodeSkill
+from src.utils.agent_context import AgentContext, current_context
 
 
 class _RecordingSandbox:

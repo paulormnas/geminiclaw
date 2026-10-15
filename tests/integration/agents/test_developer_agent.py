@@ -5,9 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agents.developer.agent import _build_developer_instruction, handle_request_filter
-from src.autonomous_loop import AutonomousLoop
-from src.orchestrator import AgentTask
+from src.agents.developer.agent import _build_developer_instruction, handle_request_filter
+from src.orchestration.autonomous_loop import AutonomousLoop
+from src.orchestration.orchestrator import AgentTask
 
 
 @pytest.fixture(autouse=True)

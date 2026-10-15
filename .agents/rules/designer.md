@@ -33,7 +33,7 @@ Antes de propor ou modificar qualquer elemento visual, consulte obrigatoriamente
 1. **Roadmaps (`roadmaps/`):** Funcionalidades planejadas que terão interface visual.
 2. **Design System** *(a ser criado)*: Paleta de cores, tipografia, tokens de espaçamento, border-radius, motion, breakpoints e dark mode.
 3. **Decisões Arquiteturais (`docs/decisions/`):** ADRs com decisões que impactam a experiência do operador.
-4. **API e Dados (`src/config.py`, `src/orchestrator.py`):** Dados disponíveis para exibição no frontend.
+4. **API e Dados (`src/config.py`, `src/orchestration/orchestrator.py`):** Dados disponíveis para exibição no frontend.
 
 Nunca proponha soluções visuais que contradigam o design system sem solicitar revisão formal.
 

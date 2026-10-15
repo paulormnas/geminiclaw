@@ -1,4 +1,4 @@
-"""Testes unitários para Roadmap V18 / Spec `usage-limits` (src/usage.py).
+"""Testes unitários para Roadmap V18 / Spec `usage-limits` (src/orchestration/usage.py).
 
 Cobre:
   - UsageBudget: validação, `exploration_token_ceiling`, `to_payload`, `from_config`
@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.usage import LimitStatus, StopReason, UsageBudget, UsageTracker
+from src.orchestration.usage import LimitStatus, StopReason, UsageBudget, UsageTracker
 
 # ---------------------------------------------------------------------------
 # UsageBudget
@@ -429,7 +429,7 @@ class TestLimitStatus:
 @pytest.mark.unit
 class TestDefaultReaders:
     def test_default_token_reader_soma_todos_os_agentes_e_provedores(self):
-        from src.usage import _default_token_reader
+        from src.orchestration.usage import _default_token_reader
 
         fake_summary = {
             "by_provider_model": [
@@ -440,23 +440,23 @@ class TestDefaultReaders:
                 {"llm_provider": "google", "llm_model": "gemini-3-pro", "total_tokens": 50},
             ]
         }
-        with patch("src.telemetry.get_telemetry") as mock_get_telemetry:
+        with patch("src.observability.telemetry.get_telemetry") as mock_get_telemetry:
             mock_get_telemetry.return_value.get_token_summary.return_value = fake_summary
             total = _default_token_reader("exec1")
         assert total == 400
 
     def test_default_token_reader_lida_com_resumo_vazio(self):
-        from src.usage import _default_token_reader
+        from src.orchestration.usage import _default_token_reader
 
-        with patch("src.telemetry.get_telemetry") as mock_get_telemetry:
+        with patch("src.observability.telemetry.get_telemetry") as mock_get_telemetry:
             mock_get_telemetry.return_value.get_token_summary.return_value = {}
             total = _default_token_reader("exec1")
         assert total == 0
 
     def test_default_connection_retry_reader_delega_a_telemetria(self):
-        from src.usage import _default_connection_retry_reader
+        from src.orchestration.usage import _default_connection_retry_reader
 
-        with patch("src.telemetry.get_telemetry") as mock_get_telemetry:
+        with patch("src.observability.telemetry.get_telemetry") as mock_get_telemetry:
             mock_get_telemetry.return_value.get_connection_retry_count.return_value = 7
             total = _default_connection_retry_reader("exec1")
         assert total == 7

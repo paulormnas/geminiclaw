@@ -9,7 +9,7 @@ from src.claims.model import STATUSES, Afirmacao, Conclusao
 from src.claims.revision import RevisionItem, apply_revisions, parse_revisions, revision_targets
 from src.claims.service import ClaimService
 from src.claims.store import ClaimStore, ClaimStoreError
-from src.continuity import Checkpoint, CheckpointError
+from src.session.continuity import Checkpoint, CheckpointError
 from tests.unit.claims.helpers import FakeVerifier, code, evidence_for, make_store
 
 pytestmark = pytest.mark.unit

@@ -12,7 +12,7 @@ import pathlib
 
 import pytest
 
-from src.skills.code.manifest import WorkspaceManifest
+from src.utils.workspace_manifest import WorkspaceManifest
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +175,7 @@ def test_atomic_write_does_not_corrupt_on_failure(
             pass
         raise OSError("Disco cheio simulado")
 
-    monkeypatch.setattr("src.skills.code.manifest.os.replace", broken_replace)
+    monkeypatch.setattr("src.utils.workspace_manifest.os.replace", broken_replace)
 
     with pytest.raises(OSError, match="Disco cheio simulado"):
         manifest.record_step(2, "success", ["new_file.csv"], "Step que vai falhar.")

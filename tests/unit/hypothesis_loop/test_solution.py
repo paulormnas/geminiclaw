@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from agents.researcher.agent import AGENT_INSTRUCTION
-from src.exploration import PLAN_FORMAT_INSTRUCTION
+from src.agents.researcher.agent import AGENT_INSTRUCTION
 from src.knowledge.hypothesis_cycle import HypothesisCycle
+from src.orchestration.exploration import PLAN_FORMAT_INSTRUCTION
 from tests.support.hypothesis_world import PESQUISADOR, HypothesisWorld
 
 pytestmark = pytest.mark.unit

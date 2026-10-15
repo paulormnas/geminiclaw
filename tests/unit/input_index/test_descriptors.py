@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from src.skills.document_processor.descriptors import describe_dataset, describe_image, describe_other
+from src.documents.descriptors import describe_dataset, describe_image, describe_other
 
 
 def _png(path: Path, w: int, h: int) -> None:

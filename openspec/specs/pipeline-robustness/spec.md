@@ -269,7 +269,7 @@ O sistema SHALL emitir o evento `sandbox_run` a cada execução de código no sa
 
 ### Requirement: Limite de execuções de agente por sessão
 _Origem: [`v16-pipeline-robustness`](../../changes/archive/v16-pipeline-robustness/proposal.md)_
-(Origem: `v16-in-process-agents` e `src/orchestrator.py`, V12.5.2.) O sistema SHALL aplicar o
+(Origem: `v16-in-process-agents` e `src/orchestration/orchestrator.py`, V12.5.2.) O sistema SHALL aplicar o
 limite de execuções de agente com os contadores e o fechamento descritos em "Limites de execução
 separados e com fechamento"; o comportamento anterior (exceção `RuntimeError` descritiva na
 chamada que ultrapassa o limite) é substituído.

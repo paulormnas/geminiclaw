@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from agents.researcher.tools import get_search_cache, reset_search_cache, search
+from src.agents.researcher.tools import get_search_cache, reset_search_cache, search
 from src.skills.base import SkillResult
 
 
@@ -10,7 +10,7 @@ from src.skills.base import SkillResult
 def _clean_cache() -> None:
     """Reseta o cache antes de cada teste para garantir isolamento."""
     reset_search_cache(ttl_seconds=3600)
-    import agents.researcher.tools as tools_module
+    import src.agents.researcher.tools as tools_module
 
     tools_module._quick_search_skill = None
 
@@ -28,7 +28,7 @@ class TestSearchToolSuccess:
         """search deve retornar texto formatado a partir dos resultados de search_quick."""
         results = [{"title": "Python frameworks", "url": "https://example.com", "snippet": "Django e Flask"}]
         with patch(
-            "agents.researcher.tools.QuickSearchSkill.run",
+            "src.agents.researcher.tools.QuickSearchSkill.run",
             new=_mock_skill_run(SkillResult(success=True, output=results)),
         ):
             result = await search("Python frameworks")
@@ -41,7 +41,7 @@ class TestSearchToolSuccess:
         """search deve armazenar resultado no cache após sucesso."""
         results = [{"title": "Web frameworks", "url": "https://example.com/web", "snippet": "Django e Flask"}]
         with patch(
-            "agents.researcher.tools.QuickSearchSkill.run",
+            "src.agents.researcher.tools.QuickSearchSkill.run",
             new=_mock_skill_run(SkillResult(success=True, output=results)),
         ):
             await search("web frameworks python")
@@ -57,7 +57,7 @@ class TestSearchToolSuccess:
         cache.set("cached query", "cached result")
 
         mock_run = _mock_skill_run(SkillResult(success=True, output=[]))
-        with patch("agents.researcher.tools.QuickSearchSkill.run", new=mock_run):
+        with patch("src.agents.researcher.tools.QuickSearchSkill.run", new=mock_run):
             result = await search("cached query")
 
         assert result == "cached result"
@@ -68,7 +68,7 @@ class TestSearchToolSuccess:
         results = [{"title": "T", "url": "https://example.com", "snippet": "S"}]
         with (
             patch(
-                "agents.researcher.tools.QuickSearchSkill.run",
+                "src.agents.researcher.tools.QuickSearchSkill.run",
                 new=_mock_skill_run(SkillResult(success=True, output=results)),
             ),
             patch("asyncio.create_subprocess_exec") as mock_subprocess,
@@ -94,7 +94,7 @@ class TestSearchToolErrors:
     async def test_search_skill_error(self) -> None:
         """search deve retornar erro quando a skill search_quick falha."""
         with patch(
-            "agents.researcher.tools.QuickSearchSkill.run",
+            "src.agents.researcher.tools.QuickSearchSkill.run",
             new=_mock_skill_run(SkillResult(success=False, output=[], error="todos os backends falharam")),
         ):
             result = await search("test query")
@@ -105,7 +105,7 @@ class TestSearchToolErrors:
     async def test_search_empty_results(self) -> None:
         """search deve retornar mensagem informativa quando não há resultados."""
         with patch(
-            "agents.researcher.tools.QuickSearchSkill.run",
+            "src.agents.researcher.tools.QuickSearchSkill.run",
             new=_mock_skill_run(SkillResult(success=True, output=[])),
         ):
             result = await search("query sem resultado")
@@ -115,7 +115,7 @@ class TestSearchToolErrors:
     async def test_search_unexpected_exception(self) -> None:
         """search deve tratar exceções inesperadas."""
         with patch(
-            "agents.researcher.tools.QuickSearchSkill.run",
+            "src.agents.researcher.tools.QuickSearchSkill.run",
             new=AsyncMock(side_effect=RuntimeError("unexpected")),
         ):
             result = await search("test query")
@@ -132,7 +132,7 @@ class TestSearchCacheIntegration:
         """Primeira chamada faz busca, segunda usa cache."""
         results = [{"title": "T", "url": "https://example.com", "snippet": "result"}]
         mock_run = _mock_skill_run(SkillResult(success=True, output=results))
-        with patch("agents.researcher.tools.QuickSearchSkill.run", new=mock_run):
+        with patch("src.agents.researcher.tools.QuickSearchSkill.run", new=mock_run):
             result1 = await search("same query")
             assert "result" in result1
             assert mock_run.call_count == 1
@@ -144,7 +144,7 @@ class TestSearchCacheIntegration:
     async def test_error_does_not_cache(self) -> None:
         """Resultados de erro não devem ser cacheados."""
         with patch(
-            "agents.researcher.tools.QuickSearchSkill.run",
+            "src.agents.researcher.tools.QuickSearchSkill.run",
             new=_mock_skill_run(SkillResult(success=False, output=[], error="falha")),
         ):
             await search("failing query")

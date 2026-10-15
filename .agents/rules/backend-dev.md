@@ -51,7 +51,7 @@ Antes de implementar ou refatorar qualquer módulo, agente, skill ou componente,
 1. **Mudança OpenSpec (`openspec/changes/<id>/`):** é o contrato a implementar — `proposal.md` (escopo e aprovações), `design.md` (contratos e decisões), `tasks.md` (ordem) e `specs/<capacidade>/spec.md` (requisitos e cenários). Leia também `openspec/project.md`.
 2. **Roadmaps (`roadmaps/`):** Etapas, tarefas, critérios de aceite e ordem de execução.
 3. **Decisões Arquiteturais (`docs/decisions/`):** ADRs com decisões técnicas fundamentadas.
-4. **Código fonte (`src/`, `agents/`, `containers/`):** Padrões e implementações existentes.
+4. **Código fonte (`src/`, `containers/`):** Padrões e implementações existentes.
 5. **Testes (`tests/`):** Testes unitários e de integração que documentam comportamentos esperados.
 6. **Configuração (`pyproject.toml`, `.env.example`, `src/config.py`):** Dependências e parâmetros do sistema.
 
@@ -179,16 +179,16 @@ No GeminiClaw, a execução de agentes não utiliza servidores web externos (`ad
                 │
                 ▼
        [ Agente em processo ]
-          ├── agents/<tipo>/agent.py: instrução, tools e callbacks do papel
+          ├── src/agents/<tipo>/agent.py: instrução, tools e callbacks do papel
           ├── AgentContext (contextvars): sessão, papel, diretório de saída, modelo
           ├── Skills Framework: code (sandbox), memory, search
           └── Saída de Artefatos: outputs/<session_id>/artifacts/
 ```
 
 ### Regras de Implementação para Agentes:
-1. **Definição do papel:** cada agente expõe `root_agent` em `agents/<tipo>/agent.py`; o `AgentRuntime` o resolve por `src/agent_runtime/definitions.py`. Não há ponto de entrada por processo nem loop de mensagens.
-2. **Estado por tarefa:** use `get_agent_context()` (`src/agent_runtime/context.py`); nunca `os.environ`, que é global ao processo e inseguro com tarefas concorrentes.
-3. **Novo papel:** registre-o em `src/agent_runtime/definitions.py` e em `DEFAULT_ROLE_CONFIGS` (`src/model_config.py`); o provedor e o modelo vêm de `{PAPEL}_PROVIDER` e `{PAPEL}_MODEL`.
+1. **Definição do papel:** cada agente expõe `root_agent` em `src/agents/<tipo>/agent.py`; o `AgentRuntime` o resolve por `src/agent_runtime/definitions.py`. Não há ponto de entrada por processo nem loop de mensagens.
+2. **Estado por tarefa:** use `get_agent_context()` (`src/utils/agent_context.py`); nunca `os.environ`, que é global ao processo e inseguro com tarefas concorrentes.
+3. **Novo papel:** registre-o em `src/agent_runtime/definitions.py` e em `DEFAULT_ROLE_CONFIGS` (`src/llm/model_config.py`); o provedor e o modelo vêm de `{PAPEL}_PROVIDER` e `{PAPEL}_MODEL`.
 4. **Ferramentas no host:** nenhuma ferramenta aceita código, comando de shell ou SQL vindo do LLM; código gerado só executa no sandbox. Escrita e leitura de arquivos ficam confinadas ao diretório da sessão.
 5. **Falhas:** o runtime converte exceções e timeouts em `AgentResult`; ferramentas que bloqueiam (docker-py, PDF) devem rodar em `asyncio.to_thread`.
 

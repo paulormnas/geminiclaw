@@ -14,10 +14,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agents.curator.agent import AGENT_INSTRUCTION, create_agent
-from agents.curator.runner import Curator
 from src import config
 from src.agent_runtime.definitions import get_agent_definition, reset_definitions_cache
+from src.agents.curator.agent import AGENT_INSTRUCTION, create_agent
+from src.agents.curator.runner import Curator
+from src.artifacts.output_manager import OutputManager
 from src.knowledge.curator_flags import FlagStore, record_flag
 from src.knowledge.curator_tools import CuratorLimits
 from src.knowledge.errors import HumanConfirmationRequiredError  # noqa: F401 - cenário de recusa abaixo
@@ -27,9 +28,8 @@ from src.knowledge.projects import create_project
 from src.knowledge.provenance import Actor
 from src.knowledge.similarity_queue import Candidate
 from src.llm.base import LLMProvider, LLMResponse, ToolCall
-from src.orchestrator import AgentResult, AgentTask, Orchestrator
-from src.output_manager import OutputManager
-from src.session import Session
+from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
+from src.session.manager import Session
 from tests.support.controlled_embedding_provider import pair_vectors
 from tests.support.curator_graph import CuratorGraph
 from tests.support.task_loop import run_tasks
@@ -157,7 +157,7 @@ def test_instrucao_contem_as_diretrizes_do_adr_015_secao_10():
 
 def test_papel_curator_no_catalogo_e_roteador_usa_ollama_por_padrao():
     """Task 5.2 — o roteador resolve o papel ``curator`` (default local) sem variáveis removidas."""
-    from src.model_config import get_role_model_config
+    from src.llm.model_config import get_role_model_config
 
     cfg = get_role_model_config("curator")
 
@@ -453,7 +453,7 @@ def test_cli_abre_o_grafo_do_binder_com_reconciliacao(monkeypatch):
 @pytest.mark.asyncio
 async def test_laco_recalcula_o_veredito_apos_cada_subtarefa_ingerida(tmp_path, monkeypatch):
     """Task 2.5 — depois de ``_ingest_subtask`` a hipótese ganha ``n_tentativas``/``veredito`` e o SUSTENTA com peso."""
-    from src.autonomous_loop import AutonomousLoop
+    from src.orchestration.autonomous_loop import AutonomousLoop
 
     store = InMemoryGraphStore()
     pid = "11111111-1111-4111-8111-111111111111"
@@ -492,7 +492,7 @@ async def test_laco_recalcula_o_veredito_apos_cada_subtarefa_ingerida(tmp_path, 
 )
 async def test_validator_sinaliza_ao_curator_a_partir_do_parecer(tmp_path, parecer, tipo):
     """I8/tarefa 4.1 — o parecer do Validator (divergente/reprovado) vira sinalização para o Curator."""
-    from src.autonomous_loop import AutonomousLoop
+    from src.orchestration.autonomous_loop import AutonomousLoop
 
     store = InMemoryGraphStore()
     pid = create_project(store, "P", "O", [])

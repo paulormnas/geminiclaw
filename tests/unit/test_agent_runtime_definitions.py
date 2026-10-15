@@ -39,7 +39,7 @@ class TestAgentDefinitions:
         assert first is second
 
     def test_developer_tools_do_not_include_web_search(self) -> None:
-        """Developer é exclusivo de código/dados (agents/developer/agent.py)."""
+        """Developer é exclusivo de código/dados (src/agents/developer/agent.py)."""
         definition = get_agent_definition("developer")
         tool_names = {getattr(t, "__name__", "") for t in definition.tools}
         assert "quick_search" not in tool_names

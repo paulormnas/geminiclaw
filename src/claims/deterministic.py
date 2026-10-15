@@ -12,7 +12,7 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable
 
-from src.knowledge.normalization import normalize_metric_name
+from src.utils.normalization import normalize_metric_name
 
 CODE_RE = re.compile(r"\[([RCS])(\d+)\]")
 

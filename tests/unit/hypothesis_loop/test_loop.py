@@ -6,10 +6,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.exploration import ExplorationSession
 from src.knowledge.hypothesis_cycle import ApprovalDecision, SolutionStatus
 from src.knowledge.suggestions import SuggestionError
-from src.usage import UsageBudget
+from src.orchestration.exploration import ExplorationSession
+from src.orchestration.usage import UsageBudget
 from tests.support.exploration_world import APPROVED, REJECTED, LoopHarness, hyp, plan, task
 
 pytestmark = pytest.mark.unit
@@ -143,7 +143,7 @@ async def test_dependente_de_subtarefa_retirada_tambem_e_retirada(tmp_path):
     p = plan([task("a", "h1"), task("b", "h2"), task("c", "h3"), task("d", None, task_type="eda", depends_on=["c"])],
              hips)
     h = LoopHarness(tmp_path, plans=[p, p])
-    with patch("src.autonomous_loop.MAX_EXPLORATION_CYCLES", 1):  # só o primeiro ciclo
+    with patch("src.orchestration.autonomous_loop.MAX_EXPLORATION_CYCLES", 1):  # só o primeiro ciclo
         await h.run()
     assert ("c" in h.ran) == ("d" in h.ran) and len([n for n in h.ran if n in "abc"]) == 2
 
@@ -214,8 +214,8 @@ async def test_assistido_sem_resposta_no_terminal_suspende_em_vez_de_decidir(tmp
 async def test_planos_rejeitados_em_sequencia_fecham_com_checkpoint(tmp_path):
     """Scenario: Planos rejeitados em sequência — MAX_PLAN_RETRIES planos seguidos rejeitados: fecha registrando."""
     h = LoopHarness(tmp_path, plans=["[]"], validator=AsyncMock(return_value=REJECTED))
-    with patch("src.config.MAX_PLAN_RETRIES", 2), patch("src.autonomous_loop.MAX_PLAN_RETRIES", 2), \
-            patch("src.orchestrator.MAX_PLANNING_ITERATIONS", 1):
+    with patch("src.config.MAX_PLAN_RETRIES", 2), patch("src.orchestration.autonomous_loop.MAX_PLAN_RETRIES", 2), \
+            patch("src.orchestration.orchestrator.MAX_PLANNING_ITERATIONS", 1):
         await h.run()
     assert h.ran == [] and h.plan_calls == 2  # uma execução de planejamento por plano rejeitado
     assert h.stop_reason == "planos_rejeitados"
@@ -227,7 +227,7 @@ async def test_um_plano_aprovado_zera_a_contagem_de_rejeitados(tmp_path):
     ok = plan([task("t1")], [hyp("h1")])
     h = LoopHarness(tmp_path, plans=["[]", ok, "[]", ok],
                     validator=AsyncMock(side_effect=[REJECTED, APPROVED] * 4))
-    with patch("src.autonomous_loop.MAX_PLAN_RETRIES", 2), patch("src.orchestrator.MAX_PLANNING_ITERATIONS", 1):
+    with patch("src.orchestration.autonomous_loop.MAX_PLAN_RETRIES", 2), patch("src.orchestration.orchestrator.MAX_PLANNING_ITERATIONS", 1):
         await h.run()
     assert h.ran == ["t1"] and h.stop_reason == "sem_caminhos_promissores"
 
@@ -238,7 +238,7 @@ async def test_teto_de_ciclos_de_exploracao_e_a_prova_de_laco_infinito(tmp_path)
     plans = [plan([task(f"t{i}", f"h{i}") for i in range(1, n + 1)], [hyp(f"h{n}", f"Hipótese número {n} única")])
              for n in range(1, 8)]
     h = LoopHarness(tmp_path, plans=plans)
-    with patch("src.autonomous_loop.MAX_EXPLORATION_CYCLES", 3):
+    with patch("src.orchestration.autonomous_loop.MAX_EXPLORATION_CYCLES", 3):
         await h.run()
     assert h.stop_reason == "limite_ciclos" and h.plan_calls == 3
     assert h.checkpoint().estado == "fechado"
@@ -247,7 +247,7 @@ async def test_teto_de_ciclos_de_exploracao_e_a_prova_de_laco_infinito(tmp_path)
 @pytest.mark.asyncio
 async def test_limite_de_tokens_fecha_o_ciclo_seguinte(tmp_path):
     """O limite de uso (tokens) é checado a cada ciclo e fecha com checkpoint; a pesquisa continua na retomada."""
-    from src.usage import UsageBudget
+    from src.orchestration.usage import UsageBudget
 
     plans = [plan([task("t1")], [hyp("h1")]), plan([task("t1"), task("t2", "h2")], [hyp("h2")])]
     h = LoopHarness(tmp_path, plans=plans)
@@ -259,7 +259,7 @@ async def test_limite_de_tokens_fecha_o_ciclo_seguinte(tmp_path):
         calls["n"] += 1
         return 0 if h.plan_calls < 1 or h.ran == [] else 5000  # esgota depois da primeira execução
 
-    with patch("src.usage._default_token_reader", side_effect=tokens):
+    with patch("src.orchestration.usage._default_token_reader", side_effect=tokens):
         await h.run(budget=budget)
     assert h.ran == ["t1"] and h.stop_reason == "limite_tokens" and h.plan_calls == 1
 
@@ -455,7 +455,7 @@ async def test_sem_limite_nao_fecha_por_tokens_nem_tempo(tmp_path):
     """Scenario: tokens e tempo muito acima dos defaults não fecham a sessão sem limite."""
     first = plan([task("t1")], [hyp("h1")])
     h = LoopHarness(tmp_path, plans=[first, first])
-    with patch("src.usage._default_token_reader", return_value=10**12):
+    with patch("src.orchestration.usage._default_token_reader", return_value=10**12):
         await h.run(budget=UsageBudget.from_config(unlimited=True))
     assert h.stop_reason == "sem_caminhos_promissores"  # e não limite_tokens
 
@@ -464,7 +464,7 @@ async def test_sem_limite_nao_fecha_por_tokens_nem_tempo(tmp_path):
 async def test_com_limite_os_mesmos_tokens_fecham_por_limite_tokens(tmp_path):
     first = plan([task("t1")], [hyp("h1")])
     h = LoopHarness(tmp_path, plans=[first, first])
-    with patch("src.usage._default_token_reader", return_value=10**12):
+    with patch("src.orchestration.usage._default_token_reader", return_value=10**12):
         await h.run(budget=UsageBudget.from_config(max_tokens=1000))
     assert h.stop_reason == "limite_tokens"
 

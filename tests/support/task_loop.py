@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from src.orchestrator import AgentTask, Orchestrator, OrchestratorResult
+from src.orchestration.orchestrator import AgentTask, Orchestrator, OrchestratorResult
 
 
 class _SequentialLoop:
@@ -44,8 +44,8 @@ async def run_tasks(orchestrator: Orchestrator, prompt: str, tasks: list[AgentTa
     no_context = MagicMock()
     no_context.return_value.load.return_value = None
     with (
-        patch("src.orchestrator.AutonomousLoop", lambda orch: _SequentialLoop(orch, tasks)),
-        patch("src.orchestrator.ContextLoader", no_context),
+        patch("src.orchestration.orchestrator.AutonomousLoop", lambda orch: _SequentialLoop(orch, tasks)),
+        patch("src.orchestration.orchestrator.ContextLoader", no_context),
         patch.object(Orchestrator, "_start_exploration"),
     ):
         return await orchestrator.handle_request(prompt, **kwargs)

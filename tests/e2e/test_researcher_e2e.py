@@ -7,7 +7,7 @@ Execute manualmente com: uv run pytest tests/e2e/test_researcher_e2e.py -m e2e -
 
 import pytest
 
-from agents.researcher.tools import reset_search_cache, search
+from src.agents.researcher.tools import reset_search_cache, search
 
 
 @pytest.fixture(autouse=True)

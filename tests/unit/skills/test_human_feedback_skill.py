@@ -9,8 +9,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.agent_runtime.context import AgentContext, bind_agent_context, current_context
 from src.skills.human_feedback.skill import HumanFeedbackSkill
+from src.utils.agent_context import AgentContext, bind_agent_context, current_context
 
 
 def _bind(tmp_path: Path, mode: str, ask=None) -> AgentContext:

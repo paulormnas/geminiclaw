@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.llm.context_injection import build_workspace_context_block
-from src.skills.code.manifest import WorkspaceManifest
+from src.utils.workspace_manifest import WorkspaceManifest
 
 # ---------------------------------------------------------------------------
 # Helpers

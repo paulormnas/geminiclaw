@@ -14,18 +14,17 @@ Tudo o que vem do grafo, do checkpoint ou das sinalizações é **dado não conf
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src import config
-from src.continuity import (
-    ST_ABANDONADA,
-    ST_CONCLUIDA,
-    Checkpoint,
-)
 from src.knowledge.curator_tools import wrap_data
 from src.knowledge.graph_store import GraphStore, Node
-from src.knowledge.normalization import clean_free_text
+from src.knowledge.subtask_states import ST_ABANDONADA, ST_CONCLUIDA
 from src.logger import get_logger
+from src.utils.normalization import clean_free_text
+
+if TYPE_CHECKING:
+    from src.session.continuity import Checkpoint
 
 logger = get_logger(__name__)
 

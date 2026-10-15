@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.human_gate import HumanGate, Source
+from src.gate.human_gate import HumanGate, Source
 from src.knowledge.hypothesis_cycle import (
     ApprovalDecision,
     HypothesisCycle,

@@ -1,10 +1,10 @@
-"""Testes unitários para src/history.py (PostgreSQL via mock)."""
+"""Testes unitários para src/session/history.py (PostgreSQL via mock)."""
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.history import ExecutionHistory
+from src.session.history import ExecutionHistory
 
 
 def _make_ctx(fetchone=None, fetchall=None):
@@ -47,7 +47,7 @@ class TestExecutionHistoryRecord:
     def test_record_retorna_id(self, history):
         """record() deve retornar um ID não-vazio."""
         ctx, _ = _make_ctx()
-        with patch("src.history.get_connection", return_value=ctx):
+        with patch("src.session.history.get_connection", return_value=ctx):
             exec_id = history.record(
                 prompt="Test", status="success", started_at="2026-01-01T00:00:00Z"
             )
@@ -56,7 +56,7 @@ class TestExecutionHistoryRecord:
     def test_record_chama_insert(self, history):
         """record() deve executar INSERT na tabela execution_history."""
         ctx, mock_conn = _make_ctx()
-        with patch("src.history.get_connection", return_value=ctx):
+        with patch("src.session.history.get_connection", return_value=ctx):
             history.record(
                 prompt="Test", status="success", started_at="2026-01-01T00:00:00Z"
             )
@@ -69,7 +69,7 @@ class TestExecutionHistoryRecord:
         ctx.__enter__ = MagicMock(side_effect=Exception("DB error"))
         ctx.__exit__ = MagicMock(return_value=False)
 
-        with patch("src.history.get_connection", return_value=ctx):
+        with patch("src.session.history.get_connection", return_value=ctx):
             result = history.record("prompt", "error", "2026-01-01T00:00:00Z")
         assert result == ""
 
@@ -80,7 +80,7 @@ class TestExecutionHistoryGet:
         """get() deve retornar ExecutionRecord quando a row existe."""
         row = _make_row()
         ctx, _ = _make_ctx(fetchone=row)
-        with patch("src.history.get_connection", return_value=ctx):
+        with patch("src.session.history.get_connection", return_value=ctx):
             record = history.get("exec-1")
         assert record is not None
         assert record.id == "exec-1"
@@ -89,7 +89,7 @@ class TestExecutionHistoryGet:
     def test_get_retorna_none_se_nao_encontrado(self, history):
         """get() deve retornar None se a row não existir."""
         ctx, _ = _make_ctx(fetchone=None)
-        with patch("src.history.get_connection", return_value=ctx):
+        with patch("src.session.history.get_connection", return_value=ctx):
             result = history.get("inexistente")
         assert result is None
 
@@ -100,7 +100,7 @@ class TestExecutionHistoryList:
         """list_recent() deve retornar lista de ExecutionRecord."""
         rows = [_make_row("e1", "P1"), _make_row("e2", "P2")]
         ctx, mock_conn = _make_ctx(fetchall=rows)
-        with patch("src.history.get_connection", return_value=ctx):
+        with patch("src.session.history.get_connection", return_value=ctx):
             records = history.list_recent(limit=2)
         assert len(records) == 2
         sql = mock_conn.execute.call_args[0][0]
@@ -109,7 +109,7 @@ class TestExecutionHistoryList:
     def test_search_usa_ilike(self, history):
         """search() deve usar ILIKE no SQL."""
         ctx, mock_conn = _make_ctx(fetchall=[])
-        with patch("src.history.get_connection", return_value=ctx):
+        with patch("src.session.history.get_connection", return_value=ctx):
             history.search("gato")
         sql = mock_conn.execute.call_args[0][0]
         assert "ILIKE" in sql
@@ -119,6 +119,6 @@ class TestExecutionHistoryList:
         ctx = MagicMock()
         ctx.__enter__ = MagicMock(side_effect=Exception("DB error"))
         ctx.__exit__ = MagicMock(return_value=False)
-        with patch("src.history.get_connection", return_value=ctx):
+        with patch("src.session.history.get_connection", return_value=ctx):
             result = history.list_recent()
         assert result == []

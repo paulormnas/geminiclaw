@@ -9,9 +9,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.agent_runtime.context import AgentContext
 from src.agent_runtime.resources import ResourceGuard, calculate_dynamic_limit, wait_for_health
 from src.agent_runtime.runtime import AgentRuntime
+from src.utils.agent_context import AgentContext
 
 
 def _health(available_mb=None, temperature=None, raises=False) -> MagicMock:
@@ -170,7 +170,7 @@ def _ctx(agent_id: str = "developer") -> AgentContext:
 class TestAgentRuntimeUsesTheGuard:
     async def test_health_failure_becomes_an_error_result_not_an_exception(self) -> None:
         """O runtime nunca levanta exceção: falta de saúde do sistema vira AgentResult de erro."""
-        from src.orchestrator import AgentTask
+        from src.orchestration.orchestrator import AgentTask
 
         guard = MagicMock()
         slot = MagicMock()
@@ -184,7 +184,7 @@ class TestAgentRuntimeUsesTheGuard:
         assert "saúde do sistema" in result.error
 
     async def test_slot_is_requested_with_the_role_provider(self) -> None:
-        from src.orchestrator import AgentTask
+        from src.orchestration.orchestrator import AgentTask
 
         guard = MagicMock()
         slot = MagicMock()
@@ -203,6 +203,6 @@ class TestAgentRuntimeUsesTheGuard:
 
     async def test_unknown_role_falls_back_to_the_researcher_provider(self) -> None:
         """Papel fora do catálogo usa o provedor resolvido do researcher (não há mais provedor global)."""
-        from src.model_config import get_role_model_config
+        from src.llm.model_config import get_role_model_config
 
         assert AgentRuntime._provider_name("papel_inexistente") == get_role_model_config("researcher").provider

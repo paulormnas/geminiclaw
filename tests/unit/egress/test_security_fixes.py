@@ -5,7 +5,7 @@ import time
 import pytest
 
 from src.egress import filters
-from src.egress.fragments import ContentOrigin, PromptFragment, labeled, mark_tainted, strip_marks
+from src.utils.egress_fragments import ContentOrigin, PromptFragment, labeled, mark_tainted, strip_marks
 
 pytestmark = pytest.mark.unit
 
@@ -75,7 +75,7 @@ def test_a3_linha_longa_e_omitida_com_marcador():
 
 
 def test_a4_nomes_de_artefatos_no_contexto_de_dependencias_passam_pela_regra_de_nomes():
-    from src.subtask_output import SubtaskOutput
+    from src.artifacts.subtask_output import SubtaskOutput
 
     from .conftest import make_dest
 
@@ -92,7 +92,7 @@ def test_a4_nomes_de_artefatos_no_contexto_de_dependencias_passam_pela_regra_de_
 
 
 def test_a4_artefatos_da_retentativa_sao_nomes_sanitizados():
-    from src.egress.fragments import mark_artifact_names
+    from src.utils.egress_fragments import mark_artifact_names
 
     from .conftest import make_dest
 
@@ -117,8 +117,8 @@ def test_a4_memoria_escrita_pelo_orquestrador_leva_tag_explicita():
 
 
 def test_a4_resultado_de_subtarefa_na_memoria_curta_vai_marcado(gate, third_party):
-    from src.egress.fragments import taint_if
     from src.egress.persisted import tags_tainted
+    from src.utils.egress_fragments import taint_if
 
     assert tags_tainted(["subtask_result", "egress:tainted"])
     prompt = "Contexto: " + taint_if("acurácia 0.93", tags_tainted(["egress:tainted"]))

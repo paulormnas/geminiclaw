@@ -1,7 +1,7 @@
 """Researcher consultor nos modos autônomos (V18 — Spec `researcher-consult`, ADR 012 §8).
 
 Reúne as constantes e os textos compartilhados entre a skill ``ask_researcher``, o núcleo de
-consulta do orquestrador e o consultor (``agents/researcher/consult.py``).
+consulta do orquestrador e o consultor (``src/agents/researcher/consult.py``).
 """
 
 from __future__ import annotations

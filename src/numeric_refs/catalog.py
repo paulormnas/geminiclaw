@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from src.metrics_file import metrics_of
+from src.artifacts.metrics_file import metrics_of
 from src.numeric_refs.sources import read_search_sources
 from src.provenance.errors import ProvenanceUnavailable
 from src.provenance.ledger import ExecutionLedger

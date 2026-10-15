@@ -8,10 +8,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.egress import filters
-from src.egress.fragments import ContentOrigin, PromptFragment, ToolOutput, labeled
 from src.egress.gate import GatedProvider, bind_gate_for_tests
 from src.llm.agent_loop import run_agent_loop
 from src.llm.base import LLMResponse, ToolCall
+from src.utils.egress_fragments import ContentOrigin, PromptFragment, ToolOutput, labeled
 
 from .conftest import make_dest
 
@@ -115,7 +115,7 @@ async def test_resultado_do_interpretador_entra_no_historico_como_saida_execucao
 @pytest.mark.asyncio
 async def test_caminhos_principais_nao_geram_fragmento_sem_origem(gate, memory_log, third_party, tmp_path):
     """Tarefa 7.3: laço do agente (sistema, prompt, resposta, ferramenta, bloco do workspace) sem rótulos faltando."""
-    from src.skills.code.manifest import WorkspaceManifest
+    from src.utils.workspace_manifest import WorkspaceManifest
 
     session_dir = tmp_path / "sess"
     session_dir.mkdir()
@@ -185,7 +185,7 @@ def test_resultados_do_document_processor_saem_rotulados_pela_fonte():
 def test_artefato_de_dados_no_bloco_do_workspace(tmp_path):
     """Cenário "Artefato de dados no bloco do workspace": só o nome é injetado, nunca o conteúdo."""
     from src.llm.context_injection import build_workspace_context_fragments
-    from src.skills.code.manifest import WorkspaceManifest
+    from src.utils.workspace_manifest import WorkspaceManifest
 
     session_dir = tmp_path / "sess"
     session_dir.mkdir()
@@ -203,8 +203,8 @@ def test_artefato_de_dados_no_bloco_do_workspace(tmp_path):
 
 @pytest.mark.asyncio
 async def test_nomes_de_artefatos_com_decimal_sao_mascarados_para_destino_sem_dados(gate, third_party, local_node):
-    from src.egress.fragments import ARTIFACT_NAMES_SOURCE
     from src.llm.context_injection import build_workspace_context_fragments  # noqa: F401
+    from src.utils.egress_fragments import ARTIFACT_NAMES_SOURCE
 
     frag = PromptFragment("  - curva_12.537.png\n  - resultados.csv", ContentOrigin.ESQUEMA_AGREGADO,
                           source=ARTIFACT_NAMES_SOURCE)
@@ -391,7 +391,7 @@ def test_nenhum_ponto_de_chamada_envia_sem_gated_provider():
     e só o roteador e o health check criam provedores diretamente; `scripts/` também (M1)."""
     ofensores = []
     criadores = []
-    for path in _py_files("src", "agents", "scripts"):
+    for path in _py_files("src", "scripts"):
         rel = path.relative_to(_ROOT).as_posix()
         text = path.read_text(encoding="utf-8")
         if any(rel.startswith(allowed) for allowed in _ALLOWED_CALL_FILES):
@@ -400,12 +400,12 @@ def test_nenhum_ponto_de_chamada_envia_sem_gated_provider():
         # e o `ContextLoader` a autoriza com `authorize_vision` antes.
         if "generate_content(" in text and rel != "src/llm/vision.py":
             ofensores.append(rel)
-        if rel == "src/context_loader.py":
+        if rel == "src/research_data/context_loader.py":
             assert "authorize_vision" in text
         if rel == "src/llm/vision.py":
-            assert "authorize_vision" in (_ROOT / "src/context_loader.py").read_text(encoding="utf-8")
+            assert "authorize_vision" in (_ROOT / "src/research_data/context_loader.py").read_text(encoding="utf-8")
         if re.search(r"\bcreate_provider\(", text):
-            if rel in {"src/model_router.py", "src/llm/availability.py", "src/llm/registry.py"}:
+            if rel in {"src/llm/model_router.py", "src/llm/availability.py", "src/llm/registry.py"}:
                 continue
             if "GatedProvider(" not in text:  # fora do roteador, o provedor criado tem de ser envolvido
                 criadores.append(rel)
@@ -432,7 +432,7 @@ def test_juiz_do_benchmark_usa_provedor_envolvido():
 
 
 def test_roteador_devolve_sempre_provedor_envolvido():
-    from src.model_router import ModelRouter
+    from src.llm.model_router import ModelRouter
 
     ModelRouter.clear_cache()
     for role in ("researcher", "developer", "validator", "summarizer", "base", "planner"):
@@ -444,7 +444,7 @@ def test_roteador_devolve_sempre_provedor_envolvido():
 
 
 def test_destino_do_provedor_vem_do_catalogo():
-    from src.model_router import ModelRouter
+    from src.llm.model_router import ModelRouter
 
     ModelRouter.clear_cache()
     dest = ModelRouter.get_provider("developer").dest

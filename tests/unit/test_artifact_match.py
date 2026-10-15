@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from src.artifact_match import resolve_artifacts
+from src.artifacts.match import resolve_artifacts
 
 pytestmark = pytest.mark.unit
 

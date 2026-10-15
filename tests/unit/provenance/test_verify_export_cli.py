@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from src.cli_provenance import handle_provenance_command
+from src.cli.provenance import handle_provenance_command
 from src.provenance.errors import ProvenanceUnavailable
 from src.provenance.export import export_session
 from src.provenance.hashing import sha256_file

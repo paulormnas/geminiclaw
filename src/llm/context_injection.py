@@ -11,9 +11,9 @@ from __future__ import annotations
 import pathlib
 from typing import Optional
 
-from src.egress.fragments import ARTIFACT_NAMES_SOURCE, ContentOrigin, PromptFragment, plain_text
 from src.logger import get_logger
-from src.skills.code.manifest import WorkspaceManifest
+from src.utils.egress_fragments import ARTIFACT_NAMES_SOURCE, ContentOrigin, PromptFragment, plain_text
+from src.utils.workspace_manifest import WorkspaceManifest
 
 logger = get_logger(__name__)
 

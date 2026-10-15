@@ -5,7 +5,7 @@ import uuid
 
 import pytest
 
-from src.knowledge.ids import generate_node_id, get_or_create_node_id, uuid7
+from src.utils.node_id import generate_node_id, get_or_create_node_id, uuid7
 
 UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", re.IGNORECASE

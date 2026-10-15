@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from src.telemetry import _PAYLOAD_INLINE_LIMIT, TelemetryCollector
+from src.observability.telemetry import _PAYLOAD_INLINE_LIMIT, TelemetryCollector
 
 # ---------------------------------------------------------------------------
 # Helper

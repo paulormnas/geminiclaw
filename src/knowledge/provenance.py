@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from src.knowledge import schema
-from src.knowledge.ids import generate_node_id
+from src.utils.node_id import generate_node_id
 
 
 def _now_iso() -> str:

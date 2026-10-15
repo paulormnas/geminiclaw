@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.metrics_file import metrics_of
+from src.artifacts.metrics_file import metrics_of
 from src.report.report_model import build_results
 
 pytestmark = pytest.mark.unit

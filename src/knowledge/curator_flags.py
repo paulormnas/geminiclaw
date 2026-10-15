@@ -21,8 +21,8 @@ from pathlib import Path
 from typing import Any
 
 from src import config
-from src.knowledge.normalization import clean_free_text
 from src.logger import get_logger
+from src.utils.normalization import clean_free_text
 
 logger = get_logger(__name__)
 

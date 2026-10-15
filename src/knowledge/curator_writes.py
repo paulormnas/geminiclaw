@@ -20,10 +20,10 @@ from src.knowledge.curator_flags import (
 )
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.graph_store import Node
-from src.knowledge.normalization import clean_free_text
 from src.knowledge.semantic_index import IGNORED_STATUSES, canonical_text
 from src.knowledge.service import KnowledgeServiceError
 from src.logger import get_logger
+from src.utils.normalization import clean_free_text
 
 logger = get_logger(__name__)
 

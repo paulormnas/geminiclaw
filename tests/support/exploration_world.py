@@ -12,12 +12,12 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.agents.validator_agent import ValidationResult
-from src.autonomous_loop import AutonomousLoop
-from src.continuity import read_checkpoint
-from src.orchestrator import AgentResult, Orchestrator
-from src.output_manager import OutputManager
-from src.usage import UsageBudget
+from src.agents.validator.agent import ValidationResult
+from src.artifacts.output_manager import OutputManager
+from src.orchestration.autonomous_loop import AutonomousLoop
+from src.orchestration.orchestrator import AgentResult, Orchestrator
+from src.orchestration.usage import UsageBudget
+from src.session.continuity import read_checkpoint
 from tests.support.hypothesis_world import HypothesisWorld
 from tests.support.session_fakes import FakeSessionManager
 
@@ -104,9 +104,9 @@ class LoopHarness:
                 patch.object(AutonomousLoop, "_promote_findings", AsyncMock()),
                 patch.object(AutonomousLoop, "_synthesize_results", AsyncMock(return_value=None)),
                 patch("src.config.REVIEW_ENABLED", False),
-                patch("src.orchestrator.generate_session_slug", return_value=self.w.sid),
-                patch("src.orchestrator.bind_session_routing"),
-                patch("src.orchestrator.build_session_routing", AsyncMock()),
+                patch("src.orchestration.orchestrator.generate_session_slug", return_value=self.w.sid),
+                patch("src.orchestration.orchestrator.bind_session_routing"),
+                patch("src.orchestration.orchestrator.build_session_routing", AsyncMock()),
                 patch.object(AutonomousLoop, "_is_complex_triage", AsyncMock(return_value=True)),
                 *self.extra_patches,
             ):

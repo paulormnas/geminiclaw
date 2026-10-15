@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.cli_graph import handle_graph_command
+from src.cli.graph import handle_graph_command
 from src.knowledge.curator_tools import CuratorToolkit
 from src.knowledge.reversals import ReversalError, revert_merge, revert_substitution
 from src.knowledge.service import KnowledgeService
@@ -115,6 +115,6 @@ def test_comando_graph_revert_pede_confirmacao_exige_terminal_e_reverte():
 
 
 def test_prompt_da_decisao_reservada_nao_corta_a_descricao_em_400():
-    from src.cli_graph import _DECISION_PROMPT_CHARS
+    from src.cli.graph import _DECISION_PROMPT_CHARS
 
     assert _DECISION_PROMPT_CHARS >= 4000

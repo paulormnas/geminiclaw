@@ -15,12 +15,12 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from src.agent_runtime.context import get_agent_context_optional
 from src.config import SESSION_DEFAULT_MODE
-from src.egress.fragments import ContentOrigin
 from src.logger import get_logger
 from src.research_consult import DECISOES_RESERVADAS, assumption_text
 from src.skills.base import BaseSkill, SkillResult
+from src.utils.agent_context import get_agent_context_optional
+from src.utils.egress_fragments import ContentOrigin
 
 logger = get_logger(__name__)
 
@@ -105,7 +105,7 @@ class HumanFeedbackSkill(BaseSkill):
             # A pergunta nunca chega a um humano nestes modos; registrá-la permite avaliar depois se
             # a consulta era relevante e se o agente decidiria melhor com ajuda.
             from src.llm.metering import bound_execution_id
-            from src.telemetry import get_telemetry
+            from src.observability.telemetry import get_telemetry
 
             get_telemetry().record_agent_event(
                 execution_id=(ctx.execution_id if ctx is not None and ctx.execution_id else "") or bound_execution_id()

@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from src import config
-from src.human_gate import HumanGate, default_gate
+from src.gate.human_gate import HumanGate, default_gate
 from src.knowledge import opportunities
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.graph_store import GraphStore, Node
@@ -39,9 +39,9 @@ from src.knowledge.ingestion import (
     _Writer,
 )
 from src.knowledge.metric_definition import MetricDecl, parse_metrics
-from src.knowledge.normalization import clean_free_text, normalize_domain_term
 from src.knowledge.projects import get_active_problem
 from src.logger import get_logger
+from src.utils.normalization import clean_free_text, normalize_domain_term
 
 logger = get_logger(__name__)
 

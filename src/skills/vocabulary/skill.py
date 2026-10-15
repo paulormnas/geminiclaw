@@ -15,11 +15,11 @@ import asyncio
 import unicodedata
 from typing import Any, Callable
 
-from src.egress.fragments import ContentOrigin
 from src.knowledge.domain_search import MAX_RESULTS, DomainHit, DomainSearch
 from src.knowledge.semantic_index import DOMAIN_LEVELS
 from src.logger import get_logger
 from src.skills.base import BaseSkill, SkillResult
+from src.utils.egress_fragments import ContentOrigin
 
 logger = get_logger(__name__)
 

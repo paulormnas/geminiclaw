@@ -86,7 +86,7 @@ mais abaixo.
 
 2. Validar cobertura nos módulos afetados:
    ```bash
-   uv run pytest --cov=src --cov=agents --cov-report=term-missing
+   uv run pytest --cov=src --cov-report=term-missing
    ```
 
 3. Verificar regressões em testes existentes e a rastreabilidade cenário → teste da spec.

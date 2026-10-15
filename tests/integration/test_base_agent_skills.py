@@ -3,7 +3,7 @@ import os
 import docker
 import pytest
 
-from agents.base.agent import root_agent
+from src.agents.base.agent import root_agent
 
 
 def is_docker_available():

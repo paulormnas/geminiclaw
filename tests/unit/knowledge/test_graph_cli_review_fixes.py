@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from src import config
-from src.human_gate import HumanGate
+from src.gate.human_gate import HumanGate
 from src.knowledge import schema, validation
 from src.knowledge.change_proposals import (
     ApplyError,
@@ -225,10 +225,10 @@ def test_plano_adulterado_depois_da_exibicao_nao_aplica(world):
 def test_guarda_estatica_apply_plan_so_na_cli():
     """IMPORTANTE 3: ``apply_plan`` e a confirmação só em ``cli_graph``; importadores restritos."""
     forbidden = re.compile(r"\b(apply_plan|issue_confirmation|HumanConfirmation|_ACTOR)\b")
-    allowed_users = {"src/knowledge/change_proposals.py", "src/cli_graph.py"}
-    allowed_importers = allowed_users | {"agents/curator/edit.py"}
+    allowed_users = {"src/knowledge/change_proposals.py", "src/cli/graph.py"}
+    allowed_importers = allowed_users | {"src/agents/curator/edit.py"}
     offenders, importers = [], []
-    for base in ("src", "agents"):
+    for base in ("src",):
         for path in (REPO / base).rglob("*.py"):
             rel = str(path.relative_to(REPO))
             text = path.read_text(encoding="utf-8")
@@ -238,9 +238,9 @@ def test_guarda_estatica_apply_plan_so_na_cli():
                 importers.append(rel)
     assert not offenders, offenders
     assert not importers, importers
-    edit = (REPO / "agents/curator/edit.py").read_text(encoding="utf-8")
+    edit = (REPO / "src/agents/curator/edit.py").read_text(encoding="utf-8")
     assert not re.search(r"import[^\n]*\b(apply_plan|issue_confirmation|HumanConfirmation)\b", edit)
-    for base in ("agents", "src/skills"):
+    for base in ("src/agents", "src/skills"):
         for path in (REPO / base).rglob("*.py"):
             assert not re.search(r"\bapply_plan\b|\bissue_confirmation\b", path.read_text(encoding="utf-8")), path
 

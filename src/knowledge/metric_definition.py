@@ -23,10 +23,10 @@ from src import config
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.graph_store import GraphStore, Node
 from src.knowledge.ingestion import ACTOR_ORQUESTRADOR, ACTOR_RESEARCHER
-from src.knowledge.normalization import clean_free_text, normalize_metric_name
 from src.knowledge.projects import get_active_problem
 from src.knowledge.vocabulary import SemanticSearch, VocabularyError, find_rejected_metric, resolve_metric
 from src.logger import get_logger
+from src.utils.normalization import clean_free_text, normalize_metric_name
 
 logger = get_logger(__name__)
 

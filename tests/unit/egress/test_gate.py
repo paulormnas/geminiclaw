@@ -5,9 +5,9 @@ import json
 import pytest
 
 from src.egress import filters
-from src.egress.fragments import ContentOrigin, PromptFragment, labeled
 from src.egress.gate import OBSERVED_DATA_RULE, RETENTION_LIMIT_NOTICE, EgressGate, EgressRefused
 from src.egress.log import EgressLog, EgressLogError
+from src.utils.egress_fragments import ContentOrigin, PromptFragment, labeled
 
 from .conftest import make_dest
 
@@ -162,7 +162,7 @@ def test_saida_de_execucao_e_filtrada_para_terceiro_e_integral_para_dados_brutos
 
 
 def test_marca_de_contaminacao_em_linha_no_system(gate, third_party, local_node):
-    from src.egress.fragments import mark_tainted
+    from src.utils.egress_fragments import mark_tainted
 
     system = f"Papel X. Memória: {mark_tainted('a acurácia chegou a 0.93')} Fim."
     fora = gate.prepare_llm([], system, third_party).system

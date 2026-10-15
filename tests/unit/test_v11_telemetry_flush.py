@@ -1,4 +1,4 @@
-"""Testes V11.1 — Flush explícito da telemetria em src/cli.py.
+"""Testes V11.1 — Flush explícito da telemetria em src/cli/main.py.
 
 Verifica que a chamada de flush é garantida ao terminar a execução via CLI (modo direto e
 SIGINT). O flush do antigo ``agents/runner.py`` saiu com o modo container (ADR 014).
@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.telemetry import TelemetryCollector
+from src.observability.telemetry import TelemetryCollector
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -49,9 +49,9 @@ class TestCLIFlushOnExit:
         mock_telemetry.flush = fake_flush  # sync-friendly for asyncio.run
 
         # Precisamos que get_telemetry retorne nosso mock
-        with patch("src.telemetry._collector", mock_telemetry):
+        with patch("src.observability.telemetry._collector", mock_telemetry):
             # Importa a função de flush do cli indiretamente
-            from src.telemetry import get_telemetry
+            from src.observability.telemetry import get_telemetry
 
             tel = get_telemetry()
             # O flush é chamado via asyncio.run(get_telemetry().flush())

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
 from src import config
+from src.artifacts.reserved_files import is_reserved_name
 from src.config import get_env
 from src.logger import get_logger
 from src.numeric_refs.literal_metrics import LiteralFinding, scan_code, write_findings
@@ -22,10 +23,9 @@ from src.provenance.records import (
     status_of,
     termino_body,
 )
-from src.reserved_files import is_reserved_name
 from src.skills.base import BaseSkill, SkillResult
-from src.skills.code.manifest import WorkspaceManifest
 from src.skills.code.sandbox import _SAFE_NAME_RE, NETWORK_UNDECLARED_MESSAGE, PythonSandbox, SandboxResult
+from src.utils.workspace_manifest import WorkspaceManifest
 
 logger = get_logger(__name__)
 
@@ -196,8 +196,8 @@ class CodeSkill(BaseSkill):
     def _record_sandbox_run(session_id: str, task_name: str, result: SandboxResult, duration_ms: int) -> None:
         """Emite o evento ``sandbox_run`` (sem o conteúdo do script) para o relatório e a avaliação."""
         try:
-            from src.agent_runtime.context import get_agent_context_optional
-            from src.telemetry import get_telemetry
+            from src.observability.telemetry import get_telemetry
+            from src.utils.agent_context import get_agent_context_optional
 
             ctx = get_agent_context_optional()
             get_telemetry().record_agent_event(
@@ -281,7 +281,7 @@ class CodeSkill(BaseSkill):
     def _readable_prior_dirs() -> List[pathlib.Path]:
         """Saídas de sessões anteriores da cadeia de continuidade (``AgentContext.readable_dirs``), se houver."""
         try:
-            from src.agent_runtime.context import get_agent_context_optional
+            from src.utils.agent_context import get_agent_context_optional
 
             ctx = get_agent_context_optional()
             return [pathlib.Path(d) for d in ctx.readable_dirs] if ctx is not None else []
@@ -311,7 +311,7 @@ class CodeSkill(BaseSkill):
         session_dir: pathlib.Path,
     ) -> "_Provenance | SkillResult":
         """Grava o ``inicio`` (fail-fast): sem o registro a execução não começa (design §4)."""
-        from src.agent_runtime.context import get_agent_context_optional
+        from src.utils.agent_context import get_agent_context_optional
 
         ctx = get_agent_context_optional()
         project_id = ctx.project_id if ctx is not None else None

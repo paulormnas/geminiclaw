@@ -40,7 +40,7 @@ uv run pytest -m integration -v
 Geração de relatório de cobertura para os módulos `src` e `agents`.
 
 ```bash
-uv run pytest --cov=src --cov=agents --cov-report=term-missing
+uv run pytest --cov=src --cov-report=term-missing
 ```
 
 ---

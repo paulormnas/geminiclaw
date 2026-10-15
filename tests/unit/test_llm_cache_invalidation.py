@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.llm_cache import LLMResponseCache
+from src.llm.cache import LLMResponseCache
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -58,26 +58,26 @@ class TestCacheSetFilterInvalidResponses:
 
     def test_set_ignora_resposta_vazia(self, cache):
         """set() não deve gravar quando response é string vazia."""
-        with patch("src.llm_cache.get_connection") as mock_gc:
+        with patch("src.llm.cache.get_connection") as mock_gc:
             cache.set("prompt", "model", "")
         mock_gc.assert_not_called()
 
     def test_set_ignora_resposta_somente_espacos(self, cache):
         """set() não deve gravar quando response tem apenas espaços."""
-        with patch("src.llm_cache.get_connection") as mock_gc:
+        with patch("src.llm.cache.get_connection") as mock_gc:
             cache.set("prompt", "model", "   ")
         mock_gc.assert_not_called()
 
     def test_set_ignora_resposta_muito_curta(self, cache):
         """set() não deve gravar quando response tem menos de 50 chars."""
-        with patch("src.llm_cache.get_connection") as mock_gc:
+        with patch("src.llm.cache.get_connection") as mock_gc:
             cache.set("prompt", "model", "curto")
         mock_gc.assert_not_called()
 
     def test_set_ignora_resposta_com_exatamente_50_chars(self, cache):
         """Resposta com exatamente 50 chars NÃO deve ser cacheada (limiar é > 50)."""
         response_50 = "A" * 50
-        with patch("src.llm_cache.get_connection") as mock_gc:
+        with patch("src.llm.cache.get_connection") as mock_gc:
             cache.set("prompt", "model", response_50)
         mock_gc.assert_not_called()
 
@@ -86,7 +86,7 @@ class TestCacheSetFilterInvalidResponses:
         count_row = {"cnt": 0}
         ctx, mock_conn = _make_ctx(fetchone=count_row)
         response_valida = "A" * 51
-        with patch("src.llm_cache.get_connection", return_value=ctx):
+        with patch("src.llm.cache.get_connection", return_value=ctx):
             cache.set("prompt", "model", response_valida)
         sqls = [c[0][0] for c in mock_conn.execute.call_args_list]
         assert any("ON CONFLICT" in s for s in sqls), (
@@ -105,7 +105,7 @@ class TestCacheInvalidate:
     def test_invalidate_chama_delete(self, cache):
         """invalidate() deve executar um DELETE com a chave correta."""
         ctx, mock_conn = _make_ctx()
-        with patch("src.llm_cache.get_connection", return_value=ctx):
+        with patch("src.llm.cache.get_connection", return_value=ctx):
             cache.invalidate("meu prompt", "gemini")
         sqls = [c[0][0] for c in mock_conn.execute.call_args_list]
         assert any("DELETE" in s for s in sqls), (
@@ -119,7 +119,7 @@ class TestCacheInvalidate:
         model = "qwen3:4b"
         expected_hash = cache._generate_hash(prompt, model)
 
-        with patch("src.llm_cache.get_connection", return_value=ctx):
+        with patch("src.llm.cache.get_connection", return_value=ctx):
             cache.invalidate(prompt, model)
 
         # Verificar que o hash foi passado como argumento ao execute
@@ -135,7 +135,7 @@ class TestCacheInvalidate:
     def test_invalidate_nao_lanca_excecao_quando_entrada_inexistente(self, cache):
         """invalidate() de entrada inexistente não deve lançar exceção."""
         ctx, _ = _make_ctx()
-        with patch("src.llm_cache.get_connection", return_value=ctx):
+        with patch("src.llm.cache.get_connection", return_value=ctx):
             # Não deve lançar nada
             cache.invalidate("prompt que nao existe", "qualquer-modelo")
 
@@ -143,7 +143,7 @@ class TestCacheInvalidate:
         """invalidate() não deve tocar no banco quando cache está desabilitado."""
         monkeypatch.setenv("LLM_CACHE_ENABLED", "false")
         cache_off = LLMResponseCache()
-        with patch("src.llm_cache.get_connection") as mock_gc:
+        with patch("src.llm.cache.get_connection") as mock_gc:
             cache_off.invalidate("prompt", "model")
         mock_gc.assert_not_called()
 

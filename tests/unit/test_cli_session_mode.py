@@ -5,7 +5,7 @@ Cobre a flag --mode, o help completo e o banner de inicialização de sessão.
 
 import pytest
 
-from src.cli import (
+from src.cli.main import (
     FULL_HELP_TEXT,
     build_parser,
     print_full_help,

@@ -13,13 +13,13 @@ from __future__ import annotations
 import contextvars
 from typing import Optional
 
-from src.agent_runtime.context import get_agent_context_optional
 from src.llm.allocation import record_call_version
 from src.llm.base import LLMProvider, LLMResponse
 from src.llm.pricing import estimate_cost
 from src.llm.versions import normalize_version
 from src.logger import get_logger
-from src.telemetry import get_telemetry
+from src.observability.telemetry import get_telemetry
+from src.utils.agent_context import get_agent_context_optional
 
 logger = get_logger(__name__)
 

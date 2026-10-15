@@ -1,7 +1,7 @@
 
 import pytest
 
-from src.session import SessionManager
+from src.session.manager import SessionManager
 from src.skills.memory.skill import MemorySkill
 
 

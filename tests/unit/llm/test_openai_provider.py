@@ -117,7 +117,7 @@ class TestMetering:
 
 class TestTokenSummaryIncludesBuffer:
     def test_unflushed_rows_are_summed(self):
-        from src.telemetry import TelemetryCollector
+        from src.observability.telemetry import TelemetryCollector
 
         tel = TelemetryCollector.__new__(TelemetryCollector)
         tel._buffer = MagicMock()

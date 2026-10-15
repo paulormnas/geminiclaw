@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.agents.validator_agent import ValidationResult
-from src.orchestrator import AgentResult, Orchestrator
+from src.agents.validator.agent import ValidationResult
+from src.orchestration.orchestrator import AgentResult, Orchestrator
 
 
 def approved() -> ValidationResult:
@@ -69,7 +69,7 @@ async def test_planning_loop_max_iterations(orchestrator):
     """O ciclo para ao atingir o limite de iterações."""
     orchestrator.validator.validate_plan.return_value = revision("ainda ruim")
 
-    with patch("src.orchestrator.MAX_PLANNING_ITERATIONS", 3):
+    with patch("src.orchestration.orchestrator.MAX_PLANNING_ITERATIONS", 3):
         with patch.object(orchestrator, "_execute_agent", AsyncMock(return_value=planner_result("[]"))) as mock_exec:
             tasks = await orchestrator._run_planning_loop("Prompt", "master_s")
 

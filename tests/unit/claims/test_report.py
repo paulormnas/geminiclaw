@@ -5,10 +5,10 @@ import threading
 
 import pytest
 
-from src.claims.report import ClaimsRunner, claims_section, format_mark, insert_marks, register_claims
 from src.claims.service import ClaimService
 from src.claims.verifier import ClaimVerifierError
 from src.report.base_converter import CLAIM_MARK_RE, split_marks
+from src.report.claims_report import ClaimsRunner, claims_section, format_mark, insert_marks, register_claims
 from src.report.pipeline import ReportState, build_default_pipeline
 from tests.unit.claims.helpers import FakeVerifier, make_store, supported
 

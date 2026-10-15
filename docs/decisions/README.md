@@ -33,6 +33,7 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 | [021](adr_021_exploracao_rastreavel_por_hipoteses.md) | Exploração Rastreável por Hipóteses: Estrutura dos Nós e Governança por Registro | 🟢 Aprovado (implementação não iniciada, V18.7) | 2026-10-15 |
 | [022](adr_022_contrato_contexto_por_chamada.md) | Contrato de Contexto por Chamada e Regimento da Pesquisa | 🟢 Aprovado (implementação não iniciada, V18.7) | 2026-10-15 |
 | [023](adr_023_pesquisa_em_segundo_plano.md) | Pesquisa em Segundo Plano com Acompanhamento pelo Terminal | 🟢 Aprovado (implementação não iniciada, V18.7) | 2026-10-15 |
+| [024](adr_024_organizacao_do_codigo.md) | Organização do Código por Responsabilidade e Regra de Camadas | 🔵 Proposto | 2026-10-15 |
 
 
 ---

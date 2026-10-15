@@ -69,12 +69,13 @@ _Origem: `v18.7-benchmark-fixes`; corrige a contagem exigida por `v18-usage-limi
 
 ### Requirement: Resfriamento do limitador de taxa com teto
 _Origem: `v18.7-benchmark-fixes` (achado 4 da bateria V18.6)._
-`AdaptiveRateLimiter.report_429` SHALL limitar o resfriamento a `LLM_RATE_LIMIT_MAX_COOLDOWN_SECONDS` (padrão 300). O orquestrador SHALL NOT chamar `report_429` para um resultado de agente com `error_category="cota_provedor"`.
+`AdaptiveRateLimiter.report_429` SHALL manter o crescimento exponencial atual do resfriamento (`src/rate_limiter.py:86`), resfriamento da n-ésima chamada consecutiva igual a `LLM_RATE_LIMIT_COOLDOWN_SECONDS * 2^(n-1)`, e SHALL limitá-lo a `LLM_RATE_LIMIT_MAX_COOLDOWN_SECONDS` (padrão 300), isto é, `min(LLM_RATE_LIMIT_COOLDOWN_SECONDS * 2^(n-1), LLM_RATE_LIMIT_MAX_COOLDOWN_SECONDS)`. O orquestrador SHALL NOT chamar `report_429` para um resultado de agente com `error_category="cota_provedor"`.
 
 #### Scenario: Teto do resfriamento
 - **GIVEN** `LLM_RATE_LIMIT_COOLDOWN_SECONDS=30` e `LLM_RATE_LIMIT_MAX_COOLDOWN_SECONDS=300`
-- **WHEN** `report_429` é chamado 9 vezes seguidas
-- **THEN** o resfriamento aplicado na nona chamada é 300 segundos
+- **WHEN** `report_429` é chamado 6 vezes seguidas, sem requisição bem-sucedida entre as chamadas
+- **THEN** os resfriamentos aplicados são 30, 60, 120, 240, 300 e 300 segundos
+- **AND** nenhum resfriamento passa de 300 segundos
 
 #### Scenario: Cota não aciona o limitador
 - **GIVEN** um `AgentResult` com `status="error"`, `error="429 RESOURCE_EXHAUSTED ... spending cap"` e `error_category="cota_provedor"`

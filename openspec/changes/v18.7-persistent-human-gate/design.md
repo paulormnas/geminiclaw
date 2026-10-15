@@ -243,7 +243,7 @@ Pontos para o parecer:
 
 ## 7. Riscos e mitigações
 
-1. **Superusuário contorna o gatilho** (§6). Mitigação nesta mudança: nenhum caminho de código; teste estático (`grep`) que falha se `SET ROLE` ou `DISABLE TRIGGER` aparecer em `src/`.
+1. **Superusuário contorna o gatilho** (§6). Mitigação nesta mudança: nenhum caminho de código; gatilhos com `session_user` e `current_user`; conferência em `pg_trigger` pelo terminal; teste estático com a lista completa do requisito "Garantias do gate escritas". Fechamento: mudança de endurecimento antes da V20 (Questão 1).
 2. **Pedido respondido por dois terminais.** Só há um REPL (`v18.7-background-sessions`), e a transição condicional recusa a segunda resposta.
 3. **Resposta perdida entre gravação e consumo.** A sessão marca `consumido_em` só depois de aplicar; na queda, a sessão retomada reaplica (operações idempotentes por id de pedido).
 4. **Ordem com `v18.7-exploration-limits`.** Os tipos `decidir_continuidade` e `restringir_direcao` existem no `CHECK` desde esta mudança; quem os produz (`v18.7-exploration-limits`) depende desta e é mergeada depois. Até lá, só `decidir_objetivo_atingido` (no `assisted`), `aprovar_hipotese` e `responder_pergunta_agente` têm produtor.

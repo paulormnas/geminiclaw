@@ -23,6 +23,7 @@
 - [ ] 2.4 Modo sem limite: o terminal cria e resolve `ativar_modo_sem_limite` antes do lançamento; o arquivo de lançamento leva o id; o processo da sessão confere no banco.
 - [ ] 2.5 Testes de unidade: pedido não duplicado; fonte não humana ignorada; decisão nova reservada no consultor; tipos de resposta validados por decisão.
 - [ ] 2.6 `consume_authorized` e `GateAuthorizationRefused` (design §1.2); referências fixas por tipo (`aprovar_hipotese` = id da hipótese, `ativar_modo_sem_limite` = `launch_id`, `ativar_adendo_regimento` = sha256 do adendo). Testes de integração (PostgreSQL real): "Reuso de autorização recusado", "Autorização de outra sessão", "Modo sem limite preso ao lançamento", "Modo sem limite consumido uma vez".
+- [ ] 2.6a `authorized_reference` só para `ativar_adendo_regimento` (leitura sem consumo, fora da cadeia da sessão), também no `FakeGate`; testes dos três cenários do requisito "Leitura sem consumo para o adendo do regimento".
 - [ ] 2.7 `src/human_approval.py`: `ApprovalPort` e `PersistentGateApprover` (design §2.4); se `v18.7-hypothesis-linking` já criou o arquivo com `NoGateApprovalPort`, trocar o uso pela implementação do gate sem mudar o `Protocol`.
 - [ ] 2.8 Ajuda de teste compartilhada `tests/support/fake_gate.py` (`FakeGate`: implementa `ApprovalPort` e a API do `PersistentGate` em memória, com respostas roteirizadas por id de pedido); reaproveitada por `v18.7-exploration-limits`, `v18.7-session-events-terminal`, `v18.7-agent-system-prompts` e, depois desta, `v18.7-hypothesis-linking`. Testes: "Só decisões respondidas", "Aprovação anterior vem do gate", "FakeGate com a mesma interface".
 
@@ -41,7 +42,7 @@
 
 ## 5. Compatibilidade
 - [ ] 5.1 `.env.example`: variáveis do design §3 e instrução do script do papel; `README.md`: passo de migração do papel.
-- [ ] 5.2 Teste estático: `SET ROLE` e `DISABLE TRIGGER` não aparecem em `src/`.
+- [ ] 5.2 Teste estático da tarefa 1.8 rodando no conjunto `unit` (lista completa do requisito "Garantias do gate escritas", não só `SET ROLE` e `DISABLE TRIGGER`).
 - [ ] 5.3 Métricas de operação: `intervencoes_humanas` contadas a partir do gate persistente; teste.
 - [ ] 5.4 `PersistentGate.request` com `motivo` e `opcoes` validadas contra o catálogo do design §1.1 (os produtores de `decidir_continuidade` e `restringir_direcao` chegam com `v18.7-exploration-limits`, mergeada depois desta); testes com pedidos sintéticos de cada `motivo`.
 - [ ] 5.5 Testes de integração (processo real, provedor gravado, pedidos sintéticos `decidir_continuidade` com `motivo="saturacao"`): "Parar por decisão do pesquisador" (sessão encerrada pelo terminal com `encerrada_pesquisador`, relatório, nenhum processo novo) e "Orientar" (texto em `<mensagens_do_pesquisador>` no prompt gravado da sessão retomada); "Resposta fora das opções do pedido" (unidade).

@@ -69,7 +69,7 @@ Cada classificação positiva registra `logger.error` com provedor, modelo, stat
 
 ### 1.5 Limitador de taxa
 
-- `report_429` limita o resfriamento a `LLM_RATE_LIMIT_MAX_COOLDOWN_SECONDS` (padrão 300).
+- `report_429` mantém o crescimento exponencial de hoje (`cooldown_seconds * 2^(n-1)`, `src/rate_limiter.py:86`) e limita o resultado a `LLM_RATE_LIMIT_MAX_COOLDOWN_SECONDS` (padrão 300): com base 30, a sequência é 30, 60, 120, 240, 300, 300 e assim por diante.
 - `src/orchestrator.py:1984` não chama `report_429` quando `error_category == "cota_provedor"` (esperar não devolve cota).
 
 ### 1.6 Contagem de retentativas de conexão

@@ -1,6 +1,6 @@
 # Delta: agent-prompts
 
-Os testes desta capacidade usam um provedor LLM falso que grava, em cada `generate`, a lista `messages` e o `system` recebidos e devolve respostas roteirizadas (chamadas de ferramenta e texto final). Nenhum cenário chama provedor pago.
+Os testes desta capacidade usam o `FakeRecordingProvider` (ajuda compartilhada de `v18.7-benchmark-fixes`), provedor falso que grava, em cada `generate`, a lista `messages` e o `system` recebidos e devolve respostas roteirizadas (chamadas de ferramenta e texto final). Nenhum cenário chama provedor pago.
 
 ## ADDED Requirements
 

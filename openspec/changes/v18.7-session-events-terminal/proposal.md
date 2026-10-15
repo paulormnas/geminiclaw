@@ -30,4 +30,4 @@ Com a sessão em processo próprio, o pesquisador precisa ver o progresso e agir
 - **Vocabulário do grafo:** `Sessao.motivo_parada` ganha `pausada_pesquisador`; `cancelada_pesquisador` é motivo de retirada de subtarefa (sem esquema de grafo novo).
 - **Exclusão de dados:** a retenção (`SESSION_EVENTS_RETENTION_DAYS`) apaga eventos de sessões terminadas há mais de N dias; o padrão é `0` (nunca apaga). Ativar a retenção é decisão do pesquisador.
 - **Papel de banco:** nenhum novo (a consulta usa `knowledge_reader`, existente, e transação somente leitura no papel principal; os comandos usam `terminal_writer`, de `v18.7-persistent-human-gate`).
-- **Dependência nova:** nenhuma (impressão assíncrona com `readline` da biblioteca padrão).
+- **Dependência nova:** nenhuma (impressão assíncrona com `readline` da biblioteca padrão). Os testes usam `pexpect` e `pytest-timeout`, dependências de desenvolvimento acrescentadas por `v18.7-background-sessions`.

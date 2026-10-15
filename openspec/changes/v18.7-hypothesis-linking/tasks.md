@@ -3,10 +3,11 @@
 **Estado (2026-10-15):** não iniciada.
 
 ## 0. Pré-requisitos
-- [ ] 0.1 `v18.7-graph-exploration-relations` mergeada (schema, leitura compatível, migração).
+- [ ] 0.1 `v18.7-graph-exploration-relations` mergeada (schema, leitura compatível, migração); os testes usam e estendem os construtores de `tests/support/exploration_graph.py` daquela mudança (design §5.1), sem criar outros para os mesmos nós.
 - [ ] 0.2 Questões do design §16 respondidas pelo pesquisador (ou propostas adotadas e listadas no PR); parecer do Analista de Segurança sobre o design §14, em especial a reversão de `Oportunidade`.
 - [ ] 0.3 Revisar esta mudança contra o código atual (`src/exploration.py`, `src/knowledge/hypotheses.py`, `src/knowledge/hypothesis_cycle.py`, `src/knowledge/ingestion.py`, `src/autonomous_loop.py`, `src/agents/validator_agent.py`) e contra o estado de `v18.7-exploration-limits` (mesmos `prepare_cycle` e `select`); registrar divergências no PR.
 - [ ] 0.4 Worktree `.worktrees/feat-v18.7-hypothesis-linking`.
+- [ ] 0.5 Conferir se `v18.7-persistent-human-gate` já foi mergeada: se sim, usar `ApprovalPort` e `PersistentGateApprover` de `src/human_approval.py`; se não, criar `src/human_approval.py` com o `Protocol` exatamente como no design §2.4 daquela mudança e a implementação provisória `NoGateApprovalPort` (design §4.5).
 
 ## 1. Configuração e campos
 - [ ] 1.1 `LINKAGE_FEEDBACK_MAX_ITEMS` e `HYPOTHESIS_TEXT_NEGATION_PREFIXES` em `src/config.py` e `.env.example` (design §11).
@@ -35,6 +36,7 @@
 - [ ] 5.2 Deduplicação pela chave com a tabela do design §4.3.
 - [ ] 5.3 Campo livre `hypothesis` (design §9.3): sem hipótese provisória para `preparacao`/`referencia` e para `eda`/`synthesis` sem exploração.
 - [ ] 5.4 Testes: os oito cenários de "Hipótese do sistema para teste sem hipótese aceita".
+- [ ] 5.5 `enunciado_fonte` (`texto_livre` ou `modelo`) na nota de auditoria da criação, no evento `hipotese_derivada` e no item de aprovação; testes do requisito "Fonte do enunciado da hipótese do sistema registrada" (parecer de segurança, item 4).
 
 ## 6. Ciclo de vida, aprovação e derivação entre hipóteses
 - [ ] 6.1 `system_origin` no `ExplorationSession` e no checkpoint; abandono pelo sistema nos três casos (design §4.4), com aviso do laço quando o DAG marca `abandonada` por retentativas.
@@ -43,12 +45,14 @@
 - [ ] 6.4 Origem `sistema` no lote do `assisted` e no caminho autônomo (design §5.1).
 - [ ] 6.5 `derivada_de` aceita `Hipotese` do projeto e `ref` declarada antes no mesmo plano.
 - [ ] 6.6 Testes: cenários de "Ciclo de vida da hipótese do sistema", "Aprovação da hipótese do sistema por modo" e "Hipótese derivada de outra hipótese".
+- [ ] 6.7 Aprovação e reabertura no `assisted` pela `ApprovalPort` (pedido `aprovar_hipotese` no gate, `previously_approved` lido de `gate_requests`, nunca da trilha de auditoria); testes "Reabertura no assistido com aprovação no gate", "Reabertura no assistido sem aprovação no gate", "Interface provisória antes do gate" e "Aprovação pelo gate persistente" com `FakeGate` (parecer de segurança, itens 1 e 2).
 
 ## 7. Concluídas e transições
 - [ ] 7.1 `select` aceita `validada`/`refutada` (design §5.2).
 - [ ] 7.2 `sync_statuses` nos dois sentidos com auditoria e evento `hipotese_transicao` (design §5.3).
 - [ ] 7.3 Revisão dos efeitos: `Oportunidade` `concluida -> em_investigacao` (alteração de `OPPORTUNITY_ORCHESTRATOR_TRANSITIONS` só para este caminho), decisões reavaliadas, atalhos contestados (design §5.4).
 - [ ] 7.4 Testes: cenários de "Hipótese concluída recebe novos testes" e "Transições de status nos dois sentidos ao fim do ciclo"; teste de que o orquestrador continua sem poder aprovar ou rejeitar `Oportunidade`.
+- [ ] 7.5 Testes do requisito "Reversão de Oportunidade fora do alcance dos agentes": Curator, orquestrador sem `revert_on_reopen` e plano com o campo (parecer de segurança, item 3).
 
 ## 8. Retiradas, fila e retorno ao Researcher
 - [ ] 8.1 Motivos do design §6, renomeação de `hipotese_ja_concluida_ou_abandonada` e cascata por hipóteses servidas.

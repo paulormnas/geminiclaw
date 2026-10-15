@@ -15,6 +15,7 @@
 - [ ] 2.1 `LLM_QUOTA_MARKERS_GOOGLE`, `LLM_QUOTA_MARKERS_ANTHROPIC`, `LLM_QUOTA_MARKERS_OPENAI`, `LLM_QUOTA_MARKERS_OPENAI_COMPATIBLE` e `LLM_RATE_LIMIT_MAX_COOLDOWN_SECONDS` em `src/config.py` e `.env.example`.
 
 ## 3. Cota do provedor (design §1)
+- [ ] 3.0 Criar o auxiliar de teste compartilhado `FakeRecordingProvider` em `tests/support/fake_recording_provider.py` (sem dependência nova): implementa a interface de provedor LLM; registra, por chamada, o `system` e as `messages` recebidos; devolve respostas roteirizadas em ordem; aceita latência simulada por chamada; injeta erros roteirizados 429 (com e sem marcador de cota), 503 e esgotamento de cota com status e mensagem configuráveis. Nenhuma chamada de rede. Esta mudança cria o auxiliar; as mudanças V18.7 seguintes o reutilizam em vez de criar outro. Testes do próprio auxiliar em `tests/unit/support/test_fake_recording_provider.py`.
 - [ ] 3.1 `src/llm/quota.py`: `ProviderQuotaExhausted`, `is_quota_exhausted`, `record_quota_exhausted`, `quota_stop_for`, `clear_quota_stop`; `is_retryable_error` devolve `False` para a exceção.
 - [ ] 3.2 Resolução única do contexto da sessão (extraída de `_task_env`) usada por `emit_connection_retry` e pelo registro de cota.
 - [ ] 3.3 Classificação em `google.py` (sem reserva), `anthropic.py` e `openai_compatible.py` (corpo lido antes de `is_retryable_status`).
@@ -22,7 +23,7 @@
 - [ ] 3.5 `StopReason.PROVIDER_QUOTA`, precedência sobre `limite_conexao`, `pending_stop` consultando `quota_stop_for`, limpeza no início da sessão.
 - [ ] 3.6 `_close_session` sem Summarizer/Curator nesse motivo, checkpoint com `cota_provedor`, evento `cota_provedor_esgotada`, mensagem da CLI.
 - [ ] 3.7 `MOTIVOS_RETOMAVEIS` e enumeração `Sessao.motivo_parada` com `limite_cota_provedor`; `describe_stop_reason`.
-- [ ] 3.8 Testes: um por cenário de `specs/llm-providers`, `specs/usage-limits` e `specs/session-continuity`, com clientes simulados (nenhuma chamada paga).
+- [ ] 3.8 Testes: um por cenário de `specs/llm-providers`, `specs/usage-limits` e `specs/session-continuity`, com `FakeRecordingProvider` (tarefa 3.0) ou clientes HTTP simulados (nenhuma chamada paga); o teste do teto do resfriamento confere a sequência 30, 60, 120, 240, 300, 300.
 
 ## 4. Cadeia de proveniência (design §2)
 - [ ] 4.1 `_check_files`: entrada reescrita pela mesma execução vira `substituido`.

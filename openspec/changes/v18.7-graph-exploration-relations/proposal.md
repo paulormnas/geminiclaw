@@ -28,6 +28,7 @@ O ADR 021 troca o bloqueio por falta de `hypothesis_ref` pelo registro da ligaç
   - Regra condicional: `Hipotese` com `origem = "sistema"` exige `chave_estruturada` e `referencia_fixada` na criação; as duas são imutáveis depois de gravadas.
   - Regra de autoridade: só o `Actor` `pesquisador` grava `abandonada_por = "pesquisador"` ou tira a hipótese desse estado (mesmo mecanismo de `HUMAN_ONLY_TRANSITIONS`, `validation.py:263`).
   - Relações `Experimento-PREPARA->(Hipotese | Problema)` e `Resultado-REFERENCIA_DE->Problema`.
+  - Construtores compartilhados de grafo em memória para testes (`tests/support/exploration_graph.py`: `Problema` por tipo de objetivo, hipóteses, `Experimento`, `Resultado` e referência), reutilizados pelas mudanças seguintes da V18.7 (design §5.1).
   - Funções de leitura compatível: `experiment_role(node)` (ausente = `teste`) e `abandoned_by(node)` (ausente = `pesquisador`, proposta do design §6, sujeita à questão 1).
 - **Modificado:**
   - `Hipotese-DERIVADA_DE->` passa a aceitar `Hipotese` como destino, sem laço para o próprio nó.

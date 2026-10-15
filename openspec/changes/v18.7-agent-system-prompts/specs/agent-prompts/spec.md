@@ -1,6 +1,6 @@
 # Delta: agent-prompts
 
-Os cenários com chamada a modelo usam um provedor falso que grava `system` e `messages` de cada `generate`; os demais são testes sobre arquivos e textos renderizados. Nenhum cenário chama provedor pago.
+Os cenários com chamada a modelo usam o `FakeRecordingProvider` (ajuda compartilhada de `v18.7-benchmark-fixes`), que grava `system` e `messages` de cada `generate` e devolve respostas roteirizadas; os demais são testes sobre arquivos e textos renderizados. Nenhum cenário chama provedor pago.
 
 ## ADDED Requirements
 
@@ -81,11 +81,23 @@ Regimento e prompts renderizados MUST NOT conter emoji nem pictograma (categoria
 - **THEN** nenhum problema é apontado
 
 ### Requirement: Auditoria registrada
-A tabela de auditoria do design da mudança SHALL listar, para cada prompt de papel existente, o que ele afirma, o que o código faz e o destino da regra (regimento, prompt do papel, esquema ou retirada), e toda regra de segurança dos prompts atuais (dado não confiável, decisões reservadas, egresso, execução só no sandbox) SHALL ter destino na versão revisada (ADR 022 §4.6).
+A tabela de auditoria do design da mudança SHALL listar, para cada prompt de papel existente, o que ele afirma, o que o código faz e o destino da regra (regimento, prompt do papel, esquema ou retirada), e toda regra de segurança dos prompts atuais SHALL ter destino na versão revisada (ADR 022 §4.6). As regras de segurança SHALL ficar em `regras_seguranca` do `regimento.yaml`, cada uma com id estável, destino (`regimento` ou o papel) e texto; o texto injetado SHALL ser renderizado desse item, e o texto renderizado é o marcador que identifica a regra (design §8, parecer de segurança item 5). A lista nominal mínima é `dado_observado_nao_confiavel`, `decisoes_reservadas`, `egresso_agregados`, `confinamento_sandbox` e `caminho_inputs`; remover qualquer uma, ou deixá-la sem destino, MUST fazer o teste falhar.
 
 #### Scenario: Regras de segurança preservadas
-- **WHEN** o teste percorre os textos renderizados depois da revisão
-- **THEN** as regras de dado não confiável, de decisões reservadas, de impressão de agregados e de execução só pela ferramenta de sandbox estão presentes no regimento ou no prompt do papel que as usa
+- **GIVEN** a lista nominal fixa no teste: `dado_observado_nao_confiavel`, `decisoes_reservadas`, `egresso_agregados`, `confinamento_sandbox` e `caminho_inputs`
+- **WHEN** o teste carrega `regras_seguranca` do regimento v1 e renderiza o recorte de cada combinação de tipo e modo e o prompt de cada papel
+- **THEN** cada id da lista existe em `regras_seguranca` com ao menos um destino
+- **AND** o texto renderizado de cada regra aparece em todo recorte quando o destino é `regimento`, e no prompt renderizado de cada papel listado no destino
+
+#### Scenario: Regra de segurança removida
+- **GIVEN** uma cópia do regimento em diretório temporário sem o item `confinamento_sandbox` em `regras_seguranca`
+- **WHEN** o teste de regras de segurança roda sobre a cópia
+- **THEN** ele falha citando `confinamento_sandbox`
+
+#### Scenario: Regra de segurança sem o texto no destino
+- **GIVEN** uma cópia do prompt do Developer renderizada sem o texto de `egresso_agregados`
+- **WHEN** o teste de regras de segurança roda
+- **THEN** ele falha citando `egresso_agregados` e o papel `developer`
 
 ## MODIFIED Requirements
 
@@ -103,8 +115,10 @@ _Origem: [`v16-research-assistant-prompts`](../../../archive/v16-research-assist
 O sistema SHALL manter o formato JSON das subtarefas (`agent_id`, `task_name`, `task_type`, `prompt`, `hypothesis`, `scientific_rationale`, `validation_criteria`, `expected_artifacts`, `depends_on`, mais os opcionais `hypothesis_ref`, `approach`, `preferred_model` e `papel`), definido num esquema único do qual os textos dos prompts são gerados.
 
 #### Scenario: Plano compatível
-- **WHEN** o Researcher gera um plano após a mudança
-- **THEN** o plano é aceito pelo normalizador e pelo Validator sem alteração
+- **GIVEN** a fixture gravada `tests/fixtures/plans/plano_regimento_v1.json`, plano no formato do esquema novo com `papel` declarado em todas as subtarefas, gravado de uma resposta do Researcher com o prompt revisado e versionado no repositório
+- **WHEN** a fixture é normalizada e validada, com o `FakeRecordingProvider` no papel do Validator devolvendo o parecer roteirizado `{"status": "approved", "issues": []}`, sem chamar o Researcher nem outro LLM
+- **THEN** a saída do normalizador é igual à fixture, campo a campo
+- **AND** as verificações determinísticas do Validator não apontam problema e o resultado da validação é `approved`
 
 #### Scenario: Plano antigo
 - **GIVEN** um plano gravado antes da mudança, sem `papel`

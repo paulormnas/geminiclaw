@@ -58,6 +58,11 @@ Antes de imprimir qualquer texto lido do banco ou vindo do processo da consulta 
 - **WHEN** `EventWriter.emit("subtarefa_concluida", campos)` recebe em `dados` a chave `stdout`
 - **THEN** a chave é descartada e o evento é gravado só com as chaves permitidas
 
+#### Scenario: Resposta da consulta com sequência de controle
+- **GIVEN** um processo filho de consulta simulado que devolve `{"resposta": "ok \x1b[2J fim", "orientacao_sugerida": "siga \x1b]0;x\x07 assim"}`
+- **WHEN** o terminal exibe a resposta e a pergunta de confirmação da orientação
+- **THEN** a saída não contém `\x1b` nem `\x07` e contém `ok`, `fim`, `siga` e `assim`
+
 ### Requirement: Retenção configurável dos eventos
 Com `SESSION_EVENTS_RETENTION_DAYS` maior que 0, o terminal SHALL apagar, ao abrir, os eventos de sessões terminadas há mais de N dias e MUST NOT apagar eventos de sessões não finalizadas; com 0 (padrão), nada SHALL ser apagado (ADR 023 §2).
 

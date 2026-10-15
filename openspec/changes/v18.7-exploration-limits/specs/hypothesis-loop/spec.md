@@ -1,6 +1,6 @@
 # Delta: hypothesis-loop
 
-Testes sem chamada paga: grafo em memória (`GraphStore` de teste), Researcher, Validator e Curator simulados por respostas gravadas, `UsageTracker` com leitores injetados e pedidos ao pesquisador por um gate simulado com a interface de `v18.7-persistent-human-gate`. Nos cenários, "pedido `<motivo>`" designa o pedido do gate persistente com a `decisao` e o `motivo` do catálogo do design §10 (por exemplo, pedido `saturacao` é `decisao = "decidir_continuidade"`, `motivo = "saturacao"`; pedido `restricao_duvidosa` é `decisao = "restringir_direcao"`).
+Testes sem chamada paga: grafo em memória (`GraphStore` de teste), Researcher, Validator e Curator simulados por respostas gravadas, `UsageTracker` com leitores injetados e pedidos ao pesquisador por um gate simulado com a interface de `v18.7-persistent-human-gate`. Nos cenários, "pedido `<motivo>`" designa o pedido do gate persistente com a `decisao` e o `motivo` do catálogo do design §10 (por exemplo, pedido `saturacao` é `decisao = "decidir_continuidade"`, `motivo = "saturacao"`; pedido `restricao_duvidosa` é `decisao = "restringir_direcao"`, `motivo = "restricao_duvidosa"`). Os pedidos `estagnacao`, `saturacao`, `intervencoes_esgotadas`, `cobertura_saturada`, `varias_compativeis`, `aguarda_experimento_fisico` e `planos_rejeitados` têm todos `decisao = "decidir_continuidade"`; os pedidos `decidir_objetivo_atingido` e `confirmar_problema` usam o próprio nome como `decisao` (o segundo com `motivo = "revisao_objetivo"`). São os nomes do catálogo de `v18.7-persistent-human-gate` (design §1.1 daquela mudança), sem nome próprio desta mudança.
 
 ## MODIFIED Requirements
 
@@ -157,12 +157,12 @@ Atingir o objetivo SHALL gerar, uma vez por sessão, o evento `objetivo_atingido
 - **AND** a resposta `encerrar` fecha com `solucao_encontrada`
 
 #### Scenario: Continuar além do alvo
-- **GIVEN** modo `auto` com `ao_atingir_objetivo = "continuar"` e o objetivo atingido no ciclo 3
-- **WHEN** os ciclos 4 a 10 terminam sem avanço
+- **GIVEN** modo `auto` com `ao_atingir_objetivo = "continuar"`, `EXPLORATION_STALL_CYCLES=5`, `EXPLORATION_PATIENCE_GROWTH=0.5`, `f = 0` e o objetivo atingido no ciclo 3
+- **WHEN** os ciclos 4 a 10 terminam sem avanço (7 ciclos, acima da paciência de 5 que acionaria a intervenção sem a política `continuar`)
 - **THEN** a sessão continua, o evento `objetivo_atingido` aparece uma única vez e nenhum evento `estagnacao_intervencao` é registrado
 
 ### Requirement: Estagnação leva a intervenção do Curator
-O sistema SHALL contar os ciclos sem avanço rumo ao objetivo, conforme o tipo, e só o avanço SHALL zerar a contagem; resultados negativos, refutações, replicações, hipóteses novas fora da `cobertura` e execuções, sozinhos, MUST NOT zerá-la. Quando a contagem atinge a paciência `ceil(EXPLORATION_STALL_CYCLES × (1 + EXPLORATION_PATIENCE_GROWTH × intervencoes) × (1 + f))`, com `f` a maior fração consumida entre os limites ativos (0 no modo sem limite), e as intervenções feitas são menos que `EXPLORATION_MAX_INTERVENTIONS`, o sistema SHALL acionar o Curator em modo intervenção, emitir `estagnacao_intervencao` e, no `assisted`, registrar também o pedido `estagnacao`; a sessão MUST NOT fechar por estagnação. `EXPLORATION_STALL_CYCLES=0` SHALL desligar estagnação, intervenção e saturação sem afetar os limites de uso (ADR 021 §5.5).
+O sistema SHALL contar os ciclos sem avanço rumo ao objetivo, conforme o tipo, e só o avanço SHALL zerar a contagem. No `limiar`, avanço SHALL ser o melhor valor elegível do ciclo superar o melhor anterior em mais que `SATURATION_SE_MULTIPLIER × EP` (padrão 1.0), com `EP = s / √n` das réplicas elegíveis da hipótese do melhor valor (`n ≥ 2`); com `n < 2`, qualquer melhora validada SHALL ser avanço, registrada com `avanco_sem_incerteza = true` (design §5.1); resultados negativos, refutações, replicações, hipóteses novas fora da `cobertura` e execuções, sozinhos, MUST NOT zerá-la. Quando a contagem atinge a paciência `ceil(EXPLORATION_STALL_CYCLES × (1 + EXPLORATION_PATIENCE_GROWTH × intervencoes) × (1 + f))`, com `f` a maior fração consumida entre os limites ativos (0 no modo sem limite), e as intervenções feitas são menos que `EXPLORATION_MAX_INTERVENTIONS`, o sistema SHALL acionar o Curator em modo intervenção, emitir `estagnacao_intervencao` e, no `assisted`, registrar também o pedido `estagnacao`; a sessão MUST NOT fechar por estagnação. `EXPLORATION_STALL_CYCLES=0` SHALL desligar estagnação, intervenção e saturação sem afetar os limites de uso (ADR 021 §5.5).
 
 #### Scenario: Primeira intervenção
 - **GIVEN** modo `auto`, `EXPLORATION_STALL_CYCLES=5`, `EXPLORATION_PATIENCE_GROWTH=0.5`, `f = 0` e 5 ciclos seguidos sem avanço com resultados negativos validados
@@ -176,9 +176,14 @@ O sistema SHALL contar os ciclos sem avanço rumo ao objetivo, conforme o tipo, 
 - **THEN** o valor é 12
 
 #### Scenario: Avanço zera a contagem
-- **GIVEN** 4 ciclos sem avanço num `limiar` com melhor valor 0.90 e EP 0.01
-- **WHEN** o quinto ciclo traz um resultado validado de 0.93
+- **GIVEN** `EXPLORATION_STALL_CYCLES=5`, `SATURATION_SE_MULTIPLIER=1.0` e 4 ciclos sem avanço num `limiar` com melhor valor 0.90 e EP 0.01 (réplicas da hipótese do melhor valor, `n ≥ 2`)
+- **WHEN** o quinto ciclo traz um resultado validado de 0.93, acima de `0.90 + 1.0 × 0.01 = 0.91`
 - **THEN** a contagem de ciclos sem avanço volta a 0 e nenhuma intervenção é feita
+
+#### Scenario: Melhora dentro do erro não é avanço
+- **GIVEN** o mesmo estado
+- **WHEN** o quinto ciclo traz um resultado validado de 0.905, abaixo de 0.91
+- **THEN** a contagem passa a 5 e a primeira intervenção é feita
 
 #### Scenario: Estagnação desligada
 - **GIVEN** `EXPLORATION_STALL_CYCLES=0`
@@ -189,9 +194,9 @@ O sistema SHALL contar os ciclos sem avanço rumo ao objetivo, conforme o tipo, 
 Esgotadas as `EXPLORATION_MAX_INTERVENTIONS` intervenções sem avanço, o sistema SHALL avaliar a saturação do tipo (evento `saturacao_avaliada`). No `limiar`, a saturação SHALL ser confirmada só com ao menos `SATURATION_MIN_REPLICATES` réplicas validadas da hipótese do melhor valor e nenhuma melhora no período acima de `SATURATION_SE_MULTIPLIER × EP`. Confirmada: no `auto` a sessão SHALL fechar com `motivo_parada = "saturacao"`; no `assisted` e no `semi` SHALL registrar o pedido `saturacao` e seguir. Sem saturação avaliável ou não confirmada, em qualquer modo SHALL emitir `intervencoes_esgotadas`, registrar o pedido de mesmo nome e seguir. O modo sem limite MUST NOT desligar a saturação (ADR 021 §5.5).
 
 #### Scenario: Saturação no auto
-- **GIVEN** modo `auto`, `EXPLORATION_MAX_INTERVENTIONS=3`, 3 intervenções sem avanço, `SATURATION_MIN_REPLICATES=3` e a hipótese do melhor valor com réplicas 0.940, 0.950 e 0.945
-- **WHEN** a paciência seguinte se esgota sem avanço
-- **THEN** a sessão fecha com `motivo_parada = "saturacao"`, com checkpoint
+- **GIVEN** modo `auto`, `EXPLORATION_MAX_INTERVENTIONS=3`, 3 intervenções sem avanço, `SATURATION_MIN_REPLICATES=3`, `SATURATION_SE_MULTIPLIER=1.0` e a hipótese do melhor valor com réplicas 0.940, 0.950 e 0.945 (`s = 0.005`, `EP = 0.005 / √3 ≈ 0.0029`)
+- **WHEN** a paciência seguinte se esgota sem nenhum resultado elegível acima de `0.950 + 1.0 × 0.0029`
+- **THEN** o evento `saturacao_avaliada` registra `confirmada` com o melhor valor, o EP e as 3 réplicas, e a sessão fecha com `motivo_parada = "saturacao"`, com checkpoint
 
 #### Scenario: Saturação no semi
 - **GIVEN** o mesmo estado em modo `semi`

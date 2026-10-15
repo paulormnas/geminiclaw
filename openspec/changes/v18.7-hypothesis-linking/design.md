@@ -108,7 +108,7 @@ Duas subtarefas do mesmo plano com a mesma chave usam a mesma hipótese. A dedup
 
 Uma hipótese do sistema com `n_tentativas` ausente ou 0 vai a `abandonada`, `abandonada_por = "sistema"`, `motivo_abandono` ∈ (`subtarefa_retirada`, `removida_pelo_replanejamento`, `tentativas_esgotadas_sem_execucao`), quando **todas** as subtarefas de origem:
 
-- foram retiradas pela governança (§6), exceto por `hipotese_aguarda_aprovacao` e `hipotese_adiada_por_prioridade` (a hipótese continua pendente, não sem trabalho); ou
+- foram retiradas pela governança (§6), exceto por `hipotese_aguarda_aprovacao` e, enquanto existir, `hipotese_adiada_por_prioridade` (a hipótese continua pendente, não sem trabalho); ou
 - saíram da fila num replanejamento (§7); ou
 - ficaram `abandonada` no DAG por retentativas esgotadas (`autonomous_loop.py:1298`, `1615`).
 
@@ -116,13 +116,13 @@ Hipótese do sistema com tentativas não é abandonada por esses eventos: já te
 
 ### 4.5 Reabertura
 
-Quando um plano posterior produz a mesma chave de uma hipótese abandonada pelo sistema, ela volta a `em_teste` se já tinha sido aprovada antes (sempre no `semi` e no `auto`; no `assisted`, se a trilha de auditoria tem a nota de aprovação do pesquisador), ou a `proposta` no `assisted` sem aprovação anterior. `abandonada_por` e `motivo_abandono` são limpos, o histórico fica na auditoria e o evento `hipotese_derivada` sai com `reaberta = true`.
+Quando um plano posterior produz a mesma chave de uma hipótese abandonada pelo sistema, ela volta a `em_teste` se já tinha sido aprovada antes (sempre no `semi` e no `auto`; no `assisted`, só se `ApprovalPort.previously_approved(hypothesis_id, session_chain)` devolver verdadeiro, isto é, se existe no gate persistente um pedido `aprovar_hipotese` daquele id, `estado = 'autorizada'` e `resolvido_por` humano), ou a `proposta` no `assisted` sem esse registro. A trilha de auditoria do grafo nunca é usada como prova de aprovação (parecer de segurança, item 1). Interface: `ApprovalPort` de `src/human_approval.py`, de `v18.7-persistent-human-gate` (design §2.4 daquela mudança). Se esta mudança for mergeada antes daquela, ela cria `src/human_approval.py` com o `Protocol` exatamente como lá descrito e usa a implementação provisória `NoGateApprovalPort` (envolve o `Approver` injetado; `previously_approved` devolve sempre `False`), de modo que no `assisted` a reabertura volta sempre a `proposta` até a troca por `PersistentGateApprover`. `abandonada_por` e `motivo_abandono` são limpos, o histórico fica na auditoria e o evento `hipotese_derivada` sai com `reaberta = true`.
 
 ## 5. Governança, concluídas e transições
 
 ### 5.1 Aprovação por modo
 
-`HypothesisCycle.select` trata `origem = "sistema"` como hipótese de agente: no `assisted` entra no lote de aprovação (`_select_assisted`, `hypothesis_cycle.py:353`), com o rótulo de origem "sistema" no terminal; no `semi` e no `auto`, segue o caminho autônomo (ADR 021 §3.6). Enquanto `v18.7-exploration-limits` não remove o teto, a prioridade e `HYPOTHESES_PER_CYCLE` valem também para ela.
+`HypothesisCycle.select` trata `origem = "sistema"` como hipótese de agente: no `assisted` entra no lote de aprovação (`_select_assisted`, `hypothesis_cycle.py:353`) pela interface `ApprovalPort` (§4.5), com o rótulo de origem "sistema" e, quando o enunciado veio do texto livre, `enunciado_fonte = "texto_livre"` no item mostrado ao pesquisador (§9.3). Com `PersistentGateApprover`, a aprovação é um pedido `aprovar_hipotese` por hipótese no gate persistente, nunca o `terminal_approver`; com a provisória `NoGateApprovalPort`, sem TTY o item fica pendente (parecer de segurança, item 2); no `semi` e no `auto`, segue o caminho autônomo (ADR 021 §3.6). Enquanto `v18.7-exploration-limits` não remove o teto, a prioridade e `HYPOTHESES_PER_CYCLE` valem também para ela.
 
 ### 5.2 Hipótese concluída recebe testes
 
@@ -173,7 +173,7 @@ Quando uma hipótese concluída volta a `em_teste` ou muda de lado:
 
 ## 7. Replanejamento substitui a fila
 
-A fila de um ciclo é o conjunto de subtarefas do plano anterior que não foram concluídas nem retiradas (inclusive as adiadas por prioridade e as que esperam aprovação). No `prepare_cycle` seguinte, cada `task_name` da fila ausente do plano novo sai com `removida_pelo_replanejamento`, registrada no evento `hypothesis_cycle` em `removidas_pelo_replanejamento` (lista de nomes, limitada a 50) e fora de `retiradas_por_motivo` (não é retirada pela governança). As hipóteses do sistema cujas subtarefas de origem saíram assim seguem o §4.4.
+A fila de um ciclo é o conjunto de subtarefas do plano anterior que não foram concluídas nem retiradas (inclusive as que esperam aprovação e, enquanto `v18.7-exploration-limits` não as remove, as adiadas por prioridade). No `prepare_cycle` seguinte, cada `task_name` da fila ausente do plano novo sai com `removida_pelo_replanejamento`, registrada no evento `hypothesis_cycle` em `removidas_pelo_replanejamento` (lista de nomes, limitada a 50) e fora de `retiradas_por_motivo` (não é retirada pela governança). As hipóteses do sistema cujas subtarefas de origem saíram assim seguem o §4.4.
 
 ## 8. Retorno ao Researcher
 
@@ -205,7 +205,7 @@ As condições de `v18.6-hypothesis-closure` §1 valem sem mudança, e agora alc
 ### 9.3 Campo livre `hypothesis`
 
 - `preparacao` e `referencia`: a ingestão não cria `Hipotese` a partir do texto (`ingestion.py:592-612` passa a exigir `papel` ausente ou `teste`).
-- `teste` sem `hypothesis_ref`: o texto vira o enunciado da hipótese do sistema quando é afirmativo e cita M. "Afirmativo": a primeira palavra normalizada não está em `HYPOTHESIS_TEXT_NEGATION_PREFIXES`. "Cita M": contém o nome ou um sinônimo normalizado de M. Senão vale o modelo fixo do §4.2.
+- `teste` sem `hypothesis_ref`: o texto vira o enunciado da hipótese do sistema quando é afirmativo e cita M; nesse caso a nota de auditoria da criação e o evento `hipotese_derivada` registram `enunciado_fonte = "texto_livre"` (no modelo fixo do §4.2, `enunciado_fonte = "modelo"`), e o item de aprovação do `assisted` mostra a fonte (parecer de segurança, item 4). "Afirmativo": a primeira palavra normalizada não está em `HYPOTHESIS_TEXT_NEGATION_PREFIXES`. "Cita M": contém o nome ou um sinônimo normalizado de M. Senão vale o modelo fixo do §4.2.
 - Sem exploração ativa (`HYPOTHESIS_LOOP_ENABLED=false` ou projeto sem `Problema` confirmado), o comportamento da V17 continua, exceto que `task_type` `eda` e `synthesis` nunca criam hipótese provisória.
 
 ## 10. Dados por ciclo e eventos
@@ -266,9 +266,11 @@ Parecer do Analista de Segurança (2026-10-15): **Aprovado com ressalvas.** Os p
 3. **Baixo: `revert_on_reopen` fora do alcance dos agentes.** Nenhuma ferramenta de agente (Curator) nem campo do plano chega a esse caminho; um teste confirma.
 4. **Baixo: origem do enunciado.** O enunciado da hipótese do sistema que vem de `task.hypothesis` é texto de LLM. A auditoria registra a fonte (`enunciado_fonte = "texto_livre"`), e o pedido de aprovação a mostra ao pesquisador.
 
+Rastreio dos achados: item 1 e item 2 no requisito "Aprovação da hipótese do sistema por modo" e no cenário "Reabertura no assistido sem aprovação no gate" (`specs/hypothesis-loop`, tarefa 6.7); item 3 no requisito "Reversão de Oportunidade fora do alcance dos agentes" (tarefa 7.5); item 4 no requisito "Fonte do enunciado da hipótese do sistema registrada" (tarefa 5.5).
+
 Pontos para o parecer:
 
-1. **Decisões reservadas.** A hipótese do sistema nunca é aprovada por agente no `assisted` (passa pelo `terminal_approver`; sem TTY fica pendente). Hipótese rejeitada ou abandonada pelo pesquisador não volta por `id`, por enunciado nem por chave derivada; a regra é aplicada em `prepare_cycle` e garantida no grafo (`v18.7-graph-exploration-relations` §2.3).
+1. **Decisões reservadas.** A hipótese do sistema nunca é aprovada por agente no `assisted` (passa pela `ApprovalPort`: pedido `aprovar_hipotese` no gate persistente; com a provisória `NoGateApprovalPort`, sem TTY fica pendente). Hipótese rejeitada ou abandonada pelo pesquisador não volta por `id`, por enunciado nem por chave derivada; a regra é aplicada em `prepare_cycle` e garantida no grafo (`v18.7-graph-exploration-relations` §2.3).
 2. **Reversão de `Oportunidade`.** O orquestrador passa a poder fazer `concluida -> em_investigacao`, só pela reabertura da hipótese gerada, com auditoria. A aprovação da oportunidade continua só do pesquisador.
 3. **Texto não confiável.** `task.hypothesis`, nomes de subtarefa e de abordagem vêm do LLM: são saneados (`clean_free_text`, `sanitize_text`) e limitados antes de virar enunciado ou nome de nó, e o retorno ao Researcher vai em `wrap_data`. Nenhum ID vindo do plano é usado sem conferência no grafo.
 4. **Telemetria.** Os eventos novos levam só IDs, códigos, números e nomes de subtarefa (já presentes em `plan_generated`), nenhum enunciado.

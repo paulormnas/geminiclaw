@@ -43,6 +43,7 @@ A chave usa `|` como separador porque os identificadores aceitos pelo grafo segu
 `validate_node_properties` (`validation.py`) recebe uma regra por rótulo:
 
 - `create_node("Hipotese", {..., "origem": "sistema"})` sem `chave_estruturada` ou sem `referencia_fixada` é recusado com `MissingPropertyError` indicando o campo.
+- Cada componente de `chave_estruturada` é validado na escrita contra `^[A-Za-z0-9._-]{1,128}$` (§2.1); valor fora do padrão é recusado indicando `chave_estruturada` (parecer de segurança, item b).
 - `IMMUTABLE_LABEL_FIELDS = {"Hipotese": frozenset({"chave_estruturada", "referencia_fixada"})}` em `schema.py`; `update_node` que tente alterar qualquer um dos dois (em qualquer hipótese, de qualquer origem) é recusado com `ImmutableFieldError`, como os campos comuns (`schema.py:94`). Gravar a propriedade pela primeira vez numa hipótese que não a tinha também é recusado: a chave e a referência só nascem com a hipótese do sistema.
 
 ### 2.3 Autoridade sobre `abandonada_por`
@@ -59,7 +60,7 @@ Valores e quem os grava (detalhado em `v18.7-hypothesis-linking`):
 
 ### 2.4 Leitura compatível
 
-`abandoned_by(node) -> str | None`: `None` se a hipótese não está `abandonada`; o valor gravado se existir; senão `"pesquisador"` (proposta conservadora: mantém o bloqueio que essas hipóteses têm hoje; questão 1). `Hipotese.origem` existente não muda.
+`abandoned_by(node) -> str | None`: `None` se a hipótese não está `abandonada`; o valor gravado se existir; senão `"pesquisador"`. Esta é a regra provisória adotada na spec (requisito "Autor do abandono", cenário "Hipótese abandonada antiga (regra provisória da questão 1)") até a decisão da questão 1: mantém o bloqueio que essas hipóteses têm hoje, e a decisão pode trocar só esta função, sem mudar o schema. `Hipotese.origem` existente não muda.
 
 ## 3. Relações novas
 
@@ -88,6 +89,20 @@ O `InMemoryGraphStore` não precisa de migração.
 - `src/knowledge/exploration_reads.py` (novo, só leitura): `experiment_role(node: Node) -> str`, `abandoned_by(node: Node) -> str | None`, `structured_key(problem_id: str, approach_id: str, metric_id: str) -> str`.
 - Nenhum evento novo.
 
+### 5.1 Construtores compartilhados de grafo em memória para testes
+
+Esta mudança cria `tests/support/exploration_graph.py`, sobre `HypothesisWorld` (`tests/support/hypothesis_world.py`) e `CuratorGraph` (`tests/support/curator_graph.py`), sem duplicá-los. As mudanças seguintes da V18.7 (`v18.7-hypothesis-linking`, `v18.7-exploration-limits`, `v18.7-exploration-metrics`, `v18.7-subtask-contract`) reutilizam estes construtores e só os estendem; não criam construtores próprios para os mesmos nós.
+
+| Construtor | Monta no `InMemoryGraphStore` |
+|---|---|
+| `problema(tipo="limiar" \| "discriminacao" \| "cobertura" \| None, **campos)` | `Problema` confirmado com `criterio_sucesso` no formato de `v18.7-exploration-limits` (design §4.1); `tipo=None` monta o critério antigo, sem `tipo`. Até aquela mudança, o schema não confere a estrutura por tipo, e o construtor só grava o mapa |
+| `hipotese(origem=..., status=..., abandonada_por=None, chave=None, referencia=None, actor=None)` | `Hipotese` com `SOBRE->Problema`; `origem="sistema"` preenche `chave_estruturada` por `structured_key` e uma `referencia_fixada` válida; o `Actor` padrão segue a origem (pesquisador, agente ou orquestrador) |
+| `experimento(papel=None, testa=None, prepara=(), subtarefa=...)` | `Experimento` com `papel` opcional (ausente = nó antigo), `TESTA` e `PREPARA` |
+| `resultado(experimento, valor, metrica=None, validado=True)` | `Resultado` com `PRODUZIU` e `MEDE` para a métrica do `Problema` |
+| `referencia(valor, metrica=None)` | `Experimento` `papel = "referencia"` e `Resultado` com `REFERENCIA_DE->Problema` |
+
+Os construtores gravam com o `Actor` que o caminho real usaria, para que os testes exercitem a validação, e nunca chamam provedor LLM.
+
 ## 6. Análise de impacto nos 6 eixos
 
 | Eixo | Impacto | Detalhes |
@@ -109,6 +124,8 @@ Parecer do Analista de Segurança (2026-10-15): **Aprovado.** Respostas aos pont
 
 Sobre a Questão 1, ler as hipóteses antigas como `pesquisador` é a escolha segura.
 
+Rastreio: item (a) no requisito "Autoridade sobre o abandono em todos os caminhos de escrita" (tarefa 2.7); item (b) no requisito "Hipótese de origem sistema com chave e referência fixadas", cenário "Chave com componente inválido" (tarefa 2.6); item (c) no cenário "Grafo anterior à V18.7" (tarefa 4.2).
+
 Pontos para o parecer: (a) a regra de autoridade do §2.3 cobre todos os caminhos de escrita de `Hipotese.status` e `abandonada_por`, inclusive `graph-cli edit`; (b) a escrita de `chave_estruturada` e `referencia_fixada` usa só identificadores conferidos no grafo, nunca texto do LLM; (c) os rótulos novos não alteram os privilégios do `knowledge_reader`.
 
 ## 8. Riscos e mitigações
@@ -122,6 +139,6 @@ Pontos para o parecer: (a) a regra de autoridade do §2.3 cobre todos os caminho
 
 ## 9. Questões em aberto
 
-1. **Hipóteses `abandonada` antigas sem `abandonada_por`.** Proposta: ler como `pesquisador` (continuam bloqueando, como hoje). Alternativa: inspecionar a trilha de auditoria (`record_audit_note` com `decisao = "rejeitada"` pelo pesquisador, `hypothesis_cycle.py:403`) e ler como `agente` as que não têm essa nota. A alternativa libera alternativas descartadas pelo Researcher em sessões antigas.
+1. **Hipóteses `abandonada` antigas sem `abandonada_por`.** Proposta: ler como `pesquisador` (continuam bloqueando, como hoje). Até a decisão, a spec adota essa proposta como regra provisória (requisito "Autor do abandono"); a alternativa, se escolhida, muda só `abandoned_by` e esse cenário. Alternativa: inspecionar a trilha de auditoria (`record_audit_note` com `decisao = "rejeitada"` pelo pesquisador, `hypothesis_cycle.py:403`) e ler como `agente` as que não têm essa nota. A alternativa libera alternativas descartadas pelo Researcher em sessões antigas.
 2. **Abandono pelo agente (`agente`) bloqueia?** O ADR 021 diz que só o abandono pelo pesquisador bloqueia, mas não trata a sugestão do Curator recusada pelo Researcher nem a alternativa descartada numa decisão, que hoje nascem `abandonada`. Proposta: não bloqueia; se um plano posterior trouxer a mesma hipótese, ela volta como `proposta` e passa pela governança do modo. Alternativa: bloqueia, como hoje. A regra de reabertura fica em `v18.7-hypothesis-linking`; aqui só existe o valor do enum.
 3. **Ciclos em `DERIVADA_DE` entre hipóteses.** Proposta: só recusar o laço para o próprio nó nesta etapa. Alternativa: recusar qualquer ciclo na escrita (consulta de alcance a cada aresta nova).

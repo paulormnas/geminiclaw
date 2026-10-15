@@ -46,6 +46,7 @@ A bateria V18.6 (2026-10-14/15) mostrou três defeitos que não são decisões d
 - **Código:** novo `src/llm/quota.py`; `src/llm/retry.py`, `src/llm/providers/{google,anthropic,openai_compatible}.py`, `src/agent_runtime/runtime.py`, `src/rate_limiter.py`, `src/orchestrator.py` (relato ao limitador), `src/usage.py`, `src/autonomous_loop.py` (`_pending_model_stop`, `_close_session`), `src/continuity.py` (`MOTIVOS_RETOMAVEIS`), `src/knowledge/schema.py` (enumeração), `src/provenance/verify.py`, `src/operation_metrics.py`, `src/cli.py` (mensagem de parada), `scripts/benchmark/{report,run_benchmark}.py`, `src/config.py`, `.env.example`.
 - **Contratos:** exceção `ProviderQuotaExhausted`; `AgentResult.error_category = "cota_provedor"`; evento `cota_provedor_esgotada`; chaves novas `egresso.bytes_limitados` e `proveniencia.cadeia.motivos` (aditivas, `versao` das métricas de operação continua 1).
 - **Schema:** um valor novo na enumeração `Sessao.motivo_parada` do grafo (aditivo, sem migração). Nenhuma tabela nova; `egress_log` e `execution_records` não mudam.
+- **Testes:** novo auxiliar compartilhado `tests/support/fake_recording_provider.py` (`FakeRecordingProvider`: registra `system` e `messages`, respostas roteirizadas, latência, erros 429, 503 e de cota), criado aqui e reutilizado pelas mudanças V18.7 seguintes. Sem dependência de desenvolvimento nova.
 - **Custo:** reduz gasto e tempo perdido (a sessão para na primeira resposta de cota). Nenhuma chamada de LLM a mais.
 
 ## Aprovações necessárias

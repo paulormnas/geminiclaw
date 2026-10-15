@@ -6,6 +6,8 @@
 - [ ] 0.1 `v18.7-background-sessions` e `v18.7-persistent-human-gate` mergeadas; revisar esta mudança contra o código de `dev` (referências de linha de 2026-10-15).
 - [ ] 0.2 Aprovação do pesquisador para o schema e respostas às Questões em aberto 1 a 4 do design.
 
+- [ ] 0.3 Testes reaproveitam as ajudas de `v18.7-background-sessions` (tasks §3.4: harness do processo da sessão, provedor gravado, `FakeClock`, fixture de PostgreSQL com `terminal_writer`, REPL com entrada simulada e em pseudo-terminal) e o `FakeGate` de `v18.7-persistent-human-gate`; nenhuma ajuda nova. Cada teste de integração em até 15 s (marcador `pytest-timeout`), com `SESSION_EVENTS_POLL_SECONDS=1`, `SESSION_INBOX_POLL_SECONDS=1` e os valores reduzidos de `v18.7-background-sessions` definidos pelo harness por variável de ambiente; os padrões (2 s etc.) só em testes de unidade com `FakeClock`.
+
 ## 1. Eventos
 - [ ] 1.1 `scripts/init_db.sql` e `scripts/migrations/v18_7_003_session_events.sql` (idempotente) com o DDL do design §2.1.
 - [ ] 1.2 `src/session_events.py`: `EventWriter` (resumo por modelo, saneamento, filtro de exibição, limite, nova tentativa, `seq` recuperado na retomada), `EventReader`, `purge`.
@@ -16,7 +18,7 @@
 ## 2. Impressão no REPL
 - [ ] 2.1 `src/terminal/`: thread de leitura, impressão com `readline` sob trava, níveis de detalhe, modo sem TTY.
 - [ ] 2.2 Testes: pseudo-terminal com texto parcial preservado (`pexpect`, de `v18.7-background-sessions`); nível silencioso; atraso máximo com `FakeClock`.
-- [ ] 2.3 Saneamento na exibição (`sanitize_text` e limite de 300) em eventos, `pesquisas`, `acompanhar` e resposta da consulta; lista fechada de chaves de `dados` por `tipo`. Testes: "Sequência de controle gravada direto na tabela", "Chave fora da lista em dados".
+- [ ] 2.3 Saneamento na exibição (`sanitize_text` e limite de 300) em eventos, `pesquisas`, `acompanhar` e resposta da consulta; lista fechada de chaves de `dados` por `tipo`. Testes: "Sequência de controle gravada direto na tabela", "Chave fora da lista em dados", "Resposta da consulta com sequência de controle".
 
 ## 3. Comandos
 - [ ] 3.1 `pesquisas`, `acompanhar`, `retomar` (sobre a retomada de `v18.7-background-sessions`); confirmação ao iniciar pesquisa com outra em execução.

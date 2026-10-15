@@ -3,7 +3,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Modo sem limite explícito
-O sistema SHALL oferecer o modo sem limite apenas por opção explícita do pesquisador, por sessão (`--unlimited`) ou por projeto, e SHALL exigir confirmação no início de cada execução, no terminal (ADR 023 §1) ou pelo gate persistente quando a sessão já roda em segundo plano. O modo SHALL NOT ser ativado por padrão, por variável de ambiente, por configuração ou por qualquer agente. O texto da confirmação SHALL dizer que tokens, tempo, custo e volume de egresso não interrompem a sessão e que, sem limites, não há parada automática garantida: a sessão segue até o objetivo (conforme a política), a falta de caminho, a saturação, o pesquisador ou uma falha (ADR 021 §5.4, §5.5).
+O sistema SHALL oferecer o modo sem limite apenas por opção explícita do pesquisador, por sessão (`--unlimited`) ou por projeto, e SHALL exigir confirmação no início de cada execução, no terminal (ADR 023 §1) ou pelo gate persistente quando a sessão já roda em segundo plano. O modo SHALL NOT ser ativado por padrão, por variável de ambiente, por configuração ou por qualquer agente. O texto da confirmação SHALL dizer que tokens, tempo, custo e volume de egresso não interrompem a sessão e que, sem limites, não há parada automática garantida: a sessão segue até o objetivo (conforme a política), a falta de caminho, a saturação, o pesquisador ou uma falha. O texto SHALL dizer também que, no `auto`, a sessão pode rodar indefinidamente e que só `wait_for_health` e `SANDBOX_MIN_FREE_BYTES` protegem o hardware (ADR 021 §5.4, §5.5; parecer de segurança, item 5).
 
 #### Scenario: Ativação por sessão confirmada
 - **WHEN** o pesquisador executa `geminiclaw --unlimited "<prompt>"` e digita "sem limite" na confirmação
@@ -12,6 +12,7 @@ O sistema SHALL oferecer o modo sem limite apenas por opção explícita do pesq
 #### Scenario: Texto da confirmação
 - **WHEN** a confirmação é exibida
 - **THEN** o texto contém "custo" e "não há parada automática garantida"
+- **AND** o texto contém "indefinidamente", `wait_for_health` e `SANDBOX_MIN_FREE_BYTES`
 
 #### Scenario: Confirmação ausente
 - **WHEN** o pesquisador executa com `--unlimited` e responde outra coisa, ou não há terminal interativo

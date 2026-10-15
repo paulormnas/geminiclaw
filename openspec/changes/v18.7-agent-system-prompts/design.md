@@ -135,7 +135,14 @@ tipos_objetivo:
 motivos_parada:   [{id: solucao_encontrada, texto: "..."}, {id: saturacao, ...}, {id: limite_custo, ...}, ...]
 motivos_retirada: [{id: hipotese_rejeitada_pelo_pesquisador, texto: "..."}, ...]
 regras_integridade: [{id: metricas_calculadas, texto: "..."}, ...]   # ids de v18.7-subtask-contract
-decisoes_reservadas: [aprovar_oportunidade, confirmar_problema, aprovar_termo_vocabulario, autorizar_escrita_instrumento, ativar_modo_sem_limite, restringir_direcao, ativar_adendo_regimento]
+decisoes_reservadas: [aprovar_oportunidade, confirmar_problema, aprovar_termo_vocabulario, autorizar_escrita_instrumento, ativar_modo_sem_limite, restringir_direcao, ativar_adendo_regimento,
+                      aprovar_hipotese, decidir_objetivo_atingido, responder_pergunta_agente, decidir_continuidade]   # parecer de segurança item 4
+regras_seguranca:               # ids estáveis; o texto renderizado de cada uma é o marcador procurado pelo teste (§8, parecer item 5)
+  - {id: dado_observado_nao_confiavel, destino: [regimento], texto: "..."}
+  - {id: decisoes_reservadas, destino: [regimento], texto: "..."}
+  - {id: egresso_agregados, destino: [regimento, developer], texto: "..."}
+  - {id: confinamento_sandbox, destino: [developer], texto: "..."}
+  - {id: caminho_inputs, destino: [developer], texto: "..."}
 modos:
   - {id: assisted, aprovacao_hipoteses: pesquisador, ao_atingir_objetivo_padrao: perguntar}
   - {id: semi, aprovacao_hipoteses: agentes, ao_atingir_objetivo_padrao: parar}
@@ -202,8 +209,10 @@ Para o Developer, o `system` com prompt e recorte vai em toda chamada do laço d
 1. **Arquivo:** `REGIMENTO_ADDENDUM_FILE` (padrão `regimento_adendo.yaml`), procurado em `INPUT_CONTEXT_DIR` (insumos do pesquisador, fora do repositório). O arquivo é excluído da indexação de insumos e da ingestão de dados de pesquisa.
 2. **Formato:** só as chaves `versao`, `regras` e `proibicoes`; cada item tem `id` (`^[a-z][a-z0-9_]{2,63}$`) e `texto` (até 500 caracteres). Qualquer outra chave torna o adendo inválido. Não há chave capaz de alterar a parte estruturada (tipos, motivos, limites, integridade): o adendo só acrescenta.
 3. **Precedência:** o regimento declara, na seção `integridade`, que em conflito vale a regra mais restritiva e que o adendo nunca desliga paradas, limites nem regras de integridade.
-4. **Ativação:** decisão reservada nova `ativar_adendo_regimento`, pelo gate persistente de `v18.7-persistent-human-gate` (mergeada antes desta mudança). O pedido mostra o texto e o hash; a aprovação registra o hash aprovado no projeto. Antes do pedido, o sistema avisa, no próprio pedido, quando o texto cita ids de motivo de parada, limite ou regra de integridade, para o pesquisador conferir se o texto afrouxa algo.
-5. **Na sessão:** adendo com o hash aprovado é injetado como `instrucao` sem contaminação. Adendo presente e não aprovado (novo ou alterado) não é injetado, e a sessão não executa subtarefas enquanto o pedido estiver pendente: no `assisted` e no `semi`, registra o pedido e espera; no `auto`, a sessão não começa e a mensagem diz como aprovar. Adendo inválido: a sessão não começa, com o erro de formato.
+4. **Ativação:** decisão reservada nova `ativar_adendo_regimento`, pelo gate persistente de `v18.7-persistent-human-gate` (mergeada antes desta mudança). O pedido tem `referencia` igual ao sha256 dos bytes do adendo e mostra o texto, o hash e a linha fixa sobre egresso: "Depois de aprovado, o adendo é enviado como instrução a todos os provedores da sessão." Quando o texto cita ids de motivo de parada, de limite ou de regra de integridade da parte estruturada, o pedido traz, para cada classe citada, a linha fixa "Aviso: o adendo cita <ids> (<classe>). Confira se o texto afrouxa alguma regra; o adendo nunca desliga paradas, limites nem regras de integridade.", com `<ids>` em ordem alfabética separados por vírgula e `<classe>` em `motivo de parada`, `limite` ou `regra de integridade`.
+5. **Prova da aprovação (parecer item 1):** a sessão só injeta o adendo quando existe em `gate_requests` um pedido `ativar_adendo_regimento` com `referencia` igual ao sha256 dos bytes lidos, `estado = 'autorizada'` e `resolvido_por` em `terminal` ou `cli`. A consulta é a única fonte da decisão; a cópia do hash aprovado no projeto é só informativa e nunca é lida para decidir a injeção. A forma da consulta (consumo de uso único ligado à cadeia da sessão ou leitura por `referencia`) depende da questão §10.6.
+6. **Leitura única (parecer item 2):** o arquivo é lido uma vez por sessão, com `O_NOFOLLOW`; link simbólico ou caminho resolvido fora do diretório de insumos é recusado e a sessão não começa. O hash é calculado sobre esses bytes e são os mesmos bytes que entram no recorte.
+7. **Na sessão:** adendo com o hash aprovado é injetado como `instrucao` sem contaminação. Adendo presente e não aprovado (novo ou alterado) não é injetado, e a sessão não executa subtarefas enquanto o pedido estiver pendente: no `assisted` e no `semi`, registra o pedido e espera; no `auto`, a sessão registra o pedido, não começa e sai com o código 1 ("sessão recusada antes de começar", tabela única de `v18.7-background-sessions/design.md` §1.4), com mensagem que cita `ativar_adendo_regimento` e o hash. Adendo inválido: a sessão não começa, com o erro de formato e o mesmo código 1.
 
 ## 6. Coerência (ADR 022 §5) e redação (§4.5)
 
@@ -237,11 +246,11 @@ O Developer recebe a regra de seed: a do enunciado da subtarefa quando houver (r
 
 **Ameaças e mitigações:**
 
-1. **Adendo como vetor de injeção ou de afrouxamento.** Quem escreve em `INPUT_CONTEXT_DIR` poderia pôr instruções que o sistema trataria como regra. Mitigações: o adendo só entra com o hash aprovado pelo pesquisador no gate; mudança de um byte exige nova aprovação; formato fechado só com acréscimos; aviso quando cita ids de parada, limite ou integridade; precedência da regra mais restritiva declarada no regimento; o adendo não muda nenhum valor que o código aplica (limites, paradas e integridade continuam no código e no YAML do repositório).
+1. **Adendo como vetor de injeção ou de afrouxamento.** Quem escreve em `INPUT_CONTEXT_DIR` poderia pôr instruções que o sistema trataria como regra. Mitigações: o adendo só entra com o hash aprovado pelo pesquisador, conferido em `gate_requests` (§5.5); mudança de um byte exige nova aprovação; formato fechado só com acréscimos; aviso quando cita ids de parada, limite ou integridade; precedência da regra mais restritiva declarada no regimento; o adendo não muda nenhum valor que o código aplica (limites, paradas e integridade continuam no código e no YAML do repositório).
 2. **Adendo classificado como dado de pesquisa.** Arquivos de `input_context/` são `dado_de_pesquisa` por padrão (spec `data-egress`); o adendo é excluído dessa classificação só depois de aprovado, e só ele (nome exato configurado).
 3. **Ferramenta `ler_regimento`.** Só lê o `Regimento` em memória, por id de seção validado contra a lista; não aceita caminho, não lê o adendo nem outro arquivo.
 4. **Regimento alterado por PR.** Mudanças passam por PR com aprovação do pesquisador (ADR 022 §4.4); o hash por sessão mostra qual versão conduziu cada sessão.
-5. **Prompts mais curtos não podem perder as regras de segurança atuais** (dado não confiável, decisões reservadas, egresso, sandbox). O teste de política existente ("Política de prompts") continua, e um teste novo confere que cada regra de segurança de §1 tem destino (R ou P) na versão final.
+5. **Prompts mais curtos não podem perder as regras de segurança atuais** (dado não confiável, decisões reservadas, egresso, sandbox). O teste de política existente ("Política de prompts") continua, e um teste novo confere que cada regra de segurança tem destino (R ou P) na versão final: as regras ficam em `regras_seguranca` do YAML com id estável e destino; o texto de cada uma é renderizado do YAML e é o marcador que o teste procura no recorte ou no prompt do papel de destino.
 6. **Egresso.** O recorte e os prompts são texto do repositório (`instrucao`, sem contaminação); nenhum dado de pesquisa entra neles.
 
 **Parecer do Analista de Segurança (2026-10-15):** Aprovado com ressalvas.
@@ -268,7 +277,7 @@ O diretório do regimento é fixo (`agents/regimento/`), não configurável, par
 | 1. Orquestrador e laço autônomo | Carga do regimento e do adendo no início da sessão; espera do pedido do adendo; montagem do bloco de exploração sem o formato. |
 | 2. Agentes e prompts | Todos os prompts reescritos; recorte injetado em toda chamada de papel; ferramenta nova; formatos gerados de esquemas. Risco de mudança de comportamento dos modelos, medido na bateria curta. |
 | 3. Sandbox e containers | Nenhum. |
-| 4. Persistência de estado | Evento `regimento_sessao` e `regimento_alterado`; payload da sessão com `regimento`; hash do adendo aprovado no projeto. Sem schema novo. |
+| 4. Persistência de estado | Evento `regimento_sessao` e `regimento_alterado`; payload da sessão com `regimento`; aprovação do adendo lida de `gate_requests` (schema de `v18.7-persistent-human-gate`), com cópia informativa do hash no projeto. Sem schema novo. |
 | 5. Segurança e hardening | Adendo com gate e hash; ferramenta só de leitura em memória; regras de segurança preservadas por teste (§8). |
 | 6. Testes e telemetria | Testes de coerência e redação; provedor falso que grava o `system` de cada chamada; bateria curta comparada à V18.6. |
 
@@ -279,6 +288,7 @@ O diretório do regimento é fixo (`agents/regimento/`), não configurável, par
 3. **Local do adendo.** `INPUT_CONTEXT_DIR` é um diretório só; se houver insumos por projeto, o adendo deveria ficar no diretório do projeto. Proposta: usar o diretório de insumos do projeto quando a sessão tem projeto.
 4. **Registro por sessão e por tentativa (resolvida na revisão de consistência de 2026-10-15).** O ADR 022 §4.4 pede o hash do regimento e do recorte "junto com o contrato de cada subtarefa (§7)". Esta mudança registra por sessão (`regimento_sessao`) e põe `regimento_sha256` e `recorte_sha256` no `AgentContext`; `v18.7-exploration-metrics` grava por tentativa, no evento `subtask_attempt`, o `contrato_sha256` e o `recorte_sha256` lido do `AgentContext` (nulo enquanto esta mudança não existir).
 5. **Teto do recorte.** 8000 caracteres por padrão, a confirmar depois de escrito o texto v1.
+6. **Aprovação do adendo entre sessões (alinhar com `v18.7-persistent-human-gate`).** O gate exige que todo consumidor chame `consume_authorized`, de uso único e ligado à cadeia da sessão. Para o adendo isso obrigaria nova aprovação a cada sessão nova do projeto e, no `auto`, deixaria a sessão sem saída: a sessão recusada registra o pedido, e a sessão seguinte, fora da cadeia, não pode consumi-lo. Adotado (requisito em `v18.7-persistent-human-gate`): o adendo é a exceção documentada, com leitura sem consumo por `referencia` (o sha256 liga a aprovação ao conteúdo exato), por um método novo `PersistentGate.authorized_reference(decisao, referencia)` que aquela mudança acrescenta, também no `FakeGate`. Alternativa: manter o uso único e aprovar o adendo a cada sessão. Os cenários desta mudança usam a proposta.
 
 ## 11. Riscos e mitigações
 

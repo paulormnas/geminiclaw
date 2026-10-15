@@ -215,7 +215,7 @@ Para uma subtarefa `teste` sem `hypothesis_ref`, com `hypothesis_ref` recusado p
 
 ### Requirement: Ciclo de vida da hipótese do sistema
 _Origem: ADR 021 §3.5_
-Uma hipótese do sistema sem tentativa SHALL ir a `abandonada` com `abandonada_por = "sistema"` e `motivo_abandono` quando todas as suas subtarefas de origem forem retiradas pela governança (exceto por `hipotese_aguarda_aprovacao` e `hipotese_adiada_por_prioridade`), saírem da fila num replanejamento ou esgotarem as retentativas sem execução. Quando um plano posterior trouxer a mesma chave, o sistema SHALL reabri-la, preservando o histórico. Hipótese abandonada pelo pesquisador MUST NOT ser reaberta pelo sistema.
+Uma hipótese do sistema sem tentativa SHALL ir a `abandonada` com `abandonada_por = "sistema"` e `motivo_abandono` quando todas as suas subtarefas de origem forem retiradas pela governança (exceto por `hipotese_aguarda_aprovacao` e, enquanto `v18.7-exploration-limits` não o remove, `hipotese_adiada_por_prioridade`), saírem da fila num replanejamento ou esgotarem as retentativas sem execução. Quando um plano posterior trouxer a mesma chave, o sistema SHALL reabri-la, preservando o histórico: em `em_teste` no `semi` e no `auto`; no `assisted`, em `em_teste` só quando `ApprovalPort.previously_approved` (interface comum de `v18.7-persistent-human-gate`) confirmar no gate persistente um pedido `aprovar_hipotese` daquele id autorizado por humano, e em `proposta` em qualquer outro caso. A trilha de auditoria do grafo MUST NOT servir de prova de aprovação. Hipótese abandonada pelo pesquisador MUST NOT ser reaberta pelo sistema.
 
 #### Scenario: Retentativas esgotadas sem execução
 - **GIVEN** a hipótese do sistema `hs1` com `n_tentativas = 0` e a única subtarefa de origem `treinar_rf` marcada `abandonada` no DAG por retentativas esgotadas
@@ -228,6 +228,21 @@ Uma hipótese do sistema sem tentativa SHALL ir a `abandonada` com `abandonada_p
 - **WHEN** um plano posterior traz um teste sem `hypothesis_ref` com a mesma abordagem
 - **THEN** `hs1` volta a `em_teste`, sem `abandonada_por`
 - **AND** o evento `hipotese_derivada` tem `reaberta = true`
+
+#### Scenario: Reabertura no assistido com aprovação no gate
+- **GIVEN** modo `assisted`, `hs1` abandonada pelo sistema e um `FakeGate` com pedido `aprovar_hipotese` de `hs1.id`, `estado = "autorizada"` e `resolvido_por = "terminal"`
+- **WHEN** um plano posterior traz um teste que deriva a chave de `hs1`
+- **THEN** `hs1` volta a `em_teste`
+
+#### Scenario: Reabertura no assistido sem aprovação no gate
+- **GIVEN** modo `assisted`, `hs1` abandonada pelo sistema, uma nota de auditoria no grafo com `decisao = "aprovada"` para `hs1` e nenhum pedido `aprovar_hipotese` autorizado de `hs1.id` no gate
+- **WHEN** um plano posterior traz um teste que deriva a chave de `hs1`
+- **THEN** `hs1` volta a `proposta` e o teste é retirado com `hipotese_aguarda_aprovacao`
+
+#### Scenario: Interface provisória antes do gate
+- **GIVEN** modo `assisted`, a implementação provisória `NoGateApprovalPort` e `hs1` aprovada num ciclo anterior pelo `Approver` injetado
+- **WHEN** `hs1` é reaberta pela chave
+- **THEN** `previously_approved` devolve `False` e `hs1` volta a `proposta`
 
 #### Scenario: Aguardar aprovação não abandona
 - **GIVEN** modo `assisted`, a hipótese do sistema `hs2` pendente e a subtarefa retirada com `hipotese_aguarda_aprovacao`
@@ -247,13 +262,19 @@ Uma hipótese do sistema sem tentativa SHALL ir a `abandonada` com `abandonada_p
 
 ### Requirement: Aprovação da hipótese do sistema por modo
 _Origem: ADR 021 §3.6_
-No modo `assisted`, a hipótese do sistema SHALL aguardar a aprovação do pesquisador como as hipóteses de agentes; nos modos `semi` e `auto`, SHALL seguir com a aprovação do plano pelo Validator, sem pedido ao pesquisador.
+No modo `assisted`, a hipótese do sistema SHALL aguardar a aprovação do pesquisador como as hipóteses de agentes, pedida e conferida pela interface comum `ApprovalPort` (`src/human_approval.py`) de `v18.7-persistent-human-gate`: com `PersistentGateApprover`, um pedido `aprovar_hipotese` por hipótese no gate persistente, e MUST NOT usar o `terminal_approver`. Se esta mudança for mergeada antes daquela, SHALL criar `src/human_approval.py` com o mesmo `Protocol` e usar a implementação provisória `NoGateApprovalPort` (envolve o `Approver` injetado; sem TTY, o item fica pendente). Nos modos `semi` e `auto`, SHALL seguir com a aprovação do plano pelo Validator, sem pedido ao pesquisador.
 
 #### Scenario: Assistido
-- **GIVEN** modo `assisted`, um `Approver` que não responde e a hipótese do sistema `hs1` derivada no ciclo
+- **GIVEN** modo `assisted`, uma `ApprovalPort` que não responde e a hipótese do sistema `hs1` derivada no ciclo
 - **WHEN** o ciclo chega à execução
 - **THEN** o teste de `hs1` é retirado com `hipotese_aguarda_aprovacao`
-- **AND** o item apresentado ao `Approver` tem `origem = "sistema"`
+- **AND** o item apresentado à `ApprovalPort` tem `origem = "sistema"`
+
+#### Scenario: Aprovação pelo gate persistente
+- **GIVEN** modo `assisted`, `PersistentGateApprover` sobre um `FakeGate` e a hipótese do sistema `hs1` derivada no ciclo
+- **WHEN** o ciclo chega à execução
+- **THEN** existe um pedido `aprovar_hipotese` com `referencia = hs1.id`, o `terminal_approver` não é chamado e o teste de `hs1` é retirado com `hipotese_aguarda_aprovacao`
+- **AND** depois que o terminal responde `aprovar` e o pedido é consumido por `consume_authorized`, o teste de `hs1` entra em `CycleOutcome.tasks` no ciclo seguinte
 
 #### Scenario: Automático
 - **GIVEN** modo `auto` e a hipótese do sistema `hs1` derivada no ciclo
@@ -300,13 +321,13 @@ Ao fim de cada ciclo, e nunca no meio dele, o sistema SHALL aplicar a todas as h
 - **AND** o evento `hipotese_transicao` tem `status_anterior = "validada"`, `status_novo = "em_teste"` e `veredito_novo = 0.12`
 
 #### Scenario: Mudança de lado
-- **GIVEN** `h1` `validada` e veredito −0.35 ao fim do ciclo
+- **GIVEN** `DECISION_EVAL_MIN_VERDICT=0.3`, `h1` `validada` e veredito −0.35 ao fim do ciclo (`<= -0.3`)
 - **WHEN** o ciclo termina
 - **THEN** `h1` fica `refutada`
 - **AND** a decisão com `ESCOLHEU->h1` e `resultado_posterior = "acertada"` passa a `nao_acertada`
 
 #### Scenario: Oportunidade reaberta
-- **GIVEN** `Oportunidade` `concluida` com `GEROU->h1`, `h1` `validada`, e veredito 0.1 ao fim do ciclo
+- **GIVEN** `DECISION_EVAL_MIN_VERDICT=0.3`, `Oportunidade` `concluida` com `GEROU->h1`, `h1` `validada`, e veredito 0.1 ao fim do ciclo (entre −0.3 e 0.3)
 - **WHEN** o ciclo termina
 - **THEN** a oportunidade fica `em_investigacao`
 - **AND** a decisão com `ESCOLHEU->h1` fica com `resultado_posterior` vazio
@@ -351,7 +372,7 @@ _Origem: ADR 021 §5.8_
 Quando o Researcher replaneja, o plano novo SHALL substituir a fila: toda subtarefa do plano anterior não concluída e não retirada que esteja ausente do plano novo SHALL ser registrada com `removida_pelo_replanejamento` no evento `hypothesis_cycle`, fora de `retiradas_por_motivo`.
 
 #### Scenario: Item removido da fila
-- **GIVEN** o ciclo 1 com `treinar_svm` adiada por prioridade, e o plano do ciclo 2 sem `treinar_svm`
+- **GIVEN** modo `assisted`, o ciclo 1 com `treinar_svm` fora da execução por `hipotese_aguarda_aprovacao` (sua hipótese segue pendente, a subtarefa continua na fila), e o plano do ciclo 2 sem `treinar_svm`
 - **WHEN** `prepare_cycle` do ciclo 2 roda
 - **THEN** `removidas_pelo_replanejamento` contém `treinar_svm`
 - **AND** `retiradas_por_motivo` não contém `removida_pelo_replanejamento`
@@ -401,3 +422,36 @@ O contexto de hipóteses entregue ao Researcher e ao Curator SHALL identificar a
 - **GIVEN** a hipótese do sistema `hs1` `em_teste`
 - **WHEN** `open_hypotheses_view()` é chamado
 - **THEN** o item de `hs1` tem `origem = "sistema"`
+
+### Requirement: Reversão de Oportunidade fora do alcance dos agentes
+_Origem: ADR 021 §4.4; parecer de segurança, item 3_
+A transição `concluida -> em_investigacao` de `Oportunidade` pelo orquestrador SHALL ser aceita pela validação do grafo só com a flag `revert_on_reopen`, passada exclusivamente pela revisão dos efeitos de `sync_statuses` ao fim do ciclo. Nenhuma ferramenta de agente (inclusive as do Curator), nenhum campo do plano e nenhuma saída de LLM MUST chegar a esse caminho, e a mesma transição sem a flag, ou por um `Actor` de agente, MUST ser recusada.
+
+#### Scenario: Curator tenta reverter a oportunidade
+- **GIVEN** uma `Oportunidade` `concluida`
+- **WHEN** o `Actor` agente `Curator` atualiza `status` para `em_investigacao` por uma ferramenta de agente
+- **THEN** a escrita é recusada e a oportunidade continua `concluida`
+
+#### Scenario: Orquestrador sem a flag
+- **GIVEN** uma `Oportunidade` `concluida`
+- **WHEN** o `Actor` orquestrador atualiza `status` para `em_investigacao` sem `revert_on_reopen`
+- **THEN** a escrita é recusada
+
+#### Scenario: Plano com campo de reversão
+- **GIVEN** um plano cujo JSON traz `"revert_on_reopen": true` numa subtarefa ou no envelope
+- **WHEN** o plano é processado e o ciclo termina sem hipótese reaberta
+- **THEN** nenhuma `Oportunidade` muda de status e o campo é descartado
+
+### Requirement: Fonte do enunciado da hipótese do sistema registrada
+_Origem: ADR 021 §8.3; parecer de segurança, item 4_
+Quando o enunciado de uma hipótese do sistema vier do campo livre `hypothesis` da subtarefa (texto de LLM), o sistema SHALL registrar `enunciado_fonte = "texto_livre"` na nota de auditoria da criação e no evento `hipotese_derivada`, e SHALL registrar `enunciado_fonte = "modelo"` quando usar o formato fixo. No modo `assisted`, o item de aprovação SHALL mostrar a fonte ao pesquisador.
+
+#### Scenario: Enunciado vindo do texto livre
+- **GIVEN** a subtarefa `teste` `treinar_rf` sem `hypothesis_ref` e com `hypothesis = "random forest melhora a acuracia"`, sendo `acuracia` a métrica M
+- **WHEN** `prepare_cycle` cria a hipótese do sistema
+- **THEN** a nota de auditoria e o evento `hipotese_derivada` têm `enunciado_fonte = "texto_livre"`
+
+#### Scenario: Fonte mostrada no assistido
+- **GIVEN** modo `assisted` e a mesma hipótese
+- **WHEN** o item é apresentado à `ApprovalPort`
+- **THEN** o item traz `origem = "sistema"` e `enunciado_fonte = "texto_livre"`

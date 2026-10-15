@@ -131,7 +131,7 @@ Precedência quando há mais de um limite no mesmo ponto de verificação (`Limi
 
 - O processo da sessão roda uma tarefa `asyncio` que atualiza um instante em memória a cada `SESSION_LOOP_TICK_SECONDS` (10). A thread do batimento grava `updated_at` e `loop_beat_at = último tique`. Assim o batimento continua independente do laço (um laço lento não apaga o batimento), mas quem confere vê há quanto tempo o laço não dá sinal.
 - `SESSION_LOOP_STALE_SECONDS` (900) é três vezes `SESSION_STALE_SECONDS`: um laço sem sinal por 15 minutos é travamento, não lentidão (as chamadas bloqueantes já correm em `asyncio.to_thread`).
-- `reassert_active` passa a exigir `NOT (payload ? 'continued_by')` e laço com sinal recente. Recusado porque a sessão foi continuada, a thread do batimento aciona o encerramento: o laço para de despachar e cancela o que roda, os containers de sandbox da sessão são removidos, nada é gravado na sessão e o processo sai com 6; se o laço não responder em 30 s, a thread encerra o processo com `os._exit(6)`.
+- `reassert_active` passa a exigir `NOT (payload ? 'continued_by')` e laço com sinal recente. Recusado porque a sessão foi continuada, a thread do batimento aciona o encerramento: o laço para de despachar e cancela o que roda, os containers de sandbox da sessão são removidos, nada é gravado na sessão e o processo sai com 6; se o laço não responder em `SESSION_LOST_EXIT_GRACE_SECONDS` (30), a thread encerra o processo com `os._exit(6)`.
 
 ### 1.9 Apelido
 
@@ -223,6 +223,7 @@ def exit_code_for(motivo_parada: str | None) -> int: ...
 | `TERMINAL_PRESENCE_STALE_SECONDS` | `60` | presença sem batimento além disso: terminal ausente |
 | `SESSION_PRESENCE_CHECK_SECONDS` | `15` | intervalo com que a sessão `assisted` lê a presença |
 | `TERMINAL_STALE_CHECK_SECONDS` | `60` | intervalo da varredura de sessões paradas no REPL |
+| `SESSION_LOST_EXIT_GRACE_SECONDS` | `30` | espera do laço depois da recusa por sessão continuada, antes de `os._exit(6)` |
 | `SESSION_ENV_DENYLIST` | vazio | nomes extras retirados do ambiente do processo da sessão (`v18.7-persistent-human-gate` acrescenta os do terminal à lista fixa) |
 | `SESSION_STALE_SECONDS`, `SESSION_HEARTBEAT_SECONDS` | `300`, `30` | existentes (`src/config.py:232-233`) |
 | `MIN_AVAILABLE_MEMORY_MB` | `512` | de `v18.7-resource-monitor-config` |

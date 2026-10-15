@@ -15,7 +15,7 @@ Uma restrição de direção (nó `Restricao`, spec `knowledge-graph`) SHALL ser
 #### Scenario: Resposta do pesquisador cria a restrição
 - **GIVEN** um pedido `restringir_direcao` com `motivo="restricao_duvidosa"` para a subtarefa `t3`
 - **WHEN** o terminal responde `restringir`
-- **THEN** a sessão cria um nó `Restricao` com `decidida_por="pesquisador"` e `pedido_id` igual ao id do pedido, ligado por `RESTRINGE` ao `Problema`
+- **THEN** a sessão consome o pedido por `consume_authorized` e cria um nó `Restricao` com `decidida_por="pesquisador"` e `pedido_id` igual ao id do pedido, ligado por `RESTRINGE` ao `Problema`
 
 #### Scenario: Liberar não cria restrição
 - **GIVEN** o mesmo pedido

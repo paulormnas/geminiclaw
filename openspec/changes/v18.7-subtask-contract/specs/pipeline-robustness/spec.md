@@ -1,6 +1,6 @@
 # Delta: pipeline-robustness
 
-Os cenários com revisor LLM usam um provedor falso que grava `messages` e `system` e devolve o parecer roteirizado; nenhum depende de provedor pago.
+Os cenários com revisor LLM usam o `FakeRecordingProvider` (ajuda compartilhada de `v18.7-benchmark-fixes`), provedor falso que grava `messages` e `system` e devolve o parecer roteirizado; nenhum depende de provedor pago.
 
 ## ADDED Requirements
 
@@ -67,6 +67,15 @@ A revisão SHALL avaliar o critério com limiar sobre a métrica `m` pela chave 
 - **WHEN** o critério é avaliado
 - **THEN** ele é atendido com valor real 0.95
 
+### Requirement: Devolução da tentativa uma vez por subtarefa
+A devolução da tentativa por `criterio_ambiguo` SHALL acontecer no máximo uma vez por `task_name` em cada sessão (design §8.1, parecer de segurança item 4). A partir da segunda ocorrência de `criterio_ambiguo` da mesma subtarefa na sessão, a tentativa MUST ser consumida normalmente e o evento `subtask_review` SHALL registrar `devolucao_recusada = true`; o desfecho continua `criterio_ambiguo` e a observação continua indo ao Researcher.
+
+#### Scenario: Ambiguidade repetida
+- **GIVEN** `treinar_modelo_a` já teve uma tentativa devolvida por `criterio_ambiguo` na sessão e o replanejamento devolve o mesmo critério ambíguo
+- **WHEN** a nova tentativa é revisada com o mesmo `metrics.json` só com `modelo_a.acuracia` e `modelo_b.acuracia`
+- **THEN** `outcome` é `criterio_ambiguo` e o contador de tentativas de `treinar_modelo_a` fica uma unidade acima do valor de antes da tentativa
+- **AND** o evento `subtask_review` dessa revisão tem `devolucao_recusada = true`
+
 ### Requirement: Colisão de artefatos entre subtarefas
 A validação do plano SHALL apontar como problema corrigível `colisao_artefato` o mesmo nome de arquivo em `expected_artifacts` de duas subtarefas sem dependência direta ou transitiva entre elas, citando o nome e as duas subtarefas, e SHALL emitir o aviso `artefato_atualizado`, sem reprovar, quando uma depende da outra (ADR 022 §8). `metrics.json` e `params.json` MUST ficar fora da regra. A verificação SHALL ser desligável por `PLAN_ARTIFACT_COLLISION_CHECK` (padrão `true`).
 
@@ -91,6 +100,15 @@ A validação do plano SHALL apontar como problema corrigível `campo_do_contrat
 #### Scenario: Nome de artefato com caminho relativo
 - **WHEN** o plano tem `expected_artifacts: ["../fora.csv"]`
 - **THEN** o normalizador aponta `nome_de_artefato_invalido` para `../fora.csv`
+
+### Requirement: Campo longo do contrato nunca é despachado
+Antes de montar o contrato de cada tentativa, o sistema SHALL conferir de novo o teto `CONTRACT_FIELD_MAX_CHARS` nos itens 2, 3, 4 e 8, inclusive quando o plano foi aceito com avisos por `PLAN_REJECTION_STALL_LIMIT` (design §8.1, parecer de segurança item 3). Subtarefa com campo acima do teto SHALL ser retirada com o motivo `campo_do_contrato_longo`, contado em `retiradas_por_motivo` do evento `hypothesis_cycle`, e MUST NOT ser despachada; o campo MUST NOT ser cortado nem enviado a provedor.
+
+#### Scenario: Plano aceito com avisos e campo longo
+- **GIVEN** um plano aceito com avisos depois de `PLAN_REJECTION_STALL_LIMIT` rejeições, em que `treinar_modelo_a` tem critérios que somam 1600 caracteres, e `CONTRACT_FIELD_MAX_CHARS=1500`
+- **WHEN** o ciclo despacha as subtarefas com o `FakeRecordingProvider`
+- **THEN** nenhuma chamada gravada pelo provedor contém o texto dos critérios de `treinar_modelo_a`
+- **AND** o evento `hypothesis_cycle` tem `campo_do_contrato_longo` em `retiradas_por_motivo` com `treinar_modelo_a`
 
 ### Requirement: Observações do revisor ao Researcher
 As `observacoes` das revisões de um ciclo e os casos `criterio_ambiguo` SHALL entrar no `feedback` do replanejamento seguinte como dado delimitado, com o `task_name` de origem, até `REVIEW_OBSERVATIONS_MAX` (padrão 10) por ciclo, sem repetir texto igual.

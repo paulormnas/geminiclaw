@@ -55,6 +55,21 @@ Quem consome o monitor SHALL tratar `None` como desconhecido: a espera por saúd
 - **WHEN** a temperatura lida é 76,0, depois 60,0, depois desconhecida
 - **THEN** `is_throttled()` devolve `True`, `False` e `None`
 
+### Requirement: Aviso de proteção térmica desligada
+_Origem: parecer do Analista de Segurança (design §4, item 1)._
+Na inicialização, quando a plataforma é Linux, o `HealthMonitor` lê uma temperatura (valor diferente de `None`) e `TEMPERATURE_LIMIT` não está definido, o sistema SHALL registrar um `WARNING` uma única vez por processo dizendo que a proteção térmica está desligada e que `TEMPERATURE_LIMIT` deve ser declarado no `.env`, e o REPL SHALL mostrar o mesmo aviso no cabeçalho. O sistema MUST NOT emitir o aviso quando `TEMPERATURE_LIMIT` está definido, quando a plataforma não é Linux ou quando a temperatura não pode ser lida. O aviso MUST NOT impedir a inicialização.
+
+#### Scenario: Aviso no Linux com sensor legível e sem limite
+- **GIVEN** plataforma Linux, `TEMPERATURE_LIMIT` vazio e sensor simulado com 55,0 °C
+- **WHEN** a inicialização roda duas vezes no mesmo processo
+- **THEN** há exatamente um `WARNING` que cita `TEMPERATURE_LIMIT`
+- **AND** a inicialização conclui sem erro
+
+#### Scenario: Sem aviso quando o limite está definido ou não há leitura
+- **GIVEN** plataforma Linux com sensor simulado a 55,0 °C e `TEMPERATURE_LIMIT=80`; depois plataforma Linux sem leitura de temperatura e `TEMPERATURE_LIMIT` vazio; depois plataforma não Linux com `TEMPERATURE_LIMIT` vazio
+- **WHEN** a inicialização roda em cada caso
+- **THEN** nenhum `WARNING` de proteção térmica desligada é registrado
+
 ### Requirement: Limite de agentes simultâneos sem padrão silencioso
 `calculate_dynamic_limit` SHALL manter as faixas atuais (6 GB ou mais disponíveis: 3; 3 GB ou mais: 2; abaixo: 1), limitadas por `MAX_CONCURRENT_AGENTS`, e, sem leitura de memória, SHALL usar `MAX_CONCURRENT_AGENTS` com aviso explícito, em vez de um padrão fixo de 3 (ADR 023 §1.1, item 2).
 

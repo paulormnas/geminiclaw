@@ -108,7 +108,7 @@ Esta mudança é a dona do mecanismo: o dicionário `_REMOVED_VARIABLES` (nome �
 
 Parecer do Analista de Segurança (2026-10-15): **Aprovado com ressalvas.** A remoção do `vcgencmd` é positiva.
 
-1. **Médio: a proteção térmica deixa de existir por padrão.** Hoje `PI_TEMPERATURE_LIMIT` vale 75 (`src/config.py:377`), e `TEMPERATURE_LIMIT` não terá padrão. Requisito: o `.env` do Pi declara `TEMPERATURE_LIMIT` antes de qualquer execução no Pi (tarefa 0.2). Quando há sensor legível e `TEMPERATURE_LIMIT` não está definido, a inicialização registra um `WARNING` uma única vez e o REPL mostra o aviso no cabeçalho.
+1. **Médio: a proteção térmica deixa de existir por padrão.** Hoje `PI_TEMPERATURE_LIMIT` vale 75 (`src/config.py:377`), e `TEMPERATURE_LIMIT` não terá padrão. Requisito: o `.env` do Pi declara `TEMPERATURE_LIMIT` antes de qualquer execução no Pi (valor capturado na tarefa 0.2, gravado na tarefa 4.3); a falta dessa migração bloqueia só a bateria no Pi, não o merge. Quando a plataforma é Linux, há sensor legível e `TEMPERATURE_LIMIT` não está definido, a inicialização registra um `WARNING` uma única vez e o REPL mostra o aviso no cabeçalho (requisito "Aviso de proteção térmica desligada" em `specs/agent-runtime`; tarefas 2.5 e 2.6).
 2. **Baixo: memória desconhecida.** Em `wait_for_health`, memória desconhecida gera só aviso e a execução segue. É aceitável porque, no Linux do Pi, a leitura existe. A bateria confirma `psutil.virtual_memory()` no aarch64.
 3. **Baixo:** confirmado que as mensagens de nomes removidos não ecoam valores (§1.5). Declarar `psutil` com limite inferior de versão, igual ao do `uv.lock`.
 

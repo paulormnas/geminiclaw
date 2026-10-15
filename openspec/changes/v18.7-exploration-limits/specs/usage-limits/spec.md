@@ -41,15 +41,20 @@ O sistema SHALL somar o custo estimado de todas as chamadas da sessão, por prov
 - **THEN** o motivo é `limite_custo`
 
 ### Requirement: Modelo sem preço impede o início
-Fora do modo sem limite, a sessão MUST NOT iniciar quando um modelo da alocação por papel tem localidade diferente de `local` e não tem preço conhecido (`get_price` devolve `None`); a mensagem SHALL citar o modelo e `LLM_PRICING_OVERRIDES`. Modelos `local` SHALL ter custo 0. Durante a sessão, uma chamada não local sem preço SHALL emitir `custo_nao_estimado` uma vez por modelo.
+Fora do modo sem limite, a sessão MUST NOT iniciar quando um modelo alcançável pelo roteamento, isto é, da alocação por papel ou de reserva (`GOOGLE_FALLBACK_MODEL` e equivalentes de cada provedor), tem localidade diferente de `local` e não tem preço conhecido (`get_price` devolve `None`); a mensagem SHALL citar o modelo e `LLM_PRICING_OVERRIDES`. Modelos `local` SHALL ter custo 0. Durante a sessão, uma chamada não local sem preço SHALL emitir `custo_nao_estimado` uma vez por modelo.
 
 #### Scenario: Alocação com modelo sem preço
 - **GIVEN** o papel `developer` alocado a `openai/modelo-sem-preco` e nenhuma entrada em `LLM_PRICING_OVERRIDES`
 - **WHEN** a sessão vai iniciar sem `--unlimited`
 - **THEN** a sessão não inicia e a mensagem cita `openai/modelo-sem-preco` e `LLM_PRICING_OVERRIDES`
 
+#### Scenario: Modelo de reserva sem preço
+- **GIVEN** todos os papéis em modelos com preço e `GOOGLE_FALLBACK_MODEL` apontando para um modelo não local sem preço
+- **WHEN** a sessão vai iniciar sem `--unlimited`
+- **THEN** a sessão não inicia e a mensagem cita o modelo de reserva e `LLM_PRICING_OVERRIDES`
+
 #### Scenario: Modelo local
-- **GIVEN** todos os papéis em modelos de localidade `local`
+- **GIVEN** todos os papéis e modelos de reserva em modelos de localidade `local`
 - **WHEN** a sessão inicia
 - **THEN** ela inicia e o custo da sessão é 0
 

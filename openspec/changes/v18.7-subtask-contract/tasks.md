@@ -21,20 +21,22 @@
 - [ ] 3.1 `AgentTask.contract`; `_dispatch_subtask` com `dataclasses.replace`.
 - [ ] 3.2 Montagem do contrato no início de cada tentativa em `_execute_task_in_dag`, a partir do plano vigente.
 - [ ] 3.3 `run_agent_loop(..., pinned_prefix=...)` e passagem pelo `AgentRuntime`; marca `_pinned` respeitada por `compress_messages`.
-- [ ] 3.4 Testes, com provedor falso que grava `messages` e `system`: "Despacho", "Laço com várias voltas", "Compressão não remove o contrato", "Nova tentativa depois de replanejamento", "Contrato desligado".
+- [ ] 3.3a Conferência do teto `CONTRACT_FIELD_MAX_CHARS` antes de montar o contrato de cada tentativa; retirada com `campo_do_contrato_longo` em `retiradas_por_motivo` (design §8.1 item 9).
+- [ ] 3.4 Testes, com o `FakeRecordingProvider` de `v18.7-benchmark-fixes` (grava `messages` e `system`): "Despacho", "Laço com várias voltas", "Compressão não remove o contrato", "Nova tentativa depois de replanejamento", "Contrato desligado", "Plano aceito com avisos e campo longo".
 
 ## 4. Egresso
-- [ ] 4.1 Fonte `contrato:` delimitada no `EgressGate` (constante em `src/egress/fragments.py`); itens 3 e 8 com `ARTIFACT_NAMES_SOURCE`; limpeza de marcas e caracteres de controle nos campos do plano.
-- [ ] 4.2 Registro de `limiar_mascarado` no log da tentativa (conforme a decisão do design §11.1).
-- [ ] 4.3 Testes: "Critério com instrução embutida", "Researcher com dados brutos, Developer sem", "Researcher sem dados brutos", "Nome com dado".
+- [ ] 4.1 Fonte `contrato:` delimitada no `EgressGate` com origem própria `planejador` (constantes em `src/egress/fragments.py`; nunca `instrucao` para texto do Researcher) e `PLANNER_TEXT_RULE` no `system` quando houver fragmento `planejador` (design §8.1 item 1); itens 3 e 8 com `ARTIFACT_NAMES_SOURCE`; limpeza de marcas e caracteres de controle nos campos do plano.
+- [ ] 4.2 Registro de `limiar_mascarado` no evento `subtask_attempt` (regra provisória do design §11.1; reescrever o cenário antes de implementar se a decisão for a alternativa).
+- [ ] 4.2a Script executado enviado ao revisor pelo `EgressGate` (origem e fonte `codigo`, `tainted = role_tainted("developer")`, política do destino do Validator) e registrado em `egress_log` (design §8.1 item 8).
+- [ ] 4.3 Testes: "Critério com instrução embutida", "Rótulo de origem do texto do Researcher", "Researcher com dados brutos, Developer sem", "Researcher sem dados brutos", "Nome com dado", "Developer local, Validator de nuvem", "Developer e Validator sem restrição".
 
 ## 5. Revisão de subtarefa
 - [ ] 5.1 `review_result` recebe o contrato; mensagem com contrato, regras de integridade, evidência, script executado e resposta (design §6.2).
 - [ ] 5.2 Parecer tipado, guarda determinística e leitura do formato antigo (design §6.3); `ReviewResult.typed_issues`, `observations`, `contract_sha256`; evento `subtask_review` com `contrato_sha256` e `observacoes`.
 - [ ] 5.3 Integridade sempre revisada (`REVIEW_INTEGRITY_ALWAYS`) e reprovação por métrica literal via `read_literal_findings`.
-- [ ] 5.4 Tabela de chaves de métrica do design §5; desfecho `criterio_ambiguo`; `UsageTracker.refund_task_attempt`; checkpoint `falhou` com `causa_falha = "ambigua"`.
+- [ ] 5.4 Tabela de chaves de métrica do design §5; desfecho `criterio_ambiguo`; `UsageTracker.refund_task_attempt`, no máximo uma devolução por `task_name` em cada sessão, com `devolucao_recusada` no evento (design §8.1 item 10); checkpoint `falhou` com `causa_falha = "ambigua"`.
 - [ ] 5.5 Observações e casos `criterio_ambiguo` no `feedback` do replanejamento (design §6.4).
-- [ ] 5.6 Testes: "Critério fraco vira observação", "Integridade reprova sempre", "Formato antigo do parecer", "Hash do contrato no parecer", "Só critérios de métrica, aprovados", "Integridade desligada", "Métrica literal", "Chave sem qualificador presente", "Ambiguidade", "Critério cita a chave qualificada", "Observação no replanejamento", "Artefato consumido no contrato"; atualizar os testes de `v18.6-review-evidence` do cenário "Grupo não nomeado" e rodar os demais cenários modificados sem mudança de resultado.
+- [ ] 5.6 Testes: "Critério fraco vira observação", "Integridade reprova sempre", "Formato antigo do parecer", "Hash do contrato no parecer", "Só critérios de métrica, aprovados", "Integridade desligada", "Métrica literal", "Chave sem qualificador presente", "Ambiguidade", "Ambiguidade repetida", "Critério cita a chave qualificada", "Observação no replanejamento", "Artefato consumido no contrato"; atualizar os testes de `v18.6-review-evidence` do cenário "Grupo não nomeado" e rodar os demais cenários modificados sem mudança de resultado.
 
 ## 6. Validação do plano
 - [ ] 6.1 `validate_plan` com `problem` (fragmento `contrato:objetivo`) e chamada atualizada em `src/orchestrator.py:2238`.

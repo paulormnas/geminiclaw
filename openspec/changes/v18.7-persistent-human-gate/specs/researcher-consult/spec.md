@@ -72,6 +72,25 @@ Todo efeito de uma decisão reservada SHALL ser aplicado só depois de `consume_
 - **WHEN** um segundo processo é iniciado com o mesmo arquivo de lançamento de `L1`, copiado pelo teste antes de ser apagado
 - **THEN** o segundo processo sai com código 2 sem criar sessão
 
+
+### Requirement: Leitura sem consumo para o adendo do regimento
+Como única exceção ao uso único, o gate SHALL oferecer `authorized_reference(decisao, referencia)`, que devolve verdadeiro só quando existe um pedido com `decisao = 'ativar_adendo_regimento'`, a mesma `referencia` (o sha256 dos bytes do adendo), `estado = 'autorizada'` e `resolvido_por` em `terminal` ou `cli`, sem marcar `consumido_em` e sem restringir à cadeia da sessão. O método MUST recusar qualquer outra `decisao`, e o `FakeGate` SHALL implementar o mesmo comportamento (ADR 022 §4.4; ADR 023 §4.3).
+
+#### Scenario: Adendo aprovado vale em sessões seguintes do projeto
+- **GIVEN** um pedido `ativar_adendo_regimento` com `referencia` igual ao sha256 do adendo, autorizado pelo terminal na sessão `s1`
+- **WHEN** a sessão `s2`, fora da cadeia de `s1`, chama `authorized_reference('ativar_adendo_regimento', sha)`
+- **THEN** o resultado é verdadeiro e `consumido_em` continua nulo
+
+#### Scenario: Outra decisão não usa a exceção
+- **GIVEN** um pedido `aprovar_hipotese` autorizado
+- **WHEN** a sessão chama `authorized_reference('aprovar_hipotese', 'h1')`
+- **THEN** a chamada é recusada com erro explícito e nenhum efeito é aplicado
+
+#### Scenario: Adendo alterado exige nova aprovação
+- **GIVEN** um adendo aprovado com sha256 `a`
+- **WHEN** o arquivo muda e o sha256 passa a ser `b`
+- **THEN** `authorized_reference('ativar_adendo_regimento', 'b')` devolve falso
+
 ### Requirement: Garantias do gate escritas
 O sistema SHALL garantir, e a documentação da mudança SHALL dizer por escrito, que o código da sessão e os agentes (inclusive ações conduzidas por LLM) não gravam resposta a pedido, mensagem na caixa de entrada nem presença do terminal; e SHALL dizer por escrito que essa garantia MUST NOT ser lida como proteção contra código arbitrário executado no host com o mesmo usuário do sistema operacional, nem contra quem tem o papel de superusuário do banco. Nenhum caminho de `src/` SHALL usar `SET ROLE`, `SET SESSION AUTHORIZATION`, `session_replication_role`, `DISABLE TRIGGER`, `DROP TRIGGER`, `ALTER ROLE` nem a cadeia `terminal_writer`, exceto `src/terminal_db.py` e o script de migração do papel (ADR 023 §4.3; caso 13).
 

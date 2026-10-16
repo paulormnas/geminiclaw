@@ -386,8 +386,9 @@ class _Planner:
                 effective["decidido_por"] = _ACTOR.criado_por
                 if op.motivo and "motivo_decisao" not in effective:
                     effective["motivo_decisao"] = op.motivo
-        else:
-            # Decisões reservadas a humano: aplica-se a mesma regra que barra os agentes.
+        elif node.label != "Hipotese":
+            # Decisões reservadas a humano: aplica-se a mesma regra que barra os agentes. A hipótese fica de fora: o
+            # pesquisador que confirma a proposta pode reabrir a que ele abandonou (v18.7-graph-exploration-relations).
             try:
                 validation.validate_human_only(
                     node.label, current=node.properties, changes=changes, actor_kind="agente"

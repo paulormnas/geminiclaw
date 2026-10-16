@@ -17,6 +17,9 @@ uv sync
 # Subir serviços essenciais (PostgreSQL e Qdrant)
 docker compose up -d
 
+# Rótulos do grafo de conhecimento (idempotente; a V18.7 acrescenta PREPARA e REFERENCIA_DE)
+uv run python scripts/migrate_v17_knowledge.py
+
 # Garantir que a imagem do sandbox de código existe na arquitetura do daemon
 uv run python -m scripts.platform_images ensure --imagens sandbox
 ```

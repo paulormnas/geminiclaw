@@ -139,3 +139,22 @@ class EdgeUpdateNotAllowedError(GraphStoreError):
         super().__init__(f"update_edge recusado em '{rel}' (ator '{actor_kind}'): {reason}.")
         self.rel = rel
         self.actor_kind = actor_kind
+
+
+class InvalidPropertyValueError(GraphStoreError):
+    """Valor de propriedade fora do formato exigido (identificador, mapa ou tamanho)."""
+
+    def __init__(self, label: str, prop: str, reason: str) -> None:
+        super().__init__(f"Valor inválido para '{label}.{prop}': {reason}.")
+        self.label = label
+        self.prop = prop
+        self.reason = reason
+
+
+class SelfRelationNotAllowedError(GraphStoreError):
+    """Relação que liga um nó a ele mesmo, proibida para o tipo de relação."""
+
+    def __init__(self, rel: str, node_id: str) -> None:
+        super().__init__(f"Relação '{rel}' não pode ligar o nó '{node_id}' a ele mesmo.")
+        self.rel = rel
+        self.node_id = node_id

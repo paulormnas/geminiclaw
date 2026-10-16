@@ -26,10 +26,6 @@ FILE_OK = "ok"
 FILE_ALTERADO = "alterado"
 FILE_AUSENTE = "ausente"
 FILE_SUBSTITUIDO = "substituido"  # reescrito por execução posterior (o último escritor é quem vale)
-# Arquivos que a PLATAFORMA grava na pasta da subtarefa depois do término de cada execução (``write_findings`` em
-# ``src/numeric_refs/literal_metrics.py``, ``LITERALS_FILE``); a próxima execução os encontra como entrada, e a
-# plataforma os reescreve depois do último término. Não são saída de código gerado nem adulteração.
-PLATFORM_WRITTEN_FILES: frozenset[str] = frozenset({"metricas_literais.json"})
 ORFA_PENDENTE_LOCAL = "pendente_local"
 ORFA_SEM_TERMINO = "sem_termino"
 
@@ -198,10 +194,6 @@ def _check_files(
                     results.append(
                         {**entry, "estado": FILE_SUBSTITUIDO, "detalhe": "consumida e reescrita pela mesma execução"}
                     )
-                    continue
-                if caminho.rsplit("/", 1)[-1] in PLATFORM_WRITTEN_FILES:
-                    detail = "arquivo gravado pela plataforma depois do término"
-                    results.append({**entry, "estado": FILE_SUBSTITUIDO, "detalhe": detail})
                     continue
                 if expected is None:
                     results.append({**entry, "estado": FILE_AUSENTE, "detalhe": "hash não registrado"})

@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from src.numeric_refs.literal_metrics import LITERALS_FILE
+from src.numeric_refs.literal_metrics import LITERALS_DIR
 
 FILE_NAME = "proveniencia_numerica.json"
 GROUP = "proveniencia"
@@ -52,9 +52,9 @@ def write_payload(session_dir: Path, payload: dict[str, Any]) -> Path:
 
 
 def read_literal_findings(session_dir: Path) -> list[dict[str, Any]]:
-    """Achados de ``metricas_literais.json`` de todas as subtarefas da sessão (com o ``exec_id``)."""
+    """Achados de ``metricas_literais/*.json`` de todas as subtarefas da sessão (com o ``exec_id``)."""
     found: list[dict[str, Any]] = []
-    for path in sorted(session_dir.glob(f"*/{LITERALS_FILE}")):
+    for path in sorted((session_dir / LITERALS_DIR).glob("*.json")):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):

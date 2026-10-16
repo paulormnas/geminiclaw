@@ -421,7 +421,8 @@ class CodeSkill(BaseSkill):
         provenance.record = finished.record
         provenance.pending = finished.pending
         write_findings(
-            provenance.output_root / provenance.session_id / provenance.task_name,
+            provenance.output_root / provenance.session_id,
+            provenance.task_name,
             provenance.began.exec_id,
             str(provenance.inicio.get("hash_codigo")),
             provenance.literal_findings,

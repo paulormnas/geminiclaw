@@ -480,3 +480,17 @@ def test_motivos_da_exploracao_tem_retomada_propria():
     cp = Checkpoint(session_id="s", motivo_parada=None)
     assert evaluate_resumability("closed", cp, "limite_ciclos").decision == "ok"
     assert evaluate_resumability("closed", cp, "planos_rejeitados").decision == "confirmar"
+
+
+def test_subtarefa_que_falhou_por_infraestrutura_e_marcada_para_retomar():
+    """Cota esgotada não é falha da abordagem: a subtarefa recomeça dos artefatos parciais, ou do zero."""
+    cp = Checkpoint(
+        session_id="sessao-a",
+        subtarefas=[
+            SubtaskState(task_name="treinar", status="falhou", causa_falha="infraestrutura", artefatos=["modelo.pkl"]),
+            SubtaskState(task_name="avaliar", status="falhou", causa_falha="abordagem"),
+        ],
+    )
+    block, _ = build_resume_context(cp, store=None, index=None, problem_id=None)
+    assert "modelo.pkl" in block
+    assert block.count('"retomar": true') == 1  # só a falha de infraestrutura

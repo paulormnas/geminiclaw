@@ -40,7 +40,7 @@ export RESEARCHER_MODEL=ollama/qwen3.5:4b   # pin provedor/modelo (ADR 017); opc
 export OLLAMA_BASE_URL=http://localhost:11434
 export OUTPUT_BASE_DIR=outputs/local
 
-uv run geminiclaw "Implemente um pipeline de classificação supervisionada para o dataset Iris. O pipeline deve incluir análise exploratória dos dados, pré-processamento, treinamento de ao menos dois algoritmos diferentes, avaliação comparativa dos modelos e uma recomendação final justificada sobre qual modelo usar em produção. Todos os artefatos gerados devem ser salvos em disco."
+uv run python -m src.cli.main "Implemente um pipeline de classificação supervisionada para o dataset Iris. O pipeline deve incluir análise exploratória dos dados, pré-processamento, treinamento de ao menos dois algoritmos diferentes, avaliação comparativa dos modelos e uma recomendação final justificada sobre qual modelo usar em produção. Todos os artefatos gerados devem ser salvos em disco."
 ```
 
 ### Passo B: Execução em Nuvem (Google Gemini)
@@ -50,7 +50,7 @@ export RESEARCHER_MODEL=google/gemini-4-argon   # pin provedor/modelo (ADR 017);
 export OUTPUT_BASE_DIR=outputs/cloud
 unset OLLAMA_BASE_URL
 
-uv run geminiclaw "Implemente um pipeline de classificação supervisionada para o dataset Iris. O pipeline deve incluir análise exploratória dos dados, pré-processamento, treinamento de ao menos dois algoritmos diferentes, avaliação comparativa dos modelos e uma recomendação final justificada sobre qual modelo usar em produção. Todos os artefatos gerados devem ser salvos em disco."
+uv run python -m src.cli.main "Implemente um pipeline de classificação supervisionada para o dataset Iris. O pipeline deve incluir análise exploratória dos dados, pré-processamento, treinamento de ao menos dois algoritmos diferentes, avaliação comparativa dos modelos e uma recomendação final justificada sobre qual modelo usar em produção. Todos os artefatos gerados devem ser salvos em disco."
 ```
 
 ---
@@ -62,7 +62,7 @@ Após as duas execuções, utilize os comandos abaixo para realizar a comparaç�
 ### Métricas de Execução
 ```bash
 # Inspecionar telemetria de uma sessão específica
-uv run geminiclaw --metrics <session_id>
+uv run python -m src.cli.main --metrics <session_id>
 ```
 
 ### Validação de Artefatos

@@ -22,7 +22,7 @@ from src.logger import get_logger
 
 logger = get_logger(__name__)
 
-LITERALS_FILE = "metricas_literais.json"
+LITERALS_DIR = "metricas_literais"  # na pasta da sessão, fora das pastas das subtarefas
 SAVE_FUNCTION = "save_experiment_artifacts"
 
 
@@ -214,16 +214,23 @@ def scan_code(code: str) -> list[LiteralFinding]:
     return sorted(findings.values(), key=lambda f: (f.linha, f.metrica))
 
 
-def write_findings(task_dir: Path, exec_id: str, code_hash: str, findings: list[LiteralFinding]) -> Path | None:
-    """Grava ``metricas_literais.json`` na pasta da subtarefa (só quando há achados). Nunca levanta."""
+def write_findings(
+    session_dir: Path, task_name: str, exec_id: str, code_hash: str, findings: list[LiteralFinding]
+) -> Path | None:
+    """Grava ``metricas_literais/<tarefa>.json`` na pasta da sessão (só quando há achados). Nunca levanta.
+
+    O arquivo é resultado da plataforma para o pesquisador: fica fora da pasta da subtarefa para não entrar na
+    comunicação entre agentes nem na cadeia de proveniência (a métrica que vale é a de ``metrics.json``).
+    """
     if not findings:
         return None
-    target = task_dir / LITERALS_FILE
+    target = session_dir / LITERALS_DIR / f"{task_name}.json"
     payload = {"exec_id": exec_id, "hash_codigo": code_hash, "achados": [f.to_dict() for f in findings]}
     try:
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     except OSError as exc:
-        logger.warning("metricas_literais.json não gravado", extra={"erro": type(exc).__name__})
+        logger.warning("Achados de métricas literais não gravados", extra={"erro": type(exc).__name__})
         return None
     return target
 
@@ -231,7 +238,7 @@ def write_findings(task_dir: Path, exec_id: str, code_hash: str, findings: list[
 def read_literal_metrics(session_dir: Path) -> set[tuple[str, str]]:
     """``{(exec_id, métrica)}`` sinalizadas nas subtarefas da sessão."""
     found: set[tuple[str, str]] = set()
-    for path in session_dir.glob(f"*/{LITERALS_FILE}"):
+    for path in (session_dir / LITERALS_DIR).glob("*.json"):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             exec_id = str(data.get("exec_id"))

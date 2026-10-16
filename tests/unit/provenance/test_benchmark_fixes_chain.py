@@ -6,9 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from src.numeric_refs.literal_metrics import LITERALS_FILE
 from src.provenance.hashing import sha256_file
-from src.provenance.verify import EXIT_INCONSISTENT, EXIT_OK, PLATFORM_WRITTEN_FILES, verify_project
+from src.provenance.verify import EXIT_INCONSISTENT, EXIT_OK, verify_project
 from src.report.operation_metrics import ProvenanceChainReader
 
 from .helpers import make_ledger, run_one
@@ -70,21 +69,6 @@ def test_entrada_lida_sem_reescrita_continua_conferida(tmp_path):
     report = verify_project(ledger.store, "proj", tmp_path / "outputs")
     assert report.exit_code == EXIT_INCONSISTENT
     assert [a["caminho"] for a in report.arquivos_alterados] == [f"{TASK}/dados.csv"]
-
-
-def test_arquivo_da_plataforma_reescrito_depois_do_termino_nao_e_adulteracao(tmp_path):
-    """Achado da bateria V18.6: ``metricas_literais.json`` é gravado pela plataforma depois de cada execução."""
-    assert LITERALS_FILE in PLATFORM_WRITTEN_FILES
-    ledger = make_ledger(tmp_path)
-    folder = tmp_path / "outputs" / "s1" / "tarefa"
-    folder.mkdir(parents=True)
-    literals = folder / LITERALS_FILE
-    literals.write_text('{"achados": []}', encoding="utf-8")
-    run_one(ledger, termino_over={"entradas": [_item(literals, f"{TASK}/{LITERALS_FILE}")]})
-    literals.write_text('{"achados": [1]}', encoding="utf-8")  # a plataforma reescreve depois do último término
-    report = verify_project(ledger.store, "proj", tmp_path / "outputs")
-    assert report.integra
-    assert report.arquivos[0]["estado"] == "substituido" and "plataforma" in report.arquivos[0]["detalhe"]
 
 
 def test_causa_da_divergencia_no_leitor(tmp_path, monkeypatch):

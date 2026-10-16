@@ -45,5 +45,5 @@
 
 ## 6. Validação
 - [x] 6.1 `uv run ruff check .`, verificação de contratos e `uv run pytest -m "unit or integration"` verdes; o diff dos testes só altera caminhos de importação, alvos de `patch`/`monkeypatch` e caminhos citados como dados.
-- [ ] 6.2 Depois do merge: `uv sync` e `uv run geminiclaw --help` no Mac e no Raspberry Pi; `scripts/setup_pi.sh` encontra `containers/images.yaml`.
+- [x] 6.2 Depois do merge: `uv sync` e `uv run python -m src.cli.main --help` no Mac e no Raspberry Pi (o comando `uv run geminiclaw` é dispensado pelo pesquisador, 2026-10-16: a interface futura é web); `scripts/setup_pi.sh` encontra `containers/images.yaml`.
 - [x] 6.3 Atualizar esta lista e a linha de estado no PR.

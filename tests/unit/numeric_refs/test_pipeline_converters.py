@@ -107,7 +107,7 @@ def test_literais_aparecem_no_apendice_e_na_contagem(session):
     from src.numeric_refs.literal_metrics import read_literal_metrics, scan_code
 
     findings = scan_code('save_experiment_artifacts("t", {}, {"acc": 0.95})')
-    write_findings(outputs / "s1" / "treinar", e, "h" * 64, findings)
+    write_findings(outputs / "s1", "treinar", e, "h" * 64, findings)
 
     state = _state(outputs, ledger, f"acc {{{{res:{e}/acc}}}}", literal_metrics=read_literal_metrics(outputs / "s1"))
     build_default_pipeline().build(state)

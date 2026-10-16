@@ -192,7 +192,7 @@ Seis camadas com todos os pacotes posicionados. **Rejeitada na revisão:** a med
 | 2 | Nenhum caminho antigo sobrevive | Busca textual pelos caminhos antigos (`src.<módulo antigo>`, `agents.`) em `src/`, `scripts/`, `tests/` e `.agents/` não encontra nada; a raiz de `src/` só tem `__init__.py`, `config.py`, `logger.py` e `db.py` |
 | 3 | Arquivos de dados continuam acessíveis | Testes conferem que os caminhos calculados a partir de `__file__` (vocabulário, manifesto de imagens, catálogo) apontam para arquivos existentes |
 | 4 | Regra de camadas ativa | A verificação passa; uma importação proibida de teste (por exemplo, `knowledge` importando `orchestration`) faz a verificação falhar |
-| 5 | Ponto de entrada | `uv run geminiclaw --help` funciona no Mac e no Raspberry Pi depois de `uv sync`; `scripts/setup_pi.sh` encontra `containers/images.yaml` |
+| 5 | Ponto de entrada | `uv run python -m src.cli.main --help` funciona no Mac e no Raspberry Pi depois de `uv sync`; `scripts/setup_pi.sh` encontra `containers/images.yaml` |
 | 6 | Exceções esvaziam | Ao fim da Etapa 2, a lista de exceções do contrato está vazia, e o filtro de egresso continua cobrindo todo envio ao provedor |
 
 ---

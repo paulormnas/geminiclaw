@@ -74,25 +74,17 @@ class TestBuildParser:
         args = parser.parse_args([])
         assert args.prompt is None
 
-    def test_flag_timeout(self) -> None:
-        """Parser aceita flag --timeout."""
+    def test_timeout_nao_e_argumento_da_cli(self) -> None:
+        """O tempo limite do agente vem de AGENT_TIMEOUT_SECONDS; a CLI não tem --timeout."""
         parser = build_parser()
-        args = parser.parse_args(["--timeout", "60", "meu prompt"])
-        assert args.timeout == 60
-        assert args.prompt == "meu prompt"
+        with pytest.raises(SystemExit):
+            parser.parse_args(["--timeout", "60", "meu prompt"])
 
     def test_flag_model(self) -> None:
         """Parser aceita flag --model."""
         parser = build_parser()
         args = parser.parse_args(["--model", "gemini-pro", "teste"])
         assert args.model == "gemini-pro"
-
-    def test_timeout_padrao(self) -> None:
-        """Timeout padrão é o valor de AGENT_TIMEOUT_SECONDS."""
-        parser = build_parser()
-        args = parser.parse_args([])
-        from src.config import AGENT_TIMEOUT_SECONDS
-        assert args.timeout == AGENT_TIMEOUT_SECONDS
 
     def test_model_padrao(self) -> None:
         """Sem --model não há pin: o catálogo decide o modelo do researcher (ADR 017)."""

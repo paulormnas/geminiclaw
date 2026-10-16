@@ -9,6 +9,8 @@ cliente do Qdrant nem clientes de LLM ao abrir: só os comandos que os usam (ADR
 from __future__ import annotations
 
 import argparse
+import asyncio
+import signal
 import sys
 import threading
 import time
@@ -35,6 +37,11 @@ from src.session.presence import PgPresenceStore, TerminalAlreadyOpenError, Term
 from src.session.states import UNFINISHED_STATUSES
 from src.session.watch import SessionWatch
 from src.utils.terminal import BANNER, DIM, MAGENTA, RED, RESET, STATUS_ICONS, YELLOW
+
+try:  # edição de linha no prompt e ``get_line_buffer()`` nas notificações; importar já aqui (numa thread bloquearia)
+    import readline
+except ImportError:  # pragma: no cover - plataformas sem readline
+    readline = None  # type: ignore[assignment]
 
 logger = get_logger(__name__)
 
@@ -66,9 +73,8 @@ class Console:
             if self.waiting_for_input:
                 partial = ""
                 try:
-                    import readline
-
-                    partial = readline.get_line_buffer()
+                    if readline is not None:
+                        partial = readline.get_line_buffer()
                 except Exception:  # noqa: BLE001 - sem readline o prompt volta sem o texto parcial
                     pass
                 self._stream.write(PROMPT + partial)
@@ -338,7 +344,12 @@ async def interactive_mode(
     print(BANNER)
     print(f"  {DIM}Modo interativo. 'nova-pesquisa <tarefa>' inicia uma pesquisa em segundo plano.{RESET}")
     print(f"  {DIM}'sessions' lista as pesquisas; 'sair' encerra o terminal (as pesquisas continuam).{RESET}\n")
-    code = repl.open()
+    try:
+        code = repl.open()
+    except Exception as exc:  # noqa: BLE001 - sem o banco não há presença nem sessões: o REPL não abre
+        print(f"\n  {STATUS_ICONS['error']} {RED}Não foi possível abrir o REPL ({type(exc).__name__}: {exc}). "
+              f"Confira o PostgreSQL (docker compose up -d).{RESET}\n")
+        return EXIT_ERROR
     if code is not None:
         return code
     try:
@@ -347,3 +358,25 @@ async def interactive_mode(
     finally:
         repl.close()
     return 0
+
+
+def run_with_prompt_interrupt(coro_factory: Callable[[], Any]) -> Any:
+    """Roda a corrotina com Ctrl+C no prompt levantando ``KeyboardInterrupt`` em ``input()``.
+
+    O ``asyncio.run`` só instala o seu tratamento de ``SIGINT`` se o atual for o padrão; com este, o Ctrl+C no prompt
+    encerra o REPL em vez de cancelar a tarefa principal (as pesquisas, em processos próprios, não recebem o sinal).
+    """
+
+    def raise_interrupt(signum: int, frame: Any) -> None:
+        raise KeyboardInterrupt
+
+    previous = signal.signal(signal.SIGINT, raise_interrupt)
+    try:
+        return asyncio.run(coro_factory())
+    finally:
+        signal.signal(signal.SIGINT, previous)
+
+
+def run_repl(**kwargs: Any) -> int:
+    """Executa o REPL (``interactive_mode``) e devolve o código de saída."""
+    return run_with_prompt_interrupt(lambda: interactive_mode(**kwargs))

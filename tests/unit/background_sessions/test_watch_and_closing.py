@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import os
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -163,3 +164,30 @@ def test_relatorio_e_deterministico_e_nao_chama_llm():
     sess = manager.add("d-01", "suspensa_sem_pesquisador", {"mode": "assisted"})
     when = datetime.datetime(2026, 10, 16, tzinfo=datetime.timezone.utc).isoformat()
     assert render_closing_report(sess, None, when=when) == render_closing_report(sess, None, when=when)
+
+
+def test_processo_zumbi_conta_como_inexistente():
+    import subprocess
+    import sys
+    import time
+
+    from src.session.watch import process_create_time
+
+    proc = subprocess.Popen([sys.executable, "-c", "pass"])
+    time.sleep(0.5)  # terminou, mas o pai (este teste) ainda não o recolheu: zumbi
+    assert process_create_time(proc.pid) is None
+    proc.wait()
+    assert process_create_time(os.getpid()) is not None
+
+
+def test_encerrada_pelo_pesquisador_pede_confirmacao_na_retomada_e_carrega_o_curator_pendente(tmp_path: Path):
+    """Tarefa 5.6 (a ponta): o encerramento deixa ``curator_pendente``; a retomada o lê e pede confirmação."""
+    from src.session.continuity import RESUME_CONFIRM, evaluate_resumability
+
+    manager = FakeSessionManager()
+    sess = manager.add("b-01", "aguarda_pesquisador", {"mode": "semi", "motivo_parada": "aguarda_pesquisador"})
+    _checkpoint(tmp_path, "b-01")
+    close_by_researcher(manager, tmp_path, sess)
+    cp, _ = read_checkpoint(tmp_path / "b-01")
+    verdict = evaluate_resumability("closed", cp, db_motivo="encerrada_pesquisador")
+    assert cp.curator_pendente is True and verdict.decision == RESUME_CONFIRM

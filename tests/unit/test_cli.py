@@ -261,9 +261,17 @@ class TestMainDispatch:
         assert cont.call_args.args[0] == "p1"
 
     def test_sem_prompt_abre_o_repl(self) -> None:
-        with patch("src.observability.telemetry.get_telemetry"):
-            code, repl = self._run([], "interactive_mode")
-        assert code == 0 and repl.call_args.kwargs["mode"]
+        with (
+            patch("sys.argv", ["geminiclaw"]),
+            patch("src.cli.main.run_repl", return_value=0) as repl,
+            patch("src.cli.main.asyncio.run"),
+            patch("src.cli.main.install_provider_resolver"),
+        ):
+            from src.cli.main import main
+
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+        assert exc_info.value.code == 0 and repl.call_args.kwargs["mode"]
 
     def test_background_sem_tarefa_e_recusado(self) -> None:
         with patch("sys.argv", ["geminiclaw", "--background"]), patch("src.cli.main.install_provider_resolver"):

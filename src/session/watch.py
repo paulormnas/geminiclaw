@@ -34,11 +34,15 @@ def _epoch(value: str | None) -> float | None:
 
 
 def process_create_time(pid: int) -> float | None:
-    """Hora de início do processo ``pid`` neste host, ou ``None`` se ele não existe."""
+    """Hora de início do processo ``pid`` neste host, ou ``None`` se ele não existe (zumbi inclusive: o processo
+    filho do REPL que morreu e ainda não foi recolhido já não executa a pesquisa)."""
     import psutil
 
     try:
-        return psutil.Process(pid).create_time()
+        process = psutil.Process(pid)
+        if process.status() == psutil.STATUS_ZOMBIE:
+            return None
+        return process.create_time()
     except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
         return None
 

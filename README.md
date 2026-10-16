@@ -226,8 +226,46 @@ Não há canal de comunicação entre processos: o orquestrador chama o agente d
 - **Contexto por tarefa**: cada execução recebe um `AgentContext` (sessão, papel, diretório de saída, modelo) via `contextvars`, o que isola tarefas concorrentes sem usar variáveis de ambiente.
 - **Supervisão**: timeout por agente e captura de exceções; falha, timeout e cancelamento têm tratamento distinto.
 - **Recursos**: o `ResourceGuard` limita agentes simultâneos e aguarda o Pi esfriar ou liberar memória antes de iniciar outro.
-- **Perguntas ao pesquisador**: a ferramenta `ask_researcher` chama diretamente o orquestrador (deduplicação e registro na sessão).
+- **Perguntas ao pesquisador**: a ferramenta `ask_researcher` chama diretamente o orquestrador (deduplicação e registro na sessão). O processo da sessão não lê o terminal: a pergunta sem resposta vira pendência registrada (`pendente_pesquisador`).
 - **Código gerado**: nunca roda no host. A skill de código o envia ao sandbox, um container efêmero que devolve os artefatos ao diretório da sessão.
+
+---
+
+## 🧵 Pesquisas em segundo plano
+
+Cada pesquisa roda em um **processo próprio** (ADR 023), separado do terminal: o terminal só lança, acompanha e decide. O prompt do REPL volta sem esperar o fim da pesquisa e fechar o terminal não interrompe uma pesquisa `semi` ou `auto`.
+
+```bash
+geminiclaw                         # REPL
+  nova-pesquisa <tarefa>           # lança a pesquisa em segundo plano (texto livre sem comando é recusado com a dica)
+  sessions                         # pesquisas em execução e por terminar (apelido, modo, estado, PID, resumo)
+  retomar <apelido|id>             # nova sessão a partir do checkpoint (mesma retomada de `geminiclaw resume`)
+  encerrar <apelido|id>            # fecha a pesquisa parada e grava relatorio_encerramento.md (sem LLM)
+  sandboxes / parar-sandboxes [id] # containers de sandbox de código (sem id, pede confirmação)
+  sair                             # as pesquisas continuam
+
+geminiclaw "tarefa"                # primeiro plano: o comando é o terminal; espera o fim e sai com o código abaixo
+geminiclaw --background "tarefa"   # cria o processo, imprime apelido e PID e sai com 0 (não combina com --mode assisted)
+```
+
+Ao abrir, o REPL marca como `interrompida` as pesquisas cujo processo não existe mais, mostra o que mudou desde a última vez e pergunta, para cada pesquisa não finalizada (`aguarda_pesquisador`, `suspensa_sem_pesquisador`, `interrompida`), se quer **retomar**, **manter** ou **encerrar**. Só um REPL pode estar aberto. Uma sessão `assisted` precisa do terminal presente: se ele sai ou cai, ela termina o que está em curso, grava o checkpoint e se suspende (`suspensa_sem_pesquisador`). `semi` e `auto` ignoram o terminal; quando só restam pedidos ao pesquisador, a sessão sai com `aguarda_pesquisador`.
+
+Antes de iniciar ou retomar, o terminal confere a memória disponível (`MIN_AVAILABLE_MEMORY_MB`): no REPL pergunta se inicia mesmo assim; no comando direto falha com o código 5. Memória desconhecida não falha: registra um evento e segue.
+
+**Códigos de saída do comando direto** (contrato fixo; vêm do `motivo_parada`):
+
+| Código | Significado |
+| --- | --- |
+| 0 | parada de pesquisa (`solucao_encontrada`, `sem_caminhos_promissores`, `hipoteses_nao_testadas`, `saturacao`) |
+| 1 | erro ou recusa |
+| 2 | modo sem limite não confirmado |
+| 3 | limite (`limite_*`, `versao_modelo`, `planos_rejeitados`) |
+| 4 | aguarda o pesquisador (`aguarda_pesquisador`, `suspensa_sem_pesquisador`) |
+| 5 | memória insuficiente |
+| 6 | sessão perdida (continuada por outra) |
+| 130 | interrupção pelo pesquisador (Ctrl+C: o 1º pede o fechamento com checkpoint; o 2º é imediato) |
+
+Com várias pesquisas simultâneas, a concorrência efetiva de agentes é `MAX_CONCURRENT_AGENTS` multiplicado pelo número de processos. As variáveis (`SESSION_LAUNCH_TIMEOUT_SECONDS`, `SESSION_LOG_DIR`, `SESSION_LOOP_TICK_SECONDS`, `TERMINAL_PRESENCE_*` etc.) estão documentadas no `.env.example`.
 
 ---
 

@@ -21,7 +21,7 @@ if root_path not in sys.path:
 
 from src.cli.context_commands import clear_context
 from src.cli.direct import continue_project, resume_research, start_research
-from src.cli.repl import interactive_mode
+from src.cli.repl import run_repl
 from src.cli.sandboxes import show_sandboxes, stop_sandboxes
 from src.cli.unlimited import _project_marked_unlimited, resolve_unlimited_budget  # noqa: F401 - API pública da CLI
 from src.config import (
@@ -47,7 +47,9 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
 ╚══════════════════════════════════════════════════════════════╝
 {RESET}
 {BOLD}USO:{RESET}
-  geminiclaw [opções] "<tarefa>"
+  geminiclaw [opções] "<tarefa>"   (espera o fim e sai com o código do motivo de parada)
+  geminiclaw --background [opções] "<tarefa>"   (cria o processo, imprime apelido e PID e sai com 0)
+  geminiclaw                        (REPL: nova-pesquisa <tarefa>, sessions, retomar, encerrar, sair)
   geminiclaw sandboxes
   geminiclaw parar-sandboxes [--session <id>]
   geminiclaw resume --session <id>   (retoma a partir do checkpoint, em nova sessão com orçamento novo)
@@ -666,7 +668,7 @@ def main() -> None:
     if args.background:
         print(f"\n  {STATUS_ICONS['error']} {RED}--background exige uma tarefa.{RESET}\n")
         sys.exit(1)
-    code = asyncio.run(interactive_mode(mode=mode, explicit_mode=args.mode, budget=budget, args=args))
+    code = run_repl(mode=mode, explicit_mode=args.mode, budget=budget, args=args)
     try:
         from src.observability.telemetry import get_telemetry
 

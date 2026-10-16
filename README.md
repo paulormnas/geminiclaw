@@ -233,7 +233,7 @@ Não há canal de comunicação entre processos: o orquestrador chama o agente d
 
 ## 🐳 Infraestrutura Docker
 
-O `docker-compose.yml` sobe apenas os **serviços de apoio**; o orquestrador e os agentes rodam como processo local (`uv run geminiclaw ...`):
+O `docker-compose.yml` sobe apenas os **serviços de apoio**; o orquestrador e os agentes rodam como processo local (`uv run python -m src.cli.main ...`):
 
 ```yaml
 services:

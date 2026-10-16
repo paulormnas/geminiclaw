@@ -159,9 +159,9 @@ def test_metrica_calculada_nao_e_sinalizada():
 
 def test_arquivo_de_achados_e_leitura(tmp_path):
     findings = scan_code('save_experiment_artifacts("t", {}, {"acc": 0.95})')
-    task_dir = tmp_path / "s1" / "treinar"
-    task_dir.mkdir(parents=True)
-    assert write_findings(task_dir, "exec_x", "h" * 64, []) is None
-    assert not (task_dir / "metricas_literais.json").exists()
-    write_findings(task_dir, "exec_x", "h" * 64, findings)
+    session_dir = tmp_path / "s1"
+    session_dir.mkdir(parents=True)
+    assert write_findings(session_dir, "treinar", "exec_x", "h" * 64, []) is None
+    assert not (session_dir / "metricas_literais").exists()
+    write_findings(session_dir, "treinar", "exec_x", "h" * 64, findings)
     assert read_literal_metrics(tmp_path / "s1") == {("exec_x", "acc")}

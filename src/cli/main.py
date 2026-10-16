@@ -24,7 +24,6 @@ if root_path not in sys.path:
 
 from src.cli.infrastructure import ensure_infrastructure
 from src.config import (
-    AGENT_TIMEOUT_SECONDS,
     APP_NAME,
     CONTEXT_TOKEN_WARNING_THRESHOLD,
     INPUT_CONTEXT_DIR,
@@ -137,12 +136,6 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="?",
         default=None,
         help="Prompt a ser enviado ao orquestrador. Se omitido, entra em modo interativo.",
-    )
-    parser.add_argument(
-        "--timeout",
-        type=int,
-        default=AGENT_TIMEOUT_SECONDS,
-        help=f"Timeout em segundos para cada agente (padrão: {AGENT_TIMEOUT_SECONDS or 'sem limite'}).",
     )
     parser.add_argument(
         "--model",

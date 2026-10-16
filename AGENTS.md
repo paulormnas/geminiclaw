@@ -111,10 +111,10 @@ uv sync --upgrade
 docker compose up -d
 
 # Executar o framework com uma tarefa (CLI direta)
-uv run geminiclaw "Sua tarefa aqui"
+uv run python -m src.cli.main "Sua tarefa aqui"
 
 # Executar em modo interativo (REPL)
-uv run geminiclaw
+uv run python -m src.cli.main
 
 # Detectar a plataforma, planejar e obter as imagens (sandbox, Qdrant) para a arquitetura do daemon
 uv run python -m scripts.platform_images detect

@@ -5,8 +5,9 @@ Movidos de ``src/gate/human_gate.py`` sem alterar o comportamento (ADR 024 §5).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 ESTADO_PENDENTE = "pendente"
 ESTADO_AUTORIZADA = "autorizada"
@@ -50,3 +51,42 @@ class GateRequest:
     estado: str = ESTADO_PENDENTE
     resolvido_por: str | None = None
     respostas_ignoradas: int = 0
+    # Gate persistente (v18.7-persistent-human-gate): o que o terminal exibe e o que a sessão consome.
+    pergunta: str = ""
+    opcoes: tuple[str, ...] = ()
+    motivo: str | None = None
+    session_id: str | None = None
+    project_id: str | None = None
+    resposta: dict[str, Any] | None = field(default=None, compare=False)
+    consumido: bool = False
+    obsoleto: bool = False
+    criado_em: str | None = None
+    resolvido_em: str | None = None
+
+
+class GateError(Exception):
+    """Erro do gate persistente (mensagem acionável, sem eco de conteúdo de pesquisa)."""
+
+
+class GateAlreadyResolved(GateError):
+    """O pedido já foi resolvido (a transição condicional não encontrou ``pendente``)."""
+
+
+class GatePendingLimitReached(GateError):
+    """A sessão já tem ``GATE_MAX_PENDING_PER_SESSION`` pedidos pendentes; o excesso vira evento, sem novo pedido."""
+
+
+class GateInvalidRequest(GateError):
+    """Pedido ou resposta fora do catálogo (decisão, motivo, opção ou texto)."""
+
+
+class GateAuthorizationRefused(GateError):
+    """A autorização não vale para este uso.
+
+    Attributes:
+        motivo: ``nao_encontrada``, ``outra_sessao``, ``ja_consumida`` ou ``nao_autorizada``.
+    """
+
+    def __init__(self, motivo: str, message: str = "") -> None:
+        super().__init__(message or f"autorização recusada ({motivo})")
+        self.motivo = motivo

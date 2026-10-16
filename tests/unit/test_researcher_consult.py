@@ -309,6 +309,9 @@ class TestDecisoesReservadas:
         assert set(DECISOES_RESERVADAS) == {
             "aprovar_oportunidade", "confirmar_problema", "aprovar_termo_vocabulario",
             "autorizar_escrita_instrumento", "ativar_modo_sem_limite",
+            # v18.7-persistent-human-gate: pedidos persistentes da sessão (o consultor nunca os responde)
+            "aprovar_hipotese", "decidir_objetivo_atingido", "responder_pergunta_agente",
+            "decidir_continuidade", "restringir_direcao", "ativar_adendo_regimento",
         }
 
     async def test_aprovacao_de_oportunidade_em_modo_auto(self, tmp_path: Path) -> None:

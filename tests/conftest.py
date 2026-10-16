@@ -7,6 +7,7 @@ import pytest
 os.environ["GENAI_API_KEY"] = "dummy_key_for_testing"
 os.environ["GEMINI_API_KEY"] = "dummy_key_for_testing"
 os.environ["AGENT_TIMEOUT_SECONDS"] = "120"
+os.environ["GATE_ASK_WAIT_SECONDS"] = "30"  # precisa ser menor que o tempo limite do agente
 # DATABASE_URL: valor fictício para testes unitários (sem banco real)
 # Testes de integração sobrescrevem com uma URL real
 os.environ.setdefault(
@@ -94,6 +95,7 @@ def mock_db_connection(request):
         or "test_input_document_index_pg.py" in path
         or f"{os.sep}tests{os.sep}integration{os.sep}provenance_pg{os.sep}" in path
         or f"{os.sep}tests{os.sep}integration{os.sep}knowledge{os.sep}" in path
+        or f"{os.sep}tests{os.sep}integration{os.sep}background_sessions{os.sep}" in path
     ):
         yield
         return

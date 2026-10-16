@@ -32,7 +32,8 @@ class HypothesisWorld:
     """Projeto, Problema confirmado (alvo 0,8; delta_min 0,05), sessão e atalhos para montar nós."""
 
     def __init__(self, *, mode: str = "auto", index: bool = False, alvo: float | None = 0.8,
-                 delta_min: float = 0.05, session_id: str = "sessao-h", approve_metric: bool = True) -> None:
+                 delta_min: float = 0.05, session_id: str = "sessao-h", approve_metric: bool = True,
+                 metrica: str = "R2", sinonimos: tuple[str, ...] = ()) -> None:
         self.raw = InMemoryGraphStore()
         self.provider: ControlledEmbeddingProvider | None = None
         self.index: SemanticIndex | None = None
@@ -44,7 +45,8 @@ class HypothesisWorld:
             self.store = self.raw
         self.pid = create_project(self.store, "Projeto X", "Objetivo X", [])
         confirm_problem(
-            self.store, self.pid, make_draft(alvo=alvo, delta_min=delta_min), sentido_metrica="maior_melhor"
+            self.store, self.pid, make_draft(alvo=alvo, delta_min=delta_min, metrica=metrica),
+            sentido_metrica="maior_melhor",
         )
         self.problem = get_active_problem(self.store, self.pid)
         assert self.problem is not None
@@ -58,22 +60,33 @@ class HypothesisWorld:
         self.graph.projeto = self.store.find_nodes("Projeto", {"projeto_id": self.pid}, limit=1)[0].id
         self.graph.problema = self.problem.id
         self.graph.metrica = self.store.find_nodes("Metrica", {}, limit=5)[0].id
+        if sinonimos:  # a métrica aprovada ganha sinônimos (``accuracy``, ``test_accuracy``)
+            self.store.update_node(self.graph.metrica, {"sinonimos": list(sinonimos)}, actor=PESQUISADOR)
 
     def base(self, **extra: Any) -> dict[str, Any]:
         return {"projeto_id": self.pid, "sessao_id": self.sid, **extra}
 
     def hypothesis(
         self, enunciado: str = "H1", *, status: str = "proposta", origem: str = "researcher", sobre: bool = True,
-        actor: Actor | None = None,
+        actor: Actor | None = None, abandonada_por: str | None = None,
     ) -> str:
-        """Hipótese do projeto (por padrão do Researcher, ``proposta``, ``SOBRE`` o Problema)."""
+        """Hipótese do projeto (por padrão do Researcher, ``proposta``, ``SOBRE`` o Problema).
+
+        ``status="abandonada"`` sem ``abandonada_por`` cria o nó antigo (sem a propriedade nem nota de rejeição, que a
+        leitura compatível trata como abandono do agente); com ``abandonada_por`` a hipótese nasce ``proposta`` e é
+        abandonada em seguida pelo ``Actor`` do caminho real (pesquisador para ``pesquisador``).
+        """
         by = actor or (PESQUISADOR if origem == "pesquisador" else AGENTE)
-        props = self.base(enunciado=enunciado, justificativa="J", status=status, origem=origem)
+        late = status == "abandonada" and abandonada_por is not None
+        props = self.base(enunciado=enunciado, justificativa="J", status="proposta" if late else status, origem=origem)
         if by.kind == "agente":
             props.update(justificativa_criacao="teste", nos_consultados=[])
         hid = self.store.create_node("Hipotese", props, actor=by)
         if sobre:
             self.store.create_edge(hid, "SOBRE", self.problem.id, {}, actor=ORQ)
+        if late:
+            closer = PESQUISADOR if abandonada_por == "pesquisador" else ORQ
+            self.store.update_node(hid, {"status": "abandonada", "abandonada_por": abandonada_por}, actor=closer)
         return hid
 
     def opportunity(self, enunciado: str = "Testar X", status: str = "documentada") -> str:

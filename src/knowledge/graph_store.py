@@ -350,7 +350,7 @@ class InMemoryGraphStore(GraphStore):
 
         validation.validate_node_update(node.label, changes)
         validation.validate_human_only(
-            node.label, current=node.properties, changes=changes, actor_kind=actor.kind
+            node.label, current=node.properties, changes=changes, actor_kind=actor.kind, actor_role=actor.role
         )
         full_changes = prepare_node_update(changes)
 
@@ -748,7 +748,7 @@ class AgeGraphStore(GraphStore):
 
         validation.validate_node_update(node.label, changes)
         validation.validate_human_only(
-            node.label, current=node.properties, changes=changes, actor_kind=actor.kind
+            node.label, current=node.properties, changes=changes, actor_kind=actor.kind, actor_role=actor.role
         )
         full_changes = prepare_node_update(changes)
 

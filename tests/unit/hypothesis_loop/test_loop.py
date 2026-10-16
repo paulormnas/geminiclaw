@@ -116,8 +116,9 @@ async def test_plano_no_formato_antigo_continua_funcionando(tmp_path):
     h = LoopHarness(tmp_path, plans=[old, old])
     await h.run()
     assert h.ran == ["t1", "t2"] and h.stop_reason == "sem_caminhos_promissores"
-    (node,) = h.hypotheses()
-    assert node.properties["origem"] == "researcher" and node.properties["enunciado"] == "O modelo atinge R2 de 0,85"
+    by_origin = {n.properties["origem"]: n for n in h.hypotheses()}
+    assert by_origin["researcher"].properties["enunciado"] == "O modelo atinge R2 de 0,85"
+    assert "sistema" in by_origin  # t2, sem hipótese declarada, testa a hipótese derivada pelo sistema
 
 
 @pytest.mark.asyncio
@@ -129,12 +130,13 @@ async def test_formato_antigo_no_assistido_tambem_exige_aprovacao_da_hipotese(tm
 
 
 @pytest.mark.asyncio
-async def test_subtarefa_experimental_sem_hipotese_no_formato_novo_nao_executa(tmp_path):
-    """Governança não pode ser contornada por omissão do hypothesis_ref; preparação (eda) segue."""
+async def test_subtarefa_sem_hypothesis_ref_executa_com_a_hipotese_do_sistema(tmp_path):
+    """v18.7-hypothesis-linking: a falta de ``hypothesis_ref`` não retira a subtarefa; o sistema deriva a ligação."""
     p = plan([task("sem_ref", None), task("eda_dados", None, task_type="eda"), task("ok", "h1")], [hyp("h1")])
     h = LoopHarness(tmp_path, plans=[p, p])
     await h.run()
-    assert sorted(h.ran) == ["eda_dados", "ok"]
+    assert sorted(h.ran) == ["eda_dados", "ok", "sem_ref"]
+    assert any(n.properties["origem"] == "sistema" for n in h.hypotheses())
 
 
 @pytest.mark.asyncio
@@ -405,8 +407,12 @@ async def test_telemetria_do_ciclo_leva_so_contagens_sem_texto_de_pesquisa(tmp_p
     cycle = next(p for t, p in events if t == "hypothesis_cycle")
     assert cycle["hipoteses_criadas"] == 1 and cycle["executadas"] == 1 and cycle["formato"] == "novo"
     assert segredo not in repr(events)
-    assert all(isinstance(v, (int, str)) or (isinstance(v, dict) and all(isinstance(n, int) for n in v.values()))
-               for _, p in events for v in p.values())  # retiradas_por_motivo: código -> contagem, nunca texto
+    assert all(
+        isinstance(v, (int, str))
+        or (isinstance(v, dict) and all(isinstance(n, int) for n in v.values()))
+        or (isinstance(v, list) and all(isinstance(n, str) for n in v))
+        for _, p in events for v in p.values()
+    )  # retiradas_por_motivo: código -> contagem; removidas_pelo_replanejamento: nomes de subtarefa; nunca texto
 
 
 @pytest.mark.asyncio
@@ -421,7 +427,7 @@ async def test_hipotese_do_llm_nao_forja_origem_pesquisador(tmp_path):
 @pytest.mark.asyncio
 async def test_hipotese_abandonada_pelo_pesquisador_nao_reexecuta_por_id(tmp_path):
     h = LoopHarness(tmp_path)
-    gone = h.w.hypothesis("rejeitada antes", status="abandonada")
+    gone = h.w.hypothesis("rejeitada antes", status="abandonada", abandonada_por="pesquisador")
     p = plan([task("t1", gone)], [{"ref": "x", "id": gone}])
     h.plans = [p, p]
     await h.run()
@@ -483,10 +489,10 @@ async def test_eda_e_sintese_com_abordagem_preenchida_nao_exigem_hipotese(tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_subtarefa_experimental_sem_hipotese_continua_retirada(tmp_path):
-    """A regra #109 segue valendo: model_impl sem `hypothesis_ref` é retirada (e quem depende dela)."""
+async def test_subtarefa_experimental_sem_hipotese_nao_e_mais_retirada(tmp_path):
+    """A regra #109 (retirada por ``sem_hipotese``) foi substituída: registrar em vez de bloquear (ADR 021)."""
     solta = task("treino_solto", None, approach={"nome": "X", "tipo": "algoritmo"})
     depois = task("depois", "h1", depends_on=["treino_solto"])
     h = LoopHarness(tmp_path, plans=[plan([solta, depois], [hyp("h1")])])
     await h.run()
-    assert "treino_solto" not in h.ran and "depois" not in h.ran
+    assert "treino_solto" in h.ran and "depois" in h.ran

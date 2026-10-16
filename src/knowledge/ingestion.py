@@ -88,6 +88,7 @@ _MAX_CONFIG_TEXT = 200
 _MAX_TEXT = 2000
 _MAX_CONSULTED = 50
 _MAX_CRITERIA = 20
+_MAX_PREPARA_IDS = 50
 _MAX_CRITERION = 500
 _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _NODE_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
@@ -96,6 +97,7 @@ EVENT_SESSION_START = "session_start"
 EVENT_INPUTS = "inputs"
 EVENT_SUBTASK = "subtask"
 EVENT_SESSION_END = "session_end"
+EVENT_LINK_PREPARATION = "link_preparation"
 # Marcador estável da hipótese provisória (V17): a V18 a distingue das hipóteses formais por ele.
 PROVISIONAL_MARKER = "hipotese_provisoria_v17"
 
@@ -103,7 +105,7 @@ _UNAVAILABLE_MODULES = frozenset(
     {"psycopg", "psycopg_pool", "qdrant_client", "httpx", "httpcore", "urllib3", "requests"}
 )
 
-EVENT_KINDS = (EVENT_SESSION_START, EVENT_INPUTS, EVENT_SUBTASK, EVENT_SESSION_END)
+EVENT_KINDS = (EVENT_SESSION_START, EVENT_INPUTS, EVENT_SUBTASK, EVENT_SESSION_END, EVENT_LINK_PREPARATION)
 
 
 class IngestionDataError(ValueError):
@@ -208,6 +210,10 @@ class SubtaskInput:
             hipótese (``v18.6-hypothesis-closure``): o experimento conta como execução bem-sucedida.
         hypothesis_id: ``id`` da ``Hipotese`` formal que a subtarefa testa (``v18-hypothesis-loop``); quando presente,
             o ``Experimento`` liga-se a ela por ``TESTA`` e a hipótese provisória da V17 não é criada.
+        papel: Papel decidido pelo laço (``teste``, ``preparacao``, ``referencia``; ``v18.7-hypothesis-linking``);
+            ``None`` mantém o comportamento anterior (nó sem ``papel`` vale ``teste``).
+        prepara_ids: Só para ``preparacao``: ``id`` das hipóteses que ela serve (lista vazia = ``Problema``); ``None``
+            quando o laço não calculou a ligação.
     """
 
     task_name: str
@@ -224,6 +230,8 @@ class SubtaskInput:
     validation_criteria: list[str] = field(default_factory=list)
     hypothesis_id: str | None = None
     review_outcome: str | None = None
+    papel: str | None = None
+    prepara_ids: list[str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serializa para o evento da fila."""
@@ -261,6 +269,8 @@ class SubtaskInput:
             ][:_MAX_CRITERIA],
             hypothesis_id=_opt_id(data.get("hypothesis_id")),
             review_outcome=_opt_text(data.get("review_outcome"), 32),
+            papel=data.get("papel") if data.get("papel") in schema.PAPEIS_EXPERIMENTO else None,
+            prepara_ids=_opt_id_list(data.get("prepara_ids")),
         )
 
 
@@ -280,6 +290,13 @@ def _opt_text(value: object, limit: int) -> str | None:
 def _opt_id(value: object) -> str | None:
     """Identificador de nó vindo de arquivo/LLM: só caracteres seguros (a fila é um arquivo não confiável)."""
     return value if isinstance(value, str) and _NODE_ID_RE.fullmatch(value) else None
+
+
+def _opt_id_list(value: object) -> list[str] | None:
+    """Lista de identificadores de nó (``None`` quando ausente ou inválida; itens inválidos são descartados)."""
+    if not isinstance(value, list):
+        return None
+    return list(dict.fromkeys(i for i in (_opt_id(v) for v in value[:_MAX_PREPARA_IDS]) if i))
 
 
 def _clean(text: object, limit: int = _MAX_TEXT) -> str:
@@ -369,10 +386,17 @@ def hash_params(parameters: object) -> str | None:
 class _Writer:
     """Operações idempotentes (obter ou criar) sobre um ``GraphStore``, para uma sessão."""
 
-    def __init__(self, store: GraphStore, ctx: SessionContext, cache: HashCache | None = None) -> None:
+    def __init__(
+        self,
+        store: GraphStore,
+        ctx: SessionContext,
+        cache: HashCache | None = None,
+        notices: list[dict[str, Any]] | None = None,
+    ) -> None:
         self.store = store
         self.ctx = ctx
         self.created = 0
+        self.notices = notices if notices is not None else []  # avisos para o laço (v18.7-hypothesis-linking §8)
         self._cache = cache if cache is not None else HashCache()
         self._hash_budget = int(config.INGESTION_MAX_HASH_BYTES_PER_CALL)
 
@@ -571,11 +595,13 @@ class _Writer:
                 node is not None
                 and node.label == "Hipotese"
                 and node.properties.get("projeto_id") == self.ctx.project_id
-                and node.properties.get("status") != "abandonada"
+                and self._accepts_tests(node)
             ):
                 return node.id
             logger.warning("Hipótese formal da subtarefa não encontrada no projeto; subtarefa sem TESTA")
             return None
+        if sub.task_type in ("eda", "synthesis"):
+            return None  # v18.7-hypothesis-linking §9.3: preparar ou sintetizar nunca cria hipótese provisória
         enunciado = _clean(sub.hypothesis)
         if not enunciado:
             return None
@@ -597,6 +623,14 @@ class _Writer:
             },
             ACTOR_RESEARCHER,
         )
+
+    def _accepts_tests(self, node: Node) -> bool:
+        """A hipótese recebe ``TESTA``: não está abandonada, ou não foi abandonada pelo pesquisador (ADR 021 §3.5)."""
+        if node.properties.get("status") != "abandonada":
+            return True
+        from src.knowledge.exploration_reads import abandoned_by
+
+        return abandoned_by(node, self.store.audit_history(node.id, limit=1000)) != "pesquisador"
 
     # -- experimento ------------------------------------------------------
 
@@ -640,10 +674,101 @@ class _Writer:
                 if digest:
                     edge_props["hash_params"] = digest
                 self._edge(exp_id, "APLICOU", abordagem_id, edge_props, fato=False)
-        hipotese_id = self.hipotese(sub)
-        if hipotese_id is not None:
-            self._edge(exp_id, "TESTA", hipotese_id, fato=False)
+        if sub.papel == "referencia":
+            self._reference(exp_id, sub)
+        elif sub.papel == "preparacao":
+            self._prepares(exp_id, sub.prepara_ids)
+        else:
+            hipotese_id = self.hipotese(sub)
+            if hipotese_id is not None:
+                self._edge(exp_id, "TESTA", hipotese_id, fato=False)
         return exp_id
+
+    # -- ligações derivadas (v18.7-hypothesis-linking, design §3) -----------
+
+    def _problem_node(self) -> Node | None:
+        try:
+            return get_active_problem(self.store, self.ctx.project_id)
+        except Exception:  # noqa: BLE001 - sem Problema não há ligação a gravar
+            return None
+
+    def _prepares(self, exp_id: str, hypothesis_ids: list[str] | None) -> None:
+        """``Experimento-PREPARA->`` cada hipótese servida, ou ``->Problema`` com a lista vazia (``derivado``).
+
+        ``None`` (ligação não calculada) não grava nada. Cada destino é conferido no grafo (existe, do projeto).
+        """
+        if hypothesis_ids is None:
+            return
+        targets: list[str] = []
+        for hid in hypothesis_ids:
+            node = self.store.get_node(hid)
+            if (
+                node is not None
+                and node.label == "Hipotese"
+                and node.properties.get("projeto_id") == self.ctx.project_id
+            ):
+                targets.append(node.id)
+        if not targets:
+            problem = self._problem_node()
+            targets = [problem.id] if problem is not None else []
+        for target in targets:
+            self._edge(exp_id, "PREPARA", target, {"origem": "derivado"}, fato=False)
+
+    def link_preparation(self, subtarefa_id: str, hypothesis_ids: list[str]) -> bool:
+        """Acrescenta ``PREPARA`` ao ``Experimento`` já gravado de uma preparação (ligação incremental).
+
+        Sem ``Experimento`` (preparação sem código nem métricas), nada é escrito e o evento
+        ``preparacao_sem_experimento`` é registrado. Só vale para ``Experimento`` de papel ``preparacao``.
+
+        Returns:
+            ``True`` quando acrescentou ou confirmou as arestas.
+        """
+        existing = self._find("Experimento", {"subtarefa_id": subtarefa_id})
+        if existing is None:
+            self._event("preparacao_sem_experimento", {"subtarefa_id": subtarefa_id[:128]})
+            return False
+        if existing.properties.get("papel") != "preparacao":
+            return False
+        self._prepares(existing.id, [h for h in hypothesis_ids if _NODE_ID_RE.fullmatch(h)] or None)
+        return True
+
+    def _reference(self, exp_id: str, sub: SubtaskInput) -> None:
+        """``Resultado-REFERENCIA_DE->Problema`` para cada ``Resultado`` com ``MEDE`` na métrica M do Problema.
+
+        Sem nenhum ``Resultado`` de M, registra ``referencia_sem_metrica``. O valor não entra no veredito.
+        """
+        problem, metric = self._problem_node(), self._problem_metric()
+        results = [
+            n for n in self.store.neighbors(exp_id, ["PRODUZIU"], direction="out", depth=1).nodes
+            if n.label == "Resultado"
+        ]
+        linked = 0
+        for node in results:
+            if problem is None or metric is None:
+                break
+            measures = self.store.neighbors(node.id, ["MEDE"], direction="out", depth=1).nodes
+            if any(m.id == metric.id for m in measures):
+                self._edge(node.id, "REFERENCIA_DE", problem.id, {"origem": "afirmado"}, fato=False)
+                linked += 1
+        if not linked:
+            name = _clean(sub.task_name, MAX_NAME_CHARS)
+            self._event("referencia_sem_metrica", {"subtarefa": name})
+            self.notices.append({"codigo": "referencia_sem_metrica", "subtarefa": name})
+
+    def _event(self, event_type: str, payload: dict[str, Any]) -> None:
+        """Evento de telemetria da ingestão (só IDs, nomes e códigos); nunca derruba a ingestão."""
+        try:
+            from src.observability.telemetry import get_telemetry
+
+            get_telemetry().record_agent_event(
+                execution_id=self.ctx.session_id,
+                session_id=self.ctx.session_id,
+                agent_id="orchestrator",
+                event_type=event_type,
+                payload=payload,
+            )
+        except Exception:  # noqa: BLE001 - telemetria nunca derruba a ingestão
+            logger.warning("Evento %s não registrado", event_type)
 
     def _provenance(self, session_dir: Path, subtarefa_id: str) -> Any:
         """Proveniência registrada da subtarefa (v18.5-execution-provenance, design §9), ou ``None``.
@@ -742,6 +867,8 @@ class _Writer:
             "caminho_artefatos": f"{self.ctx.session_id}/{_clean(sub.task_name, MAX_NAME_CHARS)}",
             "no_execucao": self.ctx.no_execucao,
         }
+        if sub.papel in schema.PAPEIS_EXPERIMENTO:
+            props["papel"] = sub.papel
         if self._is_negative(sub):
             props["criterio_plano_atendido"] = False
         elif sub.review_status == "pass" and sub.review_verified and _has_quantitative(sub.validation_criteria):
@@ -1042,9 +1169,13 @@ def ingest_subtask(
     session_dir: Path,
     sub: SubtaskInput,
     cache: HashCache | None = None,
+    notices: list[dict[str, Any]] | None = None,
 ) -> str | None:
-    """Ingere uma subtarefa concluída (Experimento, Resultados, Abordagem, hipótese provisória)."""
-    return _Writer(store, ctx, cache).subtask(session_dir, sub)
+    """Ingere uma subtarefa concluída (Experimento, Resultados, Abordagem, hipótese provisória).
+
+    ``notices`` recebe os avisos que o laço devolve ao Researcher (hoje, ``referencia_sem_metrica``).
+    """
+    return _Writer(store, ctx, cache, notices).subtask(session_dir, sub)
 
 
 def ingest_session_end(
@@ -1087,6 +1218,10 @@ def replay_event(
         ingest_inputs(store, ctx, session_dir, cache)
     elif kind == EVENT_SUBTASK:
         ingest_subtask(store, ctx, session_dir, SubtaskInput.from_dict(data), cache)
+    elif kind == EVENT_LINK_PREPARATION:
+        _Writer(store, ctx, cache).link_preparation(
+            _text_field(data, "subtarefa_id", 128), _opt_id_list(data.get("hypothesis_ids")) or []
+        )
     else:
         consumo = data.get("consumo")
         ingest_session_end(
@@ -1326,6 +1461,13 @@ class FactIngestor:
         self._down = False
         self._lock = threading.Lock()
         self._hash_cache = HashCache()
+        self.notices: list[dict[str, Any]] = []
+
+    def drain_notices(self) -> list[dict[str, Any]]:
+        """Avisos acumulados pela ingestão desde a última chamada (o laço os leva ao Researcher)."""
+        with self._lock:
+            notices, self.notices = self.notices, []
+        return notices
 
     def _get_store(self) -> GraphStore:
         if self._store is None:
@@ -1401,7 +1543,16 @@ class FactIngestor:
         return self._run(
             EVENT_SUBTASK,
             sub.to_dict(),
-            lambda s: ingest_subtask(s, self.ctx, self._session_dir, sub, self._hash_cache),
+            lambda s: ingest_subtask(s, self.ctx, self._session_dir, sub, self._hash_cache, self.notices),
+        )
+
+    def link_preparation(self, subtarefa_id: str, hypothesis_ids: list[str]) -> bool:
+        """Liga a preparação já gravada a mais hipóteses (``PREPARA``), pela mesma fila resiliente."""
+        data = {"subtarefa_id": subtarefa_id, "hypothesis_ids": list(hypothesis_ids)}
+        return self._run(
+            EVENT_LINK_PREPARATION,
+            data,
+            lambda s: _Writer(s, self.ctx, self._hash_cache).link_preparation(subtarefa_id, list(hypothesis_ids)),
         )
 
     def session_end(

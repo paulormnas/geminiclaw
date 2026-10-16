@@ -40,6 +40,7 @@ from src.logger import get_logger
 from src.observability.telemetry import get_telemetry
 from src.orchestration.autonomous_loop import AutonomousLoop
 from src.orchestration.errors import AgentRunLimitReached, PlanningStalled
+from src.orchestration.exploration_roles import declared_role, declared_roles
 from src.orchestration.plan_normalizer import normalize_plan
 from src.orchestration.unlimited_mode import budget_payload, record_confirmation_event
 from src.orchestration.usage import UsageBudget, UsageTracker
@@ -2218,6 +2219,7 @@ class Orchestrator:
                         "issues": [str(i)[:200] for i in (val_result.issues or [])][:8],
                         "plan_tasks": len(current_plan_data),
                         "plan_warnings": list(getattr(val_result, "warnings", None) or []),
+                        "papeis_declarados": declared_roles(current_plan_data),
                     },
                 )
             except Exception as exc:
@@ -2264,6 +2266,7 @@ class Orchestrator:
                         scientific_rationale=t.get("scientific_rationale", ""),
                         approach=t.get("approach") if isinstance(t.get("approach"), dict) else None,
                         hypothesis_ref=str(t.get("hypothesis_ref") or "")[:128],
+                        papel=declared_role(t.get("papel")),
                     ))
                 return tasks
             else:

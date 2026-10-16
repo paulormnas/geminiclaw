@@ -35,6 +35,7 @@ from src.knowledge.suggestions import SuggestionError
 from src.logger import get_logger
 from src.observability.telemetry import get_telemetry
 from src.orchestration.errors import AgentRunLimitReached, PlanningStalled
+from src.orchestration.subtask_ingestion import ingest_subtask, link_preparations
 from src.orchestration.triage import TriageClassifier
 from src.orchestration.usage import StopReason, UsageBudget, UsageTracker
 from src.session.continuity import (
@@ -55,6 +56,11 @@ if TYPE_CHECKING:
     from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator, OrchestratorResult
 
 logger = get_logger(__name__)
+
+# Campos de ``AgentTask`` que não voltam ao Researcher no plano anterior (internos do orquestrador).
+_PLAN_ECHO_EXCLUDED = frozenset(
+    {"subtask_id", "created_at", "papel_fonte", "prepara_ids", "hypothesis_origin"}
+)
 
 # Roadmap V3 - Etapa V3: limite de chars para injeção de contexto (~2000 tokens)
 _CONTEXT_MAX_CHARS = 8_000
@@ -1068,6 +1074,8 @@ class AutonomousLoop:
                 # v18.6-auto-metrics-and-stop-reasons: no modo auto o Researcher define a métrica no plano e o
                 # Validator a valida; só depois ela vale para o veredito. A sessão não deixa de iniciar.
                 exploration.require_metric_definition(unavailable[1])
+            if resume is not None:  # design §4.4: origem das hipóteses do sistema vinda do checkpoint
+                exploration.restore_system_origin(resume.checkpoint.hipoteses_do_sistema)
         cycle_no = 0
         rejected_plans = 0
         legacy_attempt = 0
@@ -1169,6 +1177,20 @@ class AutonomousLoop:
                 continue
             rejected_plans = 0
 
+            if resume is not None:
+                # Dependências concluídas na sessão anterior têm o resultado pré-carregado: não exigem nó no plano.
+                names = {t.task_name for t in tasks if t.task_name}
+                for t in tasks:
+                    t.depends_on = [d for d in t.depends_on if d in names or d not in resume.completed]
+            try:
+                # v18.7-hypothesis-linking §1: DAG inválido volta ao Researcher antes da governança (``prepare_cycle``
+                # deriva ``PREPARA`` percorrendo o grafo de dependências e o pressupõe válido).
+                TaskScheduler.validate_dag(tasks)
+            except ValueError as e:
+                execution_feedback = f"Grafo de dependências inválido: {e}"
+                logger.error(execution_feedback)
+                continue
+
             plan_tasks = tasks  # plano completo (inclusive o que a governança retirar), base do próximo replanejamento
             if exploration is not None:
                 # v18-hypothesis-loop §2/§4: grava hipóteses/decisões/respostas e aplica a governança do SessionMode.
@@ -1176,6 +1198,7 @@ class AutonomousLoop:
                     outcome = await asyncio.to_thread(
                         exploration.prepare_cycle, tasks, self.orchestrator.take_plan_extras(master_session_id),
                         done=set(done_results),
+                        done_tasks={n: cumulative_tasks[n] for n in done_results if n in cumulative_tasks},
                     )
                 except asyncio.CancelledError:
                     raise
@@ -1190,6 +1213,9 @@ class AutonomousLoop:
                         cumulative_dag, final_results,
                     )
                 tasks = outcome.tasks
+                await link_preparations(
+                    self.orchestrator, outcome.preparation_links, cumulative_tasks, master_session_id
+                )
                 if outcome.dropped:
                     logger.info("Subtarefas retiradas pela governança", extra={"dropped": outcome.dropped})
                 new_tasks = [t for t in tasks if t.task_name not in done_results]
@@ -1236,7 +1262,7 @@ class AutonomousLoop:
                         ) + "."
                     explore_next = True
                     current_plan_dicts = [
-                        {k: v for k, v in t.__dict__.items() if v is not None and k not in ("subtask_id", "created_at")}
+                        {k: v for k, v in t.__dict__.items() if v is not None and k not in _PLAN_ECHO_EXCLUDED}
                         for t in plan_tasks
                     ]
                     continue
@@ -1248,7 +1274,7 @@ class AutonomousLoop:
 
             # Atualiza o estado do plano atual (para a próxima iteração se falhar)
             current_plan_dicts = [
-                {k: v for k, v in t.__dict__.items() if v is not None and k not in ("subtask_id", "created_at")} 
+                {k: v for k, v in t.__dict__.items() if v is not None and k not in _PLAN_ECHO_EXCLUDED} 
                 for t in plan_tasks
             ]
             
@@ -1318,12 +1344,7 @@ class AutonomousLoop:
                 logger.warning(f"Número de subtarefas ({len(tasks)}) excede o limite {self.max_subtasks}")
                 tasks = tasks[:self.max_subtasks]
 
-            if resume is not None:
-                # Dependências concluídas na sessão anterior têm o resultado pré-carregado: não exigem nó no plano.
-                names = {t.task_name for t in tasks if t.task_name}
-                for t in tasks:
-                    t.depends_on = [d for d in t.depends_on if d in names or d not in resume.completed]
-            try:
+            try:  # as retiradas levam junto o que depende delas: o subgrafo mantido continua válido (confirmação)
                 TaskScheduler.validate_dag(tasks)
             except ValueError as e:
                 execution_feedback = f"Grafo de dependências inválido: {e}"
@@ -1332,6 +1353,8 @@ class AutonomousLoop:
 
             if recorder is not None:
                 await asyncio.to_thread(recorder.set_plan, [plan_entry(t) for t in tasks])
+                if exploration is not None:  # design §4.4: a origem das hipóteses do sistema sobrevive à retomada
+                    await asyncio.to_thread(recorder.set_system_origin, exploration.system_origin_snapshot())
 
             final_results = []
             cycle_results: Dict[str, AgentResult] = {}  # resultado final de cada subtarefa executada NESTE ciclo
@@ -1645,7 +1668,7 @@ class AutonomousLoop:
                         cycle_results[task.task_name] = last_result
 
                 # v17-structural-fact-ingestion — fatos da subtarefa (revisada) no grafo, sem LLM.
-                await self._ingest_subtask(task, last_result, last_review, master_session_id)
+                await ingest_subtask(self.orchestrator, task, last_result, last_review, master_session_id)
 
                 # v18-research-continuity — checkpoint do fim da subtarefa (status, tentativas, artefatos, resumo).
                 if recorder is not None and task.task_name:
@@ -1765,7 +1788,10 @@ class AutonomousLoop:
                 cycle_no += 1
                 exploration.cycles = cycle_no
                 try:
-                    await asyncio.to_thread(exploration.after_cycle)
+                    await asyncio.to_thread(
+                        exploration.after_cycle,
+                        [n for n, state in dag_state.items() if state["status"] == "abandonada"],
+                    )
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:  # noqa: BLE001 - a avaliação é complementar: a pesquisa segue
@@ -2030,74 +2056,6 @@ class AutonomousLoop:
             "a partir deles e das sugestões do Curator."
         )
         return "\n".join(lines)
-
-    async def _ingest_subtask(
-        self,
-        task: "AgentTask",
-        result: Optional["AgentResult"],
-        review: Optional[Dict[str, Any]],
-        master_session_id: str,
-    ) -> None:
-        """Ingere os fatos estruturais de uma subtarefa concluída (v17-structural-fact-ingestion).
-
-        Nunca interrompe a sessão: sem projeto/grafo a ingestão é omitida; falhas do grafo viram
-        eventos em ``knowledge_pending.jsonl`` (tratados pelo ``FactIngestor``).
-        """
-        from src.knowledge.ingestion import FactIngestor, SubtaskInput
-
-        ingestor = self.orchestrator.get_ingestor(master_session_id)
-        if not isinstance(ingestor, FactIngestor) or result is None or not task.task_name:
-            return
-        self._flag_from_review(task, review, master_session_id)
-        try:
-
-            sub = SubtaskInput(
-                task_name=task.task_name,
-                subtask_id=task.subtask_id,
-                agent_id=task.agent_id,
-                task_type=task.task_type,
-                hypothesis=task.hypothesis or "",
-                scientific_rationale=task.scientific_rationale or "",
-                approach=task.approach if isinstance(task.approach, dict) else None,
-                agent_status=result.status,
-                agent_error_category=getattr(result, "error_category", None),
-                review_status=(review or {}).get("status"),
-                review_verified=bool((review or {}).get("verified", False)),
-                review_outcome=(review or {}).get("outcome"),
-                validation_criteria=[c for c in (task.validation_criteria or []) if isinstance(c, str)],
-                hypothesis_id=task.hypothesis_id or None,
-            )
-            if await asyncio.to_thread(ingestor.subtask, sub):
-                # v17-curator-agent: recálculo determinístico do veredito após cada subtarefa ingerida.
-                subtarefa_id = sub.subtask_id or f"{master_session_id}:{sub.task_name}"
-                await asyncio.to_thread(self.orchestrator.knowledge_after_subtask, master_session_id, subtarefa_id)
-        except Exception as exc:  # noqa: BLE001 - a ingestão nunca derruba a subtarefa
-            logger.warning("Falha ao ingerir fatos da subtarefa", extra={"error": type(exc).__name__})
-
-    def _flag_from_review(self, task: "AgentTask", review: Optional[Dict[str, Any]], master_session_id: str) -> None:
-        """Sinalização do Validator ao Curator (ADR 012 §2; task 4.1), gravada pelo orquestrador.
-
-        O Validator não tem laço de ferramentas, então a sinalização sai do **parecer estruturado** dele: divergência
-        documentada vira ``caminho_relevante`` e reprovação ``falha_relevante``. O texto é um modelo fixo (nenhum
-        texto de LLM ou de documento entra na sinalização).
-        """
-        status = (review or {}).get("status")
-        tipo = {"divergent_but_documented": "caminho_relevante", "fail": "falha_relevante"}.get(status or "")
-        if tipo is None or not task.task_name:
-            return
-        try:
-            from src.knowledge.curator_flags import record_flag
-
-            record_flag(
-                self.orchestrator.output_manager.base_dir / master_session_id,
-                agente="validator",
-                subtarefa=task.task_name,
-                tipo=tipo,
-                texto=f"Parecer do Validator sobre a subtarefa '{task.task_name}': {status}.",
-                refs=[task.task_name],
-            )
-        except Exception as exc:  # noqa: BLE001 - sinalizar nunca derruba a subtarefa
-            logger.warning("Sinalização do Validator não gravada", extra={"error": type(exc).__name__})
 
     def _record_run_limit(self, master_session_id: str, exc: AgentRunLimitReached) -> None:
         """Registra o evento ``limit_reached`` do limite de execuções (observabilidade segura)."""

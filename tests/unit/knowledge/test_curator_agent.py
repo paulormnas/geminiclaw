@@ -29,6 +29,7 @@ from src.knowledge.provenance import Actor
 from src.knowledge.similarity_queue import Candidate
 from src.llm.base import LLMProvider, LLMResponse, ToolCall
 from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
+from src.orchestration.subtask_ingestion import ingest_subtask
 from src.session.manager import Session
 from tests.support.controlled_embedding_provider import pair_vectors
 from tests.support.curator_graph import CuratorGraph
@@ -452,8 +453,7 @@ def test_cli_abre_o_grafo_do_binder_com_reconciliacao(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_laco_recalcula_o_veredito_apos_cada_subtarefa_ingerida(tmp_path, monkeypatch):
-    """Task 2.5 — depois de ``_ingest_subtask`` a hipótese ganha ``n_tentativas``/``veredito`` e o SUSTENTA com peso."""
-    from src.orchestration.autonomous_loop import AutonomousLoop
+    """Task 2.5 — depois de ``ingest_subtask`` a hipótese ganha ``n_tentativas``/``veredito`` e o SUSTENTA com peso."""
 
     store = InMemoryGraphStore()
     pid = "11111111-1111-4111-8111-111111111111"
@@ -479,7 +479,7 @@ async def test_laco_recalcula_o_veredito_apos_cada_subtarefa_ingerida(tmp_path, 
                      hypothesis="boosting melhora o r2", scientific_rationale="R")
     result = AgentResult(agent_id="developer", session_id="x", status="success", response={})
 
-    await AutonomousLoop(orch)._ingest_subtask(task, result, {"status": "pass", "verified": True}, "s1")
+    await ingest_subtask(orch, task, result, {"status": "pass", "verified": True}, "s1")
 
     (hip,) = store.find_nodes("Hipotese", {})
     assert hip.properties["n_tentativas"] == 1 and hip.properties["veredito"] > 0
@@ -492,7 +492,6 @@ async def test_laco_recalcula_o_veredito_apos_cada_subtarefa_ingerida(tmp_path, 
 )
 async def test_validator_sinaliza_ao_curator_a_partir_do_parecer(tmp_path, parecer, tipo):
     """I8/tarefa 4.1 — o parecer do Validator (divergente/reprovado) vira sinalização para o Curator."""
-    from src.orchestration.autonomous_loop import AutonomousLoop
 
     store = InMemoryGraphStore()
     pid = create_project(store, "P", "O", [])
@@ -508,7 +507,7 @@ async def test_validator_sinaliza_ao_curator_a_partir_do_parecer(tmp_path, parec
     task = AgentTask(agent_id="developer", prompt="p", task_name="treinar")
     result = AgentResult(agent_id="developer", session_id="x", status="success", response={})
 
-    await AutonomousLoop(orch)._ingest_subtask(task, result, {"status": parecer, "verified": True}, "s1")
+    await ingest_subtask(orch, task, result, {"status": parecer, "verified": True}, "s1")
 
     (flag,) = FlagStore(orch.output_manager.base_dir / "s1").pending()
     assert flag.agente == "validator" and flag.tipo == tipo and flag.subtarefa == "treinar"

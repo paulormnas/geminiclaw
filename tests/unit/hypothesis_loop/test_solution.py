@@ -6,7 +6,7 @@ import pytest
 
 from src.agents.researcher.agent import AGENT_INSTRUCTION
 from src.knowledge.hypothesis_cycle import HypothesisCycle
-from src.orchestration.exploration import PLAN_FORMAT_INSTRUCTION
+from src.orchestration.exploration_prompts import PLAN_FORMAT_INSTRUCTION
 from tests.support.hypothesis_world import PESQUISADOR, HypothesisWorld
 
 pytestmark = pytest.mark.unit

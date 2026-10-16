@@ -374,6 +374,7 @@ def validate_human_only(
     current: dict[str, object] | None,
     changes: dict[str, object],
     actor_kind: str,
+    actor_role: str | None = None,
 ) -> None:
     """Decisões reservadas ao pesquisador: só ele as toma, nenhum agente (nem o orquestrador, no Problema).
 
@@ -386,6 +387,7 @@ def validate_human_only(
         current: Propriedades atuais (``None`` em ``create_node``).
         changes: Propriedades da criação ou mudanças do ``update_node``.
         actor_kind: ``Actor.kind`` de quem escreve (recebido explicitamente).
+        actor_role: ``Actor.role``; só ``REVERT_ON_REOPEN_ROLE`` (revisão dos efeitos de ``sync_statuses``) importa.
 
     Raises:
         HumanConfirmationRequiredError: Escrita fora do pesquisador que cria com o valor
@@ -396,7 +398,7 @@ def validate_human_only(
             raise FactWriteNotAllowedError(label, actor_kind)
         _validate_agent_reserved(label, current, changes)
     if label == "Oportunidade" and actor_kind == "orquestrador":
-        _validate_opportunity_orchestrator(current, changes)
+        _validate_opportunity_orchestrator(current, changes, revert_on_reopen=actor_role == REVERT_ON_REOPEN_ROLE)
     rule = HUMAN_ONLY_TRANSITIONS.get(label)
     if rule is None or actor_kind == "pesquisador":
         return
@@ -435,9 +437,15 @@ def validate_not_self_relation(rel_type: str, src_id: str, dst_id: str) -> None:
 # (v18-hypothesis-loop §7): ``aprovada -> em_investigacao`` (virou hipótese) e ``em_investigacao -> concluida``.
 OPPORTUNITY_ORCHESTRATOR_TRANSITIONS: dict[str, str] = {"em_investigacao": "aprovada", "concluida": "em_investigacao"}
 OPPORTUNITY_DECISION_FIELDS: tuple[str, ...] = ("decidido_por", "decidido_em", "motivo_decisao")
+# v18.7-hypothesis-linking (ADR 021 §4.4; parecer de segurança, item 3): a reversão ``concluida -> em_investigacao``
+# vale só para o orquestrador com este papel, passado exclusivamente pela revisão dos efeitos de ``sync_statuses`` ao
+# fim do ciclo (hipótese concluída que reabre). Nenhuma ferramenta de agente nem campo do plano constrói este ``Actor``.
+REVERT_ON_REOPEN_ROLE = "revert_on_reopen"
 
 
-def _validate_opportunity_orchestrator(current: dict[str, object] | None, changes: dict[str, object]) -> None:
+def _validate_opportunity_orchestrator(
+    current: dict[str, object] | None, changes: dict[str, object], *, revert_on_reopen: bool = False
+) -> None:
     """O orquestrador nunca decide sobre ``Oportunidade``: aprovar e rejeitar são do pesquisador (CLI).
 
     Ele só cria ``documentada`` e só avança uma oportunidade **já aprovada pelo pesquisador** (``aprovada`` ->
@@ -455,6 +463,8 @@ def _validate_opportunity_orchestrator(current: dict[str, object] | None, change
             raise HumanConfirmationRequiredError("Oportunidade", "status", "orquestrador")
         return
     if new == old:
+        return
+    if revert_on_reopen and old == "concluida" and new == "em_investigacao":
         return
     required_previous = OPPORTUNITY_ORCHESTRATOR_TRANSITIONS.get(str(new))
     if required_previous is None or old != required_previous:

@@ -334,6 +334,9 @@ class Checkpoint:
     provenance_pending: list[str] = field(default_factory=list)
     # v18.5-claim-verification (design §11): afirmações ``pendente``, verificadas na retomada.
     afirmacoes_pendentes: list[dict[str, str]] = field(default_factory=list)
+    # v18.7-hypothesis-linking (design §4.4): hipótese do sistema -> subtarefas de origem no plano corrente; sobrevive
+    # à retomada para a hipótese sem tentativa cuja subtarefa saiu do plano poder ser abandonada pelo sistema.
+    hipoteses_do_sistema: dict[str, list[str]] = field(default_factory=dict)
 
     def find(self, task_name: str) -> SubtaskState | None:
         """Subtarefa pelo nome, ou ``None``."""
@@ -367,6 +370,7 @@ class Checkpoint:
             "provenance_chain_tip": dict(self.provenance_chain_tip) if self.provenance_chain_tip else None,
             "provenance_pending": list(self.provenance_pending),
             "afirmacoes_pendentes": [dict(p) for p in self.afirmacoes_pendentes],
+            "hipoteses_do_sistema": {k: list(v) for k, v in self.hipoteses_do_sistema.items()},
         }
 
     @classmethod
@@ -460,6 +464,7 @@ class Checkpoint:
             provenance_chain_tip=_chain_tip(data.get("provenance_chain_tip")),
             provenance_pending=_id_list(data.get("provenance_pending"), "provenance_pending", MAX_IDS),
             afirmacoes_pendentes=_claims_pending(data.get("afirmacoes_pendentes")),
+            hipoteses_do_sistema=_system_origin(data.get("hipoteses_do_sistema")),
         )
 
 
@@ -503,6 +508,21 @@ def _claims_pending(value: object) -> list[dict[str, str]]:
         ):
             raise CheckpointError("afirmacoes_pendentes: item inválido.")
         out.append({"afirmacao_id": claim_id, "session_id": session, "conclusao_id": conclusion})
+    return out
+
+
+def _system_origin(value: object) -> dict[str, list[str]]:
+    """``hipoteses_do_sistema`` do checkpoint (dado não confiável): ``id`` de hipótese -> nomes seguros de subtarefa."""
+    if value is None:
+        return {}
+    if not isinstance(value, dict) or len(value) > MAX_HYPOTHESES:
+        raise CheckpointError(f"hipoteses_do_sistema deve ser um objeto de até {MAX_HYPOTHESES} itens.")
+    out: dict[str, list[str]] = {}
+    for key, names in value.items():
+        hid = _opt_id(key, "hipoteses_do_sistema")
+        if hid is None or not isinstance(names, list) or len(names) > config.CHECKPOINT_MAX_SUBTASKS:
+            raise CheckpointError("hipoteses_do_sistema inválido.")
+        out[hid] = [n for n in names if safe_task_name(n)]
     return out
 
 
@@ -980,6 +1000,16 @@ class CheckpointRecorder:
                     hid = hipotese_por_subtarefa.get(state.subtask_id or "")
                     if hid and _NODE_ID_RE.fullmatch(hid):
                         state.hypothesis_id = hid
+
+        return self._update(mutate)
+
+    def set_system_origin(self, origin: Mapping[str, Iterable[str]]) -> bool:
+        """Hipótese do sistema -> subtarefas de origem do plano corrente (refeito a cada ciclo; só IDs e nomes)."""
+
+        def mutate(cp: Checkpoint) -> None:
+            cp.hipoteses_do_sistema = _system_origin(
+                {hid: sorted(names)[: config.CHECKPOINT_MAX_SUBTASKS] for hid, names in origin.items()}
+            )
 
         return self._update(mutate)
 

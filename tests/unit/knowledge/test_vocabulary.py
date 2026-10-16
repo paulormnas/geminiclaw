@@ -11,7 +11,6 @@ import pytest
 
 from src.knowledge import vocabulary
 from src.knowledge.graph_store import InMemoryGraphStore
-from src.knowledge.normalization import normalize_domain_term, normalize_metric_name
 from src.knowledge.provenance import Actor
 from src.knowledge.vocabulary import (
     VocabularyError,
@@ -24,6 +23,7 @@ from src.knowledge.vocabulary import (
     resolve_metric,
     seed_vocabulary,
 )
+from src.utils.normalization import normalize_domain_term, normalize_metric_name
 
 FIXTURE_CSV = Path(__file__).resolve().parents[2] / "fixtures" / "cnpq_areas_fixture.csv"
 REAL_METRICS = vocabulary.DEFAULT_VOCABULARY_DIR / vocabulary.METRICS_FILENAME
@@ -150,9 +150,9 @@ def test_tabela_cnpq_malformada_e_rejeitada(tmp_path):
 @pytest.mark.unit
 def test_normalizacao_compartilhada_com_validator():
     """O Validator usa a mesma função de normalização de métricas do vocabulário."""
-    from src.agents import validator_agent
+    from src.knowledge import metric_criteria
 
-    assert validator_agent._normalize_metric_name("F1-Score") == normalize_metric_name("F1-Score") == "f1score"
+    assert metric_criteria._normalize_metric_name("F1-Score") == normalize_metric_name("F1-Score") == "f1score"
     assert normalize_domain_term("Química  Orgânica") == "quimica_organica"
 
 
@@ -360,7 +360,7 @@ def test_map_valida_entradas(store):
 @pytest.mark.unit
 def test_cli_vocab_pending_approve_reject_map(store, capsys):
     """CLI `vocab pending|approve|reject|map` opera sobre o store com autor pesquisador."""
-    from src.cli import _handle_vocab_command
+    from src.cli.main import _handle_vocab_command
 
     a = _candidate(store, "Candidato A")
     b = _candidate(store, "Candidato B")
@@ -387,7 +387,7 @@ def test_cli_vocab_pending_approve_reject_map(store, capsys):
 @pytest.mark.unit
 def test_cli_vocab_argumentos_invalidos(store):
     """Subcomando ausente ou `map` sem --para sai com código diferente de zero."""
-    from src.cli import _handle_vocab_command
+    from src.cli.main import _handle_vocab_command
 
     assert _handle_vocab_command([], store) != 0
     assert _handle_vocab_command(["map", "x"], store) != 0

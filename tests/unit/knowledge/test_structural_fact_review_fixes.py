@@ -14,7 +14,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src import config
-from src.agents.validator_agent import ValidatorAgent
+from src.agents.validator.agent import ValidatorAgent
+from src.artifacts.output_manager import OutputManager
 from src.knowledge import ingestion
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.graph_store import InMemoryGraphStore
@@ -31,9 +32,8 @@ from src.knowledge.ingestion import (
 )
 from src.knowledge.ingestion_queue import DEAD_FILENAME, PendingQueue
 from src.knowledge.projects import create_project
-from src.orchestrator import AgentResult, AgentTask, Orchestrator
-from src.output_manager import OutputManager
-from src.session import Session
+from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
+from src.session.manager import Session
 from tests.support.task_loop import run_tasks
 
 SESSION = "sessao-rev"
@@ -154,7 +154,7 @@ def test_evento_antigo_sem_review_verified_e_nao_verificado():
 async def test_laco_repassa_verified_e_evento_de_revisao(tmp_path):
     from unittest.mock import patch
 
-    from src.autonomous_loop import AutonomousLoop
+    from src.orchestration.autonomous_loop import AutonomousLoop
 
     orch = MagicMock()
     orch.output_manager.base_dir = tmp_path
@@ -163,7 +163,7 @@ async def test_laco_repassa_verified_e_evento_de_revisao(tmp_path):
     loop = AutonomousLoop(orch)
     task = AgentTask(agent_id="developer", prompt="p", task_name="t", validation_criteria=["gera um gráfico claro"])
     events = []
-    with patch("src.telemetry.get_telemetry") as tel:
+    with patch("src.observability.telemetry.get_telemetry") as tel:
         tel.return_value.record_agent_event.side_effect = lambda **kw: events.append(kw)
         review = await loop._review_subtask(
             task, AgentResult(agent_id="d", session_id="s", status="success", response={"text": "x"}), "sess"

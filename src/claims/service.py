@@ -38,8 +38,8 @@ from src.claims.verifier import (
     apply_response,
     split_batches,
 )
-from src.knowledge.ids import generate_node_id
 from src.logger import get_logger
+from src.utils.node_id import generate_node_id
 
 logger = get_logger(__name__)
 

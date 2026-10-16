@@ -36,12 +36,12 @@ from src.knowledge.hypotheses import (
     STATUS_REFUTADA,
     STATUS_VALIDADA,
 )
-from src.knowledge.normalization import clean_free_text, normalize_domain_term
 from src.knowledge.projects import get_active_problem
 from src.knowledge.provenance import Actor
 from src.knowledge.service import KnowledgeService
 from src.knowledge.verdict import Attempt, Criterion
 from src.logger import get_logger
+from src.utils.normalization import clean_free_text, normalize_domain_term
 
 logger = get_logger(__name__)
 

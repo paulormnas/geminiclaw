@@ -638,7 +638,7 @@ def _check_unchanged(store: GraphStore, item: PlannedOp) -> None:
 class HumanConfirmation:
     """Prova de que o pesquisador confirmou **esta** proposta, digitando a palavra exata, num terminal interativo.
 
-    Só ``src/cli_graph.py`` a emite (guarda estática em ``test_hardening``); ``apply_plan`` a exige e confere que a
+    Só ``src/cli/graph.py`` a emite (guarda estática em ``test_hardening``); ``apply_plan`` a exige e confere que a
     impressão digital é a da proposta exibida.
     """
 

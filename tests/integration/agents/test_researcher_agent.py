@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from agents.researcher.agent import plan, replan
+from src.agents.researcher.agent import plan, replan
 from src.skills.base import SkillResult
 
 
@@ -73,7 +73,7 @@ async def test_researcher_plan_invokes_web_search_for_technical_domain(caplog):
         # Simula o loop registrando o log de busca
         async def side_effect(*args, **kwargs):
             from src.logger import get_logger
-            get_logger("agents.researcher.agent").info(
+            get_logger("src.agents.researcher.agent").info(
                 "Executando busca web técnica para contexto",
                 extra={"query": "scikit-learn SVM best practices", "tool": "quick_search"}
             )

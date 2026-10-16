@@ -3,9 +3,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.autonomous_loop import AutonomousLoop
-from src.orchestrator import AgentResult, AgentTask, Orchestrator
-from src.output_manager import OutputManager
+from src.artifacts.output_manager import OutputManager
+from src.orchestration.autonomous_loop import AutonomousLoop
+from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
 
 
 @pytest.fixture

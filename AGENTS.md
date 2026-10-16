@@ -121,6 +121,9 @@ uv run python -m scripts.platform_images detect
 uv run python -m scripts.platform_images plan
 uv run python -m scripts.platform_images ensure --imagens sandbox
 
+# Verificar a regra de camadas entre pacotes de src/ (junto com ruff e pytest, antes de cada commit)
+uv run lint-imports
+
 # Rodar todos os testes
 uv run pytest
 
@@ -128,7 +131,7 @@ uv run pytest
 uv run pytest -m unit -v
 
 # Rodar com cobertura
-uv run pytest --cov=src --cov=agents --cov-report=term-missing
+uv run pytest --cov=src --cov-report=term-missing
 
 # Verificar containers ativos do GeminiClaw
 docker ps --filter "name=geminiclaw"
@@ -166,8 +169,24 @@ geminiclaw/
 ├── pyproject.toml             # Dependências e configuração (fonte da verdade)
 ├── uv.lock                    # Lockfile gerado pelo uv (versionar)
 ├── .env / .env.example        # Credenciais (nunca versionar .env)
-├── src/                       # Orquestrador Python
-├── agents/                    # Agentes (prompts e ferramentas)
+├── src/                       # Orquestrador Python, organizado por responsabilidade (ADR 024)
+│   ├── config.py, logger.py, db.py   # Únicos módulos na raiz de src/ (transversais)
+│   ├── cli/                   # Interface de linha de comando e REPL
+│   ├── orchestration/         # Planejamento, execução e laço de pesquisa
+│   ├── session/               # Ciclo de vida da sessão (checkpoint, retomada)
+│   ├── gate/                  # Decisões reservadas ao pesquisador
+│   ├── agent_runtime/         # Execução dos agentes em processo
+│   ├── agents/                # Agentes (base, researcher, developer, curator, summarizer, validator) e prompts
+│   ├── artifacts/             # Arquivos produzidos pelas subtarefas
+│   ├── documents/             # Processamento de documentos como biblioteca
+│   ├── knowledge/             # Grafo de conhecimento, hipóteses e Curator
+│   ├── llm/                   # Provedores, roteador por papel e cache
+│   ├── egress/                # Filtro de egresso de dados
+│   ├── observability/         # Telemetria
+│   ├── host/                  # Saúde da máquina e imagens por plataforma
+│   ├── report/                # Relatórios e agregações
+│   ├── skills/                # Ferramentas dos agentes
+│   └── utils/                 # Utilitários sem dependências do projeto
 ├── containers/                # Dockerfile do sandbox de código e do PostgreSQL (AGE)
 ├── tests/                     # Testes pytest
 ├── roadmaps/                  # Roadmaps de versões (V10–V20)

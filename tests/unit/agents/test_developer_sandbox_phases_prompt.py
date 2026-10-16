@@ -5,7 +5,7 @@ import pytest
 
 @pytest.mark.unit
 def test_instrucao_orienta_inputs_assets_e_sem_downloads() -> None:
-    from agents.developer.agent import AGENT_INSTRUCTION
+    from src.agents.developer.agent import AGENT_INSTRUCTION
 
     assert "/inputs/" in AGENT_INSTRUCTION
     assert "`assets`" in AGENT_INSTRUCTION and "/assets/<destino>" in AGENT_INSTRUCTION

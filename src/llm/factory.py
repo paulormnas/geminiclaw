@@ -7,6 +7,6 @@ def get_provider() -> LLMProvider:
     Mantido por compatibilidade com chamadores sem papel (laço de agente sem provedor
     explícito, triagem). Não há mais singleton nem leitura de ``LLM_PROVIDER``/``LLM_MODEL``.
     """
-    from src.model_router import ModelRouter
+    from src.llm.model_router import ModelRouter
 
     return ModelRouter.get_provider()

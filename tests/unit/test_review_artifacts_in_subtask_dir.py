@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.autonomous_loop import AutonomousLoop
-from src.orchestrator import AgentResult, AgentTask
+from src.orchestration.autonomous_loop import AutonomousLoop
+from src.orchestration.orchestrator import AgentResult, AgentTask
 
 pytestmark = pytest.mark.unit
 
@@ -20,7 +20,7 @@ async def test_artifacts_written_in_subtask_folder_are_found(tmp_path):
     orchestrator = MagicMock()
     orchestrator.output_manager.base_dir = tmp_path
     orchestrator.output_manager.list_artifacts.return_value = []  # nada em artifacts/
-    from src.agents.validator_agent import ValidatorAgent
+    from src.agents.validator.agent import ValidatorAgent
 
     orchestrator.validator = ValidatorAgent(provider=MagicMock())  # sem critérios: não chama o LLM
 
@@ -41,7 +41,7 @@ async def test_missing_artifact_is_still_reported(tmp_path):
     orchestrator = MagicMock()
     orchestrator.output_manager.base_dir = tmp_path
     orchestrator.output_manager.list_artifacts.return_value = []
-    from src.agents.validator_agent import ValidatorAgent
+    from src.agents.validator.agent import ValidatorAgent
 
     orchestrator.validator = ValidatorAgent(provider=MagicMock())
     task = AgentTask(agent_id="developer", prompt="x", task_name="t", expected_artifacts=["nao_existe.png"])

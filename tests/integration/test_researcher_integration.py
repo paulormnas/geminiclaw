@@ -2,13 +2,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.orchestrator import (
+from src.orchestration.orchestrator import (
     AGENT_IDS,
     AgentResult,
     AgentTask,
     Orchestrator,
 )
-from src.session import Session
+from src.session.manager import Session
 from tests.support.task_loop import run_tasks
 
 

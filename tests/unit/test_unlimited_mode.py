@@ -10,12 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from src import cli
-from src.cli_project import handle_project_command
+import src.cli.main as cli
+from src.cli.project import handle_project_command
 from src.knowledge import projects
 from src.knowledge.graph_store import InMemoryGraphStore
 from src.knowledge.provenance import Actor
-from src.unlimited_mode import (
+from src.orchestration.unlimited_mode import (
     CONFIRMATION_PHRASE,
     NoticeSchedule,
     UnlimitedModeError,
@@ -26,7 +26,7 @@ from src.unlimited_mode import (
     set_activation,
     stop_criteria_available,
 )
-from src.usage import (
+from src.orchestration.usage import (
     StopReason,
     UsageBudget,
     UsageTracker,
@@ -232,7 +232,7 @@ def test_so_cli_usage_e_unlimited_mode_constroem_orcamento_sem_limite() -> None:
     src = Path(__file__).resolve().parents[2] / "src"
     offenders = []
     for path in src.rglob("*.py"):
-        if path.name in {"cli.py", "usage.py", "unlimited_mode.py"}:
+        if path.relative_to(src).as_posix() in {"cli/main.py", "orchestration/usage.py", "orchestration/unlimited_mode.py"}:
             continue
         if re.search(r"unlimited\s*=\s*True", path.read_text(encoding="utf-8")):
             offenders.append(str(path.relative_to(src)))
@@ -290,7 +290,7 @@ def test_banner_no_modo_sem_limite() -> None:
 
 
 def test_primeiro_pedido_de_interrupcao_vira_motivo_de_parada() -> None:
-    from src.autonomous_loop import AutonomousLoop
+    from src.orchestration.autonomous_loop import AutonomousLoop
 
     assert AutonomousLoop._pending_model_stop() is None
     request_interrupt()
@@ -303,8 +303,8 @@ def test_primeiro_pedido_de_interrupcao_vira_motivo_de_parada() -> None:
 
 
 def test_motivo_novo_e_aceito_pelo_grafo_e_pela_retomada() -> None:
-    from src.continuity import MOTIVOS_RETOMAVEIS
     from src.knowledge.schema import NODE_SCHEMAS
+    from src.session.continuity import MOTIVOS_RETOMAVEIS
 
     allowed = NODE_SCHEMAS["Sessao"].properties["motivo_parada"].enum
     for reason in ("interrompida_pesquisador", "limite_egresso", "sem_caminhos_promissores"):
@@ -328,7 +328,7 @@ def test_agente_nao_escreve_a_marcacao_do_projeto() -> None:
 def _loop(budget: UsageBudget, *, mode: str = "auto", tokens: int = 0, minutes: float = 0.0, egress: int = 0):
     from unittest.mock import MagicMock
 
-    from src.autonomous_loop import AutonomousLoop
+    from src.orchestration.autonomous_loop import AutonomousLoop
 
     orchestrator = MagicMock()
     orchestrator._session_agent_run_counts = {}
@@ -348,7 +348,7 @@ async def test_aviso_periodico_emitido_no_terminal_e_na_telemetria(capsys) -> No
     from unittest.mock import patch
 
     loop, _ = _loop(_unlimited(), tokens=600_000, minutes=3.0, egress=1234)
-    with patch("src.autonomous_loop.get_telemetry") as tel:
+    with patch("src.orchestration.autonomous_loop.get_telemetry") as tel:
         tel.return_value.get_token_summary.return_value = {"by_provider_model": [{"total_tokens": 600_000,
                                                                                    "total_cost_usd": None}]}
         assert await loop._maybe_unlimited_notice("sess") is False
@@ -364,7 +364,7 @@ async def test_aviso_nao_repete_antes_da_proxima_cadencia(capsys) -> None:
     from unittest.mock import patch
 
     loop, _ = _loop(_unlimited(), tokens=600_000, minutes=1.0)
-    with patch("src.autonomous_loop.get_telemetry") as tel:
+    with patch("src.orchestration.autonomous_loop.get_telemetry") as tel:
         tel.return_value.get_token_summary.return_value = {"by_provider_model": []}
         await loop._maybe_unlimited_notice("sess")
         await loop._maybe_unlimited_notice("sess")
@@ -383,13 +383,13 @@ async def test_assisted_oferece_suspender_e_semi_nao_bloqueia() -> None:
     from unittest.mock import AsyncMock, patch
 
     loop, orchestrator = _loop(_unlimited(), mode="assisted", tokens=600_000)
-    with patch("src.autonomous_loop.get_telemetry") as tel, patch("asyncio.to_thread", new=AsyncMock(return_value="s")):
+    with patch("src.orchestration.autonomous_loop.get_telemetry") as tel, patch("asyncio.to_thread", new=AsyncMock(return_value="s")):
         tel.return_value.get_token_summary.return_value = {"by_provider_model": []}
         assert await loop._maybe_unlimited_notice("sess") is True
     assert orchestrator.session_manager.update.call_args.kwargs["status"] == "suspended"
 
     loop, _ = _loop(_unlimited(), mode="semi", tokens=600_000)
-    with patch("src.autonomous_loop.get_telemetry") as tel, patch("builtins.input") as mock_input:
+    with patch("src.orchestration.autonomous_loop.get_telemetry") as tel, patch("builtins.input") as mock_input:
         tel.return_value.get_token_summary.return_value = {"by_provider_model": []}
         assert await loop._maybe_unlimited_notice("sess") is False
     mock_input.assert_not_called()
@@ -402,14 +402,14 @@ async def test_g5_usa_o_orcamento_efetivo_e_cala_no_modo_sem_limite() -> None:
     heavy = {"by_provider_model": [{"total_tokens": 10_000_000, "total_cost_usd": 100.0}]}
     # Orçamento da CLI com 5 000 tokens: 10 M tokens disparam o aviso mesmo que SESSION_MAX_TOKENS seja maior.
     loop, _ = _loop(UsageBudget.from_config(max_tokens=5000), mode="semi")
-    with patch("src.autonomous_loop.get_telemetry") as tel, patch("src.autonomous_loop.logger") as log:
+    with patch("src.orchestration.autonomous_loop.get_telemetry") as tel, patch("src.orchestration.autonomous_loop.logger") as log:
         tel.return_value.get_token_summary.return_value = heavy
         await loop._check_operational_thresholds("sess")
     triggered = log.warning.call_args.kwargs["extra"]["triggered"]
     assert any("tokens" in item and "/5000" in item for item in triggered)
 
     loop, _ = _loop(_unlimited(), mode="semi")
-    with patch("src.autonomous_loop.get_telemetry") as tel, patch("src.autonomous_loop.logger") as log:
+    with patch("src.orchestration.autonomous_loop.get_telemetry") as tel, patch("src.orchestration.autonomous_loop.logger") as log:
         tel.return_value.get_token_summary.return_value = heavy
         await loop._check_operational_thresholds("sess")
     assert not any(c.args and "operacional" in c.args[0] for c in log.warning.call_args_list)
@@ -419,7 +419,7 @@ async def test_g5_usa_o_orcamento_efetivo_e_cala_no_modo_sem_limite() -> None:
 
 
 def test_confirmacao_passa_pelo_gate_humano_e_fica_registrada() -> None:
-    from src.human_gate import HumanGate
+    from src.gate.human_gate import HumanGate
 
     gate = HumanGate()
     confirm_unlimited(_unlimited(), "cli", input_fn=lambda _p: "sem limite", isatty=lambda: True, gate=gate)
@@ -429,7 +429,7 @@ def test_confirmacao_passa_pelo_gate_humano_e_fica_registrada() -> None:
 
 
 def test_resposta_de_ask_researcher_ou_agente_nunca_autoriza() -> None:
-    from src.human_gate import HumanGate, Source
+    from src.gate.human_gate import HumanGate, Source
 
     gate = HumanGate()
     request = gate.request("ativar_modo_sem_limite", "cli")
@@ -439,7 +439,7 @@ def test_resposta_de_ask_researcher_ou_agente_nunca_autoriza() -> None:
 
 
 def test_gate_que_nao_autoriza_impede_o_modo(monkeypatch) -> None:
-    from src.human_gate import HumanGate
+    from src.gate.human_gate import HumanGate
 
     class DenyingGate(HumanGate):
         def authorized(self, request_id: int) -> bool:

@@ -6,10 +6,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src import config
-from src.autonomous_loop import AutonomousLoop
 from src.claims.runtime import ClaimRuntime
 from src.claims.store import ClaimStore
 from src.llm.base import LLMResponse
+from src.orchestration.autonomous_loop import AutonomousLoop
 from tests.unit.claims.helpers import FakeVerifier, evidence_for
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
@@ -50,8 +50,8 @@ async def finalize(loop, tmp_path, summarizer_text):
     provider.model_name = "m"
     provider.generate = AsyncMock(return_value=LLMResponse(text=summarizer_text))
     session_dir = tmp_path / "s1"
-    with patch("src.autonomous_loop.ModelRouter.get_provider", return_value=provider), \
-         patch("src.claims.report.report_evidence_builder", lambda *a, **k: evidence_for("res:e1/acuracia")), \
+    with patch("src.orchestration.autonomous_loop.ModelRouter.get_provider", return_value=provider), \
+         patch("src.report.claims_report.report_evidence_builder", lambda *a, **k: evidence_for("res:e1/acuracia")), \
          patch("src.llm.metering.record_llm_call"), \
          patch("src.provenance.ledger.get_ledger", return_value=MagicMock()), \
          patch.object(AutonomousLoop, "_graph_for_report", return_value=None), \

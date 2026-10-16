@@ -202,4 +202,4 @@ recuperáveis, com mensagem que lista os papéis válidos.
 ## Requisitos removidos
 
 - Agentes como containers efêmeros com IPC (removido por [`v16-in-process-agents`](../../changes/archive/v16-in-process-agents/proposal.md))
-- Agente Reviewer, `agents/reviewer/` (removido por [`v18.6-remove-unused-agents`](../../changes/archive/v18.6-remove-unused-agents/proposal.md)): a revisão de subtarefa é feita pelo `validator` (ADR 007)
+- Agente Reviewer, `src/agents/reviewer/` (removido por [`v18.6-remove-unused-agents`](../../changes/archive/v18.6-remove-unused-agents/proposal.md)): a revisão de subtarefa é feita pelo `validator` (ADR 007)

@@ -1,7 +1,7 @@
 import pytest
 
-from src.orchestrator import AgentTask
-from src.task_scheduler import TaskScheduler
+from src.orchestration.orchestrator import AgentTask
+from src.orchestration.task_scheduler import TaskScheduler
 
 
 def test_validate_dag_valid_linear():

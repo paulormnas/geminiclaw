@@ -26,13 +26,13 @@ from src.knowledge.curator_flags import (
 )
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.graph_store import GraphStore, Node
-from src.knowledge.normalization import clean_free_text
 from src.knowledge.provenance import Actor
 from src.knowledge.semantic_index import IGNORED_STATUSES, SemanticIndex, canonical_text
 from src.knowledge.service import KnowledgeService
 from src.knowledge.similarity_queue import QueueItem, SimilarityQueue
 from src.knowledge.validation import REJECTED_STATUSES
 from src.logger import get_logger
+from src.utils.normalization import clean_free_text
 
 logger = get_logger(__name__)
 

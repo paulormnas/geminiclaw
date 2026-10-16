@@ -8,8 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from src.artifacts.metrics_file import metrics_of
 from src.logger import get_logger
-from src.metrics_file import metrics_of
 from src.numeric_refs import calc as calc_module
 from src.numeric_refs import syntax
 from src.numeric_refs.numbers import find_numbers, parse_digits

@@ -12,8 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.agent_runtime.context import bind_agent_context, current_context
-from src.human_gate import (
+from src.gate.human_gate import (
     ESTADO_AUTORIZADA,
     ESTADO_NEGADA,
     ESTADO_PENDENTE,
@@ -28,6 +27,7 @@ from src.knowledge.projects import ProjectError, confirm_problem, create_project
 from src.knowledge.provenance import Actor
 from src.research_consult import DECISOES_RESERVADAS
 from src.skills.human_feedback.skill import HumanFeedbackSkill
+from src.utils.agent_context import bind_agent_context, current_context
 from tests.unit.test_researcher_consult import Harness, ScriptedProvider, _answer
 
 pytestmark = pytest.mark.unit
@@ -37,7 +37,7 @@ pytestmark = pytest.mark.unit
 def _isolate(monkeypatch):
     token = current_context.set(None)
     tel = MagicMock()
-    monkeypatch.setattr("src.orchestrator.get_telemetry", lambda: tel)
+    monkeypatch.setattr("src.orchestration.orchestrator.get_telemetry", lambda: tel)
     monkeypatch.setattr("src.llm.metering.get_telemetry", lambda: tel)
     yield
     current_context.reset(token)
@@ -139,8 +139,8 @@ def test_confirmar_problema_por_quem_nao_e_o_pesquisador_e_recusado():
 @pytest.mark.asyncio
 async def test_confirmacao_do_problema_passa_pelo_gate_real(monkeypatch):
     """I7 — ensure_confirmed_problem consulta o gate (origem TERMINAL) antes de confirmar; gate negado não confirma."""
+    from src.cli.project_session import ensure_confirmed_problem
     from src.knowledge.problem import ProblemDraft
-    from src.project_session import ensure_confirmed_problem
 
     class _Negado(HumanGate):
         def authorized(self, request_id):  # um gate que não autoriza (ex.: origem não humana)
@@ -176,7 +176,7 @@ async def test_confirmacao_do_problema_passa_pelo_gate_real(monkeypatch):
 
 def test_vocab_approve_na_cli_passa_pelo_gate_e_resposta_de_agente_nao_aprova(monkeypatch, capsys):
     """I7 — ``vocab approve`` só aprova com a origem CLI; um gate que recusa deixa o termo candidato."""
-    from src.cli import _handle_vocab_command
+    from src.cli.main import _handle_vocab_command
     from src.knowledge.provenance import Actor as _Actor
 
     store = InMemoryGraphStore()
@@ -187,7 +187,7 @@ def test_vocab_approve_na_cli_passa_pelo_gate_e_resposta_de_agente_nao_aprova(mo
         actor=_Actor(kind="agente", role="researcher"),
     )
 
-    monkeypatch.setattr("src.human_gate.authorize_from_cli", lambda *a, **k: False)
+    monkeypatch.setattr("src.gate.human_gate.authorize_from_cli", lambda *a, **k: False)
     assert _handle_vocab_command(["approve", termo], store=store) == 1
     assert store.get_node(termo).properties["status"] == "candidato"
 

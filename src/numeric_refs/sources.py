@@ -106,7 +106,7 @@ def extract_text(path: Path, digest: str | None = None) -> str:
         except UnicodeDecodeError:
             text = path.read_text(encoding="latin-1")
     elif suffix in _EXTRACTED_SUFFIXES:
-        from src.skills.document_processor.extractors.registry import ExtractorRegistry
+        from src.documents.extractors.registry import ExtractorRegistry
 
         text = ExtractorRegistry().extract(str(path)).text_content
     else:

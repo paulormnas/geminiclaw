@@ -50,11 +50,11 @@ def _build_definitions() -> Dict[str, AgentDefinition]:
     Returns:
         Dicionário papel → ``AgentDefinition``.
     """
-    from agents.base.agent import root_agent as base_agent
-    from agents.curator.agent import create_agent as create_curator_agent
-    from agents.developer.agent import root_agent as developer_agent
-    from agents.researcher.agent import root_agent as researcher_agent
-    from agents.summarizer.agent import root_agent as summarizer_agent
+    from src.agents.base.agent import root_agent as base_agent
+    from src.agents.curator.agent import create_agent as create_curator_agent
+    from src.agents.developer.agent import root_agent as developer_agent
+    from src.agents.researcher.agent import root_agent as researcher_agent
+    from src.agents.summarizer.agent import root_agent as summarizer_agent
 
     # v17-curator-agent: papel registrado para o runtime em processo, mas fora de ``AGENT_IDS`` (um plano gerado por
     # LLM não atribui subtarefas ao Curator) e com ferramentas de escrita que falham fechado fora do ``CuratorRunner``.

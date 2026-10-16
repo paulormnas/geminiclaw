@@ -21,8 +21,8 @@ from typing import Any, Callable
 from urllib.parse import urlparse
 
 from src import config
-from src.egress.fragments import ContentOrigin, PromptFragment, labeled
 from src.llm.pricing import estimate_cost, get_price
+from src.utils.egress_fragments import ContentOrigin, PromptFragment, labeled
 from src.utils.json_parser import extract_json
 
 RUBRIC_VERSION = "1"

@@ -6,8 +6,8 @@ definidas no roadmap v3, Etapa V1.
 
 import pytest
 
-from agents.base.agent import AGENT_INSTRUCTION as BASE_INSTRUCTION
-from agents.researcher.agent import AGENT_INSTRUCTION as RESEARCHER_INSTRUCTION
+from src.agents.base.agent import AGENT_INSTRUCTION as BASE_INSTRUCTION
+from src.agents.researcher.agent import AGENT_INSTRUCTION as RESEARCHER_INSTRUCTION
 
 
 @pytest.mark.unit
@@ -38,7 +38,7 @@ class TestResearcherInstruction:
 # Summarizer
 # ---------------------------------------------------------------------------
 
-from agents.summarizer.agent import AGENT_INSTRUCTION as SUMMARIZER_INSTRUCTION
+from src.agents.summarizer.agent import AGENT_INSTRUCTION as SUMMARIZER_INSTRUCTION
 
 
 @pytest.mark.unit

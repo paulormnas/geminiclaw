@@ -11,10 +11,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.autonomous_loop import AutonomousLoop
-from src.cli import convert_report
-from src.orchestrator import AgentResult, AgentTask, Orchestrator
-from src.session import Session
+from src.cli.main import convert_report
+from src.orchestration.autonomous_loop import AutonomousLoop
+from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
+from src.session.manager import Session
 from tests.support.task_loop import run_tasks
 
 
@@ -85,7 +85,7 @@ class TestSessionMetadataGeneration:
             "sess_master", payload={"researcher_interactions": [{"question": "q", "researcher_response": "a"}]}
         )
 
-        from src.output_manager import OutputManager
+        from src.artifacts.output_manager import OutputManager
         output_manager = OutputManager(base_dir=str(tmp_path))
 
         orchestrator = Orchestrator(session_manager=mock_sm, output_manager=output_manager, agent_runtime=mock_runtime)
@@ -110,7 +110,7 @@ class TestConvertCommand:
     """geminiclaw convert --session <id> --format <fmt>."""
 
     def test_sessao_sem_relatorio_final(self, tmp_path: Path, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
-        import src.cli as cli_module
+        import src.cli.main as cli_module
         monkeypatch.setattr(cli_module, "OUTPUT_BASE_DIR", str(tmp_path))
 
         convert_report("sess_inexistente", "latex")
@@ -118,7 +118,7 @@ class TestConvertCommand:
         assert "não encontrada" in capsys.readouterr().out
 
     def test_formato_invalido(self, tmp_path: Path, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
-        import src.cli as cli_module
+        import src.cli.main as cli_module
         monkeypatch.setattr(cli_module, "OUTPUT_BASE_DIR", str(tmp_path))
 
         session_dir = tmp_path / "sess_1"
@@ -130,7 +130,7 @@ class TestConvertCommand:
         assert "latex, html, docx" in capsys.readouterr().out
 
     def test_conversao_bem_sucedida(self, tmp_path: Path, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
-        import src.cli as cli_module
+        import src.cli.main as cli_module
         monkeypatch.setattr(cli_module, "OUTPUT_BASE_DIR", str(tmp_path))
 
         session_dir = tmp_path / "sess_1"

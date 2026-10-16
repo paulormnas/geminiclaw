@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from src.numeric_refs.verifier import verify_numbers
-from src.operation_metrics import (
+from src.report.operation_metrics import (
     BEGIN_MARK,
     END_MARK,
     GROUPS,
@@ -159,7 +159,7 @@ def _row(task, agent, tokens, cost, sem_custo=0):
 
 def test_custo_nulo_nao_e_somado_como_zero(monkeypatch) -> None:
     rows = [_row("a", "researcher", 100, None, 2), _row("b", "developer", 50, 0.25), _row("c", "developer", 10, None, 1)]
-    monkeypatch.setattr("src.telemetry.get_telemetry", lambda: FakeTelemetry(rows, cpu=None))
+    monkeypatch.setattr("src.observability.telemetry.get_telemetry", lambda: FakeTelemetry(rows, cpu=None))
     out = CostResourcesReader().read("s")
     assert out["tokens_total"] == 160 and out["custo_usd_total"] == 0.25 and out["chamadas_sem_custo"] == 3
     by_task = {r["task_name"]: r["custo_usd"] for r in out["por_tarefa"]}
@@ -170,14 +170,14 @@ def test_custo_nulo_nao_e_somado_como_zero(monkeypatch) -> None:
 
 
 def test_total_de_custo_e_nulo_quando_nenhuma_chamada_informou(monkeypatch) -> None:
-    monkeypatch.setattr("src.telemetry.get_telemetry", lambda: FakeTelemetry([_row("a", "researcher", 7, None, 2)]))
+    monkeypatch.setattr("src.observability.telemetry.get_telemetry", lambda: FakeTelemetry([_row("a", "researcher", 7, None, 2)]))
     assert CostResourcesReader().read("s")["custo_usd_total"] is None
 
 
 def test_hardware_do_no(monkeypatch) -> None:
     peaks = {"max_temp_c": 80.5, "max_cpu_pct": 99.0, "max_mem_pct": 70.0, "min_mem_available_mb": 1200.0,
              "throttle_incidents": 3}
-    monkeypatch.setattr("src.telemetry.get_telemetry", lambda: FakeTelemetry([], peaks=peaks, cpu=42.34))
+    monkeypatch.setattr("src.observability.telemetry.get_telemetry", lambda: FakeTelemetry([], peaks=peaks, cpu=42.34))
     node = CostResourcesReader().read("s")["no"]
     assert node == {"cpu_pct_medio": 42.3, "cpu_pct_pico": 99.0, "ram_pct_pico": 70.0, "ram_disponivel_min_mb": 1200.0,
                     "temperatura_pico_c": 80.5, "incidentes_throttling": 3}
@@ -186,7 +186,7 @@ def test_hardware_do_no(monkeypatch) -> None:
 def test_rejeicoes_de_plano_contam_so_os_reprovados(monkeypatch) -> None:
     events = {"plan_validation": [{"payload": {"approved": False}}, {"payload": {"approved": True}},
                                    {"payload": {"approved": False}}]}
-    monkeypatch.setattr("src.telemetry.get_telemetry", lambda: FakeTelemetry([], events=events))
+    monkeypatch.setattr("src.observability.telemetry.get_telemetry", lambda: FakeTelemetry([], events=events))
     assert PlanRejectionReader().read("s") == {"ciclos_rejeicao_plano": 2}
 
 
@@ -197,7 +197,7 @@ def test_intervencoes_humanas_sem_inventar_zeros(monkeypatch) -> None:
         "divergence_reports": [{"task_name": "x"}],
     }
     events = {"researcher_interruption": [{"timestamp": "2026-10-12T10:00:00+00:00", "task_name": None}]}
-    monkeypatch.setattr("src.telemetry.get_telemetry", lambda: FakeTelemetry([], events=events))
+    monkeypatch.setattr("src.observability.telemetry.get_telemetry", lambda: FakeTelemetry([], events=events))
     out = HumanInterventionsReader(lambda sid: payload).read("s")
     assert out["respostas_ask_researcher"] == 2  # a resposta do agente `researcher` não é do pesquisador
     assert out["interrupcoes"] == 1
@@ -285,7 +285,7 @@ def test_leitores_dos_produtores_existentes_tem_produtor_e_grupo() -> None:
 async def test_laco_grava_no_payload_anexa_a_secao_e_soma_a_cadeia(tmp_path, monkeypatch) -> None:
     from unittest.mock import AsyncMock, MagicMock
 
-    from src.autonomous_loop import AutonomousLoop
+    from src.orchestration.autonomous_loop import AutonomousLoop
 
     payloads = {
         "s2": {"continues_session_id": "s1", "budget": {"unlimited": False}},
@@ -297,8 +297,8 @@ async def test_laco_grava_no_payload_anexa_a_secao_e_soma_a_cadeia(tmp_path, mon
     orchestrator.session_manager.get.side_effect = lambda sid: SimpleNamespace_(payloads[sid])
     orchestrator.session_manager.update.side_effect = lambda sid, payload=None, **kw: payloads.__setitem__(sid, payload)
     loop = AutonomousLoop(orchestrator)
-    monkeypatch.setattr("src.operation_metrics.default_readers", lambda *a, **k: _all_ok())
-    monkeypatch.setattr("src.autonomous_loop.get_telemetry", lambda: MagicMock(flush=AsyncMock()))
+    monkeypatch.setattr("src.report.operation_metrics.default_readers", lambda *a, **k: _all_ok())
+    monkeypatch.setattr("src.orchestration.autonomous_loop.get_telemetry", lambda: MagicMock(flush=AsyncMock()))
 
     markdown = await loop._append_operation_metrics_section("# Relatório\n", "s2", tmp_path, "solucao_encontrada")
 
@@ -312,7 +312,7 @@ async def test_laco_grava_no_payload_anexa_a_secao_e_soma_a_cadeia(tmp_path, mon
 async def test_laco_falha_de_agregacao_nao_bloqueia_o_relatorio(tmp_path, monkeypatch) -> None:
     from unittest.mock import AsyncMock, MagicMock
 
-    from src.autonomous_loop import AutonomousLoop
+    from src.orchestration.autonomous_loop import AutonomousLoop
 
     orchestrator = MagicMock()
     orchestrator.output_manager.base_dir = tmp_path
@@ -321,8 +321,8 @@ async def test_laco_falha_de_agregacao_nao_bloqueia_o_relatorio(tmp_path, monkey
     def boom(*a, **k):
         raise RuntimeError("leitores quebraram")
 
-    monkeypatch.setattr("src.operation_metrics.default_readers", boom)
-    monkeypatch.setattr("src.autonomous_loop.get_telemetry", lambda: MagicMock(flush=AsyncMock()))
+    monkeypatch.setattr("src.report.operation_metrics.default_readers", boom)
+    monkeypatch.setattr("src.orchestration.autonomous_loop.get_telemetry", lambda: MagicMock(flush=AsyncMock()))
     markdown = await loop._append_operation_metrics_section("# R\n", "s", tmp_path, None)
     assert "Não foi possível agregar as métricas de operação" in markdown and "# R" in markdown
 

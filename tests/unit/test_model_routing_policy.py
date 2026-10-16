@@ -22,14 +22,14 @@ _ALLOWED = {ROOT / "src" / "llm" / "routing.py"}
 
 
 def _python_files():
-    for base in ("agents", "src"):
+    for base in ("src",):
         for path in sorted((ROOT / base).rglob("*.py")):
             if path not in _ALLOWED:
                 yield path
 
 
 def test_nenhuma_leitura_direta_de_variaveis_de_modelo_removidas():
-    """Cenário: Leitura direta proibida (varre agents/ e src/, fora de src/llm/routing.py)."""
+    """Cenário: Leitura direta proibida (varre src/, fora de src/llm/routing.py)."""
     offenders = []
     for path in _python_files():
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):

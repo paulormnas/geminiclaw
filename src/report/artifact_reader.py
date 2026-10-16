@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from src.metrics_file import metrics_of
+from src.artifacts.metrics_file import metrics_of
 
 
 class ArtifactReader:

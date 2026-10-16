@@ -1,8 +1,8 @@
 from typing import Optional
 
-from src.egress.fragments import ContentOrigin
 from src.logger import get_logger
 from src.skills.base import BaseSkill, SkillResult
+from src.utils.egress_fragments import ContentOrigin
 
 from .cache import DeepSearchCache
 from .indexer import VectorIndexer

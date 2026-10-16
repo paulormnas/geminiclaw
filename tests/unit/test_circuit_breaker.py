@@ -6,7 +6,7 @@ Cobre:
            explicativa. V18/usage-limits (design §3) SUBSTITUI esse
            comportamento para o caso de uma única subtarefa persistentemente
            falha: ela agora é ABANDONADA (SESSION_MAX_TASK_RETRIES esgotado,
-           contado cumulativamente entre ciclos — ver src/usage.py), e o
+           contado cumulativamente entre ciclos — ver src/orchestration/usage.py), e o
            restante do DAG e a sessão continuam, em vez de abortar a sessão
            inteira. Ver `test_persistent_task_failure_is_abandoned_not_session_aborted`.
   V12.5.2: Limite de execuções de agente por sessão — ao atingir o limite efetivo em
@@ -34,9 +34,9 @@ async def test_persistent_task_failure_is_abandoned_not_session_aborted():
     breaker de progresso zero (V12.5.1), que abortava a sessão inteira. O
     restante do DAG ('tarefa_ok', independente) e a sessão continuam
     normalmente."""
-    from src.autonomous_loop import AutonomousLoop
-    from src.orchestrator import AgentResult, AgentTask
-    from src.usage import UsageBudget
+    from src.orchestration.autonomous_loop import AutonomousLoop
+    from src.orchestration.orchestrator import AgentResult, AgentTask
+    from src.orchestration.usage import UsageBudget
 
     # Planner sempre retorna o mesmo plano com as mesmas 2 tarefas independentes
     tarefas = [
@@ -81,7 +81,7 @@ async def test_persistent_task_failure_is_abandoned_not_session_aborted():
         max_connection_retries=20, closing_reserve_pct=0.05,
     )
 
-    with patch("src.autonomous_loop.get_telemetry", return_value=MagicMock()):
+    with patch("src.orchestration.autonomous_loop.get_telemetry", return_value=MagicMock()):
         with patch.object(loop, "_is_complex_triage", AsyncMock(return_value=True)):
             result = await loop.run("tarefa complexa", "exec_test", budget=budget)
 
@@ -103,8 +103,8 @@ async def test_persistent_task_failure_is_abandoned_not_session_aborted():
 async def test_circuit_breaker_nao_aborta_com_progresso_real():
     """Se o progresso muda entre ciclos (nova subtarefa bem-sucedida),
     o loop deve continuar normalmente."""
-    from src.autonomous_loop import AutonomousLoop
-    from src.orchestrator import AgentResult, AgentTask
+    from src.orchestration.autonomous_loop import AutonomousLoop
+    from src.orchestration.orchestrator import AgentResult, AgentTask
 
     ciclo = [0]
 
@@ -164,7 +164,7 @@ async def test_circuit_breaker_nao_aborta_com_progresso_real():
 
     loop = AutonomousLoop(mock_orchestrator)
 
-    with patch("src.autonomous_loop.get_telemetry", return_value=MagicMock()):
+    with patch("src.orchestration.autonomous_loop.get_telemetry", return_value=MagicMock()):
         result = await loop.run("tarefa de 2 etapas", "exec_test")
 
     # Deve ter concluído com sucesso (sem circuit breaker)
@@ -183,7 +183,7 @@ async def test_circuit_breaker_nao_aborta_com_progresso_real():
 # ---------------------------------------------------------------------------
 
 def _orchestrator_with_mocks():
-    from src.orchestrator import Orchestrator
+    from src.orchestration.orchestrator import Orchestrator
 
     mock_session_manager = MagicMock()
     mock_session_manager.create = MagicMock(return_value=MagicMock(id="sess_abc"))
@@ -200,12 +200,12 @@ def _orchestrator_with_mocks():
 async def test_circuit_breaker_aborta_ao_atingir_limite_de_execucoes():
     """_execute_agent deve levantar RuntimeError ao ultrapassar
     MAX_AGENT_RUNS_PER_SESSION execuções de agente na mesma sessão."""
-    from src.orchestrator import AgentTask
+    from src.orchestration.orchestrator import AgentTask
 
     orchestrator, mock_runtime = _orchestrator_with_mocks()
     task = AgentTask(agent_id="base", prompt="teste", task_name="tarefa_x")
 
-    with patch("src.orchestrator.MAX_AGENT_RUNS_PER_SESSION", 3):
+    with patch("src.orchestration.orchestrator.MAX_AGENT_RUNS_PER_SESSION", 3):
         orchestrator._session_agent_run_counts = {"master_sess": 3}
         with pytest.raises(RuntimeError, match="[Ll]imite.*[Ee]xecuç"):
             await orchestrator._execute_agent(task, "master_sess")
@@ -217,7 +217,7 @@ async def test_circuit_breaker_aborta_ao_atingir_limite_de_execucoes():
 @pytest.mark.asyncio
 async def test_execute_agent_incrementa_contador_de_execucoes():
     """_execute_agent deve incrementar o contador de execuções da sessão."""
-    from src.orchestrator import AgentResult, AgentTask
+    from src.orchestration.orchestrator import AgentResult, AgentTask
 
     orchestrator, mock_runtime = _orchestrator_with_mocks()
     mock_runtime.run.return_value = AgentResult(
@@ -225,7 +225,7 @@ async def test_execute_agent_incrementa_contador_de_execucoes():
     )
     task = AgentTask(agent_id="base", prompt="teste", task_name="tarefa_y")
 
-    with patch("src.orchestrator.get_telemetry", return_value=MagicMock()):
+    with patch("src.orchestration.orchestrator.get_telemetry", return_value=MagicMock()):
         await orchestrator._execute_agent(task, "master_sess_x")
         await orchestrator._execute_agent(task, "master_sess_x")
 

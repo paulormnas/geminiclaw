@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Mapping
 
-from src.egress.fragments import ORIGIN_INSTRUCAO_VALUE, mark_tainted
+from src.utils.egress_fragments import ORIGIN_INSTRUCAO_VALUE, mark_tainted
 
 TAINT_TAG = "egress:tainted"
 MARK_ORIGIN_MAX = 32

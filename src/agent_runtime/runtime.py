@@ -2,7 +2,7 @@
 
 Executa cada agente com uma chamada direta a ``run_agent_loop`` dentro do processo do
 orquestrador, isolada em uma ``asyncio.Task`` dedicada (contexto por tarefa via
-``contextvars`` — ver ``src/agent_runtime/context.py``), supervisionada por
+``contextvars`` — ver ``src/utils/agent_context.py``), supervisionada por
 timeout (``AGENT_TIMEOUT_SECONDS``) e regulada por ``ResourceGuard`` (limite de agentes
 simultâneos e espera por saúde do sistema).
 
@@ -17,18 +17,18 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from src.agent_runtime.context import AgentContext, bind_agent_context
 from src.agent_runtime.definitions import get_agent_definition
 from src.agent_runtime.resources import ResourceGuard
 from src.config import AGENT_TIMEOUT_SECONDS
 from src.llm.agent_loop import run_agent_loop
+from src.llm.model_config import get_role_model_config
+from src.llm.model_router import ModelRouter
 from src.llm.retry import is_retryable_error
 from src.logger import get_logger
-from src.model_config import get_role_model_config
-from src.model_router import ModelRouter
+from src.utils.agent_context import AgentContext, bind_agent_context
 
 if TYPE_CHECKING:  # evita import circular em tempo de carregamento do módulo
-    from src.orchestrator import AgentResult, AgentTask
+    from src.agent_runtime.types import AgentResult, AgentTask
 
 logger = get_logger(__name__)
 
@@ -56,16 +56,16 @@ class AgentRuntime:
         """Executa a tarefa do agente descrito por ``task`` no contexto ``ctx``.
 
         Args:
-            task: Definição da subtarefa a executar (``src.orchestrator.AgentTask``).
+            task: Definição da subtarefa a executar (``src.orchestration.orchestrator.AgentTask``).
             ctx: Contexto por tarefa (sessão, papel, diretório de output, modelo).
 
         Returns:
             ``AgentResult`` com ``status`` em ``{"success", "error", "timeout"}``.
             Nunca levanta exceção, exceto ``asyncio.CancelledError``.
         """
-        # Import tardio: src.orchestrator importa este módulo, então um import
+        # Import tardio: src.orchestration.orchestrator importa este módulo, então um import
         # no topo do arquivo criaria um ciclo de import.
-        from src.orchestrator import AgentResult
+        from src.agent_runtime.types import AgentResult
 
         try:
             # A vaga é reservada antes do timeout começar a contar: esperar a vez não

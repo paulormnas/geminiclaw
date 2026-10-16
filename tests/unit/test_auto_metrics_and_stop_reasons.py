@@ -12,9 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.agents.validator_agent import ReviewResult, ValidationResult, ValidatorAgent
-from src.autonomous_loop import AutonomousLoop
-from src.continuity import RESUME_REFUSE, Checkpoint, evaluate_resumability
+from src.agents.validator.agent import ReviewResult, ValidationResult, ValidatorAgent
 from src.knowledge import schema
 from src.knowledge.graph_store import InMemoryGraphStore
 from src.knowledge.hypotheses import split_plan
@@ -32,8 +30,10 @@ from src.knowledge.metric_definition import (
 from src.knowledge.provenance import Actor
 from src.knowledge.vocabulary import reject_term
 from src.llm.base import LLMResponse
-from src.operation_metrics import HypothesisClosureReader, describe_stop_reason, render_operation_metrics_section
-from src.orchestrator import AgentResult, AgentTask
+from src.orchestration.autonomous_loop import AutonomousLoop
+from src.orchestration.orchestrator import AgentResult, AgentTask
+from src.report.operation_metrics import HypothesisClosureReader, describe_stop_reason, render_operation_metrics_section
+from src.session.continuity import RESUME_REFUSE, Checkpoint, evaluate_resumability
 from tests.support.exploration_world import LoopHarness, hyp, plan, task
 from tests.support.hypothesis_world import HypothesisWorld
 
@@ -59,7 +59,7 @@ def _harness(tmp_path: Path, plans: list, *, validator=None, alvo: float | None 
     telemetry = MagicMock()
     h = LoopHarness(tmp_path, mode=mode, plans=plans, validator=validator,
                     world_kw={"approve_metric": False, "alvo": alvo})
-    h.extra_patches.append(patch("src.autonomous_loop.get_telemetry", return_value=telemetry))
+    h.extra_patches.append(patch("src.orchestration.autonomous_loop.get_telemetry", return_value=telemetry))
     return h, telemetry
 
 
@@ -167,7 +167,7 @@ async def test_validator_llm_aprova_ou_reprova_as_metricas():
         provider = MagicMock()
         provider.model_name = "m"
         provider.generate = AsyncMock(return_value=LLMResponse(text=reply))
-        with patch("src.agents.validator_agent.record_llm_call"):
+        with patch("src.agents.validator.agent.record_llm_call"):
             return await ValidatorAgent(provider=provider).validate_plan(steps, "t", metric_definition=definition)
 
     ok = await run('{"status": "approved", "reason": "ok", "issues": [], "metricas_status": "approved"}')
@@ -279,7 +279,7 @@ async def test_ciclos_ociosos_esgotados_fecham_com_o_motivo_proprio(tmp_path, _n
     first = plan([task("t1")], [hyp("h1")])
     h = LoopHarness(tmp_path, plans=[first, first, first], record_attempts=False)
     telemetry = MagicMock()
-    h.extra_patches.append(patch("src.autonomous_loop.get_telemetry", return_value=telemetry))
+    h.extra_patches.append(patch("src.orchestration.autonomous_loop.get_telemetry", return_value=telemetry))
     result = await h.run()
     (node,) = h.hypotheses()
     assert h.stop_reason == "hipoteses_nao_testadas" == h.checkpoint().motivo_parada
@@ -316,7 +316,7 @@ def _agent():
 async def _review(root: Path, criteria: list[str], hypothesis_id: str) -> ReviewResult:
     t = AgentTask(agent_id="developer", prompt="x", task_name="treinar_rl", validation_criteria=criteria,
                   hypothesis_id=hypothesis_id)
-    with patch("src.agents.validator_agent.record_llm_call"):
+    with patch("src.agents.validator.agent.record_llm_call"):
         return await _agent().review_result(task=t, response_text="ok", output_dir=root)
 
 
@@ -340,8 +340,8 @@ async def test_evento_da_revisao_leva_os_motivos(tmp_path):
     t = AgentTask(agent_id="developer", prompt="x", task_name="treinar_rl",
                   validation_criteria=["acurácia no teste >= 0.95"])
     result = AgentResult(agent_id="developer", session_id="s", status="success", response={"text": "ok"})
-    with patch("src.telemetry.get_telemetry", return_value=telemetry), \
-            patch("src.agents.validator_agent.record_llm_call"):
+    with patch("src.observability.telemetry.get_telemetry", return_value=telemetry), \
+            patch("src.agents.validator.agent.record_llm_call"):
         review = await AutonomousLoop(orchestrator)._review_subtask(t, result, tmp_path.name)
     assert telemetry.record_agent_event.call_args.kwargs["payload"]["motivos"] == ["sem_hipotese"]
     assert review["motivos"] == ["sem_hipotese"] and review["outcome"] == "reprovado"
@@ -381,7 +381,7 @@ def test_contadores_de_operacao_novos():
     }
     telemetry = MagicMock()
     telemetry.get_events.side_effect = lambda sid, kind: events.get(kind, [])
-    with patch("src.telemetry.get_telemetry", return_value=telemetry):
+    with patch("src.observability.telemetry.get_telemetry", return_value=telemetry):
         out = HypothesisClosureReader().read("s")
     assert out["fechada_por_hipoteses_nao_testadas"] is True
     assert out["hipoteses_sem_tentativa_no_fechamento"] == 2 and out["reprovacoes_sem_hipotese"] == 1

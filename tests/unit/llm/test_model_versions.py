@@ -8,7 +8,6 @@ import httpx
 import pytest
 import respx
 
-from src.autonomous_loop import AutonomousLoop
 from src.llm.allocation import (
     build_allocation_profile,
     current_allocation,
@@ -24,7 +23,8 @@ from src.llm.providers.openai_compatible import OpenAICompatibleProvider
 from src.llm.routing import resolve_session
 from src.llm.session import SessionRouting, bind_session_routing
 from src.llm.versions import UNKNOWN_VERSION, VersionTracker, normalize_version
-from src.usage import StopReason, UsageBudget, UsageTracker
+from src.orchestration.autonomous_loop import AutonomousLoop
+from src.orchestration.usage import StopReason, UsageBudget, UsageTracker
 from tests.support.catalog_fixtures import all_available, base_document, load
 
 pytestmark = pytest.mark.unit
@@ -195,7 +195,7 @@ def test_chamada_registra_a_versao_em_token_usage():
 
 
 def test_telemetria_guarda_a_versao_na_linha():
-    from src.telemetry import TelemetryCollector
+    from src.observability.telemetry import TelemetryCollector
 
     collector = TelemetryCollector()
     with patch.object(collector, "_maybe_flush_sync"):
@@ -271,7 +271,7 @@ def _closing_loop():
 
 
 async def _run_closing(loop):
-    with patch("src.autonomous_loop.get_telemetry", return_value=MagicMock()), \
+    with patch("src.orchestration.autonomous_loop.get_telemetry", return_value=MagicMock()), \
          patch.object(AutonomousLoop, "_is_complex_triage", AsyncMock(return_value=True)):
         return await loop._run_complex_path("tarefa", "exec_versao")
 
@@ -318,8 +318,8 @@ async def test_modo_flexivel_nao_fecha_por_versao(tmp_path):
 
 @pytest.mark.asyncio
 async def test_versao_modelo_e_motivo_retomavel_e_valido_no_grafo():
-    from src.continuity import MOTIVOS_RETOMAVEIS
     from src.knowledge.ingestion import MOTIVOS_PARADA
+    from src.session.continuity import MOTIVOS_RETOMAVEIS
 
     assert "versao_modelo" in MOTIVOS_RETOMAVEIS
     assert "versao_modelo" in MOTIVOS_PARADA
@@ -377,7 +377,7 @@ def current_allocation_from(routing):
 
 
 def test_orquestrador_grava_evento_e_atualiza_o_perfil(tmp_path):
-    from src.orchestrator import Orchestrator
+    from src.orchestration.orchestrator import Orchestrator
 
     routing = _routing(tmp_path)
     store = {"payload": {"allocation_profile": build_allocation_profile(routing), "eventos_versao_modelo": []}}
@@ -388,7 +388,7 @@ def test_orquestrador_grava_evento_e_atualiza_o_perfil(tmp_path):
     telemetry = MagicMock()
     bind_session_routing(routing)
 
-    with patch("src.orchestrator.get_telemetry", return_value=telemetry):
+    with patch("src.orchestration.orchestrator.get_telemetry", return_value=telemetry):
         orchestrator._wire_version_events(routing, "sess1")
         record_call_version("anthropic", "claude-sonnet-5-5", "v1")
         record_call_version("anthropic", "claude-sonnet-5-5", "v2")
@@ -497,7 +497,7 @@ def test_orquestrador_serializa_atualizacoes_concorrentes_do_payload(tmp_path):
     import threading
     import time
 
-    from src.orchestrator import Orchestrator
+    from src.orchestration.orchestrator import Orchestrator
 
     routing = _routing(tmp_path)
     store = {"payload": {"allocation_profile": build_allocation_profile(routing), "eventos_versao_modelo": []}}
@@ -511,7 +511,7 @@ def test_orquestrador_serializa_atualizacoes_concorrentes_do_payload(tmp_path):
     session_manager.get.side_effect = slow_get
     session_manager.update.side_effect = lambda _id, payload: store.update(payload=payload)
     orchestrator = Orchestrator(session_manager=session_manager, agent_runtime=MagicMock())
-    with patch("src.orchestrator.get_telemetry", return_value=MagicMock()):
+    with patch("src.orchestration.orchestrator.get_telemetry", return_value=MagicMock()):
         orchestrator._wire_version_events(routing, "sess1")
         sink = routing.versions._on_event
         events = [{"tipo": "versao_modelo_alterada", "nova": f"v{i}"} for i in range(4)]

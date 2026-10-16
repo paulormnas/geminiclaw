@@ -15,8 +15,8 @@ from src.claims.decompose import Sentence
 from src.claims.deterministic import CODE_RE, CodeValue
 from src.claims.model import Conclusao
 from src.claims.verifier import EvidenceItem
-from src.egress.fragments import ContentOrigin
 from src.logger import get_logger
+from src.utils.egress_fragments import ContentOrigin
 
 logger = get_logger(__name__)
 

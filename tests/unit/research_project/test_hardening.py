@@ -8,14 +8,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src import cli
+import src.cli.main as cli
+from src.cli.project_session import ProjectBinder, ProjectFlowError, resolve_project
 from src.knowledge import projects
 from src.knowledge.errors import HumanConfirmationRequiredError
 from src.knowledge.graph_store import AgeGraphStore, InMemoryGraphStore
 from src.knowledge.problem import parse_problem_draft
 from src.knowledge.provenance import Actor
-from src.orchestrator import AgentResult, AgentTask, Orchestrator
-from src.project_session import ProjectBinder, ProjectFlowError, resolve_project
+from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
 from tests.support.task_loop import run_tasks
 from tests.unit.research_project.test_flow import make_drafter, scripted
 from tests.unit.research_project.test_projects import make_draft
@@ -97,7 +97,7 @@ class TestHumanOnlyNoGraphStore:
         """Agentes e skills nunca constroem o ator pesquisador nem importam PESQUISADOR."""
         pattern = re.compile(r"""Actor\([^)]*["']pesquisador["']|\bPESQUISADOR\b""")
         offenders = []
-        for base in ("agents", "src/skills"):
+        for base in ("src/agents", "src/skills"):
             for path in (REPO / base).rglob("*.py"):
                 if pattern.search(path.read_text(encoding="utf-8")):
                     offenders.append(str(path.relative_to(REPO)))
@@ -108,18 +108,18 @@ class TestHumanOnlyNoGraphStore:
         pattern = re.compile(r"\b(apply_plan|issue_confirmation|HumanConfirmation)\b")
         offenders = [
             str(path.relative_to(REPO))
-            for base in ("agents", "src/skills")
+            for base in ("src/agents", "src/skills")
             for path in (REPO / base).rglob("*.py")
             if pattern.search(path.read_text(encoding="utf-8"))
         ]
         assert not offenders, f"Agente/skill não pode aplicar alteração do pesquisador: {offenders}"
         importers = [
             str(path.relative_to(REPO))
-            for base in ("agents", "src")
+            for base in ("src",)
             for path in (REPO / base).rglob("*.py")
             if "change_proposals" in path.read_text(encoding="utf-8")
             and str(path.relative_to(REPO))
-            not in {"src/knowledge/change_proposals.py", "src/cli_graph.py", "agents/curator/edit.py"}
+            not in {"src/knowledge/change_proposals.py", "src/cli/graph.py", "src/agents/curator/edit.py"}
         ]
         assert not importers, f"Importadores não previstos de change_proposals: {importers}"
 
@@ -257,7 +257,7 @@ class TestAutoria:
             assert nodes and all(n.properties["criado_por"] == "researcher/m" for n in nodes)
 
     async def test_cli_passa_modelo_do_roteador(self) -> None:
-        text = (REPO / "src/cli.py").read_text()
+        text = (REPO / "src/cli/main.py").read_text()
         assert 'llm_routing.resolution("researcher").id' in text and "researcher_model=researcher_model" in text
 
 
@@ -295,7 +295,7 @@ def planner_result(text: str) -> AgentResult:
 @pytest.mark.asyncio
 class TestOrquestradorProjeto:
     async def _orch(self):
-        from src.agents.validator_agent import ValidationResult
+        from src.agents.validator.agent import ValidationResult
 
         orch = Orchestrator(session_manager=MagicMock(), output_manager=MagicMock())
         orch.validator = MagicMock()
@@ -331,7 +331,7 @@ class TestOrquestradorProjeto:
             await run_tasks(orch, "p", [AgentTask(agent_id="a", prompt="p")], project_id="../../x")
 
     async def test_project_mode_no_payload(self) -> None:
-        from src.session import Session
+        from src.session.manager import Session
 
         sm = MagicMock()
         sm.create.return_value = Session(id="s1", agent_id="orchestrator", status="active",

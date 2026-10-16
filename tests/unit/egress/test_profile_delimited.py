@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.agents.validator_agent import build_artifact_evidence_fragments
-from src.egress.fragments import ContentOrigin, PromptFragment, labeled
+from src.agents.validator.agent import build_artifact_evidence_fragments
+from src.utils.egress_fragments import ContentOrigin, PromptFragment, labeled
 
 pytestmark = pytest.mark.unit
 

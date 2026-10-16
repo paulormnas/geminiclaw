@@ -63,7 +63,7 @@ def execution_record(profile: dict | None, now: datetime | None = None) -> dict:
 def db_allocation_profile(session_id: str) -> dict | None:
     """``payload["allocation_profile"]`` da sessão mestra, ou ``None`` se indisponível."""
     try:
-        from src.session import SessionManager
+        from src.session.manager import SessionManager
 
         payload = getattr(SessionManager().get(session_id), "payload", None)
         profile = payload.get("allocation_profile") if isinstance(payload, dict) else None

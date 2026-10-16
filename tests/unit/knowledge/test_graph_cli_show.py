@@ -30,7 +30,7 @@ def _no_llm(monkeypatch):
     def boom(*_a, **_k):
         raise AssertionError("graph show/node não pode chamar LLM")
 
-    monkeypatch.setattr("src.model_router.ModelRouter.get_provider", boom)
+    monkeypatch.setattr("src.llm.model_router.ModelRouter.get_provider", boom)
     monkeypatch.setattr("src.llm.session.build_session_routing", boom)
     monkeypatch.setattr("src.llm.factory.create_provider", boom, raising=False)
 
@@ -201,7 +201,7 @@ def test_visao_somente_leitura_nao_expoe_escrita(world):
 
 def test_inventario_de_comandos():
     """Scenario: Inventário de comandos (nenhum executa consulta de escrita fornecida pelo usuário)."""
-    from src.cli_graph import _build_parser
+    from src.cli.graph import _build_parser
 
     parser = _build_parser()
     actions = parser._subparsers._group_actions[0].choices  # noqa: SLF001
@@ -211,7 +211,7 @@ def test_inventario_de_comandos():
         assert forbidden not in flags
     import inspect
 
-    import src.cli_graph as module
+    import src.cli.graph as module
 
     source = inspect.getsource(module)
     assert "read_query" not in source and "cypher" not in source.lower().replace("cypher/sql", "")

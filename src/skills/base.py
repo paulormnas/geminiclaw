@@ -2,8 +2,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
-from src.egress.fragments import ContentOrigin
 from src.logger import get_logger
+from src.utils.egress_fragments import ContentOrigin
 
 _base_logger = get_logger(__name__)
 

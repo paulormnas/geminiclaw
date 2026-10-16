@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.context_loader import (
+from src.research_data.context_loader import (
     ContextBundle,
     ContextLoader,
     DatasetSummary,
@@ -265,7 +265,7 @@ class TestImageProcessing:
         context_dir.mkdir()
         (context_dir / "img.bmp").write_bytes(b"fake")
 
-        with patch("src.context_loader.ContextLoader._ocr_image_local") as mock_ocr:
+        with patch("src.research_data.context_loader.ContextLoader._ocr_image_local") as mock_ocr:
             mock_ocr.return_value = ImageContext(
                 source_path=context_dir / "img.bmp",
                 description="",
@@ -295,9 +295,9 @@ class TestPdfProcessing:
             num_pages=3,
         )
         with patch(
-            "src.skills.document_processor.extractors.registry.ExtractorRegistry.extract",
+            "src.documents.extractors.registry.ExtractorRegistry.extract",
             return_value=fake_extracted,
-        ), patch("src.context_loader.ContextLoader._ocr_scanned_pdf") as mock_ocr:
+        ), patch("src.research_data.context_loader.ContextLoader._ocr_scanned_pdf") as mock_ocr:
             bundle = ContextLoader(context_dir).load()
 
         mock_ocr.assert_not_called()
@@ -317,10 +317,10 @@ class TestPdfProcessing:
             num_pages=1,
         )
         with patch(
-            "src.skills.document_processor.extractors.registry.ExtractorRegistry.extract",
+            "src.documents.extractors.registry.ExtractorRegistry.extract",
             return_value=fake_extracted,
         ), patch(
-            "src.context_loader.ContextLoader._ocr_scanned_pdf",
+            "src.research_data.context_loader.ContextLoader._ocr_scanned_pdf",
             return_value=("Texto reconhecido via OCR", []),
         ) as mock_ocr:
             bundle = ContextLoader(context_dir).load()

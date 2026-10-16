@@ -1,4 +1,4 @@
-"""Teste de integração de `src/embeddings/reindex.py` com um Qdrant de teste.
+"""Teste de integração de `src/documents/reindex.py` com um Qdrant de teste.
 
 Usa `QdrantClient(location=":memory:")` (real, sem servidor externo) para
 verificar o fluxo completo: pontos com vetores/metadados "antigos" (como os
@@ -11,7 +11,7 @@ import pytest
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
-from src.embeddings.reindex import CollectionReindexer
+from src.documents.reindex import CollectionReindexer
 from tests.support.fake_embedding_provider import FakeEmbeddingProvider
 
 

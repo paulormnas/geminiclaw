@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable
 
-from src.egress.fragments import ContentOrigin
+from src.utils.egress_fragments import ContentOrigin
 
 if TYPE_CHECKING:
     from src.research_data.manifest import ResearchDataManifest

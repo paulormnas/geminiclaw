@@ -275,8 +275,8 @@ class LongTermMemory:
         if not memories:
             return ""
 
-        from src.egress.fragments import taint_if
         from src.egress.persisted import tags_tainted
+        from src.utils.egress_fragments import taint_if
 
         summary = "Memórias de longo prazo relevantes:\n"
         for m in memories:

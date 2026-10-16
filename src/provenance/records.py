@@ -8,8 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from src.artifacts.metrics_file import metrics_of
 from src.logger import get_logger
-from src.metrics_file import metrics_of
 from src.provenance.canonical import json_sha256, metric_text, sha256_text
 from src.provenance.hashing import HashCache, hash_file, sha256_file
 

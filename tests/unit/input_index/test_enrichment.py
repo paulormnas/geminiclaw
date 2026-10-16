@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.skills.document_processor.enrichment import (
+from src.documents.enrichment import (
     ProjectMeta,
     build_header,
     enriched_text,

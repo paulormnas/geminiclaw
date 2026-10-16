@@ -1,6 +1,6 @@
 """Montagem do índice semântico de produção e comandos ``geminiclaw knowledge`` (V17).
 
-Fica separado de ``src/cli.py`` para manter o ponto de integração mínimo:
+Fica separado de ``src/cli/main.py`` para manter o ponto de integração mínimo:
 ``cli.py`` só despacha ``geminiclaw knowledge <ação>`` para
 ``run_knowledge_command``.
 
@@ -57,7 +57,7 @@ def build_runtime(
         queue: Fila (padrão: ``PostgresSimilarityQueue``).
     """
     if qdrant_client is None:
-        from src.embeddings.reindex import _make_client
+        from src.utils.qdrant import _make_client
 
         qdrant_client = _make_client(config.QDRANT_URL)
     index = SemanticIndex(raw_store, qdrant_client)

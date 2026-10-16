@@ -6,7 +6,7 @@ import pytest
 
 from src.claims.model import Afirmacao
 from src.claims.store import ClaimStore
-from src.cli_claims import handle_claims_command
+from src.cli.claims import handle_claims_command
 
 pytestmark = pytest.mark.unit
 
@@ -87,6 +87,6 @@ def test_motivo_e_obrigatorio(outputs):
 
 def test_evidencia_do_grafo_nunca_e_tocada(outputs):
     # o comando não importa o grafo quando a afirmação não tem nó (arquivo da sessão é a única fonte)
-    import src.cli_claims as cli
+    import src.cli.claims as cli
 
     assert "SUSTENTA" not in open(cli.__file__, encoding="utf-8").read()

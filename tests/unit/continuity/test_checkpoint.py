@@ -9,7 +9,8 @@ from unittest.mock import patch
 
 import pytest
 
-from src.continuity import (
+from src.orchestration.orchestrator import AgentTask
+from src.session.continuity import (
     BACKUP_FILENAME,
     CHECKPOINT_FILENAME,
     ESTADO_FECHADO,
@@ -21,7 +22,6 @@ from src.continuity import (
     read_checkpoint,
     resolve_session_dir,
 )
-from src.orchestrator import AgentTask
 
 pytestmark = pytest.mark.unit
 
@@ -79,7 +79,7 @@ def test_queda_durante_a_gravacao_mantem_o_anterior(sdir):
     rec.subtask_finished("a", status="concluida", tentativas=1, resumo="ok")
     before = (sdir / CHECKPOINT_FILENAME).read_bytes()
 
-    with patch("src.continuity.os.replace", side_effect=OSError("queda")):
+    with patch("src.session.continuity.os.replace", side_effect=OSError("queda")):
         assert rec.subtask_started("a", 2) is False  # falha isolada, sem levantar
     assert rec.failures == 1
     assert (sdir / CHECKPOINT_FILENAME).read_bytes() == before
@@ -175,7 +175,7 @@ def test_recusa_nan_infinity_e_json_invalido(sdir):
 def test_recusa_arquivo_grande_demais(sdir):
     data = _valid_dict(sdir)
     _put(sdir, data)
-    with patch("src.continuity.config.CHECKPOINT_MAX_BYTES", 50):
+    with patch("src.session.continuity.config.CHECKPOINT_MAX_BYTES", 50):
         with pytest.raises(CheckpointError, match="excede"):
             read_checkpoint(sdir)
 
@@ -220,7 +220,7 @@ def test_resolve_session_dir_confina_e_recusa_link(tmp_path):
 
 def test_escrita_recusa_checkpoint_gigante(sdir):
     rec = _recorder(sdir)
-    with patch("src.continuity.config.CHECKPOINT_MAX_BYTES", 100):
+    with patch("src.session.continuity.config.CHECKPOINT_MAX_BYTES", 100):
         assert rec.set_plan(_plan("a")) is False
     assert rec.failures >= 1
 

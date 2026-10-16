@@ -9,8 +9,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.agent_runtime.context import AgentContext, bind_agent_context, current_context
 from src.skills.document_processor.skill import DocumentProcessorSkill, _resolve_ingest_path
+from src.utils.agent_context import AgentContext, bind_agent_context, current_context
 
 
 def _bind(tmp_path: Path) -> AgentContext:

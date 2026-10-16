@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.agents.validator_agent import ValidatorAgent
+from src.agents.validator.agent import ValidatorAgent
 from src.llm.base import LLMResponse
-from src.orchestrator import AgentTask
+from src.orchestration.orchestrator import AgentTask
 
 pytestmark = pytest.mark.unit
 
@@ -27,7 +27,7 @@ def _write(root, rel, content=b"x"):
 
 async def _review(agent, tmp_path, **task_kw):
     task = AgentTask(agent_id="developer", prompt="x", task_name=task_kw.pop("task_name", "eda"), **task_kw)
-    with patch("src.agents.validator_agent.record_llm_call"):
+    with patch("src.agents.validator.agent.record_llm_call"):
         return await agent.review_result(task=task, response_text="ok", output_dir=tmp_path)
 
 
@@ -116,7 +116,7 @@ async def test_modo_estrito_reprova_prefixo_diferente(tmp_path):
     """Scenario: Modo estrito."""
     _write(tmp_path, "eda/iris_hist.png")
     agent, _ = _agent()
-    with patch("src.agents.validator_agent.ARTIFACT_MATCH_MODE", "strict"):
+    with patch("src.agents.validator.agent.ARTIFACT_MATCH_MODE", "strict"):
         review = await _review(agent, tmp_path, expected_artifacts=["eda_hist.png"])
     assert review.status == "fail"
 

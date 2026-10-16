@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from src.context_loader import ContextLoader
+from src.research_data.context_loader import ContextLoader
 from src.research_data.summary import ceil_1sig, floor_1sig
 
 from .conftest import write_manifest
@@ -132,7 +132,7 @@ def test_json_nao_tabular_traz_tipo_e_contagem(context_dir: Path):
 # --- amostras só para destinos permitidos ---------------------------------------------------------------------------
 
 def _planner_prompt(bundle, gate, dest) -> str:
-    from src.egress.fragments import ContentOrigin, PromptFragment, labeled
+    from src.utils.egress_fragments import ContentOrigin, PromptFragment, labeled
 
     message = labeled("user", PromptFragment("plano\n" + bundle.to_marked_context(), ContentOrigin.INSTRUCAO))
     prepared = gate.prepare_llm([message], None, dest)
@@ -189,11 +189,11 @@ def test_pdf_marcado_como_dado_vira_trecho_de_dado(context_dir: Path, gate, thir
         title="Caderno de laboratório", num_pages=12,
     )
     with patch(
-        "src.skills.document_processor.extractors.registry.ExtractorRegistry.extract", return_value=extracted
+        "src.documents.extractors.registry.ExtractorRegistry.extract", return_value=extracted
     ):
         bundle = ContextLoader(context_dir, min_group_size=10).load()
     fragments = bundle.to_fragments()
-    from src.egress.fragments import ContentOrigin
+    from src.utils.egress_fragments import ContentOrigin
 
     origins = [f.origin for f in fragments]
     assert ContentOrigin.DADO_DE_PESQUISA in origins and ContentOrigin.DOCUMENTO not in origins
@@ -204,7 +204,7 @@ def test_pdf_marcado_como_dado_vira_trecho_de_dado(context_dir: Path, gate, thir
 
 
 def test_documento_padrao_vai_como_trecho_documento(context_dir: Path):
-    from src.egress.fragments import ContentOrigin
+    from src.utils.egress_fragments import ContentOrigin
 
     (context_dir / "objetivo.md").write_text("Objetivo da pesquisa", encoding="utf-8")
     fragments = ContextLoader(context_dir, min_group_size=10).load().to_fragments()

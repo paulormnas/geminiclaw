@@ -18,10 +18,12 @@ humanos fora da sessão.
 ## 1. Rodar os testes
 
 ```bash
+uv run ruff check .
+uv run lint-imports
 uv run pytest -m "unit or integration" -v
 ```
 
-Só avance se todos os testes passarem. Nunca faça commit com testes falhando.
+Só avance se o `ruff`, a verificação de camadas e todos os testes passarem. Nunca faça commit com testes falhando.
 
 ---
 

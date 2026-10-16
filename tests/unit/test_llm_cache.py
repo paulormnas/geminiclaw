@@ -1,4 +1,4 @@
-"""Testes unitários para src/llm_cache.py (PostgreSQL via mock)."""
+"""Testes unitários para src/llm/cache.py (PostgreSQL via mock)."""
 
 import os
 import time
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.llm_cache import LLMResponseCache
+from src.llm.cache import LLMResponseCache
 
 
 def _make_ctx(fetchone=None, fetchall=None):
@@ -40,7 +40,7 @@ class TestLLMCacheGet:
     def test_get_retorna_none_em_miss(self, cache):
         """get() deve retornar None quando a chave não existe."""
         ctx, _ = _make_ctx(fetchone=None)
-        with patch("src.llm_cache.get_connection", return_value=ctx):
+        with patch("src.llm.cache.get_connection", return_value=ctx):
             result = cache.get("prompt", "model")
         assert result is None
 
@@ -48,7 +48,7 @@ class TestLLMCacheGet:
         """get() deve retornar a resposta cacheada quando a chave existe e está válida."""
         row = {"response": "Olá", "timestamp": time.time() - 10}
         ctx, _ = _make_ctx(fetchone=row)
-        with patch("src.llm_cache.get_connection", return_value=ctx):
+        with patch("src.llm.cache.get_connection", return_value=ctx):
             result = cache.get("prompt", "model")
         assert result == "Olá"
 
@@ -57,7 +57,7 @@ class TestLLMCacheGet:
         old_time = time.time() - 7200  # 2 horas atrás (TTL = 3600)
         row = {"response": "antiga", "timestamp": old_time}
         ctx, mock_conn = _make_ctx(fetchone=row)
-        with patch("src.llm_cache.get_connection", return_value=ctx):
+        with patch("src.llm.cache.get_connection", return_value=ctx):
             result = cache.get("prompt", "model")
         assert result is None
         sqls = [c[0][0] for c in mock_conn.execute.call_args_list]
@@ -79,7 +79,7 @@ class TestLLMCacheSet:
         count_row = {"cnt": 0}
         ctx, mock_conn = _make_ctx(fetchone=count_row)
         # V12.1.2: response precisa ter mais de 50 chars para ser cacheada
-        with patch("src.llm_cache.get_connection", return_value=ctx):
+        with patch("src.llm.cache.get_connection", return_value=ctx):
             cache.set("prompt", "model", "A" * 51)
         sqls = [c[0][0] for c in mock_conn.execute.call_args_list]
         assert any("ON CONFLICT" in s for s in sqls)
@@ -90,7 +90,7 @@ class TestLLMCacheSet:
         count_row = {"cnt": 10}  # Acima do limite
         ctx, mock_conn = _make_ctx(fetchone=count_row)
         # V12.1.2: response precisa ter mais de 50 chars para ser cacheada
-        with patch("src.llm_cache.get_connection", return_value=ctx):
+        with patch("src.llm.cache.get_connection", return_value=ctx):
             cache.set("prompt", "model", "A" * 51)
         sqls = [c[0][0] for c in mock_conn.execute.call_args_list]
         assert any("DELETE" in s for s in sqls)
@@ -99,7 +99,7 @@ class TestLLMCacheSet:
         """set() não deve chamar get_connection quando cache está desabilitado."""
         os.environ["LLM_CACHE_ENABLED"] = "false"
         cache = LLMResponseCache()
-        with patch("src.llm_cache.get_connection") as mock_gc:
+        with patch("src.llm.cache.get_connection") as mock_gc:
             cache.set("prompt", "model", "response")
         mock_gc.assert_not_called()
         os.environ["LLM_CACHE_ENABLED"] = "true"
@@ -111,7 +111,7 @@ class TestLLMCacheStats:
         """stats() deve retornar dicionário com hits, misses e hit_rate."""
         row = {"hits": 10, "misses": 5}
         ctx, _ = _make_ctx(fetchone=row)
-        with patch("src.llm_cache.get_connection", return_value=ctx):
+        with patch("src.llm.cache.get_connection", return_value=ctx):
             s = cache.stats()
         assert s["hits"] == 10
         assert s["misses"] == 5

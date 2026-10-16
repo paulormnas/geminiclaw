@@ -30,9 +30,9 @@ from src.knowledge import schema
 from src.knowledge.domain_search import DomainSearch
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.graph_store import Edge, GraphStore, Node
-from src.knowledge.normalization import clean_free_text, normalize_domain_term, normalize_metric_name
 from src.knowledge.provenance import Actor
 from src.logger import get_logger
+from src.utils.normalization import clean_free_text, normalize_domain_term, normalize_metric_name
 
 logger = get_logger(__name__)
 

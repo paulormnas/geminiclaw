@@ -9,18 +9,18 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src import cli
-from src.cli_project import handle_project_command
-from src.knowledge import projects
-from src.knowledge.graph_store import InMemoryGraphStore
-from src.knowledge.problem import ProblemDraft
-from src.orchestrator import AgentResult, AgentTask, Orchestrator
-from src.project_session import (
+import src.cli.main as cli
+from src.cli.project import handle_project_command
+from src.cli.project_session import (
     ProjectBinder,
     ProjectFlowError,
     ensure_confirmed_problem,
     resolve_project,
 )
+from src.knowledge import projects
+from src.knowledge.graph_store import InMemoryGraphStore
+from src.knowledge.problem import ProblemDraft
+from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
 from tests.support.task_loop import run_tasks
 from tests.unit.research_project.test_projects import make_draft
 
@@ -228,7 +228,7 @@ class TestCliProjeto:
 class TestOrquestrador:
     async def test_sessao_em_projeto_existente(self, tmp_path) -> None:
         """Scenario: Sessão em projeto existente — payload da sessão com project_id."""
-        from src.session import Session
+        from src.session.manager import Session
 
         sm = MagicMock()
         sess = Session(id="s1", agent_id="orchestrator", status="active",
@@ -238,7 +238,7 @@ class TestOrquestrador:
         runtime.run = AsyncMock(return_value=AgentResult(
             agent_id="a", session_id="s1", status="success", response={}, error=None))
         # O grafo da ingestão de fatos é injetado: nenhum teste abre o banco real nem grava em outputs/.
-        from src.output_manager import OutputManager
+        from src.artifacts.output_manager import OutputManager
 
         orch = Orchestrator(
             session_manager=sm, agent_runtime=runtime,

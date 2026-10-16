@@ -50,10 +50,11 @@ anthropic = [
 ]
 
 [project.scripts]
-geminiclaw = "src.cli:main"
+geminiclaw = "src.cli.main:main"
 
 [dependency-groups]
 dev = [
+    "import-linter>=2.15",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
     "pytest-cov>=7.0.0",
@@ -84,12 +85,50 @@ select = ["E", "F", "I"]
 # Testes: literais longos (payloads, HTML, assinaturas) e imports após bootstrap de sys.path.
 "tests/**" = ["E501", "E402"]
 # Prompts de agentes são texto corrido em strings; reformatar alteraria o prompt.
-"agents/**/agent.py" = ["E501", "E402"]
+"src/agents/**/agent.py" = ["E501", "E402"]
 # Imports intencionalmente após a inserção do repositório em sys.path ou adiados por ciclo de importação.
-"src/cli.py" = ["E402"]
+"src/cli/main.py" = ["E402"]
 "src/config.py" = ["E402"]
 "src/skills/__init__.py" = ["E402"]
 "scripts/migrate_v11.py" = ["E402"]
 # Reexportam o submódulo do agente.
-"agents/*/__init__.py" = ["F401"]
+"src/agents/*/__init__.py" = ["F401"]
 
+
+[tool.importlinter]
+root_package = "src"
+include_external_packages = false
+# Importações sob TYPE_CHECKING não contam; as feitas dentro de funções contam (ADR 024 §3).
+exclude_type_checking_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Camadas de src (ADR 024 §3)"
+type = "layers"
+containers = ["src"]
+# De cima para baixo; pacotes na mesma linha são independentes entre si. Ordem medida em v18.7-source-layout.
+layers = [
+    "cli",
+    "orchestration",
+    "agent_runtime",
+    "agents",
+    "report | session",
+    "claims | skills",
+    "knowledge",
+    "numeric_refs",
+    "provenance | research_data",
+    "artifacts | documents | llm",
+    "egress | embeddings | gate | host | observability",
+    "research_consult | utils | db",
+    "config",
+    "logger",
+]
+# Exceções (cada uma com dono; a lista fica vazia ao fim de v18.7-layer-cycles, ADR 024 §3.5):
+ignore_imports = [
+    # egress <-> llm: o gate lê a sessão e a alocação de modelos do llm. Dono: v18.7-layer-cycles.
+    "src.egress.gate -> src.llm.base",
+    "src.egress.gate -> src.llm.session",
+    "src.egress.gate -> src.llm.allocation",
+    # config <-> utils: config.py lê o identificador do nó (src/utils/node_id.py) e utils/qdrant.py lê config.
+    # Não previsto na spec de source-layout; dono: v18.7-layer-cycles (questão em aberto no design).
+    "src.config -> src.utils.node_id",
+]

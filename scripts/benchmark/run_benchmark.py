@@ -183,7 +183,7 @@ def check_pins(roles: dict[str, str], llm_routing: dict | None, controle: bool =
 def db_llm_routing(session_id: str) -> dict | None:
     """``payload["llm_routing"]`` da sessão mestra, ou ``None`` se indisponível."""
     try:
-        from src.session import SessionManager
+        from src.session.manager import SessionManager
 
         session = SessionManager().get(session_id)
         payload = getattr(session, "payload", None)
@@ -225,7 +225,7 @@ def _cost_by_provider(rows: list[dict]) -> dict[str, float]:
 
 def db_token_usage(session_id: str) -> dict:
     """Resumo de tokens do Postgres, para sessões que abortaram sem gravar ``session_metadata.json``."""
-    from src.telemetry import get_telemetry
+    from src.observability.telemetry import get_telemetry
 
     return get_telemetry().get_token_summary(session_id)
 
@@ -233,7 +233,7 @@ def db_token_usage(session_id: str) -> dict:
 def db_metrics(session_id: str) -> dict:
     """Métricas de telemetria do banco: retentativas de conexão/limite e métricas derivadas."""
     try:
-        from src.telemetry import get_telemetry
+        from src.observability.telemetry import get_telemetry
 
         telemetry = get_telemetry()
         from scripts.benchmark.interactions import collect_session

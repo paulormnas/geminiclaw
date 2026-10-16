@@ -9,10 +9,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.autonomous_loop import AutonomousLoop
-from src.cli import resume_session
-from src.orchestrator import AgentResult, AgentTask, Orchestrator
-from src.session import Session
+from src.cli.main import resume_session
+from src.orchestration.autonomous_loop import AutonomousLoop
+from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
+from src.session.manager import Session
 
 
 def _make_session(session_id: str, payload: dict | None = None, status: str = "active") -> Session:
@@ -159,7 +159,7 @@ class TestOperationalThresholds:
         loop = AutonomousLoop(mock_orchestrator)
         loop._session_mode = "assisted"
 
-        with patch("src.autonomous_loop.get_telemetry") as mock_get_tel:
+        with patch("src.orchestration.autonomous_loop.get_telemetry") as mock_get_tel:
             mock_get_tel.return_value.get_token_summary.return_value = {"by_provider_model": []}
             suspended = await loop._check_operational_thresholds("sess_1")
 
@@ -171,7 +171,7 @@ class TestOperationalThresholds:
         loop = AutonomousLoop(mock_orchestrator)
         loop._session_mode = "semi"
 
-        with patch("src.autonomous_loop.get_telemetry") as mock_get_tel:
+        with patch("src.orchestration.autonomous_loop.get_telemetry") as mock_get_tel:
             mock_get_tel.return_value.get_token_summary.return_value = {
                 "by_provider_model": [{"total_tokens": 10_000_000, "total_cost_usd": 100.0}]
             }
@@ -187,7 +187,7 @@ class TestOperationalThresholds:
         loop = AutonomousLoop(mock_orchestrator)
         loop._session_mode = "assisted"
 
-        with patch("src.autonomous_loop.get_telemetry") as mock_get_tel:
+        with patch("src.orchestration.autonomous_loop.get_telemetry") as mock_get_tel:
             mock_get_tel.return_value.get_token_summary.return_value = {
                 "by_provider_model": [{"total_tokens": 10_000_000, "total_cost_usd": 100.0}]
             }
@@ -206,7 +206,7 @@ class TestOperationalThresholds:
         loop = AutonomousLoop(mock_orchestrator)
         loop._session_mode = "assisted"
 
-        with patch("src.autonomous_loop.get_telemetry") as mock_get_tel:
+        with patch("src.orchestration.autonomous_loop.get_telemetry") as mock_get_tel:
             mock_get_tel.return_value.get_token_summary.return_value = {
                 "by_provider_model": [{"total_tokens": 10_000_000, "total_cost_usd": 100.0}]
             }

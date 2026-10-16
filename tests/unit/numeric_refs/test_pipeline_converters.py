@@ -260,7 +260,7 @@ def test_conversor_latex(tmp_path):
 
 def test_instrucao_do_summarizer_descreve_as_referencias():
     """Scenario: Instrução do Summarizer."""
-    from agents.summarizer.agent import AGENT_INSTRUCTION
+    from src.agents.summarizer.agent import AGENT_INSTRUCTION
 
     for token in ("{{res:", "{{calc:", "{{src:"):
         assert token in AGENT_INSTRUCTION
@@ -269,8 +269,8 @@ def test_instrucao_do_summarizer_descreve_as_referencias():
 
 
 def test_instrucoes_do_developer_e_do_curator():
-    from agents.curator.agent import AGENT_INSTRUCTION as CURATOR
-    from agents.developer.agent import AGENT_INSTRUCTION as DEVELOPER
+    from src.agents.curator.agent import AGENT_INSTRUCTION as CURATOR
+    from src.agents.developer.agent import AGENT_INSTRUCTION as DEVELOPER
 
     assert "unidades=" in DEVELOPER and "literal" in DEVELOPER
     assert "{{res:" in CURATOR and "RECUSAM referências malformadas" in CURATOR

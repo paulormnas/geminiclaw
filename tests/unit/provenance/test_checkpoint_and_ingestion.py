@@ -9,7 +9,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.continuity import Checkpoint, CheckpointError, CheckpointRecorder, read_checkpoint
 from src.knowledge import vocabulary
 from src.knowledge.graph_store import InMemoryGraphStore
 from src.knowledge.ingestion import (
@@ -21,9 +20,10 @@ from src.knowledge.ingestion import (
 )
 from src.knowledge.projects import create_project
 from src.knowledge.vocabulary import seed_vocabulary
-from src.orchestrator import Orchestrator
+from src.orchestration.orchestrator import Orchestrator
 from src.provenance.hashing import sha256_file
 from src.provenance.ledger import get_ledger
+from src.session.continuity import Checkpoint, CheckpointError, CheckpointRecorder, read_checkpoint
 
 from .helpers import inicio, run_one, termino
 
@@ -128,7 +128,7 @@ def test_ponta_divergente_na_retomada_avisa_e_registra_evento(tmp_path, monkeypa
     run_one(get_ledger(), project_id=PROJ)
     orch = _orchestrator_with_checkpoint(tmp_path, {"project_id": PROJ, "seq": 2, "record_hash": "f" * 64})
     events = MagicMock()
-    monkeypatch.setattr("src.orchestrator.get_telemetry", lambda: events)
+    monkeypatch.setattr("src.orchestration.orchestrator.get_telemetry", lambda: events)
     message, seq = orch.resume_provenance_divergence("origem")
     assert seq == 2 and "provenance verify" in message
     orch._note_resume_provenance("nova", "origem")  # noqa: SLF001
@@ -224,7 +224,7 @@ def test_metrics_editado_antes_da_ingestao_nao_cria_resultado(tmp_path, store, c
     _record_run(tmp_path, metrics_file)
     metrics_file.write_text(json.dumps({"metrics": {"r2": 0.99}}))
     events = MagicMock()
-    monkeypatch.setattr("src.telemetry.get_telemetry", lambda: events)
+    monkeypatch.setattr("src.observability.telemetry.get_telemetry", lambda: events)
     ingest_session_start(store, ctx)
     ingest_subtask(store, ctx, session_dir, _sub())
     assert _nodes(store, "Resultado") == [] and len(_nodes(store, "Experimento")) == 1

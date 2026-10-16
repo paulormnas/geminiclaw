@@ -9,13 +9,13 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.orchestrator import (
+from src.orchestration.orchestrator import (
     AgentResult,
     AgentTask,
     Orchestrator,
     OrchestratorResult,
 )
-from src.session import Session
+from src.session.manager import Session
 from tests.support.task_loop import run_tasks
 
 
@@ -83,7 +83,7 @@ class TestOrchestratorSingleAgent:
         loop_result = OrchestratorResult(results=[agent_res], total=1, succeeded=1, failed=0)
         mock_sm.create.return_value = _make_session("orchestrator", "sess_master")
 
-        with patch("src.orchestrator.AutonomousLoop") as MockLoop:
+        with patch("src.orchestration.orchestrator.AutonomousLoop") as MockLoop:
             MockLoop.return_value.run = AsyncMock(return_value=loop_result)
             result = await orchestrator.handle_request("Teste sem tasks")
 
@@ -314,7 +314,7 @@ class TestOrchestratorInProcessRuntime:
 def test_plano_bruto_do_researcher_e_gravado_para_auditoria(tmp_path):
     from unittest.mock import MagicMock
 
-    from src.orchestrator import Orchestrator
+    from src.orchestration.orchestrator import Orchestrator
 
     orch = Orchestrator.__new__(Orchestrator)
     orch.output_manager = MagicMock()

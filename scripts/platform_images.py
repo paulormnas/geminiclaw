@@ -20,7 +20,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-from src.platform_images import (
+from src.host.platform_images import (
     PLATFORM_FILE,
     PROJECT_ROOT,
     WARNING_NOT_VALIDATED,
@@ -32,7 +32,7 @@ from src.platform_images import (
     plan_images,
     select_images,
 )
-from src.platform_info import PlatformInfo, detect_current
+from src.host.platform_info import PlatformInfo, detect_current
 
 EXIT_OK = 0
 EXIT_ERROR = 1

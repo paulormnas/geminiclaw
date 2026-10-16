@@ -4,10 +4,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.agents.validator_agent import ValidationResult, ValidatorAgent
+from src.agents.validator.agent import ValidationResult, ValidatorAgent
 from src.llm.base import LLMResponse
-from src.orchestrator import AgentResult, Orchestrator
-from src.pipeline_errors import PlanningStalled
+from src.orchestration.errors import PlanningStalled
+from src.orchestration.orchestrator import AgentResult, Orchestrator
 
 pytestmark = pytest.mark.unit
 
@@ -35,7 +35,7 @@ def orch():
 async def test_reprovacao_deterministica_repetida_termina_com_erro(orch):
     """Scenario: Reprovação determinística repetida."""
     orch.validator.validate_plan.return_value = rejection("sig", True)
-    with patch("src.orchestrator.PLAN_REJECTION_STALL_LIMIT", 2):
+    with patch("src.orchestration.orchestrator.PLAN_REJECTION_STALL_LIMIT", 2):
         with patch.object(orch, "_execute_agent", AsyncMock(return_value=planner())) as execute:
             with pytest.raises(PlanningStalled) as err:
                 await orch._run_planning_loop("p", "s")
@@ -59,7 +59,7 @@ async def test_validator_llm_consultivo_aprova_com_avisos(orch):
     """Scenario: Validator LLM consultivo."""
     orch.validator.validate_plan.return_value = rejection("llm", False)
     with patch.object(orch, "_execute_agent", AsyncMock(return_value=planner())):
-        with patch("src.orchestrator.get_telemetry") as tel:
+        with patch("src.orchestration.orchestrator.get_telemetry") as tel:
             tasks = await orch._run_planning_loop("p", "s")
     assert len(tasks) == 1
     payloads = [c.kwargs["payload"] for c in tel.return_value.record_agent_event.call_args_list
@@ -83,7 +83,7 @@ async def test_normalizador_repara_plano_antes_do_validator_e_emite_evento(orch)
     orch.validator.validate_plan.return_value = ValidationResult(is_valid=True, status="approved", reason="ok")
     wrapped = '{"tasks": [{"agent_id": "developer", "task_name": "T 1", "prompt": "p", "validation_criteria": "c"}]}'
     with patch.object(orch, "_execute_agent", AsyncMock(return_value=planner(wrapped))):
-        with patch("src.orchestrator.get_telemetry") as tel:
+        with patch("src.orchestration.orchestrator.get_telemetry") as tel:
             tasks = await orch._run_planning_loop("p", "s")
     assert tasks[0].task_name == "t_1" and tasks[0].validation_criteria == ["c"]
     events = [c.kwargs for c in tel.return_value.record_agent_event.call_args_list]
@@ -97,7 +97,7 @@ async def test_normalizador_desligado_nao_repara(orch):
     """Scenario: Normalizador desligado."""
     orch.validator.validate_plan.return_value = ValidationResult(is_valid=True, status="approved", reason="ok")
     plan = '[{"agent_id": "developer", "task_name": "t", "prompt": "p", "depends_on": "a, b"}]'
-    with patch("src.orchestrator.PLAN_NORMALIZER_ENABLED", False):
+    with patch("src.orchestration.orchestrator.PLAN_NORMALIZER_ENABLED", False):
         with patch.object(orch, "_execute_agent", AsyncMock(return_value=planner(plan))):
             await orch._run_planning_loop("p", "s")
     assert orch.validator.validate_plan.call_args.kwargs["plan"][0]["depends_on"] == "a, b"

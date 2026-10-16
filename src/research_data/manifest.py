@@ -15,8 +15,8 @@ from typing import Any
 
 import yaml
 
-from src.egress.fragments import ContentOrigin
 from src.logger import get_logger
+from src.utils.egress_fragments import ContentOrigin
 
 logger = get_logger(__name__)
 

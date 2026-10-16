@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.telemetry import ErrorType, TelemetryCollector, _Buffer
+from src.observability.telemetry import ErrorType, TelemetryCollector, _Buffer
 
 # ---------------------------------------------------------------------------
 # Helper
@@ -144,7 +144,7 @@ class TestSubtaskMetricsErrorType:
         ctx.__enter__ = MagicMock(return_value=mock_conn)
         ctx.__exit__ = MagicMock(return_value=False)
 
-        with patch("src.telemetry.get_connection", return_value=ctx):
+        with patch("src.observability.telemetry.get_connection", return_value=ctx):
             col._write_snapshot(snap)
 
         # Encontra o INSERT de subtask_metrics nos parâmetros capturados
@@ -175,7 +175,7 @@ class TestSubtaskMetricsLeanSchema:
         """record_subtask_metrics não deve aceitar campos da V10 removidos."""
         import inspect
 
-        from src.telemetry import TelemetryCollector
+        from src.observability.telemetry import TelemetryCollector
 
         sig = inspect.signature(TelemetryCollector.record_subtask_metrics)
         params = set(sig.parameters.keys())
@@ -198,7 +198,7 @@ class TestSubtaskMetricsLeanSchema:
         """Campos essenciais devem permanecer na assinatura."""
         import inspect
 
-        from src.telemetry import TelemetryCollector
+        from src.observability.telemetry import TelemetryCollector
 
         sig = inspect.signature(TelemetryCollector.record_subtask_metrics)
         params = set(sig.parameters.keys())

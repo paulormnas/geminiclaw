@@ -210,7 +210,7 @@ def validated_checks(
     def text_of(task: dict[str, Any]) -> str:
         return json.dumps(task, ensure_ascii=False, default=str)
 
-    # ``model_impl`` é o tipo normalizado das subtarefas de treino (src/plan_normalizer.py).
+    # ``model_impl`` é o tipo normalizado das subtarefas de treino (src/orchestration/plan_normalizer.py).
     training = [t for t in tasks.values() if str(t.get("task_type", "")).lower() == "model_impl"]
     approaches = {
         str((t.get("approach") or {}).get("nome", "")).strip().lower()

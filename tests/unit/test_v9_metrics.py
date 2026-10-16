@@ -3,16 +3,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.autonomous_loop import AutonomousLoop
-from src.orchestrator import AgentResult, AgentTask, Orchestrator
-from src.telemetry import get_telemetry
+from src.observability.telemetry import get_telemetry
+from src.orchestration.autonomous_loop import AutonomousLoop
+from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
 
 
 @pytest.mark.asyncio
 async def test_subtask_metrics_lifecycle():
     """Valida se as métricas de subtarefa são registradas nos estados corretos."""
-    from src.orchestrator import Orchestrator
-    from src.session import SessionManager
+    from src.orchestration.orchestrator import Orchestrator
+    from src.session.manager import SessionManager
 
     # Mocks das dependências do orquestrador
     mock_runtime = MagicMock()
@@ -68,7 +68,7 @@ async def test_complex_path_subtask_id_generation():
     with patch.object(telemetry, "record_subtask_metrics") as mock_record:
         loop = AutonomousLoop(orchestrator)
         with patch.object(AutonomousLoop, "_is_complex_triage", AsyncMock(return_value=True)), \
-             patch("src.autonomous_loop.datetime") as mock_dt:
+             patch("src.orchestration.autonomous_loop.datetime") as mock_dt:
             
             mock_dt.now.return_value = datetime(2026, 1, 1, tzinfo=timezone.utc)
             await loop.run("Complex", "exec2")

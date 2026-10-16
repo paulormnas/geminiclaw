@@ -7,10 +7,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.cli import clear_context, load_context_with_confirmation
-from src.context_loader import ContextLoader
-from src.orchestrator import AgentResult, AgentTask, Orchestrator
-from src.session import Session
+from src.cli.main import clear_context, load_context_with_confirmation
+from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
+from src.research_data.context_loader import ContextLoader
+from src.session.manager import Session
 from tests.support.task_loop import run_tasks
 
 
@@ -52,7 +52,7 @@ class TestContextLoaderMultiFormat:
             num_pages=2,
         )
         with patch(
-            "src.skills.document_processor.extractors.registry.ExtractorRegistry.extract",
+            "src.documents.extractors.registry.ExtractorRegistry.extract",
             return_value=fake_extracted,
         ), patch("pytesseract.image_to_string", return_value="texto do gráfico"), patch(
             "PIL.Image.open", return_value=MagicMock()
@@ -180,7 +180,7 @@ class TestCliContextConfirmation:
         assert bundle.total_files == 1
 
     def test_contexto_grande_pede_confirmacao_e_aceita(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        import src.cli as cli_module
+        import src.cli.main as cli_module
 
         monkeypatch.setattr(cli_module, "CONTEXT_TOKEN_WARNING_THRESHOLD", 10)
 
@@ -194,7 +194,7 @@ class TestCliContextConfirmation:
         assert bundle is not None
 
     def test_contexto_grande_recusado_retorna_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        import src.cli as cli_module
+        import src.cli.main as cli_module
 
         monkeypatch.setattr(cli_module, "CONTEXT_TOKEN_WARNING_THRESHOLD", 10)
 

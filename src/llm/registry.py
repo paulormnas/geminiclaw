@@ -1,7 +1,7 @@
 """Registro único de provedores LLM (ADR 011, V16).
 
 Cada provedor se registra por nome com uma fábrica. O roteamento por papel
-(`src.model_router.ModelRouter`) e o catálogo (`src.llm.catalog`) consultam este mesmo registro — adicionar um
+(`src.llm.model_router.ModelRouter`) e o catálogo (`src.llm.catalog`) consultam este mesmo registro — adicionar um
 provedor passa a significar implementar `LLMProvider` e chamar
 `register_provider`, sem editar nenhum dos dois consumidores.
 """

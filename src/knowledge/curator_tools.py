@@ -285,8 +285,8 @@ WRITE_TOOLS: tuple[str, ...] = tuple(n for n in TOOL_SCHEMAS if n not in _READ_T
 def unbound_agent_tools() -> list[Callable[..., Any]]:
     """Ferramentas para ``AGENT_DEFINITIONS["curator"]`` que **falham fechado** fora de uma sessão de curadoria.
 
-    O Curator só roda por ``agents.curator.runner.CuratorRunner`` (ligado a projeto, sessão e orçamento); o papel não
-    está em ``AGENT_IDS``, então o plano gerado por LLM não pode atribuir-lhe subtarefas. Se alguém executar o papel
+    O Curator só roda por ``src.agents.curator.runner.CuratorRunner`` (ligado a projeto, sessão e orçamento); o papel
+    não está em ``AGENT_IDS``, então o plano gerado por LLM não pode atribuir-lhe subtarefas. Se alguém executar o papel
     pelo runtime genérico, estas ferramentas apenas recusam.
     """
     tools: list[Callable[..., Any]] = []

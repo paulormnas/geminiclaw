@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from src.egress.fragments import ContentOrigin
+from src.utils.egress_fragments import ContentOrigin
 
 MODEL_STATUSES = ("suportada", "parcial", "refutada", "nao_verificavel")
 MAX_FIELD_CHARS = 600

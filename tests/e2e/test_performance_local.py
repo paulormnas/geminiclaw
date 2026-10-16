@@ -11,8 +11,8 @@ import os
 import httpx
 import pytest
 
-from src.orchestrator import Orchestrator
-from src.session import SessionManager
+from src.orchestration.orchestrator import Orchestrator
+from src.session.manager import SessionManager
 
 
 async def _ollama_available():

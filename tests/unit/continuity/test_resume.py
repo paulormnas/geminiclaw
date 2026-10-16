@@ -10,19 +10,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agents.base.tools import read_artifact, write_artifact
-from src.agent_runtime.context import AgentContext, bind_agent_context, current_context
-from src.autonomous_loop import AutonomousLoop
-from src.continuity import CheckpointRecorder, plan_entry, read_checkpoint
+from src.agents.base.tools import read_artifact, write_artifact
+from src.artifacts.output_manager import OutputManager
 from src.knowledge.graph_store import InMemoryGraphStore
 from src.knowledge.ingestion import SessionContext, ingest_session_start
 from src.knowledge.projects import confirm_problem, create_project
 from src.knowledge.provenance import Actor
 from src.knowledge.vocabulary import approve_term
-from src.orchestrator import AgentResult, AgentTask, Orchestrator
-from src.output_manager import OutputManager
-from src.resume import ResumeError, prepare_resume, select_session_for_project
-from src.usage import UsageBudget
+from src.orchestration.autonomous_loop import AutonomousLoop
+from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
+from src.orchestration.usage import UsageBudget
+from src.session.continuity import CheckpointRecorder, plan_entry, read_checkpoint
+from src.session.resume import ResumeError, prepare_resume, select_session_for_project
+from src.utils.agent_context import AgentContext, bind_agent_context, current_context
 from tests.support.session_fakes import FakeSessionManager
 from tests.unit.research_project.test_projects import make_draft
 
@@ -107,7 +107,7 @@ class World:
             patch.object(AutonomousLoop, "_promote_findings", AsyncMock()),
             patch.object(AutonomousLoop, "_synthesize_results", AsyncMock(return_value=None)),
             patch("src.config.REVIEW_ENABLED", False),
-            patch("src.orchestrator.generate_session_slug", return_value="sessao-b"),
+            patch("src.orchestration.orchestrator.generate_session_slug", return_value="sessao-b"),
         ]
         return stack
 
@@ -141,7 +141,7 @@ def _no_context():
 
 @pytest.fixture(autouse=True)
 def _routing_stub():
-    with patch("src.orchestrator.bind_session_routing"), patch("src.orchestrator.build_session_routing", AsyncMock()):
+    with patch("src.orchestration.orchestrator.bind_session_routing"), patch("src.orchestration.orchestrator.build_session_routing", AsyncMock()):
         yield
 
 
@@ -198,7 +198,7 @@ async def test_continuar_o_projeto(world):
     with pytest.raises(ResumeError, match="não tem sessões"):
         select_session_for_project(world.sm, "01890000-0000-7000-8000-0000000000ff")
 
-    from src import cli
+    import src.cli.main as cli
 
     orch = MagicMock(session_manager=world.sm)
     orch.recover_interrupted_sessions = AsyncMock()
@@ -222,9 +222,9 @@ async def test_pesquisa_dada_como_resolvida_pede_confirmacao(tmp_path):
     assert "continuar explorando" in asked[0]
     prep = await w.prepare(confirm=lambda q: True)
     assert prep.state.source_session_id == "sessao-a"
-    from src import cli
+    import src.cli.main as cli
 
-    with patch("src.project_session.is_interactive", return_value=False):
+    with patch("src.cli.project_session.is_interactive", return_value=False):
         assert cli._ask_yes_no("continuar?") is False
 
 
@@ -480,7 +480,7 @@ async def test_telemetria_da_recuperacao_sem_dado_de_pesquisa(tmp_path):
     sm = FakeSessionManager()
     orch = _orch(tmp_path, sm, InMemoryGraphStore())
     _crashed_session(tmp_path, sm, orch, None)
-    with patch("src.orchestrator.get_telemetry") as tel:
+    with patch("src.orchestration.orchestrator.get_telemetry") as tel:
         await orch.recover_interrupted_sessions()
     payloads = [c.kwargs["payload"] for c in tel.return_value.record_agent_event.call_args_list]
     allowed = {"subtarefas_em_andamento", "retomavel", "segundos_sem_batimento"}
@@ -513,7 +513,7 @@ async def test_suspensao_mantem_sessao_retomavel(world):
 async def test_erro_fatal_grava_checkpoint_interrompido(world):
     prep = await world.prepare()
     world.orch._run_planning_loop = AsyncMock(side_effect=RuntimeError("boom"))
-    with patch("src.orchestrator.generate_session_slug", return_value="sessao-b"), \
+    with patch("src.orchestration.orchestrator.generate_session_slug", return_value="sessao-b"), \
             pytest.raises(RuntimeError):
         await world.orch.handle_request(
             prep.prompt, mode="auto", project_id=prep.state.project_id, resume=prep.state,

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from src.human_gate import HumanGate
+from src.gate.human_gate import HumanGate
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.hypotheses import (
     HypothesisBook,

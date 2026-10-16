@@ -8,9 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.continuity import CheckpointError, CheckpointRecorder, SubtaskState, plan_entry, read_checkpoint
+from src.artifacts.subtask_output import SubtaskOutput
 from src.egress import filters
-from src.egress.fragments import ContentOrigin, PromptFragment, labeled, mark_tainted
 from src.egress.persisted import (
     TAINT_TAG,
     legacy_tainted,
@@ -23,9 +22,10 @@ from src.egress.persisted import (
 )
 from src.llm.allocation import allocation_banner_lines, mixed_profile_warning
 from src.llm.session import build_session_routing
-from src.orchestrator import AgentTask
-from src.subtask_output import SubtaskOutput
-from src.usage import StopReason, UsageBudget, UsageTracker
+from src.orchestration.orchestrator import AgentTask
+from src.orchestration.usage import StopReason, UsageBudget, UsageTracker
+from src.session.continuity import CheckpointError, CheckpointRecorder, SubtaskState, plan_entry, read_checkpoint
+from src.utils.egress_fragments import ContentOrigin, PromptFragment, labeled, mark_tainted
 from tests.support.task_loop import run_tasks
 
 pytestmark = pytest.mark.unit
@@ -121,8 +121,8 @@ def test_resultado_de_agente_com_dados_brutos_e_contaminado(monkeypatch):
 
 
 def test_escrita_de_memoria_por_agente_com_dados_brutos_leva_a_tag(monkeypatch):
-    from src.agent_runtime.context import AgentContext, bind_agent_context, current_context
     from src.skills.memory.skill import _writer_tags
+    from src.utils.agent_context import AgentContext, bind_agent_context, current_context
 
     assert TAINT_TAG in _writer_tags(["a"])  # sem agente e sem declaração: o lado seguro
     assert _writer_tags(["a"], tainted=False) == ["a"]  # declaração explícita de texto limpo
@@ -148,7 +148,7 @@ def nuvem(monkeypatch):
 @pytest.mark.asyncio
 async def test_perfil_misto(nuvem, capsys):
     """Cenário "Perfil misto": o banner mostra o aviso com os papéis de cada grupo."""
-    from src.cli import print_session_banner
+    from src.cli.main import print_session_banner
 
     routing = await build_session_routing()
     aviso = mixed_profile_warning(routing)
@@ -170,8 +170,8 @@ async def test_perfil_homogeneo_nao_gera_aviso(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_orquestrador_cria_o_portao_e_grava_k_no_payload(nuvem):
-    from src.orchestrator import AgentTask, Orchestrator
-    from src.session import Session
+    from src.orchestration.orchestrator import AgentTask, Orchestrator
+    from src.session.manager import Session
 
     session_manager = MagicMock()
     session_manager.create.return_value = Session(
@@ -194,7 +194,7 @@ async def test_orquestrador_cria_o_portao_e_grava_k_no_payload(nuvem):
 @pytest.mark.asyncio
 async def test_orquestrador_nao_inicia_sem_locality_min_group_size(monkeypatch):
     from src import config
-    from src.orchestrator import AgentTask, Orchestrator
+    from src.orchestration.orchestrator import AgentTask, Orchestrator
 
     monkeypatch.setattr(config, "LOCALITY_MIN_GROUP_SIZE", None)
     session_manager = MagicMock()
@@ -265,7 +265,7 @@ def test_tracker_le_o_volume_do_registro_de_egresso_por_padrao(gate, third_party
 
 
 def test_limite_de_egresso_e_um_motivo_retomavel():
-    from src.continuity import MOTIVOS_RETOMAVEIS
+    from src.session.continuity import MOTIVOS_RETOMAVEIS
 
     assert "limite_egresso" in MOTIVOS_RETOMAVEIS
 
@@ -274,7 +274,7 @@ def test_limite_de_egresso_e_um_motivo_retomavel():
 
 def test_prompt_do_developer_manda_imprimir_agregados():
     """Cenário "Prompt renderizado"."""
-    from agents.developer.agent import AGENT_INSTRUCTION  # noqa: F401  (instrução renderizada do módulo)
+    from src.agents.developer.agent import AGENT_INSTRUCTION  # noqa: F401  (instrução renderizada do módulo)
 
     texto = AGENT_INSTRUCTION() if callable(AGENT_INSTRUCTION) else AGENT_INSTRUCTION
     assert "IMPRIMA AGREGADOS, NÃO DADOS" in texto
@@ -285,7 +285,7 @@ def test_prompt_do_developer_manda_imprimir_agregados():
 # --- Planejamento: marcas em linha nos prompts --------------------------------------------------------------------
 
 def test_bloco_de_input_context_e_retido_para_destino_sem_dados_brutos(gate, third_party, remote_raw):
-    from src.egress.fragments import mark_research_data
+    from src.utils.egress_fragments import mark_research_data
 
     bloco = mark_research_data("[CONTEXTO CIENTÍFICO — input_context/]\nAmostra: [[1.5, 2.5]]", "input_context/")
     prompt = f"MODO: PLAN\nCrie um plano.\n{bloco}\nRetorne JSON."
@@ -298,7 +298,7 @@ def test_bloco_de_input_context_e_retido_para_destino_sem_dados_brutos(gate, thi
 
 
 def test_plano_do_pesquisador_contaminado_chega_mascarado_a_destino_sem_dados(gate, third_party):
-    from src.egress.fragments import taint_if
+    from src.utils.egress_fragments import taint_if
 
     prompt = "Plano atual:\n" + taint_if('{"meta": "acurácia 0.93"}', True) + "\nRevise."
     out = gate.prepare_llm([labeled("user", PromptFragment(prompt, ContentOrigin.INSTRUCAO))], None, third_party)
@@ -306,7 +306,7 @@ def test_plano_do_pesquisador_contaminado_chega_mascarado_a_destino_sem_dados(ga
 
 
 def test_erro_da_tentativa_anterior_e_saida_de_execucao(gate, third_party):
-    from src.egress.fragments import mark_execution_output
+    from src.utils.egress_fragments import mark_execution_output
 
     erro = mark_execution_output("ValueError: could not convert string to float: '12,5'", "t")
     prompt = "Tente de novo.\nErro: " + erro
@@ -324,7 +324,7 @@ def test_marca_forjada_em_conteudo_observado_nao_afrouxa_o_tratamento(gate, thir
 
 
 def test_json_de_metricas_na_sintese_e_saida_de_execucao(gate, third_party):
-    from src.egress.fragments import mark_execution_output
+    from src.utils.egress_fragments import mark_execution_output
 
     dados = mark_execution_output('{"metrics": {"max": 12.537}}\nmax: 12.537', "report_data")
     prompt = "Escreva a narrativa.\n" + dados
@@ -335,7 +335,7 @@ def test_json_de_metricas_na_sintese_e_saida_de_execucao(gate, third_party):
 
 def test_evidencia_do_validator_classifica_pela_origem(tmp_path, monkeypatch):
     monkeypatch.setattr("src.config.REVIEW_ARTIFACT_PROFILE", False)  # com o perfil, o CSV sai como esquema agregado
-    from src.agents.validator_agent import build_artifact_evidence_fragments
+    from src.agents.validator.agent import build_artifact_evidence_fragments
 
     (tmp_path / "metrics.json").write_text('{"acc": 0.9}', encoding="utf-8")
     (tmp_path / "dados.csv").write_text("a,b\n1,2\n", encoding="utf-8")

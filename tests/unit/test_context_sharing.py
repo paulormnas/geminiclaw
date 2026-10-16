@@ -12,8 +12,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.autonomous_loop import _CONTEXT_MAX_CHARS, AutonomousLoop
-from src.orchestrator import AgentTask
+from src.orchestration.autonomous_loop import _CONTEXT_MAX_CHARS, AutonomousLoop
+from src.orchestration.orchestrator import AgentTask
 from src.skills.memory.short_term import ShortTermMemory
 
 # ---------------------------------------------------------------------------

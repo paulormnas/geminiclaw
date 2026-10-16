@@ -1,4 +1,4 @@
-"""Testes unitários de `src/embeddings/reindex.py` (Roadmap V16 / ADR 011 §3).
+"""Testes unitários de `src/documents/reindex.py` (Roadmap V16 / ADR 011 §3).
 
 Cobre a lógica de `CollectionReindexer` com um `QdrantClient` mockado:
 contagem de pontos desatualizados, recriação da coleção quando a dimensão
@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.embeddings.reindex import (
+from src.documents.reindex import (
     REINDEXABLE_COLLECTIONS,
     CollectionNotFoundError,
     CollectionReindexer,
@@ -126,7 +126,7 @@ def test_run_rewrites_only_outdated_points_and_reports_skipped_without_text():
 
 @pytest.mark.unit
 def test_reindex_report_summary_mentions_recreated_when_dimension_changed():
-    from src.embeddings.reindex import ReindexReport
+    from src.documents.reindex import ReindexReport
 
     report = ReindexReport(collection="geminiclaw_knowledge", recreated_collection=True, elapsed_seconds=1.0)
     assert "recriada" in report.summary()
@@ -134,7 +134,7 @@ def test_reindex_report_summary_mentions_recreated_when_dimension_changed():
 
 @pytest.mark.unit
 def test_reindex_report_summary_counts_when_not_recreated():
-    from src.embeddings.reindex import ReindexReport
+    from src.documents.reindex import ReindexReport
 
     report = ReindexReport(
         collection="geminiclaw_knowledge",

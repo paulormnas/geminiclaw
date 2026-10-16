@@ -1,9 +1,9 @@
 import os
 from typing import Optional
 
-from src.egress.fragments import ContentOrigin
 from src.egress.gate import EgressRefused, caller_tainted, external_destination, get_gate
 from src.logger import get_logger
+from src.utils.egress_fragments import ContentOrigin
 
 from ..base import BaseSkill, SkillResult
 from .brave import BraveSearchClient

@@ -2,7 +2,7 @@ import pytest
 import os
 import shutil
 from pathlib import Path
-from src.output_manager import OutputManager
+from src.artifacts.output_manager import OutputManager
 
 @pytest.fixture
 def tmp_output_dir(tmp_path):

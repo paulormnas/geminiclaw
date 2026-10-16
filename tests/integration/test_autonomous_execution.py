@@ -11,11 +11,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.agents.validator_agent import ValidatorAgent
+from src.agents.validator.agent import ValidatorAgent
+from src.artifacts.output_manager import OutputManager
 from src.llm.base import LLMResponse
-from src.orchestrator import AgentResult, AgentTask, Orchestrator
-from src.output_manager import OutputManager
-from src.session import SessionManager
+from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
+from src.session.manager import SessionManager
 
 # Narrativa JSON válida do Summarizer (v16-pipeline-robustness §6)
 NARRATIVE = json.dumps({

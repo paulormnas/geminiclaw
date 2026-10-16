@@ -6,8 +6,6 @@ import traceback
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
-from src.agent_runtime.context import get_agent_context_optional
-from src.egress.fragments import ContentOrigin, PromptFragment, dumps_messages, labeled, tool_result_fragment
 from src.llm.base import LLMProvider, LLMResponse
 from src.llm.context_compression import compress_messages
 from src.llm.context_injection import build_workspace_context_fragments
@@ -15,7 +13,9 @@ from src.llm.factory import get_provider
 from src.llm.metering import bound_execution_id, provider_name, record_llm_call
 from src.llm.pricing import estimate_cost
 from src.logger import get_logger
-from src.telemetry import get_telemetry
+from src.observability.telemetry import get_telemetry
+from src.utils.agent_context import get_agent_context_optional
+from src.utils.egress_fragments import ContentOrigin, PromptFragment, dumps_messages, labeled, tool_result_fragment
 
 logger = get_logger(__name__)
 

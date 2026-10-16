@@ -3,8 +3,8 @@
 import pytest
 
 from src.llm.factory import get_provider
+from src.llm.model_router import ModelRouter
 from src.llm.providers.ollama import OllamaProvider
-from src.model_router import ModelRouter
 
 
 @pytest.fixture(autouse=True)

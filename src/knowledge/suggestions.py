@@ -27,9 +27,9 @@ from src.knowledge import opportunities
 from src.knowledge.graph_store import GraphStore, Node
 from src.knowledge.graph_views import sanitize_text
 from src.knowledge.hypotheses import PendingSuggestion
-from src.knowledge.normalization import normalize_domain_term
 from src.knowledge.projects import get_active_problem
 from src.logger import get_logger
+from src.utils.normalization import normalize_domain_term
 
 logger = get_logger(__name__)
 

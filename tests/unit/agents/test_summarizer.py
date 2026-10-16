@@ -1,4 +1,4 @@
-from agents.summarizer.agent import AGENT_NAME, root_agent
+from src.agents.summarizer.agent import AGENT_NAME, root_agent
 
 
 def test_summarizer_agent_initialization():

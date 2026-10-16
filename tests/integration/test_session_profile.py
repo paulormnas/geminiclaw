@@ -12,10 +12,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.autonomous_loop import AutonomousLoop
-from src.cli import show_sessions
-from src.orchestrator import AgentResult, AgentTask, Orchestrator
-from src.session import Session
+from src.cli.main import show_sessions
+from src.orchestration.autonomous_loop import AutonomousLoop
+from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
+from src.session.manager import Session
 from tests.support.task_loop import run_tasks
 
 
@@ -129,19 +129,19 @@ class TestAgentInstructionByMode:
 
     def test_instrucao_assisted_menciona_ask_researcher(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("SESSION_MODE", "assisted")
-        from agents.base.agent import _get_agent_instruction
+        from src.agents.base.agent import _get_agent_instruction
         instruction = _get_agent_instruction("Instrução base.")
         assert "ask_researcher" in instruction
 
     def test_instrucao_semi_nunca_bloqueia(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("SESSION_MODE", "semi")
-        from agents.base.agent import _get_agent_instruction
+        from src.agents.base.agent import _get_agent_instruction
         instruction = _get_agent_instruction("Instrução base.")
         assert "NUNCA bloqueie" in instruction
 
     def test_instrucao_auto_menciona_autonomia_total(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("SESSION_MODE", "auto")
-        from agents.base.agent import _get_agent_instruction
+        from src.agents.base.agent import _get_agent_instruction
         instruction = _get_agent_instruction("Instrução base.")
         assert "TOTALMENTE AUTÔNOMO" in instruction
 

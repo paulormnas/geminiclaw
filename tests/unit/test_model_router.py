@@ -6,10 +6,10 @@ import pytest
 
 from src.llm import registry
 from src.llm.base import LLMProvider, LLMResponse
+from src.llm.model_config import get_role_model_config
+from src.llm.model_router import ModelRouter
 from src.llm.providers.ollama import OllamaProvider
 from src.llm.session import bind_session_routing, build_session_routing
-from src.model_config import get_role_model_config
-from src.model_router import ModelRouter
 from tests.support.catalog_fixtures import model, write_yaml
 
 

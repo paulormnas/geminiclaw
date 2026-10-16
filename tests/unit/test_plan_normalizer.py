@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.plan_normalizer import normalize_plan
+from src.orchestration.plan_normalizer import normalize_plan
 
 pytestmark = pytest.mark.unit
 

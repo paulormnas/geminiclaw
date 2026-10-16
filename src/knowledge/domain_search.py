@@ -15,9 +15,9 @@ from typing import Any
 
 from src import config
 from src.knowledge.graph_store import GraphStore
-from src.knowledge.normalization import clean_free_text
 from src.knowledge.semantic_index import DOMAIN_LEVELS, SemanticIndex
 from src.logger import get_logger
+from src.utils.normalization import clean_free_text
 
 logger = get_logger(__name__)
 
@@ -187,8 +187,8 @@ def open_domain_search() -> DomainSearch:
     Raises:
         RuntimeError: Se ``KNOWLEDGE_READER_DATABASE_URL`` não está configurada.
     """
-    from src.embeddings.reindex import _make_client
     from src.knowledge.factory import open_raw_graph_store
+    from src.utils.qdrant import _make_client
 
     store = open_raw_graph_store()
     return DomainSearch(store, SemanticIndex(store, _make_client(config.QDRANT_URL)))

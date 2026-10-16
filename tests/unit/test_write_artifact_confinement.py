@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from agents.base.tools import write_artifact
-from src.agent_runtime.context import AgentContext, bind_agent_context, current_context
+from src.agents.base.tools import write_artifact
+from src.utils.agent_context import AgentContext, bind_agent_context, current_context
 
 
 def _bind_context(tmp_path: Path) -> AgentContext:

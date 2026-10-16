@@ -1,7 +1,7 @@
 import pytest
 
-from agents.base.agent import Agent, _load_session_context, _persist_session_context
-from agents.researcher.agent import (
+from src.agents.base.agent import Agent, _load_session_context, _persist_session_context
+from src.agents.researcher.agent import (
     AGENT_DESCRIPTION,
     AGENT_INSTRUCTION,
     AGENT_NAME,

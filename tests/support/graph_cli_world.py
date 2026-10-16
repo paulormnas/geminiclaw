@@ -8,8 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.cli_graph import handle_graph_command
-from src.human_gate import HumanGate
+from src.cli.graph import handle_graph_command
+from src.gate.human_gate import HumanGate
 from src.knowledge.graph_store import InMemoryGraphStore
 from src.llm.base import LLMProvider, LLMResponse, ToolCall
 from tests.support.curator_graph import ORQ, PESQUISADOR, CuratorGraph

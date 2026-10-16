@@ -23,7 +23,6 @@ from typing import Any
 
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.graph_store import GraphStore, Node
-from src.knowledge.ids import generate_node_id
 from src.knowledge.problem import (
     ProblemDraft,
     ProblemDraftError,
@@ -32,6 +31,7 @@ from src.knowledge.problem import (
 from src.knowledge.provenance import Actor
 from src.knowledge.vocabulary import SemanticSearch, VocabularyError, resolve_domain, resolve_metric
 from src.logger import get_logger
+from src.utils.node_id import generate_node_id
 
 logger = get_logger(__name__)
 

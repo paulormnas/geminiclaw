@@ -234,7 +234,7 @@ def reset_env(monkeypatch):
 | Módulo | Mínimo |
 |---|---|
 | `src/agent_runtime/` | 80% |
-| `src/autonomous_loop.py` | 70% |
+| `src/orchestration/autonomous_loop.py` | 70% |
 | `src/skills/code/sandbox.py` | 80% |
 | `agents/*/agent.py` | 70% |
 
@@ -282,7 +282,7 @@ uv run pytest -m unit -v
 uv run pytest -m integration -v
 
 # Todos os testes com cobertura
-uv run pytest --cov=src --cov=agents --cov-report=term-missing
+uv run pytest --cov=src --cov-report=term-missing
 
 # Teste específico
 uv run pytest tests/unit/test_code_pattern_memory.py -v

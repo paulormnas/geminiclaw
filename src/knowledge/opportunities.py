@@ -8,7 +8,7 @@ Barreiras (em camadas, nenhuma depende do prompt de um LLM):
 
 1. ``HumanGate``: ``decide_opportunity`` só grava com um pedido ``aprovar_oportunidade`` **autorizado** por origem
    humana (``terminal``/``cli``); a resposta de ``ask_researcher`` (inclusive a do Researcher consultor), de um agente
-   ou de um documento nunca autoriza (``src.human_gate``);
+   ou de um documento nunca autoriza (``src.gate.human_gate``);
 2. ``GraphStore``: ``validate_human_only`` recusa que agente **ou orquestrador** aprove/rejeite ou grave ``decidido_*``;
    o orquestrador só avança uma oportunidade **já aprovada** (``aprovada`` -> ``em_investigacao`` -> ``concluida``).
 
@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from src.human_gate import HUMAN_SOURCES, HumanGate, Source, default_gate
+from src.gate.human_gate import HUMAN_SOURCES, HumanGate, Source, default_gate
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.graph_store import GraphStore, Node
 from src.knowledge.graph_views import sanitize_text

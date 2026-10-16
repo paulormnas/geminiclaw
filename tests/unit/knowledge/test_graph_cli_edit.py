@@ -10,9 +10,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agents.curator.edit import EditToolkit
 from src import config
-from src.human_gate import HumanGate
+from src.agents.curator.edit import EditToolkit
+from src.gate.human_gate import HumanGate
 from src.knowledge.change_proposals import ProposalError, parse_ops, plan_changes
 from src.knowledge.curator_tools import WRITE_TOOLS, CuratorLimits
 from src.llm.base import LLMResponse, ToolCall
@@ -398,7 +398,7 @@ def test_auditoria_de_leitura_no_store_em_memoria(world):
 
 def test_edicao_pelo_store_indexado_audita_e_avisa_duplicata(env):
     """Com o store indexado e o índice semântico: aplicar grava a auditoria e o aviso de duplicata usa o índice."""
-    from src.cli_graph import handle_graph_command
+    from src.cli.graph import handle_graph_command
     from src.knowledge.provenance import Actor
     from tests.support.curator_graph import CuratorGraph
 

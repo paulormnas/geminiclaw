@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from agents.researcher.agent import DRAFT_PROBLEM_INSTRUCTION, DRAFT_PROBLEM_MAX_REPAIRS, draft_problem
+from src.agents.researcher.agent import DRAFT_PROBLEM_INSTRUCTION, DRAFT_PROBLEM_MAX_REPAIRS, draft_problem
 from src.knowledge.problem import ProblemDraftError
 
 VALID = {

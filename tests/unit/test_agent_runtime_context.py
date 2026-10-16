@@ -1,4 +1,4 @@
-"""Testes de src/agent_runtime/context.py (Roadmap V16/ADR 014).
+"""Testes de src/utils/agent_context.py (Roadmap V16/ADR 014).
 
 Cobre os Requirements "Contexto isolado por tarefa" da spec ``agent-runtime``
 (openspec/changes/archive/v16-in-process-agents/specs/agent-runtime/spec.md).
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from src.agent_runtime.context import (
+from src.utils.agent_context import (
     AgentContext,
     bind_agent_context,
     get_agent_context,

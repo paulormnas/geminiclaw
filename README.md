@@ -61,7 +61,7 @@ O sistema utiliza uma abordagem de **Multi-Agent Systems (MAS)** onde um **Orche
 
 ```mermaid
 graph TD
-    User([Usuário]) --> CLI[src/cli.py]
+    User([Usuário]) --> CLI[src/cli/main.py]
     CLI --> Orch[Orchestrator]
     
     subgraph "Loop Autônomo (S7)"
@@ -102,16 +102,16 @@ graph TD
 
 | Componente | Módulo | Função |
 | --- | --- | --- |
-| **Orchestrator** | `src/orchestrator.py` | Coordena o loop de planejamento e a execução sequencial de agentes. Integra o `AutonomousLoop`. Instrumentado com telemetria V5.6. |
-| **AutonomousLoop** | `src/autonomous_loop.py` | Triage (simples/complexo), decomposição via Planner→Validator, loop de retentativas por subtarefa. Instrumentado com telemetria V5.8. |
+| **Orchestrator** | `src/orchestration/orchestrator.py` | Coordena o loop de planejamento e a execução sequencial de agentes. Integra o `AutonomousLoop`. Instrumentado com telemetria V5.6. |
+| **AutonomousLoop** | `src/orchestration/autonomous_loop.py` | Triage (simples/complexo), decomposição via Planner→Validator, loop de retentativas por subtarefa. Instrumentado com telemetria V5.8. |
 | **AgentRuntime** | `src/agent_runtime/runtime.py` | Executa cada agente no processo do orquestrador, com contexto por tarefa (`contextvars`), timeout (`AGENT_TIMEOUT_SECONDS`) e isolamento de falhas: uma exceção vira `AgentResult` de erro e nunca derruba a sessão. |
 | **ResourceGuard** | `src/agent_runtime/resources.py` | Limita quantos agentes rodam ao mesmo tempo (pela RAM livre, teto `MAX_CONCURRENT_AGENTS`), reserva uma vaga extra para inferência local (`MAX_LOCAL_LLM_CONCURRENT`) e espera a temperatura e a memória do Pi voltarem ao normal. |
-| **Infraestrutura** | `src/infrastructure.py` | Na partida, confere se PostgreSQL, Qdrant e o daemon de containers (só para o sandbox) respondem. |
-| **SessionManager** | `src/session.py` | Persistência de histórico e estado em **PostgreSQL**. |
-| **OutputManager** | `src/output_manager.py` | Gerencia artefatos produzidos e compartilhamento de arquivos entre agentes via `outputs/<session_id>/<task>/`. |
-| **TelemetryCollector** | `src/telemetry.py` | Coleta e persiste métricas de execução (agent_events, tool_usage, token_usage, hardware_snapshots) em batch no PostgreSQL. Fornece estatísticas sintetizadas para o Summarizer. |
+| **Infraestrutura** | `src/cli/infrastructure.py` | Na partida, confere se PostgreSQL, Qdrant e o daemon de containers (só para o sandbox) respondem. |
+| **SessionManager** | `src/session/manager.py` | Persistência de histórico e estado em **PostgreSQL**. |
+| **OutputManager** | `src/artifacts/output_manager.py` | Gerencia artefatos produzidos e compartilhamento de arquivos entre agentes via `outputs/<session_id>/<task>/`. |
+| **TelemetryCollector** | `src/observability/telemetry.py` | Coleta e persiste métricas de execução (agent_events, tool_usage, token_usage, hardware_snapshots) em batch no PostgreSQL. Fornece estatísticas sintetizadas para o Summarizer. |
 | **SkillRegistry** | `src/skills/__init__.py` | Registro dinâmico que converte skills Python em ferramentas compatíveis com o formato de tool calling dos provedores LLM. |
-| **CLI** | `src/cli.py` | Interface de linha de comando com modo direto, REPL interativo e subcomandos `--metrics`, `--export`. |
+| **CLI** | `src/cli/main.py` | Interface de linha de comando com modo direto, REPL interativo e subcomandos `--metrics`, `--export`. |
 
 ---
 
@@ -171,7 +171,7 @@ O GeminiClaw implementa um ciclo de planejamento com validação iterativa:
 
 ## 🔄 Loop de Execução Autônoma
 
-Implementado em `src/autonomous_loop.py`, o loop gerencia tarefas complexas de ponta a ponta:
+Implementado em `src/orchestration/autonomous_loop.py`, o loop gerencia tarefas complexas de ponta a ponta:
 
 ```
 1. Triage: Planner decide se a tarefa é SIMPLE ou COMPLEX
@@ -207,11 +207,11 @@ Implementado em `src/autonomous_loop.py`, o loop gerencia tarefas complexas de p
 
 | Agente | Diretório | Responsabilidade |
 | --- | --- | --- |
-| **Base** | `agents/base/` | Tarefas genéricas. Integra todas as skills habilitadas e memória de longo prazo. |
-| **Researcher** | `agents/researcher/` | Pesquisa na web via busca rápida, extração de conteúdo e síntese. Cache de resultados integrado. |
-| **Planner** | `agents/planner/` | Decomposição de problemas complexos em tarefas atômicas. Triage (simples/complexo). |
-| **Validator** | `agents/validator/` | Verificação de segurança, formato JSON e consistência lógica de planos. |
-| **Summarizer** | `agents/summarizer/` | Síntese final de resultados com rastreabilidade acadêmica e metadados de autonomia. |
+| **Base** | `src/agents/base/` | Tarefas genéricas. Integra todas as skills habilitadas e memória de longo prazo. |
+| **Researcher** | `src/agents/researcher/` | Pesquisa na web via busca rápida, extração de conteúdo e síntese. Cache de resultados integrado. |
+| **Planner** | `src/agents/planner/` | Decomposição de problemas complexos em tarefas atômicas. Triage (simples/complexo). |
+| **Validator** | `src/agents/validator/` | Verificação de segurança, formato JSON e consistência lógica de planos. |
+| **Summarizer** | `src/agents/summarizer/` | Síntese final de resultados com rastreabilidade acadêmica e metadados de autonomia. |
 
 Os agentes rodam no processo do orquestrador. O roteador de modelos (ADR 017) resolve o provedor e o modelo de cada papel uma vez por sessão, a partir do catálogo `src/llm/catalog.yaml`, da política `LLM_DATA_POLICY` e da disponibilidade dos provedores; `{PAPEL}_MODEL=provedor/modelo` (por exemplo, `RESEARCHER_MODEL=anthropic/claude-sonnet-5-5`) fixa o modelo de um papel, o que permite misturar provedores na mesma sessão.
 
@@ -302,7 +302,7 @@ uv run pytest -m unit -v
 uv run pytest -m "unit or integration" -v
 
 # Rodar com cobertura
-uv run pytest --cov=src --cov=agents --cov-report=term-missing
+uv run pytest --cov=src --cov-report=term-missing
 ```
 
 ---
@@ -350,7 +350,7 @@ O desenvolvimento é guiado pelos roadmaps em `roadmaps/`, que definem as etapas
 #### V5 — Observabilidade (concluído)
 
 - **Schema PostgreSQL**: quatro tabelas de telemetria (`agent_events`, `tool_usage`, `token_usage`, `hardware_snapshots`)
-- **`TelemetryCollector`** (`src/telemetry.py`): singleton com buffer de 50 eventos e flush assíncrono no PostgreSQL
+- **`TelemetryCollector`** (`src/observability/telemetry.py`): singleton com buffer de 50 eventos e flush assíncrono no PostgreSQL
 - **Instrumentação de módulos core**: `orchestrator.py` (spawn/IPC/complete/error), `agent_loop.py` (token usage, tool usage), `autonomous_loop.py` (triage, plan, subtask, replan, memory promotion)
 - **Hardware Snapshots**: integração com `PiHealthMonitor` após cada subtarefa
 - **Queries de análise**: timeline, token summary, tool summary, hardware peaks, métricas derivadas
@@ -359,7 +359,7 @@ O desenvolvimento é guiado pelos roadmaps em `roadmaps/`, que definem as etapas
 
 ```bash
 # Ver métricas de uma execução
-uv run python -m src.cli --metrics <execution_id>
+uv run python -m src.cli.main --metrics <execution_id>
 
 # Exportar métricas para CSV
 uv run python scripts/export_metrics.py <execution_id>
@@ -381,30 +381,26 @@ geminiclaw/
 ├── scripts/
 │   ├── init_db.sql            # Schema PostgreSQL (idempotente)
 │   └── export_metrics.py      # Exporta métricas de telemetria para CSV
-├── src/                       # Orquestrador Python
-│   ├── cli.py                 # CLI (REPL + --metrics + --export)
-│   ├── orchestrator.py        # Orquestrador principal (instrumentado V5.6)
-│   ├── autonomous_loop.py     # Loop de execução autônoma S7 (instrumentado V5.8)
-│   ├── agent_runtime/         # AgentRuntime, ResourceGuard e contexto por tarefa (ADR 014)
-│   ├── infrastructure.py      # Checagens de PostgreSQL, Qdrant e daemon de containers
-│   ├── session.py             # SessionManager (PostgreSQL)
-│   ├── db.py                  # Pool singleton PostgreSQL (psycopg v3)
-│   ├── telemetry.py           # TelemetryCollector V5 (buffer + flush + queries)
-│   ├── history.py             # Histórico de execuções
-│   ├── health.py              # PiHealthMonitor (temperatura, CPU, RAM)
-│   ├── output_manager.py      # Gerenciamento de artefatos
+├── src/                       # Orquestrador Python, por responsabilidade (ADR 024)
 │   ├── config.py              # Configuração centralizada
 │   ├── logger.py              # Logger estruturado JSON
-│   ├── llm/                   # Abstração LLM (Ollama + Google)
-│   │   ├── agent_loop.py      # Loop ReAct do agente (instrumentado V5.7)
-│   │   ├── factory.py         # Factory de provedores LLM
-│   │   └── providers/         # Ollama, Google, Anthropic, OpenAI, openai_compatible
-│   └── skills/                # Framework de skills (S0–S5)
-├── agents/                    # Agentes (prompts e ferramentas)
-│   ├── base/                  # Agente base (integra skills)
-│   ├── developer/             # Agente que escreve e executa código no sandbox
-│   ├── researcher/            # Agente de pesquisa e planejamento
-│   └── summarizer/            # Agente que redige o relatório final
+│   ├── db.py                  # Pool singleton PostgreSQL (psycopg v3)
+│   ├── cli/                   # CLI (main.py: REPL, --metrics, --export; infrastructure.py: checagens de partida)
+│   ├── orchestration/         # Orchestrator, AutonomousLoop (S7), exploração, triagem e orçamento
+│   ├── session/               # SessionManager (PostgreSQL), checkpoint, retomada e histórico
+│   ├── gate/                  # Decisões reservadas ao pesquisador
+│   ├── agent_runtime/         # AgentRuntime, ResourceGuard e tipos de tarefa (ADR 014)
+│   ├── agents/                # Agentes: base, researcher, developer, curator, summarizer, validator, prompts
+│   ├── artifacts/             # Gerenciamento de artefatos das subtarefas
+│   ├── documents/             # Processamento de documentos como biblioteca
+│   ├── knowledge/             # Grafo de conhecimento, hipóteses e Curator
+│   ├── llm/                   # Abstração LLM (provedores, roteador por papel, cache)
+│   ├── egress/                # Filtro de egresso de dados
+│   ├── observability/         # TelemetryCollector (buffer + flush + queries)
+│   ├── host/                  # Saúde da máquina (temperatura, CPU, RAM) e imagens por plataforma
+│   ├── report/                # Relatórios e agregações
+│   ├── skills/                # Framework de skills (S0–S5)
+│   └── utils/                 # Utilitários sem dependências do projeto
 ├── containers/                # Dockerfile do sandbox de código e do PostgreSQL (AGE)
 ├── tests/                     # Testes pytest (unit, integration, e2e)
 ├── roadmaps/                  # Roadmaps de desenvolvimento

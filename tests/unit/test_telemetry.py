@@ -1,4 +1,4 @@
-"""Testes unitários para src/telemetry.py.
+"""Testes unitários para src/observability/telemetry.py.
 
 Verifica inserções no buffer, flush no banco (mocked) e queries de análise.
 """
@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.telemetry import TelemetryCollector, _Buffer, get_telemetry
+from src.observability.telemetry import TelemetryCollector, _Buffer, get_telemetry
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -239,7 +239,7 @@ class TestBuffer:
     def test_total_correto(self):
         buf = _Buffer()
         # adiciona 2 eventos, 1 tool, 1 token
-        from src.telemetry import _AgentEventRow, _ToolUsageRow
+        from src.observability.telemetry import _AgentEventRow, _ToolUsageRow
 
         buf.agent_events.append(MagicMock(spec=_AgentEventRow))
         buf.agent_events.append(MagicMock(spec=_AgentEventRow))
@@ -265,7 +265,7 @@ class TestFlush:
         assert col._buffer.total() > 0
 
         ctx, _ = _make_conn_ctx()
-        with patch("src.telemetry.TelemetryCollector._write_snapshot"):
+        with patch("src.observability.telemetry.TelemetryCollector._write_snapshot"):
             asyncio.run(col.flush())
 
         assert col._buffer.total() == 0
@@ -324,7 +324,7 @@ class TestFlush:
         col._buffer = _Buffer()  # limpa buffer manualmente
 
         ctx, mock_conn = _make_conn_ctx()
-        with patch("src.telemetry.get_connection", return_value=ctx):
+        with patch("src.observability.telemetry.get_connection", return_value=ctx):
             col._write_snapshot(snap)
 
         # Verifica que execute foi chamado ao menos uma vez
@@ -355,7 +355,7 @@ class TestQueries:
             }
         ]
         ctx, _ = _make_conn_ctx(fetchall=rows)
-        with patch("src.telemetry.get_connection", return_value=ctx):
+        with patch("src.observability.telemetry.get_connection", return_value=ctx):
             timeline = col.get_execution_timeline("exec1")
         assert len(timeline) == 1
         assert timeline[0]["agent_id"] == "planner"
@@ -376,7 +376,7 @@ class TestQueries:
             }
         ]
         ctx, _ = _make_conn_ctx(fetchall=rows)
-        with patch("src.telemetry.get_connection", return_value=ctx):
+        with patch("src.observability.telemetry.get_connection", return_value=ctx):
             summary = col.get_token_summary("exec1")
         assert "by_provider_model" in summary
         assert len(summary["by_provider_model"]) == 1
@@ -394,7 +394,7 @@ class TestQueries:
             }
         ]
         ctx, _ = _make_conn_ctx(fetchall=rows)
-        with patch("src.telemetry.get_connection", return_value=ctx):
+        with patch("src.observability.telemetry.get_connection", return_value=ctx):
             summary = col.get_tool_summary("exec1")
         assert "by_tool" in summary
 
@@ -410,7 +410,7 @@ class TestQueries:
             "snapshot_count": 10,
         }
         ctx, _ = _make_conn_ctx(fetchone=row)
-        with patch("src.telemetry.get_connection", return_value=ctx):
+        with patch("src.observability.telemetry.get_connection", return_value=ctx):
             peaks = col.get_hardware_peaks("exec1")
         assert peaks["max_temp_c"] == 72.5
 
@@ -420,7 +420,7 @@ class TestQueries:
         ctx = MagicMock()
         ctx.__enter__ = MagicMock(side_effect=Exception("DB offline"))
         ctx.__exit__ = MagicMock(return_value=False)
-        with patch("src.telemetry.get_connection", return_value=ctx):
+        with patch("src.observability.telemetry.get_connection", return_value=ctx):
             assert col.get_execution_timeline("x") == []
             assert col.get_token_summary("x") == {}
             assert col.get_tool_summary("x") == {}
@@ -436,7 +436,7 @@ class TestQueries:
 class TestGetTelemetrySingleton:
     def test_retorna_mesma_instancia(self):
         """get_telemetry() deve retornar sempre a mesma instância."""
-        import src.telemetry as tel_module
+        import src.observability.telemetry as tel_module
 
         tel_module._collector = None  # reset singleton
         t1 = get_telemetry()
@@ -444,7 +444,7 @@ class TestGetTelemetrySingleton:
         assert t1 is t2
 
     def test_instancia_e_telemetry_collector(self):
-        import src.telemetry as tel_module
+        import src.observability.telemetry as tel_module
 
         tel_module._collector = None
         t = get_telemetry()
@@ -465,7 +465,7 @@ def _insert_token_usage_call(**kwargs):
     snap = col._buffer
     col._buffer = _Buffer()
     ctx, mock_conn = _make_conn_ctx()
-    with patch("src.telemetry.get_connection", return_value=ctx):
+    with patch("src.observability.telemetry.get_connection", return_value=ctx):
         col._write_snapshot(snap)
     for call in mock_conn.execute.call_args_list:
         if "INSERT INTO token_usage" in call[0][0]:
@@ -515,7 +515,7 @@ def test_snapshot_remove_bytes_nul_dos_parametros_de_texto():
     """O PostgreSQL recusa NUL em campos de texto; a saída de um sandbox com NUL derrubava o lote de telemetria."""
     from unittest.mock import MagicMock
 
-    from src.telemetry import _NulSafeConnection, _strip_nul
+    from src.observability.telemetry import _NulSafeConnection, _strip_nul
 
     assert _strip_nul("a\x00b") == "ab" and _strip_nul(("x\x00", 3, None)) == ("x", 3, None)
     raw = MagicMock()

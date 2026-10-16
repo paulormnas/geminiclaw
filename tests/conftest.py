@@ -245,11 +245,11 @@ def mock_db_connection(request):
     # Patches obrigatórios
     patches = [
         patch("src.db.get_connection", return_value=ctx),
-        patch("src.session.get_connection", return_value=ctx),
-        patch("src.history.get_connection", return_value=ctx),
-        patch("src.telemetry.get_connection", return_value=ctx),
+        patch("src.session.manager.get_connection", return_value=ctx),
+        patch("src.session.history.get_connection", return_value=ctx),
+        patch("src.observability.telemetry.get_connection", return_value=ctx),
         patch("src.skills.memory.long_term.get_connection", return_value=ctx),
-        patch("src.llm_cache.get_connection", return_value=ctx),
+        patch("src.llm.cache.get_connection", return_value=ctx),
     ]
     
     # Patches opcionais (Search Deep e Doc Processor)
@@ -263,7 +263,7 @@ def mock_db_connection(request):
     try:
         from src.skills import _HAS_DOC_PROCESSOR
         if _HAS_DOC_PROCESSOR:
-            patches.append(patch("src.skills.document_processor.indexer.get_connection", return_value=ctx))
+            patches.append(patch("src.documents.indexer.get_connection", return_value=ctx))
     except (ImportError, AttributeError):
         pass
 

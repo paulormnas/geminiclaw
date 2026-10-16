@@ -22,11 +22,11 @@ import json
 import math
 import os
 import re
-import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from src.documents.hashing import IngestionFileError, _confined, _open_regular
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -36,7 +36,6 @@ _STEP_FILE_RE = re.compile(r"^step_\d{1,4}\.py$")
 
 MAX_JSON_BYTES = 2 * 1024 * 1024
 MAX_SCRIPT_BYTES = 1024 * 1024
-MAX_HASH_BYTES = 2 * 1024 * 1024 * 1024  # insumos maiores que isto não são ingeridos
 MAX_INPUT_FILES = 500
 MAX_METRICS = 200
 MAX_DATASETS = 100
@@ -44,11 +43,6 @@ MAX_MANIFEST_STEPS = 500
 MAX_SEARCH_DEPTH = 3
 MAX_SEARCH_ENTRIES = 2000
 MAX_NAME_CHARS = 200
-_CHUNK = 1024 * 1024
-
-
-class IngestionFileError(Exception):
-    """Arquivo ausente, inseguro, grande demais ou malformado (a ingestão tolera e registra)."""
 
 
 def is_safe_name(name: object) -> bool:
@@ -62,37 +56,6 @@ def finite_number(value: object) -> float | None:
         return None
     number = float(value)
     return number if math.isfinite(number) else None
-
-
-def _confined(path: Path, root: Path) -> Path:
-    """Resolve ``path`` e garante que está dentro de ``root`` (sem link simbólico no destino)."""
-    if path.is_symlink():
-        raise IngestionFileError("link simbólico recusado")
-    try:
-        resolved = path.resolve(strict=True)
-        root_resolved = root.resolve(strict=True)
-    except (OSError, RuntimeError) as exc:
-        raise IngestionFileError(f"caminho inacessível: {type(exc).__name__}") from exc
-    if not resolved.is_relative_to(root_resolved):
-        raise IngestionFileError("caminho fora da pasta da sessão")
-    return resolved
-
-
-def _open_regular(path: Path, root: Path) -> int:
-    """Abre (somente leitura) um arquivo comum confinado em ``root``; devolve o descritor."""
-    resolved = _confined(path, root)
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
-    try:
-        fd = os.open(resolved, flags)
-    except OSError as exc:
-        raise IngestionFileError(f"não foi possível abrir: {type(exc).__name__}") from exc
-    try:
-        if not stat.S_ISREG(os.fstat(fd).st_mode):
-            raise IngestionFileError("não é um arquivo comum")
-    except BaseException:
-        os.close(fd)
-        raise
-    return fd
 
 
 def read_bytes_limited(path: Path, root: Path, limit: int) -> bytes:
@@ -139,27 +102,6 @@ def stat_regular(path: Path, root: Path) -> os.stat_result:
         return os.fstat(fd)
     finally:
         os.close(fd)
-
-
-def sha256_file(path: Path, root: Path, *, max_bytes: int = MAX_HASH_BYTES) -> str:
-    """SHA-256 em streaming de um arquivo comum confinado em ``root``.
-
-    Raises:
-        IngestionFileError: Arquivo inseguro, ilegível ou maior que ``max_bytes``.
-    """
-    fd = _open_regular(path, root)
-    digest = hashlib.sha256()
-    total = 0
-    try:
-        with os.fdopen(fd, "rb") as handle:
-            while chunk := handle.read(_CHUNK):
-                total += len(chunk)
-                if total > max_bytes:
-                    raise IngestionFileError(f"arquivo maior que {max_bytes} bytes")
-                digest.update(chunk)
-    except OSError as exc:
-        raise IngestionFileError(f"falha de leitura: {type(exc).__name__}") from exc
-    return digest.hexdigest()
 
 
 def list_regular_files(directory: Path, root: Path, *, limit: int = MAX_INPUT_FILES) -> list[Path]:

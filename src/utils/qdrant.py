@@ -18,3 +18,12 @@ def get_qdrant_client() -> QdrantClient:
     logger.debug("Inicializando QdrantClient", extra={"url": QDRANT_URL})
     client = QdrantClient(url=QDRANT_URL)
     return client
+
+
+def _make_client(url: str) -> QdrantClient:
+    """Cria um `QdrantClient` a partir de uma URL/caminho/``:memory:``."""
+    if url == ":memory:":
+        return QdrantClient(location=":memory:")
+    if url.startswith("http"):
+        return QdrantClient(url=url)
+    return QdrantClient(path=url)

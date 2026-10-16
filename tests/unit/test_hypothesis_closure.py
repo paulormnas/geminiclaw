@@ -14,12 +14,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.agents.validator_agent import ReviewResult, ValidatorAgent
-from src.autonomous_loop import AutonomousLoop, CycleProgress, succeeded_task_names
+from src.agents.validator.agent import ReviewResult, ValidatorAgent
+from src.artifacts.subtask_output import negative_result_feedback
 from src.claims.decompose import Sentence
 from src.claims.evidence import report_evidence_builder, session_results_item
 from src.claims.model import Conclusao
-from src.claims.report import ensure_claims_file
 from src.knowledge import vocabulary
 from src.knowledge.graph_store import InMemoryGraphStore
 from src.knowledge.ingestion import SessionContext, SubtaskInput, ingest_session_start, ingest_subtask
@@ -29,9 +28,10 @@ from src.knowledge.service import KnowledgeService
 from src.knowledge.verdict import VerdictParams
 from src.knowledge.vocabulary import seed_vocabulary
 from src.llm.base import LLMResponse
-from src.operation_metrics import HypothesisClosureReader
-from src.orchestrator import AgentResult, AgentTask
-from src.subtask_output import negative_result_feedback
+from src.orchestration.autonomous_loop import AutonomousLoop, CycleProgress, succeeded_task_names
+from src.orchestration.orchestrator import AgentResult, AgentTask
+from src.report.claims_report import ensure_claims_file
+from src.report.operation_metrics import HypothesisClosureReader
 from tests.support.curator_graph import ORQ, RESEARCHER
 from tests.support.exploration_world import LoopHarness, hyp, plan, task
 
@@ -60,7 +60,7 @@ def _agent(reply: str = '{"status": "pass", "feedback": "ok", "issues": []}'):
 async def _review(agent, root, criteria, *, hypothesis_id="hyp-1", expected=None):
     t = AgentTask(agent_id="developer", prompt="x", task_name="treinar_rl", validation_criteria=criteria,
                   expected_artifacts=expected or [], hypothesis_id=hypothesis_id)
-    with patch("src.agents.validator_agent.record_llm_call"):
+    with patch("src.agents.validator.agent.record_llm_call"):
         return await agent.review_result(task=t, response_text="ok", output_dir=root)
 
 
@@ -94,8 +94,8 @@ async def test_subtask_review_registra_o_outcome(tmp_path):
     t = AgentTask(agent_id="developer", prompt="x", task_name="treinar_rl", validation_criteria=[CRITERION],
                   hypothesis_id="hyp-1")
     result = AgentResult(agent_id="developer", session_id="s", status="success", response={"text": "ok"})
-    with patch("src.telemetry.get_telemetry", return_value=telemetry), \
-            patch("src.agents.validator_agent.record_llm_call"):
+    with patch("src.observability.telemetry.get_telemetry", return_value=telemetry), \
+            patch("src.agents.validator.agent.record_llm_call"):
         review = await loop._review_subtask(t, result, tmp_path.name)
     assert review["outcome"] == "resultado_negativo" and review["negative_findings"]
     payload = telemetry.record_agent_event.call_args.kwargs["payload"]
@@ -185,7 +185,7 @@ async def test_dependente_roda_e_a_subtarefa_negativa_nao_repete():
     async def review(t, result, sid, attempt=1):
         return dict(NEGATIVE_REVIEW)
 
-    with patch("src.autonomous_loop.get_telemetry", return_value=MagicMock()), \
+    with patch("src.orchestration.autonomous_loop.get_telemetry", return_value=MagicMock()), \
             patch("src.config.REVIEW_ENABLED", True), patch("src.config.REVIEW_MODE", "per_subtask"), \
             patch.object(loop, "_review_subtask", side_effect=review), \
             patch.object(loop, "_is_complex_triage", AsyncMock(return_value=True)):
@@ -231,11 +231,11 @@ async def test_feedback_ao_researcher_cita_hipotese_valor_e_limiar():
     async def review(t, result, sid, attempt=1):
         return dict(NEGATIVE_REVIEW)
 
-    from src.usage import UsageBudget
+    from src.orchestration.usage import UsageBudget
 
     budget = UsageBudget(max_tokens=500_000, max_minutes=120, max_task_retries=1, max_connection_retries=20,
                          closing_reserve_pct=0.05)
-    with patch("src.autonomous_loop.get_telemetry", return_value=MagicMock()), \
+    with patch("src.orchestration.autonomous_loop.get_telemetry", return_value=MagicMock()), \
             patch("src.config.REVIEW_ENABLED", True), patch("src.config.REVIEW_MODE", "per_subtask"), \
             patch.object(loop, "_review_subtask", side_effect=review), \
             patch.object(loop, "_is_complex_triage", AsyncMock(return_value=True)):
@@ -339,7 +339,7 @@ def test_metrica_candidata_registra_resultado_sem_mede(tmp_path, tmp_path_factor
     session_dir = tmp_path / SESSION
     _metrics(session_dir, "treinar_rl", {"accuracy": 0.933})
     telemetry = MagicMock()
-    with patch("src.telemetry.get_telemetry", return_value=telemetry):
+    with patch("src.observability.telemetry.get_telemetry", return_value=telemetry):
         ingest_subtask(store, ctx, session_dir, _negative_sub(hypothesis_id=hid))
     events = [c.kwargs for c in telemetry.record_agent_event.call_args_list]
     sem_mede = [e for e in events if e["event_type"] == "resultado_sem_mede"]
@@ -468,7 +468,7 @@ def test_contadores_de_operacao():
     }
     telemetry = MagicMock()
     telemetry.get_events.side_effect = lambda sid, kind: events.get(kind, [])
-    with patch("src.telemetry.get_telemetry", return_value=telemetry):
+    with patch("src.observability.telemetry.get_telemetry", return_value=telemetry):
         out = HypothesisClosureReader().read("s")
     assert out == {
         "resultados_sem_mede": 2, "subtarefas_resultado_negativo": 1, "hipoteses_sem_tentativa_no_fechamento": 2,

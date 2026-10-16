@@ -1,5 +1,5 @@
-from src.orchestrator import AgentResult
-from src.subtask_output import SubtaskOutput
+from src.artifacts.subtask_output import SubtaskOutput
+from src.orchestration.orchestrator import AgentResult
 
 
 def test_subtask_output_serialization():

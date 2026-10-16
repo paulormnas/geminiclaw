@@ -5,7 +5,8 @@ Implementa compressão em 2 camadas: priorização por tipo e sumarização via 
 
 from typing import Any, Dict, List, Optional
 
-from src.egress.fragments import (
+from src.logger import get_logger
+from src.utils.egress_fragments import (
     ContentOrigin,
     PromptFragment,
     dumps_messages,
@@ -13,7 +14,6 @@ from src.egress.fragments import (
     message_to_fragments,
     truncate_message,
 )
-from src.logger import get_logger
 
 logger = get_logger(__name__)
 

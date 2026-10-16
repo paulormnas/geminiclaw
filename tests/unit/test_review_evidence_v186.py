@@ -11,18 +11,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.agents.validator_agent import (
-    ValidatorAgent,
-    _evaluate_metric_criteria,
-    _metric_criteria,
-    build_artifact_evidence_fragments,
-)
-from src.artifact_profile import profile_artifact
-from src.egress.fragments import ContentOrigin
-from src.knowledge.normalization import split_metric_name
+from src.agents.validator.agent import ValidatorAgent, build_artifact_evidence_fragments
+from src.artifacts.metrics_file import metrics_of
+from src.artifacts.profile import profile_artifact
+from src.knowledge.metric_criteria import _evaluate_metric_criteria, _metric_criteria
 from src.llm.base import LLMResponse
-from src.metrics_file import metrics_of
-from src.orchestrator import AgentTask
+from src.orchestration.orchestrator import AgentTask
+from src.utils.egress_fragments import ContentOrigin
+from src.utils.normalization import split_metric_name
 
 pytestmark = pytest.mark.unit
 
@@ -140,7 +136,7 @@ def _agent(reply='{"status": "pass", "feedback": "ok", "issues": []}'):
 async def _review(agent, root, criteria, expected=None):
     task = AgentTask(agent_id="developer", prompt="x", task_name="t", validation_criteria=criteria,
                      expected_artifacts=expected or [])
-    with patch("src.agents.validator_agent.record_llm_call"):
+    with patch("src.agents.validator.agent.record_llm_call"):
         return await agent.review_result(task=task, response_text="ok", output_dir=root)
 
 
@@ -286,7 +282,7 @@ def _plan(**kw):
 async def test_baseline_sem_hipotese_passa_com_aviso():
     """Scenario: Baseline sem hipótese."""
     agent, _ = _agent('{"status": "approved", "reason": "ok", "issues": []}')
-    with patch("src.agents.validator_agent.record_llm_call"):
+    with patch("src.agents.validator.agent.record_llm_call"):
         result = await agent.validate_plan(_plan(), "x")
     assert result.is_valid and result.warnings == ["validation_sem_hipotese"]
 

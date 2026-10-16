@@ -104,8 +104,8 @@ def apply_revisions(source_text: str, revisions: dict[str, str], sections: tuple
 
 async def request_revisions(provider: Any, items: list[RevisionItem], tainted: bool) -> dict[str, str]:
     """Uma chamada ao Summarizer com todas as conclusões do ciclo; devolve os parágrafos substitutos válidos."""
-    from src.egress.fragments import ContentOrigin, PromptFragment, labeled, taint_if
     from src.llm.metering import record_llm_call
+    from src.utils.egress_fragments import ContentOrigin, PromptFragment, labeled, taint_if
 
     payload = json.dumps(
         [{"conclusao_id": i.conclusao_id, "texto": i.texto, "problemas": i.problemas} for i in items],

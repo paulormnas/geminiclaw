@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from src.platform_images import (
+from src.host.platform_images import (
     MANIFEST_PATH,
     ManifestError,
     PlatformImageError,
@@ -18,7 +18,7 @@ from src.platform_images import (
     plan_images,
     select_images,
 )
-from src.platform_info import detect_platform
+from src.host.platform_info import detect_platform
 
 from .helpers import FakeClient
 
@@ -145,7 +145,7 @@ def _fake_project(root: Path) -> Path:
 
 
 def test_contexto_do_build_so_leva_o_necessario(tmp_path) -> None:
-    from src.platform_images import build_context
+    from src.host.platform_images import build_context
 
     sandbox = load_manifest(MANIFEST_PATH)["sandbox"]
     assert sandbox.contexto == ("containers/sandbox",)
@@ -160,7 +160,7 @@ def test_contexto_do_build_so_leva_o_necessario(tmp_path) -> None:
 def test_contexto_fora_do_projeto_ou_ausente_e_recusado(tmp_path) -> None:
     from dataclasses import replace
 
-    from src.platform_images import build_context
+    from src.host.platform_images import build_context
 
     sandbox = load_manifest(MANIFEST_PATH)["sandbox"]
     root = _fake_project(tmp_path / "proj")

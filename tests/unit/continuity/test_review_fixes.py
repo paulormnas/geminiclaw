@@ -12,10 +12,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agents.base.tools import read_artifact
-from src.agent_runtime.context import AgentContext, bind_agent_context, current_context
-from src.autonomous_loop import AutonomousLoop
-from src.continuity import (
+from src.agents.base.tools import read_artifact
+from src.knowledge.failure_cause import classify_failure
+from src.knowledge.ingestion import SessionContext, ingest_session_start
+from src.knowledge.resume_context import build_resume_context
+from src.orchestration.autonomous_loop import AutonomousLoop
+from src.orchestration.orchestrator import AgentTask, Orchestrator
+from src.session.continuity import (
     Checkpoint,
     CheckpointError,
     CheckpointRecorder,
@@ -28,12 +31,9 @@ from src.continuity import (
     read_checkpoint,
     safe_artifact_path,
 )
-from src.knowledge.failure_cause import classify_failure
-from src.knowledge.ingestion import SessionContext, ingest_session_start
-from src.knowledge.resume_context import build_resume_context
-from src.orchestrator import AgentTask, Orchestrator
-from src.resume import ResumeError, select_session_for_project
-from src.session import SessionManager
+from src.session.manager import SessionManager
+from src.session.resume import ResumeError, select_session_for_project
+from src.utils.agent_context import AgentContext, bind_agent_context, current_context
 from tests.support.session_fakes import FakeSessionManager
 from tests.unit.continuity.test_interruption import _crashed_session, _orch
 from tests.unit.continuity.test_resume import World
@@ -52,13 +52,13 @@ def _ctx_reset():
 
 @pytest.fixture(autouse=True)
 def _routing_stub():
-    with patch("src.orchestrator.bind_session_routing"), patch("src.orchestrator.build_session_routing", AsyncMock()):
+    with patch("src.orchestration.orchestrator.bind_session_routing"), patch("src.orchestration.orchestrator.build_session_routing", AsyncMock()):
         yield
 
 
 def _slugs(*names: str):
     it = iter(names)
-    return patch("src.orchestrator.generate_session_slug", side_effect=lambda _p: next(it))
+    return patch("src.orchestration.orchestrator.generate_session_slug", side_effect=lambda _p: next(it))
 
 
 async def _run(world: World, prep, **kw):
@@ -139,7 +139,7 @@ async def test_continuacao_sem_checkpoint_libera_a_origem(tmp_path):
 
 @pytest.mark.asyncio
 async def test_continuacao_em_erro_libera_e_valida_retomavel_manda_retomar_y(tmp_path):
-    from src.continuity import CheckpointRecorder as R
+    from src.session.continuity import CheckpointRecorder as R
 
     w = World(tmp_path)
     y_dir = w.orch.output_manager.init_session("sessao-y")
@@ -237,7 +237,7 @@ def test_preload_sanitiza_resumo_e_caminhos_do_checkpoint():
     resume = ResumeState(source_session_id="sessao-a", project_id=None, checkpoint=cp)
     loop = AutonomousLoop(MagicMock())
     loop._preload_resumed_results("sessao-b", resume)
-    from src.subtask_output import SubtaskOutput
+    from src.artifacts.subtask_output import SubtaskOutput
 
     entry = loop._short_term_memory.read("sessao-b", "result:a")
     text = SubtaskOutput.from_json(entry.value).to_context_string()
@@ -375,7 +375,7 @@ async def test_s4_teto_acumulado_da_cadeia(tmp_path):
 
 @pytest.mark.asyncio
 async def test_s5_repl_nao_sobrescreve_o_modo_da_origem():
-    from src import cli
+    import src.cli.main as cli
 
     with patch("builtins.input", side_effect=["resume s1", "sair"]), \
             patch.object(cli, "resume_session", AsyncMock(return_value=True)) as res, \
@@ -386,14 +386,14 @@ async def test_s5_repl_nao_sobrescreve_o_modo_da_origem():
 
 @pytest.mark.asyncio
 async def test_s6_run_resume_devolve_false_quando_handle_request_falha(tmp_path):
-    from src import cli
+    import src.cli.main as cli
 
     w = World(tmp_path)
     prep = await w.prepare()
     orch = MagicMock()
     orch.recover_interrupted_sessions = AsyncMock()
     orch.handle_request = AsyncMock(side_effect=ResumeConflictError("perdi"))
-    with patch("src.resume.prepare_resume", AsyncMock(return_value=prep)), \
+    with patch("src.session.resume.prepare_resume", AsyncMock(return_value=prep)), \
             patch("src.llm.session.build_session_routing", AsyncMock(return_value=ROUTING)), \
             patch("src.llm.session.bind_session_routing"), patch.object(cli, "print_session_banner"), \
             patch("src.knowledge.factory.open_knowledge_runtime", return_value=None), \
@@ -410,7 +410,7 @@ async def test_s7_mensagem_de_sessao_ativa_traz_o_tempo(tmp_path):
 
 @pytest.mark.asyncio
 async def test_s8_gravacao_do_checkpoint_fora_do_laco_de_eventos(tmp_path):
-    from src.continuity import CheckpointRecorder as R
+    from src.session.continuity import CheckpointRecorder as R
 
     w = World(tmp_path)
     prep = await w.prepare()

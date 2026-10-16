@@ -223,7 +223,7 @@ def export_derived_metrics(execution_id: str, output_dir: Path) -> None:
         execution_id: ID da execução.
         output_dir: Diretório de saída.
     """
-    from src.telemetry import get_telemetry
+    from src.observability.telemetry import get_telemetry
 
     tel = get_telemetry()
     metrics = tel.get_derived_metrics(execution_id)

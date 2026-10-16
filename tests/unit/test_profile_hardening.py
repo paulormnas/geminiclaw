@@ -11,10 +11,10 @@ import time
 
 import pytest
 
-from src import artifact_profile
-from src.agents.validator_agent import build_artifact_evidence, build_artifact_evidence_fragments
-from src.artifact_profile import profile_artifact
-from src.egress.fragments import ContentOrigin
+from src.agents.validator.agent import build_artifact_evidence, build_artifact_evidence_fragments
+from src.artifacts import profile as artifact_profile
+from src.artifacts.profile import profile_artifact
+from src.utils.egress_fragments import ContentOrigin
 
 pytestmark = pytest.mark.unit
 
@@ -76,7 +76,7 @@ def test_symlink_para_fora_da_sessao(tmp_path, com_resolucoes):
     session, link = _symlink_to_secret(tmp_path)
     resolutions = None
     if com_resolucoes:
-        from src.artifact_match import ArtifactResolution
+        from src.artifacts.match import ArtifactResolution
 
         resolutions = [ArtifactResolution(expected="dados.csv", matched=[link.relative_to(session)], tier="exact")]
     fragments = build_artifact_evidence_fragments(session, ["dados.csv"], resolutions)

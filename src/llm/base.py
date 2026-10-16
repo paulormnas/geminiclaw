@@ -50,7 +50,7 @@ class LLMResponse:
                 for tc in self.tool_calls
             ]
         if self.produced_by is not None:
-            from src.egress.fragments import FRAGMENTS_KEY, TOOL_CALLS_TAINTED_KEY, ContentOrigin, PromptFragment
+            from src.utils.egress_fragments import FRAGMENTS_KEY, TOOL_CALLS_TAINTED_KEY, ContentOrigin, PromptFragment
 
             if self.text:
                 msg[FRAGMENTS_KEY] = [

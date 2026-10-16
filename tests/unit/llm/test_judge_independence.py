@@ -285,7 +285,7 @@ def test_base_nao_e_julgado_depois_da_v18_6(tmp_path):
 async def test_orchestrator_aplica_a_dica_sem_despacho_de_base(tmp_path):
     """O orquestrador resolve o modelo da subtarefa por `apply_hint` (sem a conferência de `base`/`reviewer`)."""
     from src.llm.session import bind_session_routing
-    from src.orchestrator import AgentTask, Orchestrator
+    from src.orchestration.orchestrator import AgentTask, Orchestrator
 
     document = doc({"developer": [CLAUDE], "validator": [GEMINI]})
     routing = make_routing(tmp_path, document)
@@ -300,7 +300,7 @@ async def test_orchestrator_aplica_a_dica_sem_despacho_de_base(tmp_path):
     orchestrator.agent_runtime = MagicMock(run=AsyncMock(side_effect=RuntimeError("parou aqui")))
     orchestrator._resumes = {}
     task = AgentTask(agent_id="developer", prompt="x", task_name="s1", preferred_model=GEMINI)
-    with patch("src.orchestrator.get_telemetry", return_value=MagicMock()):
+    with patch("src.orchestration.orchestrator.get_telemetry", return_value=MagicMock()):
         try:
             await orchestrator._execute_agent(task, None)
         except Exception:  # noqa: BLE001 — o que importa é a decisão registrada antes da execução
@@ -382,7 +382,7 @@ def test_familias_julgadas_do_payload_incluem_eventos():
 @pytest.mark.asyncio
 async def test_orchestrator_confere_a_retomada_antes_de_criar_a_sessao(tmp_path):
     """Scenario: Catálogo mudou entre as execuções (pelo orquestrador: falha antes de criar a sessão)."""
-    from src.orchestrator import Orchestrator
+    from src.orchestration.orchestrator import Orchestrator
 
     routing = make_routing(tmp_path, doc({"developer": [GEMINI], "validator": [CLAUDE]}))
     orchestrator = Orchestrator.__new__(Orchestrator)
@@ -415,9 +415,9 @@ def test_catalogo_versionado_tem_uma_familia_de_cada_antes_do_local():
 @pytest.mark.asyncio
 async def test_telemetria_da_revisao(tmp_path):
     """Scenario: Telemetria da revisão."""
-    from src.agents.validator_agent import ValidatorAgent
+    from src.agents.validator.agent import ValidatorAgent
     from src.llm.base import LLMResponse
-    from src.orchestrator import AgentTask
+    from src.orchestration.orchestrator import AgentTask
 
     provider = MagicMock()
     provider.model_name = "m"
@@ -426,7 +426,7 @@ async def test_telemetria_da_revisao(tmp_path):
     )
     agent = ValidatorAgent(provider=provider)
     task = AgentTask(agent_id="developer", prompt="x", task_name="eda", validation_criteria=["texto claro"])
-    with patch("src.agents.validator_agent.record_llm_call") as record:
+    with patch("src.agents.validator.agent.record_llm_call") as record:
         await agent.review_result(task=task, response_text="ok", output_dir=tmp_path)
     assert record.call_args.args[3] == "validator"
     assert record.call_args.kwargs["funcao"] == "revisao_subtarefa"
@@ -437,7 +437,7 @@ async def test_telemetria_da_revisao(tmp_path):
 
 def test_orchestrator_grava_evento_e_atualiza_o_payload(tmp_path):
     """Cada conferência vai à telemetria e ao payload da sessão (ADR 020 §6)."""
-    from src.orchestrator import Orchestrator
+    from src.orchestration.orchestrator import Orchestrator
 
     routing = make_routing(tmp_path, doc({"developer": [GEMINI], "validator": [CLAUDE]}))
     orchestrator = Orchestrator.__new__(Orchestrator)
@@ -446,7 +446,7 @@ def test_orchestrator_grava_evento_e_atualiza_o_payload(tmp_path):
     orchestrator.session_manager.get.side_effect = lambda sid: MagicMock(payload=dict(stored["payload"]))
     orchestrator.session_manager.update.side_effect = lambda sid, payload: stored.update(payload=payload)
     telemetry = MagicMock()
-    with patch("src.orchestrator.get_telemetry", return_value=telemetry):
+    with patch("src.orchestration.orchestrator.get_telemetry", return_value=telemetry):
         orchestrator._wire_independence_events(routing, "sessao")
         routing.apply_hint("developer", CLAUDE, subtarefa="eda")
     assert telemetry.record_agent_event.call_args.kwargs["event_type"] == "independencia_julgamento"
@@ -455,7 +455,7 @@ def test_orchestrator_grava_evento_e_atualiza_o_payload(tmp_path):
 
 
 def test_metricas_de_operacao_leem_o_registro():
-    from src.operation_metrics import JudgeIndependenceReader, MetricsUnavailable
+    from src.report.operation_metrics import JudgeIndependenceReader, MetricsUnavailable
 
     payload = {
         "independencia_julgamento": {
@@ -472,7 +472,7 @@ def test_metricas_de_operacao_leem_o_registro():
 
 
 def test_secao_de_metricas_mostra_a_linha_de_julgamento():
-    from src.operation_metrics import STATE_OK, render_operation_metrics_section
+    from src.report.operation_metrics import STATE_OK, render_operation_metrics_section
 
     group = {"estado": STATE_OK}
     metrics = {

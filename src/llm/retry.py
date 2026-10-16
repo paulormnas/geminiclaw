@@ -4,7 +4,7 @@ Spec `usage-limits`).
 Cada provedor (`src/llm/providers/*.py`) usa estas funções para decidir se um
 erro é transitório (conexão/timeout/429/5xx — vale a pena retentar) e para
 emitir o evento ``connection_retry`` na telemetria a cada retentativa, insumo
-para `src.usage.UsageTracker` aplicar `SESSION_MAX_CONNECTION_RETRIES` como
+para `src.orchestration.usage.UsageTracker` aplicar `SESSION_MAX_CONNECTION_RETRIES` como
 condição de parada da sessão.
 """
 
@@ -69,7 +69,7 @@ def emit_connection_retry(component: str, error_message: str) -> None:
         error_message: Descrição resumida do erro que motivou a retentativa.
     """
     try:
-        from src.telemetry import get_telemetry
+        from src.observability.telemetry import get_telemetry
 
         session_id = os.environ.get("SESSION_ID", "unknown")
         execution_id = os.environ.get("EXECUTION_ID", session_id)

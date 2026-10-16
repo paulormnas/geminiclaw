@@ -18,8 +18,8 @@ import pytest
 from src.agent_runtime.definitions import get_agent_definitions, reset_definitions_cache
 from src.llm.catalog import REQUIRED_ROLES, CatalogError
 from src.llm.routing import read_pins, reset_removed_variables_warning
-from src.orchestrator import AGENT_IDS, AgentResult, AgentTask, Orchestrator
-from src.plan_normalizer import normalize_plan
+from src.orchestration.orchestrator import AGENT_IDS, AgentResult, AgentTask, Orchestrator
+from src.orchestration.plan_normalizer import normalize_plan
 from tests.support.catalog_fixtures import load
 
 pytestmark = pytest.mark.unit
@@ -64,11 +64,11 @@ def test_papeis_internos_continuam_executaveis():
         reset_definitions_cache()
     assert {"developer", "researcher", "summarizer", "base", "curator"} <= set(definitions)
     assert "reviewer" not in definitions
-    assert not (REPO / "agents" / "reviewer").exists()
+    assert not (REPO / "src" / "agents" / "reviewer").exists()
 
 
 def test_dispatch_de_papel_desconhecido_segue_por_palavras_chave():
-    from src.autonomous_loop import AutonomousLoop
+    from src.orchestration.autonomous_loop import AutonomousLoop
 
     loop = AutonomousLoop(MagicMock())
     assert loop._dispatch_subtask(AgentTask(agent_id="base", prompt="calcular média")).agent_id == "developer"
@@ -148,8 +148,8 @@ def test_reviewer_model_definida_gera_warning(caplog, tmp_path):
 @pytest.mark.asyncio
 async def test_evento_subtask_review_tem_agent_id_validator(tmp_path):
     """Scenario: Telemetria da revisão (o evento; a chamada LLM é coberta em test_judge_independence)."""
-    from src.agents.validator_agent import ValidatorAgent
-    from src.autonomous_loop import AutonomousLoop
+    from src.agents.validator.agent import ValidatorAgent
+    from src.orchestration.autonomous_loop import AutonomousLoop
 
     (tmp_path / "sess").mkdir()
     orchestrator = MagicMock()
@@ -159,7 +159,7 @@ async def test_evento_subtask_review_tem_agent_id_validator(tmp_path):
     task = AgentTask(agent_id="developer", prompt="x", task_name="t")
     result = AgentResult(agent_id="developer", session_id="s", status="success", response={"text": "ok"})
     telemetry = MagicMock()
-    with patch("src.telemetry.get_telemetry", return_value=telemetry):
+    with patch("src.observability.telemetry.get_telemetry", return_value=telemetry):
         await AutonomousLoop(orchestrator)._review_subtask(task, result, "sess")
     call = telemetry.record_agent_event.call_args.kwargs
     assert call["event_type"] == "subtask_review" and call["agent_id"] == "validator"

@@ -120,6 +120,27 @@ ORIGENS_REFERENCIA: tuple[str, ...] = ("referencia_medida", "criterio_problema",
 # Identificadores conferidos no grafo (cada componente de ``chave_estruturada``); sem ``|``, o separador da chave.
 IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 MOTIVO_ABANDONO_MAX_CHARS = 500
+
+# v18.7-exploration-limits (ADR 021 §5.2, §5.5): objetivo tipado do Problema, política ao atingi-lo, conferência de
+# predições das hipóteses concorrentes e restrições de direção.
+TIPOS_OBJETIVO: tuple[str, ...] = ("limiar", "discriminacao", "cobertura", "fronteira")
+POLITICAS_OBJETIVO: tuple[str, ...] = ("parar", "perguntar", "continuar")
+DEFINIDO_POR_OBJETIVO: tuple[str, ...] = ("pesquisador", "agente")
+CONFERENCIAS_PREDICAO: tuple[str, ...] = ("confirma", "contraria", "inconclusiva")
+CATEGORIAS_RESTRICAO: tuple[str, ...] = ("seguranca", "etica", "recurso")
+STATUS_RESTRICAO: tuple[str, ...] = ("ativa", "revogada")
+# Campos de ``criterio_sucesso`` por tipo: (obrigatórios, proibidos). Os comuns a todos os tipos ficam em
+# ``CAMPOS_COMUNS_OBJETIVO``; o tipo ``fronteira`` é aceito pelo schema e recusado na confirmação (V19).
+CAMPOS_COMUNS_OBJETIVO: frozenset[str] = frozenset(
+    {"tipo", "ao_atingir_objetivo", "definido_por", "metrica", "metrica_id", "sentido", "alvo", "delta_min",
+     "baseline_descricao", "hipoteses_concorrentes"}
+)
+CAMPOS_OBJETIVO_POR_TIPO: dict[str, tuple[frozenset[str], frozenset[str]]] = {
+    "limiar": (frozenset({"metrica", "sentido", "delta_min"}), frozenset({"hipoteses_concorrentes"})),
+    "discriminacao": (frozenset({"hipoteses_concorrentes"}), frozenset({"alvo", "delta_min"})),
+    "cobertura": (frozenset(), frozenset({"alvo", "delta_min", "hipoteses_concorrentes"})),
+    "fronteira": (frozenset(), frozenset()),
+}
 # Propriedades que só nascem com a criação do nó e nunca mudam (inclusive para recusar a primeira gravação tardia).
 IMMUTABLE_LABEL_FIELDS: dict[str, frozenset[str]] = {
     "Hipotese": frozenset({"chave_estruturada", "referencia_fixada"}),
@@ -163,6 +184,8 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
                     "limite_execucoes",
                     "limite_egresso",  # v18.5-operation-metrics
                     "limite_cota_provedor",  # v18.7-benchmark-fixes (cota ou teto de gasto esgotado no provedor)
+                    "limite_custo",  # v18.7-exploration-limits (SESSION_MAX_COST_USD)
+                    "saturacao",  # v18.7-exploration-limits (intervenções esgotadas com o critério atendido)
                     "interrompida_pesquisador",  # v18.5-operation-metrics (1º Ctrl+C)
                     "versao_modelo",  # v18.5-model-catalog-locality (strict: versão do modelo mudou ou desconhecida)
                     "erro",
@@ -193,6 +216,8 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             "classe": PropertySchema(),
             "caracteristicas_dados": PropertySchema(),
             "criterio_sucesso": PropertySchema(),
+            # v18.7-exploration-limits: marcos de objetivo atingido (lista só acrescentada pelo orquestrador).
+            "objetivo_atingido": PropertySchema(),
             "status": PropertySchema(required=True, enum=("rascunho", "confirmado")),
         },
     ),
@@ -218,6 +243,9 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             "certeza": PropertySchema(),
             "veredito": PropertySchema(),
             "n_tentativas": PropertySchema(),
+            # v18.7-exploration-limits: hipótese concorrente do objetivo de discriminação e sua predição.
+            "concorrente": PropertySchema(),
+            "predicao": PropertySchema(),
         },
     ),
     "Abordagem": NodeSchema(
@@ -260,6 +288,8 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             "ambiente": PropertySchema(),
             # v18.6-hypothesis-closure: o critério quantitativo do plano foi atendido (ausente sem critério).
             "criterio_plano_atendido": PropertySchema(),
+            # v18.7-exploration-limits: ``{hipotese_id: confirma | contraria | inconclusiva}`` (discriminação).
+            "conferencia_predicoes": PropertySchema(),
             # v18.5-execution-provenance: execuções registradas (a principal e todas, na ordem da cadeia).
             "exec_id": PropertySchema(),
             "exec_ids": PropertySchema(),
@@ -392,6 +422,20 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             "justificativa_definicao": PropertySchema(),
         },
     ),
+    # v18.7-exploration-limits (ADR 021 §5.5): direção de pesquisa vedada pelo pesquisador. Nunca apagada: a revogação
+    # muda ``status``.
+    "Restricao": NodeSchema(
+        "Restricao",
+        {
+            "direcao": PropertySchema(required=True),
+            "categoria": PropertySchema(required=True, enum=CATEGORIAS_RESTRICAO),
+            "abordagens": PropertySchema(),
+            "status": PropertySchema(required=True, enum=STATUS_RESTRICAO),
+            "decidida_por": PropertySchema(required=True, enum=("pesquisador",)),
+            "decidida_em": PropertySchema(required=True),
+            "pedido_id": PropertySchema(),
+        },
+    ),
 }
 
 NODE_LABELS: frozenset[str] = frozenset(NODE_SCHEMAS)
@@ -433,6 +477,8 @@ RELATION_SCHEMAS: list[RelationSchema] = [
     _rel("Experimento", "PREPARA", ("Hipotese", "Problema")),
     _rel("Resultado", "REFERENCIA_DE", "Problema"),
     _rel("Experimento", "TESTA", "Hipotese"),
+    # v18.7-exploration-limits: a restrição de direção vale para um problema ou para o projeto inteiro.
+    _rel("Restricao", "RESTRINGE", ("Problema", "Projeto")),
     _rel("Decisao", "TOMADA_EM", "Sessao"),
     _rel("Decisao", "ESCOLHEU", ("Abordagem", "Hipotese")),
     _rel("Decisao", "DESCARTOU", ("Abordagem", "Hipotese"), motivo=PropertySchema(required=True)),

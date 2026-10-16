@@ -6,8 +6,9 @@ disponíveis) e o laço autônomo é um ``ScriptedLoop`` que executa os passos d
 
     {"passos": [{"dorme": 3}, {"tokens": 0}], "motivo": "solucao_encontrada"}
 
-``dorme`` espera N s (consultando o pedido de interrupção graciosa, como o laço real); ``motivo`` é o
-``motivo_parada`` gravado no fim. Nenhum gancho de teste entra no código de produção: tudo é substituído aqui, no
+``dorme`` espera N s (consultando o pedido de interrupção graciosa, como o laço real); ``subtarefa`` dá nome ao
+passo (registrado em ``payload.subtarefas`` e concluído mesmo com a suspensão pedida); ``motivo`` é o
+``motivo_parada`` gravado no fim. Um pedido de suspensão (ausência do terminal) impede o passo seguinte. Nenhum gancho de teste entra no código de produção: tudo é substituído aqui, no
 módulo de teste (design §4, "Como os testes de integração rodam sem chamada paga").
 """
 
@@ -30,15 +31,31 @@ class ScriptedLoop:
 
     async def run(self, prompt: str, exec_id: str, mode: str | None = None, budget: Any = None) -> Any:
         from src.orchestration.orchestrator import OrchestratorResult
-        from src.orchestration.usage import clear_interrupt, interrupt_requested, set_session_active
+        from src.orchestration.usage import (
+            clear_interrupt,
+            interrupt_requested,
+            set_session_active,
+            suspension_requested,
+        )
+        from src.session.states import STATUS_AWAITING_RESEARCHER, STATUS_SUSPENDED_NO_RESEARCHER
 
         scenario = json.loads(open(os.environ["GC_SCENARIO"], encoding="utf-8").read())
         master_id = list(self.orchestrator._session_modes)[-1]
+        manager = self.orchestrator.session_manager
         clear_interrupt()
         set_session_active(True)
         motivo = scenario.get("motivo", "solucao_encontrada")
+        status: str | None = None
+        subtarefas: list[dict[str, str]] = []
         try:
             for passo in scenario.get("passos", []):
+                if suspension_requested():  # a sessão assisted sem o terminal não despacha subtarefa nova
+                    motivo, status = "suspensa_sem_pesquisador", STATUS_SUSPENDED_NO_RESEARCHER
+                    break
+                nome = passo.get("subtarefa")
+                if nome:
+                    subtarefas.append({"nome": nome, "status": "em_andamento"})
+                    self._publish(manager, master_id, subtarefas)
                 remaining = float(passo.get("dorme", 0))
                 while remaining > 0:
                     if interrupt_requested():
@@ -46,14 +63,24 @@ class ScriptedLoop:
                         break
                     await asyncio.sleep(min(0.1, remaining))
                     remaining -= 0.1
+                if nome:  # o que está em curso termina mesmo com a suspensão pedida
+                    subtarefas[-1]["status"] = "concluida"
+                    self._publish(manager, master_id, subtarefas)
                 if motivo == "interrompida_pesquisador":
                     break
+            if motivo == "aguarda_pesquisador":
+                status = STATUS_AWAITING_RESEARCHER
         finally:
             set_session_active(False)
-        manager = self.orchestrator.session_manager
         session = manager.get(master_id)
-        manager.update(master_id, payload={**(session.payload if session else {}), "motivo_parada": motivo})
+        payload = {**(session.payload if session else {}), "motivo_parada": motivo, "subtarefas": subtarefas}
+        manager.update(master_id, status=status, payload=payload)
         return OrchestratorResult(results=[], total=0, succeeded=0, failed=0, artifacts=[])
+
+    @staticmethod
+    def _publish(manager: Any, master_id: str, subtarefas: list[dict[str, str]]) -> None:
+        session = manager.get(master_id)
+        manager.update(master_id, payload={**(session.payload if session else {}), "subtarefas": list(subtarefas)})
 
 
 def _offline_routing() -> Any:

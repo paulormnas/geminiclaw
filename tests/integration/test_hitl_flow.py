@@ -162,9 +162,9 @@ class TestOperationalThresholds:
 
         with patch("src.orchestration.autonomous_loop.get_telemetry") as mock_get_tel:
             mock_get_tel.return_value.get_token_summary.return_value = {"by_provider_model": []}
-            suspended = await loop._check_operational_thresholds("sess_1")
+            assert await loop._check_operational_thresholds("sess_1") is None
 
-        assert suspended is False
+        mock_orchestrator.session_manager.update.assert_not_called()
 
     async def test_modo_semi_nunca_bloqueia_mesmo_com_limite_atingido(self) -> None:
         mock_orchestrator = MagicMock()
@@ -177,12 +177,13 @@ class TestOperationalThresholds:
                 "by_provider_model": [{"total_tokens": 10_000_000, "total_cost_usd": 100.0}]
             }
             with patch("builtins.input") as mock_input:
-                suspended = await loop._check_operational_thresholds("sess_1")
+                assert await loop._check_operational_thresholds("sess_1") is None
 
         mock_input.assert_not_called()
-        assert suspended is False
+        mock_orchestrator.session_manager.update.assert_not_called()
 
-    async def test_modo_assisted_suspende_quando_pesquisador_confirma(self) -> None:
+    async def test_modo_assisted_so_registra_o_aviso_e_continua(self) -> None:
+        """Scenario "Limite operacional no assisted": aviso no log, sessão segue, sem pergunta no terminal."""
         mock_orchestrator = MagicMock()
         mock_orchestrator._session_agent_run_counts = {}
         loop = AutonomousLoop(mock_orchestrator)
@@ -192,29 +193,14 @@ class TestOperationalThresholds:
             mock_get_tel.return_value.get_token_summary.return_value = {
                 "by_provider_model": [{"total_tokens": 10_000_000, "total_cost_usd": 100.0}]
             }
-            with patch("asyncio.to_thread", new=AsyncMock(return_value="s")):
-                suspended = await loop._check_operational_thresholds("sess_1")
+            with (
+                patch("builtins.input", side_effect=AssertionError("sem leitura de stdin")),
+                patch("src.orchestration.autonomous_loop.logger") as log,
+            ):
+                assert await loop._check_operational_thresholds("sess_1") is None
 
-        assert suspended is True
-        mock_orchestrator.session_manager.update.assert_called_once()
-        args, kwargs = mock_orchestrator.session_manager.update.call_args
-        assert args == ("sess_1",) and kwargs["status"] == "suspended"
-        assert kwargs["payload"]["motivo_parada"] == "interrompida"  # retomável (v18-research-continuity)
-
-    async def test_modo_assisted_continua_quando_pesquisador_nao_confirma(self) -> None:
-        mock_orchestrator = MagicMock()
-        mock_orchestrator._session_agent_run_counts = {}
-        loop = AutonomousLoop(mock_orchestrator)
-        loop._session_mode = "assisted"
-
-        with patch("src.orchestration.autonomous_loop.get_telemetry") as mock_get_tel:
-            mock_get_tel.return_value.get_token_summary.return_value = {
-                "by_provider_model": [{"total_tokens": 10_000_000, "total_cost_usd": 100.0}]
-            }
-            with patch("asyncio.to_thread", new=AsyncMock(return_value="n")):
-                suspended = await loop._check_operational_thresholds("sess_1")
-
-        assert suspended is False
+        mock_orchestrator.session_manager.update.assert_not_called()
+        assert any("operacional" in c.args[0] for c in log.warning.call_args_list)
 
 
 @pytest.mark.unit

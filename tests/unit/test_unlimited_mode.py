@@ -351,7 +351,7 @@ async def test_aviso_periodico_emitido_no_terminal_e_na_telemetria(capsys) -> No
     with patch("src.orchestration.autonomous_loop.get_telemetry") as tel:
         tel.return_value.get_token_summary.return_value = {"by_provider_model": [{"total_tokens": 600_000,
                                                                                    "total_cost_usd": None}]}
-        assert await loop._maybe_unlimited_notice("sess") is False
+        assert await loop._maybe_unlimited_notice("sess") is None
         events = [c.kwargs["event_type"] for c in tel.return_value.record_agent_event.call_args_list]
     out = capsys.readouterr().out
     assert "Modo sem limite" in out and "600,000" in out.replace(" ", ",") or "600" in out
@@ -374,25 +374,24 @@ async def test_aviso_nao_repete_antes_da_proxima_cadencia(capsys) -> None:
 @pytest.mark.asyncio
 async def test_sem_aviso_no_modo_limitado() -> None:
     loop, _ = _loop(UsageBudget.from_config(), tokens=10**9, minutes=500)
-    assert await loop._maybe_unlimited_notice("sess") is False
+    assert await loop._maybe_unlimited_notice("sess") is None
     assert loop._unlimited_notices == 0
 
 
 @pytest.mark.asyncio
-async def test_assisted_oferece_suspender_e_semi_nao_bloqueia() -> None:
-    from unittest.mock import AsyncMock, patch
+async def test_aviso_nao_pergunta_em_nenhum_modo() -> None:
+    from unittest.mock import patch
 
-    loop, orchestrator = _loop(_unlimited(), mode="assisted", tokens=600_000)
-    with patch("src.orchestration.autonomous_loop.get_telemetry") as tel, patch("asyncio.to_thread", new=AsyncMock(return_value="s")):
-        tel.return_value.get_token_summary.return_value = {"by_provider_model": []}
-        assert await loop._maybe_unlimited_notice("sess") is True
-    assert orchestrator.session_manager.update.call_args.kwargs["status"] == "suspended"
-
-    loop, _ = _loop(_unlimited(), mode="semi", tokens=600_000)
-    with patch("src.orchestration.autonomous_loop.get_telemetry") as tel, patch("builtins.input") as mock_input:
-        tel.return_value.get_token_summary.return_value = {"by_provider_model": []}
-        assert await loop._maybe_unlimited_notice("sess") is False
-    mock_input.assert_not_called()
+    for mode in ("assisted", "semi", "auto"):
+        loop, orchestrator = _loop(_unlimited(), mode=mode, tokens=600_000)
+        with (
+            patch("src.orchestration.autonomous_loop.get_telemetry") as tel,
+            patch("builtins.input", side_effect=AssertionError("sem leitura de stdin")),
+        ):
+            tel.return_value.get_token_summary.return_value = {"by_provider_model": []}
+            assert await loop._maybe_unlimited_notice("sess") is None
+        assert loop._unlimited_notices == 1
+        orchestrator.session_manager.update.assert_not_called()
 
 
 @pytest.mark.asyncio

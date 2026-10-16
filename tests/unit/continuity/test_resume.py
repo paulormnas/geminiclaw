@@ -492,19 +492,20 @@ async def test_telemetria_da_recuperacao_sem_dado_de_pesquisa(tmp_path):
 
 @pytest.mark.asyncio
 async def test_suspensao_mantem_sessao_retomavel(world):
-    """Sessão suspensa pelo pesquisador continua `suspended` (não vira `closed`) e é retomável."""
-    async def suspend(self, master_session_id):
-        cur = self.orchestrator.session_manager.get(master_session_id)
-        self.orchestrator.session_manager.update(
-            master_session_id, status="suspended", payload={**cur.payload, "motivo_parada": "interrompida"}
-        )
-        return True
+    """Sessão assisted sem o terminal continua `suspensa_sem_pesquisador` (não vira `closed`) e é retomável."""
+    from src.orchestration.usage import clear_suspension, request_suspension
 
-    with patch.object(AutonomousLoop, "_check_operational_thresholds", suspend):
-        await world.run_resume()
-    assert world.sm.get("sessao-b").status == "suspended"
+    async def suspend(self, master_session_id):
+        request_suspension()  # a ausência do terminal chega pelo mesmo ponto de verificação dos limites
+
+    try:
+        with patch.object(AutonomousLoop, "_check_operational_thresholds", suspend):
+            await world.run_resume()
+    finally:
+        clear_suspension()
+    assert world.sm.get("sessao-b").status == "suspensa_sem_pesquisador"
     cp, _ = read_checkpoint(world.base / "sessao-b")
-    assert (cp.estado, cp.motivo_parada) == ("interrompido", "interrompida")
+    assert (cp.estado, cp.motivo_parada) == ("interrompido", "suspensa_sem_pesquisador")
     prep = await world.prepare(session_id="sessao-b")
     assert prep.state.source_session_id == "sessao-b"
 

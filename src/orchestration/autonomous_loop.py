@@ -144,10 +144,10 @@ class AutonomousLoop:
 
     @staticmethod
     def _pending_model_stop(master_session_id: str | None = None) -> "StopReason | None":
-        """Parada pedida fora do orçamento: interrupção do pesquisador, cota do provedor esgotada (v18.7) ou, em
-        ``strict``, versão do modelo (v18.5)."""
+        """Parada pedida fora do orçamento: interrupção do pesquisador, cota do provedor esgotada (v18.7), em
+        ``strict`` a versão do modelo (v18.5) e, por último, a ausência do terminal numa sessão ``assisted`` (v18.7)."""
         from src.llm.quota import quota_stop_for
-        from src.orchestration.usage import interrupt_requested
+        from src.orchestration.usage import interrupt_requested, suspension_requested
 
         if interrupt_requested():
             return StopReason.INTERRUPTED
@@ -159,6 +159,8 @@ class AutonomousLoop:
         routing = current_session_routing()
         if routing is not None and routing.versions.parada_pendente == STOP_VERSION:
             return StopReason.MODEL_VERSION
+        if suspension_requested():  # por último: um limite atingido no mesmo ponto prevalece (design §1.4)
+            return StopReason.SUSPENDED
         return None
 
     def _pending_stop(self, master_session_id: str) -> "StopReason | None":
@@ -556,16 +558,11 @@ class AutonomousLoop:
             artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id),
         )
 
-    async def _check_operational_thresholds(self, master_session_id: str) -> bool:
-        """Monitora limites operacionais (tokens, custo, duração, containers) e, no modo
-        `assisted`, oferece ao pesquisador a opção de suspender a sessão (Roadmap V15.3 / Spec G5).
+    async def _check_operational_thresholds(self, master_session_id: str) -> None:
+        """Monitora limites operacionais (tokens, custo, duração, containers) (Roadmap V15.3 / Spec G5).
 
-        Não-bloqueante por padrão: apenas registra em log nos modos `semi`/`auto`. No modo
-        `assisted`, exibe um aviso e aguarda `OPERATIONAL_THRESHOLD_WAIT_SECONDS` por uma
-        resposta; se o pesquisador digitar 's', a sessão é marcada como suspensa.
-
-        Returns:
-            True se o pesquisador optou por suspender a sessão; False caso contrário.
+        Nunca bloqueia, em nenhum modo: apenas registra o aviso no log. O processo da sessão não lê o terminal
+        (v18.7-background-sessions §1.10); a pausa pelo pesquisador vem em ``v18.7-session-events-terminal``.
         """
         from src.config import (
             MAX_AGENT_RUNS_PER_SESSION,
@@ -578,8 +575,7 @@ class AutonomousLoop:
         session_max_tokens = budget.max_tokens
         session_max_minutes = budget.max_minutes
 
-        if await self._maybe_unlimited_notice(master_session_id):
-            return True
+        await self._maybe_unlimited_notice(master_session_id)
 
         telemetry = get_telemetry()
         token_summary = telemetry.get_token_summary(master_session_id)
@@ -620,61 +616,22 @@ class AutonomousLoop:
             )
 
         if not triggered:
-            return False
+            return
 
         logger.warning(
             "Limite(s) operacional(is) atingido(s)",
             extra={"triggered": triggered, "mode": self._session_mode, "master_session_id": master_session_id},
         )
 
-        if self._session_mode != "assisted":
-            # Nos modos semi/auto, apenas registra em log — nunca bloqueia (Spec G5).
-            return False
-
-        from src.utils.terminal import BOLD, RESET, YELLOW
-
-        print(f"\n{YELLOW}{BOLD}⚠ Limite(s) operacional(is) atingido(s):{RESET}")
-        for item in triggered:
-            print(f"  {YELLOW}•{RESET} {item}")
-
-        return await self._offer_suspension(master_session_id)
-
-    async def _offer_suspension(self, master_session_id: str) -> bool:
-        """Oferece ao pesquisador suspender a sessão (modo ``assisted``); ``True`` se ele digitou 's'."""
-        from src.config import OPERATIONAL_THRESHOLD_WAIT_SECONDS
-
-        try:
-            answer = await asyncio.wait_for(
-                asyncio.to_thread(input, "  Digite 's' para suspender a sessão, ou aguarde para continuar: "),
-                timeout=OPERATIONAL_THRESHOLD_WAIT_SECONDS,
-            )
-        except asyncio.TimeoutError:
-            answer = None
-
-        if answer and answer.strip().lower() in ("s", "sim"):
-            current = self.orchestrator.session_manager.get(master_session_id)
-            suspended_payload = dict(current.payload) if current is not None else {}
-            suspended_payload["motivo_parada"] = "interrompida"  # retomável (v18-research-continuity)
-            self.orchestrator.session_manager.update(
-                master_session_id, status="suspended", payload=suspended_payload
-            )
-            logger.info("Sessão suspensa pelo pesquisador", extra={"master_session_id": master_session_id})
-            return True
-
-        return False
-
-    async def _maybe_unlimited_notice(self, master_session_id: str) -> bool:
+    async def _maybe_unlimited_notice(self, master_session_id: str) -> None:
         """Aviso periódico de consumo do modo sem limite (v18.5-operation-metrics §2.5).
 
-        Emitido no terminal em todos os modos quando passa o intervalo de tempo ou de tokens (o que ocorrer primeiro).
-        No ``assisted`` oferece suspender; em ``semi``/``auto`` não bloqueia.
-
-        Returns:
-            True se o pesquisador suspendeu a sessão; False caso contrário (inclusive fora do modo sem limite).
+        Registrado em log e na saída da sessão quando passa o intervalo de tempo ou de tokens (o que ocorrer
+        primeiro), em todos os modos, sem nunca bloquear.
         """
         tracker = self._usage_tracker
         if tracker is None or not tracker.budget.unlimited:
-            return False
+            return
         if self._notice_schedule is None:
             from src import config
             from src.orchestration.unlimited_mode import NoticeSchedule
@@ -686,7 +643,7 @@ class AutonomousLoop:
             )
         status = tracker.check()
         if not self._notice_schedule.due(status.minutes_elapsed, status.tokens_used):
-            return False
+            return
 
         from src.utils.terminal import BOLD, RESET, YELLOW
 
@@ -715,9 +672,6 @@ class AutonomousLoop:
                 "numero": self._unlimited_notices,
             },
         )
-        if self._session_mode != "assisted":
-            return False
-        return await self._offer_suspension(master_session_id)
 
     async def _report_divergence(
         self, task: "AgentTask", attempt_errors: List[str], master_session_id: str
@@ -878,14 +832,18 @@ class AutonomousLoop:
     async def _suspend_session(
         self, master_session_id: str, tasks: List["AgentTask"], final_results: List["AgentResult"], text: str
     ) -> "OrchestratorResult":
-        """Suspende (retomável) a sessão que espera uma decisão do pesquisador que não pôde ser tomada agora."""
+        """Pausa (retomável) a sessão que só tem pedidos ao pesquisador pela frente: ``aguarda_pesquisador``.
+
+        O processo da sessão não espera: grava o checkpoint e sai com o código 4 (v18.7-background-sessions §1.5).
+        """
         from src.orchestration.orchestrator import AgentResult, OrchestratorResult
+        from src.session.states import MOTIVO_AGUARDA_PESQUISADOR, STATUS_AWAITING_RESEARCHER
 
         current = self.orchestrator.session_manager.get(master_session_id)
         payload = dict(current.payload) if current is not None else {}
-        payload["motivo_parada"] = "interrompida"  # retomável (v18-research-continuity)
-        self.orchestrator.session_manager.update(master_session_id, status="suspended", payload=payload)
-        logger.warning("Sessão suspensa à espera do pesquisador", extra={"master_session_id": master_session_id})
+        payload["motivo_parada"] = MOTIVO_AGUARDA_PESQUISADOR
+        self.orchestrator.session_manager.update(master_session_id, status=STATUS_AWAITING_RESEARCHER, payload=payload)
+        logger.warning("Sessão aguarda o pesquisador", extra={"master_session_id": master_session_id})
         final_results.append(
             AgentResult(
                 agent_id="orchestrator", session_id=master_session_id, status="success", response={"text": text}
@@ -1224,7 +1182,7 @@ class AutonomousLoop:
                     if outcome.pending_approval:
                         return await self._suspend_session(
                             master_session_id, list(cumulative_tasks.values()), final_results,
-                            "Sessão suspensa: há hipóteses aguardando a aprovação do pesquisador.",
+                            "Sessão aguarda o pesquisador: há hipóteses aguardando a aprovação.",
                         )
                     exploration.idle_cycles += 1
                     cycle_no += 1
@@ -1313,23 +1271,7 @@ class AutonomousLoop:
             # Roadmap V15.3 / Spec G5 — monitoramento de limites operacionais, checado uma
             # vez por ciclo de planejamento (não por subtarefa, para evitar corridas entre
             # subtarefas concorrentes do mesmo ciclo).
-            if await self._check_operational_thresholds(master_session_id):
-                suspend_result = AgentResult(
-                    agent_id="orchestrator",
-                    session_id=master_session_id,
-                    status="success",
-                    response={"text": "Sessão suspensa pelo pesquisador após aviso de limite operacional."},
-                )
-                final_results.append(suspend_result)
-                self._short_term_memory.clear(master_session_id)
-                succeeded = sum(1 for r in final_results if r.status == "success")
-                return OrchestratorResult(
-                    results=final_results,
-                    total=len(tasks),
-                    succeeded=succeeded,
-                    failed=len(final_results) - succeeded,
-                    artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id),
-                )
+            await self._check_operational_thresholds(master_session_id)
 
             # V18/usage-limits — limites reais (não apenas avisos): tokens, tempo e
             # retentativas de conexão, checados no mesmo ponto do ciclo que os avisos
@@ -1839,7 +1781,7 @@ class AutonomousLoop:
                     if answer is None:
                         return await self._suspend_session(
                             master_session_id, list(cumulative_tasks.values()), final_results,
-                            "Sessão suspensa: critério de solução atingido, à espera da confirmação do pesquisador.",
+                            "Sessão aguarda o pesquisador: critério de solução atingido, à espera da confirmação.",
                         )
 
             # Verifica se houve alguma falha
@@ -2168,7 +2110,11 @@ class AutonomousLoop:
         from src.llm.quota import quota_stop_for
 
         quota = quota_stop_for(master_session_id) if reason == StopReason.PROVIDER_QUOTA else None
-        tokens_available_for_closing = quota is None and not self._usage_tracker.tokens_hard_exhausted()
+        # Sem o pesquisador a pesquisa não terminou: nada é consolidado (a consolidação fica para a retomada).
+        suspending = reason == StopReason.SUSPENDED
+        tokens_available_for_closing = (
+            quota is None and not suspending and not self._usage_tracker.tokens_hard_exhausted()
+        )
         consolidation_pending = not tokens_available_for_closing
 
         checkpoint = {
@@ -2193,7 +2139,14 @@ class AutonomousLoop:
         payload = dict(session.payload) if session is not None else {}
         payload["motivo_parada"] = reason.value
         payload["checkpoint"] = checkpoint
-        self.orchestrator.session_manager.update(master_session_id, payload=payload)
+        if suspending:
+            from src.session.states import STATUS_SUSPENDED_NO_RESEARCHER
+
+            self.orchestrator.session_manager.update(
+                master_session_id, status=STATUS_SUSPENDED_NO_RESEARCHER, payload=payload
+            )
+        else:
+            self.orchestrator.session_manager.update(master_session_id, payload=payload)
 
         # v18-research-continuity — checkpoint.json atômico e versionado (substitui o dicionário ad hoc anterior).
         recorder = self._recorder(master_session_id)
@@ -2233,6 +2186,11 @@ class AutonomousLoop:
                     extra={"error": str(e)},
                 )
                 consolidation_pending = True
+        elif suspending:
+            logger.warning(
+                "Sessão suspensa sem o pesquisador — consolidação final adiada (consolidation_pending)",
+                extra={"master_session_id": master_session_id},
+            )
         elif quota is not None:
             logger.warning(
                 "Cota do provedor esgotada — consolidação final adiada (consolidation_pending)",

@@ -5,9 +5,11 @@ from __future__ import annotations
 import datetime
 import threading
 import uuid
+from dataclasses import replace
 from typing import Any
 
 from src.session.manager import Session
+from src.session.presence import TIPO_REPL, PresenceRow
 
 
 def _now(delta: float = 0.0) -> str:
@@ -102,3 +104,50 @@ class FakeSessionManager:
             sess.payload = {k: v for k, v in sess.payload.items() if k != "motivo_parada"}
             sess.updated_at = _now()
             return True
+
+
+class InMemoryPresenceStore:
+    """Armazenamento de presença em memória (testes de unidade)."""
+
+    def __init__(self) -> None:
+        self.rows: dict[str, PresenceRow] = {}
+        self._lock = threading.Lock()
+
+    def open_rows(self, tipo: str) -> list[PresenceRow]:
+        with self._lock:
+            return [r for r in self.rows.values() if r.tipo == tipo and r.ended_at is None]
+
+    def insert(self, row: PresenceRow, *, exclusive_live_after: float | None = None) -> bool:
+        with self._lock:
+            if exclusive_live_after is not None and any(
+                r.tipo == row.tipo and r.ended_at is None and r.heartbeat_at > exclusive_live_after
+                for r in self.rows.values()
+            ):
+                return False
+            self.rows[row.terminal_id] = row
+            return True
+
+    def touch(self, terminal_id: str, heartbeat_at: float) -> bool:
+        with self._lock:
+            row = self.rows.get(terminal_id)
+            if row is None or row.ended_at is not None:
+                return False
+            self.rows[terminal_id] = replace(row, heartbeat_at=heartbeat_at)
+            return True
+
+    def end(self, terminal_id: str, ended_at: float, reason: str) -> bool:
+        with self._lock:
+            row = self.rows.get(terminal_id)
+            if row is None or row.ended_at is not None:
+                return False
+            self.rows[terminal_id] = replace(row, ended_at=ended_at, end_reason=reason)
+            return True
+
+    def get(self, terminal_id: str) -> PresenceRow | None:
+        with self._lock:
+            return self.rows.get(terminal_id)
+
+    def last_repl_end(self) -> float | None:
+        with self._lock:
+            ends = [r.ended_at for r in self.rows.values() if r.tipo == TIPO_REPL and r.ended_at is not None]
+        return max(ends) if ends else None

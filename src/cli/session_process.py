@@ -101,6 +101,33 @@ def register_session_process(session_manager: Any, session: Any, spec: LaunchSpe
     return alias
 
 
+async def watch_presence(
+    terminal_id: str | None,
+    *,
+    interval: float | None = None,
+    present: Callable[[str | None], bool] | None = None,
+) -> None:
+    """Sessão ``assisted``: lê a presença do terminal a cada ``SESSION_PRESENCE_CHECK_SECONDS``; na ausência pede a
+    suspensão (a sessão para de despachar, deixa o que está em curso terminar e grava o checkpoint)."""
+    from src import config
+    from src.orchestration.usage import request_suspension
+    from src.session.presence import terminal_present
+
+    check = present or terminal_present
+    wait = config.SESSION_PRESENCE_CHECK_SECONDS if interval is None else interval
+    while True:
+        try:
+            absent = not await asyncio.to_thread(check, terminal_id)
+        except Exception as exc:  # noqa: BLE001 - sem ler a presença não se suspende por engano
+            logger.warning("Leitura da presença falhou", extra={"error": type(exc).__name__})
+            absent = False
+        if absent:
+            logger.warning("Terminal ausente: a sessão assisted será suspensa", extra={"terminal_id": terminal_id})
+            request_suspension()
+            return
+        await asyncio.sleep(wait)
+
+
 class SessionRunner:
     """Executa o lançamento no orquestrador e devolve o código de saída."""
 
@@ -197,7 +224,14 @@ class SessionRunner:
                 kwargs.update(resume_kwargs)
             self._loop = asyncio.get_running_loop()
             self._task = asyncio.ensure_future(orchestrator.handle_request(prompt, **kwargs))
-            result = await self._task
+            watcher = None
+            if kwargs.get("mode") == "assisted":  # semi e auto não leem a presença (design §1.6)
+                watcher = asyncio.ensure_future(watch_presence(spec.terminal_id))
+            try:
+                result = await self._task
+            finally:
+                if watcher is not None:
+                    watcher.cancel()
         except asyncio.CancelledError:
             return EXIT_SESSION_LOST if self.session_id in orchestrator._lost_sessions else EXIT_INTERRUPTED
         except ResumeConflictError as exc:

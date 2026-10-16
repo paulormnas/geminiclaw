@@ -80,6 +80,10 @@ _REMOVED_VARIABLES: dict[str, str | Callable[[str], str]] = {
         "(sem padrão: sem valor, a temperatura não é verificada)."
     ),
     "PI_MIN_AVAILABLE_MEMORY_MB": "'PI_MIN_AVAILABLE_MEMORY_MB' foi removida: renomeie para 'MIN_AVAILABLE_MEMORY_MB'.",
+    "OPERATIONAL_THRESHOLD_WAIT_SECONDS": (
+        "'OPERATIONAL_THRESHOLD_WAIT_SECONDS' foi removida (v18.7-background-sessions): o processo da sessão não "
+        "pergunta no terminal; o aviso de limite operacional só é registrado. Remova a linha do .env."
+    ),
 }
 
 
@@ -556,8 +560,6 @@ OPERATIONAL_THRESHOLDS: dict[str, float] = {
 }
 # Alias de retrocompatibilidade: MAX_SESSION_TOKENS é o nome antigo de SESSION_MAX_TOKENS.
 MAX_SESSION_TOKENS = SESSION_MAX_TOKENS
-# Tempo que a CLI aguarda a resposta do pesquisador ao aviso de limite antes de continuar.
-OPERATIONAL_THRESHOLD_WAIT_SECONDS = int(get_env("OPERATIONAL_THRESHOLD_WAIT_SECONDS", default="30"))
 
 # v18.5-operation-metrics: avisos periódicos do modo sem limite (sem como desligá-los: valores <= 0 falham).
 UNLIMITED_NOTICE_INTERVAL_MINUTES = float(get_env("UNLIMITED_NOTICE_INTERVAL_MINUTES", default="15"))

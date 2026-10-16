@@ -120,6 +120,92 @@ def validate_node_write(
     _validate_properties_against(label, full_props, property_schemas, error_scope="nó")
     if label == "Hipotese":
         _validate_hypothesis_rules(full_props)
+    _validate_exploration_fields(label, full_props)
+
+
+def _validate_exploration_fields(label: str, props: dict[str, object]) -> None:
+    """Estrutura dos campos de v18.7-exploration-limits presentes em ``props`` (criação ou atualização)."""
+    if label == "Problema":
+        if props.get("criterio_sucesso") is not None:
+            _validate_success_criterion(props["criterio_sucesso"])
+        if props.get("objetivo_atingido") is not None:
+            _validate_achievement_marks(props["objetivo_atingido"])
+    elif label == "Hipotese":
+        if props.get("concorrente") is not None and not isinstance(props["concorrente"], bool):
+            raise InvalidPropertyValueError("Hipotese", "concorrente", "esperado booleano")
+        predicao = props.get("predicao")
+        if predicao is not None:
+            from src import config
+
+            if not isinstance(predicao, str) or len(predicao) > config.HYPOTHESIS_TEXT_MAX_CHARS:
+                raise InvalidPropertyValueError(
+                    "Hipotese", "predicao", f"esperado texto de até {config.HYPOTHESIS_TEXT_MAX_CHARS} caracteres"
+                )
+    elif label == "Experimento" and props.get("conferencia_predicoes") is not None:
+        _validate_prediction_check(props["conferencia_predicoes"])
+    elif label == "Restricao" and props.get("abordagens") is not None:
+        values = props["abordagens"]
+        if not isinstance(values, list) or not all(isinstance(v, str) and v for v in values):
+            raise InvalidPropertyValueError("Restricao", "abordagens", "esperada lista de textos não vazios")
+
+
+def _validate_success_criterion(value: object) -> None:
+    """``criterio_sucesso`` por tipo de objetivo (design §4.1). Sem ``tipo`` (Problema anterior): lido como ``limiar``
+    e não revalidado, para que atualizar outra propriedade continue aceito."""
+    if not isinstance(value, dict):
+        raise InvalidPropertyValueError("Problema", "criterio_sucesso", "esperado um mapa")
+    if "tipo" not in value:
+        _validate_objective_policy(value)
+        return
+    kind = value["tipo"]
+    if kind not in schema.TIPOS_OBJETIVO:
+        raise InvalidEnumValueError("Problema", "criterio_sucesso.tipo", kind, schema.TIPOS_OBJETIVO)
+    _validate_objective_policy(value)
+    required, forbidden = schema.CAMPOS_OBJETIVO_POR_TIPO[kind]
+    for name in sorted(forbidden & set(value)):
+        raise InvalidPropertyValueError("Problema", f"criterio_sucesso.{name}", f"não vale no tipo '{kind}'")
+    for name in sorted(required):
+        if value.get(name) in (None, "", []):
+            raise MissingRequiredPropertyError("Problema", f"criterio_sucesso.{name}")
+    if kind == "discriminacao":
+        rivals = value["hipoteses_concorrentes"]
+        if not isinstance(rivals, list) or len(rivals) < 2:
+            raise InvalidPropertyValueError(
+                "Problema", "criterio_sucesso.hipoteses_concorrentes", "esperada lista com ao menos 2 itens"
+            )
+        for item in rivals:
+            if not isinstance(item, dict) or not isinstance(item.get("predicao"), str) or not item["predicao"].strip():
+                raise InvalidPropertyValueError(
+                    "Problema", "criterio_sucesso.hipoteses_concorrentes", "cada item exige 'predicao' não vazia"
+                )
+
+
+def _validate_objective_policy(criterion: dict[str, object]) -> None:
+    policy = criterion.get("ao_atingir_objetivo")
+    if policy is not None and policy not in schema.POLITICAS_OBJETIVO:
+        raise InvalidEnumValueError(
+            "Problema", "criterio_sucesso.ao_atingir_objetivo", policy, schema.POLITICAS_OBJETIVO
+        )
+    author = criterion.get("definido_por")
+    if author is not None and author not in schema.DEFINIDO_POR_OBJETIVO:
+        raise InvalidEnumValueError("Problema", "criterio_sucesso.definido_por", author, schema.DEFINIDO_POR_OBJETIVO)
+
+
+def _validate_achievement_marks(value: object) -> None:
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+        raise InvalidPropertyValueError("Problema", "objetivo_atingido", "esperada lista de marcos")
+
+
+def _validate_prediction_check(value: object) -> None:
+    if not isinstance(value, dict):
+        raise InvalidPropertyValueError(
+            "Experimento", "conferencia_predicoes", "esperado mapa hipotese_id -> conferência"
+        )
+    for hypothesis_id, check in value.items():
+        if check not in schema.CONFERENCIAS_PREDICAO:
+            raise InvalidEnumValueError(
+                "Experimento", f"conferencia_predicoes.{hypothesis_id}", check, schema.CONFERENCIAS_PREDICAO
+            )
 
 
 _REFERENCE_KEYS = frozenset({"valor", "origem_referencia", "metrica_id", "resultado_id", "fixada_em"})
@@ -228,6 +314,7 @@ def validate_node_update(label: str, changes: dict[str, object]) -> None:
             raise InvalidEnumValueError(label, field_name, value, prop_schema.enum)
         if label == "Hipotese" and field_name == "motivo_abandono":
             _validate_abandonment_reason(value)
+    _validate_exploration_fields(label, changes)
 
 
 def validate_node_filter_keys(label: str, filters: dict[str, object]) -> NodeSchema:
@@ -355,6 +442,8 @@ AGENT_ALLOWED_VALUES: dict[str, dict[str, tuple[str, ...] | None]] = {
     "Metrica": {"status": ("candidato",), "motivo_decisao": None},
     # v18.5-operation-metrics: a marcação do modo sem limite é decisão do pesquisador (agentes: nenhum valor).
     "Projeto": {"modo_sem_limite": None, "modo_sem_limite_decidido_em": None, "modo_sem_limite_decidido_por": None},
+    # v18.7-exploration-limits: os marcos de objetivo atingido são do orquestrador.
+    "Problema": {"objetivo_atingido": None},
     "Oportunidade": {
         "status": ("documentada",),
         "decidido_por": None,
@@ -399,6 +488,11 @@ def validate_human_only(
         _validate_agent_reserved(label, current, changes)
     if label == "Oportunidade" and actor_kind == "orquestrador":
         _validate_opportunity_orchestrator(current, changes, revert_on_reopen=actor_role == REVERT_ON_REOPEN_ROLE)
+    if label == "Restricao" and actor_kind != "pesquisador":
+        # Fechado a agentes e ao orquestrador; o caminho da sessão (pedido ``restringir_direcao`` consumido) é de 7.5.
+        raise HumanConfirmationRequiredError(label, "status", actor_kind)
+    if label == "Problema" and "criterio_sucesso" in changes and actor_kind != "pesquisador":
+        _validate_objective_authority(current, changes["criterio_sucesso"], actor_kind)
     rule = HUMAN_ONLY_TRANSITIONS.get(label)
     if rule is None or actor_kind == "pesquisador":
         return
@@ -411,6 +505,22 @@ def validate_human_only(
     old = (current or {}).get(field)
     if new == protected or (old == protected and new != protected):
         raise HumanConfirmationRequiredError(label, field, actor_kind)
+
+
+def _validate_objective_authority(current: dict[str, object] | None, new: object, actor_kind: str) -> None:
+    """Política ao atingir e ``definido_por = "pesquisador"`` são do pesquisador (ADR 021 §5.2, §5.3).
+
+    O orquestrador também não substitui um critério já definido pelo pesquisador.
+    """
+    new_criterion = new if isinstance(new, dict) else {}
+    old = (current or {}).get("criterio_sucesso")
+    old_criterion = old if isinstance(old, dict) else {}
+    if old_criterion.get("definido_por") == "pesquisador" and new_criterion != old_criterion:
+        raise HumanConfirmationRequiredError("Problema", "criterio_sucesso", actor_kind)
+    if new_criterion.get("definido_por") == "pesquisador":
+        raise HumanConfirmationRequiredError("Problema", "criterio_sucesso.definido_por", actor_kind)
+    if new_criterion.get("ao_atingir_objetivo") != old_criterion.get("ao_atingir_objetivo"):
+        raise HumanConfirmationRequiredError("Problema", "criterio_sucesso.ao_atingir_objetivo", actor_kind)
 
 
 def _validate_hypothesis_reopening(

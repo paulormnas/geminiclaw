@@ -561,6 +561,81 @@ OPERATIONAL_THRESHOLDS: dict[str, float] = {
 # Alias de retrocompatibilidade: MAX_SESSION_TOKENS é o nome antigo de SESSION_MAX_TOKENS.
 MAX_SESSION_TOKENS = SESSION_MAX_TOKENS
 
+# --- Limites da exploração (v18.7-exploration-limits, ADR 021; design §13) ---
+# Valores provisórios: só mudam depois de testados em bateria. Valor inválido falha na inicialização.
+
+
+def _bounded_number(key: str, default: str, kind: type, rule: str, valid: Callable[[float], bool]) -> float | int:
+    """Número de ``key`` que cumpre ``valid``; vazio, inválido ou fora da regra falha citando a variável."""
+    value = _env_number(key, default, kind)
+    if value is None or not valid(value):
+        raise ConfigurationError(f"'{key}' deve ser {rule}.")
+    return value
+
+
+def _provider_costs(raw: str) -> dict[str, float]:
+    """``provedor=valor,...`` com valores > 0; vazio resulta em ``{}`` (só o total vale)."""
+    limits: dict[str, float] = {}
+    for item in (part.strip() for part in raw.split(",")):
+        if not item:
+            continue
+        provider, _, amount = item.partition("=")
+        try:
+            value = float(amount)
+        except ValueError:
+            value = 0.0
+        if not provider.strip() or value <= 0:
+            raise ConfigurationError(
+                "'SESSION_MAX_COST_USD_BY_PROVIDER' deve ser 'provedor=valor,...' com valores maiores que zero."
+            )
+        limits[provider.strip()] = value
+    return limits
+
+
+# Custo estimado da sessão (US$): o único jeito de desligar o limite é o modo sem limite, nunca um valor <= 0.
+_cost_limit = _env_number("SESSION_MAX_COST_USD", "20.0", float)
+if _cost_limit is None or _cost_limit <= 0:
+    raise ConfigurationError(
+        "'SESSION_MAX_COST_USD' deve ser um número maior que zero; para rodar sem limite use o modo sem limite "
+        "(--unlimited), não um valor <= 0 ou vazio."
+    )
+SESSION_MAX_COST_USD: float = _cost_limit
+SESSION_MAX_COST_USD_BY_PROVIDER: dict[str, float] = _provider_costs(
+    get_env("SESSION_MAX_COST_USD_BY_PROVIDER", default="")
+)
+OPERATIONAL_THRESHOLD_COST_USAGE_PCT = float(
+    _bounded_number("OPERATIONAL_THRESHOLD_COST_USAGE_PCT", "0.80", float, "um número em (0, 1]", lambda v: 0 < v <= 1)
+)
+# Estagnação, intervenção do Curator e saturação (0 em EXPLORATION_STALL_CYCLES desliga as três).
+EXPLORATION_STALL_CYCLES = int(
+    _bounded_number("EXPLORATION_STALL_CYCLES", "5", int, "um inteiro >= 0 (0 desliga)", lambda v: v >= 0)
+)
+EXPLORATION_MAX_INTERVENTIONS = int(
+    _bounded_number("EXPLORATION_MAX_INTERVENTIONS", "3", int, "um inteiro >= 1", lambda v: v >= 1)
+)
+EXPLORATION_PATIENCE_GROWTH = float(
+    _bounded_number("EXPLORATION_PATIENCE_GROWTH", "0.5", float, "um número >= 0", lambda v: v >= 0)
+)
+SATURATION_MIN_REPLICATES = int(
+    _bounded_number("SATURATION_MIN_REPLICATES", "3", int, "um inteiro >= 2", lambda v: v >= 2)
+)
+SATURATION_SE_MULTIPLIER = float(
+    _bounded_number("SATURATION_SE_MULTIPLIER", "1.0", float, "um número maior que zero", lambda v: v > 0)
+)
+COVERAGE_NOVELTY_WINDOW = int(
+    _bounded_number("COVERAGE_NOVELTY_WINDOW", "5", int, "um inteiro >= 1", lambda v: v >= 1)
+)
+COVERAGE_NOVELTY_MIN_RATE = float(
+    _bounded_number("COVERAGE_NOVELTY_MIN_RATE", "0.2", float, "um número >= 0", lambda v: v >= 0)
+)
+RESTRICTION_SIMILARITY = float(
+    _bounded_number("RESTRICTION_SIMILARITY", "0.80", float, "um número em (0, 1]", lambda v: 0 < v <= 1)
+)
+# Política dos planos rejeitados em sequência (design §9.3): explorar (Curator intervém) ou parar.
+ON_PLAN_REJECTIONS = get_env("ON_PLAN_REJECTIONS", default="explorar").strip().lower()
+if ON_PLAN_REJECTIONS not in ("explorar", "parar"):
+    raise ConfigurationError("'ON_PLAN_REJECTIONS' deve ser 'explorar' ou 'parar'.")
+
 # v18.5-operation-metrics: avisos periódicos do modo sem limite (sem como desligá-los: valores <= 0 falham).
 UNLIMITED_NOTICE_INTERVAL_MINUTES = float(get_env("UNLIMITED_NOTICE_INTERVAL_MINUTES", default="15"))
 UNLIMITED_NOTICE_TOKEN_STEP = int(get_env("UNLIMITED_NOTICE_TOKEN_STEP", default="500000"))

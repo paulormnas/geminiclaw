@@ -1,6 +1,6 @@
 # Tarefas: v18.7-exploration-limits
 
-**Estado (2026-10-16):** aprovada pelo pesquisador (schema do grafo, remoção das variáveis de teto, Questões 4 e 5 do design §17 decididas); tarefa 0.9 (divisão do módulo) feita; o comportamento novo (seções 1 a 6) ainda não iniciado. Todo valor de variável que precise de ajuste é validado em bateria de testes antes de mudar o padrão.
+**Estado (2026-10-16):** aprovada pelo pesquisador (schema do grafo, remoção das variáveis de teto, Questões 4 e 5 do design §17 decididas); tarefa 0.9 (divisão do módulo) feita; seção 1 feita exceto 1.2 (a remoção das variáveis antigas vai junto com a remoção dos seus usos, nas seções 3 e 4, para não quebrar o código) e seção 2 feita (a validação de `Restricao` pela sessão com pedido consumido é a 7.5; até lá só o pesquisador a grava); seções 3 em diante não iniciadas. Todo valor de variável que precise de ajuste é validado em bateria de testes antes de mudar o padrão.
 
 ## 0. Pré-requisitos
 - [x] 0.1 Mudança aprovada pelo pesquisador, inclusive o schema aditivo do grafo (`Restricao`, `RESTRINGE`, motivos, propriedades) e a remoção das variáveis de teto com falha na inicialização.
@@ -10,17 +10,17 @@
 - [x] 0.9 (feito em 2026-10-16: relatório final e métricas de operação, ~360 linhas, movidos para `src/orchestration/loop_report.py` como `LoopReportMixin`, sem mudança de comportamento; os critérios de parada, o objetivo tipado, a estagnação e a saturação nascem já em módulos próprios nas seções 3 a 6, porque hoje estão embutidos no corpo de `_run_complex_path` e só serão reescritos) Divisão do módulo grande antes do comportamento novo (ADR 024 §5), só movendo código, com a suíte verde antes de seguir: `src/orchestration/autonomous_loop.py`: extrair para módulos próprios em `src/orchestration/` os critérios de parada, o objetivo tipado e a política ao atingir o objetivo, a estagnação e a saturação. Os caminhos citados nesta mudança valem pela tabela de `v18.7-source-layout`.
 
 ## 1. Configuração e variáveis removidas
-- [ ] 1.1 `src/config.py`: `ON_PLAN_REJECTIONS`, `SESSION_MAX_COST_USD`, `SESSION_MAX_COST_USD_BY_PROVIDER`, `OPERATIONAL_THRESHOLD_COST_USAGE_PCT`, `EXPLORATION_STALL_CYCLES`, `EXPLORATION_MAX_INTERVENTIONS`, `EXPLORATION_PATIENCE_GROWTH`, `SATURATION_MIN_REPLICATES`, `SATURATION_SE_MULTIPLIER`, `COVERAGE_NOVELTY_WINDOW`, `COVERAGE_NOVELTY_MIN_RATE`, `RESTRICTION_SIMILARITY`, com validação (design §13).
+- [x] 1.1 `src/config.py`: `ON_PLAN_REJECTIONS`, `SESSION_MAX_COST_USD`, `SESSION_MAX_COST_USD_BY_PROVIDER`, `OPERATIONAL_THRESHOLD_COST_USAGE_PCT`, `EXPLORATION_STALL_CYCLES`, `EXPLORATION_MAX_INTERVENTIONS`, `EXPLORATION_PATIENCE_GROWTH`, `SATURATION_MIN_REPLICATES`, `SATURATION_SE_MULTIPLIER`, `COVERAGE_NOVELTY_WINDOW`, `COVERAGE_NOVELTY_MIN_RATE`, `RESTRICTION_SIMILARITY`, com validação (design §13).
 - [ ] 1.2 Remover `HYPOTHESES_PER_CYCLE`, `MAX_EXPLORATION_CYCLES`, `SOLUTION_MIN_VERDICT`, `MAX_AGENT_RUNS_PER_SESSION`, `MAX_PLANNING_RUNS_PER_SESSION`, `OPERATIONAL_THRESHOLDS["agent_runs_pct"]` e `["cost_usd"]`; nomes acrescentados a `_REMOVED_VARIABLES` de `v18.7-resource-monitor-config` (design §12), sem mecanismo próprio.
-- [ ] 1.3 `.env.example` atualizado.
-- [ ] 1.4 Testes: cenários "Zero não desliga", "Formato inválido" e "Teto de ciclos antigo no .env".
+- [x] 1.3 `.env.example` atualizado.
+- [ ] 1.4 Testes: cenários "Zero não desliga" e "Formato inválido" feitos (`tests/unit/test_exploration_limits_config.py`); falta "Teto de ciclos antigo no .env", que depende da 1.2.
 
 ## 2. Schema do grafo
-- [ ] 2.1 `src/knowledge/schema.py`: `motivo_parada` com `limite_custo` e `saturacao` (mantendo antigos e `limite_cota_provedor`); `Problema.objetivo_atingido`; `Hipotese.concorrente`, `predicao`; `Experimento.conferencia_predicoes`; nó `Restricao` e relação `RESTRINGE`.
-- [ ] 2.2 `src/knowledge/validation.py`: validação estruturada de `criterio_sucesso`; barreira de agentes para `objetivo_atingido` e `Restricao`.
-- [ ] 2.3 Migração idempotente do rótulo `Restricao` (junto da de `v18.7-graph-exploration-relations`).
-- [ ] 2.4 Testes dos cenários de `specs/knowledge-graph/spec.md`.
-- [ ] 2.5 Barreira de `ao_atingir_objetivo` e `definido_por = "pesquisador"` em `src/knowledge/validation.py` (mecanismo de `HUMAN_ONLY_TRANSITIONS`); testes do requisito "Campos do pesquisador no objetivo protegidos no grafo" com os actors `orquestrador`, agente e `pesquisador` (parecer de segurança, item 1).
+- [x] 2.1 `src/knowledge/schema.py`: `motivo_parada` com `limite_custo` e `saturacao` (mantendo antigos e `limite_cota_provedor`); `Problema.objetivo_atingido`; `Hipotese.concorrente`, `predicao`; `Experimento.conferencia_predicoes`; nó `Restricao` e relação `RESTRINGE`.
+- [x] 2.2 `src/knowledge/validation.py`: validação estruturada de `criterio_sucesso`; barreira de agentes para `objetivo_atingido` e `Restricao`.
+- [x] 2.3 Migração idempotente do rótulo `Restricao`: `scripts/migrate_v17_knowledge.py` cria os rótulos de `NODE_SCHEMAS` e `RESTRINGE` de `RELATION_SCHEMAS` só se faltarem; aplicar no Raspberry Pi depois do merge.
+- [x] 2.4 Testes dos cenários de `specs/knowledge-graph/spec.md` (`tests/unit/knowledge/test_exploration_limits_schema.py`), menos os de `Restricao` pela sessão e de abandono por restrição (7.5).
+- [x] 2.5 (o `Actor` da sessão com pedido consumido fica na 7.5) Barreira de `ao_atingir_objetivo` e `definido_por = "pesquisador"` em `src/knowledge/validation.py` (mecanismo de `HUMAN_ONLY_TRANSITIONS`); testes do requisito "Campos do pesquisador no objetivo protegidos no grafo" com os actors `orquestrador`, agente e `pesquisador` (parecer de segurança, item 1).
 
 ## 3. Limite de custo
 - [ ] 3.1 `src/usage.py`: `UsageBudget` com custo; `UsageTracker(cost_reader=...)`; `LimitStatus` com custo e precedência (design §3.2); `StopReason.COST`; remover `StopReason.RUNS`.

@@ -21,14 +21,16 @@ _TIPOS_OBJETIVO = ("limiar", "discriminacao", "cobertura")
 def problema(world: HypothesisWorld, tipo: str | None = "limiar", **campos: Any) -> Node:
     """``Problema`` confirmado do mundo, com ``criterio_sucesso`` do ``tipo`` pedido.
 
-    ``tipo=None`` deixa o critério antigo, sem ``tipo`` (todos os ``Problema`` anteriores à V18.7). Até
-    ``v18.7-exploration-limits`` o schema não confere a estrutura por tipo: o construtor só grava o mapa.
+    ``tipo=None`` deixa o critério antigo, sem ``tipo`` (todos os ``Problema`` anteriores à V18.7). Com ``tipo`` o
+    schema confere a estrutura (v18.7-exploration-limits): ``limiar`` leva ``sentido``; ``**campos`` entra por último.
     """
     if tipo is not None and tipo not in _TIPOS_OBJETIVO:
         raise ValueError(f"tipo de objetivo desconhecido: {tipo!r}")
     criterio = {k: v for k, v in dict(world.problem.properties["criterio_sucesso"]).items() if k != "tipo"}
     if tipo is not None:
         criterio["tipo"] = tipo
+    if tipo == "limiar":
+        criterio.setdefault("sentido", "maior_melhor")
     if tipo in ("discriminacao", "cobertura"):
         criterio.pop("alvo", None)
         criterio.pop("delta_min", None)
@@ -63,6 +65,8 @@ def hipotese(
     referencia: dict[str, Any] | None = None,
     enunciado: str = "H",
     actor: Any = None,
+    concorrente: Any = None,
+    predicao: str | None = None,
 ) -> str:
     """``Hipotese`` do problema do mundo.
 
@@ -73,6 +77,10 @@ def hipotese(
     """
     by = actor or {"pesquisador": PESQUISADOR, "sistema": ORQ}.get(origem, AGENTE)
     props = world.base(enunciado=enunciado, justificativa="J", status="proposta", origem=origem)
+    if concorrente is not None:
+        props["concorrente"] = concorrente
+    if predicao is not None:
+        props["predicao"] = predicao
     if origem == "sistema":
         abordagem = world.graph.abordagem(nome=f"abordagem-{enunciado}")
         metrica = world.graph.metrica
@@ -100,11 +108,14 @@ def experimento(
     testa: str | None = None,
     prepara: tuple[str, ...] = (),
     subtarefa: str = "sub-1",
+    conferencia_predicoes: dict[str, str] | None = None,
 ) -> str:
     """``Experimento`` com ``papel`` opcional (ausente = nó antigo), ``TESTA`` e ``PREPARA`` (``origem="derivado"``)."""
     props = world.base(subtarefa_id=subtarefa, status="sucesso", caminho_artefatos="/x", no_execucao="A")
     if papel is not None:
         props["papel"] = papel
+    if conferencia_predicoes is not None:
+        props["conferencia_predicoes"] = conferencia_predicoes
     eid = world.store.create_node("Experimento", props, actor=ORQ)
     if testa is not None:
         world.store.create_edge(eid, "TESTA", testa, {}, actor=ORQ)

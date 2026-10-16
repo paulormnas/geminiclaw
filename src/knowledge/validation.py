@@ -7,6 +7,8 @@ de validação garante paridade de comportamento entre os testes unitários
 
 from __future__ import annotations
 
+import math
+
 from src.knowledge import schema
 from src.knowledge.errors import (
     DisallowedRelationError,
@@ -15,8 +17,10 @@ from src.knowledge.errors import (
     HumanConfirmationRequiredError,
     ImmutableFieldError,
     InvalidEnumValueError,
+    InvalidPropertyValueError,
     MissingJustificationError,
     MissingRequiredPropertyError,
+    SelfRelationNotAllowedError,
     UnknownLabelError,
     UnknownPropertyError,
 )
@@ -114,6 +118,79 @@ def validate_node_write(
         property_schemas = {**property_schemas, **schema.AGENT_PROVENANCE_PROPERTIES}
 
     _validate_properties_against(label, full_props, property_schemas, error_scope="nó")
+    if label == "Hipotese":
+        _validate_hypothesis_rules(full_props)
+
+
+_REFERENCE_KEYS = frozenset({"valor", "origem_referencia", "metrica_id", "resultado_id", "fixada_em"})
+
+
+def _validate_hypothesis_rules(props: dict[str, object]) -> None:
+    """Regras condicionais da ``Hipotese`` (v18.7-graph-exploration-relations, design §2.2).
+
+    A hipótese do sistema nasce com ``chave_estruturada`` e ``referencia_fixada``; as duas só existem nela.
+    """
+    is_system = props.get("origem") == schema.ORIGEM_SISTEMA
+    for name in ("chave_estruturada", "referencia_fixada"):
+        if is_system and props.get(name) is None:
+            raise MissingRequiredPropertyError("Hipotese", name)
+        if not is_system and name in props:
+            raise InvalidPropertyValueError("Hipotese", name, "só existe em hipótese de origem 'sistema'")
+    if is_system:
+        _validate_structured_key(props["chave_estruturada"])
+        _validate_fixed_reference(props["referencia_fixada"])
+    _validate_abandonment_reason(props.get("motivo_abandono"))
+
+
+def _validate_structured_key(value: object) -> None:
+    """``"<problema_id>|<abordagem_id>|<metrica_id>"``, cada componente um identificador conferido no grafo."""
+    parts = value.split("|") if isinstance(value, str) else []
+    if len(parts) != 3 or not all(schema.IDENTIFIER_RE.fullmatch(part) for part in parts):
+        raise InvalidPropertyValueError(
+            "Hipotese", "chave_estruturada", "esperado '<problema_id>|<abordagem_id>|<metrica_id>' com identificadores"
+        )
+
+
+def _validate_fixed_reference(value: object) -> None:
+    """Forma de ``referencia_fixada``: chaves conhecidas, ``valor`` finito ou ``null`` e origem no enum."""
+    if not isinstance(value, dict):
+        raise InvalidPropertyValueError("Hipotese", "referencia_fixada", "esperado um mapa")
+    unknown = set(value) - _REFERENCE_KEYS
+    if unknown:
+        raise InvalidPropertyValueError("Hipotese", f"referencia_fixada.{sorted(unknown)[0]}", "chave desconhecida")
+    if "valor" not in value:
+        raise MissingRequiredPropertyError("Hipotese", "referencia_fixada.valor")
+    number = value["valor"]
+    if number is not None and (
+        isinstance(number, bool) or not isinstance(number, (int, float)) or not math.isfinite(number)
+    ):
+        raise InvalidPropertyValueError("Hipotese", "referencia_fixada.valor", "esperado número finito ou null")
+    origin = value.get("origem_referencia")
+    if origin not in schema.ORIGENS_REFERENCIA:
+        raise InvalidEnumValueError(
+            "Hipotese", "referencia_fixada.origem_referencia", origin, schema.ORIGENS_REFERENCIA
+        )
+    for required in ("metrica_id", "fixada_em"):
+        if not isinstance(value.get(required), str) or not value[required]:
+            raise MissingRequiredPropertyError("Hipotese", f"referencia_fixada.{required}")
+    has_result = value.get("resultado_id") is not None
+    if origin == "referencia_medida" and not has_result:
+        raise MissingRequiredPropertyError("Hipotese", "referencia_fixada.resultado_id")
+    if origin != "referencia_medida" and has_result:
+        raise InvalidPropertyValueError(
+            "Hipotese", "referencia_fixada.resultado_id", "só existe com origem_referencia 'referencia_medida'"
+        )
+    if number is None and origin != "indisponivel":
+        raise InvalidPropertyValueError(
+            "Hipotese", "referencia_fixada.valor", "null só com origem_referencia 'indisponivel'"
+        )
+
+
+def _validate_abandonment_reason(value: object) -> None:
+    if value is not None and (not isinstance(value, str) or len(value) > schema.MOTIVO_ABANDONO_MAX_CHARS):
+        raise InvalidPropertyValueError(
+            "Hipotese", "motivo_abandono", f"esperado texto de até {schema.MOTIVO_ABANDONO_MAX_CHARS} caracteres"
+        )
 
 
 def validate_node_update(label: str, changes: dict[str, object]) -> None:
@@ -142,13 +219,15 @@ def validate_node_update(label: str, changes: dict[str, object]) -> None:
     }
 
     for field_name, value in changes.items():
-        if field_name in schema.IMMUTABLE_NODE_FIELDS:
+        if field_name in schema.IMMUTABLE_NODE_FIELDS or field_name in schema.IMMUTABLE_LABEL_FIELDS.get(label, ()):
             raise ImmutableFieldError(field_name)
         prop_schema = property_schemas.get(field_name)
         if prop_schema is None:
             raise UnknownPropertyError(label, field_name)
         if prop_schema.enum is not None and value is not None and value not in prop_schema.enum:
             raise InvalidEnumValueError(label, field_name, value, prop_schema.enum)
+        if label == "Hipotese" and field_name == "motivo_abandono":
+            _validate_abandonment_reason(value)
 
 
 def validate_node_filter_keys(label: str, filters: dict[str, object]) -> NodeSchema:
@@ -260,7 +339,11 @@ def validate_edge_update(
 
 # Transições reservadas ao pesquisador: rótulo -> (campo, valor protegido). Não altera o schema:
 # a regra vive na porta única de escrita e a trilha fica na auditoria (autor ``pesquisador``).
-HUMAN_ONLY_TRANSITIONS: dict[str, tuple[str, str]] = {"Problema": ("status", "confirmado")}
+# v18.7-graph-exploration-relations: só o pesquisador grava o abandono que bloqueia novos testes (``abandonada_por``).
+HUMAN_ONLY_TRANSITIONS: dict[str, tuple[str, str]] = {
+    "Problema": ("status", "confirmado"),
+    "Hipotese": ("abandonada_por", "pesquisador"),
+}
 
 
 # Allowlist do que um AGENTE (Curator, Researcher...) pode escrever em campos de decisão do pesquisador
@@ -317,6 +400,8 @@ def validate_human_only(
     rule = HUMAN_ONLY_TRANSITIONS.get(label)
     if rule is None or actor_kind == "pesquisador":
         return
+    if label == "Hipotese":
+        _validate_hypothesis_reopening(current, changes, actor_kind)
     field, protected = rule
     if field not in changes:
         return
@@ -324,6 +409,26 @@ def validate_human_only(
     old = (current or {}).get(field)
     if new == protected or (old == protected and new != protected):
         raise HumanConfirmationRequiredError(label, field, actor_kind)
+
+
+def _validate_hypothesis_reopening(
+    current: dict[str, object] | None, changes: dict[str, object], actor_kind: str
+) -> None:
+    """Só o pesquisador tira do estado ``abandonada`` uma hipótese que ele mesmo abandonou (ADR 021 §3.5, §6)."""
+    if current is None or current.get("abandonada_por") != "pesquisador" or "status" not in changes:
+        return
+    if changes["status"] != current.get("status") and changes["status"] != "abandonada":
+        raise HumanConfirmationRequiredError("Hipotese", "status", actor_kind)
+
+
+def validate_not_self_relation(rel_type: str, src_id: str, dst_id: str) -> None:
+    """``DERIVADA_DE`` não liga uma hipótese a ela mesma (ciclos longos não são verificados; design §3).
+
+    Raises:
+        SelfRelationNotAllowedError: Origem e destino são o mesmo nó.
+    """
+    if rel_type == "DERIVADA_DE" and src_id == dst_id:
+        raise SelfRelationNotAllowedError(rel_type, src_id)
 
 
 # Transições de ``Oportunidade`` que o orquestrador pode fazer sozinho, só depois da aprovação do pesquisador

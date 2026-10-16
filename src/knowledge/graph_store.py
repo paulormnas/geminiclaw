@@ -378,6 +378,7 @@ class InMemoryGraphStore(GraphStore):
             raise NodeNotFoundError(dst_id)
 
         full_props = prepare_edge_properties(props, actor)
+        validation.validate_not_self_relation(rel, src_id, dst_id)
         validation.validate_edge_write(src.label, rel, dst.label, full_props)
         validation.validate_edge_endpoints_mutable(src.properties, dst.properties, rel, actor.kind)
 
@@ -807,6 +808,7 @@ class AgeGraphStore(GraphStore):
             raise NodeNotFoundError(dst_id)
 
         full_props = prepare_edge_properties(props, actor)
+        validation.validate_not_self_relation(rel, src_id, dst_id)
         validation.validate_edge_write(src.label, rel, dst.label, full_props)
         validation.validate_edge_endpoints_mutable(src.properties, dst.properties, rel, actor.kind)
 

@@ -14,6 +14,7 @@ migração.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 
@@ -109,6 +110,23 @@ DEFAULT_EDGE_ORIGEM = "afirmado"
 
 
 # ---------------------------------------------------------------------------
+# v18.7-graph-exploration-relations (ADR 021): papéis de experimento, hipótese do sistema, autor do abandono
+# ---------------------------------------------------------------------------
+
+PAPEIS_EXPERIMENTO: tuple[str, ...] = ("teste", "preparacao", "referencia")
+ORIGEM_SISTEMA = "sistema"
+ABANDONADA_POR: tuple[str, ...] = ("pesquisador", "sistema", "agente")
+ORIGENS_REFERENCIA: tuple[str, ...] = ("referencia_medida", "criterio_problema", "indisponivel")
+# Identificadores conferidos no grafo (cada componente de ``chave_estruturada``); sem ``|``, o separador da chave.
+IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+MOTIVO_ABANDONO_MAX_CHARS = 500
+# Propriedades que só nascem com a criação do nó e nunca mudam (inclusive para recusar a primeira gravação tardia).
+IMMUTABLE_LABEL_FIELDS: dict[str, frozenset[str]] = {
+    "Hipotese": frozenset({"chave_estruturada", "referencia_fixada"}),
+}
+
+
+# ---------------------------------------------------------------------------
 # Nós (14 tipos — ADR 015 §3; ``Afirmacao`` acrescentado por v18.5-claim-verification)
 # ---------------------------------------------------------------------------
 
@@ -183,7 +201,15 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
                 required=True,
                 enum=("proposta", "em_teste", "validada", "refutada", "inconclusiva", "abandonada"),
             ),
-            "origem": PropertySchema(required=True, enum=("pesquisador", "researcher", "curator", "oportunidade")),
+            "origem": PropertySchema(
+                required=True, enum=("pesquisador", "researcher", "curator", "oportunidade", ORIGEM_SISTEMA)
+            ),
+            # v18.7-graph-exploration-relations: hipótese do sistema (chave estruturada e referência fixadas na
+            # criação) e autor do abandono (só ``pesquisador`` bloqueia novos testes).
+            "chave_estruturada": PropertySchema(),
+            "referencia_fixada": PropertySchema(),
+            "abandonada_por": PropertySchema(enum=ABANDONADA_POR),
+            "motivo_abandono": PropertySchema(),
             "suporte": PropertySchema(),
             "certeza": PropertySchema(),
             "veredito": PropertySchema(),
@@ -220,6 +246,8 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
         {
             "subtarefa_id": PropertySchema(required=True),
             "status": PropertySchema(required=True, enum=("sucesso", "falha", "divergente_documentado")),
+            # v18.7-graph-exploration-relations: ausente = ``teste`` (nós anteriores à V18.7).
+            "papel": PropertySchema(enum=PAPEIS_EXPERIMENTO),
             "causa_falha": PropertySchema(enum=("infraestrutura", "abordagem", "ambigua")),
             "assinatura_falha": PropertySchema(),
             "hash_params": PropertySchema(),
@@ -395,7 +423,11 @@ RELATION_SCHEMAS: list[RelationSchema] = [
     _rel("Resultado", "MEDE", "Metrica"),
     _rel("Hipotese", "SOBRE", "Problema"),
     _rel("Hipotese", "PROPOE", "Abordagem"),
-    _rel("Hipotese", "DERIVADA_DE", ("Insumo", "Descoberta", "Oportunidade")),
+    _rel("Hipotese", "DERIVADA_DE", ("Insumo", "Descoberta", "Oportunidade", "Hipotese")),
+    # v18.7-graph-exploration-relations: preparação serve a hipótese (ou ao problema) e a referência é medida
+    # sobre o problema; nenhuma das duas é tentativa de teste.
+    _rel("Experimento", "PREPARA", ("Hipotese", "Problema")),
+    _rel("Resultado", "REFERENCIA_DE", "Problema"),
     _rel("Experimento", "TESTA", "Hipotese"),
     _rel("Decisao", "TOMADA_EM", "Sessao"),
     _rel("Decisao", "ESCOLHEU", ("Abordagem", "Hipotese")),

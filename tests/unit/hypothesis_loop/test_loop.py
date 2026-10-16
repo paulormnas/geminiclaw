@@ -68,12 +68,12 @@ async def test_modo_autonomo_executa_as_duas_hipoteses_de_maior_prioridade(tmp_p
 
 @pytest.mark.asyncio
 async def test_modo_assistido_sem_aprovacao_a_hipotese_do_researcher_nao_executa(tmp_path):
-    """Scenario: Modo assistido — sem aprovação nada executa e a sessão fica suspensa (retomável)."""
+    """Scenario: Modo assistido — sem aprovação nada executa e a sessão aguarda o pesquisador (retomável)."""
     approver = lambda items: {}  # noqa: E731 - o pesquisador não respondeu
     h = LoopHarness(tmp_path, mode="assisted", plans=[plan([task("t1")], [hyp("h1")])], approver=approver)
     await h.run()
     assert h.ran == []
-    assert h.sm.get(h.w.sid).status in ("suspended", "closed") and h.stop_reason == "interrompida"
+    assert h.sm.get(h.w.sid).status == "aguarda_pesquisador" and h.stop_reason == "aguarda_pesquisador"
     assert _hyp_status(h, "Hipótese h1") == "proposta"
     assert h.checkpoint().estado == "interrompido"
 
@@ -126,7 +126,7 @@ async def test_formato_antigo_no_assistido_tambem_exige_aprovacao_da_hipotese(tm
     old = [task("t1", None, hypothesis="O modelo atinge R2 de 0,85")]
     h = LoopHarness(tmp_path, mode="assisted", plans=[old], approver=lambda items: {})
     await h.run()
-    assert h.ran == [] and h.stop_reason == "interrompida"
+    assert h.ran == [] and h.stop_reason == "aguarda_pesquisador"
 
 
 @pytest.mark.asyncio
@@ -204,12 +204,12 @@ async def test_parada_por_solucao_no_assistido_pode_continuar_explorando(tmp_pat
 
 
 @pytest.mark.asyncio
-async def test_assistido_sem_resposta_no_terminal_suspende_em_vez_de_decidir(tmp_path):
+async def test_assistido_sem_resposta_no_terminal_aguarda_em_vez_de_decidir(tmp_path):
     h = LoopHarness(tmp_path, mode="assisted", plans=[plan([task("t1")], [hyp("h1")])], confirmer=lambda s: None,
                     approver=lambda items: {i.id: ApprovalDecision("aprovar") for i in items})
     h.extra_patches.append(_solution())
     await h.run()
-    assert h.stop_reason == "interrompida" and h.checkpoint().estado == "interrompido"
+    assert h.stop_reason == "aguarda_pesquisador" and h.checkpoint().estado == "interrompido"
 
 
 @pytest.mark.asyncio

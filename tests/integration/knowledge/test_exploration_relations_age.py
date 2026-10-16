@@ -6,6 +6,7 @@ quando não há AGE de teste acessível (ver ``conftest.py``) ou quando faltam a
 
 from __future__ import annotations
 
+import os
 import uuid
 
 import psycopg
@@ -51,7 +52,7 @@ def test_migracao_idempotente_cria_os_rotulos_novos(temp_graph, monkeypatch):
 
 def test_leitor_le_as_arestas_novas_e_nao_grava(temp_graph, monkeypatch):
     """Scenario: Grafo anterior à V18.7 (``knowledge_reader`` lê e não grava; parecer de segurança, item c)."""
-    if not config.KNOWLEDGE_READER_DATABASE_URL or not config.KNOWLEDGE_READER_PASSWORD:
+    if not config.KNOWLEDGE_READER_DATABASE_URL or not os.environ.get("KNOWLEDGE_READER_PASSWORD"):
         pytest.skip("KNOWLEDGE_READER_DATABASE_URL/KNOWLEDGE_READER_PASSWORD não configuradas")
     migration, conn, name = temp_graph
     _migrate_twice(migration, conn, name, monkeypatch)

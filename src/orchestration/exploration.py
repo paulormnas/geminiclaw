@@ -35,7 +35,6 @@ from src.knowledge.hypotheses import (
     PlanExtras,
     RecordReport,
     SuggestionReply,
-    legacy_hypotheses,
     split_plan,
 )
 from src.knowledge.hypothesis_cycle import Approver, HypothesisCycle, Selection, SolutionStatus, terminal_approver
@@ -44,14 +43,13 @@ from src.knowledge.metric_definition import AppliedMetrics, apply_validated_metr
 from src.knowledge.projects import get_active_problem
 from src.knowledge.suggestions import Suggestion, SuggestionError, SuggestionStore
 from src.logger import get_logger
-from src.utils.normalization import normalize_domain_term
+from src.orchestration.exploration_linking import bind_legacy_refs, descendants_of, governance_drops, resolve_task_refs
+from src.orchestration.exploration_prompts import METRIC_DEFINITION_PLAN_INSTRUCTION, PLAN_FORMAT_INSTRUCTION
 
 logger = get_logger(__name__)
 
 __all__ = ["CycleOutcome", "ExplorationSession", "ExplorationStop", "SuggestionError", "split_plan"]
 
-# Subtarefas que preparam ou sintetizam não testam hipótese; as demais de um plano no formato novo precisam de uma.
-PREPARATORY_TASK_TYPES = frozenset({"eda", "synthesis"})
 _MAX_BLOCK_ITEMS = 20
 SolutionConfirmer = Callable[[SolutionStatus], "str | None"]
 Telemetry = Callable[[str, dict[str, Any]], None]
@@ -90,38 +88,6 @@ class CycleOutcome:
     @property
     def pending_approval(self) -> bool:
         return bool(self.selection.pending_approval)
-
-
-PLAN_FORMAT_INSTRUCTION = """FORMATO DO PLANO NESTE PROJETO (obrigatório): retorne UM objeto JSON com as chaves
-"hipoteses", "decisoes", "respostas_sugestoes" e "subtarefas" (lista; as subtarefas seguem o formato de sempre e
-ganham "hypothesis_ref").
-- "hipoteses": cada item {"ref": "h1", "id": null, "enunciado": "...", "justificativa": "...", "origem": "researcher",
-  "derivada_de": ["<id de Descoberta|Oportunidade|Insumo>"], "custo_estimado": "baixo|medio|alto",
-  "abordagem": {"nome": "...", "tipo": "algoritmo"}}. Use "id" para continuar uma hipótese existente (listada abaixo);
-  "ref" para as novas. A origem real é decidida pelo sistema, não por você.
-- "decisoes": TODA escolha entre alternativas gera uma decisão: {"contexto": "...", "escolhido": {"tipo": "Hipotese",
-  "ref": "h1"}, "descartados": [{"tipo": "Abordagem", "nome": "...", "motivo": "..."}], "criterio": "evidencia_previa",
-  "justificativa": "...", "informada_por": ["<id de Descoberta>"]}. Inclua ao menos uma decisão ao introduzir hipótese
-  nova.
-- "respostas_sugestoes": responda a CADA sugestão pendente do Curator: {"sugestao_id": "...", "decisao": "aceita" ou
-  "recusada", "motivo": "...", "hipotese_ref": "h2"} ("aceita" exige a hipótese correspondente em "hipoteses").
-- Cada subtarefa que testa uma hipótese DEVE ter "hypothesis_ref" (o "ref" ou o "id" da hipótese). Subtarefas só de
-  preparação (eda) ou de síntese podem omiti-lo.
-- Hipóteses de agentes dependem de aprovação do pesquisador conforme o modo da sessão; oportunidades só viram
-  hipótese depois de aprovadas pelo pesquisador.
-- Subtarefas já concluídas continuam no plano, inalteradas (para manter as dependências); não são reexecutadas.
-- Se você não vê mais nenhum caminho promissor, devolva o plano só com as subtarefas já concluídas e sem hipótese
-  nova: a sessão será encerrada como "sem caminhos promissores"."""
-
-
-METRIC_DEFINITION_PLAN_INSTRUCTION = """DEFINIÇÃO DE MÉTRICAS (obrigatória neste plano): o Problema deste projeto não
-tem métrica aprovada ({motivo}). Inclua no plano a chave "metricas": a métrica (ou o conjunto de métricas) que melhor
-expressa o sucesso para ESTE problema, cada item {{"nome": "...", "sentido": "maior_melhor" ou "menor_melhor",
-"limiar": <número a alcançar>, "delta_min": <menor melhoria relevante, opcional>, "justificativa": "por que esta
-métrica e este limiar servem a este problema"}}. A primeira é a principal (define o veredito das hipóteses). Escolha
-métricas adequadas ao tipo de problema e aos dados, com limiar plausível; evite métrica de vaidade ou calculada sobre
-dados de treino. O Validator avalia a definição junto com o plano; ela só vale depois de aprovada, e um plano sem
-"metricas" é reprovado."""
 
 
 def _is_interactive() -> bool:
@@ -291,35 +257,6 @@ class ExplorationSession:
 
     # ------------------------------------------------------------------ ciclo
 
-    @staticmethod
-    def _is_bound(task: Any) -> bool:
-        """Subtarefa que testa hipótese (precisa de ``hypothesis_ref`` resolvível no formato novo).
-
-        Tipos preparatórios (``eda``, ``synthesis``) nunca testam hipótese, mesmo que o modelo preencha ``approach``:
-        o Gemini 3.8 flash o preenche em todas as subtarefas, e exigir hipótese da EDA retirava o plano inteiro (tudo
-        depende dela), fechando a sessão como ``sem_caminhos_promissores`` sem executar nada.
-        """
-        if getattr(task, "task_type", None) in PREPARATORY_TASK_TYPES:
-            return False
-        if getattr(task, "approach", None):
-            return True
-        return getattr(task, "agent_id", "") == "developer" and getattr(task, "task_type", None) not in (
-            PREPARATORY_TASK_TYPES
-        )
-
-    def _descendants_of(self, dropped: set[str], tasks: list[Any], keep: set[str]) -> set[str]:
-        """Fecho transitivo das subtarefas que dependem de uma retirada (as já concluídas em ``keep`` ficam)."""
-        out = set(dropped)
-        changed = True
-        while changed:
-            changed = False
-            for task in tasks:
-                name = getattr(task, "task_name", "")
-                if name and name not in out and name not in keep and any(d in out for d in task.depends_on):
-                    out.add(name)
-                    changed = True
-        return out
-
     def _with_unanswered_refused(self, extras: PlanExtras) -> PlanExtras:
         """Sugestão que o Researcher continuou sem responder (mesmo após a nova solicitação) vira recusa registrada.
 
@@ -347,18 +284,8 @@ class ExplorationSession:
         Raises:
             HypothesisError / GraphStoreError: o grafo não aceitou o plano (o laço fecha a sessão com checkpoint).
         """
-        legacy = False
         extras = self._with_unanswered_refused(extras)
-        if not extras.novo_formato:
-            declared = legacy_hypotheses([{"hypothesis": t.hypothesis, "scientific_rationale": t.scientific_rationale,
-                                           "approach": t.approach} for t in tasks])
-            if declared:
-                extras = replace(extras, hipoteses=declared)
-                legacy = True
-                by_text = {normalize_domain_term(d.enunciado): d.ref for d in declared}
-                for task in tasks:
-                    if not getattr(task, "hypothesis_ref", "") and task.hypothesis:
-                        task.hypothesis_ref = by_text.get(normalize_domain_term(task.hypothesis), "")
+        extras, legacy = bind_legacy_refs(tasks, extras)
         report = self.book.record(extras) if not extras.vazio else RecordReport()
         self._suggestions.record_answers(report.respostas_registradas)
         costs: dict[str, str] = {}
@@ -366,33 +293,12 @@ class ExplorationSession:
             hid = report.ref_map.get(decl.ref)
             if hid:
                 costs[hid] = decl.custo
-        dropped: dict[str, str] = {}
-        for task in tasks:
-            ref = getattr(task, "hypothesis_ref", "") or ""
-            hid = self.book.resolve_ref(ref, report) if ref else None
-            task.hypothesis_id = hid or ""
-            if ref and hid is None and ref in report.rejeitadas:
-                dropped[task.task_name] = f"hipotese_{report.rejeitadas[ref]}"
-            elif extras.novo_formato and hid is None and self._is_bound(task) and task.task_name not in done:
-                dropped[task.task_name] = "sem_hipotese"
+        dropped = resolve_task_refs(self.book, tasks, report, novo_formato=extras.novo_formato, done=done)
         candidates = [t.hypothesis_id for t in tasks if t.hypothesis_id and t.task_name not in dropped
                       and t.task_name not in done]
         selection = self.cycle.select(candidates, mode=self.mode, approver=self._approver, custos=costs)
-        runnable = set(selection.execute)
-        for task in tasks:
-            if task.task_name in dropped or task.task_name in done:
-                continue
-            if task.hypothesis_id and task.hypothesis_id not in runnable:
-                if task.hypothesis_id in selection.pending_approval:
-                    dropped[task.task_name] = "hipotese_aguarda_aprovacao"
-                elif task.hypothesis_id in selection.rejected:
-                    dropped[task.task_name] = "hipotese_rejeitada_pelo_pesquisador"
-                elif task.hypothesis_id in selection.deferred:
-                    dropped[task.task_name] = "hipotese_adiada_por_prioridade"
-                else:
-                    dropped[task.task_name] = "hipotese_ja_concluida_ou_abandonada"
-        all_dropped = self._descendants_of(set(dropped), tasks, done)
-        for name in all_dropped - set(dropped):
+        governance_drops(tasks, selection, dropped, done=done)
+        for name in descendants_of(set(dropped), tasks, done) - set(dropped):
             dropped[name] = "depende_de_subtarefa_retirada"
         kept = [t for t in tasks if t.task_name not in dropped]
         self._emit(

@@ -35,6 +35,7 @@ from src.knowledge.suggestions import SuggestionError
 from src.logger import get_logger
 from src.observability.telemetry import get_telemetry
 from src.orchestration.errors import AgentRunLimitReached, PlanningStalled
+from src.orchestration.subtask_ingestion import ingest_subtask
 from src.orchestration.triage import TriageClassifier
 from src.orchestration.usage import StopReason, UsageBudget, UsageTracker
 from src.session.continuity import (
@@ -1645,7 +1646,7 @@ class AutonomousLoop:
                         cycle_results[task.task_name] = last_result
 
                 # v17-structural-fact-ingestion — fatos da subtarefa (revisada) no grafo, sem LLM.
-                await self._ingest_subtask(task, last_result, last_review, master_session_id)
+                await ingest_subtask(self.orchestrator, task, last_result, last_review, master_session_id)
 
                 # v18-research-continuity — checkpoint do fim da subtarefa (status, tentativas, artefatos, resumo).
                 if recorder is not None and task.task_name:
@@ -2030,74 +2031,6 @@ class AutonomousLoop:
             "a partir deles e das sugestões do Curator."
         )
         return "\n".join(lines)
-
-    async def _ingest_subtask(
-        self,
-        task: "AgentTask",
-        result: Optional["AgentResult"],
-        review: Optional[Dict[str, Any]],
-        master_session_id: str,
-    ) -> None:
-        """Ingere os fatos estruturais de uma subtarefa concluída (v17-structural-fact-ingestion).
-
-        Nunca interrompe a sessão: sem projeto/grafo a ingestão é omitida; falhas do grafo viram
-        eventos em ``knowledge_pending.jsonl`` (tratados pelo ``FactIngestor``).
-        """
-        from src.knowledge.ingestion import FactIngestor, SubtaskInput
-
-        ingestor = self.orchestrator.get_ingestor(master_session_id)
-        if not isinstance(ingestor, FactIngestor) or result is None or not task.task_name:
-            return
-        self._flag_from_review(task, review, master_session_id)
-        try:
-
-            sub = SubtaskInput(
-                task_name=task.task_name,
-                subtask_id=task.subtask_id,
-                agent_id=task.agent_id,
-                task_type=task.task_type,
-                hypothesis=task.hypothesis or "",
-                scientific_rationale=task.scientific_rationale or "",
-                approach=task.approach if isinstance(task.approach, dict) else None,
-                agent_status=result.status,
-                agent_error_category=getattr(result, "error_category", None),
-                review_status=(review or {}).get("status"),
-                review_verified=bool((review or {}).get("verified", False)),
-                review_outcome=(review or {}).get("outcome"),
-                validation_criteria=[c for c in (task.validation_criteria or []) if isinstance(c, str)],
-                hypothesis_id=task.hypothesis_id or None,
-            )
-            if await asyncio.to_thread(ingestor.subtask, sub):
-                # v17-curator-agent: recálculo determinístico do veredito após cada subtarefa ingerida.
-                subtarefa_id = sub.subtask_id or f"{master_session_id}:{sub.task_name}"
-                await asyncio.to_thread(self.orchestrator.knowledge_after_subtask, master_session_id, subtarefa_id)
-        except Exception as exc:  # noqa: BLE001 - a ingestão nunca derruba a subtarefa
-            logger.warning("Falha ao ingerir fatos da subtarefa", extra={"error": type(exc).__name__})
-
-    def _flag_from_review(self, task: "AgentTask", review: Optional[Dict[str, Any]], master_session_id: str) -> None:
-        """Sinalização do Validator ao Curator (ADR 012 §2; task 4.1), gravada pelo orquestrador.
-
-        O Validator não tem laço de ferramentas, então a sinalização sai do **parecer estruturado** dele: divergência
-        documentada vira ``caminho_relevante`` e reprovação ``falha_relevante``. O texto é um modelo fixo (nenhum
-        texto de LLM ou de documento entra na sinalização).
-        """
-        status = (review or {}).get("status")
-        tipo = {"divergent_but_documented": "caminho_relevante", "fail": "falha_relevante"}.get(status or "")
-        if tipo is None or not task.task_name:
-            return
-        try:
-            from src.knowledge.curator_flags import record_flag
-
-            record_flag(
-                self.orchestrator.output_manager.base_dir / master_session_id,
-                agente="validator",
-                subtarefa=task.task_name,
-                tipo=tipo,
-                texto=f"Parecer do Validator sobre a subtarefa '{task.task_name}': {status}.",
-                refs=[task.task_name],
-            )
-        except Exception as exc:  # noqa: BLE001 - sinalizar nunca derruba a subtarefa
-            logger.warning("Sinalização do Validator não gravada", extra={"error": type(exc).__name__})
 
     def _record_run_limit(self, master_session_id: str, exc: AgentRunLimitReached) -> None:
         """Registra o evento ``limit_reached`` do limite de execuções (observabilidade segura)."""

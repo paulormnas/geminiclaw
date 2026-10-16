@@ -20,6 +20,7 @@ from src.knowledge.projects import create_project
 from src.orchestration.autonomous_loop import AutonomousLoop
 from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
 from src.orchestration.plan_normalizer import normalize_plan
+from src.orchestration.subtask_ingestion import ingest_subtask
 from src.session.manager import Session
 from src.skills.code.sandbox import PythonSandbox, extract_exception_type
 from src.skills.code.scientific_helpers import save_experiment_artifacts
@@ -248,7 +249,7 @@ async def test_laco_ingere_subtarefa_revisada(tmp_path):
                      validation_criteria=["r2 >= 0.75"], approach={"nome": "boosting", "tipo": "algoritmo"},
                      hypothesis="H", scientific_rationale="R")
     result = AgentResult(agent_id="developer", session_id="x", status="success", response={})
-    await loop._ingest_subtask(task, result, {"status": "pass", "verified": True}, "s1")
+    await ingest_subtask(loop.orchestrator, task, result, {"status": "pass", "verified": True}, "s1")
 
     (exp,) = store.find_nodes("Experimento", {})
     assert exp.properties["subtarefa_id"] == "sub-9" and exp.properties["status"] == "sucesso"
@@ -263,7 +264,7 @@ async def test_laco_ingestao_nao_levanta_com_orquestrador_sem_ingestor():
     orch = MagicMock()
     orch.get_ingestor.return_value = None
     loop = AutonomousLoop(orch)
-    await loop._ingest_subtask(AgentTask(agent_id="developer", prompt="p", task_name="t"),
+    await ingest_subtask(loop.orchestrator, AgentTask(agent_id="developer", prompt="p", task_name="t"),
                                AgentResult(agent_id="d", session_id="x", status="error", response={}), None, "s1")
 
 

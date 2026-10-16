@@ -9,10 +9,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from src.cli.graph import handle_graph_command
-from src.gate.human_gate import HumanGate
 from src.knowledge.graph_store import InMemoryGraphStore
 from src.llm.base import LLMProvider, LLMResponse, ToolCall
 from tests.support.curator_graph import ORQ, PESQUISADOR, CuratorGraph
+from tests.support.fake_gate import FakeGate
 
 PID = "11111111-1111-4111-8111-111111111111"
 OTHER_PID = "22222222-2222-4222-8222-222222222222"
@@ -107,7 +107,7 @@ class World:
         inputs: list[str] | None = None,
         interactive: bool = True,
         provider: Scripted | None = None,
-        gate: HumanGate | None = None,
+        gate: FakeGate | None = None,
         with_project: bool = True,
         config_dir: Any = None,
     ) -> tuple[int, str, list[str]]:

@@ -10,14 +10,13 @@ Tudo aqui é **determinístico** (sem LLM, exceto o ``custo_estimado`` que o Res
 - ``evaluate_decisions``: ``Decisao.resultado_posterior`` preenchido deterministicamente;
 - ``check_solution``: critério "solução encontrada" (veredito moderado **e** melhor resultado *validado* no alvo).
 
-A aprovação em lote do ``assisted`` é uma ação do **pesquisador no terminal** (``terminal_approver``): a resposta de
+A aprovação do ``assisted`` é uma ação do **pesquisador no terminal**, registrada no gate persistente: a resposta de
 ``ask_researcher`` (inclusive a do consultor), de agente ou de documento nunca aprova hipótese — sem TTY nada é
 aprovado e as hipóteses ficam pendentes (falha fechada).
 """
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -330,7 +329,7 @@ class HypothesisCycle:
         Args:
             hypothesis_ids: Hipóteses referenciadas pelas subtarefas do plano.
             mode: ``SessionMode`` da sessão.
-            approver: Quem aprova no ``assisted`` (padrão em produção: ``terminal_approver``).
+            approver: Quem aprova no ``assisted`` (em produção, ``PersistentGateApprover`` sobre o gate persistente).
             custos: ``id`` -> ``custo_estimado`` declarado.
         """
         mode = mode if mode in SESSION_MODES else "assisted"
@@ -713,63 +712,3 @@ class HypothesisCycle:
             if len(out) >= limit:
                 break
         return out
-
-
-# ---------------------------------------------------------------------------
-# Aprovação no terminal (ação do pesquisador)
-# ---------------------------------------------------------------------------
-
-
-def _is_interactive() -> bool:
-    try:
-        return bool(sys.stdin.isatty() and sys.stdout.isatty())
-    except (AttributeError, ValueError):
-        return False
-
-
-def terminal_approver(
-    *,
-    input_fn: Callable[[str], str] = input,
-    output_fn: Callable[[str], Any] = print,
-    interactive: bool | None = None,
-) -> Approver:
-    """Aprovador do ``assisted``: o pesquisador decide no **terminal interativo**, em lote.
-
-    Sem TTY devolve ``{}`` (nada é aprovado: as hipóteses ficam pendentes). A decisão de agente, do consultor ou
-    de documento nunca chega aqui. Entradas: ``a`` aprova, ``r`` rejeita (pede o motivo), ``e`` edita o enunciado e
-    aprova, ``p`` (ou vazio) pula e deixa pendente.
-
-    Args:
-        input_fn: Leitura do terminal (injetável em testes).
-        output_fn: Saída de texto.
-        interactive: Força o estado interativo (testes).
-    """
-
-    def approve(items: list[ApprovalItem]) -> dict[str, ApprovalDecision]:
-        if not (_is_interactive() if interactive is None else interactive):
-            output_fn("Hipóteses aguardam aprovação do pesquisador, mas não há terminal interativo: nada foi aprovado.")
-            return {}
-        decisions: dict[str, ApprovalDecision] = {}
-        output_fn(f"\nHipóteses propostas por agentes aguardam sua aprovação ({len(items)}):")
-        try:
-            for n, item in enumerate(items, start=1):
-                output_fn(
-                    f"\n[{n}] origem: {sanitize_text(item.origem, 40)} | prioridade: {item.prioridade:.2f}\n"
-                    f"    {sanitize_text(item.enunciado, 400)}\n"
-                    f"    justificativa: {sanitize_text(item.justificativa, 400)}"
-                )
-                reply = input_fn("    [a]provar / [r]ejeitar / [e]ditar / [p]ular: ").strip().lower()
-                if reply in ("a", "aprovar"):
-                    decisions[item.id] = ApprovalDecision(ACTION_APPROVE)
-                elif reply in ("r", "rejeitar"):
-                    motivo = input_fn("    Motivo da rejeição: ").strip()
-                    decisions[item.id] = ApprovalDecision(ACTION_REJECT, motivo=motivo or "rejeitada pelo pesquisador")
-                elif reply in ("e", "editar"):
-                    novo = input_fn("    Novo enunciado: ").strip()
-                    if novo:
-                        decisions[item.id] = ApprovalDecision(ACTION_EDIT, enunciado=novo)
-        except (EOFError, KeyboardInterrupt):
-            output_fn("Aprovação interrompida: o que não foi decidido continua pendente.")
-        return decisions
-
-    return approve

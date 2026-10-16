@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from src.gate.human_gate import HumanGate
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.hypotheses import (
     HypothesisBook,
@@ -17,6 +16,7 @@ from src.knowledge.hypotheses import (
 )
 from src.knowledge.ingestion import SubtaskInput, ingest_subtask
 from tests.support.controlled_embedding_provider import pair_vectors
+from tests.support.fake_gate import FakeGate
 from tests.support.hypothesis_world import AGENTE, DIM, HypothesisWorld
 
 pytestmark = pytest.mark.unit
@@ -24,7 +24,7 @@ pytestmark = pytest.mark.unit
 
 def _book(w: HypothesisWorld, pending=None, gate=None) -> HypothesisBook:
     return HypothesisBook(w.store, w.ctx, index=w.index, pending_suggestions=lambda: pending or [],
-                          gate=gate or HumanGate())
+                          gate=gate or FakeGate())
 
 
 def _extras(**plan):
@@ -179,7 +179,7 @@ def test_oportunidade_documentada_nunca_origina_hipotese_e_fica_pendente_no_gate
     """Nenhuma oportunidade é investigada sem aprovação: o pedido fica pendente e a hipótese é recusada."""
     w = HypothesisWorld()
     opp = w.opportunity()
-    gate = HumanGate()
+    gate = FakeGate()
     extras = _extras(hipoteses=[{"ref": "h1", "enunciado": "Investigar X", "derivada_de": [opp]}])
     report = _book(w, gate=gate).record(extras)
     assert report.rejeitadas == {"h1": "oportunidade_nao_aprovada"} and report.oportunidades_pendentes == [opp]

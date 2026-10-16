@@ -17,7 +17,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src import config
-from src.gate.human_gate import HumanGate, Source, default_gate
+from src.gate.persistent_gate import TerminalGate, terminal_gate
+from src.gate.types import Source
 from src.knowledge import projects
 from src.knowledge.change_proposals import (
     CONFIRM_WORD,
@@ -115,7 +116,7 @@ def handle_graph_command(
     interactive: bool | None = None,
     provider_factory: Callable[[], Any] | None = None,
     index: Any | None = None,
-    gate: HumanGate | None = None,
+    gate: TerminalGate | None = None,
 ) -> int:
     """Trata ``geminiclaw graph show|node|edit``.
 
@@ -128,7 +129,7 @@ def handle_graph_command(
         interactive: Força o estado interativo (testes); padrão: ``stdin`` e ``stdout`` são TTY.
         provider_factory: Provedor do Curator (testes injetam um dublê; padrão: roteador ADR 017).
         index: Índice semântico (avisos de duplicata e ``similar``); só com ``store`` injetado.
-        gate: ``HumanGate`` das decisões reservadas (padrão: o do processo).
+        gate: ``TerminalGate`` das decisões reservadas (padrão: o do processo).
 
     Returns:
         Código de saída (0 em sucesso).
@@ -181,16 +182,18 @@ def _ask(input_fn: Callable[[str], str], prompt: str) -> str | None:
         return None
 
 
-def _authorize_decisions(plan: Plan, gate: HumanGate, input_fn: Callable[[str], str]) -> bool:
-    """Decisões reservadas (``Oportunidade``): autorização adicional, no terminal, pelo ``HumanGate``.
+def _authorize_decisions(plan: Plan, gate: TerminalGate, input_fn: Callable[[str], str]) -> bool:
+    """Decisões reservadas (``Oportunidade``): autorização adicional, no terminal, pelo gate persistente.
 
     O prompt identifica o alvo e o novo status; só a resposta ``s`` digitada no terminal autoriza.
     """
     for item in plan.decisions:
-        request = gate.request(item.decision or "", item.node_id)
         target = sanitize_text(item.description, _DECISION_PROMPT_CHARS)
         reply = _ask(input_fn, f"Autoriza a decisão '{item.decision}' (operação {item.index})?\n  {target}\n[s/N] ")
-        gate.answer(request.id, source=Source.TERMINAL, approved=reply is not None and reply.lower() in ("s", "sim"))
+        request = gate.resolve(
+            item.decision or "", item.node_id, source=Source.TERMINAL,
+            approved=reply is not None and reply.lower() in ("s", "sim"),
+        )
         if not gate.authorized(request.id):
             return False
     return True
@@ -242,7 +245,7 @@ def _edit(
     interactive: bool | None,
     provider_factory: Callable[[], Any] | None,
     index: Any | None,
-    gate: HumanGate | None,
+    gate: TerminalGate | None,
 ) -> int:
     from src.agents.curator.edit import CuratorEditor, EditProposal, plan_for
 
@@ -267,7 +270,7 @@ def _edit(
         runtime = open_knowledge_runtime()
         store, index = (runtime.store, runtime.index) if runtime is not None else (open_raw_graph_store(), None)
     projects.get_project(store, project_id)
-    gate = gate or default_gate()
+    gate = gate or terminal_gate()
     # O provedor é resolvido AQUI (fora do laço assíncrono do Curator): o roteador usa ``asyncio.run`` internamente.
     try:
         provider = (provider_factory or _default_provider_factory())()
@@ -320,7 +323,7 @@ def _apply(
     store: Any,
     plan: Plan,
     request: str,
-    gate: HumanGate,
+    gate: TerminalGate,
     input_fn: Callable[[str], str],
     out: Callable[[str], Any],
     adjustments: tuple[str, ...],

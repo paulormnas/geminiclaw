@@ -11,7 +11,7 @@ Garantias deste módulo:
 - **Decisões reservadas continuam reservadas**: o ``Problema`` e o ``Projeto`` têm comandos próprios (``project``),
   termos do vocabulário, os do ``vocab``; fatos estruturais (Sessao, Insumo, Experimento, Resultado), campos calculados
   (veredito...) e relações derivadas nunca são escritos aqui. Decidir sobre ``Oportunidade`` exige, além da
-  confirmação da proposta, a autorização do ``HumanGate`` (``aprovar_oportunidade``).
+  confirmação da proposta, a autorização do gate persistente (``aprovar_oportunidade``).
 - **Aplicação atômica no que for reversível**: verificação prévia do estado e, se uma escrita falhar, reversão das
   alterações de status/propriedades já feitas; nós criados não são apagados (e são reportados).
 - **Auditoria**: cada escrita registra em ``knowledge_audit`` (mesma trilha das demais alterações) o pedido original.
@@ -123,7 +123,7 @@ class PlannedOp:
     before: dict[str, Any] = field(default_factory=dict)
     effective: dict[str, Any] = field(default_factory=dict)
     sensitive: bool = False
-    decision: str | None = None  # decisão reservada que exige o HumanGate
+    decision: str | None = None  # decisão reservada que exige o gate persistente
     label: str = ""
     node_id: str = ""
 

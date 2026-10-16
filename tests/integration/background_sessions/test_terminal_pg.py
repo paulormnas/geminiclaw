@@ -183,12 +183,14 @@ def test_codigo_do_limite_e_3(harness: SessionHarness):
 
 def test_ctrl_c_no_comando_direto_fecha_com_checkpoint_e_sai_com_130(harness: SessionHarness):
     harness.use_scenario(harness.scenario(passos=[{"subtarefa": "s1", "dorme": 10}]))
-    timer = threading.Timer(3.0, lambda: os.kill(os.getpid(), signal.SIGINT))
-    timer.start()
-    try:
-        code = run_direct(harness, background=False)
-    finally:
-        timer.cancel()
+    def interrupt_when_active() -> None:  # o Ctrl+C só chega depois que o laço da sessão está ativo
+        if wait_for(lambda: any(s.payload.get("subtarefas") for s in harness.manager.list_orchestrator()), 30):
+            os.kill(os.getpid(), signal.SIGINT)
+
+    watcher = threading.Thread(target=interrupt_when_active, daemon=True)
+    watcher.start()
+    code = run_direct(harness, background=False)
+    watcher.join(5)
     assert code == 130
     session = harness.manager.list_orchestrator()[0]
     assert session.payload["motivo_parada"] == "interrompida_pesquisador"
@@ -210,6 +212,7 @@ def test_sessao_lancada_pelo_repl_recebe_sigint_e_o_repl_continua_aberto(harness
     with terminal_patches():
         asyncio.run(repl.handle("nova-pesquisa estudar iris"))
     session = harness.manager.list_orchestrator()[0]
+    assert wait_for(lambda: harness.manager.get(session.id).payload.get("subtarefas"))  # o laço já está ativo
     os.kill(session.pid, signal.SIGINT)
     assert wait_for(lambda: harness.manager.get(session.id).status != "active", timeout=15)
     assert harness.manager.get(session.id).payload["motivo_parada"] == "interrompida_pesquisador"

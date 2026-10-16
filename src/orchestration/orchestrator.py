@@ -28,7 +28,7 @@ from src.config import (
 )
 from src.egress.gate import EgressGate, any_role_raw, bind_gate, role_tainted
 from src.egress.persisted import resumo_marca
-from src.gate.human_gate import HumanGate
+from src.gate.persistent_gate import PersistentGate, session_gate
 from src.knowledge.hypotheses import PlanExtras, split_plan
 from src.knowledge.suggestions import SuggestionError
 from src.llm.allocation import build_allocation_profile
@@ -46,6 +46,7 @@ from src.orchestration.unlimited_mode import budget_payload, record_confirmation
 from src.orchestration.usage import UsageBudget, UsageTracker
 from src.research_data.context_loader import ContextBundle, ContextLoader
 from src.research_data.manifest import ManifestError
+from src.session.chain import chain_session_ids
 from src.session.continuity import (
     ESTADO_FECHADO,
     ESTADO_INTERROMPIDO,
@@ -179,7 +180,7 @@ class Orchestrator:
         # v17-curator-agent — Curator por sessão mestra; provedor injetável (testes); gate de decisões reservadas.
         self._curators: dict[str, Curator] = {}
         self.curator_provider: Any = None
-        self.human_gate = HumanGate()
+        self.human_gate: PersistentGate = session_gate()
         # v18-research-continuity — gravador de checkpoint e estado de retomada por sessão mestra.
         self._recorders: dict[str, CheckpointRecorder] = {}
         self._resumes: dict[str, ResumeState] = {}
@@ -432,14 +433,24 @@ class Orchestrator:
         except Exception as exc:  # noqa: BLE001
             logger.warning("Recálculo do veredito não executado", extra={"error": type(exc).__name__})
 
-    def _register_reserved(self, decisao: str | None, task: "AgentTask") -> None:
-        """Registra no gate a decisão reservada como pendente para o pesquisador (a resposta do consultor não vale)."""
+    def _register_reserved(self, decisao: str | None, task: "AgentTask", session_id: str | None = None) -> None:
+        """Registra no gate persistente a decisão reservada como pendente para o pesquisador (a resposta do consultor
+        não vale)."""
         if not decisao:
             return
+        from src.gate.types import GateError
+
         try:
-            self.human_gate.request(decisao, task.task_name or "")
-        except ValueError:
-            logger.warning("Decisão reservada desconhecida; tratada como pendente sem registro no gate")
+            self.human_gate.request(
+                decisao, task.task_name or "",
+                f"O agente '{task.agent_id}' pediu a decisão reservada '{decisao}' "
+                f"(subtarefa {task.task_name or '-'}).",
+                session_id=session_id, project_id=self._session_project_id(session_id) if session_id else None,
+            )
+        except GateError as exc:  # decisão desconhecida/fora do catálogo ou pedidos pendentes demais
+            logger.warning(
+                "Decisão reservada tratada como pendente sem registro no gate", extra={"error": type(exc).__name__}
+            )
 
     async def _index_inputs(self, session_id: str, project_id: str | None) -> dict[str, Any] | None:
         """Indexa o ``input_snapshot/`` da sessão na coleção de documentos (v17-input-document-index).
@@ -538,6 +549,7 @@ class Orchestrator:
                 solution_confirmer=self.solution_confirmer,
                 telemetry=_telemetry,
                 curator_suggest=lambda: self.curator_suggest(session_id),
+                session_chain=lambda: chain_session_ids(self.session_manager, session_id),
             )
         except Exception as exc:  # noqa: BLE001 - sem exploração a sessão continua no laço de ciclo único
             logger.warning("Exploração de hipóteses não iniciada", extra={"error": type(exc).__name__})
@@ -1503,13 +1515,76 @@ class Orchestrator:
             )
             return cached_answer
 
-        # v18.7-background-sessions §1.10: o processo da sessão não lê o terminal; a pergunta vira pendência
-        # registrada (o gate persistente a substitui por um pedido que o pesquisador responde).
+        # v18.7-persistent-human-gate §1.5: o processo da sessão não lê o terminal. A pergunta vira um pedido
+        # `responder_pergunta_agente`; a subtarefa espera até GATE_ASK_WAIT_SECONDS e, sem resposta, segue com a
+        # mensagem de pendência (o pedido continua pendente e a resposta posterior vai ao Researcher no replanejamento).
+        answer = await self._ask_through_gate(question, context, why_cant_proceed, options, task, session_key)
+        if answer is not None:
+            return answer
         self._record_researcher_interaction(
             session_key, question, why_cant_proceed, options, PENDING_MESSAGE, task,
             respondido_por=PENDENTE_PESQUISADOR, context=context,
         )
         return PENDING_MESSAGE
+
+    async def _ask_through_gate(
+        self, question: str, context: str, why_cant_proceed: str, options: list[str], task: AgentTask, session_key: str
+    ) -> str | None:
+        """Cria o pedido ``responder_pergunta_agente`` e espera a resposta do pesquisador por ``GATE_ASK_WAIT_SECONDS``.
+
+        Returns:
+            O texto respondido (já registrado como interação do pesquisador), ou ``None`` se não houve resposta a
+            tempo, o pedido não pôde ser criado ou a sessão foi interrompida/suspensa durante a espera.
+        """
+        import hashlib
+
+        from src import config as cfg
+        from src.gate.types import GateAuthorizationRefused, GateError
+        from src.orchestration.usage import interrupt_requested, suspension_requested
+
+        digest = hashlib.sha256(question.encode("utf-8")).hexdigest()[:12]
+        reference = f"{task.task_name or 'tarefa'}"[:100] + f":{digest}"
+        text = (
+            f"O agente '{task.agent_id}' (subtarefa {task.task_name or '-'}) pergunta: {question}"
+            + (f" | contexto: {context}" if context else "")
+            + (f" | por que não segue sozinho: {why_cant_proceed}" if why_cant_proceed else "")
+            + (f" | opções sugeridas: {'; '.join(options)}" if options else "")
+        )
+        chain = chain_session_ids(self.session_manager, session_key)
+        try:
+            request = await asyncio.to_thread(
+                lambda: self.human_gate.find_in_chain("responder_pergunta_agente", reference, chain)
+                or self.human_gate.request(
+                    "responder_pergunta_agente", reference, text, ("responder",),
+                    session_id=session_key, project_id=self._session_project_id(session_key),
+                )
+            )
+        except GateError as exc:
+            logger.warning("Pergunta do agente sem pedido no gate", extra={"error": type(exc).__name__})
+            return None
+        deadline = asyncio.get_running_loop().time() + float(cfg.GATE_ASK_WAIT_SECONDS)
+        while True:
+            current = await asyncio.to_thread(self.human_gate.get, request.id)
+            if current is not None and current.estado != "pendente":
+                break
+            if interrupt_requested() or suspension_requested():
+                return None
+            if asyncio.get_running_loop().time() >= deadline:
+                return None
+            remaining = deadline - asyncio.get_running_loop().time()
+            await asyncio.sleep(max(min(float(cfg.GATE_POLL_SECONDS), remaining), 0.05))
+        try:
+            consumed = await asyncio.to_thread(
+                self.human_gate.consume_authorized, "responder_pergunta_agente", reference, chain
+            )
+        except GateAuthorizationRefused as exc:
+            logger.warning("Resposta do pesquisador não aceita", extra={"motivo": exc.motivo})
+            return None
+        answer = str((consumed.resposta or {}).get("texto", "")).strip()
+        if not answer:
+            return None
+        self._record_researcher_interaction(session_key, question, why_cant_proceed, options, answer, task)
+        return answer
 
     def _find_similar_researcher_answer(self, session_key: str, question: str) -> str | None:
         """Procura, nas interações já registradas na sessão, uma pergunta textualmente
@@ -1751,7 +1826,7 @@ class Orchestrator:
         # Além da autodeclaração do agente, classifica a pergunta por palavras-chave (fail-closed).
         decisao_reservada = decisao_reservada or classify_reserved(question)
         if decisao_reservada:
-            self._register_reserved(decisao_reservada, task)
+            self._register_reserved(decisao_reservada, task, session_key)
             return _finish(PENDENTE_PESQUISADOR, RESERVED_MESSAGE, None, {"decisao_reservada": decisao_reservada})
 
         # 2. Consultor desligado.
@@ -1837,7 +1912,7 @@ class Orchestrator:
         }
         # 6. Classificação pelo próprio consultor: decisão reservada.
         if outcome.reservada:
-            self._register_reserved(decisao_reservada or classify_reserved(question), task)
+            self._register_reserved(decisao_reservada or classify_reserved(question), task, session_key)
             return _finish(PENDENTE_PESQUISADOR, RESERVED_MESSAGE, None, consulta | {"reservada": True})
         return _finish(RESPONDIDO_RESEARCHER, format_answer(outcome.resposta), None, consulta)
 

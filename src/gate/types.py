@@ -1,6 +1,6 @@
 """Tipos do gate de decisões reservadas: estados, origens humanas e o pedido (``v18.7-persistent-human-gate`` 0.9).
 
-Movidos de ``src/gate/human_gate.py`` sem alterar o comportamento (ADR 024 §5).
+O gate em memória (``HumanGate``) foi removido: o gate é o persistente (``src/gate/persistent_gate.py``).
 """
 
 from __future__ import annotations

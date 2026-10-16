@@ -12,6 +12,7 @@ import pytest
 
 import src.cli.main as cli
 from src.cli.project import handle_project_command
+from src.cli.unlimited import confirm_unlimited
 from src.knowledge import projects
 from src.knowledge.graph_store import InMemoryGraphStore
 from src.knowledge.provenance import Actor
@@ -21,7 +22,6 @@ from src.orchestration.unlimited_mode import (
     UnlimitedModeError,
     banner_line,
     budget_payload,
-    confirm_unlimited,
     get_activation,
     set_activation,
     stop_criteria_available,
@@ -418,19 +418,20 @@ async def test_g5_usa_o_orcamento_efetivo_e_cala_no_modo_sem_limite() -> None:
 
 
 def test_confirmacao_passa_pelo_gate_humano_e_fica_registrada() -> None:
-    from src.gate.human_gate import HumanGate
+    from tests.support.fake_gate import FakeGate
 
-    gate = HumanGate()
+    gate = FakeGate()
     confirm_unlimited(_unlimited(), "cli", input_fn=lambda _p: "sem limite", isatty=lambda: True, gate=gate)
-    (request,) = gate._requests.values()  # noqa: SLF001
+    (request,) = gate.requests
     assert request.decisao == "ativar_modo_sem_limite" and request.estado == "autorizada"
-    assert request.resolvido_por.value == "terminal"
+    assert request.resolvido_por == "terminal"
 
 
 def test_resposta_de_ask_researcher_ou_agente_nunca_autoriza() -> None:
-    from src.gate.human_gate import HumanGate, Source
+    from src.gate.types import Source
+    from tests.support.fake_gate import FakeGate
 
-    gate = HumanGate()
+    gate = FakeGate()
     request = gate.request("ativar_modo_sem_limite", "cli")
     for source in (Source.ASK_RESEARCHER, Source.RESEARCHER_CONSULT, Source.AGENT, Source.DOCUMENT):
         gate.answer(request.id, source=source, approved=True)
@@ -438,9 +439,9 @@ def test_resposta_de_ask_researcher_ou_agente_nunca_autoriza() -> None:
 
 
 def test_gate_que_nao_autoriza_impede_o_modo(monkeypatch) -> None:
-    from src.gate.human_gate import HumanGate
+    from tests.support.fake_gate import FakeGate
 
-    class DenyingGate(HumanGate):
+    class DenyingGate(FakeGate):
         def authorized(self, request_id: int) -> bool:
             return False
 

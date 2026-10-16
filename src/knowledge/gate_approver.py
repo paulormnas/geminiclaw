@@ -18,6 +18,7 @@ from src.knowledge.hypothesis_cycle import (
     ACTION_REJECT,
     ApprovalDecision,
     ApprovalItem,
+    SolutionStatus,
 )
 from src.logger import get_logger
 from src.utils.display_text import sanitize_line
@@ -57,7 +58,8 @@ class PersistentGateApprover:
         decisions: dict[str, ApprovalDecision] = {}
         for item in items:
             try:
-                req = self._gate.request(
+                # Na retomada, o pedido da sessão anterior (pendente ou já respondido) é o desta hipótese.
+                req = self._gate.find_in_chain(DECISAO, item.id, self._chain) or self._gate.request(
                     DECISAO, item.id, _question(item), OPCOES, session_id=self._session_id, project_id=self._project_id
                 )
             except GatePendingLimitReached:
@@ -85,3 +87,52 @@ class PersistentGateApprover:
     def previously_approved(self, hypothesis_id: str, session_chain: Iterable[str]) -> bool:
         """Verdadeiro só com pedido ``aprovar_hipotese`` desse id, autorizado por humano, na cadeia da sessão."""
         return self._gate.was_authorized(DECISAO, hypothesis_id, session_chain)
+
+
+CONFIRM_DECISAO = "decidir_objetivo_atingido"
+CONFIRM_OPCOES = ("encerrar", "continuar")
+
+
+class PersistentGateConfirmer:
+    """Confirmação de solução do ``assisted`` pelo gate persistente: ``encerrar``, ``continuar`` ou ``None`` (pendente).
+
+    Substitui ``terminal_solution_confirmer``: o processo da sessão não lê o terminal. O pedido
+    ``decidir_objetivo_atingido`` leva o id da hipótese como referência e só vale uma vez (``consume_authorized``).
+    """
+
+    def __init__(
+        self,
+        gate: PersistentGate,
+        session_id: str,
+        session_chain: Iterable[str] | None = None,
+        project_id: str | None = None,
+    ) -> None:
+        self._gate = gate
+        self._session_id = session_id
+        self._chain = list(session_chain) if session_chain else [session_id]
+        self._project_id = project_id
+
+    def __call__(self, solution: SolutionStatus) -> str | None:
+        reference = solution.hypothesis_id or "-"
+        value = f"{solution.best_value:g}" if solution.best_value is not None else "-"
+        verdict = f"{solution.verdict:+.2f}" if solution.verdict is not None else "-"
+        question = (
+            f"Critério de solução atingido na hipótese {sanitize_line(reference, 64)} (veredito {verdict}, melhor "
+            f"resultado validado {value}). Encerrar a pesquisa agora ou continuar explorando?"
+        )
+        try:
+            req = self._gate.find_in_chain(CONFIRM_DECISAO, reference, self._chain) or self._gate.request(
+                CONFIRM_DECISAO, reference, question, CONFIRM_OPCOES,
+                session_id=self._session_id, project_id=self._project_id,
+            )
+        except GatePendingLimitReached:
+            return None
+        if req.estado == "pendente" or req.consumido:
+            return None
+        try:
+            consumed = self._gate.consume_authorized(CONFIRM_DECISAO, reference, self._chain)
+        except GateAuthorizationRefused as exc:
+            logger.warning("Autorização recusada", extra={"extra": {"id": reference, "motivo": exc.motivo}})
+            return None
+        action = (consumed.resposta or {}).get("acao")
+        return action if action in CONFIRM_OPCOES else None

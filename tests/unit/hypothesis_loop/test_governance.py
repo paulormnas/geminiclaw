@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from src.gate.human_gate import HumanGate, Source
+from src.gate.types import Source
+from src.knowledge.gate_approver import PersistentGateApprover
 from src.knowledge.hypothesis_cycle import (
     ApprovalDecision,
     HypothesisCycle,
-    terminal_approver,
 )
 from tests.support.controlled_embedding_provider import pair_vectors
+from tests.support.fake_gate import FakeGate
 from tests.support.hypothesis_world import AGENTE, DIM, ORQ, HypothesisWorld
 
 pytestmark = pytest.mark.unit
@@ -96,20 +97,26 @@ def test_falha_do_aprovador_nao_aprova_nada():
     assert sel.execute == [] and sel.pending_approval == [hid]
 
 
-def test_sem_tty_nada_e_aprovado():
-    """Sem terminal interativo o aprovador devolve vazio: as hipóteses ficam pendentes (falha fechada)."""
+def test_sem_resposta_no_gate_nada_e_aprovado():
+    """Sem resposta do pesquisador no gate o aprovador devolve vazio: as hipóteses ficam pendentes (falha fechada)."""
     w = HypothesisWorld(mode="assisted")
     hid = w.hypothesis("H")
-    out: list[str] = []
-    sel = _cycle(w).select([hid], mode="assisted", approver=terminal_approver(interactive=False, output_fn=out.append))
-    assert sel.execute == [] and sel.pending_approval == [hid] and out
+    gate = FakeGate()
+    sel = _cycle(w).select([hid], mode="assisted", approver=PersistentGateApprover(gate, "s1"))
+    assert sel.execute == [] and sel.pending_approval == [hid]
+    (pedido,) = gate.pending()
+    assert pedido.decisao == "aprovar_hipotese" and pedido.referencia == hid  # o pedido foi criado
 
 
-def test_aprovador_de_terminal_le_a_decisao_do_pesquisador():
+def test_aprovador_do_gate_le_a_decisao_do_pesquisador():
     w = HypothesisWorld(mode="assisted")
     a, b, c = (w.hypothesis(f"H{i}") for i in range(3))
-    answers = iter(["a", "r", "faltou dado", "e", "H3 corrigida"])
-    approver = terminal_approver(input_fn=lambda _p: next(answers), output_fn=lambda _t: None, interactive=True)
+    gate = FakeGate()
+    approver = PersistentGateApprover(gate, "s1")
+    _cycle(w).select([a, b, c], mode="assisted", approver=approver)  # cria os três pedidos
+    gate.respond(gate.for_reference(a)[0].id, resposta={"acao": "aprovar"})
+    gate.respond(gate.for_reference(b)[0].id, resposta={"acao": "rejeitar", "motivo": "faltou dado"})
+    gate.respond(gate.for_reference(c)[0].id, resposta={"acao": "editar", "enunciado": "H3 corrigida"})
     sel = _cycle(w).select([a, b, c], mode="assisted", approver=approver)
     assert set(sel.execute) == {a, c} and list(sel.rejected) == [b]
     assert w.raw.get_node(c).properties["enunciado"] == "H3 corrigida"
@@ -126,7 +133,7 @@ def test_resposta_do_consultor_nao_aprova_hipotese():
     """O consultor/ask_researcher nunca é aprovador: a origem não é humana e a hipótese segue pendente."""
     w = HypothesisWorld(mode="assisted")
     hid = w.hypothesis("H")
-    gate = HumanGate()
+    gate = FakeGate()
     req = gate.request("aprovar_oportunidade", hid)
     gate.answer(req.id, source=Source.RESEARCHER_CONSULT, approved=True)
     assert not gate.authorized(req.id)

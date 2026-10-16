@@ -1,8 +1,8 @@
 """Subcomando ``geminiclaw opportunities list|approve|reject`` (v18-hypothesis-loop, design §7).
 
 Comandos determinísticos, sem LLM, com autor ``pesquisador`` e auditoria no grafo. Aprovar ou rejeitar uma oportunidade
-é decisão reservada ao pesquisador: o ``HumanGate`` registra o pedido com a origem ``cli`` e o ``GraphStore`` recusa a
-mesma escrita por agente ou pelo orquestrador (``validate_human_only``).
+é decisão reservada ao pesquisador: o gate persistente registra o pedido com a origem ``cli`` e o
+``GraphStore`` recusa a mesma escrita por agente ou pelo orquestrador (``validate_human_only``).
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Any, Callable
 
-from src.gate.human_gate import HumanGate
+from src.gate.persistent_gate import TerminalGate
 from src.knowledge import opportunities, projects
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.graph_views import sanitize_text
@@ -50,7 +50,7 @@ def handle_opportunities_command(
     *,
     config_dir: Path | None = None,
     output_fn: Callable[[str], Any] = print,
-    gate: HumanGate | None = None,
+    gate: TerminalGate | None = None,
     input_fn: Callable[[str], str] | None = None,
 ) -> int:
     """Trata ``geminiclaw opportunities list|approve|reject``.
@@ -60,7 +60,7 @@ def handle_opportunities_command(
         store: ``GraphStore`` a usar (padrão: o grafo de produção); injetável em testes.
         config_dir: Diretório do projeto padrão.
         output_fn: Saída de texto.
-        gate: ``HumanGate`` (padrão: o do processo).
+        gate: ``TerminalGate`` (padrão: o do processo).
         input_fn: Leitura da confirmação de ``approve`` (padrão: ``input`` no terminal interativo; sem terminal
             interativo e sem ``--yes`` a aprovação é recusada).
 

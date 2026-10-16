@@ -6,9 +6,9 @@ aprovação, em nenhum ``SessionMode``.
 
 Barreiras (em camadas, nenhuma depende do prompt de um LLM):
 
-1. ``HumanGate``: ``decide_opportunity`` só grava com um pedido ``aprovar_oportunidade`` **autorizado** por origem
+1. Gate persistente: ``decide_opportunity`` só grava com um pedido ``aprovar_oportunidade`` **autorizado** por origem
    humana (``terminal``/``cli``); a resposta de ``ask_researcher`` (inclusive a do Researcher consultor), de um agente
-   ou de um documento nunca autoriza (``src.gate.human_gate``);
+   ou de um documento nunca autoriza (``src.gate.persistent_gate``);
 2. ``GraphStore``: ``validate_human_only`` recusa que agente **ou orquestrador** aprove/rejeite ou grave ``decidido_*``;
    o orquestrador só avança uma oportunidade **já aprovada** (``aprovada`` -> ``em_investigacao`` -> ``concluida``).
 
@@ -21,7 +21,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from src.gate.human_gate import HUMAN_SOURCES, HumanGate, Source, default_gate
+from src.gate.persistent_gate import PersistentGate, terminal_gate
+from src.gate.types import HUMAN_SOURCES, Source
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.graph_store import GraphStore, Node
 from src.knowledge.graph_views import sanitize_text
@@ -102,7 +103,7 @@ def list_opportunities(store: GraphStore, project_id: str, status: str | None = 
     ]
 
 
-def _require_authorization(gate: HumanGate, request_id: int, opportunity_id: str) -> None:
+def _require_authorization(gate: PersistentGate, request_id: int, opportunity_id: str) -> None:
     """Exige um pedido ``aprovar_oportunidade`` autorizado por origem humana e referente a esta oportunidade."""
     req = gate.get(request_id)
     if (
@@ -124,7 +125,7 @@ def decide_opportunity(
     *,
     approve: bool,
     motivo: str | None,
-    gate: HumanGate,
+    gate: PersistentGate,
     request_id: int,
     project_id: str | None = None,
 ) -> Node:
@@ -135,7 +136,7 @@ def decide_opportunity(
         opportunity_id: ``id`` da oportunidade.
         approve: ``True`` aprova; ``False`` rejeita (exige ``motivo``).
         motivo: Justificativa da decisão (obrigatória na rejeição).
-        gate: ``HumanGate`` que registrou a decisão.
+        gate: Gate persistente que registrou a decisão.
         request_id: Pedido ``aprovar_oportunidade`` já autorizado por origem humana.
         project_id: Se informado, a oportunidade deve ser deste projeto.
 
@@ -177,19 +178,20 @@ def authorize_and_decide(
     approve: bool,
     motivo: str | None,
     project_id: str | None = None,
-    gate: HumanGate | None = None,
+    gate: Any | None = None,
 ) -> Node:
     """Ponto de entrada da **CLI** (``geminiclaw opportunities approve|reject``).
 
     Só deve ser chamado de dentro do comando disparado pelo pesquisador: registra o pedido no gate, autoriza com a
     origem ``cli`` e decide. Código que processa resposta de agente ou de consultor nunca o chama.
     """
-    gate = gate or default_gate()
-    req = gate.request(DECISION_NAME, opportunity_id)
-    gate.answer(req.id, source=Source.CLI, approved=True)
-    return decide_opportunity(
+    gate = gate or terminal_gate()
+    req = gate.resolve(DECISION_NAME, opportunity_id, source=Source.CLI, approved=True)
+    node = decide_opportunity(
         store, opportunity_id, approve=approve, motivo=motivo, gate=gate, request_id=req.id, project_id=project_id
     )
+    gate.mark_consumed(req.id)  # autorização de uso único (design §1.2)
+    return node
 
 
 def advance_opportunity(store: GraphStore, opportunity_id: str, new_status: str) -> bool:

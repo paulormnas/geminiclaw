@@ -859,6 +859,40 @@ class AutonomousLoop:
             artifacts=self.orchestrator.output_manager.list_artifacts(master_session_id),
         )
 
+    async def _wait_for_researcher(self, master_session_id: str, decisoes: tuple[str, ...]) -> str:
+        """`assisted`: espera o pesquisador responder um pedido de ``decisoes`` (consulta o gate a cada
+        ``GATE_POLL_SECONDS``). Não conta como ciclo ocioso nem como estagnação.
+
+        Returns:
+            ``"respondido"`` se há resposta nova ainda não vista; ``"parar"`` se um limite, a interrupção ou a ausência
+            do terminal pede o fechamento (``_close_for_pending_stop``).
+        """
+        from src.config import GATE_POLL_SECONDS
+        from src.session.chain import chain_session_ids
+
+        gate = self.orchestrator.human_gate
+        chain = chain_session_ids(self.orchestrator.session_manager, master_session_id)
+        seen: set[int] = self.__dict__.setdefault("_gate_seen", set())
+        while True:
+            if self._pending_stop(master_session_id) is not None or self._usage_tracker.check().should_close:
+                return "parar"
+            answered = await asyncio.to_thread(gate.answered_unconsumed, chain)
+            fresh = [r for r in answered if r.decisao in decisoes and r.id not in seen]
+            if fresh:
+                seen.update(r.id for r in fresh)
+                return "respondido"
+            await asyncio.sleep(max(float(GATE_POLL_SECONDS), 0.01))
+
+    async def _close_for_pending_stop(
+        self, master_session_id: str, prompt: str, tasks: List["AgentTask"], dag_state: Dict[str, Any],
+        final_results: List["AgentResult"],
+    ) -> "OrchestratorResult":
+        """Fecha a sessão pelo motivo que interrompeu a espera pelo pesquisador (limite, interrupção ou ausência)."""
+        reason = self._pending_stop(master_session_id) or self._usage_tracker.check().stop_reason
+        return await self._close_session(
+            reason or StopReason.INTERRUPTED, master_session_id, prompt, tasks, dag_state, final_results
+        )
+
     async def _close_on_suggestion_failure(
         self,
         exc: Exception,
@@ -1152,12 +1186,29 @@ class AutonomousLoop:
             plan_tasks = tasks  # plano completo (inclusive o que a governança retirar), base do próximo replanejamento
             if exploration is not None:
                 # v18-hypothesis-loop §2/§4: grava hipóteses/decisões/respostas e aplica a governança do SessionMode.
-                try:
-                    outcome = await asyncio.to_thread(
-                        exploration.prepare_cycle, tasks, self.orchestrator.take_plan_extras(master_session_id),
+                plan_extras = self.orchestrator.take_plan_extras(master_session_id)
+
+                async def _prepare_cycle(plan: List["AgentTask"] = tasks) -> Any:
+                    return await asyncio.to_thread(
+                        exploration.prepare_cycle, plan, plan_extras,
                         done=set(done_results),
                         done_tasks={n: cumulative_tasks[n] for n in done_results if n in cumulative_tasks},
                     )
+
+                try:
+                    outcome = await _prepare_cycle()
+                    # v18.7-persistent-human-gate §1.5: no `assisted`, com o terminal presente, a sessão espera o
+                    # pesquisador decidir as hipóteses pendentes (sem contar como ciclo ocioso nem estagnação).
+                    while (
+                        outcome.pending_approval and self._session_mode == "assisted"
+                        and not [t for t in outcome.tasks if t.task_name not in done_results]
+                    ):
+                        if await self._wait_for_researcher(master_session_id, ("aprovar_hipotese",)) == "parar":
+                            return await self._close_for_pending_stop(
+                                master_session_id, prompt, list(cumulative_tasks.values()), cumulative_dag,
+                                final_results,
+                            )
+                        outcome = await _prepare_cycle()
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:  # noqa: BLE001 - o grafo não aceitou o plano: fecha com checkpoint
@@ -1776,6 +1827,11 @@ class AutonomousLoop:
                     if self._session_mode in ("semi", "auto"):
                         return await self._close_exploration(ExplorationStop.SOLUTION, *stop_args)
                     answer = await asyncio.to_thread(exploration.confirm_solution, solution)
+                    while answer is None and self._session_mode == "assisted":
+                        waited = await self._wait_for_researcher(master_session_id, ("decidir_objetivo_atingido",))
+                        if waited == "parar":
+                            return await self._close_for_pending_stop(*stop_args)
+                        answer = await asyncio.to_thread(exploration.confirm_solution, solution)
                     if answer == "encerrar":
                         return await self._close_exploration(ExplorationStop.SOLUTION, *stop_args)
                     if answer is None:

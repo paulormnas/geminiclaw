@@ -12,14 +12,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.gate.human_gate import (
+from src.gate.persistent_gate import authorize_from_cli
+from src.gate.types import (
     ESTADO_AUTORIZADA,
     ESTADO_NEGADA,
     ESTADO_PENDENTE,
     HUMAN_SOURCES,
-    HumanGate,
+    GateInvalidRequest,
     Source,
-    authorize_from_cli,
 )
 from src.knowledge.graph_store import InMemoryGraphStore
 from src.knowledge.problem import ProblemDraft
@@ -28,9 +28,13 @@ from src.knowledge.provenance import Actor
 from src.research_consult import DECISOES_RESERVADAS
 from src.skills.human_feedback.skill import HumanFeedbackSkill
 from src.utils.agent_context import bind_agent_context, current_context
+from tests.support.fake_gate import FakeGate
 from tests.unit.test_researcher_consult import Harness, ScriptedProvider, _answer
 
 pytestmark = pytest.mark.unit
+
+#: Tipos com subtipo obrigatório (``motivo``): o pedido só existe com ele.
+MOTIVO_DO_TIPO = {"decidir_continuidade": "saturacao", "restringir_direcao": "restricao_duvidosa"}
 
 
 @pytest.fixture(autouse=True)
@@ -46,8 +50,8 @@ def _isolate(monkeypatch):
 @pytest.mark.parametrize("decisao", DECISOES_RESERVADAS)
 def test_gate_com_resposta_do_consultor_continua_pendente(decisao):
     """Tarefa 6.99 — a resposta do consultor (ou de qualquer fonte não humana) deixa a decisão pendente."""
-    gate = HumanGate()
-    req = gate.request(decisao, "subtarefa-1")
+    gate = FakeGate()
+    req = gate.request(decisao, "subtarefa-1", motivo=MOTIVO_DO_TIPO.get(decisao))
 
     fontes = (Source.RESEARCHER_CONSULT, Source.ASK_RESEARCHER, Source.AGENT, Source.DOCUMENT,
               "terminal", "cli", "")  # string solta, mesmo "terminal", nunca vale
@@ -62,12 +66,12 @@ def test_gate_com_resposta_do_consultor_continua_pendente(decisao):
 
 def test_so_o_pesquisador_no_terminal_ou_cli_resolve_o_pedido():
     """Tarefa 6.99 — ação explícita do pesquisador (terminal/CLI) autoriza ou nega; sem TTY nada é autorizado."""
-    gate = HumanGate()
-    autorizado, negado, sem_tty = (gate.request("aprovar_oportunidade") for _ in range(3))
+    gate = FakeGate()
+    autorizado, negado, sem_tty = (gate.request("aprovar_oportunidade", ref) for ref in ("a", "b", "c"))
 
-    gate.ask_in_terminal(autorizado.id, input_fn=lambda _: "s", interactive=True)
-    gate.ask_in_terminal(negado.id, input_fn=lambda _: "n", interactive=True)
-    gate.ask_in_terminal(sem_tty.id, input_fn=lambda _: "s", interactive=False)
+    gate.answer(autorizado.id, source=Source.TERMINAL, approved=True)
+    gate.answer(negado.id, source=Source.TERMINAL, approved=False)
+    gate.answer(sem_tty.id, source="terminal", approved=True)  # texto solto não é uma origem humana
 
     assert HUMAN_SOURCES == {Source.TERMINAL, Source.CLI}
     assert gate.get(autorizado.id).estado == ESTADO_AUTORIZADA and gate.authorized(autorizado.id)
@@ -82,8 +86,8 @@ def test_so_o_pesquisador_no_terminal_ou_cli_resolve_o_pedido():
 
 def test_decisao_desconhecida_nao_e_registrada():
     """Fail-fast — só as decisões reservadas conhecidas entram no gate."""
-    with pytest.raises(ValueError):
-        HumanGate().request("decidir_qualquer_coisa")
+    with pytest.raises(GateInvalidRequest):
+        FakeGate().request("decidir_qualquer_coisa")
 
 
 @pytest.mark.asyncio
@@ -100,6 +104,9 @@ async def test_pedido_reservado_do_agente_fica_pendente_e_o_consultor_nao_e_cham
 
     assert "reservada ao pesquisador" in result.output.lower()
     assert provider.calls == []  # o consultor nunca foi chamado
+    if decisao in MOTIVO_DO_TIPO:  # os tipos com subtipo só têm produtor no laço (exploration-limits), não no agente
+        assert h.orch.human_gate.pending() == []
+        return
     (pedido,) = h.orch.human_gate.pending()
     assert pedido.decisao == decisao
     # Mesmo que a resposta do consultor chegasse ao gate, ela não autoriza.
@@ -142,7 +149,7 @@ async def test_confirmacao_do_problema_passa_pelo_gate_real(monkeypatch):
     from src.cli.project_session import ensure_confirmed_problem
     from src.knowledge.problem import ProblemDraft
 
-    class _Negado(HumanGate):
+    class _Negado(FakeGate):
         def authorized(self, request_id):  # um gate que não autoriza (ex.: origem não humana)
             return False
 
@@ -163,14 +170,14 @@ async def test_confirmacao_do_problema_passa_pelo_gate_real(monkeypatch):
     assert store.find_nodes("Problema", {"status": "confirmado"}) == []
     assert negado.get(1).decisao == "confirmar_problema"  # o pedido passou pelo gate
 
-    gate = HumanGate()
+    gate = FakeGate()
     entradas = iter(["c", "m", "c"])  # confirmar, sentido da métrica nova, confirmar
     detail = await ensure_confirmed_problem(
         store, pid, "p", None, drafter=drafter, interactive=True, input_fn=lambda _: next(entradas),
         output_fn=lambda *_: None, gate=gate,
     )
     assert detail.problema is not None
-    pedido = list(gate._requests.values())[-1]  # noqa: SLF001
+    pedido = gate.requests[-1]
     assert pedido.estado == ESTADO_AUTORIZADA and pedido.resolvido_por == Source.TERMINAL
 
 
@@ -187,7 +194,7 @@ def test_vocab_approve_na_cli_passa_pelo_gate_e_resposta_de_agente_nao_aprova(mo
         actor=_Actor(kind="agente", role="researcher"),
     )
 
-    monkeypatch.setattr("src.gate.human_gate.authorize_from_cli", lambda *a, **k: False)
+    monkeypatch.setattr("src.gate.persistent_gate.authorize_from_cli", lambda *a, **k: False)
     assert _handle_vocab_command(["approve", termo], store=store) == 1
     assert store.get_node(termo).properties["status"] == "candidato"
 

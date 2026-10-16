@@ -18,7 +18,6 @@ confiável, saneado e conferido no grafo por ``src.knowledge.hypotheses``. A tel
 from __future__ import annotations
 
 import asyncio
-import sys
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
@@ -45,7 +44,6 @@ from src.knowledge.hypothesis_cycle import (
     HypothesisCycle,
     Selection,
     SolutionStatus,
-    terminal_approver,
 )
 from src.knowledge.ingestion import SessionContext
 from src.knowledge.metric_definition import AppliedMetrics, apply_validated_metrics
@@ -124,46 +122,6 @@ class CycleOutcome:
         return bool(self.selection.pending_approval)
 
 
-def _is_interactive() -> bool:
-    try:
-        return bool(sys.stdin.isatty() and sys.stdout.isatty())
-    except (AttributeError, ValueError):
-        return False
-
-
-def terminal_solution_confirmer(
-    *,
-    input_fn: Callable[[str], str] = input,
-    output_fn: Callable[[str], Any] = print,
-    interactive: bool | None = None,
-) -> SolutionConfirmer:
-    """Confirmação do ``assisted``: o pesquisador escolhe, no terminal, entre encerrar e continuar explorando.
-
-    Devolve ``"encerrar"``, ``"continuar"`` ou ``None`` (sem TTY ou entrada interrompida: sem resposta).
-    """
-
-    def confirm(solution: SolutionStatus) -> str | None:
-        if not (_is_interactive() if interactive is None else interactive):
-            return None
-        valor = f"{solution.best_value:g}" if solution.best_value is not None else "-"
-        veredito = f"{solution.verdict:+.2f}" if solution.verdict is not None else "-"
-        output_fn(
-            f"\nCritério de solução atingido (veredito {veredito}, melhor resultado validado {valor}) "
-            f"na hipótese {sanitize_text(solution.hypothesis_id or '-', 64)}."
-        )
-        try:
-            reply = input_fn("Encerrar a pesquisa agora? [e]ncerrar / [c]ontinuar explorando: ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            return None
-        if reply in ("e", "encerrar"):
-            return "encerrar"
-        if reply in ("c", "continuar"):
-            return "continuar"
-        return None
-
-    return confirm
-
-
 class ExplorationSession:
     """Estado e operações de exploração de uma sessão mestra."""
 
@@ -180,6 +138,7 @@ class ExplorationSession:
         telemetry: Telemetry | None = None,
         output_fn: Callable[[str], Any] = print,
         curator_suggest: Callable[[], Any] | None = None,
+        session_chain: Callable[[], list[str]] | None = None,
     ) -> None:
         """Inicializa a exploração.
 
@@ -189,18 +148,20 @@ class ExplorationSession:
             session_dir: ``outputs/<sessão>/``.
             mode: ``SessionMode`` da sessão.
             index: ``SemanticIndex`` (deduplicação, prioridade, sugestões).
-            approver: Aprovação em lote do ``assisted`` (padrão: ``terminal_approver``).
-            solution_confirmer: Confirmação de solução no ``assisted`` (padrão: terminal).
+            approver: Aprovação do ``assisted`` (padrão: ``PersistentGateApprover`` sobre o gate persistente).
+            solution_confirmer: Confirmação de solução no ``assisted`` (padrão: ``PersistentGateConfirmer``).
             telemetry: Callback ``(event_type, payload)``; só recebe contagens e IDs.
             output_fn: Saída de avisos ao pesquisador.
             curator_suggest: Coroutine do Curator (``suggest_paths``); ``None`` sem Curator.
+            session_chain: Sessões da cadeia (a atual e as antecessoras) para os pedidos do gate; padrão: só a atual.
         """
         self._store_getter = store_getter
         self.ctx = ctx
         self.session_dir = Path(session_dir)
         self.mode = mode
         self._index = index
-        self._approver: ApprovalPort = as_approval_port(approver if approver is not None else terminal_approver())
+        self._session_chain = session_chain
+        self._approver: ApprovalPort = as_approval_port(approver if approver is not None else self._gate_approver())
         self._confirmer = solution_confirmer
         self._telemetry = telemetry
         self._out = output_fn
@@ -665,17 +626,35 @@ class ExplorationSession:
             raise SuggestionError(f"Falha ao gerar sugestões do Curator ({type(exc).__name__}).") from exc
         return len(fresh or [])
 
+    def _chain(self) -> list[str]:
+        try:
+            return (self._session_chain() if self._session_chain else []) or [self.ctx.session_id]
+        except Exception:  # noqa: BLE001 - sem a cadeia o pedido vale só para a sessão atual
+            return [self.ctx.session_id]
+
+    def _gate_approver(self) -> ApprovalPort:
+        from src.gate.persistent_gate import session_gate
+        from src.knowledge.gate_approver import PersistentGateApprover
+
+        return PersistentGateApprover(session_gate(), self.ctx.session_id, self._chain(), self.ctx.project_id)
+
     def check_solution(self) -> SolutionStatus:
         """Critério de solução (veredito moderado e alvo atingido por resultado validado)."""
         return self.cycle.check_solution()
 
     def confirm_solution(self, solution: SolutionStatus) -> str | None:
-        """``encerrar``/``continuar`` (``assisted`` pergunta no terminal) ou ``None`` sem resposta humana."""
-        confirmer = self._confirmer or terminal_solution_confirmer()
+        """``encerrar``/``continuar`` (``assisted`` pede ao pesquisador pelo gate) ou ``None`` sem resposta humana."""
+        confirmer = self._confirmer or self._gate_confirmer()
         answer = confirmer(solution)
         if answer == "continuar" and solution.hypothesis_id:
             self.declined_solutions.add(solution.hypothesis_id)
         return answer
+
+    def _gate_confirmer(self) -> SolutionConfirmer:
+        from src.gate.persistent_gate import session_gate
+        from src.knowledge.gate_approver import PersistentGateConfirmer
+
+        return PersistentGateConfirmer(session_gate(), self.ctx.session_id, self._chain(), self.ctx.project_id)
 
     def verdict_availability(self) -> tuple[str, str] | None:
         """Confere se o veredito pode ser calculado (``v18.6-hypothesis-closure`` §4).

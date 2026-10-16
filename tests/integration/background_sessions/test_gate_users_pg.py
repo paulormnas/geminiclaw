@@ -50,7 +50,8 @@ def test_aprovador_e_confirmador_no_banco_real_com_retomada(pg_db):  # noqa: F81
     terminal.answer(pend["decidir_objetivo_atingido"].id, source=Source.TERMINAL, resposta={"acao": "encerrar"})
     # a sessão retomada (s2) aplica o que foi respondido enquanto estava fora, uma vez só
     resumed = PersistentGateApprover(session, "s2", ["s2", "s1"], "p")
-    assert set(resumed([item()])) == {"h1"} and resumed([item()]) == {}
+    assert set(resumed([item()])) == {"h1"}
+    assert session.find_in_chain("aprovar_hipotese", "h1", ["s2", "s1"]) is None  # consumido: uso único
     assert PersistentGateConfirmer(session, "s2", ["s2", "s1"], "p")(SolutionStatus(True, hypothesis_id="h1")) == "encerrar"
     assert session.pending(["s1", "s2"]) == []  # nenhum pedido duplicado
 

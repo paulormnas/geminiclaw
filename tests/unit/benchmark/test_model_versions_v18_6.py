@@ -39,7 +39,7 @@ def test_versao_nao_informada_vira_aviso_e_nao_e_anomalia() -> None:
     models = model_versions.collect_models(_profile())
     assert models["validator"]["versao_efetiva"] == "desconhecida"
     assert model_versions.version_marks(models) == ["versao_desconhecida:validator"]
-    result = {"status": "exit 0", "session": "s", "outcome": {"subtasks": 2}, "stop_reason": "criterio_pesquisa",
+    result = {"status": "exit 0", "session": "s", "outcome": {"subtasks": 2}, "stop_reason": "solucao_encontrada",
               "operation_metrics": {}, "routing_check": {"ok": True},
               "anomalias_placar": ["versao_desconhecida:validator"]}
     assert anomalies(result) == []

@@ -189,7 +189,7 @@ def test_metrica_candidata_nao_conta_como_aprovada(tmp_path) -> None:
 
 
 class FakeProc:
-    pid = 4242
+    pid = 2**31 - 1  # nunca é um pid real: o runner sinaliza o grupo e o teste não pode atingir ninguém
     returncode = 0
 
     def __init__(self, work) -> None:
@@ -215,15 +215,17 @@ class FakeResourceSampler:
 
 
 def _run_fake_combination(monkeypatch, tmp_path, *, reset=False, work=lambda: None, nodes=None, interval=5.0,
-                          session: Path | None = None, combo: dict | None = None, popen_env: dict | None = None):
-    """Roda ``run_combination`` sem subprocesso, banco ou Qdrant reais."""
+                          session: Path | None = None, combo: dict | None = None, popen_env: dict | None = None,
+                          command: list[str] | None = None, timeout: int = 60, kill_grace_seconds: float = 10.0):
+    """Roda ``run_combination`` sem banco ou Qdrant reais; sem ``command`` o subprocesso também é simulado."""
     nodes = nodes if nodes is not None else {"n": 0}
     def fake_popen(*a, **k):
         if popen_env is not None:
             popen_env.update(k["env"])
         return FakeProc(work)
 
-    monkeypatch.setattr(run_benchmark.subprocess, "Popen", fake_popen)
+    if command is None:
+        monkeypatch.setattr(run_benchmark.subprocess, "Popen", fake_popen)
     monkeypatch.setattr(run_benchmark, "ResourceSampler", FakeResourceSampler)
     monkeypatch.setattr(footprint, "snapshot", lambda: {})
     monkeypatch.setattr(footprint, "session_operation_metrics", lambda s: None)
@@ -241,9 +243,9 @@ def _run_fake_combination(monkeypatch, tmp_path, *, reset=False, work=lambda: No
     monkeypatch.setattr(run_benchmark, "_save_log", lambda name, log: str(tmp_path / f"{name}.log"))
     return run_combination(
         combo or {"name": "combo", "roles": {"*": "anthropic/claude-haiku-5-5"}, "sem_projeto": True}, "tarefa",
-        {"DATABASE_URL": BENCH_URL}, 60, tmp_path / "outputs", None,
+        {"DATABASE_URL": BENCH_URL}, timeout, tmp_path / "outputs", None,
         repeticao=1, results_path=tmp_path / "results.json", target=make_target(), reset=reset,
-        store_sample_seconds=interval,
+        store_sample_seconds=interval, kill_grace_seconds=kill_grace_seconds, command=command,
     )
 
 

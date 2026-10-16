@@ -28,9 +28,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
+from collections.abc import Sequence
 from pathlib import Path
 
 from dotenv import dotenv_values
@@ -54,6 +56,7 @@ from scripts.benchmark.scoring import (
     session_outcome,
     validated_scoreboard,
 )
+from src.session.exit_codes import exit_code_for
 
 ROLES = ("RESEARCHER", "VALIDATOR", "DEVELOPER", "BASE", "SUMMARIZER")
 # Papéis de julgamento: o ``*`` não os cobre; a combinação os declara (ADR 020 §7).
@@ -289,11 +292,23 @@ def stop_class(stop: str | None) -> str | None:
         return "limite"
     if stop == "erro":
         return "erro"
-    if stop in ("interrompida", "interrompida_pesquisador"):
+    if stop == "interrompida" or stop.endswith("_pesquisador"):
+        # Inclui `aguarda_pesquisador`, `suspensa_sem_pesquisador`, `encerrada_pesquisador` e `pausada_pesquisador`
+        # (v18.7-background-sessions): a sessão `auto` não terminou por critério de pesquisa.
         return "interrupcao"
     if stop == STOP_UNTESTED_HYPOTHESES:
         return STOP_UNTESTED_HYPOTHESES
     return "criterio_pesquisa"
+
+
+def _exit_number(status: str) -> int | None:
+    """Número de ``"exit N"``; ``None`` para ``timeout`` e demais estados."""
+    if status.startswith("exit "):
+        try:
+            return int(status[5:])
+        except ValueError:
+            return None
+    return None
 
 
 def anomalies(result: dict) -> list[str]:
@@ -311,6 +326,7 @@ def anomalies(result: dict) -> list[str]:
     if "Traceback (most recent call last)" in (result.get("log_tail") or ""):
         problems.append("traceback no fim do log")
     stop = result.get("stop_reason")
+    code = _exit_number(status)
     if stop == STOP_PROVIDER_QUOTA:
         problems.append(
             f"sessão fechada por '{stop}' antes de concluir: cota ou teto de gasto esgotado em {quota_label(result)}; "
@@ -337,6 +353,16 @@ def anomalies(result: dict) -> list[str]:
         problems.append(f"semeadura do projeto falhou: {result['seed_error']}")
     if result.get("score_error"):
         problems.append(f"placar validado indisponível: {result['score_error']}")
+    if code == 4:
+        problems.append(
+            "código de saída 4: a sessão aguarda o pesquisador (uma sessão `auto` não terminou; ver os pedidos "
+            "pendentes e o motivo de parada)"
+        )
+    elif code is not None and stop and code != exit_code_for(stop):
+        problems.append(
+            f"código de saída divergente: exit {code} com motivo de parada '{stop}' "
+            f"(esperado exit {exit_code_for(stop)})"
+        )
     return problems
 
 
@@ -388,12 +414,51 @@ def compute_scoreboard(project_id: str | None, session: Path, events: list[dict]
         return {**empty, "accuracy_note": "placar indisponível", "score_error": f"{type(exc).__name__}: {exc}"}
 
 
+KILL_GRACE_SECONDS = 10.0
+
+
+def _signal_group(proc: subprocess.Popen, sig: int) -> bool:
+    """Envia ``sig`` ao grupo do comando (``start_new_session``: ``pgid == pid``). ``False`` se não há grupo."""
+    try:
+        os.killpg(proc.pid, sig)
+    except (ProcessLookupError, PermissionError, OverflowError, TypeError):
+        return False
+    return True
+
+
+def terminate_group(proc: subprocess.Popen, grace_seconds: float) -> None:
+    """Tempo limite: ``SIGTERM`` ao grupo e, se algum processo sobrar depois da carência, ``SIGKILL``."""
+    if not _signal_group(proc, signal.SIGTERM):
+        proc.kill()
+        return
+    deadline = time.monotonic() + max(grace_seconds, 0.0)
+    while time.monotonic() < deadline:
+        if not _signal_group(proc, 0):  # grupo vazio
+            return
+        time.sleep(0.1)
+    _signal_group(proc, signal.SIGKILL)
+
+
+def reap_group(proc: subprocess.Popen) -> None:
+    """Fim normal: o que ainda estiver no grupo (processo da sessão órfão) é encerrado."""
+    _signal_group(proc, signal.SIGKILL)
+
+
 def run_combination(
     combo: dict, task: str, env_base: dict[str, str], timeout: int, output_dir: Path, extra_env: dict | None = None,
     *, repeticao: int = 1, results_path: Path | None = None, target: BenchmarkTarget | None = None,
     reset: bool = False, dump: bool = True, store_sample_seconds: float = footprint.DEFAULT_STORE_SAMPLE_SECONDS,
+    kill_grace_seconds: float = KILL_GRACE_SECONDS, command: Sequence[str] | None = None,
 ) -> dict:
     """Uma execução (combinação x repetição): reset, semeadura, medição, placar e arquivamento (design §1).
+
+    O comando direto roda em primeiro plano e em grupo de processos próprio: no tempo limite o grupo inteiro
+    (o comando e o processo da sessão) recebe ``SIGTERM`` e, depois de ``kill_grace_seconds``, ``SIGKILL``
+    (v18.7-background-sessions, ADR 023 §1).
+
+    Args:
+        kill_grace_seconds: Carência entre ``SIGTERM`` e ``SIGKILL`` no tempo limite.
+        command: Substitui o comando (``main.py --mode auto ... <tarefa>``); usado para ensaiar o runner.
 
     Raises:
         ResetError: O reset ou a conferência pós-reset falhou (o runner termina com código 4).
@@ -423,8 +488,8 @@ def run_combination(
     started_wall = time.time()
     start = time.monotonic()
     proc = subprocess.Popen(
-        [sys.executable, "main.py", "--mode", "auto", *project_args, task],
-        env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        list(command) if command is not None else [sys.executable, "main.py", "--mode", "auto", *project_args, task],
+        env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, start_new_session=True,
     ) if seed_error is None else None
     if proc is None:
         return {**base_result, "status": "seed_error", "seed_error": seed_error,
@@ -444,8 +509,10 @@ def run_combination(
         log, _ = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
         timed_out = True
-        proc.kill()
+        terminate_group(proc, kill_grace_seconds)
         log, _ = proc.communicate()
+    else:
+        reap_group(proc)  # nenhum processo da combinação sobrevive a ela (a próxima começa depois do reset)
     elapsed = time.monotonic() - start
     sampler.stop()
     sampler.join(timeout=5)

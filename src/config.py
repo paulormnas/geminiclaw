@@ -238,6 +238,26 @@ if _agent_timeout is None or _agent_timeout < 0:
     raise ConfigurationError("'AGENT_TIMEOUT_SECONDS' deve ser um inteiro >= 0 (0 = sem tempo limite).")
 AGENT_TIMEOUT_SECONDS = _agent_timeout or None
 
+# v18.7-persistent-human-gate: pedidos ao pesquisador e caixa de entrada da sessão (design §3).
+GATE_POLL_SECONDS = float(get_env("GATE_POLL_SECONDS", default="5"))
+GATE_REMINDER_SECONDS = float(get_env("GATE_REMINDER_SECONDS", default="300"))
+GATE_ASK_WAIT_SECONDS = float(get_env("GATE_ASK_WAIT_SECONDS", default="120"))
+GATE_QUESTION_MAX_CHARS = int(get_env("GATE_QUESTION_MAX_CHARS", default="1000"))
+GATE_ANSWER_MAX_CHARS = int(get_env("GATE_ANSWER_MAX_CHARS", default="2000"))
+GATE_MAX_PENDING_PER_SESSION = int(get_env("GATE_MAX_PENDING_PER_SESSION", default="20"))
+SESSION_INBOX_MAX_CHARS = int(get_env("SESSION_INBOX_MAX_CHARS", default="2000"))
+SESSION_INBOX_MAX_PENDING = int(get_env("SESSION_INBOX_MAX_PENDING", default="20"))
+SESSION_INBOX_POLL_SECONDS = float(get_env("SESSION_INBOX_POLL_SECONDS", default="5"))
+if not 0 < SESSION_INBOX_MAX_CHARS <= 2000:
+    raise ConfigurationError("'SESSION_INBOX_MAX_CHARS' deve estar entre 1 e 2000 (limite do CHECK da tabela).")
+if not 0 < GATE_QUESTION_MAX_CHARS <= 1000:
+    raise ConfigurationError("'GATE_QUESTION_MAX_CHARS' deve estar entre 1 e 1000 (limite do CHECK da tabela).")
+if GATE_ASK_WAIT_SECONDS < 0 or (AGENT_TIMEOUT_SECONDS is not None and AGENT_TIMEOUT_SECONDS <= GATE_ASK_WAIT_SECONDS):
+    raise ConfigurationError(
+        "'GATE_ASK_WAIT_SECONDS' deve ser >= 0 e menor que 'AGENT_TIMEOUT_SECONDS' (a subtarefa que pergunta ao "
+        "pesquisador não pode esperar mais que o tempo limite do agente)."
+    )
+
 # Limites de planejamento (Roadmap V4)
 MAX_PLANNING_ITERATIONS = int(get_env("MAX_PLANNING_ITERATIONS", default="10"))
 MAX_PLAN_RETRIES = int(get_env("MAX_PLAN_RETRIES", default="5"))

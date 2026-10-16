@@ -13,13 +13,13 @@ texto (bidi); eles são removidos antes de qualquer impressão. Tamanhos de text
 from __future__ import annotations
 
 import json
-import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from src import config
 from src.knowledge import schema
 from src.knowledge.graph_store import Edge, Node, Subgraph
+from src.utils.display_text import sanitize_line
 
 FORMATS = ("text", "table", "json", "mermaid")
 MAX_DEPTH = 3
@@ -31,7 +31,6 @@ _TEXT_KEYS = ("enunciado", "titulo", "nome", "termo", "contexto", "subtarefa_id"
 _TABLE_KEYS = ("status", "tipo", "veredito", "criado_por")
 _VERDICT_LABELS = frozenset({"Hipotese", "Descoberta"})
 _STATUS_RE_MAX = 40
-_REMOVED_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Co", "Cn", "Zl", "Zp"})
 
 
 class GraphViewError(Exception):
@@ -87,27 +86,11 @@ class ReadOnlyGraph:
 
 
 def sanitize_text(value: Any, limit: int | None = None) -> str:
-    """Texto seguro para o terminal, em uma linha.
+    """Texto seguro para o terminal, em uma linha (``src.utils.display_text.sanitize_line``).
 
-    Remove caracteres de controle (inclui ``ESC``, ``DEL`` e os C1), de formatação (inclui marcas bidi e de largura
-    zero), separadores de linha/parágrafo, caracteres privados e não atribuídos; quebras e tabulações viram espaço e
-    espaços repetidos colapsam. Com ``limit``, corta com reticências.
+    Com ``limit`` omitido vale ``GRAPH_SHOW_MAX_TEXT_CHARS``.
     """
-    text = value if isinstance(value, str) else str(value)
-    kept: list[str] = []
-    for char in text:
-        category = unicodedata.category(char)
-        if char in "\n\r\t":
-            kept.append(" ")
-        elif category in _REMOVED_CATEGORIES:
-            continue
-        else:
-            kept.append(char)
-    clean = " ".join("".join(kept).split())
-    cap = config.GRAPH_SHOW_MAX_TEXT_CHARS if limit is None else limit
-    if cap > 0 and len(clean) > cap:
-        clean = clean[: max(cap - 1, 0)] + "…"
-    return clean
+    return sanitize_line(value, config.GRAPH_SHOW_MAX_TEXT_CHARS if limit is None else limit)
 
 
 def sanitize_value(value: Any, limit: int | None = None, _depth: int = 0) -> Any:

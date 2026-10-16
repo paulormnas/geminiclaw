@@ -16,6 +16,13 @@ DECISOES_RESERVADAS: tuple[str, ...] = (
     "aprovar_termo_vocabulario",
     "autorizar_escrita_instrumento",
     "ativar_modo_sem_limite",
+    # v18.7-persistent-human-gate: pedidos persistentes da sessão ao pesquisador (catálogo em src/gate/catalog.py).
+    "aprovar_hipotese",
+    "decidir_objetivo_atingido",
+    "responder_pergunta_agente",
+    "decidir_continuidade",
+    "restringir_direcao",
+    "ativar_adendo_regimento",
 )
 
 # Valores de ``respondido_por`` em ``researcher_interactions``.

@@ -1,94 +1,93 @@
-from unittest.mock import MagicMock, mock_open, patch
+"""Monitor de recursos multiplataforma (v18.7-resource-monitor-config, requisito "Monitor de recursos multiplataforma")."""
+
+from __future__ import annotations
+
+import subprocess
 
 import pytest
 
-from src.host.health import PiHealthMonitor
+from src import config
+from src.host.health import HealthMonitor, reset_warnings_for_tests
+from tests.support.fake_psutil_backend import FakePsutilBackend
+
+pytestmark = pytest.mark.unit
 
 
-@pytest.fixture
-def linux_monitor():
-    with patch("platform.system", return_value="Linux"):
-        yield PiHealthMonitor()
+@pytest.fixture(autouse=True)
+def _defaults(monkeypatch):
+    monkeypatch.setattr(config, "TEMPERATURE_LIMIT", None)
+    monkeypatch.setattr(config, "TEMPERATURE_SENSOR", "")
+    reset_warnings_for_tests()
 
-@pytest.fixture
-def mac_monitor():
-    with patch("platform.system", return_value="Darwin"):
-        yield PiHealthMonitor()
 
-@pytest.mark.unit
-def test_fallback_mac(mac_monitor):
-    assert mac_monitor.get_temperature() == 45.0
-    mem = mac_monitor.get_memory_usage()
-    assert mem["total_mb"] == 8192.0
-    assert mac_monitor.get_cpu_usage() == 20.0
-    assert mac_monitor.is_throttled() is False
+def test_temperatura_indisponivel_no_macos():
+    """Scenario: Temperatura indisponível no macOS (sem ``sensors_temperatures``)."""
+    monitor = HealthMonitor(backend=FakePsutilBackend(available_mb=2048.0), system="Darwin")
+    assert monitor.get_temperature() is None
+    assert monitor.get_memory_usage()["available_mb"] == 2048.0
+    assert monitor.is_throttled() is None
 
-@pytest.mark.unit
-@patch("os.path.exists", return_value=True)
-def test_temp_sysfs(mock_exists, linux_monitor):
-    with patch("builtins.open", mock_open(read_data="45123\n")):
-        temp = linux_monitor.get_temperature()
-        assert temp == 45.123
 
-@pytest.mark.unit
-@patch("os.path.exists", return_value=False)
-@patch("subprocess.run")
-def test_temp_vcgencmd(mock_run, mock_exists, linux_monitor):
-    mock_result = MagicMock()
-    mock_result.stdout = "temp=52.5'C\n"
-    mock_run.return_value = mock_result
-    
-    temp = linux_monitor.get_temperature()
-    assert temp == 52.5
-    mock_run.assert_called_with(["vcgencmd", "measure_temp"], capture_output=True, text=True, check=True)
+def test_nenhum_valor_fixo_no_macos():
+    monitor = HealthMonitor(backend=FakePsutilBackend(total_mb=16384.0, available_mb=1000.0, cpu=3.5), system="Darwin")
+    assert monitor.get_memory_usage() == {"total_mb": 16384.0, "available_mb": 1000.0, "percent": 93.9}
+    assert monitor.get_cpu_usage() == 3.5
 
-@pytest.mark.unit
-def test_memory_usage(linux_monitor):
-    meminfo_data = (
-        "MemTotal:        8192000 kB\n"
-        "MemFree:         1024000 kB\n"
-        "MemAvailable:    4096000 kB\n"
+
+def test_nenhum_subprocesso(monkeypatch):
+    """Scenario: Nenhum subprocesso (os quatro métodos, backend Linux simulado)."""
+    def boom(*args, **kwargs):
+        raise AssertionError("subprocesso criado")
+
+    monkeypatch.setattr(subprocess, "run", boom)
+    monkeypatch.setattr(subprocess, "Popen", boom)
+    monkeypatch.setattr(config, "TEMPERATURE_LIMIT", 75.0)
+    monitor = HealthMonitor(backend=FakePsutilBackend(temperatures={"cpu_thermal": 60.0}), system="Linux")
+    assert monitor.get_temperature() == 60.0
+    assert monitor.get_memory_usage() is not None
+    assert monitor.get_cpu_usage() == 20.0
+    assert monitor.is_throttled() is False
+
+
+def test_leitura_de_memoria_que_falha():
+    """Scenario: Leitura de memória que falha (nunca o antigo valor fixo)."""
+    assert HealthMonitor(backend=FakePsutilBackend(memory_error=True)).get_memory_usage() is None
+
+
+def test_leitura_de_cpu_e_de_sensores_que_falham():
+    monitor = HealthMonitor(backend=FakePsutilBackend(cpu_error=True, temperatures={"x": 1.0}, temperature_error=True))
+    assert monitor.get_cpu_usage() is None
+    assert monitor.get_temperature() is None
+
+
+def test_sensor_escolhido(monkeypatch, caplog):
+    """Scenario: Sensor escolhido (maior leitura, sensor nomeado e sensor inexistente)."""
+    monitor = HealthMonitor(
+        backend=FakePsutilBackend(temperatures={"cpu_thermal": 61.0, "nvme": 48.0}), system="Linux"
     )
-    with patch("builtins.open", mock_open(read_data=meminfo_data)):
-        mem = linux_monitor.get_memory_usage()
-        assert mem["total_mb"] == 8000.0  # 8192000 / 1024
-        assert mem["available_mb"] == 4000.0 # 4096000 / 1024
-        assert mem["percent"] == 50.0  # (8000 - 4000) / 8000 * 100
+    assert monitor.get_temperature() == 61.0
+    monkeypatch.setattr(config, "TEMPERATURE_SENSOR", "nvme")
+    assert monitor.get_temperature() == 48.0
+    monkeypatch.setattr(config, "TEMPERATURE_SENSOR", "inexistente")
+    with caplog.at_level("WARNING"):
+        assert monitor.get_temperature() is None
+        assert monitor.get_temperature() is None
+    assert len([r for r in caplog.records if "Sensor de temperatura não encontrado" in r.getMessage()]) == 1
 
-@pytest.mark.unit
-def test_is_throttled(linux_monitor):
-    with patch("subprocess.run") as mock_run:
-        # 0x0 -> not throttled
-        mock_result = MagicMock()
-        mock_result.stdout = "throttled=0x0\n"
-        mock_run.return_value = mock_result
-        assert linux_monitor.is_throttled() is False
 
-        # 0x2 -> currently throttled (frequency capped)
-        mock_result.stdout = "throttled=0x2\n"
-        mock_run.return_value = mock_result
-        assert linux_monitor.is_throttled() is True
+def test_sem_sensores_listados():
+    assert HealthMonitor(backend=FakePsutilBackend(temperatures={}), system="Linux").get_temperature() is None
 
-        # 0x50005 -> under-voltage occurred and currently under-voltage (bit 0 and bit 2 are 1, bit 16 and 18 are 1)
-        # bit 2 is 0x4 (currently throttled), so it should return True
-        mock_result.stdout = "throttled=0x50005\n"
-        mock_run.return_value = mock_result
-        assert linux_monitor.is_throttled() is True
 
-@pytest.mark.unit
-@patch("time.sleep", return_value=None)
-def test_cpu_usage(mock_sleep, linux_monitor):
-    # Mocking multiple open calls for /proc/stat
-    # Format: cpu  user nice system idle iowait irq softirq steal guest guest_nice
-    data1 = "cpu  1000 0 1000 8000 0 0 0 0 0 0\n" # total: 10000, idle: 8000
-    data2 = "cpu  1100 0 1100 8300 0 0 0 0 0 0\n" # total: 10500 (+500), idle: 8300 (+300) => usage = (500-300)/500 = 40%
-    
-    mock_file = mock_open(read_data=data1)
-    mock_file.side_effect = [
-        mock_open(read_data=data1).return_value,
-        mock_open(read_data=data2).return_value
-    ]
-    
-    with patch("builtins.open", mock_file):
-        pct = linux_monitor.get_cpu_usage()
-        assert pct == 40.0
+def test_limitacao_termica_derivada(monkeypatch):
+    """Scenario: Limitação térmica derivada (76,0 -> True, 60,0 -> False, desconhecida -> None)."""
+    monkeypatch.setattr(config, "TEMPERATURE_LIMIT", 75.0)
+    monitor = HealthMonitor(backend=FakePsutilBackend(temperatures={"cpu_thermal": [76.0, 60.0]}), system="Linux")
+    assert monitor.is_throttled() is True
+    assert monitor.is_throttled() is False
+    assert HealthMonitor(backend=FakePsutilBackend(), system="Darwin").is_throttled() is None
+
+
+def test_monitor_real_le_o_computador_sem_inventar_valores():
+    memory = HealthMonitor().get_memory_usage()
+    assert memory is not None and memory["total_mb"] > 0 and 0 <= memory["percent"] <= 100

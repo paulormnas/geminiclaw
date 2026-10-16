@@ -33,6 +33,7 @@ from src.config import (
     SessionMode,
 )
 from src.egress.routing import install_provider_resolver
+from src.host.health import thermal_protection_warning
 from src.llm.vision import VisionConfigError
 from src.logger import get_logger
 from src.orchestration.orchestrator import AgentResult, Orchestrator, OrchestratorResult
@@ -141,7 +142,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--timeout",
         type=int,
         default=AGENT_TIMEOUT_SECONDS,
-        help=f"Timeout em segundos para cada agente (padrão: {AGENT_TIMEOUT_SECONDS}).",
+        help=f"Timeout em segundos para cada agente (padrão: {AGENT_TIMEOUT_SECONDS or 'sem limite'}).",
     )
     parser.add_argument(
         "--model",
@@ -1018,6 +1019,10 @@ def print_session_banner(
             f"{effective_budget.max_connection_retries} retentativas de conexão"
         )
 
+    thermal_warning = thermal_protection_warning()
+    if thermal_warning:
+        print(f"  {YELLOW}⚠ {thermal_warning}{RESET}")
+
     if llm_routing is not None:
         header, *role_lines = llm_routing.banner_lines()
         print(f"  {DIM}{header}{RESET}")
@@ -1486,6 +1491,7 @@ def _project_marked_unlimited(project_arg: str | None) -> bool:
 def main() -> None:
     """Ponto de entrada principal da CLI."""
     install_provider_resolver()
+    thermal_protection_warning()  # registra o aviso de proteção térmica desligada, se couber
 
     # Roadmap V15.6 / Spec G10 — help completo customizado, sem passar pelo argparse padrão
     if any(a in ("-h", "--help") for a in sys.argv[1:]):

@@ -46,4 +46,4 @@ def test_alias_local_do_registro_continua_resolvendo_para_ollama():
     """O alias legado 'local' do registro continua valendo para a lista de permissão."""
     from src.llm.availability import parse_priority
 
-    assert parse_priority("local", "default") == ("ollama",)
+    assert parse_priority("local") == ("ollama",)

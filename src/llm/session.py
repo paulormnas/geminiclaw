@@ -253,7 +253,7 @@ async def build_session_routing(
     modo = validate_routing_mode(config.LLM_ROUTING)
     catalog = get_catalog()
     pins = read_pins(catalog, env, cli_pins)
-    priority = parse_priority(config.LLM_PROVIDER_PRIORITY, config.DEPLOYMENT_PROFILE)
+    priority = parse_priority(config.LLM_PROVIDER_PRIORITY)
     disponiveis = await compute_availability(
         catalog,
         _relevant_ids(catalog, pins, politica),
@@ -276,7 +276,7 @@ def build_offline_routing(
     modo = validate_routing_mode(config.LLM_ROUTING)
     catalog = get_catalog()
     pins = read_pins(catalog, env, cli_pins)
-    priority = parse_priority(config.LLM_PROVIDER_PRIORITY, config.DEPLOYMENT_PROFILE)
+    priority = parse_priority(config.LLM_PROVIDER_PRIORITY)
     decided, pending = static_availability(catalog, _relevant_ids(catalog, pins, politica), priority=priority)
     decided.update({model_id: Availability(True) for model_id in pending})
     return _resolve(catalog, pins, politica, modo, decided)

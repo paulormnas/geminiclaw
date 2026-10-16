@@ -29,10 +29,8 @@ logger = get_logger(__name__)
 _NEEDS_API_KEY = {"google", "anthropic", "openai"}
 _NEEDS_BASE_URL = {"ollama", "openai_compatible"}
 
-PROFILE_PRIORITY: dict[str, tuple[str, ...]] = {
-    "pi5": ("ollama", "openai_compatible", "google", "anthropic", "openai"),
-    "default": ("google", "anthropic", "openai", "ollama", "openai_compatible"),
-}
+# Prioridade padrão de provedores, a mesma em qualquer máquina; outra ordem se declara em ``LLM_PROVIDER_PRIORITY``.
+DEFAULT_PRIORITY: tuple[str, ...] = ("google", "anthropic", "openai", "ollama", "openai_compatible")
 
 # Motivos de indisponibilidade (usados também na auditoria dos descartados).
 MOTIVO_SEM_CREDENCIAL = "sem_credencial"
@@ -68,11 +66,11 @@ def sanitize_error(exc: BaseException) -> str:
     return f"{name}:{status}" if isinstance(status, int) else name
 
 
-def parse_priority(raw: str | None, profile: str) -> tuple[str, ...]:
-    """Lista de permissão: ``LLM_PROVIDER_PRIORITY`` ou o padrão do perfil de deployment."""
+def parse_priority(raw: str | None) -> tuple[str, ...]:
+    """Lista de permissão: ``LLM_PROVIDER_PRIORITY`` ou ``DEFAULT_PRIORITY``."""
     names = [item.strip() for item in (raw or "").split(",") if item.strip()]
     if not names:
-        return PROFILE_PRIORITY.get(profile, PROFILE_PRIORITY["default"])
+        return DEFAULT_PRIORITY
     return tuple(registry.canonical_name(name) for name in names)
 
 

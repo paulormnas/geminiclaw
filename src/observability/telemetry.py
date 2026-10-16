@@ -1227,12 +1227,17 @@ class TelemetryCollector:
             f"- Custo Estimado (Cloud): ${total_cost:.4f}",
             f"- Latência Média de Inferência: {derived.get('avg_inference_latency_ms', 0):.0f}ms",
             f"- Latência Máxima de Inferência: {derived.get('max_inference_latency_ms', 0):.0f}ms",
-            f"- Pico de Temperatura CPU: {hw.get('max_temp_c', 0):.1f}°C",
+            f"- Pico de Temperatura CPU: {_peak(hw.get('max_temp_c'), '°C')}",
             f"- Incidentes de Throttling: {derived.get('throttle_incidents', 0)}",
-            f"- Pico de Pressão de Memória: {derived.get('peak_mem_pressure_pct', 0):.1f}%",
+            f"- Pico de Pressão de Memória: {_peak(derived.get('peak_mem_pressure_pct'), '%')}",
             f"- Utilização Média de Contexto: {derived.get('avg_context_utilization', 0)*100:.1f}%",
         ]
         return "\n".join(lines)
+
+
+def _peak(value: Any, unit: str) -> str:
+    """Pico formatado, ou ``desconhecido`` quando a plataforma não expõe a leitura (``NULL`` no instantâneo)."""
+    return "desconhecido" if value is None else f"{float(value):.1f}{unit}"
 
 
 # ------------------------------------------------------------------

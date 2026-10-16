@@ -29,7 +29,7 @@ from src.config import (
 from src.egress.gate import role_tainted
 from src.egress.persisted import resumed_text_tainted, resumo_marca, tags_tainted, with_taint_tag
 from src.egress.routing import ModelRouter
-from src.host.health import PiHealthMonitor
+from src.host.health import HealthMonitor
 from src.knowledge.hypothesis_cycle import SolutionStatus
 from src.knowledge.suggestions import SuggestionError
 from src.logger import get_logger
@@ -122,7 +122,7 @@ class AutonomousLoop:
         self._triage_classifier = TriageClassifier(
             confidence_threshold=float(os.environ.get("TRIAGE_CONFIDENCE_THRESHOLD", "0.7"))
         )
-        self._health_monitor = PiHealthMonitor()
+        self._health_monitor = HealthMonitor()
         # Roadmap V15.6 / Spec G10 — modo de operação da sessão corrente
         self._session_mode: str = ""
         # V18/usage-limits — orçamento e contabilização de uso da sessão corrente.
@@ -345,6 +345,45 @@ class AutonomousLoop:
 
         # modo 'llm': sempre usa LLM direto (sem container)
         return await self._llm_triage_direct(prompt)
+
+    def _record_hardware_snapshot(self, master_session_id: str, task_name: str | None) -> None:
+        """Grava o instantâneo de hardware após uma subtarefa (``HEALTH_CHECK_ENABLED``).
+
+        Só valores lidos pelo ``HealthMonitor``: o que a plataforma não expõe vai como ``NULL``; ``is_throttled`` é a
+        temperatura frente a ``TEMPERATURE_LIMIT`` (``NULL`` sem limite ou sem leitura). Falhas não
+        interrompem a sessão.
+        """
+        from src.config import HEALTH_CHECK_ENABLED
+
+        if not HEALTH_CHECK_ENABLED:
+            return
+        try:
+            temp = self._health_monitor.get_temperature()
+            mem = self._health_monitor.get_memory_usage()
+            cpu = self._health_monitor.get_cpu_usage()
+            throttled = self._health_monitor.is_throttled()
+
+            health_data = {
+                "temp": temp,
+                "mem_avail_mb": mem["available_mb"] if mem else None,
+                "cpu_pct": cpu
+            }
+            logger.info("Métricas de saúde do sistema após subtarefa", extra=health_data)
+
+            # V5 — Telemetria: hardware_snapshot após subtarefa
+            telemetry = get_telemetry()
+            telemetry.record_hardware_snapshot(
+                execution_id=master_session_id,
+                task_name=task_name,
+                cpu_temp_c=temp,
+                cpu_usage_pct=cpu,
+                mem_total_mb=mem["total_mb"] if mem else None,
+                mem_available_mb=mem["available_mb"] if mem else None,
+                mem_usage_pct=mem["percent"] if mem else None,
+                is_throttled=throttled,
+            )
+        except Exception as e:
+            logger.debug("Falha ao coletar métricas de saúde", extra={"error": str(e)})
 
     async def _llm_triage_direct(self, prompt: str) -> bool:
         """Classifica usando o LLM configurado diretamente, sem container.
@@ -1571,35 +1610,7 @@ class AutonomousLoop:
                 )
 
                 # Fase 3 V5: Hardware snapshot + Monitoramento de Saúde
-                from src.config import HEALTH_CHECK_ENABLED
-                if HEALTH_CHECK_ENABLED:
-                    try:
-                        temp = self._health_monitor.get_temperature()
-                        mem = self._health_monitor.get_memory_usage()
-                        cpu = self._health_monitor.get_cpu_usage()
-                        throttled = self._health_monitor.is_throttled()
-                        
-                        health_data = {
-                            "temp": temp,
-                            "mem_avail_mb": mem["available_mb"] if mem else None,
-                            "cpu_pct": cpu
-                        }
-                        logger.info("Métricas de saúde do sistema após subtarefa", extra=health_data)
-
-                        # V5 — Telemetria: hardware_snapshot após subtarefa
-                        telemetry = get_telemetry()
-                        telemetry.record_hardware_snapshot(
-                            execution_id=master_session_id,
-                            task_name=task.task_name or None,
-                            cpu_temp_c=temp,
-                            cpu_usage_pct=cpu,
-                            mem_total_mb=mem["total_mb"] if mem else None,
-                            mem_available_mb=mem["available_mb"] if mem else None,
-                            mem_usage_pct=mem["percent"] if mem else None,
-                            is_throttled=throttled,
-                        )
-                    except Exception as e:
-                        logger.debug("Falha ao coletar métricas de saúde", extra={"error": str(e)})
+                self._record_hardware_snapshot(master_session_id, task.task_name or None)
 
                 if task.task_name:
                     if success:

@@ -1,143 +1,130 @@
-import os
-import platform
-import subprocess
-import time
-from typing import Dict, Optional
+"""Monitor de recursos multiplataforma (Linux e macOS) sobre ``psutil`` (ADR 023 §1.1).
 
+Lê memória, CPU e temperatura sem executar comando externo. Leitura que a plataforma não expõe ou que falha vem como
+``None`` (desconhecida): nenhum método devolve valor fixo ou estimado (AGENTS.md §1.6). Quem consome trata ``None``
+explicitamente (``src/agent_runtime/resources.py``, telemetria).
+"""
+
+from __future__ import annotations
+
+import platform
+from typing import Any
+
+import psutil
+
+from src import config
 from src.logger import get_logger
 
 logger = get_logger(__name__)
 
-class PiHealthMonitor:
-    """Monitora métricas vitais de hardware (focado no Raspberry Pi 5).
-    
-    Implementa "fallback gracioso" em sistemas que não são Linux/Pi, retornando
-    valores padrão para não bloquear o desenvolvimento local (ex: no macOS).
+_MB = 1024 * 1024
+_CPU_SAMPLE_SECONDS = 0.1
+
+_sensor_warned = False
+_thermal_warned = False
+
+
+class HealthMonitor:
+    """Lê memória, CPU e temperatura do computador em que o processo roda.
+
+    O backend é injetável (testes): qualquer objeto com ``virtual_memory()``, ``cpu_percent(interval)`` e,
+    opcionalmente, ``sensors_temperatures()`` (ausente em macOS) no formato do ``psutil``.
     """
-    
-    def __init__(self):
-        self.is_linux = platform.system() == "Linux"
-        
-    def get_temperature(self) -> Optional[float]:
-        """Obtém a temperatura da CPU em graus Celsius.
-        
-        Tenta ler do arquivo sysfs primeiro, com fallback para vcgencmd.
-        """
-        if not self.is_linux:
-            return 45.0  # Fallback gracioso
-            
-        try:
-            # Tenta via sysfs
-            temp_path = "/sys/class/thermal/thermal_zone0/temp"
-            if os.path.exists(temp_path):
-                with open(temp_path, "r") as f:
-                    return float(f.read().strip()) / 1000.0
-        except Exception as e:
-            logger.debug("Falha ao ler temperatura via sysfs", extra={"error": str(e)})
-            
-        try:
-            # Tenta via vcgencmd
-            result = subprocess.run(["vcgencmd", "measure_temp"], capture_output=True, text=True, check=True)
-            # result.stdout format: "temp=45.0'C"
-            temp_str = result.stdout.strip().replace("temp=", "").replace("'C", "")
-            return float(temp_str)
-        except Exception as e:
-            logger.debug("Falha ao ler temperatura via vcgencmd", extra={"error": str(e)})
-            
-        return None
 
-    def get_memory_usage(self) -> Optional[Dict[str, float]]:
-        """Lê informações de memória do /proc/meminfo.
-        
-        Returns:
-            Dict com 'total_mb' e 'available_mb'.
+    def __init__(self, *, backend: Any | None = None, system: str | None = None) -> None:
+        self._backend = backend if backend is not None else psutil
+        self.system = system or platform.system()
+
+    def get_temperature(self) -> float | None:
+        """Temperatura da CPU em °C, ou ``None`` se desconhecida.
+
+        Com ``TEMPERATURE_SENSOR`` vazio vale a maior leitura entre os sensores; com valor, só o sensor de mesmo nome.
         """
-        if not self.is_linux:
-            return {"total_mb": 8192.0, "available_mb": 4096.0, "percent": 50.0}
-            
+        global _sensor_warned
+        reader = getattr(self._backend, "sensors_temperatures", None)
+        if reader is None:
+            return None
         try:
-            meminfo = {}
-            with open("/proc/meminfo", "r") as f:
-                for line in f:
-                    parts = line.split(":")
-                    if len(parts) == 2:
-                        key = parts[0].strip()
-                        val_str = parts[1].strip().split()[0]
-                        meminfo[key] = int(val_str)
-                        
-            total_kb = meminfo.get("MemTotal", 0)
-            avail_kb = meminfo.get("MemAvailable", meminfo.get("MemFree", 0))
-            
-            if total_kb == 0:
+            sensors = reader()
+        except Exception as exc:  # noqa: BLE001 - a leitura é opcional: falha vira desconhecida
+            logger.debug("Falha ao ler temperatura", extra={"error": str(exc)})
+            return None
+        if not sensors:
+            return None
+        wanted = config.TEMPERATURE_SENSOR
+        if wanted:
+            if wanted not in sensors:
+                if not _sensor_warned:
+                    _sensor_warned = True
+                    logger.warning(
+                        "Sensor de temperatura não encontrado",
+                        extra={"sensor": wanted, "disponiveis": sorted(sensors)},
+                    )
                 return None
-                
-            total_mb = total_kb / 1024.0
-            avail_mb = avail_kb / 1024.0
-            percent = ((total_kb - avail_kb) / total_kb) * 100.0
-            
-            return {
-                "total_mb": round(total_mb, 2),
-                "available_mb": round(avail_mb, 2),
-                "percent": round(percent, 2)
-            }
-        except Exception as e:
-            logger.debug("Falha ao ler memória", extra={"error": str(e)})
-            return None
+            entries = list(sensors[wanted])
+        else:
+            entries = [entry for group in sensors.values() for entry in group]
+        values = [float(entry.current) for entry in entries if getattr(entry, "current", None) is not None]
+        return max(values) if values else None
 
-    def get_cpu_usage(self) -> Optional[float]:
-        """Calcula o percentual de uso da CPU via /proc/stat.
-        Requer ler o arquivo duas vezes com um intervalo curto.
-        """
-        if not self.is_linux:
-            return 20.0
-            
-        def _read_stat() -> tuple[Optional[int], Optional[int]]:
-            try:
-                with open("/proc/stat", "r") as f:
-                    line = f.readline()
-                    parts = line.split()
-                    if parts[0] == "cpu":
-                        # idle is the 4th column + iowait 5th
-                        user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice = map(int, parts[1:11])
-                        total = user + nice + system + idle + iowait + irq + softirq + steal
-                        return total, idle + iowait
-            except Exception:
-                pass
-            return None, None
-
-        total1, idle1 = _read_stat()
-        if total1 is None or idle1 is None:
-            return None
-            
-        time.sleep(0.1) # Aguarda 100ms para delta
-        
-        total2, idle2 = _read_stat()
-        if total2 is None or idle2 is None:
-            return None
-            
-        delta_total = total2 - total1
-        delta_idle = idle2 - idle1
-        
-        if delta_total == 0:
-            return 0.0
-            
-        pct = ((delta_total - delta_idle) / delta_total) * 100.0
-        return round(pct, 2)
-        
-    def is_throttled(self) -> Optional[bool]:
-        """Verifica se há thermal throttling ativo via vcgencmd."""
-        if not self.is_linux:
-            return False
-            
+    def get_memory_usage(self) -> dict[str, float] | None:
+        """Memória em MB (``total_mb``, ``available_mb``, ``percent``), ou ``None`` se desconhecida."""
         try:
-            result = subprocess.run(["vcgencmd", "get_throttled"], capture_output=True, text=True, check=True)
-            # result.stdout format: "throttled=0x0"
-            val = result.stdout.strip().replace("throttled=", "")
-            int_val = int(val, 16)
-            
-            # Bit 1 (0x2) indicates ARM frequency capped (thermal throttling)
-            # Bit 2 (0x4) indicates currently throttled
-            return bool(int_val & 0x6) 
-        except Exception as e:
-            logger.debug("Falha ao verificar throttling", extra={"error": str(e)})
+            memory = self._backend.virtual_memory()
+            return {
+                "total_mb": round(memory.total / _MB, 2),
+                "available_mb": round(memory.available / _MB, 2),
+                "percent": round(float(memory.percent), 2),
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Falha ao ler memória", extra={"error": str(exc)})
             return None
+
+    def get_cpu_usage(self) -> float | None:
+        """Uso da CPU em %, medido em 100 ms, ou ``None`` se desconhecido."""
+        try:
+            return round(float(self._backend.cpu_percent(interval=_CPU_SAMPLE_SECONDS)), 2)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Falha ao ler CPU", extra={"error": str(exc)})
+            return None
+
+    def is_throttled(self) -> bool | None:
+        """Temperatura frente a ``TEMPERATURE_LIMIT``; ``None`` sem limite configurado ou sem leitura."""
+        limit = config.TEMPERATURE_LIMIT
+        if limit is None:
+            return None
+        temperature = self.get_temperature()
+        if temperature is None:
+            return None
+        return temperature >= limit
+
+
+THERMAL_PROTECTION_OFF_MESSAGE = (
+    "Proteção térmica desligada: há sensor de temperatura legível, mas TEMPERATURE_LIMIT não está definido. "
+    "Declare TEMPERATURE_LIMIT (°C) no .env."
+)
+
+
+def thermal_protection_warning(monitor: HealthMonitor | None = None) -> str | None:
+    """Mensagem de proteção térmica desligada, ou ``None`` se não se aplica.
+
+    Aplica-se no Linux, com temperatura legível e ``TEMPERATURE_LIMIT`` indefinido. Registra ``WARNING`` uma única vez
+    por processo; devolve a mensagem em toda chamada aplicável (o REPL a mostra no cabeçalho). Nunca falha.
+    """
+    global _thermal_warned
+    if config.TEMPERATURE_LIMIT is not None:
+        return None
+    monitor = monitor or HealthMonitor()
+    if monitor.system != "Linux" or monitor.get_temperature() is None:
+        return None
+    if not _thermal_warned:
+        _thermal_warned = True
+        logger.warning(THERMAL_PROTECTION_OFF_MESSAGE)
+    return THERMAL_PROTECTION_OFF_MESSAGE
+
+
+def reset_warnings_for_tests() -> None:
+    """Zera os avisos de uma vez por processo (testes)."""
+    global _sensor_warned, _thermal_warned
+    _sensor_warned = False
+    _thermal_warned = False

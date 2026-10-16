@@ -40,10 +40,17 @@ class TestDynamicLimit:
     def test_under_3gb_allows_one(self) -> None:
         assert calculate_dynamic_limit(_health(available_mb=2048.0)) == 1
 
-    def test_unreadable_memory_falls_back_to_default(self) -> None:
-        assert calculate_dynamic_limit(_health(available_mb=None)) == 3  # macOS
+    def test_unreadable_memory_falls_back_to_max_concurrent_agents(self, caplog) -> None:
+        """Scenario: Sem leitura de memória (limite igual a MAX_CONCURRENT_AGENTS, com WARNING que o cita)."""
+        with patch("src.agent_runtime.resources.MAX_CONCURRENT_AGENTS", 2), caplog.at_level("WARNING"):
+            assert calculate_dynamic_limit(_health(available_mb=None)) == 2
+        assert any("MAX_CONCURRENT_AGENTS=2" in r.getMessage() for r in caplog.records)
 
-    def test_read_error_falls_back_to_default(self) -> None:
+    def test_memory_range(self) -> None:
+        """Scenario: Faixa de memória (3500 MB disponíveis com MAX_CONCURRENT_AGENTS=3: 2)."""
+        assert calculate_dynamic_limit(_health(available_mb=3500.0)) == 2
+
+    def test_read_error_falls_back_to_max_concurrent_agents(self) -> None:
         assert calculate_dynamic_limit(_health(raises=True)) == 3
 
     def test_never_exceeds_max_concurrent_agents(self) -> None:
@@ -60,8 +67,9 @@ class TestDynamicLimit:
 class TestWaitForHealth:
     @pytest.fixture(autouse=True)
     def _limits(self, monkeypatch):
-        monkeypatch.setattr("src.agent_runtime.resources.PI_TEMPERATURE_LIMIT", 75.0)
-        monkeypatch.setattr("src.agent_runtime.resources.PI_MIN_AVAILABLE_MEMORY_MB", 512.0)
+        monkeypatch.setattr("src.agent_runtime.resources.TEMPERATURE_LIMIT", 75.0)
+        monkeypatch.setattr("src.agent_runtime.resources.MIN_AVAILABLE_MEMORY_MB", 512.0)
+        monkeypatch.setattr("src.agent_runtime.resources.TEMPERATURE_WARNING_MARGIN_C", 5.0)
 
         async def _instant(_seconds):
             return None
@@ -86,6 +94,42 @@ class TestWaitForHealth:
         await wait_for_health(health)
 
         assert health.get_memory_usage.call_count == 2
+
+    async def test_temperature_ignored_without_limit(self, monkeypatch, caplog) -> None:
+        """Scenario: Temperatura ignorada sem limite (nem a leitura é pedida; sem aviso de temperatura)."""
+        monkeypatch.setattr("src.agent_runtime.resources.TEMPERATURE_LIMIT", None)
+        health = _health(available_mb=4096.0, temperature=90.0)
+        with caplog.at_level("WARNING"):
+            await wait_for_health(health)
+        assert not [r for r in caplog.records if "Temperatura" in r.getMessage()]
+
+    async def test_waits_with_limit_on_successive_readings(self, monkeypatch) -> None:
+        """Scenario: Espera por temperatura com limite (limite 80: 82, 81 e 70 °C)."""
+        monkeypatch.setattr("src.agent_runtime.resources.TEMPERATURE_LIMIT", 80.0)
+        health = _health(available_mb=4096.0)
+        health.get_temperature.side_effect = [82.0, 81.0, 70.0]
+        await wait_for_health(health)
+        assert health.get_temperature.call_count == 3
+
+    async def test_warning_derived_from_limit(self, monkeypatch, caplog) -> None:
+        """Scenario: Aviso derivado do limite (limite 80, margem 5: aviso em 75,0, não em 74,0)."""
+        monkeypatch.setattr("src.agent_runtime.resources.TEMPERATURE_LIMIT", 80.0)
+        with caplog.at_level("WARNING"):
+            await wait_for_health(_health(available_mb=4096.0, temperature=75.0))
+        assert any("Temperatura do sistema elevada" in r.getMessage() for r in caplog.records)
+        caplog.clear()
+        with caplog.at_level("WARNING"):
+            await wait_for_health(_health(available_mb=4096.0, temperature=74.0))
+        assert not [r for r in caplog.records if "Temperatura do sistema elevada" in r.getMessage()]
+
+    async def test_unknown_memory_does_not_block(self, monkeypatch, caplog) -> None:
+        """Scenario: Memória desconhecida não bloqueia (retorna sem esperar, com WARNING)."""
+        monkeypatch.setattr("src.agent_runtime.resources._memory_unknown_warned", False)
+        health = _health(available_mb=None, temperature=50.0)
+        with caplog.at_level("WARNING"):
+            await wait_for_health(health)
+        assert health.get_memory_usage.call_count == 1
+        assert any("Memória desconhecida" in r.getMessage() for r in caplog.records)
 
     async def test_fails_explicitly_when_limits_persist(self) -> None:
         with pytest.raises(RuntimeError, match="Timeout aguardando saúde do sistema"):

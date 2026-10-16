@@ -22,51 +22,55 @@ from src.config import (
     HEALTH_CHECK_ENABLED,
     MAX_CONCURRENT_AGENTS,
     MAX_LOCAL_LLM_CONCURRENT,
-    PI_MIN_AVAILABLE_MEMORY_MB,
-    PI_TEMPERATURE_LIMIT,
+    MIN_AVAILABLE_MEMORY_MB,
+    TEMPERATURE_LIMIT,
+    TEMPERATURE_WARNING_MARGIN_C,
 )
-from src.host.health import PiHealthMonitor
+from src.host.health import HealthMonitor
 from src.logger import get_logger
 
 logger = get_logger(__name__)
 
-_DEFAULT_LIMIT = 3
+_memory_unknown_warned = False
 _HEALTH_MAX_WAIT_SECONDS = 60
 _HEALTH_POLL_SECONDS = 5
 
 
-def calculate_dynamic_limit(health: PiHealthMonitor) -> int:
+def calculate_dynamic_limit(health: HealthMonitor) -> int:
     """Calcula quantos agentes podem rodar juntos a partir da RAM disponível.
 
     Args:
         health: Monitor de saúde do sistema.
 
     Returns:
-        3 com 6 GB ou mais livres, 2 com 3 GB ou mais, 1 abaixo disso; 3 quando a leitura
-        de memória não está disponível (ex.: macOS). O resultado nunca passa de
-        ``MAX_CONCURRENT_AGENTS``.
+        3 com 6 GB ou mais livres, 2 com 3 GB ou mais, 1 abaixo disso; ``MAX_CONCURRENT_AGENTS`` (com aviso)
+        quando a leitura de memória é desconhecida. O resultado nunca passa de ``MAX_CONCURRENT_AGENTS``.
     """
-    limit = _DEFAULT_LIMIT
+    limit = MAX_CONCURRENT_AGENTS
     try:
         memory = health.get_memory_usage()
-        if memory and "available_mb" in memory:
-            available_gb = memory["available_mb"] / 1024.0
-            if available_gb >= 6.0:
-                limit = 3
-            elif available_gb >= 3.0:
-                limit = 2
-            else:
-                limit = 1
-            logger.info(f"Limite dinâmico de agentes simultâneos: {limit} (RAM livre: {available_gb:.2f} GB)")
+    except Exception as exc:  # noqa: BLE001 — a leitura de memória é opcional: falha vira desconhecida
+        logger.debug("Falha ao ler memória", extra={"error": str(exc)})
+        memory = None
+    if memory and "available_mb" in memory:
+        available_gb = memory["available_mb"] / 1024.0
+        if available_gb >= 6.0:
+            limit = 3
+        elif available_gb >= 3.0:
+            limit = 2
         else:
-            logger.warning("Falha ao ler memória (provavelmente macOS). Usando o limite padrão.")
-    except Exception as exc:  # noqa: BLE001 — a leitura de memória é opcional
-        logger.warning(f"Erro ao calcular o limite de recursos, usando o padrão ({_DEFAULT_LIMIT}): {exc}")
+            limit = 1
+        logger.info(f"Limite dinâmico de agentes simultâneos: {limit} (RAM livre: {available_gb:.2f} GB)")
+    else:
+        logger.warning(
+            "Memória desconhecida: limite de agentes simultâneos igual a "
+            f"MAX_CONCURRENT_AGENTS={MAX_CONCURRENT_AGENTS}."
+        )
     return max(1, min(limit, MAX_CONCURRENT_AGENTS))
 
 
 async def wait_for_health(
-    health: PiHealthMonitor,
+    health: HealthMonitor,
     max_wait_seconds: float = _HEALTH_MAX_WAIT_SECONDS,
     poll_seconds: float = _HEALTH_POLL_SECONDS,
 ) -> None:
@@ -80,19 +84,23 @@ async def wait_for_health(
     Raises:
         RuntimeError: Se os limites continuarem excedidos após ``max_wait_seconds``.
     """
+    global _memory_unknown_warned
     waited = 0.0
     while waited < max_wait_seconds:
-        temperature = health.get_temperature()
+        temperature = health.get_temperature() if TEMPERATURE_LIMIT is not None else None
         memory = health.get_memory_usage()
 
-        if temperature is not None and temperature > 70.0:
+        if memory is None and not _memory_unknown_warned:
+            _memory_unknown_warned = True
+            logger.warning("Memória desconhecida: verificação de memória ignorada.")
+        if temperature is not None and temperature >= TEMPERATURE_LIMIT - TEMPERATURE_WARNING_MARGIN_C:
             logger.warning("Temperatura do sistema elevada", extra={"temperature": temperature})
 
         reasons = []
-        if temperature is not None and temperature >= PI_TEMPERATURE_LIMIT:
-            reasons.append(f"Temperatura alta ({temperature} >= {PI_TEMPERATURE_LIMIT})")
-        if memory is not None and memory["available_mb"] < PI_MIN_AVAILABLE_MEMORY_MB:
-            reasons.append(f"Memória livre baixa ({memory['available_mb']} < {PI_MIN_AVAILABLE_MEMORY_MB})")
+        if temperature is not None and temperature >= TEMPERATURE_LIMIT:
+            reasons.append(f"Temperatura alta ({temperature} >= {TEMPERATURE_LIMIT})")
+        if memory is not None and memory["available_mb"] < MIN_AVAILABLE_MEMORY_MB:
+            reasons.append(f"Memória livre baixa ({memory['available_mb']} < {MIN_AVAILABLE_MEMORY_MB})")
         if not reasons:
             return
 
@@ -111,20 +119,20 @@ class ResourceGuard:
 
     def __init__(
         self,
-        health: PiHealthMonitor | None = None,
+        health: HealthMonitor | None = None,
         max_concurrent: int | None = None,
         local_llm_concurrent: int | None = None,
     ) -> None:
         """Cria o regulador.
 
         Args:
-            health: Monitor de saúde (padrão: um novo ``PiHealthMonitor``).
+            health: Monitor de saúde (padrão: um novo ``HealthMonitor``).
             max_concurrent: Limite fixo de agentes simultâneos; se omitido, é calculado
                 pela RAM livre.
             local_llm_concurrent: Limite de execuções simultâneas com inferência local;
                 se omitido, usa ``MAX_LOCAL_LLM_CONCURRENT``.
         """
-        self._health = health or PiHealthMonitor()
+        self._health = health or HealthMonitor()
         self.limit = max_concurrent if max_concurrent is not None else calculate_dynamic_limit(self._health)
         self._semaphore = asyncio.Semaphore(self.limit)
         self._local_semaphore = asyncio.Semaphore(local_llm_concurrent or MAX_LOCAL_LLM_CONCURRENT)

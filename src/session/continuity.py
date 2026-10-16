@@ -62,9 +62,11 @@ MOTIVOS_RETOMAVEIS = frozenset(
     {
         "limite_tokens", "limite_tempo", "limite_retentativas", "limite_conexao", "limite_execucoes", "limite_ciclos",
         "limite_egresso", "limite_cota_provedor", "versao_modelo", "interrompida", "interrompida_pesquisador",
+        "aguarda_pesquisador", "suspensa_sem_pesquisador",  # v18.7-background-sessions
     }
 )
 MOTIVO_RESOLVIDA = "solucao_encontrada"
+MOTIVO_ENCERRADA = "encerrada_pesquisador"  # v18.7-background-sessions: encerrada pelo REPL; retomar pede confirmação
 
 SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -1133,10 +1135,14 @@ def evaluate_resumability(
         if motivo is not None and motivo != db_motivo:
             return Resumability(RESUME_REFUSE, "o motivo de parada do checkpoint diverge do registrado no banco.")
         motivo = db_motivo
-    if session_status in ("suspended", "interrompida"):
+    if session_status in ("suspended", "interrompida", "aguarda_pesquisador", "suspensa_sem_pesquisador"):
         return Resumability(RESUME_OK)
     if motivo in MOTIVOS_RETOMAVEIS:
         return Resumability(RESUME_OK)
+    if motivo == MOTIVO_ENCERRADA:
+        return Resumability(
+            RESUME_CONFIRM, "a pesquisa foi encerrada por você (encerrada_pesquisador); retomar mesmo assim?"
+        )
     if motivo == MOTIVO_RESOLVIDA:
         return Resumability(
             RESUME_CONFIRM, "a pesquisa foi dada como resolvida (solucao_encontrada); continuar explorando?"

@@ -513,6 +513,9 @@ _STOP_DESCRIPTIONS = {
         "hipóteses em teste sem nenhuma tentativa ao esgotar os ciclos ociosos (parada de pesquisa, não falha de "
         "infraestrutura)"
     ),
+    "aguarda_pesquisador": "só restam pedidos ao pesquisador; responda e retome a sessão",
+    "suspensa_sem_pesquisador": "o terminal saiu durante uma sessão assisted; retome a sessão",
+    "encerrada_pesquisador": "encerrada pelo pesquisador no terminal",
 }
 
 

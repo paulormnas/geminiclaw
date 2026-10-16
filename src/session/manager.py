@@ -5,6 +5,7 @@ As sessões são armazenadas na tabela ``agent_sessions`` criada pelo
 ``scripts/init_db.sql``.
 """
 
+import dataclasses
 import datetime
 import json
 import uuid
@@ -13,6 +14,7 @@ from typing import Any, Optional
 
 from src.db import get_connection
 from src.logger import get_logger
+from src.session.states import FINISHED_STATUSES
 from src.skills.memory.long_term import LongTermMemory
 
 logger = get_logger(__name__)
@@ -20,7 +22,11 @@ logger = get_logger(__name__)
 
 @dataclass
 class Session:
-    """Representação de uma sessão de agente."""
+    """Representação de uma sessão de agente.
+
+    Os campos do processo (``pid`` em diante) são preenchidos pelo processo da sessão mestra
+    (v18.7-background-sessions); ``resumo`` é a tarefa da pesquisa em poucas linhas, para as listas do terminal.
+    """
 
     id: str
     agent_id: str
@@ -28,6 +34,27 @@ class Session:
     created_at: str
     updated_at: str
     payload: dict[str, Any]
+    pid: int | None = None
+    host: str | None = None
+    process_started_at: str | None = None
+    loop_beat_at: str | None = None
+    terminal_id: str | None = None
+    alias: str | None = None
+    resumo: str | None = None
+
+
+def _col(row: Any, key: str) -> Any:
+    """Coluna opcional da linha (``None`` se o banco ainda não tem a coluna)."""
+    try:
+        return row[key]
+    except (KeyError, IndexError):
+        return None
+
+
+def _iso(value: Any) -> str | None:
+    if value is None:
+        return None
+    return value if isinstance(value, str) else value.isoformat()
 
 
 class SessionManager:
@@ -103,14 +130,7 @@ class SessionManager:
             ).fetchone()
 
         if row is not None:
-            return Session(
-                id=row["id"],
-                agent_id=row["agent_id"],
-                status=row["status"],
-                created_at=row["created_at"] if isinstance(row["created_at"], str) else row["created_at"].isoformat(),
-                updated_at=row["updated_at"] if isinstance(row["updated_at"], str) else row["updated_at"].isoformat(),
-                payload=json.loads(row["payload"]) if isinstance(row["payload"], str) else row["payload"],
-            )
+            return self._row_to_session(row)
         return None
 
     def update(
@@ -158,13 +178,8 @@ class SessionManager:
                 (current_status, json.dumps(current_payload), now, session_id),
             )
 
-        return Session(
-            id=session_id,
-            agent_id=row["agent_id"],
-            status=current_status,
-            created_at=row["created_at"] if isinstance(row["created_at"], str) else row["created_at"].isoformat(),
-            updated_at=now,
-            payload=current_payload,
+        return dataclasses.replace(
+            self._row_to_session(row), status=current_status, updated_at=now, payload=current_payload
         )
 
     def close(self, session_id: str) -> None:
@@ -190,17 +205,7 @@ class SessionManager:
                 "SELECT * FROM agent_sessions WHERE status = 'active'"
             ).fetchall()
 
-        return [
-            Session(
-                id=row["id"],
-                agent_id=row["agent_id"],
-                status=row["status"],
-                created_at=row["created_at"] if isinstance(row["created_at"], str) else row["created_at"].isoformat(),
-                updated_at=row["updated_at"] if isinstance(row["updated_at"], str) else row["updated_at"].isoformat(),
-                payload=json.loads(row["payload"]) if isinstance(row["payload"], str) else row["payload"],
-            )
-            for row in rows
-        ]
+        return [self._row_to_session(row) for row in rows]
 
     def list_recent(self, limit: int = 10) -> list[Session]:
         """Lista as sessões mais recentes (ativas ou fechadas).
@@ -217,17 +222,7 @@ class SessionManager:
                 (limit,),
             ).fetchall()
 
-        return [
-            Session(
-                id=row["id"],
-                agent_id=row["agent_id"],
-                status=row["status"],
-                created_at=row["created_at"] if isinstance(row["created_at"], str) else row["created_at"].isoformat(),
-                updated_at=row["updated_at"] if isinstance(row["updated_at"], str) else row["updated_at"].isoformat(),
-                payload=json.loads(row["payload"]) if isinstance(row["payload"], str) else row["payload"],
-            )
-            for row in rows
-        ]
+        return [self._row_to_session(row) for row in rows]
 
     @staticmethod
     def _row_to_session(row: Any) -> Session:
@@ -235,16 +230,25 @@ class SessionManager:
             id=row["id"],
             agent_id=row["agent_id"],
             status=row["status"],
-            created_at=row["created_at"] if isinstance(row["created_at"], str) else row["created_at"].isoformat(),
-            updated_at=row["updated_at"] if isinstance(row["updated_at"], str) else row["updated_at"].isoformat(),
+            created_at=_iso(row["created_at"]) or "",
+            updated_at=_iso(row["updated_at"]) or "",
             payload=json.loads(row["payload"]) if isinstance(row["payload"], str) else row["payload"],
+            pid=_col(row, "pid"),
+            host=_col(row, "host"),
+            process_started_at=_iso(_col(row, "process_started_at")),
+            loop_beat_at=_iso(_col(row, "loop_beat_at")),
+            terminal_id=_col(row, "terminal_id"),
+            alias=_col(row, "alias"),
+            resumo=_col(row, "resumo"),
         )
 
-    def heartbeat(self, session_id: str) -> bool:
+    def heartbeat(self, session_id: str, loop_beat_at: str | None = None) -> bool:
         """Batimento da sessão: atualiza só ``updated_at`` (nunca o payload) enquanto ela está ``active``.
 
         Args:
             session_id: ID da sessão mestra.
+            loop_beat_at: Último sinal do laço (``ISO 8601``); quando informado, grava ``loop_beat_at`` junto
+                (v18.7-background-sessions §1.8: quem confere vê há quanto tempo o laço não dá sinal).
 
         Returns:
             ``True`` se a sessão ainda estava ``active``; ``False`` se outro processo já a marcou
@@ -252,9 +256,45 @@ class SessionManager:
         """
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         with get_connection() as conn:
+            if loop_beat_at is None:
+                row = conn.execute(
+                    "UPDATE agent_sessions SET updated_at = %s WHERE id = %s AND status = 'active' RETURNING id",
+                    (now, session_id),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "UPDATE agent_sessions SET updated_at = %s, loop_beat_at = %s "
+                    "WHERE id = %s AND status = 'active' RETURNING id",
+                    (now, loop_beat_at, session_id),
+                ).fetchone()
+        return row is not None
+
+    def register_process(
+        self,
+        session_id: str,
+        *,
+        pid: int,
+        host: str,
+        process_started_at: str,
+        terminal_id: str | None = None,
+        alias: str | None = None,
+        resumo: str | None = None,
+    ) -> bool:
+        """Registra o processo que executa a sessão (PID, host, início do processo, terminal, apelido e resumo).
+
+        O terminal confere esses campos para saber se o processo ainda existe (PID e início do processo, só no
+        mesmo host). ``loop_beat_at`` começa no instante do registro.
+
+        Returns:
+            ``True`` se a sessão existe.
+        """
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        with get_connection() as conn:
             row = conn.execute(
-                "UPDATE agent_sessions SET updated_at = %s WHERE id = %s AND status = 'active' RETURNING id",
-                (now, session_id),
+                "UPDATE agent_sessions SET pid = %s, host = %s, process_started_at = %s, loop_beat_at = %s, "
+                "terminal_id = COALESCE(%s, terminal_id), alias = COALESCE(%s, alias), "
+                "resumo = COALESCE(%s, resumo), updated_at = %s WHERE id = %s RETURNING id",
+                (pid, host, process_started_at, now, terminal_id, alias, resumo, now, session_id),
             ).fetchone()
         return row is not None
 
@@ -349,13 +389,75 @@ class SessionManager:
     def reassert_active(self, session_id: str) -> bool:
         """Reafirma ``active`` numa sessão viva marcada ``interrompida`` por engano (falso positivo de obsolescência).
 
-        Limpa o ``motivo_parada`` herdado da marcação. Só age se o status ainda é ``interrompida``.
+        Limpa o ``motivo_parada`` herdado da marcação. Só age se o status ainda é ``interrompida`` **e** a sessão não
+        foi continuada por outra (``payload.continued_by``): reativá-la criaria duas sessões vivas para a mesma
+        pesquisa (v18.7-background-sessions §1.8).
         """
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         with get_connection() as conn:
             row = conn.execute(
                 "UPDATE agent_sessions SET status = 'active', payload = payload - 'motivo_parada', updated_at = %s "
-                "WHERE id = %s AND status = 'interrompida' RETURNING id",
+                "WHERE id = %s AND status = 'interrompida' AND NOT (payload ? 'continued_by') RETURNING id",
                 (now, session_id),
             ).fetchone()
         return row is not None
+
+    def aliases_in_use(self, slug: str) -> list[str]:
+        """Apelidos já gravados com o prefixo ``<slug>-`` (para ``next_alias`` escolher o próximo número livre)."""
+        with get_connection() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT alias FROM agent_sessions WHERE alias LIKE %s",
+                (slug.replace("%", "").replace("_", r"\_") + "-%",),
+            ).fetchall()
+        return [r["alias"] for r in rows or []]
+
+    def find_by_alias(self, alias: str) -> Session | None:
+        """Folha da cadeia com o apelido (a sessão mais recente sem ``continued_by``); ``None`` se não existe."""
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM agent_sessions WHERE agent_id = 'orchestrator' AND alias = %s "
+                "AND NOT (payload ? 'continued_by') ORDER BY created_at DESC LIMIT 1",
+                (alias,),
+            ).fetchone()
+        return self._row_to_session(row) if row else None
+
+    def purge_finished(self, retention_days: float) -> int:
+        """Remove do registro as sessões mestras **terminadas** há mais de ``retention_days`` dias.
+
+        O registro de sessões não precisa durar para sempre (decisão do pesquisador, 2026-10-16). Nunca remove:
+        sessão com trabalho por terminar (``active``, ``interrompida``, ``aguarda_pesquisador``,
+        ``suspensa_sem_pesquisador``, ``suspended``) nem as antecessoras de uma cadeia que ainda tem sessão assim
+        (a retomada precisa da cadeia). Os arquivos de ``outputs/`` não são tocados. ``0`` ou menos desliga a purga.
+
+        Returns:
+            Quantidade de sessões removidas.
+        """
+        if retention_days <= 0:
+            return 0
+        cutoff = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=retention_days)).isoformat()
+        with get_connection() as conn:
+            rows = conn.execute(
+                """
+                WITH RECURSIVE keep(id) AS (
+                    SELECT id FROM agent_sessions
+                    WHERE agent_id = 'orchestrator' AND NOT (status = ANY(%s))
+                    UNION
+                    SELECT s.payload->>'continues_session_id'
+                    FROM agent_sessions s JOIN keep k ON s.id = k.id
+                    WHERE s.payload ? 'continues_session_id'
+                )
+                DELETE FROM agent_sessions
+                WHERE agent_id = 'orchestrator' AND status = ANY(%s) AND updated_at < %s
+                  AND id NOT IN (SELECT id FROM keep WHERE id IS NOT NULL)
+                RETURNING id
+                """,
+                (list(FINISHED_STATUSES), list(FINISHED_STATUSES), cutoff),
+            ).fetchall()
+            conn.execute(
+                "DELETE FROM terminal_presence WHERE ended_at IS NOT NULL AND ended_at < %s",
+                (cutoff,),
+            )
+        removed = len(rows or [])
+        if removed:
+            logger.info("Sessões antigas removidas do registro", extra={"extra": {"removidas": removed}})
+        return removed

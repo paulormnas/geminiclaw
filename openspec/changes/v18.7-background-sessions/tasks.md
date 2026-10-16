@@ -1,21 +1,29 @@
 # Tarefas: v18.7-background-sessions
 
-**Estado (2026-10-15):** não iniciada.
+**Estado (2026-10-16):** em andamento, em PRs sequenciais. PR 1 (`feat/v18.7-background-sessions-base`): divisão do `cli/main.py` (0.9), schema e sessão (1.1 a 1.4), códigos de saída e apelido (2.1 e 2.2), retenção do registro de sessões. Faltam lançamento e processo da sessão (3), fim por modo e presença (4), REPL e comando direto (5), benchmark (6) e configuração/documentação (7).
+
+**Decisões do pesquisador em 2026-10-16 (resposta à revisão desta mudança):**
+- Entrega: pode haver quantos PRs forem necessários; `background-sessions` e `persistent-human-gate` são mergeadas em sequência no mesmo dia, sem uso intermediário (Questão 1).
+- Coluna nova **`resumo`** em `agent_sessions` (tarefa da pesquisa em poucas linhas, montada sem LLM): a lista de pesquisas não finalizadas mostra o que cada sessão faz. As sessões **não precisam durar para sempre**: `SESSION_RETENTION_DAYS` (30; 0 desliga) remove do registro as sessões terminadas e antigas, nunca as com trabalho por terminar nem as antecessoras de uma cadeia viva (`SessionManager.purge_finished`). O que importa é retomar a pesquisa em curso quando o terminal ou a aplicação é encerrado (estados `interrompida`, `aguarda_pesquisador`, `suspensa_sem_pesquisador` retomáveis sem confirmação).
+- **Memória desconhecida** (Questão 3): não falha, nem no REPL nem no comando direto; registra um evento no banco (telemetria) e a aplicação segue, mesmo que consuma muita memória. Memória conhecida abaixo de `MIN_AVAILABLE_MEMORY_MB` continua como no design (§1.3).
+- **Papel do terminal** (Questão 2): ver `v18.7-persistent-human-gate` (sem endurecimento no desenvolvimento; a presença é gravada pelo papel principal e o endurecimento fica para a mudança anterior à produção).
+- **Encerrar com Curator pendente** (Questão 5): aceito, com a condição de existir no laço a retomada da etapa do Curator (tarefa 5.6 abaixo).
+- `sessions` e `stop` (Questão 4): o pesquisador pediu mais contexto; até decidir, seguem tratando containers de sandbox (sem renomear).
 
 ## 0. Pré-requisitos
 - [ ] 0.1 `v18.7-resource-monitor-config` mergeada; revisar esta mudança contra o código de `dev` (referências de linha de 2026-10-15). Merge junto com `v18.7-persistent-human-gate` (PRs em sequência no mesmo dia).
 - [ ] 0.2 Aprovação do pesquisador para o schema (proposal, "Aprovações necessárias") e resposta às Questões em aberto 1 e 3 do design.
-- [ ] 0.9 Divisão do módulo grande antes do comportamento novo (ADR 024 §5), só movendo código, com a suíte verde antes de seguir: `src/cli/main.py`: extrair para módulos próprios em `src/cli/` o lançamento do processo da sessão e o laço do REPL. Os caminhos citados nesta mudança valem pela tabela de `v18.7-source-layout`.
+- [x] 0.9 Divisão do módulo grande antes do comportamento novo (ADR 024 §5), só movendo código, com a suíte verde antes de seguir: `src/cli/main.py`: extrair para módulos próprios em `src/cli/` o lançamento do processo da sessão e o laço do REPL. Os caminhos citados nesta mudança valem pela tabela de `v18.7-source-layout`.
 
 ## 1. Schema e sessão
-- [ ] 1.1 `scripts/init_db.sql` e `scripts/migrations/v18_7_001_session_process.sql` (idempotente) com o DDL do design §2.1.
-- [ ] 1.2 `src/session.py`: colunas novas em `Session`/`_row_to_session`; constantes de status; `heartbeat(session_id, loop_beat_at)`; `reassert_active` com `NOT (payload ? 'continued_by')`; `register_process`.
-- [ ] 1.3 `src/knowledge/schema.py`: `Sessao.motivo_parada` com `aguarda_pesquisador`, `suspensa_sem_pesquisador`, `encerrada_pesquisador`; `src/continuity.py`: estados retomáveis (os dois primeiros sem confirmação, `encerrada_pesquisador` com confirmação); `describe_stop_reason` com os três (design §1.4).
-- [ ] 1.4 Testes de unidade: `reassert_active` recusa sessão continuada (caso 11); estados retomáveis; migração aplicada duas vezes sem erro (integração, PostgreSQL real).
+- [x] 1.1 `scripts/init_db.sql` e `scripts/migrations/v18_7_001_session_process.sql` (idempotente) com o DDL do design §2.1.
+- [x] 1.2 `src/session.py`: colunas novas em `Session`/`_row_to_session`; constantes de status; `heartbeat(session_id, loop_beat_at)`; `reassert_active` com `NOT (payload ? 'continued_by')`; `register_process`.
+- [x] 1.3 `src/knowledge/schema.py`: `Sessao.motivo_parada` com `aguarda_pesquisador`, `suspensa_sem_pesquisador`, `encerrada_pesquisador`; `src/continuity.py`: estados retomáveis (os dois primeiros sem confirmação, `encerrada_pesquisador` com confirmação); `describe_stop_reason` com os três (design §1.4).
+- [x] 1.4 Dev-deps `pexpect` e `pytest-timeout` (aprovadas em 2026-10-16: só testes) e `tests/support/pg.py` (banco temporário por execução). Testes de unidade: `reassert_active` recusa sessão continuada (caso 11); estados retomáveis; migração aplicada duas vezes sem erro (integração, PostgreSQL real).
 
 ## 2. Códigos de saída e apelido
-- [ ] 2.1 `src/exit_codes.py` (`exit_code_for`) e `src/session_alias.py`.
-- [ ] 2.2 Testes: todo valor de `Sessao.motivo_parada` tem classe; motivo desconhecido dá 1; apelido `<slug>-NN` sem colisão no projeto; `sessao-NN` sem projeto.
+- [x] 2.1 `src/exit_codes.py` (`exit_code_for`) e `src/session_alias.py` (pela tabela de `v18.7-source-layout`: `src/session/exit_codes.py`, `src/session/alias.py`; estados em `src/session/states.py`).
+- [x] 2.2 Testes: todo valor de `Sessao.motivo_parada` tem classe; motivo desconhecido dá 1; apelido `<slug>-NN` sem colisão no projeto; `sessao-NN` sem projeto.
 
 ## 3. Lançamento e processo da sessão
 - [ ] 3.1 `src/session_launcher.py`: verificação de memória, arquivo de lançamento `0600` com `O_EXCL`, `filtered_env`, `spawn_session`, `wait_registered`.
@@ -47,6 +55,8 @@
 - [ ] 5.3 Testes de unidade (entrada simulada): lista e pergunta do caso 7; manter e encerrar do caso 9 (sem chamada a LLM); `fastembed` não importado depois de abrir e sair do REPL.
 - [ ] 5.4 Testes de integração: retomar do caso 8 (`continued_by`, sem reexecutar concluídas, apelido herdado); `SIGKILL` no processo da sessão do caso 10; reuso de PID e outro host (unidade); laço travado com `SESSION_LOOP_STALE_SECONDS=2`; comando direto do caso 12 (código 0, código 3, Ctrl+C com 130) e, também do caso 12, "Interrupção da sessão lançada pelo REPL" (`SIGINT` ao processo da sessão: `interrompida_pesquisador`, checkpoint, saída 130, REPL aberto).
 - [ ] 5.5 Teste de unidade "Laço lento não derruba a sessão" com `FakeClock` e os padrões (300, 30, 900).
+
+- [ ] 5.6 Retomada da etapa do Curator: ao retomar uma cadeia cujo checkpoint tem `curator_pendente` (gravado pelo encerramento no REPL), o laço da sessão nova executa a consolidação do Curator antes de planejar. Teste de unidade com Curator simulado.
 
 ## 6. Benchmark
 - [ ] 6.1 `scripts/benchmark/run_benchmark.py`: `start_new_session=True`, `killpg` no tempo limite; `anomalies()` com código 4 e código divergente; `stop_class` devolve `interrupcao` para todo motivo terminado em `_pesquisador`.

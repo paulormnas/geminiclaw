@@ -16,59 +16,22 @@ from __future__ import annotations
 import itertools
 import sys
 import threading
-from dataclasses import dataclass, replace
-from enum import Enum
+from dataclasses import replace
 from typing import Callable
 
+from src.gate.types import (
+    ESTADO_AUTORIZADA,
+    ESTADO_NEGADA,
+    ESTADO_PENDENTE,
+    HUMAN_SOURCES,
+    MAX_REFERENCE_CHARS,
+    GateRequest,
+    Source,
+)
 from src.logger import get_logger
 from src.research_consult import DECISOES_RESERVADAS
 
 logger = get_logger(__name__)
-
-ESTADO_PENDENTE = "pendente"
-ESTADO_AUTORIZADA = "autorizada"
-ESTADO_NEGADA = "negada"
-
-
-
-class Source(str, Enum):
-    """Origem de uma resposta ao gate (enum fechado: texto livre nunca vale como origem humana)."""
-
-    TERMINAL = "terminal"  # o pesquisador respondeu no terminal interativo (TTY)
-    CLI = "cli"  # o pesquisador executou um comando da CLI (ex.: ``geminiclaw vocab approve``)
-    ASK_RESEARCHER = "ask_researcher"
-    RESEARCHER_CONSULT = "researcher_consult"
-    AGENT = "agente"
-    DOCUMENT = "documento"
-
-
-# Únicas origens que valem como ação do pesquisador. ``ask_researcher``, o consultor, agentes e conteúdo de arquivos
-# ficam de fora de propósito; uma string solta (mesmo "terminal") também não conta: só membros de ``Source``.
-HUMAN_SOURCES: frozenset[Source] = frozenset({Source.TERMINAL, Source.CLI})
-
-_MAX_REFERENCE_CHARS = 120
-
-
-@dataclass(frozen=True)
-class GateRequest:
-    """Um pedido de decisão reservada.
-
-    Attributes:
-        id: Identificador sequencial do pedido.
-        decisao: Um item de ``DECISOES_RESERVADAS``.
-        referencia: Identificador curto do que se decide (ex.: nome da subtarefa ou ID de nó); nunca texto de pesquisa.
-        estado: ``pendente``, ``autorizada`` ou ``negada``.
-        resolvido_por: Origem humana que decidiu (``terminal``/``cli``), se houver.
-        respostas_ignoradas: Quantas respostas de fontes não humanas foram recebidas e descartadas.
-    """
-
-    id: int
-    decisao: str
-    referencia: str
-    estado: str = ESTADO_PENDENTE
-    resolvido_por: str | None = None
-    respostas_ignoradas: int = 0
-
 
 class HumanGate:
     """Registro de pedidos de decisão reservada: só uma origem humana os resolve."""
@@ -88,7 +51,7 @@ class HumanGate:
         if decisao not in DECISOES_RESERVADAS:
             raise ValueError(f"decisão desconhecida: use um de {list(DECISOES_RESERVADAS)}.")
         with self._lock:
-            req = GateRequest(next(self._ids), decisao, str(referencia)[:_MAX_REFERENCE_CHARS])
+            req = GateRequest(next(self._ids), decisao, str(referencia)[:MAX_REFERENCE_CHARS])
             self._requests[req.id] = req
         logger.info("Decisão reservada ao pesquisador registrada", extra={"extra": {"decisao": decisao, "id": req.id}})
         return req

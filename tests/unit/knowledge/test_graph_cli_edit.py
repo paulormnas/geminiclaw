@@ -12,10 +12,10 @@ import pytest
 
 from src import config
 from src.agents.curator.edit import EditToolkit
-from src.gate.human_gate import HumanGate
 from src.knowledge.change_proposals import ProposalError, parse_ops, plan_changes
 from src.knowledge.curator_tools import WRITE_TOOLS, CuratorLimits
 from src.llm.base import LLMResponse, ToolCall
+from tests.support.fake_gate import FakeGate
 from tests.support.graph_cli_world import ESC, PID, Scripted, World, propose
 
 pytestmark = pytest.mark.unit
@@ -133,7 +133,7 @@ def test_pedido_de_remocao_vira_mudanca_de_status(world):
     op = {"op": "update_node", "id": world.ids["oportunidade"], "changes": {"status": "rejeitada"},
           "motivo": "pedido de remoção"}
     provider = Scripted(propose([op], "Nada é apagado: a oportunidade passa a 'rejeitada'."))
-    gate = HumanGate()
+    gate = FakeGate()
     code, out, prompts = world.run(
         ["edit", "apague a oportunidade Testar random forest"], inputs=["aplicar", "s"], provider=provider, gate=gate
     )
@@ -155,7 +155,7 @@ def test_decisao_reservada_sem_autorizacao_nao_aplica(world):
     """Oportunidade: sem a autorização do gate (resposta 'n'), nada é alterado."""
     op = {"op": "update_node", "id": world.ids["oportunidade"], "changes": {"status": "aprovada"}}
     code, out, _ = world.run(["edit", "aprove a oportunidade"], inputs=["aplicar", "n"],
-                             provider=Scripted(propose([op])), gate=HumanGate())
+                             provider=Scripted(propose([op])), gate=FakeGate())
     assert code == 1 and "não autorizada" in out
     assert status_of(world, "oportunidade") == "documentada"
 

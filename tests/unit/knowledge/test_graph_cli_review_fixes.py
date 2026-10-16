@@ -14,7 +14,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from src import config
-from src.gate.human_gate import HumanGate
 from src.knowledge import schema, validation
 from src.knowledge.change_proposals import (
     ApplyError,
@@ -28,6 +27,7 @@ from src.knowledge.change_proposals import (
 )
 from src.knowledge.graph_store import Edge
 from src.knowledge.provenance import Actor
+from tests.support.fake_gate import FakeGate
 from tests.support.graph_cli_world import PID, Scripted, World, propose
 
 pytestmark = pytest.mark.unit
@@ -399,7 +399,7 @@ def test_gate_da_oportunidade_identifica_alvo_e_status_e_decidido_em_e_o_real(wo
     op = {"op": "update_node", "id": world.ids["oportunidade"], "changes": {"status": "aprovada"}, "motivo": "ok"}
     started = datetime.now(timezone.utc)
     code, out, prompts = world.run(["edit", REQ], inputs=["aplicar", "s"], provider=Scripted(propose([op])),
-                                   gate=HumanGate())
+                                   gate=FakeGate())
     assert code == 0
     gate_prompt = next(p for p in prompts if "aprovar_oportunidade" in p)
     assert world.ids["oportunidade"] in gate_prompt and "aprovada" in gate_prompt

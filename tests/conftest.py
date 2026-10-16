@@ -78,6 +78,25 @@ def provenance_ledger(request, tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
+def gates_em_memoria(request):
+    """Gate persistente em memória (``FakeGate``) nos testes de unidade: nenhum toca ``gate_requests``.
+
+    Os testes do gate no PostgreSQL real ficam em ``tests/integration/background_sessions/`` (pulados sem banco).
+    """
+    from src.gate.persistent_gate import set_gates
+
+    if f"{os.sep}tests{os.sep}integration{os.sep}background_sessions{os.sep}" in request.node.fspath.strpath:
+        yield
+        return
+    from tests.support.fake_gate import FakeGate
+
+    gate = FakeGate()  # o terminal e a sessão compartilham o mesmo banco: um gate em memória para os dois
+    set_gates(gate, gate)
+    yield
+    set_gates(None, None)
+
+
+@pytest.fixture(autouse=True)
 def mock_db_connection(request):
     """Mock global do banco de dados com estado em memória.
 

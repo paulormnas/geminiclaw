@@ -12,6 +12,7 @@ import argparse
 import dataclasses
 import signal
 import subprocess
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -253,11 +254,15 @@ class SessionStarter:
             raise LaunchRefused("modo sem limite sem confirmação registrada.", EXIT_UNLIMITED_NOT_CONFIRMED)
         return {"origem": activation.origem, "confirmado_em": activation.confirmado_em}
 
-    def _confirm_unlimited(self, args: argparse.Namespace, budget: UsageBudget) -> UsageBudget:
+    def _confirm_unlimited(self, args: argparse.Namespace, budget: UsageBudget, launch_id: str) -> UsageBudget:
+        """Confirma o modo sem limite no terminal: o pedido ``ativar_modo_sem_limite`` leva o ``launch_id`` como
+        referência e o processo da sessão o confere e consome no banco (design §1.1)."""
         from src.orchestration.unlimited_mode import UnlimitedModeError
 
         try:
-            return resolve_unlimited_budget(args, budget, project_marked=_project_marked_unlimited)
+            return resolve_unlimited_budget(
+                args, budget, project_marked=_project_marked_unlimited, reference=launch_id
+            )
         except UnlimitedModeError as exc:
             raise LaunchRefused(str(exc), EXIT_UNLIMITED_NOT_CONFIRMED) from exc
 
@@ -308,7 +313,8 @@ class SessionStarter:
             binding = await self._binder.bind(prompt, bundle)
         except ProjectFlowError as exc:
             raise LaunchRefused(str(exc), EXIT_ERROR) from exc
-        budget = self._confirm_unlimited(args, budget)
+        launch_id = str(uuid.uuid4())
+        budget = self._confirm_unlimited(args, budget, launch_id)
         self._memory_gate(memory_policy)
         print_session_banner(mode, budget=budget, llm_routing=routing, context_bundle=bundle)
         projeto = None
@@ -319,6 +325,7 @@ class SessionStarter:
         else:
             projeto = {"project_id": binding.project_id, "project_context": binding.context_block}
         spec = LaunchSpec(
+            launch_id=launch_id,
             tipo="nova",
             prompt=prompt,
             modo=mode,
@@ -387,7 +394,8 @@ class SessionStarter:
         except ResumeError as exc:
             raise LaunchRefused(str(exc), EXIT_ERROR) from exc
         routing = await self._routing(getattr(args, "model", None))
-        budget = self._confirm_unlimited(args, budget)  # a retomada não herda o modo sem limite da sessão anterior
+        launch_id = str(uuid.uuid4())
+        budget = self._confirm_unlimited(args, budget, launch_id)  # a retomada não herda o modo sem limite
         self._memory_gate(memory_policy)
         print_session_banner(prep.mode, budget=budget, llm_routing=routing)
         if prep.accumulated.get("tokens") or prep.accumulated.get("minutos"):
@@ -402,6 +410,7 @@ class SessionStarter:
         )
         project_arg = getattr(args, "project", None)
         spec = LaunchSpec(
+            launch_id=launch_id,
             tipo="retomada",
             prompt=prep.prompt,
             modo=prep.mode,

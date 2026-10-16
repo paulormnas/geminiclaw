@@ -20,7 +20,14 @@ from collections.abc import Callable, Iterable
 from typing import Any
 
 from src.logger import get_logger
-from src.session.exit_codes import EXIT_ERROR, EXIT_INTERRUPTED, EXIT_SESSION_LOST, exit_code_for
+from src.session.chain import chain_session_ids
+from src.session.exit_codes import (
+    EXIT_ERROR,
+    EXIT_INTERRUPTED,
+    EXIT_SESSION_LOST,
+    EXIT_UNLIMITED_NOT_CONFIRMED,
+    exit_code_for,
+)
 from src.session.launcher import LaunchError, LaunchSpec, context_digest, read_launch_file, summarize_task
 
 logger = get_logger(__name__)
@@ -39,18 +46,6 @@ def _forbidden_input(*_args: Any, **_kwargs: Any) -> str:
 def install_input_guard() -> None:
     """Substitui ``builtins.input`` por uma função que levanta ``StdinForbiddenError``."""
     builtins.input = _forbidden_input
-
-
-def chain_session_ids(session_manager: Any, session_id: str, limit: int = 200) -> list[str]:
-    """A sessão e os antecessores da cadeia (``continues_session_id``), para a limpeza de sandboxes por rótulo."""
-    ids: list[str] = []
-    current: str | None = session_id
-    while current and current not in ids and len(ids) < limit:
-        ids.append(current)
-        session = session_manager.get(current)
-        nxt = (session.payload or {}).get("continues_session_id") if session is not None else None
-        current = nxt if isinstance(nxt, str) else None
-    return ids
 
 
 def process_started_at() -> str:
@@ -181,6 +176,11 @@ class SessionRunner:
         except (TypeError, ValueError) as exc:
             print(f"Orçamento inválido no lançamento: {exc}")
             return EXIT_ERROR
+        if spec.ilimitado:
+            refusal = self._check_unlimited_authorization()
+            if refusal is not None:
+                print(refusal)
+                return EXIT_UNLIMITED_NOT_CONFIRMED
         set_activation(UnlimitedActivation(**spec.ilimitado) if spec.ilimitado else None)
 
         if self.orchestrator is None:
@@ -245,6 +245,25 @@ class SessionRunner:
 
         print(format_result(result))
         return self._exit_code_from_session(manager, EXIT_ERROR, getattr(result, "session_id", None))
+
+    def _check_unlimited_authorization(self) -> str | None:
+        """Confere e consome no banco o pedido ``ativar_modo_sem_limite`` do lançamento (``referencia``: ``launch_id``).
+
+        Antes de a sessão existir, a cadeia é vazia: vale só o pedido do terminal fora de sessão (``session_id`` nulo).
+        """
+        from src.gate.persistent_gate import session_gate
+        from src.gate.types import GateAuthorizationRefused
+
+        try:
+            session_gate().consume_authorized("ativar_modo_sem_limite", self.spec.launch_id, [])
+        except GateAuthorizationRefused as exc:
+            return (
+                "O modo sem limite não foi autorizado pelo pesquisador para este lançamento "
+                f"({exc.motivo}); a sessão não foi criada."
+            )
+        except Exception as exc:  # noqa: BLE001 - sem o banco não há como conferir: falha fechada
+            return f"Autorização do modo sem limite não conferida ({type(exc).__name__}); a sessão não foi criada."
+        return None
 
     def _exit_code_from_session(self, manager: Any, default: int, session_id: str | None = None) -> int:
         sid = session_id or self.session_id

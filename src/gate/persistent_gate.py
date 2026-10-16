@@ -186,6 +186,17 @@ class PersistentGate:
                 ).fetchall()
         return [_row_to_request(r) for r in rows or []]
 
+    def find_in_chain(self, decisao: str, referencia: str, session_chain: Iterable[str]) -> GateRequest | None:
+        """Pedido ainda não consumido nem obsoleto de ``decisao`` + ``referencia`` em qualquer sessão da cadeia (o mais
+        recente), ou ``None``. Na retomada, a sessão nova reaproveita o pedido da anterior (pendente ou respondido)."""
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM gate_requests WHERE decisao = %s AND referencia = %s AND session_id = ANY(%s) "
+                "AND consumido_em IS NULL AND obsoleto_em IS NULL ORDER BY id DESC LIMIT 1",
+                (decisao, str(referencia)[:MAX_REFERENCE_CHARS], list(session_chain)),
+            ).fetchone()
+        return _row_to_request(row) if row else None
+
     def answered_unconsumed(self, session_ids: Iterable[str]) -> list[GateRequest]:
         """Pedidos respondidos e ainda não aplicados pela sessão (inclui os respondidos com a sessão fora)."""
         with get_connection() as conn:
@@ -295,6 +306,35 @@ class TerminalGate(PersistentGate):
     A sessão e os agentes nunca instanciam esta classe (teste estático ``test_gate_guarantees``).
     """
 
+    def resolve(
+        self,
+        decisao: str,
+        referencia: str = "",
+        *,
+        source: Source,
+        approved: bool,
+        pergunta: str = "",
+        session_id: str | None = None,
+        project_id: str | None = None,
+    ) -> GateRequest:
+        """Pede e resolve de uma vez uma decisão que o pesquisador toma no próprio terminal (confirmar o Problema,
+        ``vocab approve``, ``opportunities approve``...). Idempotente: se o pedido já foi resolvido, devolve-o como está
+        (a decisão anterior do pesquisador vale; nada é sobrescrito).
+
+        Raises:
+            GateInvalidRequest: decisão ou subtipo fora do catálogo.
+        """
+        request = self.request(
+            decisao, referencia, pergunta, session_id=session_id, project_id=project_id,
+            opcoes=GATE_CATALOG[decisao].acoes if decisao in GATE_CATALOG else (),
+        )
+        if request.estado != ESTADO_PENDENTE:
+            return request
+        try:
+            return self.answer(request.id, source=source, approved=approved)
+        except GateAlreadyResolved:  # outro terminal chegou antes
+            return self.get(request.id) or request
+
     def answer(
         self,
         request_id: int,
@@ -339,3 +379,40 @@ class TerminalGate(PersistentGate):
         if row is None:
             raise GateAlreadyResolved(f"o pedido {request_id} já foi resolvido.")
         return _row_to_request(row)
+
+
+_terminal_gate: "TerminalGate | None" = None
+_session_gate: "PersistentGate | None" = None
+
+
+def terminal_gate() -> "TerminalGate":
+    """Gate do processo do terminal (REPL, comando direto e comandos de CLI): o único que responde pedidos."""
+    global _terminal_gate
+    if _terminal_gate is None:
+        _terminal_gate = TerminalGate()
+    return _terminal_gate
+
+
+def session_gate() -> "PersistentGate":
+    """Gate do processo da sessão: cria, lista e consome pedidos; nunca responde (não tem ``answer``)."""
+    global _session_gate
+    if _session_gate is None:
+        _session_gate = PersistentGate()
+    return _session_gate
+
+
+def set_gates(terminal: Any | None = None, session: Any | None = None) -> None:
+    """Troca os gates do processo (testes de unidade injetam ``FakeGate``); ``None`` volta ao gate de produção."""
+    global _terminal_gate, _session_gate
+    _terminal_gate, _session_gate = terminal, session
+
+
+def authorize_from_cli(decisao: str, referencia: str = "", gate: Any | None = None) -> bool:
+    """Registra e autoriza uma decisão reservada executada pelo **pesquisador** na CLI (``resolvido_por='cli'``).
+
+    Só deve ser chamado de dentro de um comando de CLI disparado pelo pesquisador (nunca de código que processe
+    resposta de agente ou de consultor). A barreira final continua sendo ``validate_human_only`` no ``GraphStore``.
+    """
+    active = gate or terminal_gate()
+    req = active.resolve(decisao, referencia, source=Source.CLI, approved=True)
+    return bool(active.authorized(req.id))

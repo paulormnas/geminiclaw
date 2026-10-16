@@ -15,7 +15,7 @@ Princípios de segurança:
 - a **origem** de uma hipótese nunca vem do LLM: ``pesquisador`` só existe para nós que o pesquisador criou; a
   hipótese nova nasce ``researcher``, ``curator`` (resposta a sugestão aceita) ou ``oportunidade`` (oportunidade
   **aprovada** pelo pesquisador). Uma oportunidade ``documentada`` nunca origina hipótese (o pedido fica
-  pendente no ``HumanGate``);
+  pendente no gate persistente);
 - uma hipótese abandonada **pelo pesquisador** não volta: nem por ``id``, nem por repetição de enunciado, nem por
   chave derivada (a abandonada pelo sistema ou pelo agente é reaberta e segue a governança do modo);
 - toda escrita passa pela porta única (``GraphStore``): o schema, a proveniência e ``validate_human_only`` valem aqui.
@@ -28,7 +28,8 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from src import config
-from src.gate.human_gate import HumanGate, default_gate
+from src.gate.persistent_gate import PersistentGate, session_gate
+from src.gate.types import GatePendingLimitReached
 from src.knowledge import opportunities
 from src.knowledge.approval_port import ApprovalPort, NoGateApprovalPort
 from src.knowledge.errors import GraphStoreError
@@ -419,7 +420,7 @@ class HypothesisBook:
         index: Any | None = None,
         similarity: float | None = None,
         pending_suggestions: Callable[[], list[PendingSuggestion]] | None = None,
-        gate: HumanGate | None = None,
+        gate: PersistentGate | None = None,
         approvals: ApprovalPort | None = None,
     ) -> None:
         """Inicializa o livro de hipóteses da sessão.
@@ -430,7 +431,7 @@ class HypothesisBook:
             index: ``SemanticIndex`` para a deduplicação; sem ele a deduplicação é por enunciado normalizado exato.
             similarity: Limiar de reutilização (padrão: ``HYPOTHESIS_DEDUP_SIMILARITY``).
             pending_suggestions: Fornece as sugestões pendentes (para validar ``respostas_sugestoes``).
-            gate: ``HumanGate`` onde ficam pendentes as oportunidades citadas sem aprovação (padrão: o do processo).
+            gate: Gate persistente onde ficam pendentes as oportunidades citadas sem aprovação (padrão: o do processo).
             approvals: Interface de aprovação do pesquisador, usada para conferir a aprovação anterior na reabertura
                 de hipótese abandonada pelo sistema (padrão: ``NoGateApprovalPort`` sem aprovador).
         """
@@ -722,12 +723,14 @@ class HypothesisBook:
 
     def _request_opportunity_decision(self, opportunity_id: str) -> None:
         """Deixa a decisão sobre a oportunidade **pendente** para o pesquisador (sem duplicar pedidos)."""
-        gate = self._gate or default_gate()
-        if any(r.decisao == opportunities.DECISION_NAME and r.referencia == opportunity_id[:120]
-               for r in gate.pending()):
-            return
-        try:
-            gate.request(opportunities.DECISION_NAME, opportunity_id)
+        gate = self._gate or session_gate()
+        try:  # idempotente por (sessão, decisão, referência): não duplica o pedido pendente
+            gate.request(
+                opportunities.DECISION_NAME, opportunity_id, f"Aprovar a oportunidade {opportunity_id}?",
+                session_id=self._ctx.session_id, project_id=self._ctx.project_id,
+            )
+        except GatePendingLimitReached:
+            logger.warning("Pedidos pendentes demais: a oportunidade segue sem pedido", extra={"id": opportunity_id})
         except ValueError:  # pragma: no cover - a decisão é constante do próprio módulo
             logger.warning("Decisão reservada desconhecida ao registrar oportunidade pendente")
 

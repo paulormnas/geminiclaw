@@ -9,20 +9,22 @@ import pytest
 
 from src.artifacts.output_manager import OutputManager
 from src.cli.opportunities import handle_opportunities_command
-from src.gate.human_gate import HumanGate, Source
+from src.gate.catalog import GATE_CATALOG
+from src.gate.types import Source
 from src.knowledge import opportunities, validation
 from src.knowledge.errors import HumanConfirmationRequiredError
 from src.orchestration.orchestrator import AgentTask, Orchestrator
 from src.research_consult import DECISOES_RESERVADAS, PENDENTE_PESQUISADOR
+from tests.support.fake_gate import FakeGate
 from tests.support.hypothesis_world import AGENTE, CURATOR, ORQ, PESQUISADOR, HypothesisWorld
 
 pytestmark = pytest.mark.unit
 
 
-def _cli(w: HypothesisWorld, *argv: str, gate: HumanGate | None = None, input_fn=None):
+def _cli(w: HypothesisWorld, *argv: str, gate: FakeGate | None = None, input_fn=None):
     out: list[str] = []
     code = handle_opportunities_command(
-        list(argv), store=w.store, output_fn=out.append, gate=gate or HumanGate(), input_fn=input_fn,
+        list(argv), store=w.store, output_fn=out.append, gate=gate or FakeGate(), input_fn=input_fn,
     )
     return code, "\n".join(out)
 
@@ -186,16 +188,18 @@ def test_validate_human_only_tem_a_regra_de_oportunidade_para_o_orquestrador():
 @pytest.mark.parametrize("source", [Source.ASK_RESEARCHER, Source.RESEARCHER_CONSULT, Source.AGENT, Source.DOCUMENT])
 def test_gate_com_resposta_do_consultor_continua_pendente(decisao, source):
     """Tarefa 6.99: a resposta de ask_researcher/consultor/agente/documento nunca autoriza uma decisão reservada."""
-    gate = HumanGate()
-    req = gate.request(decisao, "ref")
-    after = gate.answer(req.id, source=source, approved=True)
+    gate = FakeGate()
+    req = gate.request(decisao, "ref", motivo={"decidir_continuidade": "saturacao",
+                                                "restringir_direcao": "restricao_duvidosa"}.get(decisao))
+    resposta = {"acao": GATE_CATALOG[decisao].acoes[0], "texto": "resposta"}
+    after = gate.answer(req.id, source=source, resposta=resposta)
     assert after.estado == "pendente" and after.respostas_ignoradas == 1 and not gate.authorized(req.id)
     # só a ação humana (terminal/CLI) resolve
-    assert gate.answer(req.id, source=Source.TERMINAL, approved=True).estado == "autorizada"
+    assert gate.answer(req.id, source=Source.TERMINAL, resposta=resposta).estado == "autorizada"
 
 
 def test_origem_em_texto_livre_nao_vale_como_humana():
-    gate = HumanGate()
+    gate = FakeGate()
     req = gate.request("aprovar_oportunidade", "x")
     gate.answer(req.id, source="terminal", approved=True)  # type: ignore[arg-type]
     assert not gate.authorized(req.id)
@@ -204,7 +208,7 @@ def test_origem_em_texto_livre_nao_vale_como_humana():
 def test_decidir_oportunidade_exige_pedido_autorizado_por_humano():
     w = HypothesisWorld()
     opp = w.opportunity()
-    gate = HumanGate()
+    gate = FakeGate()
     req = gate.request("aprovar_oportunidade", opp)
     gate.answer(req.id, source=Source.RESEARCHER_CONSULT, approved=True)
     with pytest.raises(opportunities.OpportunityError):

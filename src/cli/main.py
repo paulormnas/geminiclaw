@@ -483,7 +483,7 @@ def _handle_vocab_command(argv: list[str], store: Any | None = None) -> int:
                 extra = f" sinônimos candidatos: {item['sinonimos_candidatos']}" if item["tipo"] == "sinonimo" else ""
                 print(f"{item['id']}  {item['label']}  {item['tipo']}  {item['termo']}{extra}")
         elif args.action == "approve":
-            from src.gate.human_gate import authorize_from_cli
+            from src.gate.persistent_gate import authorize_from_cli
 
             if not authorize_from_cli("aprovar_termo_vocabulario", args.id):
                 print("Aprovação não autorizada pelo gate (exige a ação do pesquisador na CLI).")

@@ -15,7 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from src.gate.human_gate import HumanGate, Source, default_gate
+from src.gate.persistent_gate import TerminalGate, terminal_gate
+from src.gate.types import Source
 from src.knowledge import projects
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.graph_store import GraphStore
@@ -153,7 +154,7 @@ async def ensure_confirmed_problem(
     input_fn: Callable[[str], str] = input,
     output_fn: Callable[[str], Any] = print,
     researcher_model: str | None = None,
-    gate: HumanGate | None = None,
+    gate: TerminalGate | None = None,
 ) -> projects.ProjectDetail:
     """Garante um ``Problema`` confirmado antes do planejamento; pede a confirmação se faltar.
 
@@ -211,9 +212,8 @@ async def ensure_confirmed_problem(
                     output_fn("  A métrica do critério de sucesso é obrigatória; edite o campo 'metrica'.")
                     continue
                 # Gate de decisão reservada: a confirmação só vale com a ação explícita do pesquisador neste terminal.
-                active_gate = gate or default_gate()
-                pedido = active_gate.request("confirmar_problema", projeto_id)
-                active_gate.answer(pedido.id, source=Source.TERMINAL, approved=True)
+                active_gate = gate or terminal_gate()
+                pedido = active_gate.resolve("confirmar_problema", projeto_id, source=Source.TERMINAL, approved=True)
                 if not active_gate.authorized(pedido.id):
                     output_fn("  Confirmação não autorizada pelo gate; o Problema segue sem confirmação.")
                     continue

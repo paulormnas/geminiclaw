@@ -17,8 +17,20 @@ pytestmark = pytest.mark.unit
 
 @pytest.fixture(autouse=True)
 def _defaults():
-    with patch("src.config.CURATOR_ENABLED", False):
+    from src.orchestration.usage import clear_suspension
+
+    clear_suspension()
+    with patch("src.config.CURATOR_ENABLED", False), patch("src.config.GATE_POLL_SECONDS", 0.01):
         yield
+    clear_suspension()
+
+
+def _terminal_left(items=None) -> dict:
+    """Aprovador de um pesquisador que não responde e cujo terminal saiu (a sessão ``assisted`` se suspende)."""
+    from src.orchestration.usage import request_suspension
+
+    request_suspension()
+    return {}
 
 
 def _hyp_status(h: LoopHarness, enunciado_part: str) -> str:
@@ -68,12 +80,11 @@ async def test_modo_autonomo_executa_as_duas_hipoteses_de_maior_prioridade(tmp_p
 
 @pytest.mark.asyncio
 async def test_modo_assistido_sem_aprovacao_a_hipotese_do_researcher_nao_executa(tmp_path):
-    """Scenario: Modo assistido — sem aprovação nada executa e a sessão aguarda o pesquisador (retomável)."""
-    approver = lambda items: {}  # noqa: E731 - o pesquisador não respondeu
-    h = LoopHarness(tmp_path, mode="assisted", plans=[plan([task("t1")], [hyp("h1")])], approver=approver)
+    """Scenario: Modo assistido — sem aprovação nada executa; sem o terminal a sessão se suspende (retomável)."""
+    h = LoopHarness(tmp_path, mode="assisted", plans=[plan([task("t1")], [hyp("h1")])], approver=_terminal_left)
     await h.run()
     assert h.ran == []
-    assert h.sm.get(h.w.sid).status == "aguarda_pesquisador" and h.stop_reason == "aguarda_pesquisador"
+    assert h.sm.get(h.w.sid).status == "suspensa_sem_pesquisador" and h.stop_reason == "suspensa_sem_pesquisador"
     assert _hyp_status(h, "Hipótese h1") == "proposta"
     assert h.checkpoint().estado == "interrompido"
 
@@ -124,9 +135,9 @@ async def test_plano_no_formato_antigo_continua_funcionando(tmp_path):
 @pytest.mark.asyncio
 async def test_formato_antigo_no_assistido_tambem_exige_aprovacao_da_hipotese(tmp_path):
     old = [task("t1", None, hypothesis="O modelo atinge R2 de 0,85")]
-    h = LoopHarness(tmp_path, mode="assisted", plans=[old], approver=lambda items: {})
+    h = LoopHarness(tmp_path, mode="assisted", plans=[old], approver=_terminal_left)
     await h.run()
-    assert h.ran == [] and h.stop_reason == "aguarda_pesquisador"
+    assert h.ran == [] and h.stop_reason == "suspensa_sem_pesquisador"
 
 
 @pytest.mark.asyncio
@@ -205,11 +216,16 @@ async def test_parada_por_solucao_no_assistido_pode_continuar_explorando(tmp_pat
 
 @pytest.mark.asyncio
 async def test_assistido_sem_resposta_no_terminal_aguarda_em_vez_de_decidir(tmp_path):
-    h = LoopHarness(tmp_path, mode="assisted", plans=[plan([task("t1")], [hyp("h1")])], confirmer=lambda s: None,
+    from src.orchestration.usage import request_suspension
+
+    def silent(solution):  # o pesquisador não respondeu e o terminal saiu
+        request_suspension()
+
+    h = LoopHarness(tmp_path, mode="assisted", plans=[plan([task("t1")], [hyp("h1")])], confirmer=silent,
                     approver=lambda items: {i.id: ApprovalDecision("aprovar") for i in items})
     h.extra_patches.append(_solution())
     await h.run()
-    assert h.stop_reason == "aguarda_pesquisador" and h.checkpoint().estado == "interrompido"
+    assert h.stop_reason == "suspensa_sem_pesquisador" and h.checkpoint().estado == "interrompido"
 
 
 @pytest.mark.asyncio
@@ -419,7 +435,7 @@ async def test_telemetria_do_ciclo_leva_so_contagens_sem_texto_de_pesquisa(tmp_p
 async def test_hipotese_do_llm_nao_forja_origem_pesquisador(tmp_path):
     """No assistido, uma hipótese que se declara `pesquisador` continua dependendo de aprovação."""
     forged = plan([task("t1")], [hyp("h1", origem="pesquisador")])
-    h = LoopHarness(tmp_path, mode="assisted", plans=[forged], approver=lambda items: {})
+    h = LoopHarness(tmp_path, mode="assisted", plans=[forged], approver=_terminal_left)
     await h.run()
     assert h.ran == [] and h.hypotheses()[0].properties["origem"] == "researcher"
 

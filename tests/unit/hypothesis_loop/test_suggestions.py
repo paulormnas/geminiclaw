@@ -7,7 +7,6 @@ import json
 import pytest
 
 from src.agents.curator.runner import Curator
-from src.gate.human_gate import HumanGate
 from src.knowledge import opportunities
 from src.knowledge.suggestions import (
     FILENAME,
@@ -19,6 +18,7 @@ from src.knowledge.suggestions import (
 )
 from src.orchestration.exploration import ExplorationSession
 from tests.support.controlled_embedding_provider import pair_vectors
+from tests.support.fake_gate import FakeGate
 from tests.support.hypothesis_world import AGENTE, DIM, ORQ, PESQUISADOR, HypothesisWorld
 
 pytestmark = pytest.mark.unit
@@ -34,7 +34,7 @@ def test_oportunidade_documentada_nunca_e_sugerida_e_aprovada_pode(tmp_path):
     opp = w.opportunity("Explorar variação Z")
     assert suggest_paths(w.store, w.pid, tmp_path) == []
     assert SuggestionStore(tmp_path).pending() == []
-    opportunities.authorize_and_decide(w.store, opp, approve=True, motivo=None, gate=HumanGate())
+    opportunities.authorize_and_decide(w.store, opp, approve=True, motivo=None, gate=FakeGate())
     (sug,) = suggest_paths(w.store, w.pid, tmp_path)
     assert sug.tipo == "oportunidade_aprovada" and sug.fundamento_ids == (opp,) and "variação Z" in sug.texto
 

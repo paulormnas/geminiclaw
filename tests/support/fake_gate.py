@@ -14,7 +14,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.gate.catalog import ACOES_NEGATIVAS, GATE_CATALOG, validate_request
-from src.gate.types import GateAlreadyResolved, GateAuthorizationRefused, GateInvalidRequest, GatePendingLimitReached
+from src.gate.types import (
+    GateAlreadyResolved,
+    GateAuthorizationRefused,
+    GateInvalidRequest,
+    GatePendingLimitReached,
+    Source,
+)
 from src.knowledge.hypothesis_cycle import ApprovalDecision, ApprovalItem
 
 HUMAN_SOURCES = ("terminal", "cli")
@@ -89,14 +95,37 @@ class FakeGate:
         request.estado, request.resolvido_por = estado, resolvido_por
         return request
 
-    def answer(self, request_id: int, *, source: str, estado: str) -> FakeRequest:
-        """Resposta do terminal ao pedido (só o papel do terminal responde)."""
+    def answer(
+        self,
+        request_id: int,
+        *,
+        source: Any,
+        estado: str | None = None,
+        approved: bool | None = None,
+        resposta: dict[str, Any] | None = None,
+    ) -> FakeRequest:
+        """Resposta do terminal ao pedido, com a interface do ``TerminalGate.answer`` (``approved`` ou ``resposta``) e,
+        para semear estados nos testes, ``estado`` direto. Fonte não humana é ignorada (o pedido segue pendente)."""
         request = next(r for r in self.requests if r.id == request_id)
-        request.estado, request.resolvido_por = estado, source
-        return request
+        if estado is not None:
+            request.estado, request.resolvido_por = estado, getattr(source, "value", source)
+            return request
+        if not isinstance(source, Source):  # como o TerminalGate real: texto solto nunca vale como origem humana
+            request.respostas_ignoradas += 1
+            return request
+        return self.respond(request_id, source=source.value, approved=approved, resposta=resposta)
 
-    def pending(self) -> list[FakeRequest]:
-        return [r for r in self.requests if r.estado == "pendente"]
+    def resolve(self, decisao: str, referencia: str = "", *, source: Any, approved: bool, pergunta: str = "",
+                session_id: str | None = None, project_id: str | None = None) -> FakeRequest:
+        """Pede e resolve de uma vez (decisão tomada no próprio terminal); idempotente, como o ``TerminalGate``."""
+        request = self.request(decisao, referencia, pergunta, session_id=session_id, project_id=project_id)
+        if request.estado != "pendente":
+            return request
+        return self.answer(request.id, source=source, approved=approved)
+
+    def pending(self, session_ids: Iterable[str] | None = None) -> list[FakeRequest]:
+        ids = None if session_ids is None else set(session_ids)
+        return [r for r in self.requests if r.estado == "pendente" and (ids is None or r.session_id in ids)]
 
     def for_reference(self, referencia: str) -> list[FakeRequest]:
         return [r for r in self.requests if r.referencia == referencia]
@@ -164,6 +193,12 @@ class FakeGate:
         ids = None if session_ids is None else set(session_ids)
         return [r for r in self.requests if r.estado == "pendente" and not r.obsoleto
                 and (ids is None or r.session_id in ids)]
+
+    def find_in_chain(self, decisao: str, referencia: str, session_chain: Iterable[str]) -> FakeRequest | None:
+        chain = set(session_chain)
+        found = [r for r in self.requests if r.decisao == decisao and r.referencia == referencia
+                 and r.session_id in chain and not r.consumido and not r.obsoleto]
+        return found[-1] if found else None
 
     def answered_unconsumed(self, session_ids: Iterable[str]) -> list[FakeRequest]:
         ids = set(session_ids)

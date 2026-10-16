@@ -137,12 +137,16 @@ class AutonomousLoop:
 
 
     @staticmethod
-    def _pending_model_stop() -> "StopReason | None":
-        """Parada pedida fora do orçamento: interrupção do pesquisador ou, em ``strict``, versão do modelo (v18.5)."""
+    def _pending_model_stop(master_session_id: str | None = None) -> "StopReason | None":
+        """Parada pedida fora do orçamento: interrupção do pesquisador, cota do provedor esgotada (v18.7) ou, em
+        ``strict``, versão do modelo (v18.5)."""
+        from src.llm.quota import quota_stop_for
         from src.orchestration.usage import interrupt_requested
 
         if interrupt_requested():
             return StopReason.INTERRUPTED
+        if master_session_id is not None and quota_stop_for(master_session_id) is not None:
+            return StopReason.PROVIDER_QUOTA
         from src.llm.session import current_session_routing
         from src.llm.versions import STOP_VERSION
 
@@ -220,9 +224,11 @@ class AutonomousLoop:
 
         Marca a sessão como ativa para que o 1º Ctrl+C a feche com checkpoint (v18.5-operation-metrics §2.6).
         """
+        from src.llm.quota import clear_quota_stop
         from src.orchestration.usage import clear_interrupt, set_session_active
 
         clear_interrupt()
+        clear_quota_stop(master_session_id)  # v18.7: a parada por cota de uma sessão anterior não vale para esta
         set_session_active(True)
         try:
             return await self._run_session(prompt, master_session_id, mode, budget)
@@ -262,7 +268,9 @@ class AutonomousLoop:
         # orçamento default — só é ignorado se `budget` for passado explicitamente.
         effective_budget = budget or UsageBudget.from_config(max_task_retries=self.max_retries)
         self._usage_tracker = UsageTracker(
-            effective_budget, execution_id=master_session_id, pending_stop=self._pending_model_stop
+            effective_budget,
+            execution_id=master_session_id,
+            pending_stop=lambda: self._pending_model_stop(master_session_id),
         )
         self.orchestrator.register_usage_tracker(master_session_id, self._usage_tracker)
         self.max_retries = effective_budget.max_task_retries
@@ -969,7 +977,7 @@ class AutonomousLoop:
             self._usage_tracker = UsageTracker(
                 UsageBudget.from_config(max_task_retries=self.max_retries),
                 execution_id=master_session_id,
-                pending_stop=self._pending_model_stop,
+                pending_stop=lambda: self._pending_model_stop(master_session_id),
             )
             self.orchestrator.register_usage_tracker(master_session_id, self._usage_tracker)
 
@@ -1087,6 +1095,12 @@ class AutonomousLoop:
                 )
             
             if not tasks:
+                # v18.7-benchmark-fixes: cota ou teto de gasto esgotado no planejamento não é plano rejeitado nem
+                # motivo de replanejar: a sessão fecha por ``limite_cota_provedor``.
+                if self._usage_tracker.check().stop_reason == StopReason.PROVIDER_QUOTA:
+                    return await self._close_session(
+                        StopReason.PROVIDER_QUOTA, master_session_id, prompt, tasks, {}, final_results
+                    )
                 logger.error(f"Falha na tentativa {plan_attempt+1} de gerar/recuperar plano")
                 execution_feedback = "O orquestrador falhou ao gerar um plano aprovado."
                 if exploring:
@@ -1496,6 +1510,11 @@ class AutonomousLoop:
                             f"Tentativa {attempt+1} de {task.task_name} falhou", extra={"error": result.error}
                         )
                         attempt_errors.append(result.error or "Erro desconhecido")
+
+                        # v18.7-benchmark-fixes: cota ou teto de gasto esgotado no provedor não se resolve com nova
+                        # tentativa; a sessão fecha por ``limite_cota_provedor`` no próximo ponto de verificação.
+                        if result.error_category == "cota_provedor":
+                            break
 
                         # V13.5.1: Orquestrador lista artefatos reais antes de cada retry.
                         artifacts_on_disk = self.orchestrator.output_manager.list_artifacts(master_session_id)
@@ -2125,7 +2144,12 @@ class AutonomousLoop:
         # design §3 — "Reserva esgotada": se não sobrar orçamento nem para a reserva de
         # fechamento, pula a consolidação via LLM e apenas grava o checkpoint
         # determinístico; a consolidação fica pendente para a próxima execução.
-        tokens_available_for_closing = not self._usage_tracker.tokens_hard_exhausted()
+        # v18.7-benchmark-fixes: com a cota do provedor esgotada o fechamento não chama LLM (nem Summarizer nem
+        # Curator): o checkpoint determinístico é gravado e a consolidação fica para a retomada.
+        from src.llm.quota import quota_stop_for
+
+        quota = quota_stop_for(master_session_id) if reason == StopReason.PROVIDER_QUOTA else None
+        tokens_available_for_closing = quota is None and not self._usage_tracker.tokens_hard_exhausted()
         consolidation_pending = not tokens_available_for_closing
 
         checkpoint = {
@@ -2140,6 +2164,10 @@ class AutonomousLoop:
             "connection_retries": usage_status.connection_retries,
             "consolidation_pending": consolidation_pending,
         }
+        if quota is not None:
+            checkpoint["cota_provedor"] = {
+                "provedor": quota.provider, "modelo": quota.model, "status": quota.status_code,
+            }
 
         # Checkpoint determinístico — sempre gravado, mesmo se a consolidação abaixo falhar.
         session = self.orchestrator.session_manager.get(master_session_id)
@@ -2186,6 +2214,11 @@ class AutonomousLoop:
                     extra={"error": str(e)},
                 )
                 consolidation_pending = True
+        elif quota is not None:
+            logger.warning(
+                "Cota do provedor esgotada — consolidação final adiada (consolidation_pending)",
+                extra={"master_session_id": master_session_id, "provedor": quota.provider, "modelo": quota.model},
+            )
         elif not tokens_available_for_closing:
             logger.warning(
                 "Reserva de tokens esgotada — consolidação final adiada (consolidation_pending)",

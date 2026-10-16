@@ -25,6 +25,7 @@ from google.genai import types as genai_types
 
 from src.config import GEMINI_API_KEY
 from src.llm.base import LLMProvider, LLMResponse, ToolCall
+from src.llm.quota import ProviderQuotaExhausted, raise_if_quota_exhausted
 from src.llm.retry import RETRY_BACKOFFS_SECONDS, emit_connection_retry, is_retryable_error
 from src.llm.versions import normalize_version
 from src.logger import get_logger
@@ -188,6 +189,8 @@ class GoogleProvider(LLMProvider):
                 return response
             except Exception as exc:  # noqa: BLE001 — classificado por is_retryable_error
                 last_exc = exc
+                # v18.7-benchmark-fixes: cota ou teto de gasto esgotado não é limite de taxa: sem retentativa.
+                raise_if_quota_exhausted("google", model, getattr(exc, "code", None), str(exc))
                 if not is_retryable_error(exc):
                     raise
         logger.error("Provedor Google GenAI esgotou as retentativas", extra={"model": model})
@@ -197,6 +200,8 @@ class GoogleProvider(LLMProvider):
         model = self._current_model()
         try:
             return await self._call_with_retry(model, contents, config)
+        except ProviderQuotaExhausted:
+            raise  # a cota é do projeto: o modelo de reserva falharia igual
         except Exception as exc:  # noqa: BLE001
             if self._fallback_model and model != self._fallback_model and _is_rate_limit(exc):
                 logger.warning(

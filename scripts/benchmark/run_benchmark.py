@@ -37,6 +37,7 @@ from dotenv import dotenv_values
 
 from scripts.benchmark import footprint, model_versions
 from scripts.benchmark.archive import archive_dir_for, archive_repetition, fetch_events
+from scripts.benchmark.interactions import quota_label
 from scripts.benchmark.reset_stores import (
     EXIT_RESET_FAILED,
     BenchmarkTarget,
@@ -265,6 +266,7 @@ def _stop_reason(session_dir: Path) -> str | None:
 
 
 STOP_UNTESTED_HYPOTHESES = "hipoteses_nao_testadas"
+STOP_PROVIDER_QUOTA = "limite_cota_provedor"
 
 
 def stop_class(stop: str | None) -> str | None:
@@ -304,7 +306,12 @@ def anomalies(result: dict) -> list[str]:
     if "Traceback (most recent call last)" in (result.get("log_tail") or ""):
         problems.append("traceback no fim do log")
     stop = result.get("stop_reason")
-    if stop_class(stop) in ("limite", "erro", "interrupcao"):
+    if stop == STOP_PROVIDER_QUOTA:
+        problems.append(
+            f"sessão fechada por '{stop}' antes de concluir: cota ou teto de gasto esgotado em {quota_label(result)}; "
+            "aumente o teto ou troque o provedor e retome a sessão"
+        )
+    elif stop_class(stop) in ("limite", "erro", "interrupcao"):
         problems.append(
             f"sessão fechada por '{stop}' antes de concluir: a comparação entre modelos exige sessões completas "
             "(ajuste o orçamento da matriz)"

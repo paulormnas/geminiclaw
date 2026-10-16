@@ -23,6 +23,7 @@ from src.config import AGENT_TIMEOUT_SECONDS
 from src.egress.routing import ModelRouter
 from src.llm.agent_loop import run_agent_loop
 from src.llm.model_config import get_role_model_config
+from src.llm.quota import ProviderQuotaExhausted
 from src.llm.retry import is_retryable_error
 from src.logger import get_logger
 from src.utils.agent_context import AgentContext, bind_agent_context
@@ -97,6 +98,17 @@ class AgentRuntime:
         except asyncio.CancelledError:
             # Cancelamento explícito da sessão (não é falha do agente) — propaga.
             raise
+        except ProviderQuotaExhausted as exc:
+            # v18.7-benchmark-fixes: cota ou teto de gasto esgotado no provedor; a sessão fecha por
+            # ``limite_cota_provedor`` (o evento e o registro já foram feitos pelo provedor).
+            return AgentResult(
+                agent_id=ctx.agent_id,
+                session_id=ctx.agent_session_id,
+                status="error",
+                response={},
+                error=str(exc),
+                error_category="cota_provedor",
+            )
         except Exception as exc:  # noqa: BLE001 — isolamento de falha é intencional (design §2)
             logger.error(
                 "Erro ao executar agente em processo",

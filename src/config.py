@@ -178,6 +178,34 @@ ANTHROPIC_EFFORT = get_env("ANTHROPIC_EFFORT", default="medium").lower()
 # Repete no servidor, em outro modelo, um pedido recusado pelos classificadores de segurança.
 ANTHROPIC_REFUSAL_FALLBACK = get_env_bool("ANTHROPIC_REFUSAL_FALLBACK", default=True)
 
+# Marcadores de esgotamento de cota/gasto por provedor (v18.7-benchmark-fixes, design §1.2): a mensagem do erro
+# (429, 400, 402 ou 403) que contém um deles, sem diferenciar caixa, é cota esgotada; sem marcador, o 429 segue
+# transitório.
+_DEFAULT_QUOTA_MARKERS = {
+    "google": "spending cap",
+    "anthropic": "credit balance is too low",
+    "openai": "insufficient_quota",
+    "openai_compatible": "",
+}
+
+
+def _quota_markers(provider: str) -> tuple[str, ...]:
+    variable = f"LLM_QUOTA_MARKERS_{provider.upper()}"
+    raw = get_env(variable, default=_DEFAULT_QUOTA_MARKERS[provider])
+    markers = tuple(item.strip().lower() for item in raw.split(",") if item.strip())
+    for marker in markers:
+        # Um marcador curto ou só numérico (por exemplo, 429) classificaria todo limite de taxa como cota.
+        if len(marker) < 6 or marker.isdigit():
+            raise ConfigurationError(
+                f"'{variable}' tem o marcador {marker!r}: use texto específico do erro de cota "
+                "(mínimo de 6 caracteres, nunca só números)."
+            )
+    return markers
+
+
+QUOTA_MARKERS: dict[str, tuple[str, ...]] = {name: _quota_markers(name) for name in _DEFAULT_QUOTA_MARKERS}
+LLM_RATE_LIMIT_MAX_COOLDOWN_SECONDS = int(get_env("LLM_RATE_LIMIT_MAX_COOLDOWN_SECONDS", default="300"))
+
 # Rate limiting — ler nova variável com fallback para a antiga (retrocompatibilidade)
 LLM_REQUESTS_PER_MINUTE = int(
     get_env("LLM_REQUESTS_PER_MINUTE")

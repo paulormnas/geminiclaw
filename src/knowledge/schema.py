@@ -162,6 +162,7 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
                     "limite_conexao",
                     "limite_execucoes",
                     "limite_egresso",  # v18.5-operation-metrics
+                    "limite_cota_provedor",  # v18.7-benchmark-fixes (cota ou teto de gasto esgotado no provedor)
                     "interrompida_pesquisador",  # v18.5-operation-metrics (1º Ctrl+C)
                     "versao_modelo",  # v18.5-model-catalog-locality (strict: versão do modelo mudou ou desconhecida)
                     "erro",

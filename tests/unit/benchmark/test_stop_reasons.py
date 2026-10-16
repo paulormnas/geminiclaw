@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from scripts.benchmark.interactions import summarize_events
-from scripts.benchmark.report import render_interactions, render_untested_stops
+from scripts.benchmark.report import render_interactions, render_quota_stops, render_untested_stops
 from scripts.benchmark.run_benchmark import anomalies, stop_class
 from tests.unit.benchmark.test_footprint_and_seed import _ok_result
 
@@ -49,3 +49,31 @@ def test_resumo_de_interacoes_conta_os_motivos_de_reprovacao() -> None:
         **summary, "tokens_by_agent": [], "ask_researcher": [],
     }}}
     assert "sem_hipotese: 1" in render_interactions([result])
+
+
+# --- v18.7-benchmark-fixes: cota ou teto de gasto do provedor --------------------------------------------------
+
+
+def test_cota_do_provedor_e_limite() -> None:
+    """Scenario: Classificação (``limite_cota_provedor`` é ``limite``)."""
+    assert stop_class("limite_cota_provedor") == "limite"
+
+
+def test_parada_por_cota_e_anomalia_identificada() -> None:
+    """Scenario: Parada por cota é anomalia identificada (o texto cita provedor e modelo do evento)."""
+    events = [{"event_type": "cota_provedor_esgotada",
+               "payload": {"provedor": "google", "modelo": "gemini-4-argon", "status": 429}}]
+    summary = summarize_events(events)
+    assert summary["cota_provedor"] == [{"provedor": "google", "modelo": "gemini-4-argon", "status": 429}]
+    result = _ok_result(stop_reason="limite_cota_provedor")
+    result["db"] = {"interactions": summary}
+    problems = anomalies(result)
+    assert problems and "google/gemini-4-argon" in problems[0] and "limite_cota_provedor" in problems[0]
+    listing = render_quota_stops([{**result, "name": "c1", "repeticao": 2}])
+    assert "c1 (repetição 2)" in listing and "google/gemini-4-argon" in listing
+
+
+def test_resumo_sem_evento_de_cota_nao_traz_a_chave() -> None:
+    assert "cota_provedor" not in summarize_events([])
+    result = _ok_result(stop_reason="limite_cota_provedor")
+    assert "provedor desconhecido" in anomalies(result)[0]

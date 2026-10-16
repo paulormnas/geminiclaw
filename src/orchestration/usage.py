@@ -34,6 +34,7 @@ class StopReason(str, Enum):
     MODEL_VERSION = "versao_modelo"  # v18.5-model-catalog-locality (LLM_ROUTING=strict)
     EGRESS = "limite_egresso"  # v18.5-egress-gate (volume de saídas de execução enviadas fora do nó)
     INTERRUPTED = "interrompida_pesquisador"  # v18.5-operation-metrics (1º Ctrl+C: fechamento sem perda de avanço)
+    PROVIDER_QUOTA = "limite_cota_provedor"  # v18.7-benchmark-fixes (cota ou teto de gasto esgotado no provedor)
 
 
 # v18.5-operation-metrics §2.6: o 1º Ctrl+C pede o fechamento gracioso da sessão em andamento. O pedido é um sinalizador
@@ -266,8 +267,9 @@ class LimitStatus:
     def stop_reason(self) -> StopReason | None:
         """Motivo de parada correspondente.
 
-        Segue a prioridade tokens > tempo > egresso > conexão, coerente com a
-        ordem de avaliação em `UsageTracker.check`.
+        Segue a prioridade tokens > tempo > egresso > cota do provedor > conexão, coerente com a
+        ordem de avaliação em `UsageTracker.check`. A cota esgotada vem antes da conexão porque é a causa das
+        retentativas (v18.7-benchmark-fixes).
         """
         if self.tokens_exhausted:
             return StopReason.TOKENS
@@ -275,6 +277,8 @@ class LimitStatus:
             return StopReason.TIME
         if self.egress_exhausted:
             return StopReason.EGRESS
+        if self.pending_stop == StopReason.PROVIDER_QUOTA:
+            return StopReason.PROVIDER_QUOTA
         if self.connection_retries_exhausted:
             return StopReason.CONNECTION
         return self.pending_stop

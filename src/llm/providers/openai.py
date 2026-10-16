@@ -28,6 +28,8 @@ MIN_RESPONSES_TOKENS = 32768
 
 
 class OpenAIProvider(OpenAICompatibleProvider):
+    PROVIDER_KEY = "openai"
+
     def __init__(
         self,
         api_key: str | None,

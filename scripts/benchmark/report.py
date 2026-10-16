@@ -9,6 +9,7 @@ from collections import Counter
 from pathlib import Path
 
 from scripts.benchmark import footprint, model_versions
+from scripts.benchmark.interactions import quota_label
 
 
 def _fmt(stats: dict | None, key: str = "max", suffix: str = "") -> str:
@@ -95,6 +96,15 @@ def render_untested_stops(results: list[dict]) -> str:
         if r.get("status") != "skipped" and r.get("stop_reason") == "hipoteses_nao_testadas"
     ]
     return "\n".join(rows)
+
+
+def render_quota_stops(results: list[dict]) -> str:
+    """Execuções fechadas por ``limite_cota_provedor``, com o provedor e o modelo do evento (anomalia identificada)."""
+    return "\n".join(
+        f"- {r['name']} (repetição {r.get('repeticao', 1)}): {quota_label(r)}"
+        for r in results
+        if r.get("status") != "skipped" and r.get("stop_reason") == "limite_cota_provedor"
+    )
 
 
 def render_growth(results: list[dict]) -> str:
@@ -271,6 +281,10 @@ if __name__ == "__main__":
         print()
         print("### Paradas por hipóteses não testadas (parada de pesquisa, não erro)")
         print(render_untested_stops(loaded))
+    if render_quota_stops(loaded):
+        print()
+        print("### Paradas por cota ou teto de gasto do provedor (anomalia: aumente o teto ou troque o provedor)")
+        print(render_quota_stops(loaded))
     if any(r.get("store_timeline") for r in loaded):
         print()
         print(render_growth(loaded))

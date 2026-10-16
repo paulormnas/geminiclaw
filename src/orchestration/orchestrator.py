@@ -1922,7 +1922,9 @@ class Orchestrator:
             await self.rate_limiter.report_success()
         else:
             error_msg = str(result.error or "")
-            if "429" in error_msg or "Too Many Requests" in error_msg:
+            if result.error_category == "cota_provedor":
+                pass  # v18.7: esperar não devolve cota; o limitador não é acionado e a sessão fecha por cota
+            elif "429" in error_msg or "Too Many Requests" in error_msg:
                 await self.rate_limiter.report_429()
             else:
                 await self.rate_limiter.report_success()

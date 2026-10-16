@@ -97,7 +97,7 @@ async def test_modelo_ollama_instalado(tmp_path, credentials):
 async def test_provedor_fora_da_lista_de_permissao(tmp_path, credentials):
     """Cenário: Provedor fora da lista de permissão (nenhum anthropic/* disponível)."""
     catalog = load(tmp_path)
-    priority = parse_priority("ollama,google", "default")
+    priority = parse_priority("ollama,google")
 
     result = await compute_availability(
         catalog,
@@ -118,7 +118,7 @@ async def test_sem_credencial_e_sem_endpoint(tmp_path, monkeypatch):
     catalog = load(tmp_path)
 
     result = await compute_availability(
-        catalog, None, priority=parse_priority("", "default"), timeout=1,
+        catalog, None, priority=parse_priority(""), timeout=1,
         provider_factory=lambda p, m: _FakeProvider(None),
     )
 
@@ -194,7 +194,7 @@ async def test_checks_em_paralelo_e_um_por_modelo(tmp_path, credentials):
         return _FakeProvider(None)
 
     await compute_availability(
-        catalog, None, priority=parse_priority("", "default"), timeout=1, provider_factory=factory
+        catalog, None, priority=parse_priority(""), timeout=1, provider_factory=factory
     )
 
     assert sorted(calls) == [
@@ -204,7 +204,36 @@ async def test_checks_em_paralelo_e_um_por_modelo(tmp_path, credentials):
     ]
 
 
-async def test_lista_de_permissao_padrao_por_perfil():
-    assert parse_priority("", "pi5")[0] == "ollama"
-    assert parse_priority("", "default")[0] == "google"
-    assert parse_priority("local, google", "default") == ("ollama", "google")
+async def test_lista_de_permissao_padrao_sem_perfil():
+    """Scenario: Prioridade padrão (``LLM_PROVIDER_PRIORITY`` vazio dá uma só ordem, em qualquer máquina)."""
+    assert parse_priority("") == ("google", "anthropic", "openai", "ollama", "openai_compatible")
+    assert parse_priority(None) == availability.DEFAULT_PRIORITY
+    assert parse_priority("local, google") == ("ollama", "google")
+
+
+async def test_assinatura_de_parse_priority_sem_perfil():
+    """Scenario: Assinatura sem perfil (um único parâmetro) e ``src.config`` sem ``DEPLOYMENT_PROFILE``."""
+    import inspect
+
+    from src import config
+
+    assert list(inspect.signature(parse_priority).parameters) == ["raw"]
+    assert not hasattr(config, "DEPLOYMENT_PROFILE")
+
+
+async def test_provedores_locais_primeiro_por_declaracao(monkeypatch):
+    """Scenario: Provedores locais primeiro por declaração (a sessão usa a prioridade de ``LLM_PROVIDER_PRIORITY``)."""
+    from src import config
+    from src.llm import session
+
+    seen = {}
+
+    def fake_static(catalog, ids, *, priority):
+        seen["priority"] = priority
+        return {}, []
+
+    monkeypatch.setattr(config, "LLM_PROVIDER_PRIORITY", "ollama,openai_compatible,google")
+    monkeypatch.setattr(session, "static_availability", fake_static)
+    monkeypatch.setattr(session, "_resolve", lambda *args, **kwargs: None)
+    session.build_offline_routing()
+    assert seen["priority"] == ("ollama", "openai_compatible", "google")

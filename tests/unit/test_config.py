@@ -21,7 +21,6 @@ def reset_env():
         "LLM_PROVIDER_PRIORITY",
         "AGENT_TIMEOUT_SECONDS",
         "DATABASE_URL",
-        "DEPLOYMENT_PROFILE",
     ]
     old_vars = {k: os.environ.get(k) for k in vars_to_clear}
     for k in vars_to_clear:
@@ -103,7 +102,3 @@ def test_config_strict_validation_removida():
     with patch.dict(os.environ, {"STRICT_VALIDATION": "true"}, clear=True):
         importlib.reload(src.config)
         assert not hasattr(src.config, "STRICT_VALIDATION")
-        for profile in ("pi5", "default"):
-            with patch.dict(os.environ, {"DEPLOYMENT_PROFILE": profile}):
-                importlib.reload(src.config)
-                assert not hasattr(src.config, "STRICT_VALIDATION")

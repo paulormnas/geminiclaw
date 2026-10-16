@@ -36,7 +36,9 @@ cp .env.example .env
 # Configuração .env (política padrão: self_hosted_only; o catálogo escolhe o modelo Ollama)
 LLM_DATA_POLICY=self_hosted_only
 RESEARCHER_MODEL=ollama/qwen3.5:4b   # opcional: pin provedor/modelo
-DEPLOYMENT_PROFILE=pi5
+AGENT_TIMEOUT_SECONDS=0   # sem tempo limite (inferência local lenta)
+LLM_PROVIDER_PRIORITY=ollama,openai_compatible,google,anthropic,openai   # provedores locais primeiro
+TEMPERATURE_LIMIT=75   # proteção térmica (°C); sem valor, a temperatura não é verificada
 ```
 
 Veja o [guia de configuração do Ollama no Pi 5](OLLAMA_PI5.md) para detalhes de otimização e instalação.
@@ -352,7 +354,7 @@ O desenvolvimento é guiado pelos roadmaps em `roadmaps/`, que definem as etapas
 - **Schema PostgreSQL**: quatro tabelas de telemetria (`agent_events`, `tool_usage`, `token_usage`, `hardware_snapshots`)
 - **`TelemetryCollector`** (`src/observability/telemetry.py`): singleton com buffer de 50 eventos e flush assíncrono no PostgreSQL
 - **Instrumentação de módulos core**: `orchestrator.py` (spawn/IPC/complete/error), `agent_loop.py` (token usage, tool usage), `autonomous_loop.py` (triage, plan, subtask, replan, memory promotion)
-- **Hardware Snapshots**: integração com `PiHealthMonitor` após cada subtarefa
+- **Hardware Snapshots**: integração com `HealthMonitor` após cada subtarefa
 - **Queries de análise**: timeline, token summary, tool summary, hardware peaks, métricas derivadas
 - **CLI**: `geminiclaw --metrics <id>` e `--export <id>` para exportação em CSV
 - **Testes**: 350 testes unitários passando (incluindo 24 testes específicos de telemetria)

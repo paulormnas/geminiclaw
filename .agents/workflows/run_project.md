@@ -78,5 +78,5 @@ Compare os arquivos gerados:
 ---
 
 ## Dicas para Raspberry Pi 5
-- Use `DEPLOYMENT_PROFILE=pi5` para otimizar timeouts e concorrência.
+- Declare `AGENT_TIMEOUT_SECONDS=0` (sem tempo limite), `LLM_PROVIDER_PRIORITY` com provedores locais primeiro e `TEMPERATURE_LIMIT` no `.env` do Pi.
 - Se o Ollama falhar por timeout, ajuste `AGENT_TIMEOUT_SECONDS=600`.

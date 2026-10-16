@@ -1,8 +1,11 @@
 import os
+from collections.abc import Callable, Mapping
 from enum import Enum
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+from src.utils.configuration_error import ConfigurationError
 
 # Carrega o arquivo .env se existir
 load_dotenv()
@@ -43,6 +46,62 @@ def get_env(key: str, default: str | None = None, required: bool = False) -> str
     if required and value is None:
         raise RuntimeError(f"Variável de ambiente obrigatória '{key}' não está definida.")
     return value  # type: ignore
+
+_PI5_PROFILE_VALUES = (
+    "MAX_SUBTASKS_PER_TASK=5, MAX_CONCURRENT_AGENTS=2, AGENT_TIMEOUT_SECONDS=0, "
+    "LLM_PROVIDER_PRIORITY=ollama,openai_compatible,google,anthropic,openai"
+)
+
+
+def _deployment_profile_message(value: str) -> str:
+    """Mensagem para ``DEPLOYMENT_PROFILE``: só ``default`` e ``pi5`` são distinguidos; o valor não é ecoado."""
+    if value == "pi5":
+        return (
+            "'DEPLOYMENT_PROFILE' foi removida (ADR 023 §1.1): remova a linha e declare no .env os valores que o "
+            f"perfil aplicava e que você quer manter: {_PI5_PROFILE_VALUES}."
+        )
+    return "'DEPLOYMENT_PROFILE' foi removida (ADR 023 §1.1): remova a linha do .env."
+
+
+# Nomes de configuração removidos: nome -> mensagem fixa ou função do valor. Quem remove uma variável acrescenta
+# aqui o nome dela (nunca lê o nome antigo como sinônimo). v18.7-resource-monitor-config.
+_REMOVED_VARIABLES: dict[str, str | Callable[[str], str]] = {
+    "DEPLOYMENT_PROFILE": _deployment_profile_message,
+    "PI_TEMPERATURE_LIMIT": (
+        "'PI_TEMPERATURE_LIMIT' foi removida: renomeie para 'TEMPERATURE_LIMIT' "
+        "(sem padrão: sem valor, a temperatura não é verificada)."
+    ),
+    "PI_MIN_AVAILABLE_MEMORY_MB": "'PI_MIN_AVAILABLE_MEMORY_MB' foi removida: renomeie para 'MIN_AVAILABLE_MEMORY_MB'.",
+}
+
+
+def check_removed_variables(environ: Mapping[str, str]) -> None:
+    """Falha se ``environ`` traz algum nome removido, com uma linha por nome encontrado.
+
+    Raises:
+        ConfigurationError: Há ao menos um nome removido; a mensagem diz o que fazer com cada um.
+    """
+    lines = []
+    for name, message in _REMOVED_VARIABLES.items():
+        if name in environ:
+            lines.append(message(environ[name]) if callable(message) else message)
+    if lines:
+        raise ConfigurationError("Configuração com nomes removidos:\n- " + "\n- ".join(lines))
+
+
+check_removed_variables(os.environ)  # depois do load_dotenv(): cobre o ambiente e o .env
+
+
+def _env_number(key: str, default: str | None, kind: type) -> float | int | None:
+    """Número de uma variável (``None`` se vazia e sem padrão); texto inválido falha citando a variável."""
+    raw = get_env(key, default=default)
+    if raw is None or raw.strip() == "":
+        return None
+    try:
+        return kind(raw.strip())
+    except ValueError:
+        raise ConfigurationError(f"'{key}' deve ser um número ({kind.__name__}); valor inválido.") from None
+
 
 def get_env_bool(key: str, default: bool = False) -> bool:
     """Obtém uma variável de ambiente convertendo para booleano.
@@ -131,26 +190,15 @@ LLM_RATE_LIMIT_COOLDOWN_SECONDS = int(
 GEMINI_REQUESTS_PER_MINUTE = LLM_REQUESTS_PER_MINUTE  # Retrocompatibilidade
 GEMINI_RATE_LIMIT_COOLDOWN_SECONDS = LLM_RATE_LIMIT_COOLDOWN_SECONDS  # Retrocompatibilidade
 
-# --- Perfil de Deployment (V18.1) ---
-DEPLOYMENT_PROFILE = get_env("DEPLOYMENT_PROFILE", default="default")
+# --- Limites gerais (iguais em qualquer máquina; ADR 023 §1.1) ---
+MAX_SUBTASKS_PER_TASK = int(get_env("MAX_SUBTASKS_PER_TASK", default="10"))
+MAX_CONCURRENT_AGENTS = int(get_env("MAX_CONCURRENT_AGENTS", default="3"))
 
-if DEPLOYMENT_PROFILE == "pi5":
-    MAX_SUBTASKS_PER_TASK = int(get_env("MAX_SUBTASKS_PER_TASK", default="5"))
-    MAX_CONCURRENT_AGENTS = int(get_env("MAX_CONCURRENT_AGENTS", default="2"))
-else:
-    MAX_SUBTASKS_PER_TASK = int(get_env("MAX_SUBTASKS_PER_TASK", default="10"))
-    MAX_CONCURRENT_AGENTS = int(get_env("MAX_CONCURRENT_AGENTS", default="3"))
-
-# Prioridade para variável de ambiente explícita para o timeout do agente
-env_timeout = get_env("AGENT_TIMEOUT_SECONDS")
-if env_timeout is not None:
-    AGENT_TIMEOUT_SECONDS = int(env_timeout)
-else:
-    # Fallback para perfil
-    if DEPLOYMENT_PROFILE == "pi5":
-        AGENT_TIMEOUT_SECONDS = None  # Infinito por padrão no Pi 5
-    else:
-        AGENT_TIMEOUT_SECONDS = 300   # Default 5min
+# Tempo limite do agente (s): 0 = sem limite (vira None); negativo ou não inteiro falha na inicialização.
+_agent_timeout = _env_number("AGENT_TIMEOUT_SECONDS", "300", int)
+if _agent_timeout is None or _agent_timeout < 0:
+    raise ConfigurationError("'AGENT_TIMEOUT_SECONDS' deve ser um inteiro >= 0 (0 = sem tempo limite).")
+AGENT_TIMEOUT_SECONDS = _agent_timeout or None
 
 # Limites de planejamento (Roadmap V4)
 MAX_PLANNING_ITERATIONS = int(get_env("MAX_PLANNING_ITERATIONS", default="10"))
@@ -374,8 +422,17 @@ SANDBOX_COPY_MAX_BYTES = int(get_env("SANDBOX_COPY_MAX_BYTES", default="67108864
 
 # Health Monitoring (S7)
 HEALTH_CHECK_ENABLED = get_env_bool("HEALTH_CHECK_ENABLED", default=True)
-PI_TEMPERATURE_LIMIT = float(get_env("PI_TEMPERATURE_LIMIT", default="75.0"))
-PI_MIN_AVAILABLE_MEMORY_MB = float(get_env("PI_MIN_AVAILABLE_MEMORY_MB", default="512.0"))
+# Mínimo de memória disponível para iniciar um agente (e uma pesquisa, v18.7-background-sessions).
+MIN_AVAILABLE_MEMORY_MB = float(get_env("MIN_AVAILABLE_MEMORY_MB", default="512"))
+# Limite de temperatura (°C): sem valor, a temperatura não entra nas verificações (sem padrão).
+TEMPERATURE_LIMIT = _env_number("TEMPERATURE_LIMIT", None, float)
+if TEMPERATURE_LIMIT is not None and TEMPERATURE_LIMIT <= 0:
+    raise ConfigurationError("'TEMPERATURE_LIMIT' deve ser um número maior que zero (°C).")
+TEMPERATURE_WARNING_MARGIN_C = _env_number("TEMPERATURE_WARNING_MARGIN_C", "5.0", float)
+if TEMPERATURE_WARNING_MARGIN_C is None or TEMPERATURE_WARNING_MARGIN_C < 0:
+    raise ConfigurationError("'TEMPERATURE_WARNING_MARGIN_C' deve ser um número >= 0.")
+# Sensor de temperatura (nome em psutil.sensors_temperatures()); vazio = maior leitura entre os sensores.
+TEMPERATURE_SENSOR = get_env("TEMPERATURE_SENSOR", default="").strip()
 
 # Memory (S4 + S5)
 SKILL_MEMORY_ENABLED = get_env_bool("SKILL_MEMORY_ENABLED", default=True)

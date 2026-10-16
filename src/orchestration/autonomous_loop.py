@@ -57,6 +57,11 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+# Campos de ``AgentTask`` que não voltam ao Researcher no plano anterior (internos do orquestrador).
+_PLAN_ECHO_EXCLUDED = frozenset(
+    {"subtask_id", "created_at", "papel_fonte", "prepara_ids", "hypothesis_origin"}
+)
+
 # Roadmap V3 - Etapa V3: limite de chars para injeção de contexto (~2000 tokens)
 _CONTEXT_MAX_CHARS = 8_000
 
@@ -1257,7 +1262,7 @@ class AutonomousLoop:
                         ) + "."
                     explore_next = True
                     current_plan_dicts = [
-                        {k: v for k, v in t.__dict__.items() if v is not None and k not in ("subtask_id", "created_at")}
+                        {k: v for k, v in t.__dict__.items() if v is not None and k not in _PLAN_ECHO_EXCLUDED}
                         for t in plan_tasks
                     ]
                     continue
@@ -1269,7 +1274,7 @@ class AutonomousLoop:
 
             # Atualiza o estado do plano atual (para a próxima iteração se falhar)
             current_plan_dicts = [
-                {k: v for k, v in t.__dict__.items() if v is not None and k not in ("subtask_id", "created_at")} 
+                {k: v for k, v in t.__dict__.items() if v is not None and k not in _PLAN_ECHO_EXCLUDED} 
                 for t in plan_tasks
             ]
             

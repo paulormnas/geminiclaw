@@ -40,7 +40,7 @@ def _out(store: AgeGraphStore, node_id: str, rel: str) -> set[str]:
 def test_ciclo_com_preparacao_dois_testes_e_referencia(age_store: AgeGraphStore, tmp_path: Path):
     suffix = uuid.uuid4().hex[:8]
     metric = f"acc_{suffix}"
-    project_id, session_id = f"proj-{suffix}", f"sess-{suffix}"
+    project_id, session_id = str(uuid.uuid4()), f"sess-{suffix}"  # ``get_active_problem`` exige UUID
     try:
         graph = CuratorGraph(age_store, project_id, session_id).setup_project(metrica=metric, delta_min=0.01)
         ctx = SessionContext(project_id, session_id, "auto", "2026-10-16T10:00:00+00:00", f"no-{suffix}")

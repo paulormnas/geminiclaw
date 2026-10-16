@@ -39,6 +39,14 @@ class AgentTask:
     # v18-hypothesis-loop: referência do plano à hipótese que a subtarefa testa e o ``id`` resolvido no grafo.
     hypothesis_ref: str = ""
     hypothesis_id: str = ""
+    # v18.7-hypothesis-linking: papel declarado no plano (``teste``/``preparacao``/``referencia``; vazio = não
+    # declarado), papel decidido pelo sistema, a regra que o decidiu, as hipóteses que uma preparação serve e a
+    # origem da hipótese testada (``sistema``, ``researcher``...).
+    papel: str = ""
+    papel_decidido: str = ""
+    papel_fonte: str = ""
+    prepara_ids: list[str] | None = None  # ``None`` = não calculado; ``[]`` = preparação ligada ao Problema
+    hypothesis_origin: str = ""
     # v18.5-egress-gate: o ``prompt`` foi escrito por um modelo que aceita dados brutos (contaminado, ADR 019 §3.8);
     # o despacho o envolve na marca de contaminação ao montar o prompt da execução.
     prompt_tainted: bool = False

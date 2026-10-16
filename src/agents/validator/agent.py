@@ -56,9 +56,9 @@ MANDATORY_KEYS = ["agent_id", "task_name", "prompt", "validation_criteria"]
 # testa uma hipótese (``hypothesis_ref``). Baseline e diagnóstico sem hipótese passam com aviso.
 _QUANTITATIVE_REQUIRED_TASK_TYPES = {"reproduction", "validation"}
 WARNING_VALIDATION_WITHOUT_HYPOTHESIS = "validation_sem_hipotese"
-# v18.6-auto-metrics-and-stop-reasons: motivo de reprovação registrado quando só faltou a hipótese para o resultado
-# ser negativo (limiar numérico não atingido numa subtarefa sem ``hypothesis_id``).
-MOTIVO_SEM_HIPOTESE = "sem_hipotese"
+# v18.7-hypothesis-linking: motivo registrado (só registro, sem efeito no status) quando a subtarefa revisada testa uma
+# hipótese de origem ``sistema``. O motivo ``sem_hipotese`` da V18.6 deixou de existir: todo teste tem hipótese.
+MOTIVO_HIPOTESE_DO_SISTEMA = "hipotese_do_sistema"
 
 
 def _requires_quantitative(task: Dict[str, Any]) -> bool:
@@ -66,6 +66,11 @@ def _requires_quantitative(task: Dict[str, Any]) -> bool:
     if task_type == "reproduction":
         return True
     return task_type == "validation" and bool(str(task.get("hypothesis_ref") or "").strip())
+
+def _declared_reference(task: Dict[str, Any]) -> bool:
+    """A subtarefa foi declarada ``papel = "referencia"`` (baseline do Problema; v18.7-hypothesis-linking)."""
+    return str(task.get("papel") or "").strip().lower() == "referencia"
+
 
 # Heurística de "critério quantitativo": presença de um dígito combinado com um operador
 # de comparação (símbolo ou palavra) — ex: "acurácia > 0.85", "pelo menos 90% de cobertura".
@@ -97,8 +102,9 @@ SCHEMA_INSTRUCTION = """Cada subtarefa no plano DEVE ser um objeto JSON contendo
 - "expected_artifacts": list[str] (arquivos esperados a serem gerados em /outputs/)
 - "depends_on": list[str] (nomes de tarefas das quais esta depende)
 - campos OPCIONAIS do orquestrador, que fazem parte do formato e NUNCA são motivo de reprovação:
-  "hypothesis_ref" (referência 'h1', 'h2'... à hipótese que a subtarefa testa), "approach" (objeto com 'nome' e
-  'tipo' da abordagem) e "preferred_model".
+  "hypothesis_ref" (referência 'h1', 'h2'... à hipótese que a subtarefa testa), "papel" ('teste', 'preparacao' ou
+  'referencia'; uma 'validation' com papel 'referencia' é o baseline do Problema e dispensa limiar numérico),
+  "approach" (objeto com 'nome' e 'tipo' da abordagem) e "preferred_model".
 """
 
 def _partly_known_criteria(criteria: List[Any]) -> List[str]:
@@ -368,8 +374,8 @@ class ReviewResult:
     # numérico, sem outro problema). ``negative_findings`` traz {metric, value, operator, threshold} para o feedback.
     outcome: str = "reprovado"
     negative_findings: List[Dict[str, Any]] = field(default_factory=list)
-    # v18.6-auto-metrics-and-stop-reasons: motivos de reprovação além do texto livre (hoje: ``sem_hipotese`` quando o
-    # limiar numérico não foi atingido numa subtarefa sem ``hypothesis_id``). Só registro: status e outcome não mudam.
+    # Motivos registrados além do texto livre (hoje: ``hipotese_do_sistema`` quando a hipótese testada tem origem
+    # ``sistema``). Só registro: status e outcome não mudam.
     motivos: List[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -464,6 +470,7 @@ class ValidatorAgent:
             if (
                 task_type == "validation"
                 and not _requires_quantitative(task)
+                and not _declared_reference(task)
                 and WARNING_VALIDATION_WITHOUT_HYPOTHESIS not in plan_warnings
             ):
                 plan_warnings.append(WARNING_VALIDATION_WITHOUT_HYPOTHESIS)
@@ -611,6 +618,26 @@ class ValidatorAgent:
         output_dir: Optional[Path | str] = None,
         manifest_artifacts: Optional[List[str]] = None,
     ) -> ReviewResult:
+        """Revisa a subtarefa (``_review``) e registra ``hipotese_do_sistema`` quando ela testa hipótese do sistema.
+
+        O motivo vale para qualquer desfecho (aprovada ou reprovada) e não altera ``status`` nem ``outcome``.
+        """
+        result = await self._review(task, response_text, artifacts_on_disk, output_dir, manifest_artifacts)
+        origin = getattr(task, "hypothesis_origin", None) or (
+            task.get("hypothesis_origin") if isinstance(task, dict) else None
+        )
+        if origin == "sistema" and MOTIVO_HIPOTESE_DO_SISTEMA not in result.motivos:
+            result.motivos = [*result.motivos, MOTIVO_HIPOTESE_DO_SISTEMA]
+        return result
+
+    async def _review(
+        self,
+        task: Any,
+        response_text: str,
+        artifacts_on_disk: Optional[List[str]] = None,
+        output_dir: Optional[Path | str] = None,
+        manifest_artifacts: Optional[List[str]] = None,
+    ) -> ReviewResult:
         """Revisa a execução de uma subtarefa verificando artefatos em disco e critérios.
 
         Args:
@@ -715,8 +742,6 @@ class ValidatorAgent:
                     else None
                 )
                 if not misses:
-                    if not hypothesis_id and not undecided and _threshold_misses(metric_criteria, metrics):
-                        metric_fail.motivos = [MOTIVO_SEM_HIPOTESE]  # só registro: segue reprovado
                     return metric_fail
                 metric_fail.negative_findings = misses
                 negative_candidate = True

@@ -35,7 +35,7 @@ from src.knowledge.suggestions import SuggestionError
 from src.logger import get_logger
 from src.observability.telemetry import get_telemetry
 from src.orchestration.errors import AgentRunLimitReached, PlanningStalled
-from src.orchestration.subtask_ingestion import ingest_subtask
+from src.orchestration.subtask_ingestion import ingest_subtask, link_preparations
 from src.orchestration.triage import TriageClassifier
 from src.orchestration.usage import StopReason, UsageBudget, UsageTracker
 from src.session.continuity import (
@@ -1170,6 +1170,20 @@ class AutonomousLoop:
                 continue
             rejected_plans = 0
 
+            if resume is not None:
+                # Dependências concluídas na sessão anterior têm o resultado pré-carregado: não exigem nó no plano.
+                names = {t.task_name for t in tasks if t.task_name}
+                for t in tasks:
+                    t.depends_on = [d for d in t.depends_on if d in names or d not in resume.completed]
+            try:
+                # v18.7-hypothesis-linking §1: DAG inválido volta ao Researcher antes da governança (``prepare_cycle``
+                # deriva ``PREPARA`` percorrendo o grafo de dependências e o pressupõe válido).
+                TaskScheduler.validate_dag(tasks)
+            except ValueError as e:
+                execution_feedback = f"Grafo de dependências inválido: {e}"
+                logger.error(execution_feedback)
+                continue
+
             plan_tasks = tasks  # plano completo (inclusive o que a governança retirar), base do próximo replanejamento
             if exploration is not None:
                 # v18-hypothesis-loop §2/§4: grava hipóteses/decisões/respostas e aplica a governança do SessionMode.
@@ -1177,6 +1191,7 @@ class AutonomousLoop:
                     outcome = await asyncio.to_thread(
                         exploration.prepare_cycle, tasks, self.orchestrator.take_plan_extras(master_session_id),
                         done=set(done_results),
+                        done_tasks={n: cumulative_tasks[n] for n in done_results if n in cumulative_tasks},
                     )
                 except asyncio.CancelledError:
                     raise
@@ -1191,6 +1206,9 @@ class AutonomousLoop:
                         cumulative_dag, final_results,
                     )
                 tasks = outcome.tasks
+                await link_preparations(
+                    self.orchestrator, outcome.preparation_links, cumulative_tasks, master_session_id
+                )
                 if outcome.dropped:
                     logger.info("Subtarefas retiradas pela governança", extra={"dropped": outcome.dropped})
                 new_tasks = [t for t in tasks if t.task_name not in done_results]
@@ -1319,12 +1337,7 @@ class AutonomousLoop:
                 logger.warning(f"Número de subtarefas ({len(tasks)}) excede o limite {self.max_subtasks}")
                 tasks = tasks[:self.max_subtasks]
 
-            if resume is not None:
-                # Dependências concluídas na sessão anterior têm o resultado pré-carregado: não exigem nó no plano.
-                names = {t.task_name for t in tasks if t.task_name}
-                for t in tasks:
-                    t.depends_on = [d for d in t.depends_on if d in names or d not in resume.completed]
-            try:
+            try:  # as retiradas levam junto o que depende delas: o subgrafo mantido continua válido (confirmação)
                 TaskScheduler.validate_dag(tasks)
             except ValueError as e:
                 execution_feedback = f"Grafo de dependências inválido: {e}"
@@ -1766,7 +1779,10 @@ class AutonomousLoop:
                 cycle_no += 1
                 exploration.cycles = cycle_no
                 try:
-                    await asyncio.to_thread(exploration.after_cycle)
+                    await asyncio.to_thread(
+                        exploration.after_cycle,
+                        [n for n, state in dag_state.items() if state["status"] == "abandonada"],
+                    )
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:  # noqa: BLE001 - a avaliação é complementar: a pesquisa segue

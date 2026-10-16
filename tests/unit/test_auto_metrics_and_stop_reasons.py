@@ -297,7 +297,7 @@ def test_retomada_de_hipoteses_nao_testadas_e_recusada():
     assert verdict.decision == RESUME_REFUSE and "hipoteses_nao_testadas" in verdict.message
 
 
-# --- hypothesis-loop: sem_hipotese -----------------------------------------------------------------------------------
+# --- hypothesis-loop: motivos da revisão -----------------------------------------------------------------------------------
 
 
 def _write(root: Path, rel: str, content) -> None:
@@ -321,11 +321,11 @@ async def _review(root: Path, criteria: list[str], hypothesis_id: str) -> Review
 
 
 @pytest.mark.asyncio
-async def test_subtarefa_sem_hipotese_registra_o_motivo(tmp_path):
-    """Scenario: Subtarefa sem hipótese."""
+async def test_subtarefa_sem_hipotese_nao_registra_sem_hipotese(tmp_path):
+    """v18.7-hypothesis-linking: o motivo ``sem_hipotese`` deixou de existir; a reprovação segue sem motivo."""
     _write(tmp_path, "treinar_rl/metrics.json", {"metrics": {"accuracy": 0.933}})
     review = await _review(tmp_path, ["acurácia no teste >= 0.95"], hypothesis_id="")
-    assert review.status == "fail" and review.outcome == "reprovado" and review.motivos == ["sem_hipotese"]
+    assert review.status == "fail" and review.outcome == "reprovado" and review.motivos == []
 
 
 @pytest.mark.asyncio
@@ -338,13 +338,13 @@ async def test_evento_da_revisao_leva_os_motivos(tmp_path):
     orchestrator.output_manager.base_dir = tmp_path.parent
     telemetry = MagicMock()
     t = AgentTask(agent_id="developer", prompt="x", task_name="treinar_rl",
-                  validation_criteria=["acurácia no teste >= 0.95"])
+                  validation_criteria=["acurácia no teste >= 0.95"], hypothesis_origin="sistema")
     result = AgentResult(agent_id="developer", session_id="s", status="success", response={"text": "ok"})
     with patch("src.observability.telemetry.get_telemetry", return_value=telemetry), \
             patch("src.agents.validator.agent.record_llm_call"):
         review = await AutonomousLoop(orchestrator)._review_subtask(t, result, tmp_path.name)
-    assert telemetry.record_agent_event.call_args.kwargs["payload"]["motivos"] == ["sem_hipotese"]
-    assert review["motivos"] == ["sem_hipotese"] and review["outcome"] == "reprovado"
+    assert telemetry.record_agent_event.call_args.kwargs["payload"]["motivos"] == ["hipotese_do_sistema"]
+    assert review["motivos"] == ["hipotese_do_sistema"] and review["outcome"] == "reprovado"
 
 
 @pytest.mark.asyncio

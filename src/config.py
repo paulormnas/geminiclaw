@@ -646,6 +646,14 @@ HYPOTHESES_MAX_PER_PLAN = int(get_env("HYPOTHESES_MAX_PER_PLAN", default="10"))
 DECISIONS_MAX_PER_PLAN = int(get_env("DECISIONS_MAX_PER_PLAN", default="10"))
 # v18.6-auto-metrics-and-stop-reasons: máximo de métricas que o Researcher pode definir no plano (modo auto).
 METRICS_MAX_PER_PLAN = max(int(get_env("METRICS_MAX_PER_PLAN", default="3")), 1)
+# v18.7-hypothesis-linking: máximo de itens do retorno ao Researcher sobre ligações e retiradas do ciclo anterior, e
+# primeiras palavras (normalizadas, sem acento) que tornam o texto livre ``hypothesis`` não afirmativo.
+LINKAGE_FEEDBACK_MAX_ITEMS = max(int(get_env("LINKAGE_FEEDBACK_MAX_ITEMS", default="30")), 1)
+HYPOTHESIS_TEXT_NEGATION_PREFIXES = tuple(
+    item.strip().lower()
+    for item in get_env("HYPOTHESIS_TEXT_NEGATION_PREFIXES", default="nao,sem,nenhum,nenhuma,nunca").split(",")
+    if item.strip()
+)
 
 # --- Grafo de Conhecimento (Roadmap V17 / ADR 009, ADR 015) ---
 # Nome do grafo Apache AGE (sem o nome do produto — ADR 011).

@@ -64,16 +64,25 @@ class HypothesisWorld:
 
     def hypothesis(
         self, enunciado: str = "H1", *, status: str = "proposta", origem: str = "researcher", sobre: bool = True,
-        actor: Actor | None = None,
+        actor: Actor | None = None, abandonada_por: str | None = None,
     ) -> str:
-        """Hipótese do projeto (por padrão do Researcher, ``proposta``, ``SOBRE`` o Problema)."""
+        """Hipótese do projeto (por padrão do Researcher, ``proposta``, ``SOBRE`` o Problema).
+
+        ``status="abandonada"`` sem ``abandonada_por`` cria o nó antigo (sem a propriedade nem nota de rejeição, que a
+        leitura compatível trata como abandono do agente); com ``abandonada_por`` a hipótese nasce ``proposta`` e é
+        abandonada em seguida pelo ``Actor`` do caminho real (pesquisador para ``pesquisador``).
+        """
         by = actor or (PESQUISADOR if origem == "pesquisador" else AGENTE)
-        props = self.base(enunciado=enunciado, justificativa="J", status=status, origem=origem)
+        late = status == "abandonada" and abandonada_por is not None
+        props = self.base(enunciado=enunciado, justificativa="J", status="proposta" if late else status, origem=origem)
         if by.kind == "agente":
             props.update(justificativa_criacao="teste", nos_consultados=[])
         hid = self.store.create_node("Hipotese", props, actor=by)
         if sobre:
             self.store.create_edge(hid, "SOBRE", self.problem.id, {}, actor=ORQ)
+        if late:
+            closer = PESQUISADOR if abandonada_por == "pesquisador" else ORQ
+            self.store.update_node(hid, {"status": "abandonada", "abandonada_por": abandonada_por}, actor=closer)
         return hid
 
     def opportunity(self, enunciado: str = "Testar X", status: str = "documentada") -> str:

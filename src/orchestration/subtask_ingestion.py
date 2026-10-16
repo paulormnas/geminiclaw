@@ -52,6 +52,8 @@ async def ingest_subtask(
             review_outcome=(review or {}).get("outcome"),
             validation_criteria=[c for c in (task.validation_criteria or []) if isinstance(c, str)],
             hypothesis_id=task.hypothesis_id or None,
+            papel=task.papel_decidido or None,
+            prepara_ids=task.prepara_ids if task.papel_decidido == "preparacao" else None,
         )
         if await asyncio.to_thread(ingestor.subtask, sub):
             # v17-curator-agent: recálculo determinístico do veredito após cada subtarefa ingerida.
@@ -87,3 +89,30 @@ def flag_from_review(
         )
     except Exception as exc:  # noqa: BLE001 - sinalizar nunca derruba a subtarefa
         logger.warning("Sinalização do Validator não gravada", extra={"error": type(exc).__name__})
+
+
+async def link_preparations(
+    orchestrator: "Orchestrator",
+    links: dict[str, list[str]],
+    executed: dict[str, "AgentTask"],
+    master_session_id: str,
+) -> None:
+    """Liga preparações já concluídas às hipóteses de testes novos (``PREPARA`` incremental, pela fila do ingestor).
+
+    ``executed`` guarda as subtarefas já executadas (``subtask_id`` do ``Experimento``); sem ele vale o identificador
+    padrão da sessão. Nunca interrompe a sessão.
+    """
+    from src.knowledge.ingestion import FactIngestor
+
+    if not links:
+        return
+    ingestor = orchestrator.get_ingestor(master_session_id)
+    if not isinstance(ingestor, FactIngestor):
+        return
+    for name, hypothesis_ids in links.items():
+        before = executed.get(name)
+        subtarefa_id = (before.subtask_id if before is not None else None) or f"{master_session_id}:{name}"
+        try:
+            await asyncio.to_thread(ingestor.link_preparation, subtarefa_id, hypothesis_ids)
+        except Exception as exc:  # noqa: BLE001 - a ligação incremental nunca derruba a sessão
+            logger.warning("Falha ao ligar a preparação às hipóteses", extra={"error": type(exc).__name__})

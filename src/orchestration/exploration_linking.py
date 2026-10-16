@@ -1,13 +1,14 @@
-"""Ligação das subtarefas do plano às hipóteses (v18-hypothesis-loop, design §2 e §4).
+"""Ligação das subtarefas do plano às hipóteses (v18-hypothesis-loop §2 e §4; v18.7-hypothesis-linking §3 e §6).
 
-Movido de ``exploration.py`` sem alterar o comportamento (v18.7-hypothesis-linking, tarefa 0.9; ADR 024 §5): a
-resolução de ``hypothesis_ref`` para o ``id`` da hipótese, a retirada das subtarefas que a governança não deixa
-executar e o fecho das que dependem delas. ``ExplorationSession.prepare_cycle`` só orquestra estas funções.
+Separado de ``exploration.py`` (tarefa 0.9 de v18.7-hypothesis-linking; ADR 024 §5): a resolução de ``hypothesis_ref``
+para o ``id`` da hipótese, a preparação servida a cada hipótese, a retirada das subtarefas que só a decisão humana ou a
+integridade impedem de executar e o fecho (até o ponto fixo) das que dependem delas. Funções puras sobre as subtarefas
+do plano; ``ExplorationSession.prepare_cycle`` só as orquestra.
 """
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from src.knowledge.hypotheses import HypothesisBook, PlanExtras, RecordReport, legacy_hypotheses
@@ -39,55 +40,121 @@ def bind_legacy_refs(tasks: list[Any], extras: PlanExtras) -> tuple[PlanExtras, 
     return replace(extras, hipoteses=declared), True
 
 
-def is_bound(task: Any) -> bool:
-    """Subtarefa que testa hipótese (precisa de ``hypothesis_ref`` resolvível no formato novo).
+# Motivos que impedem a execução (ADR 021 §6).
+DROP_REJECTED = "hipotese_rejeitada_pelo_pesquisador"
+DROP_PENDING = "hipotese_aguarda_aprovacao"
+DROP_ABANDONED = "hipotese_abandonada_pelo_pesquisador"
+DROP_DEFERRED = "hipotese_adiada_por_prioridade"
+DROP_DEPENDS = "depende_de_subtarefa_retirada"
+# Retiradas que mantêm a hipótese viva (pendente ou adiada): não abandonam a hipótese do sistema (design §4.4).
+KEEPS_HYPOTHESIS_ALIVE = frozenset({DROP_PENDING, DROP_DEFERRED})
+_FORMAT_REJECTIONS = ("id_inexistente", "sem_enunciado")  # falha de formato: vira hipótese do sistema
 
-    Tipos preparatórios (``eda``, ``synthesis``) nunca testam hipótese, mesmo que o modelo preencha ``approach``:
-    o Gemini 3.8 flash o preenche em todas as subtarefas, e exigir hipótese da EDA retirava o plano inteiro (tudo
-    depende dela), fechando a sessão como ``sem_caminhos_promissores`` sem executar nada.
+
+@dataclass
+class RefResolution:
+    """Resolução dos ``hypothesis_ref`` do plano.
+
+    Attributes:
+        resolved: ``task_name`` -> ``id`` da hipótese aceita a que o ``hypothesis_ref`` resolveu.
+        dropped: ``task_name`` -> código das subtarefas cuja referência não pode executar (hipótese abandonada pelo
+            pesquisador, equivalente a uma abandonada, oportunidade não aprovada).
+        motivo: ``task_name`` -> motivo da hipótese do sistema quando a referência é inválida
+            (``ref_id_inexistente`` ou ``ref_sem_enunciado``).
     """
-    if getattr(task, "task_type", None) in PREPARATORY_TASK_TYPES:
-        return False
-    if getattr(task, "approach", None):
-        return True
-    return getattr(task, "agent_id", "") == "developer" and getattr(task, "task_type", None) not in (
-        PREPARATORY_TASK_TYPES
-    )
+
+    resolved: dict[str, str] = field(default_factory=dict)
+    dropped: dict[str, str] = field(default_factory=dict)
+    motivo: dict[str, str] = field(default_factory=dict)
 
 
 def resolve_task_refs(
-    book: HypothesisBook, tasks: list[Any], report: RecordReport, *, novo_formato: bool, done: set[str]
-) -> dict[str, str]:
-    """Preenche ``hypothesis_id`` de cada subtarefa e devolve ``task_name -> motivo`` das que não podem executar."""
-    dropped: dict[str, str] = {}
+    book: HypothesisBook, tasks: list[Any], report: RecordReport
+) -> RefResolution:
+    """Resolve o ``hypothesis_ref`` de cada subtarefa; nada é retirado por falta ou erro de formato da referência."""
+    out = RefResolution()
     for task in tasks:
         ref = getattr(task, "hypothesis_ref", "") or ""
-        hid = book.resolve_ref(ref, report) if ref else None
-        task.hypothesis_id = hid or ""
-        if ref and hid is None and ref in report.rejeitadas:
-            dropped[task.task_name] = f"hipotese_{report.rejeitadas[ref]}"
-        elif novo_formato and hid is None and is_bound(task) and task.task_name not in done:
-            dropped[task.task_name] = "sem_hipotese"
-    return dropped
+        if not ref:
+            continue
+        hid = book.resolve_ref(ref, report)
+        if hid is not None:
+            out.resolved[task.task_name] = hid
+        elif ref in report.rejeitadas:
+            reason = report.rejeitadas[ref]
+            if reason in _FORMAT_REJECTIONS:
+                out.motivo[task.task_name] = f"ref_{reason}"
+            else:
+                out.dropped[task.task_name] = f"hipotese_{reason}"
+        elif (node := book.referenced(ref)) is not None and book.abandoned_author(node) == "pesquisador":
+            out.dropped[task.task_name] = "hipotese_hipotese_abandonada"
+        else:
+            out.motivo[task.task_name] = "ref_id_inexistente"
+    return out
 
 
-def governance_drops(
-    tasks: list[Any], selection: Selection, dropped: dict[str, str], *, done: set[str]
-) -> None:
-    """Acrescenta a ``dropped`` as subtarefas cuja hipótese a governança não deixou executar."""
+def is_test(task: Any) -> bool:
+    return getattr(task, "papel_decidido", "") == "teste"
+
+
+def transitive_dependents(name: str, tasks: list[Any]) -> set[str]:
+    """Subtarefas que dependem de ``name``, direta ou transitivamente."""
+    found: set[str] = set()
+    frontier = {name}
+    while frontier:
+        nxt = {
+            t.task_name for t in tasks
+            if t.task_name and t.task_name not in found and any(d in frontier for d in t.depends_on)
+        }
+        found |= nxt
+        frontier = nxt
+    return found
+
+
+def transitive_dependencies(name: str, tasks: list[Any]) -> set[str]:
+    """Subtarefas das quais ``name`` depende, direta ou transitivamente."""
+    by_name = {t.task_name: t for t in tasks if t.task_name}
+    found: set[str] = set()
+    frontier = [name]
+    while frontier:
+        task = by_name.get(frontier.pop())
+        for dep in (task.depends_on if task is not None else []):
+            if dep not in found and dep in by_name:
+                found.add(dep)
+                frontier.append(dep)
+    return found
+
+
+def served_hypotheses(prep: Any, tasks: list[Any], own: set[str]) -> list[str]:
+    """Hipóteses que a preparação serve: as testadas por ``teste`` que dependem dela, e ``own`` (a que ela cita)."""
+    dependents = transitive_dependents(prep.task_name, tasks)
+    served = {t.hypothesis_id for t in tasks if t.task_name in dependents and is_test(t) and t.hypothesis_id}
+    return sorted(served | own)
+
+
+def governance_drops(tasks: list[Any], selection: Selection, dropped: dict[str, str], *, done: set[str]) -> None:
+    """Acrescenta a ``dropped`` os testes cuja hipótese a governança não deixou executar."""
     runnable = set(selection.execute)
     for task in tasks:
-        if task.task_name in dropped or task.task_name in done:
+        if task.task_name in dropped or task.task_name in done or not is_test(task):
             continue
-        if task.hypothesis_id and task.hypothesis_id not in runnable:
-            if task.hypothesis_id in selection.pending_approval:
-                dropped[task.task_name] = "hipotese_aguarda_aprovacao"
-            elif task.hypothesis_id in selection.rejected:
-                dropped[task.task_name] = "hipotese_rejeitada_pelo_pesquisador"
-            elif task.hypothesis_id in selection.deferred:
-                dropped[task.task_name] = "hipotese_adiada_por_prioridade"
-            else:
-                dropped[task.task_name] = "hipotese_ja_concluida_ou_abandonada"
+        hid = task.hypothesis_id
+        if not hid or hid in runnable:
+            continue
+        dropped[task.task_name] = hypothesis_drop_reason(hid, selection) or DROP_ABANDONED
+
+
+def hypothesis_drop_reason(hid: str, selection: Selection) -> str | None:
+    """Motivo pelo qual a governança retirou a hipótese do ciclo, ou ``None`` se ela executa."""
+    if hid in selection.execute:
+        return None
+    if hid in selection.pending_approval:
+        return DROP_PENDING
+    if hid in selection.rejected:
+        return DROP_REJECTED
+    if hid in selection.deferred:
+        return DROP_DEFERRED
+    return DROP_ABANDONED
 
 
 def descendants_of(dropped: set[str], tasks: list[Any], keep: set[str]) -> set[str]:
@@ -102,3 +169,48 @@ def descendants_of(dropped: set[str], tasks: list[Any], keep: set[str]) -> set[s
                 out.add(name)
                 changed = True
     return out
+
+
+def cascade_drops(
+    tasks: list[Any], dropped: dict[str, str], *, done: set[str], served: dict[str, list[str]],
+    hypothesis_drops: dict[str, str],
+) -> None:
+    """Fecho das retiradas até o ponto fixo (ADR 021 §6).
+
+    - subtarefa que depende de uma retirada sai com ``depende_de_subtarefa_retirada`` (a entrada não vai existir);
+    - preparação sai quando **todas** as hipóteses que serve foram retiradas (com o motivo comum delas, se for um só);
+      preparação ligada só ao ``Problema`` nunca sai por motivo de hipótese.
+
+    Uma hipótese está retirada quando a governança a retirou (``hypothesis_drops``) ou quando todos os seus testes
+    ainda não concluídos foram retirados.
+    """
+    changed = True
+    while changed:
+        changed = False
+        for name in descendants_of(set(dropped), tasks, done) - set(dropped):
+            dropped[name] = DROP_DEPENDS
+            changed = True
+        tests_of: dict[str, list[str]] = {}
+        for task in tasks:
+            if task.task_name not in done and is_test(task) and task.hypothesis_id:
+                tests_of.setdefault(task.hypothesis_id, []).append(task.task_name)
+
+        def retired(hid: str) -> str | None:
+            if hid in hypothesis_drops:
+                return hypothesis_drops[hid]
+            names = tests_of.get(hid)
+            if names and all(n in dropped for n in names):
+                reasons = {dropped[n] for n in names}
+                return reasons.pop() if len(reasons) == 1 else DROP_DEPENDS
+            return None
+
+        for task in tasks:
+            name = task.task_name
+            if name in done or name in dropped or getattr(task, "papel_decidido", "") != "preparacao":
+                continue
+            targets = served.get(name) or []
+            reasons = [retired(h) for h in targets]
+            if targets and all(reasons):
+                common = set(reasons)
+                dropped[name] = common.pop() if len(common) == 1 else DROP_DEPENDS  # type: ignore[arg-type]
+                changed = True

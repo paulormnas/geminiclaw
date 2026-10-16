@@ -18,8 +18,11 @@ ganham "hypothesis_ref").
   nova.
 - "respostas_sugestoes": responda a CADA sugestão pendente do Curator: {"sugestao_id": "...", "decisao": "aceita" ou
   "recusada", "motivo": "...", "hipotese_ref": "h2"} ("aceita" exige a hipótese correspondente em "hipoteses").
-- Cada subtarefa que testa uma hipótese DEVE ter "hypothesis_ref" (o "ref" ou o "id" da hipótese). Subtarefas só de
-  preparação (eda) ou de síntese podem omiti-lo.
+- Cada subtarefa que testa uma hipótese DEVERIA ter "hypothesis_ref" (o "ref" ou o "id" da hipótese); sem ele o
+  sistema deriva a ligação e a registra (nenhuma subtarefa é retirada por falta de "hypothesis_ref").
+- Declare o "papel" de cada subtarefa: "teste" (testa uma hipótese), "preparacao" (prepara dados ou ambiente para
+  outras subtarefas) ou "referencia" (baseline do Problema, medido com a métrica principal). O campo é opcional;
+  sem ele o sistema decide o papel pela estrutura do plano.
 - Hipóteses de agentes dependem de aprovação do pesquisador conforme o modo da sessão; oportunidades só viram
   hipótese depois de aprovadas pelo pesquisador.
 - Subtarefas já concluídas continuam no plano, inalteradas (para manter as dependências); não são reexecutadas.

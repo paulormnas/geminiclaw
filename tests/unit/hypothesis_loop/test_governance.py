@@ -167,12 +167,14 @@ def test_pesquisador_nao_consome_a_cota_do_ciclo():
     assert mine in sel.execute and len(sel.execute) == 3
 
 
-def test_hipoteses_concluidas_ou_abandonadas_nao_executam_de_novo():
+def test_concluidas_recebem_novos_testes_e_abandonada_pelo_pesquisador_nao_executa():
+    """v18.7-hypothesis-linking §5.2: ``validada``/``refutada`` entram na execução sem mudar de status."""
     w = HypothesisWorld(mode="auto")
-    done, refuted, gone = (w.hypothesis(n, status=s) for n, s in
-                           (("a", "validada"), ("b", "refutada"), ("c", "abandonada")))
+    done, refuted = (w.hypothesis(n, status=s) for n, s in (("a", "validada"), ("b", "refutada")))
+    gone = w.hypothesis("c", status="abandonada", abandonada_por="pesquisador")
     sel = _cycle(w).select([done, refuted, gone], mode="auto")
-    assert sel.execute == [] and sorted(sel.excluded) == sorted([done, refuted, gone])
+    assert sorted(sel.execute) == sorted([done, refuted]) and sel.excluded == [gone]
+    assert _status(w, done) == "validada" and _status(w, refuted) == "refutada"
 
 
 def test_prioridade_formula_e_pesos_configuraveis():
@@ -272,7 +274,7 @@ def test_status_validada_e_refutada_so_pelo_veredito_calculado():
     good = _hypothesis_with_attempts(w, [0.85, 0.86, 0.9])
     bad = _hypothesis_with_attempts(w, [0.55, 0.52, 0.5, 0.45])
     weak = _hypothesis_with_attempts(w, [0.85])
-    rejected = w.hypothesis("rejeitada pelo pesquisador", status="abandonada")
+    rejected = w.hypothesis("rejeitada pelo pesquisador", status="abandonada", abandonada_por="pesquisador")
     w.store.update_node(rejected, {"veredito": 0.9}, actor=ORQ)
     changed = _cycle(w).sync_statuses([good, bad, weak, rejected])
     assert changed == {good: "validada", bad: "refutada"}

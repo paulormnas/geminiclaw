@@ -16,7 +16,8 @@ Princípios de segurança:
   hipótese nova nasce ``researcher``, ``curator`` (resposta a sugestão aceita) ou ``oportunidade`` (oportunidade
   **aprovada** pelo pesquisador). Uma oportunidade ``documentada`` nunca origina hipótese (o pedido fica
   pendente no ``HumanGate``);
-- uma hipótese ``abandonada`` (rejeitada pelo pesquisador) não volta: nem por ``id``, nem por repetição de enunciado;
+- uma hipótese abandonada **pelo pesquisador** não volta: nem por ``id``, nem por repetição de enunciado, nem por
+  chave derivada (a abandonada pelo sistema ou pelo agente é reaberta e segue a governança do modo);
 - toda escrita passa pela porta única (``GraphStore``): o schema, a proveniência e ``validate_human_only`` valem aqui.
 """
 
@@ -29,7 +30,9 @@ from typing import Any, Callable
 from src import config
 from src.gate.human_gate import HumanGate, default_gate
 from src.knowledge import opportunities
+from src.knowledge.approval_port import ApprovalPort, NoGateApprovalPort
 from src.knowledge.errors import GraphStoreError
+from src.knowledge.exploration_reads import abandoned_by
 from src.knowledge.graph_store import GraphStore, Node
 from src.knowledge.ingestion import (
     ACTOR_ORQUESTRADOR,
@@ -70,6 +73,7 @@ _MAX_SIMILAR = 5
 _LEXICAL_MIN_OVERLAP = 0.5  # sem índice semântico: fração mínima de termos do menor enunciado em comum
 _MAX_DISCARDED = 10
 _PLAN_DATA_KEYS = ("hipoteses", "decisoes", "respostas_sugestoes", "metricas")
+_AUDIT_SCAN = 1000
 
 
 class HypothesisError(GraphStoreError):
@@ -416,6 +420,7 @@ class HypothesisBook:
         similarity: float | None = None,
         pending_suggestions: Callable[[], list[PendingSuggestion]] | None = None,
         gate: HumanGate | None = None,
+        approvals: ApprovalPort | None = None,
     ) -> None:
         """Inicializa o livro de hipóteses da sessão.
 
@@ -426,6 +431,8 @@ class HypothesisBook:
             similarity: Limiar de reutilização (padrão: ``HYPOTHESIS_DEDUP_SIMILARITY``).
             pending_suggestions: Fornece as sugestões pendentes (para validar ``respostas_sugestoes``).
             gate: ``HumanGate`` onde ficam pendentes as oportunidades citadas sem aprovação (padrão: o do processo).
+            approvals: Interface de aprovação do pesquisador, usada para conferir a aprovação anterior na reabertura
+                de hipótese abandonada pelo sistema (padrão: ``NoGateApprovalPort`` sem aprovador).
         """
         self._store = store
         self._ctx = ctx
@@ -433,6 +440,7 @@ class HypothesisBook:
         self._threshold = config.HYPOTHESIS_DEDUP_SIMILARITY if similarity is None else similarity
         self._pending = pending_suggestions or (lambda: [])
         self._gate = gate
+        self._approvals: ApprovalPort = approvals if approvals is not None else NoGateApprovalPort(None)
         self._writer = _Writer(store, ctx)
         self._session_node: str | None = None
 
@@ -452,6 +460,75 @@ class HypothesisBook:
         if self._session_node is None:
             self._session_node = self._writer.session()
         return self._session_node
+
+    @property
+    def store(self) -> GraphStore:
+        return self._store
+
+    @property
+    def ctx(self) -> SessionContext:
+        return self._ctx
+
+    @property
+    def writer(self) -> _Writer:
+        return self._writer
+
+    def problem(self) -> Node:
+        """``Problema`` confirmado do projeto (``HypothesisError`` quando não há)."""
+        return self._problem()
+
+    def system_hypothesis(
+        self, *, task_name: str, approach: dict[str, str] | None, text: str, metric: Any, motivo: str
+    ) -> Any:
+        """Deriva (ou reutiliza, ou reabre) a hipótese do sistema do teste (``SystemHypotheses.derive``)."""
+        from src.knowledge.system_hypotheses import SystemHypotheses
+
+        return SystemHypotheses(self).derive(
+            task_name=task_name, approach=approach, text=text, metric=metric, motivo=motivo
+        )
+
+    def referenced(self, ref: str) -> Node | None:
+        """``Hipotese`` do projeto citada pelo ``id`` em ``ref`` (conferida no grafo), ou ``None``."""
+        return self._project_node(_ident(ref), ("Hipotese",))
+
+    def abandoned_author(self, node: Node) -> str | None:
+        """Quem abandonou a hipótese (``pesquisador``, ``sistema``, ``agente``) ou ``None`` se não está abandonada."""
+        if node.properties.get("status") != STATUS_ABANDONADA:
+            return None
+        return abandoned_by(node, self._store.audit_history(node.id, limit=_AUDIT_SCAN))
+
+    def reopen(self, node: Node, author: str, label: str) -> str:
+        """Reabre uma hipótese abandonada pelo sistema ou pelo agente, preservando o histórico na auditoria.
+
+        ``em_teste`` quando foi o sistema que abandonou e o modo é ``semi``/``auto`` ou, no ``assisted``, o gate
+        persistente confirma a aprovação anterior (``ApprovalPort.previously_approved``; a trilha de auditoria do
+        grafo nunca é prova). A abandonada pelo agente volta sempre como ``proposta`` e passa pela governança do
+        modo. A abandonada pelo pesquisador nunca é reaberta pelo sistema.
+
+        Returns:
+            O novo ``status``.
+        """
+        if author == "pesquisador":
+            raise HypothesisError("Hipótese abandonada pelo pesquisador não é reaberta pelo sistema.")
+        chain = [self._ctx.session_id, *([self._ctx.continues_session_id] if self._ctx.continues_session_id else [])]
+        approved = author == "sistema" and (
+            self._ctx.modo != "assisted" or self._approvals.previously_approved(node.id, chain)
+        )
+        new_status = STATUS_EM_TESTE if approved else STATUS_PROPOSTA
+        self._store.update_node(
+            node.id, {"status": new_status, "abandonada_por": None, "motivo_abandono": None}, actor=ACTOR_ORQUESTRADOR
+        )
+        self._store.record_audit_note(
+            node.id,
+            ACTOR_ORQUESTRADOR,
+            {
+                "reabertura": new_status,
+                "subtarefa": _text(label, 128),
+                "abandonada_por_anterior": author,
+                "motivo_abandono_anterior": node.properties.get("motivo_abandono"),
+            },
+        )
+        return new_status
 
     def _problem(self) -> Node:
         problem = get_active_problem(self._store, self._ctx.project_id)
@@ -582,7 +659,7 @@ class HypothesisBook:
             node = self._project_node(decl.id, ("Hipotese",))
             if node is None:
                 report.rejeitadas[decl.ref] = "id_inexistente"
-            elif node.properties.get("status") == STATUS_ABANDONADA:
+            elif not self._usable(node, decl.ref):
                 report.rejeitadas[decl.ref] = "hipotese_abandonada"
             else:
                 report.ref_map[decl.ref] = node.id
@@ -602,7 +679,7 @@ class HypothesisBook:
             return
         similar, score = self.find_similar(decl.enunciado, decl.justificativa)
         if similar is not None:
-            if similar.properties.get("status") == STATUS_ABANDONADA:
+            if not self._usable(similar, decl.ref):
                 report.rejeitadas[decl.ref] = "equivalente_a_hipotese_abandonada"
                 return
             report.ref_map[decl.ref] = similar.id
@@ -619,6 +696,21 @@ class HypothesisBook:
         report.criadas.append(hypothesis_id)
         for node in opportunity_sources:
             self._link_opportunity(node, hypothesis_id)
+
+    def _usable(self, node: Node, label: str) -> bool:
+        """A hipótese pode receber testes: não está abandonada, ou foi abandonada pelo sistema ou pelo agente.
+
+        Só a abandonada pelo pesquisador (``abandonada_por = "pesquisador"``, inclusive a leitura compatível do nó
+        antigo) bloqueia. A abandonada pelo sistema ou pelo agente é reaberta aqui (``reopen``) e segue pela
+        governança do modo (decisão do pesquisador de 2026-10-15).
+        """
+        author = self.abandoned_author(node)
+        if author is None:
+            return True
+        if author == "pesquisador":
+            return False
+        self.reopen(node, author, label)
+        return True
 
     def _request_opportunity_decision(self, opportunity_id: str) -> None:
         """Deixa a decisão sobre a oportunidade **pendente** para o pesquisador (sem duplicar pedidos)."""
@@ -646,23 +738,25 @@ class HypothesisBook:
         enunciado: str | None = None,
         status: str = STATUS_PROPOSTA,
         motivo_criacao: str = "declarada no plano da sessão",
+        motivo_abandono: str | None = None,
     ) -> str:
         text = enunciado if enunciado is not None else (decl.enunciado if decl else "")
         consulted = [n.id for n in sources] + [problem.id]
-        hypothesis_id = self._store.create_node(
-            "Hipotese",
-            {
-                "projeto_id": self._ctx.project_id,
-                "sessao_id": self._ctx.session_id,
-                "enunciado": text,
-                "justificativa": justificativa or "Sem justificativa declarada no plano.",
-                "status": status,
-                "origem": origem,
-                "justificativa_criacao": f"{motivo_criacao} {self._ctx.session_id}",
-                "nos_consultados": consulted[:_MAX_CONSULTED],
-            },
-            actor=ACTOR_RESEARCHER,
-        )
+        props: dict[str, Any] = {
+            "projeto_id": self._ctx.project_id,
+            "sessao_id": self._ctx.session_id,
+            "enunciado": text,
+            "justificativa": justificativa or "Sem justificativa declarada no plano.",
+            "status": status,
+            "origem": origem,
+            "justificativa_criacao": f"{motivo_criacao} {self._ctx.session_id}",
+            "nos_consultados": consulted[:_MAX_CONSULTED],
+        }
+        if status == STATUS_ABANDONADA:  # recusa ou alternativa descartada pelo Researcher: não bloqueia (ADR 021 §3.5)
+            props["abandonada_por"] = "agente"
+            if motivo_abandono:
+                props["motivo_abandono"] = motivo_abandono
+        hypothesis_id = self._store.create_node("Hipotese", props, actor=ACTOR_RESEARCHER)
         self._writer._edge(hypothesis_id, "SOBRE", problem.id, fato=False)
         if decl is not None and decl.abordagem:
             approach_id = self._writer.abordagem(decl.abordagem, f"hipotese {decl.ref}")
@@ -711,6 +805,7 @@ class HypothesisBook:
             discarded_id = self._create_hypothesis(
                 None, problem, ORIGEM_CURATOR, sources, f"Sugestão do Curator recusada: {reply.motivo}",
                 enunciado=text, status=STATUS_ABANDONADA, motivo_criacao="sugestão do Curator recusada na sessão",
+                motivo_abandono="sugestao_recusada_pelo_researcher",
             )
         decision_id = self._create_decision(
             f"Resposta à sugestão do Curator ({suggestion.tipo})",
@@ -786,6 +881,7 @@ class HypothesisBook:
                 target = self._create_hypothesis(
                     None, problem, ORIGEM_RESEARCHER, [], alt.motivo, enunciado=alt.nome,
                     status=STATUS_ABANDONADA, motivo_criacao="alternativa descartada na decisão da sessão",
+                    motivo_abandono="alternativa_descartada_pelo_researcher",
                 )
             if target is None or target == chosen:
                 continue
@@ -798,7 +894,8 @@ class HypothesisBook:
     def resolve_ref(self, ref: str, report: RecordReport) -> str | None:
         """``id`` da hipótese a que ``hypothesis_ref`` se refere: declarada no plano ou hipótese existente do projeto.
 
-        Uma referência a hipótese ``abandonada`` ou recusada nunca resolve.
+        Uma referência a hipótese recusada, ou abandonada pelo pesquisador, nunca resolve; a abandonada pelo sistema
+        ou pelo agente é reaberta (``reopen``) e resolve.
         """
         if not ref:
             return None
@@ -807,6 +904,6 @@ class HypothesisBook:
         if ref in report.rejeitadas:
             return None
         node = self._project_node(_ident(ref), ("Hipotese",))
-        if node is not None and node.properties.get("status") != STATUS_ABANDONADA:
+        if node is not None and self._usable(node, ref):
             return node.id
         return None

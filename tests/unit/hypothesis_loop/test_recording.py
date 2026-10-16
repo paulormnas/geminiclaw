@@ -110,7 +110,7 @@ def test_sem_indice_a_deduplicacao_e_por_enunciado_normalizado():
 def test_hipotese_equivalente_a_abandonada_nao_volta():
     """Uma hipótese rejeitada pelo pesquisador não é reproposta por repetição do enunciado."""
     w = HypothesisWorld()
-    w.hypothesis("Idéia X", status="abandonada")
+    w.hypothesis("Idéia X", status="abandonada", abandonada_por="pesquisador")
     report = _book(w).record(_extras(hipoteses=[{"ref": "h1", "enunciado": "idéia x"}]))
     assert "h1" not in report.ref_map and report.rejeitadas["h1"] == "equivalente_a_hipotese_abandonada"
     assert len(_nodes(w, "Hipotese")) == 1
@@ -120,7 +120,7 @@ def test_id_do_plano_e_conferido_no_grafo():
     """O ``id`` citado precisa ser hipótese do projeto e não estar abandonada; ID inventado é recusado."""
     w = HypothesisWorld()
     ok = w.hypothesis("continua", status="em_teste")
-    gone = w.hypothesis("rejeitada", status="abandonada")
+    gone = w.hypothesis("rejeitada", status="abandonada", abandonada_por="pesquisador")
     other = w.store.create_node(
         "Hipotese",
         {"projeto_id": "outro", "sessao_id": "x", "enunciado": "alheia", "justificativa": "j", "status": "proposta",
@@ -167,7 +167,7 @@ def test_decisao_registra_escolhido_e_descartado_com_motivo():
 
 def test_decisao_com_hipotese_recusada_nao_e_gravada():
     w = HypothesisWorld()
-    w.hypothesis("Idéia X", status="abandonada")
+    w.hypothesis("Idéia X", status="abandonada", abandonada_por="pesquisador")
     extras = _extras(
         hipoteses=[{"ref": "h1", "enunciado": "idéia x"}],
         decisoes=[{"contexto": "c", "escolhido": {"tipo": "Hipotese", "ref": "h1"}, "justificativa": "j"}],

@@ -183,6 +183,9 @@ def test_chamada_registra_a_versao_em_token_usage():
     class GoogleProvider:
         model_name = "gemini-2.5-pro"
 
+        def unwrap(self):
+            return self
+
     provider = GoogleProvider()
     response = LLMResponse(
         text="x", usage={"prompt_tokens": 1, "completion_tokens": 1}, versao_efetiva="gemini-2.5-pro-002"

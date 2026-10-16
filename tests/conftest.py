@@ -351,6 +351,18 @@ class _AlwaysHealthyProvider:
 
 
 @pytest.fixture(autouse=True)
+def provider_resolver():
+    """Registra o roteador com filtro de egresso como resolvedor de ``get_provider()`` e restaura o anterior."""
+    from src.egress.routing import install_provider_resolver
+    from src.llm import factory
+
+    previous = factory._resolver
+    install_provider_resolver()
+    yield
+    factory.set_provider_resolver(previous)
+
+
+@pytest.fixture(autouse=True)
 def isolate_model_routing(monkeypatch):
     """Isola o roteador de modelos (ADR 017) do ambiente e da rede.
 

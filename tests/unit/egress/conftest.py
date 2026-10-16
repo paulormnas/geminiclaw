@@ -6,8 +6,9 @@ from typing import Any
 
 import pytest
 
-from src.egress.gate import Destination, EgressGate
+from src.egress.gate import EgressGate
 from src.egress.log import EgressLogError, EgressRecord
+from src.llm.destination import Destination
 
 
 class MemoryLog:

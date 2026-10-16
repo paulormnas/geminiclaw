@@ -37,10 +37,8 @@ def bound_execution_id() -> str:
 
 
 def provider_name(provider: LLMProvider) -> str:
-    from src.egress.gate import GatedProvider
-
     # GatedProvider (v18.5-egress-gate) envolve o provedor real: o nome é o do provedor interno.
-    inner = provider.inner if isinstance(provider, GatedProvider) else provider
+    inner = provider.unwrap()
     return type(inner).__name__.removesuffix("Provider").lower() or "unknown"
 
 

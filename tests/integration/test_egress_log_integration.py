@@ -77,7 +77,7 @@ def real_pool():
 
 
 def _dest(**kw):
-    from src.egress.gate import Destination
+    from src.llm.destination import Destination
 
     base = dict(canal="llm", provedor="google", modelo="gemini", trust="third_party", localidade="fora_do_no",
                 aceita_dados_brutos=False, papel="researcher", versao_efetiva="desconhecida")

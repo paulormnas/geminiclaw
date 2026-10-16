@@ -95,7 +95,7 @@ def _default_provider_factory() -> Callable[[], Any]:
     """Provedor do papel ``curator`` pelo roteador de modelos (ADR 017); só é chamado no ``graph edit``."""
 
     def factory() -> Any:
-        from src.llm.model_router import ModelRouter
+        from src.egress.routing import ModelRouter
         from src.llm.session import bind_session_routing, build_session_routing
 
         routing = asyncio.run(build_session_routing())

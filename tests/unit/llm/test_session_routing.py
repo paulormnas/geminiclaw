@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.llm.model_router import ModelRouter
+from src.egress.routing import ModelRouter
 from src.llm.session import (
     SessionRouting,
     bind_session_routing,

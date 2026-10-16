@@ -32,6 +32,7 @@ from src.config import (
     SESSION_DEFAULT_MODE,
     SessionMode,
 )
+from src.egress.routing import install_provider_resolver
 from src.llm.vision import VisionConfigError
 from src.logger import get_logger
 from src.orchestration.orchestrator import AgentResult, Orchestrator, OrchestratorResult
@@ -1484,6 +1485,8 @@ def _project_marked_unlimited(project_arg: str | None) -> bool:
 
 def main() -> None:
     """Ponto de entrada principal da CLI."""
+    install_provider_resolver()
+
     # Roadmap V15.6 / Spec G10 — help completo customizado, sem passar pelo argparse padrão
     if any(a in ("-h", "--help") for a in sys.argv[1:]):
         print_full_help()

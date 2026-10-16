@@ -164,9 +164,9 @@ def test_alvo_de_patch_de_definicao_movida_aponta_para_o_modulo_novo() -> None:
 
 def test_test_wiring_cita_os_caminhos_novos() -> None:
     text = (ROOT / "tests" / "unit" / "egress" / "test_wiring.py").read_text(encoding="utf-8")
-    for new in ("src/research_data/context_loader.py", "src/llm/model_router.py"):
+    for new in ("src/research_data/context_loader.py",):
         assert new in text and (ROOT / new).is_file()
-    for old in ("src/context_loader.py", "src/model_router.py"):
+    for old in ("src/context_loader.py", "src/llm/model_router.py"):
         assert old not in text
 
 

@@ -20,9 +20,9 @@ from typing import TYPE_CHECKING
 from src.agent_runtime.definitions import get_agent_definition
 from src.agent_runtime.resources import ResourceGuard
 from src.config import AGENT_TIMEOUT_SECONDS
+from src.egress.routing import ModelRouter
 from src.llm.agent_loop import run_agent_loop
 from src.llm.model_config import get_role_model_config
-from src.llm.model_router import ModelRouter
 from src.llm.retry import is_retryable_error
 from src.logger import get_logger
 from src.utils.agent_context import AgentContext, bind_agent_context

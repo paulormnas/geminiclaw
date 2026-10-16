@@ -2,8 +2,8 @@
 
 import pytest
 
+from src.egress.routing import ModelRouter
 from src.llm.factory import get_provider
-from src.llm.model_router import ModelRouter
 from src.llm.providers.ollama import OllamaProvider
 
 

@@ -10,9 +10,11 @@ from typing import Dict, Optional
 
 # Import com efeito colateral: popula o registro de provedores (src.llm.providers.__init__).
 import src.llm.providers  # noqa: F401
-from src.egress.gate import Destination, GatedProvider
+from src.egress.gate import GatedProvider
 from src.llm.base import LLMProvider
 from src.llm.catalog import split_model_id
+from src.llm.destination import Destination
+from src.llm.factory import set_provider_resolver
 from src.llm.registry import create_provider
 from src.llm.session import clear_catalog_cache, get_session_routing
 from src.logger import get_logger
@@ -106,3 +108,11 @@ class ModelRouter:
         _provider_cache.clear()
         _gated_cache.clear()
         clear_catalog_cache()
+
+
+def install_provider_resolver() -> None:
+    """Registra o roteador como resolvedor de ``src.llm.factory.get_provider`` (chamada na partida).
+
+    O roteador só devolve provedores envolvidos pelo filtro de egresso (ADR 019): é a camada de composição.
+    """
+    set_provider_resolver(lambda papel=None: ModelRouter.get_provider(papel))

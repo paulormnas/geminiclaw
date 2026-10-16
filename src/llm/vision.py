@@ -12,7 +12,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.egress.gate import Destination
+from src.llm.destination import Destination
 from src.logger import get_logger
 
 logger = get_logger(__name__)

@@ -442,8 +442,9 @@ def routed_provider_factory(provider: str, model: str) -> Any:
     Raises:
         JudgeUnavailable: Modelo fora do catálogo, recusado pela política ou endpoint inseguro.
     """
-    from src.egress.gate import Destination, GatedProvider
+    from src.egress.gate import GatedProvider
     from src.llm.catalog import CatalogError
+    from src.llm.destination import Destination
     from src.llm.endpoints import EndpointError
     from src.llm.registry import create_provider
     from src.llm.session import get_catalog

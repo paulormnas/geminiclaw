@@ -271,7 +271,7 @@ class Orchestrator:
             def _provider() -> Any:
                 if provider is not None:
                     return provider
-                from src.llm.model_router import ModelRouter
+                from src.egress.routing import ModelRouter
 
                 return ModelRouter.get_provider("curator")
 
@@ -1613,7 +1613,7 @@ class Orchestrator:
     def _consult_provider(self) -> Any:
         if self.consult_provider is not None:
             return self.consult_provider
-        from src.llm.model_router import ModelRouter
+        from src.egress.routing import ModelRouter
 
         return ModelRouter.get_provider("researcher")
 

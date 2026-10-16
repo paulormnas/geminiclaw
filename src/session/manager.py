@@ -411,6 +411,16 @@ class SessionManager:
             ).fetchall()
         return [r["alias"] for r in rows or []]
 
+    def find_by_launch_id(self, launch_id: str) -> Session | None:
+        """Sessão criada pelo lançamento ``launch_id`` (``payload.launch_id``), ou ``None`` se ainda não existe."""
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM agent_sessions WHERE agent_id = 'orchestrator' AND payload->>'launch_id' = %s "
+                "ORDER BY created_at DESC LIMIT 1",
+                (launch_id,),
+            ).fetchone()
+        return self._row_to_session(row) if row else None
+
     def find_by_alias(self, alias: str) -> Session | None:
         """Folha da cadeia com o apelido (a sessão mais recente sem ``continued_by``); ``None`` se não existe."""
         with get_connection() as conn:

@@ -10,6 +10,14 @@ from src.utils.configuration_error import ConfigurationError
 # Carrega o arquivo .env se existir
 load_dotenv()
 
+# v18.7-background-sessions §6.2: o processo da sessão não herda nomes negados; como o `.env` relido os reintroduziria,
+# eles saem de `os.environ` logo depois da carga e antes de qualquer outro import do projeto.
+SESSION_PROCESS_MARKER = "GEMINICLAW_SESSION_PROCESS"
+if os.environ.get(SESSION_PROCESS_MARKER) == "1":
+    for _denied in (n.strip() for n in os.environ.get("SESSION_ENV_DENYLIST", "").split(",")):
+        if _denied:
+            os.environ.pop(_denied, None)
+
 
 # Nome do aplicativo — usado, por exemplo, para compor caminhos de cache
 # default (ex.: EMBEDDING_CACHE_DIR) sem repetir a string literal.
@@ -340,6 +348,25 @@ SESSION_STALE_SECONDS = float(get_env("SESSION_STALE_SECONDS", default="300"))
 # v18.7-background-sessions: sessões terminadas há mais de N dias saem do registro (`agent_sessions`); as com
 # trabalho por terminar e as antecessoras de uma cadeia viva ficam. 0 desliga a purga; `outputs/` nunca é tocado.
 SESSION_RETENTION_DAYS = float(get_env("SESSION_RETENTION_DAYS", default="30"))
+# v18.7-background-sessions: cada pesquisa roda em processo próprio (ADR 023); o terminal só lança, acompanha e decide.
+SESSION_LAUNCH_TIMEOUT_SECONDS = float(get_env("SESSION_LAUNCH_TIMEOUT_SECONDS", default="60"))
+SESSION_LOG_DIR = get_env("SESSION_LOG_DIR", default="logs/sessions")
+SESSION_LOOP_TICK_SECONDS = float(get_env("SESSION_LOOP_TICK_SECONDS", default="10"))
+SESSION_LOOP_STALE_SECONDS = float(get_env("SESSION_LOOP_STALE_SECONDS", default="900"))
+TERMINAL_PRESENCE_HEARTBEAT_SECONDS = float(get_env("TERMINAL_PRESENCE_HEARTBEAT_SECONDS", default="10"))
+TERMINAL_PRESENCE_STALE_SECONDS = float(get_env("TERMINAL_PRESENCE_STALE_SECONDS", default="60"))
+SESSION_PRESENCE_CHECK_SECONDS = float(get_env("SESSION_PRESENCE_CHECK_SECONDS", default="15"))
+TERMINAL_STALE_CHECK_SECONDS = float(get_env("TERMINAL_STALE_CHECK_SECONDS", default="60"))
+SESSION_LOST_EXIT_GRACE_SECONDS = float(get_env("SESSION_LOST_EXIT_GRACE_SECONDS", default="30"))
+# Nomes extras retirados do ambiente do processo da sessão (separados por vírgula).
+SESSION_ENV_DENYLIST = tuple(n.strip() for n in get_env("SESSION_ENV_DENYLIST", default="").split(",") if n.strip())
+if TERMINAL_PRESENCE_STALE_SECONDS <= 2 * TERMINAL_PRESENCE_HEARTBEAT_SECONDS:
+    raise ConfigurationError(
+        "'TERMINAL_PRESENCE_STALE_SECONDS' deve ser maior que o dobro de 'TERMINAL_PRESENCE_HEARTBEAT_SECONDS' "
+        "(uma pausa curta do banco não pode contar como ausência do terminal)."
+    )
+if SESSION_LOOP_STALE_SECONDS <= SESSION_LOOP_TICK_SECONDS:
+    raise ConfigurationError("'SESSION_LOOP_STALE_SECONDS' deve ser maior que 'SESSION_LOOP_TICK_SECONDS'.")
 # `checkpoint.json` é dado não confiável na leitura: tamanho máximo aceito (bytes) e teto de subtarefas.
 CHECKPOINT_MAX_BYTES = int(get_env("CHECKPOINT_MAX_BYTES", default=str(2 * 1024 * 1024)))
 CHECKPOINT_MAX_SUBTASKS = int(get_env("CHECKPOINT_MAX_SUBTASKS", default="200"))

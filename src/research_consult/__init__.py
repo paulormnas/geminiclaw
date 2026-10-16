@@ -31,6 +31,12 @@ RESPONDIDO_RESEARCHER = "researcher"
 RESPONDIDO_SUPOSICAO = "suposicao"
 PENDENTE_PESQUISADOR = "pendente_pesquisador"
 
+PENDING_MESSAGE = (
+    "[Pergunta pendente do pesquisador] A pergunta foi registrada para o pesquisador, que não responde a esta sessão "
+    "durante a execução (a sessão não lê o terminal). Prossiga com a suposição documentada, sem tratá-la como "
+    "resposta, e registre isso em 'scientific_rationale'."
+)
+
 RESERVED_MESSAGE = (
     "[Decisão reservada ao pesquisador] Esta decisão não pode ser tomada pelo Researcher "
     "consultor; foi registrada como pendente para o pesquisador. Prossiga com a suposição "

@@ -55,7 +55,7 @@ from src.session.continuity import (
     ResumeState,
 )
 from src.session.heartbeat import SessionHeartbeat
-from src.session.manager import SessionManager
+from src.session.manager import Session, SessionManager
 from src.utils.agent_context import AgentContext
 from src.utils.egress_fragments import taint_if
 from src.utils.json_parser import extract_json
@@ -184,6 +184,10 @@ class Orchestrator:
         self._recorders: dict[str, CheckpointRecorder] = {}
         self._resumes: dict[str, ResumeState] = {}
         self._resume_planning: set[str] = set()
+        # v18.7-background-sessions §1.8 — sessões continuadas por outra: o batimento aciona ``mark_session_lost`` e
+        # nada mais é gravado nelas; ``session_lost_handler`` (do processo da sessão) cancela a tarefa e sai com 6.
+        self._lost_sessions: set[str] = set()
+        self.session_lost_handler: "Callable[[str], None] | None" = None
         # v17-input-document-index — metadados do projeto por sessão mestra (cabeçalho da ingestão de artefatos).
         self._project_metas: dict[str, ProjectMeta] = {}
         # v18-hypothesis-loop — exploração ativa por sessão mestra e declarações do último plano aprovado.
@@ -654,15 +658,43 @@ class Orchestrator:
             logger.warning("Evento proveniencia_divergente não registrado")
 
     def _start_heartbeat(self, session_id: str) -> SessionHeartbeat:
-        """Batimento da sessão em thread dedicada (não depende do laço de eventos)."""
-        from src.config import SESSION_HEARTBEAT_SECONDS
+        """Batimento da sessão em thread dedicada (não depende do laço de eventos) com o sinal do laço (§1.8).
+
+        A reafirmação exige laço com sinal recente (``SESSION_LOOP_STALE_SECONDS``) e a recusa porque a sessão foi
+        continuada por outra aciona ``mark_session_lost`` (o processo se encerra sem gravar nada na sessão).
+        """
+        from src.config import SESSION_HEARTBEAT_SECONDS, SESSION_LOOP_STALE_SECONDS, SESSION_LOOP_TICK_SECONDS
+        from src.session.heartbeat import LoopTick
 
         sm = self.session_manager
+        tick = LoopTick(SESSION_LOOP_TICK_SECONDS).start()
+
+        def reassert() -> bool:
+            return tick.age() < SESSION_LOOP_STALE_SECONDS and bool(sm.reassert_active(session_id))
+
+        def is_lost() -> bool:
+            current = sm.get(session_id)
+            return current is not None and "continued_by" in (current.payload or {})
+
         return SessionHeartbeat(
-            lambda: bool(sm.heartbeat(session_id)),
-            lambda: bool(sm.reassert_active(session_id)),
+            lambda: bool(sm.heartbeat(session_id, tick.iso())),
+            reassert,
             interval=SESSION_HEARTBEAT_SECONDS,
+            tick=tick,
+            is_lost=is_lost,
+            on_lost=lambda: self.mark_session_lost(session_id),
         ).start()
+
+    def mark_session_lost(self, session_id: str) -> None:
+        """A sessão foi continuada por outra: nada mais é gravado nela e ``session_lost_handler`` é avisado.
+
+        Chamado pela thread do batimento. O processo da sessão (``src/cli/session_process.py``) cancela a tarefa,
+        remove os containers de sandbox da sessão e sai com o código 6.
+        """
+        self._lost_sessions.add(session_id)
+        handler = self.session_lost_handler
+        if handler is not None:
+            handler(session_id)
 
     def refresh_graph_checkpoint(self, session_id: str) -> None:
         """Atualiza no checkpoint o estado do grafo e as sinalizações pendentes (síncrono, falha isolada)."""
@@ -963,6 +995,8 @@ class Orchestrator:
         project_context: str | None = None,
         project_mode: str | None = None,
         resume: ResumeState | None = None,
+        launch_id: str | None = None,
+        on_session_created: "Callable[[Session], None] | None" = None,
     ) -> OrchestratorResult:
         """Processa a solicitação do usuário, executando o ciclo de vida completo.
 
@@ -987,6 +1021,10 @@ class Orchestrator:
                 está ligado; gravado em ``payload["project_mode"]``.
             resume: Estado de retomada já validado (v18-research-continuity): a sessão nova grava
                 ``continues_session_id``, parte do plano do checkpoint e lê (só leitura) os outputs da cadeia.
+            launch_id: Identificador do lançamento pelo terminal (v18.7-background-sessions); gravado em
+                ``payload["launch_id"]`` para o terminal achar a sessão do processo que lançou.
+            on_session_created: Chamado com a sessão mestra logo depois de criada e com o payload gravado (o processo
+                da sessão registra aí PID, host, apelido e resumo).
 
         Returns:
             O resultado final da orquestração.
@@ -1071,8 +1109,12 @@ class Orchestrator:
                 **({"project_id": project_id} if project_id else {}),
                 **({"project_mode": project_mode} if project_mode else {}),
                 **({"continues_session_id": resume.source_session_id} if resume is not None else {}),
+                **({"launch_id": launch_id} if launch_id else {}),
             },
         )
+        if on_session_created is not None:
+            created = self.session_manager.get(master_session.id)
+            on_session_created(created if created is not None else master_session)
         self._wire_version_events(routing, master_session.id)
         self._wire_independence_events(routing, master_session.id)
         record_confirmation_event(master_session.id)  # v18.5-operation-metrics: modo sem limite confirmado
@@ -1191,6 +1233,12 @@ class Orchestrator:
             )
         except BaseException as run_exc:  # noqa: BLE001 - registra o fim da sessão no grafo e repropaga
             await asyncio.to_thread(heartbeat.stop)
+            if master_session.id in self._lost_sessions:
+                # Sessão continuada por outra (§1.8): este processo não grava mais nada nela nem no checkpoint.
+                self._recorders.pop(master_session.id, None)
+                self._resumes.pop(master_session.id, None)
+                self._resume_planning.discard(master_session.id)
+                raise
             interrupted = isinstance(run_exc, (KeyboardInterrupt, asyncio.CancelledError))
             if recorder is not None:
                 recorder.close(ESTADO_INTERROMPIDO, "interrompida" if interrupted else "erro", curator_pendente=True)
@@ -1406,8 +1454,8 @@ class Orchestrator:
         master_session_id: str | None,
     ) -> str:
         """Núcleo de ``ask_researcher``, chamado pelo callback do ``AgentContext`` (Roadmap
-        V16/ADR 014): reutiliza uma resposta anterior similar se houver, ou exibe a pergunta
-        e bloqueia aguardando a resposta do pesquisador via stdin.
+        V16/ADR 014): reutiliza uma resposta anterior similar se houver; senão registra a pergunta como
+        ``pendente_pesquisador`` e devolve a mensagem de pendência, sem bloquear (nenhuma leitura de ``stdin``).
 
         Args:
             question: Pergunta objetiva para o pesquisador.
@@ -1418,11 +1466,9 @@ class Orchestrator:
             master_session_id: ID da sessão mestra, usado para persistência/dedup.
 
         Returns:
-            A resposta do pesquisador (ou reaproveitada de uma pergunta similar anterior).
+            A resposta reaproveitada de uma pergunta similar anterior ou a mensagem de pendência.
         """
-        import asyncio as _asyncio
-
-        from src.utils.terminal import BOLD, CYAN, DIM, RESET, YELLOW
+        from src.research_consult import PENDENTE_PESQUISADOR, PENDING_MESSAGE
 
         session_key = master_session_id or task.task_name or "unknown"
 
@@ -1434,21 +1480,13 @@ class Orchestrator:
             )
             return cached_answer
 
-        print(f"\n{YELLOW}{BOLD}❓ O agente '{task.agent_id}' está bloqueado e precisa da sua ajuda:{RESET}")
-        print(f"  {BOLD}Pergunta:{RESET} {question}")
-        if context:
-            print(f"  {DIM}Contexto: {context}{RESET}")
-        if why_cant_proceed:
-            print(f"  {DIM}Por que não pode prosseguir sozinho: {why_cant_proceed}{RESET}")
-        if options:
-            print(f"  {CYAN}Opções:{RESET}")
-            for i, opt in enumerate(options, start=1):
-                print(f"    [{i}] {opt}")
-
-        answer = await _asyncio.to_thread(input, f"  {BOLD}Sua resposta:{RESET} ")
-
-        self._record_researcher_interaction(session_key, question, why_cant_proceed, options, answer, task)
-        return answer
+        # v18.7-background-sessions §1.10: o processo da sessão não lê o terminal; a pergunta vira pendência
+        # registrada (o gate persistente a substitui por um pedido que o pesquisador responde).
+        self._record_researcher_interaction(
+            session_key, question, why_cant_proceed, options, PENDING_MESSAGE, task,
+            respondido_por=PENDENTE_PESQUISADOR, context=context,
+        )
+        return PENDING_MESSAGE
 
     def _find_similar_researcher_answer(self, session_key: str, question: str) -> str | None:
         """Procura, nas interações já registradas na sessão, uma pergunta textualmente

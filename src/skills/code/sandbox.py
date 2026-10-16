@@ -11,6 +11,7 @@ import tarfile
 import threading
 import time
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, List, Literal, Optional
@@ -358,11 +359,42 @@ def sweep_orphan_work_dirs(
     return removed
 
 
-def cleanup_sandbox_containers() -> int:
-    """Encerra e remove containers de sandbox que ficaram para trás (ex.: após Ctrl+C).
+def cleanup_sandbox_containers(session_ids: Iterable[str]) -> int:
+    """Remove os containers de sandbox das sessões ``session_ids`` (a sessão e a sua cadeia).
 
-    O sandbox remove o próprio container ao terminar; isto cobre a interrupção do processo no
-    meio de uma execução. Best-effort: nunca levanta exceção.
+    O sandbox remove o próprio container ao terminar; isto cobre a interrupção do processo no meio de uma execução
+    (Ctrl+C, sessão perdida). Filtra pelo rótulo ``session_id``: com várias pesquisas simultâneas, uma sessão nunca
+    derruba os containers de outra (v18.7-background-sessions §6.1). Best-effort: nunca levanta exceção.
+
+    Args:
+        session_ids: Identificadores da sessão e dos antecessores da cadeia; vazio não remove nada.
+
+    Returns:
+        Quantidade de containers removidos.
+    """
+    ids = {sid for sid in session_ids if sid}
+    if not ids:
+        return 0
+    removed = 0
+    try:
+        client = docker.from_env(timeout=10)
+        for container in client.containers.list(all=True, filters={"label": f"project={SANDBOX_PROJECT_LABEL}"}):
+            if (container.labels or {}).get("session_id") not in ids:
+                continue
+            try:
+                container.remove(force=True)
+                removed += 1
+            except Exception as exc:  # noqa: BLE001 — limpeza best-effort
+                logger.warning(f"Falha ao remover container de sandbox {container.short_id}: {exc}")
+    except Exception as exc:  # noqa: BLE001 — sem daemon não há o que limpar
+        logger.warning(f"Cleanup de sandboxes ignorado: {exc}")
+    return removed
+
+
+def cleanup_all_sandbox_containers() -> int:
+    """Remove **todos** os containers de sandbox do projeto, de qualquer sessão.
+
+    Só o comando explícito do REPL, com confirmação, chama esta função: nenhum processo de sessão a usa.
 
     Returns:
         Quantidade de containers removidos.

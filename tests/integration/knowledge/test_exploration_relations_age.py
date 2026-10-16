@@ -65,7 +65,7 @@ def test_leitor_le_as_arestas_novas_e_nao_grava(temp_graph, monkeypatch):
         store.read_query(f"MATCH ()-[r:{label}]->() RETURN count(r)", {})  # sem erro de permissão
 
     with psycopg.connect(config.KNOWLEDGE_READER_DATABASE_URL, autocommit=True) as reader:
-        reader.execute("LOAD 'age'")
+        # Sem LOAD: o papel somente-leitura não pode carregar bibliotecas (mesma configuração do pool do AgeGraphStore).
         reader.execute('SET search_path = ag_catalog, "$user", public')
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             reader.execute(f"SELECT * FROM cypher('{name}', $$ CREATE ()-[:PREPARA]->() $$) AS (r agtype)")

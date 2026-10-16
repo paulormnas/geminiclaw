@@ -386,10 +386,17 @@ def hash_params(parameters: object) -> str | None:
 class _Writer:
     """Operações idempotentes (obter ou criar) sobre um ``GraphStore``, para uma sessão."""
 
-    def __init__(self, store: GraphStore, ctx: SessionContext, cache: HashCache | None = None) -> None:
+    def __init__(
+        self,
+        store: GraphStore,
+        ctx: SessionContext,
+        cache: HashCache | None = None,
+        notices: list[dict[str, Any]] | None = None,
+    ) -> None:
         self.store = store
         self.ctx = ctx
         self.created = 0
+        self.notices = notices if notices is not None else []  # avisos para o laço (v18.7-hypothesis-linking §8)
         self._cache = cache if cache is not None else HashCache()
         self._hash_budget = int(config.INGESTION_MAX_HASH_BYTES_PER_CALL)
 
@@ -744,7 +751,9 @@ class _Writer:
                 self._edge(node.id, "REFERENCIA_DE", problem.id, {"origem": "afirmado"}, fato=False)
                 linked += 1
         if not linked:
-            self._event("referencia_sem_metrica", {"subtarefa": _clean(sub.task_name, MAX_NAME_CHARS)})
+            name = _clean(sub.task_name, MAX_NAME_CHARS)
+            self._event("referencia_sem_metrica", {"subtarefa": name})
+            self.notices.append({"codigo": "referencia_sem_metrica", "subtarefa": name})
 
     def _event(self, event_type: str, payload: dict[str, Any]) -> None:
         """Evento de telemetria da ingestão (só IDs, nomes e códigos); nunca derruba a ingestão."""
@@ -1160,9 +1169,13 @@ def ingest_subtask(
     session_dir: Path,
     sub: SubtaskInput,
     cache: HashCache | None = None,
+    notices: list[dict[str, Any]] | None = None,
 ) -> str | None:
-    """Ingere uma subtarefa concluída (Experimento, Resultados, Abordagem, hipótese provisória)."""
-    return _Writer(store, ctx, cache).subtask(session_dir, sub)
+    """Ingere uma subtarefa concluída (Experimento, Resultados, Abordagem, hipótese provisória).
+
+    ``notices`` recebe os avisos que o laço devolve ao Researcher (hoje, ``referencia_sem_metrica``).
+    """
+    return _Writer(store, ctx, cache, notices).subtask(session_dir, sub)
 
 
 def ingest_session_end(
@@ -1448,6 +1461,13 @@ class FactIngestor:
         self._down = False
         self._lock = threading.Lock()
         self._hash_cache = HashCache()
+        self.notices: list[dict[str, Any]] = []
+
+    def drain_notices(self) -> list[dict[str, Any]]:
+        """Avisos acumulados pela ingestão desde a última chamada (o laço os leva ao Researcher)."""
+        with self._lock:
+            notices, self.notices = self.notices, []
+        return notices
 
     def _get_store(self) -> GraphStore:
         if self._store is None:
@@ -1523,7 +1543,7 @@ class FactIngestor:
         return self._run(
             EVENT_SUBTASK,
             sub.to_dict(),
-            lambda s: ingest_subtask(s, self.ctx, self._session_dir, sub, self._hash_cache),
+            lambda s: ingest_subtask(s, self.ctx, self._session_dir, sub, self._hash_cache, self.notices),
         )
 
     def link_preparation(self, subtarefa_id: str, hypothesis_ids: list[str]) -> bool:

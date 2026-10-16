@@ -166,6 +166,26 @@ def test_referencia_sem_a_metrica_registra_o_evento(tmp_path):
     assert ("referencia_sem_metrica", {"subtarefa": "baseline_majoritario"}) in seen
 
 
+def test_referencia_sem_a_metrica_volta_ao_researcher_no_ciclo_seguinte(tmp_path):
+    """Scenario: Referência sem a métrica (a frase do design §8 chega ao replanejamento seguinte)."""
+    c = LinkingCycle(tmp_path)
+    c.run([sub("baseline_majoritario", task_type="validation", papel="referencia", criteria=None)])
+    notices: list[dict] = []
+    sub_input = SubtaskInput(
+        task_name="baseline_majoritario", agent_id="developer", task_type="validation", agent_status="success",
+        review_status="pass", review_verified=True, papel="referencia",
+    )
+    _write_metrics(tmp_path / "out", "baseline_majoritario", {"f1_macro": 0.4})
+    ingest_subtask(c.w.store, c.w.ctx, tmp_path / "out", sub_input, notices=notices)
+    assert notices == [{"codigo": "referencia_sem_metrica", "subtarefa": "baseline_majoritario"}]
+    c.session.note_reference_without_metric(notices[0]["subtarefa"])
+    c.run([sub("outro_passo", criteria=None)])
+    texts = [i["texto"] for i in c.session.linkage_feedback() if i["acao"] == "referencia_sem_metrica"]
+    assert texts == ["`baseline_majoritario`: referência sem resultado da métrica M."]
+    c.run([sub("mais_um", criteria=None)])
+    assert not [i for i in c.session.linkage_feedback() if i["acao"] == "referencia_sem_metrica"]
+
+
 @pytest.mark.parametrize("papel", ["referencia", "preparacao"])
 def test_papel_gravado_no_experimento_sem_testa(tmp_path, papel):
     """Scenario: Papel gravado no experimento (``referencia`` e ``preparacao`` não têm ``TESTA``)."""

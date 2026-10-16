@@ -17,6 +17,7 @@ ACAO_RETIRADA = "retirada"
 ACAO_PREPARACAO = "preparacao_ligada"
 ACAO_HIPOTESE_SISTEMA = "hipotese_do_sistema"
 ACAO_REFERENCIA = "referencia_registrada"
+ACAO_REFERENCIA_SEM_METRICA = "referencia_sem_metrica"
 ACAO_BASELINE = "baseline_provavel"
 ACAO_REMOVIDA = "removida_pelo_replanejamento"
 ACAO_FORMATO = "formato"
@@ -68,6 +69,11 @@ class LinkageFeedback:
     def reference(self, task: str) -> None:
         text = f"`{task[:_MAX_NAME]}`: registrada como referência do Problema."
         self.others.append(self._item(task, "referencia", ACAO_REFERENCIA, "", [], text))
+
+    def reference_without_metric(self, task: str) -> None:
+        text = f"`{task[:_MAX_NAME]}`: referência sem resultado da métrica M."
+        item = self._item(task, "referencia", ACAO_REFERENCIA_SEM_METRICA, "sem_resultado_da_metrica", [], text)
+        self.others.append(item)
 
     def probable_baseline(self, task: str, hypothesis_id: str) -> None:
         text = (

@@ -220,6 +220,7 @@ class ExplorationSession:
         self._queue: set[str] = set()
         self._linked: dict[str, set[str]] = {}
         self._feedback: list[dict[str, Any]] = []
+        self._ingestion_notes: list[str] = []  # referências sem métrica, até o próximo ``prepare_cycle``
 
     # ------------------------------------------------------------------ componentes
 
@@ -334,6 +335,11 @@ class ExplorationSession:
         """Restaura ``system_origin`` do checkpoint da sessão retomada."""
         self.system_origin = {hid: set(names) for hid, names in origin.items() if names}
 
+    def note_reference_without_metric(self, task_name: str) -> None:
+        """Guarda o aviso da ingestão (referência sem resultado da métrica M) para o retorno ao Researcher."""
+        if task_name and task_name not in self._ingestion_notes:
+            self._ingestion_notes.append(task_name)
+
     def linkage_feedback(self) -> list[dict[str, Any]]:
         """Itens do retorno ao Researcher produzidos pelo último ``prepare_cycle`` (retiradas primeiro)."""
         return list(self._feedback)
@@ -369,6 +375,9 @@ class ExplorationSession:
             if hid:
                 costs[hid] = decl.custo
         feedback = LinkageFeedback()
+        for name in self._ingestion_notes:
+            feedback.reference_without_metric(name)
+        self._ingestion_notes = []
         metric = self._metric()
         events: Counter[str] = Counter()
 

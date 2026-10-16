@@ -55,12 +55,27 @@ async def ingest_subtask(
             papel=task.papel_decidido or None,
             prepara_ids=task.prepara_ids if task.papel_decidido == "preparacao" else None,
         )
-        if await asyncio.to_thread(ingestor.subtask, sub):
+        applied = await asyncio.to_thread(ingestor.subtask, sub)
+        _forward_notices(orchestrator, ingestor, master_session_id)
+        if applied:
             # v17-curator-agent: recálculo determinístico do veredito após cada subtarefa ingerida.
             subtarefa_id = sub.subtask_id or f"{master_session_id}:{sub.task_name}"
             await asyncio.to_thread(orchestrator.knowledge_after_subtask, master_session_id, subtarefa_id)
     except Exception as exc:  # noqa: BLE001 - a ingestão nunca derruba a subtarefa
         logger.warning("Falha ao ingerir fatos da subtarefa", extra={"error": type(exc).__name__})
+
+
+def _forward_notices(orchestrator: "Orchestrator", ingestor: Any, master_session_id: str) -> None:
+    """Leva os avisos da ingestão à exploração, que os devolve ao Researcher no replanejamento (design §8)."""
+    notices = ingestor.drain_notices()
+    getter = getattr(orchestrator, "get_exploration", None)
+    exploration = getter(master_session_id) if callable(getter) else None
+    note = getattr(exploration, "note_reference_without_metric", None)
+    if not callable(note):
+        return
+    for notice in notices:
+        if notice.get("codigo") == "referencia_sem_metrica":
+            note(str(notice.get("subtarefa", "")))
 
 
 def flag_from_review(

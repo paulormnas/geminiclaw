@@ -1,6 +1,6 @@
 # Tarefas: v18.7-hypothesis-linking
 
-**Estado (2026-10-16):** implementada em `feat/v18.7-hypothesis-linking` (PR aberto); falta só a execução do teste de integração com AGE real no Pi (10.2) e a confirmação do Arquiteto (ADRs). As propostas das questões §16 do design foram adotadas e estão listadas abaixo, junto com as dúvidas de spec que surgiram.
+**Estado (2026-10-16):** implementada em `feat/v18.7-hypothesis-linking` (PR aberto); o teste com AGE real (10.2) passou no Pi; falta só a confirmação do Arquiteto (ADRs). As propostas das questões §16 do design foram adotadas e estão listadas abaixo, junto com as dúvidas de spec que surgiram.
 
 ## 0. Pré-requisitos
 - [x] 0.1 `v18.7-graph-exploration-relations` mergeada (schema, leitura compatível, migração); os testes usam e estendem os construtores de `tests/support/exploration_graph.py` daquela mudança (design §5.1), sem criar outros para os mesmos nós.
@@ -69,7 +69,7 @@
 
 ## 10. Validação
 - [x] 10.1 `uv run ruff check .` sem erros novos; `uv run pytest -m "unit or integration" -v` verde.
-- [ ] 10.2 Teste de integração com AGE real: um ciclo com preparação, dois testes (um declarado, um do sistema) e uma referência, conferindo `PREPARA`, `TESTA`, `REFERENCIA_DE`, `origem = "sistema"` e o evento `hypothesis_cycle`.
+- [x] 10.2 Teste de integração com AGE real: um ciclo com preparação, dois testes (um declarado, um do sistema) e uma referência, conferindo `PREPARA`, `TESTA`, `REFERENCIA_DE`, `origem = "sistema"` e o evento `hypothesis_cycle`.
 - [x] 10.3 Teste de regressão com o plano de passos finos da bateria V18.6 (reconstruído como JSON nos dados de teste, com nomes genéricos): nenhuma retirada, todas as subtarefas no DAG executado.
 - [x] 10.4 `tasks.md` com caixas e linha **Estado** atualizadas no PR.
 
@@ -81,7 +81,7 @@
 - **Caminho de `ApprovalPort`:** o design cita `src/human_approval.py`, mas a raiz de `src/` só pode ter `config.py`, `db.py` e `logger.py` (ADR 024 §1; `tests/unit/structure`), e o pacote `gate` fica abaixo de `knowledge` na regra de camadas, então não pode importar `ApprovalItem`. O `Protocol`, o `NoGateApprovalPort` e `as_approval_port` ficaram em `src/knowledge/approval_port.py`. A `v18.7-persistent-human-gate` decide onde mora o `PersistentGateApprover` (precisa de uma camada que enxergue `knowledge`).
 - **`revert_on_reopen`:** em vez de um argumento novo em todas as implementações de `update_node`, a validação aceita `concluida -> em_investigacao` só para o `Actor` orquestrador com `role = "revert_on_reopen"` (`validation.REVERT_ON_REOPEN_ROLE`), construído apenas por `hypothesis_cycle.ORQUESTRADOR_REABERTURA` na revisão dos efeitos. Mesma garantia (nenhuma ferramenta de agente nem campo do plano o constrói), com menos superfície.
 - **Proveniência da `Hipotese` do sistema:** `justificativa_criacao` e `nos_consultados` só existem para `Actor` de agente (o schema recusa no orquestrador); a justificativa "derivada pelo sistema da subtarefa X (motivo)" foi para o campo `justificativa`, e o motivo e a fonte do enunciado ficam na nota de auditoria da criação.
-- **Retorno ao Researcher "referência sem métrica":** o evento `referencia_sem_metrica` sai na ingestão, mas a frase do §8 não chega ao replanejamento seguinte (a ingestão não devolve resultado ao laço); fica só no evento.
+- **Retorno ao Researcher "referência sem métrica" (confirmado pelo pesquisador em 2026-10-16):** a ingestão acumula o aviso (`FactIngestor.drain_notices`), o laço o entrega a `ExplorationSession.note_reference_without_metric` e a frase do §8 volta ao Researcher no próximo `prepare_cycle` (`ligacoes_e_retiradas_do_ciclo_anterior`, ação `referencia_sem_metrica`), além do evento.
 - **Ligação incremental na retomada:** a preparação concluída em sessão anterior é achada pelo `subtask_id` guardado no ciclo atual ou, sem ele, por `<sessão>:<subtarefa>`; sem `Experimento` o evento `preparacao_sem_experimento` registra.
 - **`HYPOTHESES_PER_CYCLE`:** continua adiando hipóteses (inclusive as do sistema) até `v18.7-exploration-limits`; os testes que não tratam disso usam um teto alto.
 - **Caminhos do tasks.md:** os caminhos antigos (`src/exploration.py` etc.) valem pela tabela de `v18.7-source-layout`; o papel do experimento ficou em `src/orchestration/exploration_roles.py`, a ligação em `exploration_linking.py`, o retorno ao Researcher em `exploration_feedback.py` e a hipótese do sistema em `src/knowledge/system_hypotheses.py`.

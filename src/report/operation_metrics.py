@@ -187,12 +187,17 @@ class EgressMetricsReader:
             ).fetchone()
         by_channel = {row["canal"]: int(row["n"]) for row in canais}
         origin_bytes = {str(row["origem"]): int(row["bytes"] or 0) for row in origins}
+        from src.egress.log import egress_bytes_for_session
+
+        # v18.7-benchmark-fixes: a grandeza que o limite de egresso limita (saídas de execução novas), à parte do total.
+        limited_bytes = egress_bytes_for_session(session_id)
         limit = None
         if self._budget_loader is not None:
             limit = (self._budget_loader(session_id) or {}).get("max_egress_bytes")
         return {
             # "Egresso" = bytes enviados a destinos fora do nó; destinos no nó aparecem em ``por_destino``.
             "bytes_total": sum(int(row["bytes"] or 0) for row in destinations if row["localidade"] == "fora_do_no"),
+            "bytes_limitados": limited_bytes,
             "por_destino": [
                 {
                     "provedor": row["provedor"], "modelo": row["modelo"], "trust": row["trust"],
@@ -229,12 +234,22 @@ class ProvenanceChainReader:
         integra = all(report.integra for report in reports)
         orphans = [o for report in reports for o in report.orfas]
         tip = reports[-1].ponta
+        # v18.7-benchmark-fixes: a causa da divergência (contagens por tipo de problema e os primeiros arquivos).
+        changed = [str(item["caminho"]) for report in reports for item in report.arquivos_alterados]
         return {
             "cadeia": {
                 "resultado": "integra" if integra else "divergente",
                 "orfas": len(orphans),
                 "pendentes": sum(1 for o in orphans if o.get("classe") == "pendente_local"),
                 "ponta": tip["record_hash"] if tip else None,
+                "motivos": {
+                    "cadeia": sum(len(report.problemas_cadeia) for report in reports),
+                    "pares": sum(len(report.problemas_pares) for report in reports),
+                    "arquivos_alterados": len(changed),
+                    "checkpoints_divergentes": sum(len(report.checkpoints_divergentes) for report in reports),
+                    "conflitos_pendencia": sum(len(report.conflitos_pendencia) for report in reports),
+                },
+                "arquivos_alterados_exemplos": changed[:5],
             }
         }
 
@@ -527,9 +542,15 @@ def render_operation_metrics_section(metrics: dict[str, Any], *, stop_reason: st
         lines.append(_unavailable_line("Egresso", egress))
     else:
         limit = egress.get("limite_bytes")
+        limited = egress.get("bytes_limitados")
+        limit_text = "sem limite" if limit is None else _fmt(limit, " bytes")
+        limited_text = (
+            f"saídas de execução novas (sujeitas ao limite): {_fmt(limited)} de {limit_text}"
+            if limited is not None else f"limite das saídas de execução novas: {limit_text}"
+        )
         lines.append(
-            f"- **Egresso:** {_fmt(egress['bytes_total'], ' bytes')} enviados fora do nó "
-            f"(limite: {'sem limite' if limit is None else _fmt(limit, ' bytes')}); "
+            f"- **Egresso:** {_fmt(egress['bytes_total'], ' bytes')} enviados fora do nó; "
+            f"{limited_text}; "
             f"buscas: {_fmt(egress['consultas_busca'])}; chamadas de visão: {_fmt(egress['chamadas_visao'])}; "
             f"envios recusados: {_fmt(egress.get('envios_recusados'))}"
         )
@@ -560,8 +581,11 @@ def render_operation_metrics_section(metrics: dict[str, Any], *, stop_reason: st
             f"métricas literais: {_fmt(prov.get('metricas_literais'))}"
             if origins is not None else "números: indisponível"
         )
+        causes = {k: v for k, v in ((chain or {}).get("motivos") or {}).items() if v}
+        cause_text = (", causas: " + ", ".join(f"{k}={v}" for k, v in causes.items())) if causes else ""
         chain_text = (
-            f"cadeia {chain['resultado']} (órfãs: {_fmt(chain['orfas'])}, pendentes: {_fmt(chain['pendentes'])})"
+            f"cadeia {chain['resultado']} (órfãs: {_fmt(chain['orfas'])}, pendentes: {_fmt(chain['pendentes'])}"
+            f"{cause_text})"
             if chain else "cadeia: indisponível"
         )
         lines.append(f"- **Proveniência:** {numbers}; {chain_text}")

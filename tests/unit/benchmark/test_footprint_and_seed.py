@@ -109,7 +109,7 @@ def test_relatorios_de_conhecimento_e_operacao() -> None:
     assert "15 (knowledge: +12, docs: +3)" in knowledge and "Hipotese 4, Problema 1" in knowledge
     assert "| 8 | 5 | 14 |" in knowledge
     operation = report.render_operation([result])
-    assert "| 2048 | 3 | integra | 5/1/0 | 2 | 3/4 | 2 | 0.42 | 33.1 |" in operation
+    assert "| 2048 | - | - | 3 | integra | 5/1/0 | 2 | 3/4 | 2 | 0.42 | 33.1 |" in operation
 
 
 def test_matriz_do_benchmark_v18_6_e_valida() -> None:

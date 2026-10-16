@@ -12,6 +12,7 @@ import threading
 
 from src.cli.repl import Console, Repl, run_with_prompt_interrupt
 from src.session.presence import TerminalPresence
+from tests.support.fake_gate import FakeGate
 from tests.support.session_fakes import FakeSessionManager, InMemoryPresenceStore
 from tests.support.starter_world import BUDGET, args, make_starter
 
@@ -26,7 +27,7 @@ async def main() -> int:
     repl = Repl(
         mode="auto", explicit_mode=None, budget=BUDGET, args=args(), starter=starter, manager=manager,
         presence=TerminalPresence("repl", store=InMemoryPresenceStore(), pid_alive=lambda pid: True),
-        console=console, sweep_interval=3600, recover=lambda s: None,
+        console=console, sweep_interval=3600, recover=lambda s: None, gate=FakeGate(), reminder_interval=3600,
     )
     if repl.open() is not None:
         return 1

@@ -46,7 +46,10 @@ class TestAskResearcherCore:
 
         task = AgentTask(agent_id="researcher", prompt="p", task_name="t1")
 
-        with patch("builtins.input", side_effect=AssertionError("o processo da sessão não lê stdin")):
+        with (
+            patch("builtins.input", side_effect=AssertionError("o processo da sessão não lê stdin")),
+            patch("src.config.GATE_ASK_WAIT_SECONDS", 0.05),
+        ):
             answer = await orchestrator._ask_researcher_core(
                 question="Onde está o dataset?",
                 context="ctx",
@@ -101,14 +104,15 @@ class TestAskResearcherCore:
 
         task = AgentTask(agent_id="researcher", prompt="p", task_name="t3")
 
-        answer = await orchestrator._ask_researcher_core(
-            question="Onde está o dataset de treino?",
-            context="",
-            why_cant_proceed="",
-            options=[],
-            task=task,
-            master_session_id="sess_1",
-        )
+        with patch("src.config.GATE_ASK_WAIT_SECONDS", 0.05):
+            answer = await orchestrator._ask_researcher_core(
+                question="Onde está o dataset de treino?",
+                context="",
+                why_cant_proceed="",
+                options=[],
+                task=task,
+                master_session_id="sess_1",
+            )
 
         assert answer == PENDING_MESSAGE  # pergunta diferente não reaproveita: vira pendência
 

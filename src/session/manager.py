@@ -455,13 +455,16 @@ class SessionManager:
             ).fetchone()
         return self._row_to_session(row) if row else None
 
-    def close_by_researcher(self, session_id: str, statuses: Sequence[str]) -> bool:
-        """Fecha a sessão parada por decisão do pesquisador: ``closed`` e ``motivo_parada='encerrada_pesquisador'``.
+    def close_by_researcher(
+        self, session_id: str, statuses: Sequence[str], motivo: str = "encerrada_pesquisador"
+    ) -> bool:
+        """Fecha a sessão parada por decisão do pesquisador: ``closed`` com ``motivo_parada`` (padrão
+        ``encerrada_pesquisador``; ``solucao_encontrada`` ou ``planos_rejeitados`` nas respostas de continuidade).
 
         Condicional ao status atual estar em ``statuses`` (uma sessão que voltou a ``active`` não é encerrada).
         """
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        patch = json.dumps({"motivo_parada": "encerrada_pesquisador"})
+        patch = json.dumps({"motivo_parada": motivo})
         with get_connection() as conn:
             row = conn.execute(
                 "UPDATE agent_sessions SET status = 'closed', payload = payload || %s::jsonb, updated_at = %s "

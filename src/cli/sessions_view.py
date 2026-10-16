@@ -7,7 +7,7 @@ e pergunta, para cada pesquisa não finalizada, se o pesquisador quer retomar, m
 from __future__ import annotations
 
 import datetime
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from src.report.operation_metrics import describe_stop_reason
@@ -61,8 +61,8 @@ def progress_text(session: Session, base_dir: Any) -> str:
     return f"checkpoint {checkpoint.estado}: {done} de {len(checkpoint.subtarefas)} subtarefa(s) concluída(s)"
 
 
-def describe(session: Session, base_dir: Any, now: float) -> list[str]:
-    """Linhas da pergunta de retomada: apelido, modo, motivo e último estado."""
+def describe(session: Session, base_dir: Any, now: float, pending: Sequence[Any] = ()) -> list[str]:
+    """Linhas da pergunta de retomada: apelido, modo, motivo, último estado e os pedidos pendentes ao pesquisador."""
     mode = (session.payload or {}).get("mode", "?")
     head = f"{BOLD}{label(session)}{RESET} — modo {mode}, {session.status} há {_age(session.updated_at, now)}"
     lines = [head, f"    {DIM}{session.resumo or (session.payload or {}).get('prompt', '')[:160]}{RESET}"]
@@ -70,6 +70,11 @@ def describe(session: Session, base_dir: Any, now: float) -> list[str]:
     progress = progress_text(session, base_dir)
     if progress:
         lines.append(f"    {progress}")
+    if pending:
+        from src.cli.gate_commands import format_request
+
+        lines.append(f"    pedidos pendentes ao pesquisador ({len(pending)}):")
+        lines += [f"      {format_request(req, None, now)}" for req in pending]
     return lines
 
 
@@ -108,11 +113,16 @@ def summary_since(manager: Any, last_end: float | None, output: Callable[[str], 
 
 
 def ask_unfinished(
-    session: Session, base_dir: Any, input_fn: Callable[[str], str], output: Callable[[str], Any], now: float
+    session: Session,
+    base_dir: Any,
+    input_fn: Callable[[str], str],
+    output: Callable[[str], Any],
+    now: float,
+    pending: Sequence[Any] = (),
 ) -> str:
     """Pergunta "[r]etomar / [m]anter / [e]ncerrar" para uma pesquisa não finalizada; padrão e erros: manter."""
     output("")
-    for line in describe(session, base_dir, now):
+    for line in describe(session, base_dir, now, pending):
         output(f"  {line}")
     while True:
         try:

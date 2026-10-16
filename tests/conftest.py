@@ -97,6 +97,18 @@ def gates_em_memoria(request):
 
 
 @pytest.fixture(autouse=True)
+def _sinalizadores_do_processo():
+    """Limpa os sinalizadores de interrupção e de suspensão (globais do processo) entre os testes."""
+    from src.orchestration.usage import clear_interrupt, clear_suspension
+
+    clear_interrupt()
+    clear_suspension()
+    yield
+    clear_interrupt()
+    clear_suspension()
+
+
+@pytest.fixture(autouse=True)
 def mock_db_connection(request):
     """Mock global do banco de dados com estado em memória.
 

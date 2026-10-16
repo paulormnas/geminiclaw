@@ -244,3 +244,41 @@ def test_exploracao_sem_aprovador_injetado_usa_o_gate_persistente():
     assert isinstance(exploration._approver, PersistentGateApprover)
     assert isinstance(exploration._gate_confirmer(), PersistentGateConfirmer)
     assert exploration._chain() == ["s1", "s0"]
+
+
+# -- nenhuma leitura de stdin no laço completo do assisted (validação final 6.2) -----------------------------------
+
+
+@pytest.mark.asyncio
+async def test_laco_completo_do_assisted_nao_le_stdin(tmp_path):
+    """Com ``input`` proibido (``StdinForbiddenError``), o laço do ``assisted`` percorre aprovação, espera, execução,
+    confirmação de solução, avisos de limite e ``ask_researcher`` sem tocar o terminal."""
+    import builtins
+
+    from src.cli.session_process import StdinForbiddenError, install_input_guard
+
+    original = builtins.input
+    gate = session_gate()
+    sid_holder: dict[str, str] = {}
+
+    def approver(items):
+        req = gate.find_in_chain("aprovar_hipotese", items[0].id, [sid_holder["sid"]]) or gate.request(
+            "aprovar_hipotese", items[0].id, "?", ("aprovar", "rejeitar", "editar"), session_id=sid_holder["sid"])
+        if req.estado == "pendente":
+            gate.respond(req.id, resposta={"acao": "aprovar"})  # o terminal responde (outro processo)
+            return {}
+        return {items[0].id: ApprovalDecision("aprovar")}
+
+    h = LoopHarness(tmp_path, mode="assisted", plans=[plan([task("t1")], [hyp("h1")])], approver=approver)
+    sid_holder["sid"] = h.w.sid
+    try:
+        install_input_guard()
+        with pytest.raises(StdinForbiddenError):
+            input("sanidade: o guarda está ativo")
+        await asyncio.wait_for(h.run(), 30)
+        orch = make_orchestrator()
+        with patch("src.config.GATE_ASK_WAIT_SECONDS", 0.05):
+            assert await ask(orch) == PENDING_MESSAGE
+    finally:
+        builtins.input = original
+    assert "t1" in h.ran  # a sessão chegou ao fim sem que nenhum ponto lesse o terminal

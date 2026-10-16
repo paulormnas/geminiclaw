@@ -8,6 +8,7 @@ sandbox de código, acionado pela skill de código.
 import asyncio
 import json
 import threading
+from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -2145,6 +2146,49 @@ class Orchestrator:
                 event_type="metricas_nao_aplicadas", payload={"motivo": f"falha_de_escrita:{type(exc).__name__}"},
             )
 
+    async def _researcher_messages_block(self, session_id: str) -> "tuple[str, Callable[[], Awaitable[None]]]":
+        """Bloco ``<mensagens_do_pesquisador>`` do replanejamento (v18.7-persistent-human-gate §1.7).
+
+        Reúne as orientações da caixa de entrada e as respostas que o pesquisador deu a perguntas de agentes depois de a
+        subtarefa seguir sem elas, ambas delimitadas como dado. Devolve o bloco e a função que as marca consumidas
+        (chamada depois que o Researcher recebeu o prompt). Falha da caixa nunca impede o planejamento.
+        """
+        from src.gate.types import HUMAN_SOURCES
+        from src.session.inbox import SessionInbox, messages_block
+        from src.utils.display_text import sanitize_line
+
+        async def nothing() -> None:
+            return None
+
+        try:
+            chain = chain_session_ids(self.session_manager, session_id)
+            inbox = SessionInbox()
+            messages = await asyncio.to_thread(inbox.deliver, chain)
+            human = {s.value for s in HUMAN_SOURCES}
+            late = [
+                r for r in await asyncio.to_thread(self.human_gate.answered_unconsumed, chain)
+                if r.decisao == "responder_pergunta_agente" and r.estado == "autorizada" and r.resolvido_por in human
+            ]
+            answers = [
+                (sanitize_line(r.pergunta, 300), sanitize_line((r.resposta or {}).get("texto", ""), 600)) for r in late
+            ]
+            block = messages_block(messages, answers)
+        except Exception as exc:  # noqa: BLE001 - a caixa de entrada nunca derruba o planejamento
+            logger.warning("Caixa de entrada indisponível no replanejamento", extra={"error": type(exc).__name__})
+            return "", nothing
+
+        async def consume() -> None:
+            try:
+                await asyncio.to_thread(inbox.consume, [m.id for m in messages])
+                for request in late:
+                    await asyncio.to_thread(self.human_gate.mark_consumed, request.id)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Mensagens do pesquisador não marcadas como consumidas", extra={"error": type(exc).__name__}
+                )
+
+        return block, consume
+
     async def _run_planning_loop(
         self, 
         prompt: str, 
@@ -2267,12 +2311,16 @@ class Orchestrator:
 
             if exploration_block:
                 planner_prompt += f"\n\n{taint_if(str(exploration_block), mixed_raw)}"
+            researcher_block, consume_researcher_block = await self._researcher_messages_block(master_session_id)
+            if researcher_block:
+                planner_prompt += f"\n\n{researcher_block}"
             planner_task = AgentTask(
                 agent_id="researcher",
                 prompt=planner_prompt,
             )
 
             planner_result = await self._execute_agent(planner_task, master_session_id, run_kind="planning")
+            await consume_researcher_block()
             if planner_result.status != "success" or "error" in planner_result.response:
                 err = planner_result.error or planner_result.response.get("error", "Erro desconhecido")
                 logger.error(f"Falha no Agente Researcher (Planner): {err}", extra={"error": err})

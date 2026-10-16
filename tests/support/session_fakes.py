@@ -138,13 +138,13 @@ class FakeSessionManager:
             sess.payload = {**sess.payload, "motivo_parada": "interrompida"}
             return sess
 
-    def close_by_researcher(self, session_id: str, statuses) -> bool:
+    def close_by_researcher(self, session_id: str, statuses, motivo: str = "encerrada_pesquisador") -> bool:
         with self._lock:
             sess = self.rows.get(session_id)
             if sess is None or sess.status not in statuses:
                 return False
             sess.status = "closed"
-            sess.payload = {**sess.payload, "motivo_parada": "encerrada_pesquisador"}
+            sess.payload = {**sess.payload, "motivo_parada": motivo}
             sess.updated_at = _now()
             return True
 

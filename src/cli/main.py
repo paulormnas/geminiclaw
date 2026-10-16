@@ -56,6 +56,9 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
   geminiclaw continue --project <id> (retoma a sessão mais recente do projeto)
   geminiclaw convert --session <id> --format latex|html|docx
   geminiclaw clear-context
+  geminiclaw pendentes [<apelido>]   (pedidos pendentes ao pesquisador)
+  geminiclaw decidir <id>            (responde um pedido; no REPL: decidir <id>)
+  geminiclaw "mensagem <apelido> <texto>"   (orienta uma pesquisa em execução no próximo replanejamento)
   geminiclaw history
   geminiclaw embeddings reindex [--collection <nome>] [--yes]
   geminiclaw provenance verify <projeto>|--session <id> [--full] [--json] | --from-export <dir>
@@ -590,6 +593,36 @@ def main() -> None:
                 target_sess = args.prompt.strip().split(maxsplit=1)[1]
             stop_sandboxes(session_id=target_sess)
             sys.exit(0)
+        elif p_lower == "pendentes" or p_lower.startswith("pendentes "):
+            from src.cli.gate_commands import show_pending
+            from src.gate.persistent_gate import terminal_gate
+            from src.session.manager import SessionManager
+
+            target = args.prompt.strip().split(maxsplit=1)[1] if " " in args.prompt.strip() else None
+            show_pending(terminal_gate(), SessionManager(), print, target)
+            sys.exit(0)
+        elif p_lower.startswith("decidir "):
+            from src.cli.gate_commands import decide
+            from src.gate.persistent_gate import terminal_gate
+            from src.session.manager import SessionManager
+
+            try:
+                request_id = int(args.prompt.strip().split()[1].lstrip("#"))
+            except (ValueError, IndexError):
+                print(f"\n  {RED}❌ Use: geminiclaw decidir <id> (veja `geminiclaw pendentes`){RESET}\n")
+                sys.exit(1)
+            result = decide(terminal_gate(), request_id, input, print, manager=SessionManager())
+            sys.exit(0 if result.resolved else 1)
+        elif p_lower.startswith("mensagem "):
+            from src.cli.gate_commands import send_message
+            from src.session.manager import SessionManager
+
+            _, _, rest = args.prompt.strip().partition(" ")
+            target, _, text = rest.strip().partition(" ")
+            if not target or not text.strip():
+                print(f"\n  {RED}❌ Use: geminiclaw \"mensagem <apelido> <texto>\"{RESET}\n")
+                sys.exit(1)
+            sys.exit(0 if send_message(SessionManager(), target, text.strip(), print) else 1)
         elif p_lower == "clear-context":
             clear_context()
             sys.exit(0)

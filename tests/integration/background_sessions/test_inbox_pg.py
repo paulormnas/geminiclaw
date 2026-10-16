@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -161,4 +160,3 @@ def test_orientar_deixa_o_texto_na_caixa_da_sessao_retomada(harness: SessionHarn
     assert wait_for(lambda: harness.manager.get(origin.id).payload.get("continued_by"), 30)
     messages = SessionInbox().deliver([origin.id])  # a sessão retomada lê a cadeia (origem inclusive)
     assert [m.conteudo for m in messages] == ["teste XGBoost com 5 dobras"]
-    time.sleep(0.1)

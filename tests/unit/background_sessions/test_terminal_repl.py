@@ -27,6 +27,7 @@ from src.cli.session_start import (
 from src.session.exit_codes import EXIT_ERROR, EXIT_LOW_MEMORY
 from src.session.presence import TerminalPresence
 from tests.support.fake_clock import FakeClock
+from tests.support.fake_gate import FakeGate
 from tests.support.session_fakes import FakeSessionManager, InMemoryPresenceStore
 from tests.support.starter_world import BUDGET, args, make_starter, patched_terminal
 
@@ -67,7 +68,7 @@ def make_repl(tmp_path, *, inputs=(), available_mb=4096, manager=None, mode="aut
     repl = Repl(
         mode=mode, explicit_mode=None, budget=BUDGET, args=args(), starter=starter, manager=manager,
         presence=presence, input_fn=lambda p: next(answers, "sair"), console=out, now=clock.now,
-        sweep_interval=3600, recover=lambda s: None,
+        sweep_interval=3600, recover=lambda s: None, gate=FakeGate(), reminder_interval=3600,
     )
     repl._last_end = last_end
     return repl, launched, out, store, manager
@@ -329,10 +330,21 @@ def test_segundo_repl_e_recusado_com_codigo_1(tmp_path):
 
 def test_abrir_e_sair_do_repl_nao_carrega_embeddings_nem_clientes():
     code = (
-        "import sys, asyncio\n"
-        "from tests.unit.background_sessions.test_terminal_repl import make_repl\n"
-        "import tempfile, pathlib\n"
-        "repl, *_ = make_repl(pathlib.Path(tempfile.mkdtemp()), inputs=['sair'])\n"
+        "import sys, asyncio, tempfile, pathlib\n"
+        "from types import SimpleNamespace\n"
+        "from src.cli.repl import Console, Repl\n"
+        "from src.session.presence import TerminalPresence\n"
+        "from tests.support.session_fakes import FakeSessionManager, InMemoryPresenceStore\n"
+        "from tests.support.starter_world import BUDGET, args, make_starter\n"
+        "class NoGate:\n"
+        "    def pending(self, *a, **k): return []\n"
+        "manager = FakeSessionManager()\n"
+        "starter, _ = make_starter(pathlib.Path(tempfile.mkdtemp()), manager=manager)\n"
+        "lines = iter(['sair'])\n"
+        "repl = Repl(mode='auto', explicit_mode=None, budget=BUDGET, args=args(), starter=starter, manager=manager,\n"
+        "            presence=TerminalPresence('repl', store=InMemoryPresenceStore(), pid_alive=lambda pid: True),\n"
+        "            input_fn=lambda p: next(lines, 'sair'), console=Console(), sweep_interval=3600,\n"
+        "            recover=lambda s: None, gate=NoGate(), reminder_interval=3600)\n"
         "assert repl.open() is None\n"
         "asyncio.run(repl.review_unfinished()); asyncio.run(repl.loop()); repl.close()\n"
         "heavy = [m for m in ('fastembed', 'qdrant_client', 'onnxruntime', 'google.genai', 'anthropic', 'openai')"

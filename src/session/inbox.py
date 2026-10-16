@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from src import config
-from src.db import get_connection
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -77,6 +76,8 @@ class SessionInbox:
         Raises:
             InboxError: texto vazio, acima de ``SESSION_INBOX_MAX_CHARS`` (nada é gravado) ou caixa cheia.
         """
+        from src.db import get_connection
+
         text = clean_message(conteudo)
         limit = int(config.SESSION_INBOX_MAX_CHARS)
         if not text:
@@ -101,6 +102,8 @@ class SessionInbox:
 
     def deliver(self, session_ids: Iterable[str]) -> list[InboxMessage]:
         """Orientações não consumidas das sessões da cadeia, da mais antiga à mais nova (marca ``entregue_em``)."""
+        from src.db import get_connection
+
         with get_connection() as conn:
             rows = conn.execute(
                 "UPDATE session_inbox SET entregue_em = COALESCE(entregue_em, now()) "
@@ -111,6 +114,8 @@ class SessionInbox:
 
     def consume(self, message_ids: Iterable[int]) -> int:
         """Marca ``consumido_em`` (as mensagens já foram ao prompt do replanejamento)."""
+        from src.db import get_connection
+
         ids = list(message_ids)
         if not ids:
             return 0
@@ -123,6 +128,8 @@ class SessionInbox:
         return len(rows or [])
 
     def pending_count(self, session_id: str) -> int:
+        from src.db import get_connection
+
         with get_connection() as conn:
             row = conn.execute(
                 "SELECT count(*) AS n FROM session_inbox WHERE session_id = %s AND consumido_em IS NULL",

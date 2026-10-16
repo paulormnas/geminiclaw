@@ -265,6 +265,20 @@ Antes de iniciar ou retomar, o terminal confere a memória disponível (`MIN_AVA
 | 6 | sessão perdida (continuada por outra) |
 | 130 | interrupção pelo pesquisador (Ctrl+C: o 1º pede o fechamento com checkpoint; o 2º é imediato) |
 
+**Decisões reservadas e orientação.** O processo da sessão nunca lê o terminal: o que exige o pesquisador vira um pedido no banco (`gate_requests`) e só o terminal o responde.
+
+```bash
+pendentes [apelido]                # pedidos pendentes (id, pesquisa, decisão, pergunta, há quanto tempo)
+decidir <id>                       # mostra o pedido e pede a resposta conforme o tipo (hipótese, objetivo atingido,
+                                   # pergunta de agente, continuidade, restrição...)
+mensagem <apelido> <texto>         # orienta uma pesquisa em execução; entra no próximo replanejamento
+                                   # (<mensagens_do_pesquisador>) e fica no grafo como Decisao do pesquisador
+```
+
+A mensagem orienta o plano mas **não decide** nada reservado ("rejeite a hipótese h4" não rejeita; use `decidir`). Responder o último pedido de uma pesquisa em `aguarda_pesquisador` a retoma; `parar`, `aceitar_conjunto` e `objetivo_atingido` (em `decidir_continuidade`) encerram a pesquisa pelo terminal sem processo novo, e `orientar` deixa o texto na caixa da sessão retomada. No `assisted` a sessão espera as respostas enquanto o terminal está presente; o REPL lembra os pedidos pendentes ao abrir e a cada `GATE_REMINDER_SECONDS`.
+
+> **Garantia e limite (ambiente de desenvolvimento).** O código da sessão e os agentes não resolvem pedidos porque só o `TerminalGate` tem `answer` e a sessão nunca o instancia (teste estático). Isso **não** protege contra código arbitrário com acesso direto ao banco: o papel de banco separado do terminal é um endurecimento a fazer antes da produção.
+
 Com várias pesquisas simultâneas, a concorrência efetiva de agentes é `MAX_CONCURRENT_AGENTS` multiplicado pelo número de processos. As variáveis (`SESSION_LAUNCH_TIMEOUT_SECONDS`, `SESSION_LOG_DIR`, `SESSION_LOOP_TICK_SECONDS`, `TERMINAL_PRESENCE_*` etc.) estão documentadas no `.env.example`.
 
 ---

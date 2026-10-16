@@ -206,6 +206,16 @@ def _quota_markers(provider: str) -> tuple[str, ...]:
 QUOTA_MARKERS: dict[str, tuple[str, ...]] = {name: _quota_markers(name) for name in _DEFAULT_QUOTA_MARKERS}
 LLM_RATE_LIMIT_MAX_COOLDOWN_SECONDS = int(get_env("LLM_RATE_LIMIT_MAX_COOLDOWN_SECONDS", default="300"))
 
+# Política da mudança de versão do modelo dentro da sessão (v18.7-benchmark-fixes, design §1.7); vale só com
+# LLM_ROUTING=strict. ``retomar``: grava checkpoint e continua (versão desconhecida troca o modelo do papel pelo
+# próximo elegível da preferência); ``parar``: fecha a sessão com versao_modelo (a bateria usa este valor).
+MODEL_VERSION_POLICIES = ("retomar", "parar")
+ON_MODEL_VERSION_CHANGE = get_env("ON_MODEL_VERSION_CHANGE", default="retomar").strip().lower()
+if ON_MODEL_VERSION_CHANGE not in MODEL_VERSION_POLICIES:
+    raise ConfigurationError(
+        f"'ON_MODEL_VERSION_CHANGE' inválido: aceita {' ou '.join(repr(v) for v in MODEL_VERSION_POLICIES)}."
+    )
+
 # Rate limiting — ler nova variável com fallback para a antiga (retrocompatibilidade)
 LLM_REQUESTS_PER_MINUTE = int(
     get_env("LLM_REQUESTS_PER_MINUTE")

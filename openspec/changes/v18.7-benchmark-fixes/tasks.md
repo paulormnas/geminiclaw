@@ -1,6 +1,13 @@
 # Tarefas: v18.7-benchmark-fixes
 
-**Estado (2026-10-16):** em implementação, em três PRs. **PR 1 (mergeado, #172): diagnóstico (1.1, 1.2), cadeia de proveniência (§4) e egresso no relatório (§5.1 e a tabela de §5.2). PR 2 (esta etapa): cota do provedor (§2, §3.0 a §3.8, `limite_cota_provedor`, classificação e relatório do benchmark).** Pendente: a política `ON_MODEL_VERSION_CHANGE` (§3.9, §3.10, `build_env` e a classificação de `versao_modelo`).
+**Estado (2026-10-16):** implementada em três PRs: #172 (diagnóstico, cadeia de proveniência e egresso no relatório), #173 (cota do provedor) e o PR 3 (esta etapa: política `ON_MODEL_VERSION_CHANGE`, §3.9 e §3.10, `build_env` e a classificação de `versao_modelo`). Pendente só o 6.3: confirmar na próxima bateria (com a confirmação do pesquisador) que nenhuma cadeia sai `divergente` por `metrics.json` reescrito e que a cota esgotada fecha a execução em minutos.
+
+**Registros do PR 3 (política da versão do modelo):**
+- `ON_MODEL_VERSION_CHANGE` (`retomar` padrão | `parar`; outro valor falha na inicialização) vale só com `LLM_ROUTING=strict`. O `VersionTracker` guarda a política: `parar` marca `parada_pendente` como antes; `retomar` empilha ações (`alterada` ou `desconhecida`) que o laço trata no ponto de verificação de limites (`AutonomousLoop._pending_stop` -> `_apply_model_version_policy`): grava o checkpoint e continua; para versão desconhecida troca o modelo do papel (`src/llm/model_substitution.py`) e grava `modelo_substituido`; sem elegível pede o fechamento por `versao_modelo`.
+- Elegibilidade do substituto: depois do atual na `preferencia`, disponível, política e requisitos do ADR 017, independência do julgamento (ADR 020, pelo `JudgeIndependenceGuard`) e localidade (ADR 019: quem estava no nó não vai para fora dele e quem aceitava dados brutos continua aceitando). Papel com pin do pesquisador não é trocado: a sessão fecha.
+- O mapa da sessão (`routing.papeis`) passa a mudar nesse ponto de verificação (antes era imutável); `llm_routing` e `allocation_profile` do payload são regravados.
+- Lacuna conhecida: o gatilho "modelo indisponível" da spec não tem sinal próprio (a disponibilidade só é conferida no início da sessão); hoje a troca ocorre por versão desconhecida. Um modelo que nunca informa versão percorre a `preferencia` até não restar elegível e a sessão fecha por `versao_modelo`.
+- A bateria define `ON_MODEL_VERSION_CHANGE=parar` (`build_env`) e `versao_modelo` é `limite`/anomalia no benchmark.
 
 **Registros do PR 2 (cota do provedor):**
 - A resolução do contexto da sessão ficou em `src/llm/session_context.py` (ordem: `AgentContext`, `bound_execution_id()`, `EXECUTION_ID`/`SESSION_ID`); `emit_connection_retry`, o registro de cota e `_task_env` a usam. Corrige o contador de retentativas de conexão, que ficava em zero para agentes em processo.
@@ -15,9 +22,9 @@
 - **1.2, cadeia `divergente`:** aplicada offline a regra de `_check_files` às 7 sessões arquivadas com registros no Pi. Dos 23 arquivos `alterado` em 4 sessões divergentes (as demais sessões arquivadas estavam íntegras), 21 eram **entrada reescrita pela mesma execução** (a causa do design §2.1; a regra nova os resolve) e 2 eram `metricas_literais.json`, outra causa que a spec não previa: a **plataforma** grava esse arquivo na pasta da subtarefa (`write_findings`) depois do término de cada execução, a execução seguinte o registra como entrada com o hash antigo e a plataforma o reescreve depois do último término. Não é adulteração nem saída de código gerado. Todas as pontas dos checkpoints conferiram (`ok`), todas as sessões tinham uma só cadeia: a hipótese do design §2.3 (checkpoint de outra cadeia) não se confirmou. **Decisão tomada na implementação (a confirmar):** `PLATFORM_WRITTEN_FILES` em `src/provenance/verify.py` trata `metricas_literais.json` como `substituido` (detalhe "arquivo gravado pela plataforma depois do término"), com teste de que a constante cobre `LITERALS_FILE`. Alternativas se o Arquiteto preferir: registrar esse arquivo como saída da própria execução ou gravá-lo fora da pasta da subtarefa.
 
 ## 0. Pré-requisitos
-- [ ] 0.1 Mudança aprovada pelo pesquisador, inclusive o valor aditivo `limite_cota_provedor` em `Sessao.motivo_parada`.
-- [ ] 0.2 Parecer do Analista de Segurança sobre `design.md` §7.
-- [ ] 0.3 Worktree `.worktrees/fix-v18.7-benchmark-fixes` (ou uma por parte, §1 a §3 do design); spec confrontada com o código.
+- [x] 0.1 Mudança aprovada pelo pesquisador, inclusive o valor aditivo `limite_cota_provedor` em `Sessao.motivo_parada`.
+- [x] 0.2 Parecer do Analista de Segurança sobre `design.md` §7.
+- [x] 0.3 Worktree `.worktrees/fix-v18.7-benchmark-fixes` (ou uma por parte, §1 a §3 do design); spec confrontada com o código.
 
 ## 1. Diagnóstico (sem chamada de LLM, com confirmação do pesquisador antes de acessar o Pi)
 - [x] 1.1 Extrair do `run.log` arquivado da tentativa interrompida da rodada 3 (`~/bench/bateria_v18_6.json.d/`) o texto literal do 429 de teto de gasto do Google e se ele traz `retryDelay`; fixar `LLM_QUOTA_MARKERS_GOOGLE` e registrar o texto (sem identificadores de conta) no PR.
@@ -37,8 +44,8 @@
 - [x] 3.7 `MOTIVOS_RETOMAVEIS` e enumeração `Sessao.motivo_parada` com `limite_cota_provedor`; `describe_stop_reason`.
 - [x] 3.8 Testes: um por cenário de `specs/llm-providers`, `specs/usage-limits` e `specs/session-continuity`, com `FakeRecordingProvider` (tarefa 3.0) ou clientes HTTP simulados (nenhuma chamada paga); o teste do teto do resfriamento confere a sequência 30, 60, 120, 240, 300, 300.
 
-- [ ] 3.9 `ON_MODEL_VERSION_CHANGE` (`retomar` padrão | `parar`) em `src/config.py` e `.env.example`, com validação (design §1.7).
-- [ ] 3.10 Política `retomar` com `LLM_ROUTING=strict`: checkpoint e continuação no ponto de verificação de limites (`src/orchestrator.py`, `src/llm/versions.py`, `src/usage.py`, `src/continuity.py`); nova versão registrada na proveniência; substituição pelo próximo modelo elegível da `preferencia` do papel (ADR 017, ADR 020, ADR 019) com o evento `modelo_substituido`; sem elegível, fecha com `versao_modelo`. Testes: um por cenário do requisito "Mudança de versão dentro da sessão" de `specs/llm-providers`, com `FakeRecordingProvider` e catálogo de teste (nenhuma chamada paga).
+- [x] 3.9 `ON_MODEL_VERSION_CHANGE` (`retomar` padrão | `parar`) em `src/config.py` e `.env.example`, com validação (design §1.7).
+- [x] 3.10 Política `retomar` com `LLM_ROUTING=strict`: checkpoint e continuação no ponto de verificação de limites (`src/orchestrator.py`, `src/llm/versions.py`, `src/usage.py`, `src/continuity.py`); nova versão registrada na proveniência; substituição pelo próximo modelo elegível da `preferencia` do papel (ADR 017, ADR 020, ADR 019) com o evento `modelo_substituido`; sem elegível, fecha com `versao_modelo`. Testes: um por cenário do requisito "Mudança de versão dentro da sessão" de `specs/llm-providers`, com `FakeRecordingProvider` e catálogo de teste (nenhuma chamada paga).
 
 ## 4. Cadeia de proveniência (design §2)
 - [x] 4.1 `_check_files`: entrada reescrita pela mesma execução vira `substituido`.
@@ -47,11 +54,11 @@
 
 ## 5. Egresso no relatório (design §3)
 - [x] 5.1 `EgressMetricsReader.bytes_limitados`; seção Markdown com as duas grandezas.
-- [ ] 5.2 (parte feita no PR 1: `scripts/benchmark/report.py` com três colunas de egresso e a causa da cadeia; falta o que segue) ~~`scripts/benchmark/report.py`: três colunas de egresso, causa da cadeia;~~ `run_benchmark.py`: `limite_cota_provedor` listado com provedor e modelo; `stop_class` devolve `limite` para `versao_modelo`; `build_env` define `ON_MODEL_VERSION_CHANGE=parar` no ambiente do subprocesso (junto de `LLM_ROUTING` e `LLM_DATA_POLICY`).
-- [ ] 5.3 Testes: cenários de `specs/operation-metrics` e `specs/benchmark`.
+- [x] 5.2 (colunas de egresso e causa da cadeia no PR 1; `limite_cota_provedor` no PR 2; `stop_class` de `versao_modelo` e `build_env` no PR 3) ~~`scripts/benchmark/report.py`: três colunas de egresso, causa da cadeia;~~ `run_benchmark.py`: `limite_cota_provedor` listado com provedor e modelo; `stop_class` devolve `limite` para `versao_modelo`; `build_env` define `ON_MODEL_VERSION_CHANGE=parar` no ambiente do subprocesso (junto de `LLM_ROUTING` e `LLM_DATA_POLICY`).
+- [x] 5.3 Testes: cenários de `specs/operation-metrics` e `specs/benchmark`.
 
 ## 6. Validação
-- [ ] 6.1 `uv run ruff check .` sem erros novos; `uv run pytest -m "unit or integration" -v` verde.
+- [x] 6.1 `uv run ruff check .` sem erros novos; `uv run pytest -m "unit or integration" -v` verde.
 - [x] 6.2 Regenerar o relatório da bateria V18.6 a partir de `bateria_v18_6.json` (sem nova execução) e conferir que as colunas de egresso mostram as saídas novas como `-` (resultado antigo) sem erro.
 - [ ] 6.3 Na próxima bateria (com confirmação do pesquisador): nenhuma cadeia `divergente` causada por `metrics.json` reescrito; se houver cota esgotada, a execução fecha com `limite_cota_provedor` em minutos.
-- [ ] 6.4 Atualizar `tasks.md` (caixas e **Estado**), a tabela de `openspec/README.md` e o achado 4, 5 e 6 do relatório da bateria no PR.
+- [x] 6.4 Atualizar `tasks.md` (caixas e **Estado**), a tabela de `openspec/README.md` e o achado 4, 5 e 6 do relatório da bateria no PR.

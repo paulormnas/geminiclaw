@@ -7,7 +7,8 @@ como informado", não "imutável": a versão pode ser só um alias estável do p
 
 O :class:`VersionTracker` guarda a última versão por ``provedor/modelo`` numa sessão, acumula os eventos de troca e,
 em ``LLM_ROUTING=strict``, marca ``parada_pendente`` para o ``AutonomousLoop`` fechar a sessão no próximo ponto de
-verificação de limites.
+verificação de limites. Com ``ON_MODEL_VERSION_CHANGE=retomar`` (padrão) a mudança vira uma ação para o laço tratar
+nesse ponto (``drain_actions``): checkpoint e continuação, ou troca do modelo do papel (v18.7-benchmark-fixes, §1.7).
 """
 
 from __future__ import annotations
@@ -22,6 +23,11 @@ logger = get_logger(__name__)
 UNKNOWN_VERSION = "desconhecida"
 STOP_VERSION = "versao_modelo"
 EVENT_VERSION_CHANGED = "versao_modelo_alterada"
+EVENT_MODEL_REPLACED = "modelo_substituido"
+POLICY_RESUME = "retomar"
+POLICY_STOP = "parar"
+ACTION_CHANGED = "alterada"  # versão nova informada: continua com o mesmo modelo
+ACTION_UNKNOWN = "desconhecida"  # versão não informada: troca o modelo do papel ou fecha
 _MAX_VERSION_LENGTH = 200
 
 
@@ -45,8 +51,14 @@ def compose_compatible_version(model: Any, fingerprint: Any) -> str:
 class VersionTracker:
     """Última versão efetiva por ``provedor/modelo`` e eventos de troca de uma sessão."""
 
-    def __init__(self, strict: bool = False) -> None:
+    def __init__(self, strict: bool = False, policy: str | None = None) -> None:
         self.strict = strict
+        if policy is None:
+            from src import config
+
+            policy = config.ON_MODEL_VERSION_CHANGE
+        self.policy = policy
+        self._actions: list[dict[str, Any]] = []
         self._lock = threading.Lock()
         self._versions: dict[str, str] = {}
         self._events: list[dict[str, Any]] = []
@@ -70,6 +82,27 @@ class VersionTracker:
     @property
     def eventos(self) -> list[dict[str, Any]]:
         return list(self._events)
+
+    def drain_actions(self) -> list[dict[str, Any]]:
+        """Mudanças de versão a tratar no próximo ponto de verificação (política ``retomar``); esvazia a fila."""
+        with self._lock:
+            actions, self._actions = self._actions, []
+        return actions
+
+    def request_stop(self) -> None:
+        """Pede o fechamento da sessão com ``versao_modelo`` (sem modelo elegível para substituir)."""
+        with self._lock:
+            self._pending = STOP_VERSION
+
+    def emit_event(self, event: dict[str, Any]) -> None:
+        """Acrescenta ``event`` aos eventos da sessão e o entrega ao registro (telemetria e payload)."""
+        with self._lock:
+            self._events.append(event)
+        if self._on_event is not None:
+            try:
+                self._on_event(event)
+            except Exception:  # noqa: BLE001 — telemetria nunca derruba a sessão
+                logger.exception("Falha ao registrar o evento de versão do modelo")
 
     def current(self, model_id: str) -> str:
         """Última versão conhecida do modelo, ou ``desconhecida`` se nunca observada."""
@@ -101,7 +134,16 @@ class VersionTracker:
                 }
                 self._events.append(event)
             if self.strict and (event is not None or new == UNKNOWN_VERSION):
-                self._pending = STOP_VERSION
+                if self.policy == POLICY_STOP:
+                    self._pending = STOP_VERSION
+                else:
+                    self._actions.append({
+                        "tipo": ACTION_UNKNOWN if new == UNKNOWN_VERSION else ACTION_CHANGED,
+                        "provedor_modelo": model_id,
+                        "papeis": list(papeis),
+                        "anterior": previous,
+                        "nova": new,
+                    })
             changed = previous != new
         if changed and self._on_change is not None:
             try:
@@ -120,7 +162,9 @@ class VersionTracker:
                     logger.exception("Falha ao registrar o evento de versão do modelo")
         elif self.strict and new == UNKNOWN_VERSION:
             logger.warning(
-                "Versão efetiva desconhecida em LLM_ROUTING=strict: a sessão fechará no próximo ponto de verificação",
+                "Versão efetiva desconhecida em LLM_ROUTING=strict: "
+                + ("a sessão fechará" if self.policy == POLICY_STOP else "o papel será tratado")
+                + " no próximo ponto de verificação",
                 extra={"provedor_modelo": model_id},
             )
         return event

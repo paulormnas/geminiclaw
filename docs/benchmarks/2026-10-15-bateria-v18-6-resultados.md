@@ -52,15 +52,21 @@ do teto, a rodada 3 foi refeita do zero.
    evidência leva o veredito a no máximo `(1/3)² ≈ 0,11` (ADR 015 §9.5). Questão em aberto do ADR 021, para a
    calibração.
 4. **Laço autônomo replaneja em erro de cota.** O 429 por teto de gasto mensal do Google foi tratado como
-   falha de tarefa; o laço replanejou por 3h20 até o `timeout_seconds` do benchmark. Correção pendente
-   (falhar na hora em erro de cota/gasto).
+   falha de tarefa; o laço replanejou por 3h20 até o `timeout_seconds` do benchmark. **Corrigido na V18.7**
+   (`v18.7-benchmark-fixes`, PR #173): cota ou teto de gasto esgotado fecha a sessão com `limite_cota_provedor`,
+   sem retentar nem replanejar; o limitador de taxa ganhou teto e o contador de retentativas de conexão passou a
+   contar os agentes em processo.
 5. **Cadeia de proveniência "divergente" com retentativas.** 6 das 8 execuções com Gemini saíram com a
    cadeia `divergente` (0 órfãs). Nos registros, tentativas anteriores de uma subtarefa guardam o hash de um
    `metrics.json` que a tentativa seguinte sobrescreveu; hipótese a confirmar: a verificação conta isso como
-   arquivo alterado. Correção pendente.
+   arquivo alterado. **Corrigido na V18.7** (`v18.7-benchmark-fixes`, PR #172): o diagnóstico nos dados do Pi
+   confirmou a hipótese (21 dos 23 arquivos `alterado` eram entrada reescrita pela mesma execução) e achou outra
+   causa (`metricas_literais.json`, gravado pela plataforma depois de cada execução); as causas da divergência
+   agora aparecem no relatório.
 6. **Egresso acima de 2 MB sem recusa.** Não é violação: `EGRESS_SESSION_MAX_BYTES` limita só as saídas de
    execução novas (`saida_execucao`, de 3 KB a 0,4 MB nas execuções); o relatório compara o limite com o
-   total, que inclui as instruções. A tabela do relatório será corrigida.
+   total, que inclui as instruções. **Corrigido na V18.7** (`v18.7-benchmark-fixes`, PR #172): o relatório traz o
+   total, as saídas novas e o limite em colunas separadas.
 7. **Temperatura.** 10 das 12 execuções registraram o limite de temperatura do Pi (máximas de 79 a
    82 °C).
 

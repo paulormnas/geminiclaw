@@ -8,7 +8,7 @@
 - **Memória desconhecida** (Questão 3): não falha, nem no REPL nem no comando direto; registra um evento no banco (telemetria) e a aplicação segue, mesmo que consuma muita memória. Memória conhecida abaixo de `MIN_AVAILABLE_MEMORY_MB` continua como no design (§1.3).
 - **Papel do terminal** (Questão 2): ver `v18.7-persistent-human-gate` (sem endurecimento no desenvolvimento; a presença é gravada pelo papel principal e o endurecimento fica para a mudança anterior à produção).
 - **Encerrar com Curator pendente** (Questão 5): aceito, com a condição de existir no laço a retomada da etapa do Curator (tarefa 5.6 abaixo).
-- `sessions` e `stop` (Questão 4): o pesquisador pediu mais contexto; até decidir, seguem tratando containers de sandbox (sem renomear).
+- `sessions` e `stop` (Questão 4): decidido em 2026-10-16: os comandos de container passam a se chamar **`sandboxes`** e **`parar-sandboxes`** (REPL e comando direto; feito no PR de renomeação) e `sessions` fica livre para listar as pesquisas (tarefa 5.1).
 
 ## 0. Pré-requisitos
 - [ ] 0.1 `v18.7-resource-monitor-config` mergeada; revisar esta mudança contra o código de `dev` (referências de linha de 2026-10-15). Merge junto com `v18.7-persistent-human-gate` (PRs em sequência no mesmo dia).

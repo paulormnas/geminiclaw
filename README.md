@@ -259,8 +259,8 @@ O único container de execução é o **sandbox**, criado sob demanda pela skill
 uv run python -m scripts.platform_images ensure --imagens sandbox
 
 # Listar e encerrar sandboxes ativos
-geminiclaw sessions
-geminiclaw stop
+geminiclaw sandboxes
+geminiclaw parar-sandboxes
 ```
 
 ### Comandos

@@ -13,7 +13,7 @@ from src.cli.banner import print_session_banner
 from src.cli.context_commands import clear_context, print_context_lifecycle_message
 from src.cli.reports import format_result
 from src.cli.resume import resume_session
-from src.cli.sandboxes import show_sessions, stop_sessions
+from src.cli.sandboxes import show_sandboxes, stop_sandboxes
 from src.config import (
     SESSION_DEFAULT_MODE,
 )
@@ -131,14 +131,14 @@ async def interactive_mode(
             print(f"\n  {DIM}Até logo! 👋{RESET}\n")
             break
 
-        if prompt.lower() == "sessions":
-            show_sessions()
+        if prompt.lower() == "sandboxes":
+            show_sandboxes()
             continue
 
-        if prompt.lower() == "stop" or prompt.lower().startswith("stop "):
+        if prompt.lower() == "parar-sandboxes" or prompt.lower().startswith("parar-sandboxes "):
             parts = prompt.split()
             s_id = parts[1] if len(parts) > 1 else None
-            stop_sessions(session_id=s_id)
+            stop_sandboxes(session_id=s_id)
             continue
 
         if prompt.lower() == "clear-context":

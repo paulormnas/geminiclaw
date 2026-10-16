@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.cli.main import show_sessions
+from src.cli.main import show_sandboxes
 from src.orchestration.autonomous_loop import AutonomousLoop
 from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
 from src.session.manager import Session
@@ -150,7 +150,7 @@ class TestAgentInstructionByMode:
 class TestSessionsListingShowsMode:
     """`geminiclaw sessions` deve exibir o modo de operação de cada container listado."""
 
-    def test_show_sessions_exibe_coluna_mode(self, capsys: pytest.CaptureFixture) -> None:
+    def test_show_sandboxes_exibe_coluna_mode(self, capsys: pytest.CaptureFixture) -> None:
         container = MagicMock()
         container.id = "abc123"
         container.short_id = "abc123"
@@ -168,7 +168,7 @@ class TestSessionsListingShowsMode:
         mock_client = MagicMock()
         mock_client.containers.list.return_value = [container]
 
-        info = show_sessions(docker_client=mock_client)
+        info = show_sandboxes(docker_client=mock_client)
         out = capsys.readouterr().out
 
         assert info[0]["mode"] == "auto"

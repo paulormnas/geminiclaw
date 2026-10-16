@@ -19,7 +19,7 @@ import os
 import sys
 from typing import Any
 
-from src.cli import session_process
+import src.cli.session_process as session_process
 
 
 class ScriptedLoop:

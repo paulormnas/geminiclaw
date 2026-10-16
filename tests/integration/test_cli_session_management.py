@@ -179,7 +179,7 @@ class TestCliSigintCleanup:
 
         # Simula o disparo do sinal SIGINT
         with patch("sys.exit") as mock_exit:
-            with patch("src.skills.code.sandbox.cleanup_sandbox_containers", return_value=2) as mock_cleanup:
+            with patch("src.skills.code.sandbox.cleanup_all_sandbox_containers", return_value=2) as mock_cleanup:
                 with patch("src.observability.telemetry.get_telemetry") as mock_tel:
                     mock_tel.return_value.flush = AsyncMock()
                     handler(signal.SIGINT, None)

@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.session import launcher
+import src.session.launcher as launcher
 from src.session.launcher import (
     LaunchError,
     LaunchSpec,
@@ -272,3 +272,36 @@ def test_espera_falha_no_prazo():
 
     with pytest.raises(LaunchError, match="SESSION_LAUNCH_TIMEOUT_SECONDS"):
         asyncio.run(run())
+
+
+# -- validação da configuração ------------------------------------------------------------------------------------
+
+
+def _import_config(**env) -> subprocess.CompletedProcess:
+    root = Path(__file__).resolve().parents[3]
+    return subprocess.run(
+        ["python", "-c", "import src.config"], cwd=root, env={**os.environ, **env}, capture_output=True, text=True
+    )
+
+
+def test_presenca_com_prazo_menor_que_o_dobro_do_batimento_falha_na_partida():
+    result = _import_config(TERMINAL_PRESENCE_HEARTBEAT_SECONDS="10", TERMINAL_PRESENCE_STALE_SECONDS="20")
+    assert result.returncode != 0 and "TERMINAL_PRESENCE_STALE_SECONDS" in result.stderr
+
+
+def test_laco_com_prazo_menor_que_o_tique_falha_na_partida():
+    result = _import_config(SESSION_LOOP_TICK_SECONDS="10", SESSION_LOOP_STALE_SECONDS="10")
+    assert result.returncode != 0 and "SESSION_LOOP_STALE_SECONDS" in result.stderr
+
+
+def test_padroes_da_configuracao_de_sessao():
+    result = subprocess.run(
+        ["python", "-c", "import src.config as c; print(c.SESSION_LAUNCH_TIMEOUT_SECONDS, c.SESSION_LOOP_TICK_SECONDS,"
+         " c.SESSION_LOOP_STALE_SECONDS, c.TERMINAL_PRESENCE_HEARTBEAT_SECONDS, c.TERMINAL_PRESENCE_STALE_SECONDS,"
+         " c.SESSION_PRESENCE_CHECK_SECONDS, c.TERMINAL_STALE_CHECK_SECONDS, c.SESSION_LOST_EXIT_GRACE_SECONDS,"
+         " c.SESSION_LOG_DIR, c.SESSION_ENV_DENYLIST)"],
+        cwd=Path(__file__).resolve().parents[3],
+        env={k: v for k, v in os.environ.items() if not k.startswith(("SESSION_", "TERMINAL_"))},
+        capture_output=True, text=True, check=True,
+    )
+    assert result.stdout.strip() == "60.0 10.0 900.0 10.0 60.0 15.0 60.0 30.0 logs/sessions ()"

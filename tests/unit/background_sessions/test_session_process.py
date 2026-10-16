@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.cli import session_process
+import src.cli.session_process as session_process
 from src.cli.session_process import (
     SessionRunner,
     StdinForbiddenError,

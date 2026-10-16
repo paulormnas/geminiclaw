@@ -51,7 +51,7 @@ class Launched:
 
     @property
     def log(self) -> Path:
-        return Path(self.path.parents[1]) / "logs" / f"{self.path.stem}.log"
+        return Path(self.path.parents[2]) / "logs" / f"{self.path.stem}.log"
 
 
 class SessionHarness:

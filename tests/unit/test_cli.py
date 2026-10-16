@@ -9,16 +9,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.cli.main import (
-    BANNER,
-    EXIT_COMMANDS,
-    STATUS_ICONS,
-    VERSION,
-    build_parser,
-    format_agent_result,
-    format_result,
-)
+from src.cli.main import build_parser
+from src.cli.repl import EXIT_COMMANDS
+from src.cli.reports import format_agent_result, format_result
 from src.orchestration.orchestrator import AgentResult, OrchestratorResult
+from src.utils.terminal import BANNER, STATUS_ICONS, VERSION
 
 # ─── Helpers ────────────────────────────────────────────────────────
 

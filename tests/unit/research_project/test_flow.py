@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 import src.cli.main as cli
+import src.cli.repl as cli_repl
 from src.cli.project import handle_project_command
 from src.cli.project_session import (
     ProjectBinder,
@@ -207,7 +208,7 @@ class TestCliProjeto:
         orch.handle_request = AsyncMock()
         binder = MagicMock()
         binder.bind = AsyncMock(side_effect=ProjectFlowError("recusada"))
-        ok = await cli.execute_prompt(orch, "p", mode="auto", project_binder=binder)
+        ok = await cli_repl.execute_prompt(orch, "p", mode="auto", project_binder=binder)
         assert ok is False
         orch.handle_request.assert_not_awaited()
 
@@ -217,8 +218,8 @@ class TestCliProjeto:
         orch.handle_request = AsyncMock(return_value=MagicMock(session_id=None))
         binder = MagicMock()
         binder.bind = AsyncMock(return_value=MagicMock(project_id="pid1", context_block="CTX"))
-        monkeypatch.setattr(cli, "format_result", lambda _r: "ok")
-        assert await cli.execute_prompt(orch, "p", mode="auto", project_binder=binder) is True
+        monkeypatch.setattr(cli_repl, "format_result", lambda _r: "ok")
+        assert await cli_repl.execute_prompt(orch, "p", mode="auto", project_binder=binder) is True
         kwargs = orch.handle_request.await_args.kwargs
         assert kwargs["project_id"] == "pid1" and kwargs["project_context"] == "CTX"
 

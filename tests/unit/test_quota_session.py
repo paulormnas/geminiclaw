@@ -210,7 +210,7 @@ async def test_nova_sessao_nao_herda_a_parada(tmp_path, telemetry):
 
 def test_mensagem_acionavel_da_cli():
     """Scenario: Mensagem acionável."""
-    from src.cli.main import quota_stop_message
+    from src.cli.reports import quota_stop_message
 
     text = quota_stop_message("sessao-42", {"provedor": "google", "modelo": "gemini-4-argon", "status": 429})
     assert "limite_cota_provedor" in text and "google" in text and "gemini-4-argon" in text

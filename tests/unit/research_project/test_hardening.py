@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-import src.cli.main as cli
+import src.cli.repl as cli
 from src.cli.project_session import ProjectBinder, ProjectFlowError, resolve_project
 from src.knowledge import projects
 from src.knowledge.errors import HumanConfirmationRequiredError

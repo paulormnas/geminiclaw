@@ -118,7 +118,7 @@ def _loop(tmp_path, responses):
 
 async def _synth(loop):
     results = [AgentResult(agent_id="developer", session_id="s", status="success", response={"text": "ok"})]
-    with patch("src.orchestration.autonomous_loop.get_telemetry") as tel:
+    with patch("src.orchestration.loop_report.get_telemetry") as tel:
         tel.return_value.flush = AsyncMock()
         tel.return_value.get_token_summary.return_value = {"by_provider_model": [
             {"total_prompt_tokens": 10, "total_completion_tokens": 5, "total_cost_usd": 0.5}]}

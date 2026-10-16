@@ -402,6 +402,7 @@ async def test_autonomous_loop_all_tasks_abandoned_closes_session_with_retries_r
     )
 
     with patch("src.orchestration.autonomous_loop.get_telemetry", return_value=MagicMock()), \
+         patch("src.orchestration.loop_report.get_telemetry", return_value=MagicMock()), \
          patch.object(AutonomousLoop, "_is_complex_triage", AsyncMock(return_value=True)):
         result = await loop._run_complex_path("tarefa", "exec_retries")
 

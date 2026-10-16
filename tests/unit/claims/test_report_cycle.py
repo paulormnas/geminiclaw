@@ -50,7 +50,7 @@ async def finalize(loop, tmp_path, summarizer_text):
     provider.model_name = "m"
     provider.generate = AsyncMock(return_value=LLMResponse(text=summarizer_text))
     session_dir = tmp_path / "s1"
-    with patch("src.orchestration.autonomous_loop.ModelRouter.get_provider", return_value=provider), \
+    with patch("src.orchestration.loop_report.ModelRouter.get_provider", return_value=provider), \
          patch("src.report.claims_report.report_evidence_builder", lambda *a, **k: evidence_for("res:e1/acuracia")), \
          patch("src.llm.metering.record_llm_call"), \
          patch("src.provenance.ledger.get_ledger", return_value=MagicMock()), \

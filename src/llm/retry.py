@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import os
 
+from src.llm.session_context import resolve_execution_id, resolve_session_id
 from src.logger import get_logger
+from src.utils.agent_context import get_agent_context_optional
 
 logger = get_logger(__name__)
 
@@ -46,6 +48,10 @@ def is_retryable_error(exc: BaseException) -> bool:
     Returns:
         True se a chamada deve ser retentada.
     """
+    from src.llm.quota import ProviderQuotaExhausted
+
+    if isinstance(exc, ProviderQuotaExhausted):  # a mensagem contém "429", mas cota esgotada não se recupera
+        return False
     if isinstance(exc, (ConnectionError, TimeoutError, OSError)):
         return True
     message = str(exc)
@@ -55,11 +61,10 @@ def is_retryable_error(exc: BaseException) -> bool:
 def emit_connection_retry(component: str, error_message: str) -> None:
     """Emite o evento ``connection_retry`` na telemetria da sessão corrente.
 
-    Lê o contexto da sessão (``SESSION_ID``, ``EXECUTION_ID``, ``AGENT_ID``,
-    ``TASK_NAME``) das variáveis de ambiente do container do agente, seguindo
-    o mesmo padrão usado em `src/llm/agent_loop.py`. Quando chamado fora de um
-    container de agente (ex: triage direto no host), usa valores de fallback
-    — o evento ainda é registrado, apenas com contexto menos preciso.
+    Lê o contexto da sessão pela mesma resolução de ``src/llm/agent_loop.py``
+    (``src/llm/session_context.py``): ``AgentContext`` corrente, vínculo do
+    orquestrador (``bound_execution_id``) e variáveis de ambiente. Sem nenhuma
+    fonte, usa ``unknown`` — o evento ainda é registrado, com contexto menos preciso.
 
     Nunca lança: falhas ao registrar telemetria não devem interromper a
     retentativa em curso.
@@ -71,10 +76,13 @@ def emit_connection_retry(component: str, error_message: str) -> None:
     try:
         from src.observability.telemetry import get_telemetry
 
-        session_id = os.environ.get("SESSION_ID", "unknown")
-        execution_id = os.environ.get("EXECUTION_ID", session_id)
-        agent_id = os.environ.get("AGENT_ID", "unknown")
-        task_name = os.environ.get("TASK_NAME") or None
+        # v18.7-benchmark-fixes: o contexto vem do AgentContext (agentes em processo), do vínculo do orquestrador e só
+        # então do ambiente; antes, só do ambiente, e o contador lido pelo UsageTracker ficava em zero.
+        ctx = get_agent_context_optional()
+        execution_id = resolve_execution_id() or "unknown"
+        session_id = resolve_session_id(execution_id) or "unknown"
+        agent_id = ctx.agent_id if ctx is not None else os.environ.get("AGENT_ID", "unknown")
+        task_name = (ctx.task_name if ctx is not None else os.environ.get("TASK_NAME")) or None
 
         get_telemetry().record_connection_retry(
             execution_id=execution_id,

@@ -5,6 +5,7 @@ import time
 import httpx
 
 from src.llm.base import LLMProvider, LLMResponse, ToolCall
+from src.llm.quota import QUOTA_STATUS_CODES, raise_if_quota_exhausted
 from src.llm.retry import RETRY_BACKOFFS_SECONDS, emit_connection_retry, is_retryable_status
 from src.llm.versions import compose_compatible_version
 from src.logger import get_logger
@@ -32,6 +33,8 @@ class OpenAICompatibleProvider(LLMProvider):
 
     `base_url` deve incluir o prefixo de versão do servidor (ex.: `.../v1`).
     """
+
+    PROVIDER_KEY = "openai_compatible"  # chave dos marcadores de cota (``LLM_QUOTA_MARKERS_*``)
 
     def __init__(self, base_url: str | None, model: str, api_key: str | None = None):
         if not base_url:
@@ -162,6 +165,10 @@ class OpenAICompatibleProvider(LLMProvider):
             except httpx.TransportError as exc:
                 last_exc = exc
                 continue
+
+            if response.status_code in QUOTA_STATUS_CODES:
+                # v18.7-benchmark-fixes: o corpo diz se é cota esgotada (ex.: insufficient_quota) ou limite de taxa.
+                raise_if_quota_exhausted(self.PROVIDER_KEY, self._model, response.status_code, response.text[:800])
 
             if is_retryable_status(response.status_code):
                 last_exc = httpx.HTTPStatusError(

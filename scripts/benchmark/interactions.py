@@ -21,6 +21,7 @@ def summarize_events(events: list[dict[str, Any]]) -> dict:
     reviews = [e["payload"] for e in events if e["event_type"] == "subtask_review"]
     questions = [e["payload"] for e in events if e["event_type"] == "ask_researcher"]
     reason_counts = Counter(m for r in reviews if not r.get("approved") for m in (r.get("motivos") or []))
+    quotas = [e["payload"] for e in events if e["event_type"] == "cota_provedor_esgotada"]
     return {
         "event_counts": dict(counts),
         "messages": sum(counts[t] for t in MESSAGE_EVENTS),
@@ -41,7 +42,23 @@ def summarize_events(events: list[dict[str, Any]]) -> dict:
             {"question": q.get("question"), "why": q.get("why_cant_proceed"), "options": q.get("options")}
             for q in questions
         ],
+        # v18.7-benchmark-fixes: provedor e modelo do esgotamento de cota (evento cota_provedor_esgotada), se houve.
+        **(
+            {"cota_provedor": [
+                {"provedor": q.get("provedor"), "modelo": q.get("modelo"), "status": q.get("status")} for q in quotas
+            ]}
+            if quotas else {}
+        ),
     }
+
+
+def quota_label(result: dict) -> str:
+    """``provedor/modelo`` do evento ``cota_provedor_esgotada`` da execução (``provedor desconhecido`` sem o evento)."""
+    events = ((result.get("db") or {}).get("interactions") or {}).get("cota_provedor") or []
+    if not events:
+        return "provedor desconhecido"
+    first = events[0]
+    return f"{first.get('provedor')}/{first.get('modelo')}"
 
 
 def tokens_by_agent(rows: list[dict[str, Any]]) -> list[dict]:

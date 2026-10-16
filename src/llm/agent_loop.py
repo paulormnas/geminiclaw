@@ -10,8 +10,9 @@ from src.llm.base import LLMProvider, LLMResponse
 from src.llm.context_compression import compress_messages
 from src.llm.context_injection import build_workspace_context_fragments
 from src.llm.factory import get_provider
-from src.llm.metering import bound_execution_id, provider_name, record_llm_call
+from src.llm.metering import provider_name, record_llm_call
 from src.llm.pricing import estimate_cost
+from src.llm.session_context import resolve_execution_id
 from src.logger import get_logger
 from src.observability.telemetry import get_telemetry
 from src.utils.agent_context import get_agent_context_optional
@@ -56,7 +57,7 @@ def _task_env() -> Dict[str, str]:
         "TASK_NAME": os.environ.get("TASK_NAME", ""),
         "OUTPUT_BASE_DIR": os.environ.get("OUTPUT_BASE_DIR", ""),
         "AGENT_ID": os.environ.get("AGENT_ID", "agent"),
-        "EXECUTION_ID": os.environ.get("EXECUTION_ID", os.environ.get("SESSION_ID", "")) or bound_execution_id(),
+        "EXECUTION_ID": resolve_execution_id(),
         "PROVIDER_NAME": "unknown",
         "MODEL_ID": "unknown",
     }

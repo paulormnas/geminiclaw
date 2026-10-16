@@ -25,6 +25,7 @@ import json
 import anthropic
 
 from src.llm.base import LLMProvider, LLMResponse, ToolCall
+from src.llm.quota import raise_if_quota_exhausted
 from src.llm.retry import RETRY_BACKOFFS_SECONDS, emit_connection_retry, is_retryable_status
 from src.llm.versions import normalize_version
 from src.logger import get_logger
@@ -249,6 +250,8 @@ class AnthropicProvider(LLMProvider):
             except anthropic.APIConnectionError as exc:
                 last_exc = exc
             except anthropic.APIStatusError as exc:
+                # v18.7-benchmark-fixes: saldo/cota esgotado (400, 402, 403 ou 429 com marcador) não é retentado.
+                raise_if_quota_exhausted("anthropic", self._model, exc.status_code, str(exc))
                 if not is_retryable_status(exc.status_code):
                     raise
                 last_exc = exc

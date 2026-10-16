@@ -504,7 +504,11 @@ def _gaps(group: dict[str, Any]) -> list[str]:
 
 
 STOP_UNTESTED_HYPOTHESES = "hipoteses_nao_testadas"
+STOP_PROVIDER_QUOTA = "limite_cota_provedor"
 _STOP_DESCRIPTIONS = {
+    STOP_PROVIDER_QUOTA: (
+        "cota ou teto de gasto esgotado no provedor; aumente o teto ou troque o provedor e retome a sessão"
+    ),
     STOP_UNTESTED_HYPOTHESES: (
         "hipóteses em teste sem nenhuma tentativa ao esgotar os ciclos ociosos (parada de pesquisa, não falha de "
         "infraestrutura)"

@@ -1,6 +1,7 @@
 import asyncio
 import time
 
+from src import config
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -17,6 +18,7 @@ class AdaptiveRateLimiter:
         requests_per_minute: int = 15,
         cooldown_seconds: int = 30,
         min_requests_per_minute: int = 2,
+        max_cooldown_seconds: int | None = None,
     ) -> None:
         """Inicializa o rate limiter.
 
@@ -24,10 +26,14 @@ class AdaptiveRateLimiter:
             requests_per_minute: Limite máximo normal de requisições por minuto.
             cooldown_seconds: Tempo base de espera quando ocorre um erro 429.
             min_requests_per_minute: Limite mínimo de requisições por minuto (durante backoff).
+            max_cooldown_seconds: Teto do resfriamento (padrão: ``LLM_RATE_LIMIT_MAX_COOLDOWN_SECONDS``).
         """
         self.base_rpm = requests_per_minute
         self.current_rpm = requests_per_minute
         self.cooldown_seconds = cooldown_seconds
+        self.max_cooldown_seconds = (
+            max_cooldown_seconds if max_cooldown_seconds is not None else config.LLM_RATE_LIMIT_MAX_COOLDOWN_SECONDS
+        )
         self.min_rpm = min_requests_per_minute
         
         self.tokens: float = float(self.current_rpm)
@@ -82,8 +88,8 @@ class AdaptiveRateLimiter:
         async with self._lock:
             self.consecutive_429s += 1
             
-            # Backoff exponencial: 30s, 60s, 120s...
-            cooldown = self.cooldown_seconds * (2 ** (self.consecutive_429s - 1))
+            # Backoff exponencial com teto: 30s, 60s, 120s, 240s, 300s, 300s...
+            cooldown = min(self.cooldown_seconds * (2 ** (self.consecutive_429s - 1)), self.max_cooldown_seconds)
             self.in_cooldown_until = time.monotonic() + cooldown
             
             # Reduz a taxa pela metade, não menos que min_rpm

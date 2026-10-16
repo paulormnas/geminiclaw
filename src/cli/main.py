@@ -396,6 +396,20 @@ def show_history() -> None:
     print(f"{BOLD}{_sep}{RESET}\n")
 
 
+def quota_stop_message(execution_id: str, quota: dict | None) -> str:
+    """Mensagem acionável da parada por cota ou teto de gasto esgotado (v18.7-benchmark-fixes).
+
+    Args:
+        execution_id: Sessão fechada.
+        quota: ``checkpoint["cota_provedor"]`` (``provedor``, ``modelo``, ``status``), se registrado.
+    """
+    who = f"{quota['provedor']}, modelo {quota['modelo']}" if quota else "provedor não identificado"
+    return (
+        f"Sessão fechada por limite_cota_provedor: cota ou teto de gasto esgotado no provedor ({who}). "
+        f"Aumente o teto ou troque o provedor e retome com: geminiclaw resume --session {execution_id}"
+    )
+
+
 def _show_operation_metrics(execution_id: str) -> None:
     """Mostra as métricas de operação da sessão (v18.5-operation-metrics §6.5).
 
@@ -436,6 +450,9 @@ def _show_operation_metrics(execution_id: str) -> None:
     for line in render_operation_metrics_section(metrics, stop_reason=payload.get("motivo_parada")).splitlines():
         if not line.startswith("<!--"):
             print(f"    {line}")
+    if payload.get("motivo_parada") == "limite_cota_provedor":
+        quota = (payload.get("checkpoint") or {}).get("cota_provedor")
+        print(f"\n  {YELLOW}{quota_stop_message(execution_id, quota)}{RESET}")
 
 
 def show_metrics(execution_id: str) -> None:

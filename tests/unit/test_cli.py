@@ -4,7 +4,6 @@ Cobre parsing de argumentos, formatação de resultados,
 e comportamento do handler de SIGINT.
 """
 
-import signal
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -227,75 +226,57 @@ class TestConstants:
 
 
 @pytest.mark.unit
-class TestSignalHandler:
-    """Testes do comportamento do handler SIGINT."""
+class TestMainDispatch:
+    """``main()`` só despacha: toda pesquisa roda em processo próprio (v18.7-background-sessions, design §1.1)."""
 
-    @patch("src.cli.main._create_orchestrator")
-    @patch("src.cli.main.signal.signal")
-    def test_sigint_handler_registrado(
-        self,
-        mock_signal: MagicMock,
-        mock_create: MagicMock,
-    ) -> None:
-        """main() registra handler para SIGINT."""
-        mock_orchestrator = MagicMock()
-        mock_create.return_value = mock_orchestrator
+    def _run(self, argv: list[str], target: str, result: int = 0) -> tuple[int, MagicMock]:
+        mock = MagicMock(return_value=object())
+        with (
+            patch("sys.argv", ["geminiclaw", *argv]),
+            patch(f"src.cli.main.{target}", mock),
+            patch("src.cli.main.asyncio.run", return_value=result) as run,
+            patch("src.cli.main.install_provider_resolver"),
+        ):
+            from src.cli.main import main
 
-        with patch("src.llm.session.build_session_routing"), patch("src.cli.main.print_session_banner"), \
-             patch("src.cli.main.asyncio.run"):
-            with patch("src.cli.main.execute_prompt", new_callable=MagicMock):
-                with patch("sys.argv", ["geminiclaw", "teste"]):
-                    from src.cli.main import main
-                    main()
-
-        # Verifica que signal.signal foi chamado com SIGINT
-        mock_signal.assert_any_call(signal.SIGINT, pytest.approx(None, abs=None) if False else mock_signal.call_args_list[0][0][1])
-
-    @patch("src.cli.main._create_orchestrator")
-    def test_main_prompt_direto(
-        self,
-        mock_create: MagicMock,
-    ) -> None:
-        """main() com prompt executa asyncio.run com execute_prompt."""
-        mock_orchestrator = MagicMock()
-        mock_create.return_value = mock_orchestrator
-
-        with patch("src.llm.session.build_session_routing"), patch("src.cli.main.print_session_banner"), \
-             patch("src.cli.main.asyncio.run") as mock_run:
-            with patch("src.cli.main.execute_prompt", new_callable=MagicMock) as mock_execute:
-                with patch("sys.argv", ["geminiclaw", "meu prompt"]):
-                    from src.cli.main import main
-                    main()
-
-        mock_run.assert_any_call(mock_execute.return_value)
-
-    @patch("src.cli.main._create_orchestrator")
-    def test_main_modo_interativo(
-        self,
-        mock_create: MagicMock,
-    ) -> None:
-        """main() sem prompt executa asyncio.run com interactive_mode."""
-        mock_orchestrator = MagicMock()
-        mock_create.return_value = mock_orchestrator
-
-        with patch("src.cli.main.asyncio.run") as mock_run:
-            with patch("src.cli.main.interactive_mode", new_callable=MagicMock) as mock_interactive:
-                with patch("sys.argv", ["geminiclaw"]):
-                    from src.cli.main import main
-                    main()
-
-        mock_run.assert_any_call(mock_interactive.return_value)
-
-    @patch("src.cli.main._create_orchestrator")
-    def test_main_falha_inicializacao(
-        self,
-        mock_create: MagicMock,
-    ) -> None:
-        """main() sai com código 1 se inicialização falhar."""
-        mock_create.side_effect = RuntimeError("Docker não disponível")
-
-        with patch("sys.argv", ["geminiclaw", "teste"]):
             with pytest.raises(SystemExit) as exc_info:
-                from src.cli.main import main
                 main()
-            assert exc_info.value.code == 1
+        run.assert_any_call(mock.return_value)
+        return exc_info.value.code, mock
+
+    def test_prompt_direto_sai_com_o_codigo_da_sessao(self) -> None:
+        code, start = self._run(["meu prompt"], "start_research", result=3)
+        assert code == 3
+        assert start.call_args.args[0] == "meu prompt"
+        assert start.call_args.kwargs["background"] is False
+
+    def test_background_e_repassado(self) -> None:
+        _, start = self._run(["--background", "--mode", "auto", "meu prompt"], "start_research")
+        assert start.call_args.kwargs["background"] is True and start.call_args.kwargs["mode"] == "auto"
+
+    def test_resume_e_continue_vao_ao_modulo_direto(self) -> None:
+        code, resume = self._run(["resume", "--session", "sessao-a"], "resume_research", result=4)
+        assert code == 4 and resume.call_args.args[0] == "sessao-a"
+        _, cont = self._run(["continue", "--project", "p1"], "continue_project")
+        assert cont.call_args.args[0] == "p1"
+
+    def test_sem_prompt_abre_o_repl(self) -> None:
+        with (
+            patch("sys.argv", ["geminiclaw"]),
+            patch("src.cli.main.run_repl", return_value=0) as repl,
+            patch("src.cli.main.asyncio.run"),
+            patch("src.cli.main.install_provider_resolver"),
+        ):
+            from src.cli.main import main
+
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+        assert exc_info.value.code == 0 and repl.call_args.kwargs["mode"]
+
+    def test_background_sem_tarefa_e_recusado(self) -> None:
+        with patch("sys.argv", ["geminiclaw", "--background"]), patch("src.cli.main.install_provider_resolver"):
+            from src.cli.main import main
+
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+        assert exc_info.value.code == 1

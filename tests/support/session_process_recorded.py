@@ -6,7 +6,7 @@ disponíveis) e o laço autônomo é um ``ScriptedLoop`` que executa os passos d
 
     {"passos": [{"dorme": 3}, {"tokens": 0}], "motivo": "solucao_encontrada"}
 
-``dorme`` espera N s (consultando o pedido de interrupção graciosa, como o laço real); ``subtarefa`` dá nome ao
+``bloqueia`` trava o laço de eventos por N s (``time.sleep``); ``dorme`` espera N s (consultando o pedido de interrupção graciosa, como o laço real); ``subtarefa`` dá nome ao
 passo (registrado em ``payload.subtarefas`` e concluído mesmo com a suspensão pedida); ``motivo`` é o
 ``motivo_parada`` gravado no fim. Um pedido de suspensão (ausência do terminal) impede o passo seguinte. Nenhum gancho de teste entra no código de produção: tudo é substituído aqui, no
 módulo de teste (design §4, "Como os testes de integração rodam sem chamada paga").
@@ -18,6 +18,7 @@ import asyncio
 import json
 import os
 import sys
+import time
 from typing import Any
 
 import src.cli.session_process as session_process
@@ -56,6 +57,8 @@ class ScriptedLoop:
                 if nome:
                     subtarefas.append({"nome": nome, "status": "em_andamento"})
                     self._publish(manager, master_id, subtarefas)
+                if passo.get("bloqueia"):  # trava o laço de eventos (o batimento em thread segue vivo)
+                    time.sleep(float(passo["bloqueia"]))
                 remaining = float(passo.get("dorme", 0))
                 while remaining > 0:
                     if interrupt_requested():

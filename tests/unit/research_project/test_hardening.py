@@ -8,14 +8,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-import src.cli.repl as cli
 from src.cli.project_session import ProjectBinder, ProjectFlowError, resolve_project
+from src.cli.session_start import SessionStarter
 from src.knowledge import projects
 from src.knowledge.errors import HumanConfirmationRequiredError
 from src.knowledge.graph_store import AgeGraphStore, InMemoryGraphStore
 from src.knowledge.problem import parse_problem_draft
 from src.knowledge.provenance import Actor
 from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
+from tests.support.starter_world import BUDGET, args, make_starter, patched_terminal
 from tests.support.task_loop import run_tasks
 from tests.unit.research_project.test_flow import make_drafter, scripted
 from tests.unit.research_project.test_projects import make_draft
@@ -178,15 +179,16 @@ class TestGrafoForaDoAr:
         assert config.RESEARCH_PROJECT_GRAPH_OPTIONAL is False
         assert "RESEARCH_PROJECT_GRAPH_OPTIONAL=false" in (REPO / ".env.example").read_text()
 
-    async def test_execute_prompt_grava_project_mode_sem_grafo(self) -> None:
-        orch = MagicMock()
-        orch.handle_request = AsyncMock(return_value=MagicMock(session_id=None))
+    async def test_lancamento_grava_project_mode_sem_grafo(self, tmp_path) -> None:
         binder = MagicMock()
         binder.bind = AsyncMock(return_value=MagicMock(mode="sem_grafo", project_id=None, context_block=""))
-        with patch.object(cli, "format_result", lambda _r: "ok"):
-            assert await cli.execute_prompt(orch, "p", project_binder=binder) is True
-        kwargs = orch.handle_request.await_args.kwargs
-        assert kwargs["project_mode"] == "sem_grafo" and "project_id" not in kwargs
+        starter, launched = make_starter(tmp_path, binder=binder)
+        with patched_terminal():
+            started = await starter.start_new(
+                "p", mode="assisted", budget=BUDGET, args=args(), terminal_id=None, foreground=False,
+                memory_policy="falhar",
+            )
+        assert started.spec.project_mode == "sem_grafo" and started.spec.projeto is None and len(launched) == 1
 
 
 # ------------------------------------------------------------- TTY, atomicidade
@@ -257,8 +259,11 @@ class TestAutoria:
             assert nodes and all(n.properties["criado_por"] == "researcher/m" for n in nodes)
 
     async def test_cli_passa_modelo_do_roteador(self) -> None:
-        text = (REPO / "src/cli/main.py").read_text()
-        assert 'llm_routing.resolution("researcher").id' in text and "researcher_model=researcher_model" in text
+        routing = MagicMock()
+        routing.resolution.return_value.id = "ollama/qwen3:8b"
+        binder = SessionStarter._default_binder(routing, args(project="p1"))
+        assert binder._researcher_model == "ollama/qwen3:8b" and binder._project_arg == "p1"
+        routing.resolution.assert_called_with("researcher")
 
 
 @pytest.mark.unit
@@ -348,21 +353,19 @@ class TestOrquestradorProjeto:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_modo_auto_passa_o_modo_e_pede_confirmacao_uma_vez(store, pid) -> None:
-    """Scenario: Modo autônomo — execute_prompt(mode='auto') confirma uma vez, antes do orquestrador."""
+async def test_modo_auto_passa_o_modo_e_pede_confirmacao_uma_vez(store, pid, tmp_path) -> None:
+    """Scenario: Modo autônomo — o lançamento confirma o Problema uma vez, antes do processo da sessão."""
     drafter = make_drafter(make_draft())
     binder = ProjectBinder(lambda: store, project_arg=pid, drafter=drafter, interactive=True,
                            input_fn=scripted("c", "m", "c"), output_fn=lambda _m: None, graph_optional=False)
-    orch = MagicMock()
-    calls: list[str] = []
-
-    async def handle(prompt, **kw):
-        calls.append(kw["mode"])
-        assert projects.get_active_problem(store, pid) is not None  # confirmado ANTES da execução
-        return MagicMock(session_id=None)
-
-    orch.handle_request = handle
-    with patch.object(cli, "format_result", lambda _r: "ok"):
-        assert await cli.execute_prompt(orch, "p", mode="auto", project_binder=binder) is True
-        assert await cli.execute_prompt(orch, "p2", mode="auto", project_binder=binder) is True
-    assert calls == ["auto", "auto"] and drafter.await_count == 1
+    starter, launched = make_starter(tmp_path, binder=binder)
+    modes: list[str] = []
+    with patched_terminal():
+        for prompt in ("p", "p2"):
+            started = await starter.start_new(
+                prompt, mode="auto", budget=BUDGET, args=args(), terminal_id=None, foreground=False,
+                memory_policy="falhar",
+            )
+            modes.append(started.spec.modo)
+            assert projects.get_active_problem(store, pid) is not None  # confirmado ANTES do processo existir
+    assert modes == ["auto", "auto"] and drafter.await_count == 1 and len(launched) == 2

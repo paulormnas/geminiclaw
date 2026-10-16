@@ -101,7 +101,7 @@ async def test_sessao_nao_comeca_sem_modelo_elegivel(monkeypatch):
 @pytest.mark.asyncio
 async def test_banner_sem_segredos(nuvem, capsys):
     """Cenário: Banner (uma linha por papel, sem nenhum valor de *_API_KEY)."""
-    from src.cli.main import print_session_banner
+    from src.cli.banner import print_session_banner
 
     routing = await build_session_routing()
     print_session_banner("assisted", context_dir="/inexistente", llm_routing=routing)

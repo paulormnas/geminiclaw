@@ -73,9 +73,9 @@ class TestSessionCreate:
         """create() deve chamar INSERT com os dados corretos."""
         ctx, mock_conn = _make_ctx_with_fetchone(None)
 
-        # LongTermMemory é importédo no nível do módulo — patch direto em src.session.manager
+        # LongTermMemory é importada tardiamente em create(): o patch vai na origem
         with patch("src.session.manager.get_connection", return_value=ctx), \
-             patch("src.session.manager.LongTermMemory") as mock_ltm:
+             patch("src.skills.memory.long_term.LongTermMemory") as mock_ltm:
             mock_ltm.return_value.summarize_for_context.return_value = ""
             session = manager.create("agent-1")
 
@@ -90,7 +90,7 @@ class TestSessionCreate:
         ctx, _ = _make_ctx_with_fetchone(None)
 
         with patch("src.session.manager.get_connection", return_value=ctx), \
-             patch("src.session.manager.LongTermMemory") as mock_ltm:
+             patch("src.skills.memory.long_term.LongTermMemory") as mock_ltm:
             mock_ltm.return_value.summarize_for_context.return_value = "Memória importante"
             session = manager.create("agent-1")
 

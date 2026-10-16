@@ -9,7 +9,7 @@ import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -339,3 +339,55 @@ def test_diretorio_de_lancamento_nunca_e_montado_no_sandbox():
     root = Path(__file__).resolve().parents[3] / "src" / "skills" / "code" / "sandbox.py"
     source = root.read_text(encoding="utf-8")
     assert ".launch" not in source  # o sandbox só monta outputs/<session_id>/<tarefa>
+
+
+# -- SIGINT do processo da sessão (o handler saiu do terminal) ----------------------------------------------------
+
+
+def _install_handler(runner):
+    original = session_process.signal.getsignal(session_process.signal.SIGINT)
+    session_process._install_sigint_handler(lambda: runner)
+    handler = session_process.signal.getsignal(session_process.signal.SIGINT)
+    session_process.signal.signal(session_process.signal.SIGINT, original)
+    return handler
+
+
+def test_primeiro_sigint_e_gracioso_e_o_segundo_limpa_so_a_sessao_e_sai_com_130():
+    from src.orchestration.usage import clear_interrupt, interrupt_requested, set_session_active
+
+    manager = FakeSessionManager()
+    manager.add("s1", "active", {})
+    runner = SessionRunner(make_spec(), orchestrator=SimpleNamespace(session_manager=manager))
+    runner.session_id = "s1"
+    handler = _install_handler(runner)
+    clear_interrupt()
+    set_session_active(True)
+    try:
+        handler(2, None)  # 1º: pedido de fechamento com checkpoint, sem sair
+        assert interrupt_requested()
+        with (
+            patch("src.skills.code.sandbox.cleanup_sandbox_containers", return_value=1) as cleanup,
+            patch.object(session_process.os, "_exit") as leave,
+            patch("src.observability.telemetry.get_telemetry") as tel,
+        ):
+            tel.return_value.flush = AsyncMock()
+            handler(2, None)  # 2º: limpa só os containers desta sessão e encerra
+        cleanup.assert_called_once_with(["s1"])
+        leave.assert_called_once_with(EXIT_INTERRUPTED)
+    finally:
+        set_session_active(False)
+        clear_interrupt()
+
+
+def test_sigint_antes_da_sessao_ativa_nao_limpa_nada_e_sai_com_130():
+    runner = SessionRunner(make_spec())
+    handler = _install_handler(runner)
+    with (
+        patch("src.skills.code.sandbox.cleanup_sandbox_containers") as cleanup,
+        patch.object(session_process.os, "_exit") as leave,
+        patch("src.observability.telemetry.get_telemetry") as tel,
+    ):
+        tel.return_value.flush = AsyncMock()
+        handler(2, None)
+    cleanup.assert_not_called()  # sem sessão registrada não há container a remover
+    leave.assert_called_once_with(EXIT_INTERRUPTED)

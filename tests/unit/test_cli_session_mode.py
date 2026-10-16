@@ -5,11 +5,11 @@ Cobre a flag --mode, o help completo e o banner de inicialização de sessão.
 
 import pytest
 
+from src.cli.banner import print_session_banner
 from src.cli.main import (
     FULL_HELP_TEXT,
     build_parser,
     print_full_help,
-    print_session_banner,
 )
 from src.config import SESSION_DEFAULT_MODE, SessionMode
 

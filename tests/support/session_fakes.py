@@ -105,6 +105,49 @@ class FakeSessionManager:
             sess.updated_at = _now()
             return True
 
+    # -- métodos da v18.7-background-sessions ---------------------------------------------------------------------
+
+    def find_by_alias(self, alias: str) -> Session | None:
+        found = [
+            s for s in self.rows.values()
+            if s.agent_id == "orchestrator" and s.alias == alias and "continued_by" not in s.payload
+        ]
+        return sorted(found, key=lambda s: s.created_at)[-1] if found else None
+
+    def find_by_launch_id(self, launch_id: str) -> Session | None:
+        found = [s for s in self.rows.values() if s.payload.get("launch_id") == launch_id]
+        return found[-1] if found else None
+
+    def aliases_in_use(self, slug: str) -> list[str]:
+        return [s.alias for s in self.rows.values() if s.alias and s.alias.startswith(slug + "-")]
+
+    def list_orchestrator(self, statuses=None, *, updated_after: str | None = None, limit: int = 200) -> list[Session]:
+        found = [
+            s for s in self.rows.values()
+            if s.agent_id == "orchestrator" and (statuses is None or s.status in statuses)
+            and (updated_after is None or s.updated_at > updated_after)
+        ]
+        return sorted(found, key=lambda s: s.updated_at)[:limit]
+
+    def mark_interrupted(self, session_id: str, expected_updated_at: str) -> Session | None:
+        with self._lock:
+            sess = self.rows.get(session_id)
+            if sess is None or sess.status != "active" or sess.updated_at != expected_updated_at:
+                return None
+            sess.status = "interrompida"
+            sess.payload = {**sess.payload, "motivo_parada": "interrompida"}
+            return sess
+
+    def close_by_researcher(self, session_id: str, statuses) -> bool:
+        with self._lock:
+            sess = self.rows.get(session_id)
+            if sess is None or sess.status not in statuses:
+                return False
+            sess.status = "closed"
+            sess.payload = {**sess.payload, "motivo_parada": "encerrada_pesquisador"}
+            sess.updated_at = _now()
+            return True
+
 
 class InMemoryPresenceStore:
     """Armazenamento de presença em memória (testes de unidade)."""

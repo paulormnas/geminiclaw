@@ -1,6 +1,6 @@
 # Tarefas: v18.7-background-sessions
 
-**Estado (2026-10-16):** em andamento, em PRs sequenciais. PR 1 (#177): divisão do `cli/main.py` (0.9), schema e sessão (1.1 a 1.4), códigos de saída e apelido (2.1 e 2.2), retenção do registro de sessões. #179: renomeação `sandboxes`/`parar-sandboxes`. PR 2 (#180): lançamento e processo da sessão (3), configuração (7.1). PR 3 (`feat/v18.7-session-end`): fim por modo e presença (4). Faltam REPL e comando direto (5), benchmark (6) e documentação (7.2).
+**Estado (2026-10-16):** em andamento, em PRs sequenciais. PR 1 (#177): divisão do `cli/main.py` (0.9), schema e sessão (1.1 a 1.4), códigos de saída e apelido (2.1 e 2.2), retenção do registro de sessões. #179: renomeação `sandboxes`/`parar-sandboxes`. PR 2 (#180): lançamento e processo da sessão (3), configuração (7.1). PR 3 (#181): fim por modo e presença (4). PR 4 (`feat/v18.7-terminal-repl`): REPL e comando direto (5) e documentação (7.2). Falta o benchmark (6).
 
 **Decisões do pesquisador em 2026-10-16 (resposta à revisão desta mudança):**
 - Entrega: pode haver quantos PRs forem necessários; `background-sessions` e `persistent-human-gate` são mergeadas em sequência no mesmo dia, sem uso intermediário (Questão 1).
@@ -46,13 +46,12 @@
 - [x] 4.6 Integração "Saída normal" no armazenamento real: `stop()` grava `ended_at` e `end_reason="saida"` (o `sair` do REPL chama `stop()`; o teste do comando em si vem com a tarefa 5).
 
 ## 5. REPL e comando direto
-- [ ] 5.1 `src/cli.py` `interactive_mode`: iniciar pesquisa pelo comando `nova-pesquisa <tarefa>` (texto livre sem comando recusado com a dica de `nova-pesquisa` até `v18.7-session-events-terminal`) e lançar em segundo plano; varredura de sessões paradas ao abrir e periódica (`src/session_watch.py`); resumo desde a última vez; pergunta retomar/manter/encerrar; relatório determinístico de encerramento; carga sob demanda de embeddings e clientes.
-- [ ] 5.2 `src/cli.py` `main`: comando direto em primeiro plano com presença, repasse de `SIGINT` e código de saída; `--background`; recusa de `--background` com `assisted`.
-- [ ] 5.3 Testes de unidade (entrada simulada): lista e pergunta do caso 7; manter e encerrar do caso 9 (sem chamada a LLM); `fastembed` não importado depois de abrir e sair do REPL.
-- [ ] 5.4 Testes de integração: retomar do caso 8 (`continued_by`, sem reexecutar concluídas, apelido herdado); `SIGKILL` no processo da sessão do caso 10; reuso de PID e outro host (unidade); laço travado com `SESSION_LOOP_STALE_SECONDS=2`; comando direto do caso 12 (código 0, código 3, Ctrl+C com 130) e, também do caso 12, "Interrupção da sessão lançada pelo REPL" (`SIGINT` ao processo da sessão: `interrompida_pesquisador`, checkpoint, saída 130, REPL aberto).
-- [ ] 5.5 Teste de unidade "Laço lento não derruba a sessão" com `FakeClock` e os padrões (300, 30, 900).
-
-- [ ] 5.6 Retomada da etapa do Curator: ao retomar uma cadeia cujo checkpoint tem `curator_pendente` (gravado pelo encerramento no REPL), o laço da sessão nova executa a consolidação do Curator antes de planejar. Teste de unidade com Curator simulado.
+- [x] 5.1 `src/cli/repl.py` (`Repl`, `interactive_mode`, `run_repl`): iniciar pelo comando `nova-pesquisa <tarefa>` (texto livre sem comando é recusado com a dica), `sessions` (lista as pesquisas), `retomar`/`resume <apelido|id>`, `encerrar <apelido|id>`, `sandboxes`, `parar-sandboxes [id]` (sem id, confirmação e limpeza global explícita), `clear-context`; presença do terminal (`TerminalPresence`, um REPL por vez); varredura de sessões paradas ao abrir e periódica (`SweepThread`, `src/session/watch.py`) com aviso que redesenha o prompt; resumo desde a última vez e pergunta retomar/manter/encerrar (`src/cli/sessions_view.py`); encerramento com relatório determinístico (`src/session/closing.py`); `import src.cli.main` e o REPL não carregam embeddings, cliente do Qdrant nem clientes de LLM (imports tardios em `SessionManager.create`, `reports` e `ProjectBinder`). Lançamento e retomada pelo terminal em `src/cli/session_start.py` (`SessionStarter`: contexto, modelos, projeto e Problema, modo sem limite, memória, arquivo de lançamento e processo). Memória desconhecida só registra o evento `memoria_desconhecida` (decisão do pesquisador de 2026-10-16, no REPL e no comando direto).
+- [x] 5.2 `src/cli/direct.py` e `main`: comando direto em primeiro plano com presença `tipo='direto'`, repasse de `SIGINT` ao processo da sessão e código de saída do motivo de parada; `--background` (apelido e PID, saída 0, sem presença); recusa de `--background` com `--mode assisted`; `resume`/`continue` pelo mesmo caminho. O `_signal_handler` do `main()` e `execute_prompt` saíram (um caminho só).
+- [x] 5.3 Testes de unidade (entrada simulada): lista e pergunta do caso 7; manter e encerrar do caso 9 (sem chamada a LLM); retomar do caso 8 (chamada à retomada); casos 14 e 15 (memória no REPL e no comando direto) e retomada que também verifica; um REPL por vez; subprocesso confirma que abrir e sair do REPL não importa `fastembed`, `qdrant_client` nem clientes de LLM; Ctrl+C repassado ao processo da sessão.
+- [x] 5.4 Testes de integração (processo real, PostgreSQL real): REPL livre durante a pesquisa (3.8), retomar do caso 8 (`continued_by`, apelido herdado), `SIGKILL` no processo da sessão do caso 10 (e a pergunta ao reabrir), laço travado (`bloqueia` 6 s; varredura com `loop_stale_seconds=2`), comando direto do caso 12 (código 0, código 3, Ctrl+C com 130), `--background`, "Interrupção da sessão lançada pelo REPL" (`SIGINT` ao PID registrado: `interrompida_pesquisador`, REPL aberto e presença sem `ended_at`). Em pseudo-terminal com `pexpect`: prompt, redesenho depois de aviso assíncrono com o texto parcial, Ctrl+C no prompt. Reuso de PID e outro host: unidade (`test_watch_and_closing.py`). **Não coberto:** "2 subtarefas concluídas não são reexecutadas" na retomada (depende do laço real; dúvida 3.A).
+- [x] 5.5 Teste de unidade "Laço lento não derruba a sessão" com `FakeClock` e os padrões (300, 30, 900) (`test_watch_and_closing.py`).
+- [x] 5.6 Retomada da etapa do Curator: já existia no laço (`Orchestrator.resume_curator_pending`, chamado antes do primeiro planejamento da sessão retomada, com testes em `tests/unit/continuity/test_resume.py`); novo: o encerramento pelo REPL marca `curator_pendente` no checkpoint e a retomada de `encerrada_pesquisador` pede confirmação (teste).
 
 ## 6. Benchmark
 - [ ] 6.1 `scripts/benchmark/run_benchmark.py`: `start_new_session=True`, `killpg` no tempo limite; `anomalies()` com código 4 e código divergente; `stop_class` devolve `interrupcao` para todo motivo terminado em `_pesquisador`.
@@ -61,7 +60,7 @@
 
 ## 7. Configuração e documentação
 - [x] 7.1 `src/config.py` com as variáveis do design §3 e validações; `.env.example` documentado.
-- [ ] 7.2 `README.md`: REPL em segundo plano, `--background`, códigos de saída.
+- [x] 7.2 `README.md`: REPL em segundo plano, `--background`, códigos de saída (e a ajuda da CLI).
 
 ## 8. Validação final
 - [ ] 8.1 `uv run ruff check .`; `uv run pytest -m "unit or integration" -v` verde, com PostgreSQL real para os testes de integração.

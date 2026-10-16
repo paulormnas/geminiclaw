@@ -46,7 +46,7 @@ DEFAULT_BUDGET = UsageBudget(100_000, 60.0, 3, 3, 0.05, 1_000_000)
 @dataclass
 class Launched:
     proc: subprocess.Popen[bytes]
-    spec: LaunchSpec
+    spec: LaunchSpec | None
     path: Path
 
     @property
@@ -71,6 +71,45 @@ class SessionHarness:
         }
         self.manager = SessionManager()
         self.launched: list[Launched] = []
+
+    def starter(self, **kwargs: Any) -> Any:
+        """``SessionStarter`` real que cria o processo de teste (``GC_SCENARIO`` é lido de ``self.env`` a cada lançamento).
+
+        Tudo o que é do terminal e não do processo (infraestrutura, roteamento e vínculo de projeto) fica a cargo do
+        teste; a memória é a do computador.
+        """
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, MagicMock
+
+        from src.cli.session_start import SessionStarter
+
+        binder = MagicMock()
+        binder.bind = AsyncMock(return_value=SimpleNamespace(mode="sem_grafo", project_id=None, context_block=""))
+        defaults: dict[str, Any] = dict(
+            session_manager=self.manager,
+            base_dir=self.root / "outputs",
+            context_dir=str(self.context_dir),
+            monitor=SimpleNamespace(get_memory_usage=lambda: {"available_mb": 10**6}),
+            spawn=self._tracked_spawn,
+            spawn_module=RECORDED_MODULE,
+            spawn_env=self.env,
+            spawn_cwd=self.root,
+            log_dir=self.root / "logs",
+            launch_timeout=10,
+            binder_factory=lambda _routing, _args: binder,
+            prerequisites=lambda: None,
+            output_fn=lambda _t: None,
+        )
+        defaults.update(kwargs)
+        return SessionStarter(**defaults)
+
+    def _tracked_spawn(self, path: Path, **kwargs: Any) -> subprocess.Popen[bytes]:
+        proc = spawn_session(path, **kwargs)
+        self.launched.append(Launched(proc, None, path))
+        return proc
+
+    def use_scenario(self, scenario: Path) -> None:
+        self.env["GC_SCENARIO"] = str(scenario)
 
     def scenario(self, *, motivo: str = "solucao_encontrada", passos: list[dict[str, Any]] | None = None) -> Path:
         path = self.root / f"cenario-{uuid.uuid4().hex[:6]}.json"

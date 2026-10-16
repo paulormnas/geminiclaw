@@ -6,9 +6,7 @@ Suporta execução direta com prompt ou modo interativo (REPL).
 
 import argparse
 import asyncio
-import signal
 import sys
-from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -21,13 +19,11 @@ root_path = str(Path(__file__).resolve().parents[2])
 if root_path not in sys.path:
     sys.path.insert(0, root_path)
 
-from src.cli.banner import print_session_banner
-from src.cli.context_commands import clear_context, load_context_with_confirmation
-from src.cli.infrastructure import ensure_infrastructure
-from src.cli.repl import execute_prompt, interactive_mode
-from src.cli.reports import show_history, show_metrics, show_session_logs
-from src.cli.resume import continue_project, resume_session
+from src.cli.context_commands import clear_context
+from src.cli.direct import continue_project, resume_research, start_research
+from src.cli.repl import run_repl
 from src.cli.sandboxes import show_sandboxes, stop_sandboxes
+from src.cli.unlimited import _project_marked_unlimited, resolve_unlimited_budget  # noqa: F401 - API pública da CLI
 from src.config import (
     APP_NAME,
     OUTPUT_BASE_DIR,
@@ -37,9 +33,7 @@ from src.config import (
 from src.egress.routing import install_provider_resolver
 from src.host.health import thermal_protection_warning
 from src.logger import get_logger
-from src.orchestration.orchestrator import Orchestrator
 from src.orchestration.usage import UsageBudget
-from src.session.manager import SessionManager
 from src.utils.terminal import BOLD, CYAN, GREEN, RED, RESET, STATUS_ICONS, VERSION, YELLOW
 
 logger = get_logger(__name__)
@@ -53,7 +47,9 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
 ╚══════════════════════════════════════════════════════════════╝
 {RESET}
 {BOLD}USO:{RESET}
-  geminiclaw [opções] "<tarefa>"
+  geminiclaw [opções] "<tarefa>"   (espera o fim e sai com o código do motivo de parada)
+  geminiclaw --background [opções] "<tarefa>"   (cria o processo, imprime apelido e PID e sai com 0)
+  geminiclaw                        (REPL: nova-pesquisa <tarefa>, sessions, retomar, encerrar, sair)
   geminiclaw sandboxes
   geminiclaw parar-sandboxes [--session <id>]
   geminiclaw resume --session <id>   (retoma a partir do checkpoint, em nova sessão com orçamento novo)
@@ -244,6 +240,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--background",
+        action="store_true",
+        help=(
+            "Cria o processo da pesquisa, imprime o apelido e o PID e sai com 0, sem esperar o fim (sem presença de "
+            "terminal). Não combina com --mode assisted. Sem ele, o comando espera o fim e sai com o código do "
+            "motivo de parada (0 parada de pesquisa, 1 erro, 2 modo sem limite não confirmado, 3 limite, "
+            "4 aguarda o pesquisador, 5 memória insuficiente, 6 sessão perdida, 130 interrupção)."
+        ),
+    )
+    parser.add_argument(
         "--max-task-retries",
         type=int,
         default=None,
@@ -392,16 +398,6 @@ def run_embeddings_reindex(collection: str | None, auto_confirm: bool) -> None:
     print()
 
 
-def _create_orchestrator() -> Orchestrator:
-    """Verifica a infraestrutura de apoio e retorna o orquestrador.
-
-    Returns:
-        O ``Orchestrator``, que executa os agentes no próprio processo.
-    """
-    ensure_infrastructure()
-    return Orchestrator(session_manager=SessionManager())
-
-
 def _handle_embeddings_command(argv: list[str]) -> None:
     """Trata `geminiclaw embeddings <ação> [opções]` (Roadmap V16 / ADR 011 §3).
 
@@ -506,66 +502,6 @@ def _handle_vocab_command(argv: list[str], store: Any | None = None) -> int:
     return 0
 
 
-def resolve_unlimited_budget(
-    args: "argparse.Namespace",
-    budget: UsageBudget,
-    *,
-    project_marked: Callable[[str | None], bool] | None = None,
-    input_fn: Callable[[str], str] = input,
-    isatty: Callable[[], bool] | None = None,
-) -> UsageBudget:
-    """Aplica e confirma o modo sem limite (v18.5-operation-metrics, design §2.2).
-
-    O modo vem da opção ``--unlimited`` ou da marcação do projeto; nos dois casos a confirmação digitada é exigida a
-    cada execução, e a retomada (``resume``/``continue``) não herda o modo da sessão anterior. Opções numéricas
-    explícitas (``--max-tokens`` etc.) prevalecem sobre a marcação do projeto.
-
-    Returns:
-        O orçamento a usar (sem limite e confirmado, ou o recebido).
-
-    Raises:
-        UnlimitedModeError: Confirmação ausente, errada ou impossível (sem terminal).
-    """
-    from src.orchestration.unlimited_mode import (
-        ORIGIN_CLI,
-        ORIGIN_PROJECT,
-        confirm_unlimited,
-        set_activation,
-    )
-
-    origin: str | None = ORIGIN_CLI if budget.unlimited else None
-    explicit_limits = any(
-        getattr(args, name, None) is not None for name in ("max_tokens", "max_minutes", "max_egress_bytes")
-    )
-    if origin is None and not explicit_limits and project_marked is not None:
-        try:
-            if project_marked(getattr(args, "project", None)):
-                origin = ORIGIN_PROJECT
-                budget = UsageBudget.from_config(
-                    max_task_retries=getattr(args, "max_task_retries", None),
-                    max_connection_retries=getattr(args, "max_connection_retries", None),
-                    unlimited=True,
-                )
-        except Exception as exc:  # noqa: BLE001 - sem ler a marcação, a sessão segue limitada (padrão seguro)
-            logger.warning("Marcação de modo sem limite do projeto não lida", extra={"error": type(exc).__name__})
-    if origin is None:
-        set_activation(None)
-        return budget
-    set_activation(confirm_unlimited(budget, origin, input_fn=input_fn, isatty=isatty))
-    return budget
-
-
-def _project_marked_unlimited(project_arg: str | None) -> bool:
-    """True se o projeto da sessão (``--project`` ou o padrão) está marcado com ``modo_sem_limite``."""
-    from src.knowledge import projects
-    from src.knowledge.factory import open_graph_store
-
-    projeto_id = project_arg or projects.get_default_project()
-    if not projeto_id:
-        return False
-    return projects.is_unlimited_marked(open_graph_store(), projeto_id)
-
-
 def main() -> None:
     """Ponto de entrada principal da CLI."""
     install_provider_resolver()
@@ -638,47 +574,11 @@ def main() -> None:
         logger.error("Orçamento de uso inválido", extra={"error": str(e)})
         sys.exit(1)
 
-    orchestrator: Orchestrator | None = None
-
-    def _signal_handler(sig: int, frame: object) -> None:
-        """Handler para SIGINT (Ctrl+C).
-
-        v18.5-operation-metrics §2.6: com uma sessão em andamento, o 1º Ctrl+C pede o fechamento com checkpoint
-        (``interrompida_pesquisador``); o 2º mantém o encerramento imediato.
-        """
-        from src.config import LIMIT_GRACE_SECONDS
-        from src.orchestration.usage import interrupt_requested, request_interrupt, session_active
-
-        if session_active() and not interrupt_requested():
-            request_interrupt()
-            print(
-                f"\n\n  {YELLOW}⚠  Interrupção pedida: a sessão fecha com checkpoint assim que as subtarefas em "
-                f"andamento terminarem (até {LIMIT_GRACE_SECONDS}s). Ctrl+C de novo encerra imediatamente.{RESET}\n"
-            )
-            return
-        print(f"\n\n  {YELLOW}⚠  Interrupção recebida. Encerrando sandboxes de código...{RESET}")
-        # Os agentes rodam no processo; só o sandbox de código pode ter deixado container para trás.
-        from src.skills.code.sandbox import cleanup_all_sandbox_containers
-
-        removed = cleanup_all_sandbox_containers()  # provisório: o processo da sessão limpa só a sua (PR do REPL)
-        print(f"  {GREEN}✅ Cleanup concluído ({removed} sandbox(es) removido(s)).{RESET}\n")
-        # V11.1.2 — Flush de telemetria antes de encerrar via SIGINT
-        try:
-            import asyncio as _asyncio
-
-            from src.observability.telemetry import get_telemetry
-            _tel = get_telemetry()
-            _asyncio.run(_tel.flush())
-            logger.info("Flush de telemetria concluído (SIGINT).")
-        except Exception as _e:
-            logger.error("Erro no flush de telemetria (SIGINT)", extra={"error": str(_e)})
-        sys.exit(130)
-
-    signal.signal(signal.SIGINT, _signal_handler)
-
     if args.prompt:
         p_lower = args.prompt.strip().lower()
         if p_lower == "history":
+            from src.cli.reports import show_history
+
             show_history()
             sys.exit(0)
         elif p_lower == "sandboxes":
@@ -702,6 +602,7 @@ def main() -> None:
 
     # Subcomando: --metrics <execution_id>
     if args.metrics:
+        from src.cli.reports import show_metrics
         from src.db import get_pool
         pool = get_pool()
         pool.open()
@@ -725,33 +626,13 @@ def main() -> None:
 
     # Subcomando: --log <session_id>
     if args.log:
+        from src.cli.reports import show_session_logs
+
         show_session_logs(args.log)
         sys.exit(0)
 
-    try:
-        orchestrator = _create_orchestrator()
-    except RuntimeError as e:
-        print(f"\n  {STATUS_ICONS['error']} {RED}Falha na inicialização: {e}{RESET}\n")
-        logger.error("Falha ao inicializar CLI", extra={"error": str(e)})
-        sys.exit(1)
-
-    # v18-research-continuity — paradas inesperadas: sessões sem batimento viram `interrompida` na inicialização.
-    try:
-        asyncio.run(orchestrator.recover_interrupted_sessions())
-    except Exception as _e:  # noqa: BLE001 - nunca impede a inicialização
-        logger.warning("Detecção de sessões interrompidas falhou", extra={"error": type(_e).__name__})
-
-    # v18.5-operation-metrics — modo sem limite: opção --unlimited ou marcação do projeto, sempre com confirmação.
-    from src.orchestration.unlimited_mode import UnlimitedModeError
-
-    try:
-        budget = resolve_unlimited_budget(args, budget, project_marked=_project_marked_unlimited)
-    except UnlimitedModeError as e:
-        print(f"\n  {STATUS_ICONS['error']} {RED}{e}{RESET}\n")
-        logger.error("Modo sem limite não iniciado", extra={"error": str(e)})
-        sys.exit(2)
-
-    # Roadmap V15.3 / Spec G5 + v18-research-continuity — retomar a partir do checkpoint
+    # v18.7-background-sessions — toda pesquisa roda em processo próprio (ADR 023 §1): o comando direto é o terminal
+    # que cria o processo, mostra a saída dele e sai com o código do motivo de parada; o REPL só lança e acompanha.
     if args.prompt:
         p_lower_resume = args.prompt.strip().lower()
         if p_lower_resume == "resume" or p_lower_resume.startswith("resume "):
@@ -761,13 +642,13 @@ def main() -> None:
             if not target_sess:
                 print(f"\n  {RED}❌ Especifique --session <id> (ex: geminiclaw resume --session <id>).{RESET}\n")
                 sys.exit(1)
-            ok = asyncio.run(
-                resume_session(
-                    orchestrator, target_sess, project_arg=args.project,
-                    mode=args.mode, budget=budget, model_pin=args.model,
+            sys.exit(
+                asyncio.run(
+                    resume_research(
+                        target_sess, args, mode=args.mode, budget=budget, background=args.background
+                    )
                 )
             )
-            sys.exit(0 if ok else 1)
         if p_lower_resume == "continue" or p_lower_resume.startswith("continue "):
             target_project = args.project
             if not target_project and " " in args.prompt.strip():
@@ -775,82 +656,26 @@ def main() -> None:
             if not target_project:
                 print(f"\n  {RED}❌ Especifique --project <id> (ex: geminiclaw continue --project <id>).{RESET}\n")
                 sys.exit(1)
-            ok = asyncio.run(
-                continue_project(orchestrator, target_project, mode=args.mode, budget=budget, model_pin=args.model)
+            sys.exit(
+                asyncio.run(
+                    continue_project(target_project, args, mode=args.mode, budget=budget, background=args.background)
+                )
             )
-            sys.exit(0 if ok else 1)
+        sys.exit(
+            asyncio.run(start_research(args.prompt, args, mode=mode, budget=budget, background=args.background))
+        )
 
-    # Roadmap V15.5 / Spec G9 — carrega input_context/ uma única vez por invocação
-    context_bundle = load_context_with_confirmation()
-    if context_bundle is None:
+    if args.background:
+        print(f"\n  {STATUS_ICONS['error']} {RED}--background exige uma tarefa.{RESET}\n")
         sys.exit(1)
-
-    # ADR 017 — resolve o modelo de cada papel uma única vez, antes do banner e de qualquer chamada
-    # de LLM; sem modelo elegível, a sessão não começa (mensagem acionável).
-    from src.llm.catalog import CatalogError
-    from src.llm.routing import RoutingError
-    from src.llm.session import build_session_routing
-
+    code = run_repl(mode=mode, explicit_mode=args.mode, budget=budget, args=args)
     try:
-        llm_routing = asyncio.run(
-            build_session_routing(cli_pins={"researcher": args.model} if args.model else None)
-        )
-    except (RoutingError, CatalogError) as e:
-        print(f"\n  {STATUS_ICONS['error']} {RED}Falha na resolução de modelos: {e}{RESET}\n")
-        logger.error("Falha ao resolver modelos por papel", extra={"error": str(e)})
-        sys.exit(1)
+        from src.observability.telemetry import get_telemetry
 
-    # v17-research-project — projeto da sessão e Problema confirmado (todos os modos).
-    from src.cli.project_session import ProjectBinder
-
-    def _open_store() -> Any:
-        from src.knowledge.factory import open_graph_store
-
-        # Início da sessão: reconcilia o índice semântico antes da primeira consulta ao grafo (projeto e Problema).
-        return open_graph_store(reconcile=True)
-
-    try:
-        researcher_model: str | None = llm_routing.resolution("researcher").id
-    except Exception:  # noqa: BLE001 - sem modelo conhecido, a autoria do rascunho fica só com o papel
-        researcher_model = None
-    project_binder = ProjectBinder(_open_store, project_arg=args.project, researcher_model=researcher_model)
-
-    if args.prompt:
-        # Modo direto: executa o prompt e sai
-        print_session_banner(mode, budget=budget, llm_routing=llm_routing, context_bundle=context_bundle)
-        accepted = asyncio.run(
-            execute_prompt(
-                orchestrator,
-                args.prompt,
-                mode=mode,
-                context_bundle=context_bundle,
-                budget=budget,
-                llm_routing=llm_routing,
-                project_binder=project_binder,
-            )
-        )
-        if accepted is False:
-            sys.exit(1)
-        # V11.1.2 — Flush explícito ao encerrar modo não-interativo
-        try:
-            from src.observability.telemetry import get_telemetry
-            asyncio.run(get_telemetry().flush())
-        except Exception as _e:
-            logger.error("Erro no flush de telemetria final", extra={"error": str(_e)})
-    else:
-        # Modo interativo (REPL)
-        asyncio.run(
-            interactive_mode(
-                orchestrator, mode=mode, explicit_mode=args.mode, context_bundle=context_bundle, budget=budget,
-                llm_routing=llm_routing, project_binder=project_binder,
-            )
-        )
-        # V11.1.2 — Flush explícito ao sair do modo interativo
-        try:
-            from src.observability.telemetry import get_telemetry
-            asyncio.run(get_telemetry().flush())
-        except Exception as _e:
-            logger.error("Erro no flush de telemetria final (REPL)", extra={"error": str(_e)})
+        asyncio.run(get_telemetry().flush())  # V11.1.2 — flush explícito ao sair do modo interativo
+    except Exception as _e:
+        logger.error("Erro no flush de telemetria final (REPL)", extra={"error": str(_e)})
+    sys.exit(code)
 
 
 if __name__ == "__main__":

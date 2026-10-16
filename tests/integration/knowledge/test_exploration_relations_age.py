@@ -21,31 +21,40 @@ NEW_LABELS = ["PREPARA", "REFERENCIA_DE"]
 
 
 @pytest.fixture
-def temp_graph(monkeypatch):
-    if not config.KNOWLEDGE_READER_DATABASE_URL or not config.KNOWLEDGE_READER_PASSWORD:
-        pytest.skip("KNOWLEDGE_READER_DATABASE_URL/KNOWLEDGE_READER_PASSWORD não configuradas")
+def temp_graph():
     from scripts import migrate_v17_knowledge as migration
 
     name = f"knowledge_t_{uuid.uuid4().hex[:8]}"
     with psycopg.connect(config.DATABASE_URL, autocommit=True) as conn:
+        migration.apply_static_sql(conn, name)
+        migration.create_node_labels(conn, name)
         yield migration, conn, name
         conn.execute("LOAD 'age'")
         conn.execute('SET search_path = ag_catalog, "$user", public')
         conn.execute("SELECT drop_graph(%s, true)", (name,))
 
 
-def test_grafo_anterior_a_v18_7(temp_graph, monkeypatch):
-    """Scenario: Grafo anterior à V18.7 (migração duas vezes; leitor lê e não grava)."""
-    migration, conn, name = temp_graph
-    migration.apply_static_sql(conn, name)
-    migration.create_node_labels(conn, name)
+def _migrate_twice(migration, conn, name, monkeypatch):
     before = frozenset(schema.RELATION_TYPES) - set(NEW_LABELS)
     monkeypatch.setattr(schema, "RELATION_TYPES", before)
     assert set(migration.create_relation_labels(conn, name)) == before  # grafo criado antes desta mudança
     monkeypatch.undo()
-
     assert migration.create_relation_labels(conn, name) == NEW_LABELS
     assert migration.create_relation_labels(conn, name) == []
+
+
+def test_migracao_idempotente_cria_os_rotulos_novos(temp_graph, monkeypatch):
+    """Scenario: Grafo anterior à V18.7 (a migração roda duas vezes sem duplicar rótulos)."""
+    migration, conn, name = temp_graph
+    _migrate_twice(migration, conn, name, monkeypatch)
+
+
+def test_leitor_le_as_arestas_novas_e_nao_grava(temp_graph, monkeypatch):
+    """Scenario: Grafo anterior à V18.7 (``knowledge_reader`` lê e não grava; parecer de segurança, item c)."""
+    if not config.KNOWLEDGE_READER_DATABASE_URL or not config.KNOWLEDGE_READER_PASSWORD:
+        pytest.skip("KNOWLEDGE_READER_DATABASE_URL/KNOWLEDGE_READER_PASSWORD não configuradas")
+    migration, conn, name = temp_graph
+    _migrate_twice(migration, conn, name, monkeypatch)
     migration.create_reader_role(conn, name)
 
     store = AgeGraphStore(

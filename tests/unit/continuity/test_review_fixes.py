@@ -375,7 +375,7 @@ async def test_s4_teto_acumulado_da_cadeia(tmp_path):
 
 @pytest.mark.asyncio
 async def test_s5_repl_nao_sobrescreve_o_modo_da_origem():
-    import src.cli.main as cli
+    import src.cli.repl as cli
 
     with patch("builtins.input", side_effect=["resume s1", "sair"]), \
             patch.object(cli, "resume_session", AsyncMock(return_value=True)) as res, \
@@ -386,7 +386,7 @@ async def test_s5_repl_nao_sobrescreve_o_modo_da_origem():
 
 @pytest.mark.asyncio
 async def test_s6_run_resume_devolve_false_quando_handle_request_falha(tmp_path):
-    import src.cli.main as cli
+    import src.cli.resume as cli
 
     w = World(tmp_path)
     prep = await w.prepare()

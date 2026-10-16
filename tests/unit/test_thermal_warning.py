@@ -53,7 +53,7 @@ def test_sem_aviso_sem_leitura_ou_fora_do_linux(monkeypatch, caplog):
 
 
 def test_cabecalho_do_repl_mostra_o_aviso(monkeypatch, capsys):
-    import src.cli.main as cli_main
+    import src.cli.banner as cli_main
 
     monkeypatch.setattr(config, "TEMPERATURE_LIMIT", None)
     monkeypatch.setattr(

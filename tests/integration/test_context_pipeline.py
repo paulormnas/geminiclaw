@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.cli.main import clear_context, load_context_with_confirmation
+from src.cli.context_commands import clear_context, load_context_with_confirmation
 from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
 from src.research_data.context_loader import ContextLoader
 from src.session.manager import Session
@@ -180,7 +180,7 @@ class TestCliContextConfirmation:
         assert bundle.total_files == 1
 
     def test_contexto_grande_pede_confirmacao_e_aceita(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        import src.cli.main as cli_module
+        import src.cli.context_commands as cli_module
 
         monkeypatch.setattr(cli_module, "CONTEXT_TOKEN_WARNING_THRESHOLD", 10)
 
@@ -194,7 +194,7 @@ class TestCliContextConfirmation:
         assert bundle is not None
 
     def test_contexto_grande_recusado_retorna_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        import src.cli.main as cli_module
+        import src.cli.context_commands as cli_module
 
         monkeypatch.setattr(cli_module, "CONTEXT_TOKEN_WARNING_THRESHOLD", 10)
 

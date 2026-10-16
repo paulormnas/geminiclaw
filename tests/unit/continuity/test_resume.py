@@ -198,7 +198,7 @@ async def test_continuar_o_projeto(world):
     with pytest.raises(ResumeError, match="não tem sessões"):
         select_session_for_project(world.sm, "01890000-0000-7000-8000-0000000000ff")
 
-    import src.cli.main as cli
+    import src.cli.resume as cli
 
     orch = MagicMock(session_manager=world.sm)
     orch.recover_interrupted_sessions = AsyncMock()
@@ -222,7 +222,7 @@ async def test_pesquisa_dada_como_resolvida_pede_confirmacao(tmp_path):
     assert "continuar explorando" in asked[0]
     prep = await w.prepare(confirm=lambda q: True)
     assert prep.state.source_session_id == "sessao-a"
-    import src.cli.main as cli
+    import src.cli.resume as cli
 
     with patch("src.cli.project_session.is_interactive", return_value=False):
         assert cli._ask_yes_no("continuar?") is False

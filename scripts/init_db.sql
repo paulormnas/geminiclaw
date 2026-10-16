@@ -15,6 +15,29 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
     payload JSONB NOT NULL DEFAULT '{}'
 );
 
+-- v18.7-background-sessions: processo da sessão (conferido pelo terminal) e apelido; idempotente em bancos antigos.
+ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS pid INTEGER;
+ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS host TEXT;
+ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS process_started_at TIMESTAMPTZ;
+ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS loop_beat_at TIMESTAMPTZ;
+ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS terminal_id TEXT;
+ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS alias TEXT;
+ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS resumo TEXT;
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_alias ON agent_sessions (alias);
+
+-- v18.7-background-sessions: presença do terminal (REPL ou comando direto em primeiro plano).
+CREATE TABLE IF NOT EXISTS terminal_presence (
+    terminal_id  TEXT PRIMARY KEY,
+    tipo         TEXT NOT NULL CHECK (tipo IN ('repl', 'direto')),
+    pid          INTEGER NOT NULL,
+    host         TEXT NOT NULL,
+    started_at   TIMESTAMPTZ NOT NULL,
+    heartbeat_at TIMESTAMPTZ NOT NULL,
+    ended_at     TIMESTAMPTZ,
+    end_reason   TEXT CHECK (end_reason IN ('saida', 'obsoleta'))
+);
+CREATE INDEX IF NOT EXISTS idx_terminal_presence_ativos ON terminal_presence (tipo, heartbeat_at) WHERE ended_at IS NULL;
+
 CREATE INDEX IF NOT EXISTS idx_agent_sessions_agent_id ON agent_sessions (agent_id);
 
 CREATE INDEX IF NOT EXISTS idx_agent_sessions_status ON agent_sessions (status);

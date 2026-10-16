@@ -317,6 +317,9 @@ LIMIT_GRACE_SECONDS = int(get_env("LIMIT_GRACE_SECONDS", default="120"))
 # sem batimento há mais de SESSION_STALE_SECONDS é marcada `interrompida` na próxima inicialização.
 SESSION_HEARTBEAT_SECONDS = float(get_env("SESSION_HEARTBEAT_SECONDS", default="30"))
 SESSION_STALE_SECONDS = float(get_env("SESSION_STALE_SECONDS", default="300"))
+# v18.7-background-sessions: sessões terminadas há mais de N dias saem do registro (`agent_sessions`); as com
+# trabalho por terminar e as antecessoras de uma cadeia viva ficam. 0 desliga a purga; `outputs/` nunca é tocado.
+SESSION_RETENTION_DAYS = float(get_env("SESSION_RETENTION_DAYS", default="30"))
 # `checkpoint.json` é dado não confiável na leitura: tamanho máximo aceito (bytes) e teto de subtarefas.
 CHECKPOINT_MAX_BYTES = int(get_env("CHECKPOINT_MAX_BYTES", default=str(2 * 1024 * 1024)))
 CHECKPOINT_MAX_SUBTASKS = int(get_env("CHECKPOINT_MAX_SUBTASKS", default="200"))

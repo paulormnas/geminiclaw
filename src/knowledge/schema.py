@@ -167,6 +167,9 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
                     "versao_modelo",  # v18.5-model-catalog-locality (strict: versão do modelo mudou ou desconhecida)
                     "erro",
                     "interrompida",
+                    "aguarda_pesquisador",  # v18.7-background-sessions (semi/auto: só restam pedidos ao pesquisador)
+                    "suspensa_sem_pesquisador",  # v18.7-background-sessions (assisted sem o terminal)
+                    "encerrada_pesquisador",  # v18.7-background-sessions (encerrada pelo REPL)
                 )
             ),
             "consumo": PropertySchema(),

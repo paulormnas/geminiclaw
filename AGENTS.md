@@ -180,6 +180,7 @@ geminiclaw/
 │   ├── artifacts/             # Arquivos produzidos pelas subtarefas
 │   ├── documents/             # Processamento de documentos como biblioteca
 │   ├── knowledge/             # Grafo de conhecimento, hipóteses e Curator
+│   ├── memory/                # Conexões com as memórias vetoriais (Qdrant)
 │   ├── llm/                   # Provedores, roteador por papel e cache
 │   ├── egress/                # Filtro de egresso de dados
 │   ├── observability/         # Telemetria

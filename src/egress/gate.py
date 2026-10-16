@@ -23,7 +23,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, AsyncIterator, Callable, Iterable, Iterator, Literal
+from typing import Any, AsyncIterator, Callable, Iterable, Iterator
 from urllib.parse import parse_qsl, urlparse
 
 from src import config
@@ -31,6 +31,7 @@ from src.egress import filters
 from src.egress.filters import FilterContext
 from src.egress.log import EgressError, EgressLog, EgressRecord, egress_bytes_for_session
 from src.llm.base import LLMProvider, LLMResponse
+from src.llm.destination import Canal, Destination
 from src.logger import get_logger
 from src.utils.egress_fragments import (
     ARTIFACT_NAMES_SOURCE,
@@ -56,25 +57,8 @@ _TOOL_PREFIX_RE = re.compile(r"^(?:Resultado de|Erro em) [\w.\-]+: ")
 _ESCAPED_OPEN = "‹‹‹"  # ‹‹‹
 _UNLABELED_SOURCE = "sem_rotulo"
 
-Canal = Literal["llm", "visao", "busca", "leitura_web"]
-
-
 class EgressRefused(EgressError):
     """Envio recusado pela camada de saída (a recusa também é registrada)."""
-
-
-@dataclass(frozen=True)
-class Destination:
-    """Destino de um envio (design §2)."""
-
-    canal: Canal
-    provedor: str
-    modelo: str | None
-    trust: str | None
-    localidade: str  # "no_no" | "fora_do_no" (busca e leitura web: fora_do_no)
-    aceita_dados_brutos: bool  # busca e leitura web: False
-    papel: str | None
-    versao_efetiva: str | None = None
 
 
 @dataclass
@@ -658,6 +642,10 @@ class GatedProvider(LLMProvider):
     def dest(self) -> Destination:
         """Destino atual (a versão efetiva é lida no momento do envio)."""
         return self._destination() if callable(self._destination) else self._destination
+
+    def unwrap(self) -> LLMProvider:
+        """O provedor interno, sem a camada de saída."""
+        return self.inner
 
     @property
     def tainted_output(self) -> bool:

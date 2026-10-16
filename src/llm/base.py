@@ -87,6 +87,10 @@ class LLMProvider(ABC):
         """Retorna True se o backend está acessível e operacional."""
         ...
 
+    def unwrap(self) -> "LLMProvider":
+        """Provedor interno: o próprio provedor, ou o que a camada de saída envolve (``GatedProvider``)."""
+        return self
+
     async def check_availability(self) -> str | None:
         """Confere se o modelo configurado está utilizável, **sem gerar texto** (ADR 017 §4).
 

@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from src.utils.qdrant import get_qdrant_client
+from src.memory.qdrant import get_qdrant_client
 
 
 def _qdrant_is_running() -> bool:
@@ -26,7 +26,7 @@ def test_qdrant_connection(monkeypatch):
     no banco de vetores que deve estar rodando no docker compose.
     """
     # tests/conftest.py força QDRANT_URL=":memory:"; aqui o alvo é o servidor real (o mesmo do skipif).
-    monkeypatch.setattr("src.utils.qdrant.QDRANT_URL", "http://localhost:6333")
+    monkeypatch.setattr("src.memory.qdrant.QDRANT_URL", "http://localhost:6333")
     client = get_qdrant_client()
 
     # Chama o endpoint healthzinho /collections para garantir a resposta

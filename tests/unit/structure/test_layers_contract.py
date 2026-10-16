@@ -61,3 +61,42 @@ def test_importacao_de_verificacao_de_tipos_nao_conta(tmp_path) -> None:
     output = result.stdout + result.stderr
     assert result.returncode != 0
     assert "src.knowledge.resume_context" in output and "src.session.continuity" in output
+
+
+def test_contrato_sem_excecoes() -> None:
+    """``v18.7-layer-cycles``: a lista de importações ignoradas do contrato está vazia."""
+    options = tomllib.loads(importlinter_section())["tool"]["importlinter"]
+    assert options["contracts"][0]["ignore_imports"] == []
+    assert run_lint_imports(ROOT / "pyproject.toml").returncode == 0
+
+
+def test_importacao_de_llm_para_egress_e_acusada(tmp_path) -> None:
+    pkg = tmp_path / "pkgtmp"
+    (pkg / "egress").mkdir(parents=True)
+    (pkg / "llm").mkdir()
+    for init in (pkg / "__init__.py", pkg / "egress" / "__init__.py", pkg / "llm" / "__init__.py"):
+        init.write_text("")
+    (pkg / "egress" / "mod.py").write_text("VALOR = 1\n")
+    (pkg / "llm" / "mod.py").write_text(
+        "def usa() -> int:\n    from pkgtmp.egress import mod\n\n    return mod.VALOR\n"
+    )
+    options = tomllib.loads(importlinter_section())["tool"]["importlinter"]
+    config = tmp_path / "contrato.ini"
+    config.write_text(textwrap.dedent(f"""\
+        [importlinter]
+        root_package = pkgtmp
+        exclude_type_checking_imports = {str(options['exclude_type_checking_imports'])}
+
+        [importlinter:contract:camadas]
+        name = camadas temporarias
+        type = layers
+        layers =
+            egress
+            llm
+        containers =
+            pkgtmp
+        """))
+    result = run_lint_imports(config, cwd=tmp_path, pythonpath=[tmp_path])
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "llm" in output and "egress" in output

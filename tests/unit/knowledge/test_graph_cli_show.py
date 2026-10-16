@@ -30,7 +30,7 @@ def _no_llm(monkeypatch):
     def boom(*_a, **_k):
         raise AssertionError("graph show/node não pode chamar LLM")
 
-    monkeypatch.setattr("src.llm.model_router.ModelRouter.get_provider", boom)
+    monkeypatch.setattr("src.egress.routing.ModelRouter.get_provider", boom)
     monkeypatch.setattr("src.llm.session.build_session_routing", boom)
     monkeypatch.setattr("src.llm.factory.create_provider", boom, raising=False)
 

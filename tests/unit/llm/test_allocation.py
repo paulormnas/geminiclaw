@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.egress.routing import ModelRouter
 from src.llm.allocation import allocation_banner_lines, build_allocation_profile, current_allocation
-from src.llm.model_router import ModelRouter
 from src.llm.session import bind_session_routing, build_session_routing
 from tests.support.task_loop import run_tasks
 

@@ -115,20 +115,15 @@ layers = [
     "claims | skills",
     "knowledge",
     "numeric_refs",
-    "provenance | research_data",
-    "artifacts | documents | llm",
-    "egress | embeddings | gate | host | observability",
-    "research_consult | utils | db",
+    "provenance",
+    "artifacts | research_data",
+    "egress",
+    "documents | llm",
+    "embeddings | gate | host | memory | observability",
+    "research_consult | db",
     "config",
+    "utils",
     "logger",
 ]
-# Exceções (cada uma com dono; a lista fica vazia ao fim de v18.7-layer-cycles, ADR 024 §3.5):
-ignore_imports = [
-    # egress <-> llm: o gate lê a sessão e a alocação de modelos do llm. Dono: v18.7-layer-cycles.
-    "src.egress.gate -> src.llm.base",
-    "src.egress.gate -> src.llm.session",
-    "src.egress.gate -> src.llm.allocation",
-    # config <-> utils: config.py lê o identificador do nó (src/utils/node_id.py) e utils/qdrant.py lê config.
-    # Não previsto na spec de source-layout; dono: v18.7-layer-cycles (questão em aberto no design).
-    "src.config -> src.utils.node_id",
-]
+# Exceções (cada uma com dono, ADR 024 §3.5): lista vazia ao fim de v18.7-layer-cycles.
+ignore_imports = []

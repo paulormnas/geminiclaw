@@ -22,6 +22,7 @@ from src.claims.verifier import ClaimBatchResult, ClaimVerifierError, EvidenceIt
 from src.config import APP_NAME, ARTIFACT_MATCH_MODE
 from src.egress.classification import artifact_origin
 from src.egress.gate import role_tainted
+from src.egress.routing import ModelRouter
 from src.knowledge.metric_criteria import (
     MetricCriterion,
     _comparisons,
@@ -31,7 +32,6 @@ from src.knowledge.metric_criteria import (
 )
 from src.llm.base import LLMProvider
 from src.llm.metering import record_llm_call
-from src.llm.model_router import ModelRouter
 from src.logger import get_logger
 from src.utils.egress_fragments import (
     ARTIFACT_NAMES_SOURCE,

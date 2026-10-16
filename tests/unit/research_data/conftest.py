@@ -7,8 +7,9 @@ from typing import Any
 
 import pytest
 
-from src.egress.gate import Destination, EgressGate, bind_gate_for_tests
+from src.egress.gate import EgressGate, bind_gate_for_tests
 from src.egress.log import EgressRecord
+from src.llm.destination import Destination
 
 
 class MemoryLog:

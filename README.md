@@ -394,6 +394,7 @@ geminiclaw/
 │   ├── artifacts/             # Gerenciamento de artefatos das subtarefas
 │   ├── documents/             # Processamento de documentos como biblioteca
 │   ├── knowledge/             # Grafo de conhecimento, hipóteses e Curator
+│   ├── memory/                # Conexões com as memórias vetoriais (Qdrant)
 │   ├── llm/                   # Abstração LLM (provedores, roteador por papel, cache)
 │   ├── egress/                # Filtro de egresso de dados
 │   ├── observability/         # TelemetryCollector (buffer + flush + queries)

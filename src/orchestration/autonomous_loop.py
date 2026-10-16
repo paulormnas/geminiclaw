@@ -28,10 +28,10 @@ from src.config import (
 )
 from src.egress.gate import role_tainted
 from src.egress.persisted import resumed_text_tainted, resumo_marca, tags_tainted, with_taint_tag
+from src.egress.routing import ModelRouter
 from src.host.health import PiHealthMonitor
 from src.knowledge.hypothesis_cycle import SolutionStatus
 from src.knowledge.suggestions import SuggestionError
-from src.llm.model_router import ModelRouter
 from src.logger import get_logger
 from src.observability.telemetry import get_telemetry
 from src.orchestration.errors import AgentRunLimitReached, PlanningStalled
@@ -356,7 +356,7 @@ class AutonomousLoop:
             True se COMPLEX, False se SIMPLE. Em caso de erro, retorna True.
         """
         try:
-            from src.llm.factory import get_provider
+            from src.llm.factory import ProviderResolverError, get_provider
             provider = get_provider()
 
             triage_prompt = (
@@ -391,6 +391,8 @@ class AutonomousLoop:
             if "SIMPLE" in text:
                 return False
 
+        except ProviderResolverError:
+            raise  # falha de composição (sem resolvedor ou sem filtro de egresso): nunca vira COMPLEX
         except Exception as e:
             logger.warning(
                 "Falha no triage LLM direto, assumindo COMPLEX",

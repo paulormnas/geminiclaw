@@ -25,7 +25,7 @@ from src.config import QDRANT_URL
 from src.documents.enrichment import enriched_text
 from src.embeddings.base import EmbeddingProvider, embedding_payload, get_embedding_provider
 from src.logger import get_logger
-from src.utils.qdrant import _make_client
+from src.memory.qdrant import _make_client
 
 logger = get_logger(__name__)
 

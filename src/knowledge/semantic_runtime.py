@@ -57,7 +57,7 @@ def build_runtime(
         queue: Fila (padrão: ``PostgresSimilarityQueue``).
     """
     if qdrant_client is None:
-        from src.utils.qdrant import _make_client
+        from src.memory.qdrant import _make_client
 
         qdrant_client = _make_client(config.QDRANT_URL)
     index = SemanticIndex(raw_store, qdrant_client)

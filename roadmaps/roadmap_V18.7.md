@@ -171,7 +171,7 @@ As mudanças foram escritas antes da reorganização do código: os caminhos de 
 | `_METRIC_ALIASES`, `_metric_key`, `MetricCriterion`, `_comparisons`, `_metric_criteria`, `_OPERATORS`, `_compare`, `_group_named`, `_evaluate_comparison`, `_evaluate_comparison_found`, `_evaluate_metric_criteria`, `evaluated_metric_names`, `Comparison` (`src/agents/validator_agent.py`) | `src/knowledge/metric_criteria.py` |
 | `Checkpoint` (`src/continuity.py`) | sob `TYPE_CHECKING` (só anotação) |
 | `ST_CONCLUIDA`, `ST_EM_ANDAMENTO`, `ST_PENDENTE`, `ST_ABANDONADA`, `ST_FALHOU` (`src/continuity.py`) | `src/knowledge/subtask_states.py` |
-| `_make_client` (`src/embeddings/reindex.py`) | `src/utils/qdrant.py` |
+| `_make_client` (`src/embeddings/reindex.py`) | `src/utils/qdrant.py` (depois, em `v18.7-layer-cycles`, `src/memory/qdrant.py`) |
 | `get_or_create_node_id`, `generate_node_id`, `_node_id_config_dir`, `uuid7` (`src/knowledge/ids.py`) | `src/utils/node_id.py` |
 | `insumo_tipo` (`src/knowledge/ingestion.py`) | `src/documents/hashing.py` |
 | `sha256_file`, `MAX_HASH_BYTES` (`src/knowledge/ingestion_io.py`) | `src/documents/hashing.py` |

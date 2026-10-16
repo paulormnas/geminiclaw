@@ -263,7 +263,7 @@ def web_dest():
 
 
 def _web(dest_provider="brave", canal="busca"):
-    from src.egress.gate import Destination
+    from src.llm.destination import Destination
 
     return Destination(canal=canal, provedor=dest_provider, modelo=None, trust=None, localidade="fora_do_no",
                        aceita_dados_brutos=False, papel="researcher")
@@ -352,7 +352,8 @@ async def test_quick_search_em_cache_nao_e_egresso(gate, memory_log):
 
 def test_imagem_de_pesquisa_a_terceiro(gate, memory_log, tmp_path):
     """Cenário "Imagem de pesquisa a terceiro"."""
-    from src.egress.gate import Destination, EgressRefused
+    from src.egress.gate import EgressRefused
+    from src.llm.destination import Destination
 
     imagem = tmp_path / "micro.png"
     imagem.write_bytes(b"png")
@@ -388,9 +389,8 @@ def _py_files(*roots):
 
 def test_nenhum_ponto_de_chamada_envia_sem_gated_provider():
     """Toda chamada `generate(` fora dos provedores usa um provedor obtido do roteador (sempre `GatedProvider`),
-    e só o roteador e o health check criam provedores diretamente; `scripts/` também (M1)."""
+    `scripts/` também (M1)."""
     ofensores = []
-    criadores = []
     for path in _py_files("src", "scripts"):
         rel = path.relative_to(_ROOT).as_posix()
         text = path.read_text(encoding="utf-8")
@@ -404,13 +404,8 @@ def test_nenhum_ponto_de_chamada_envia_sem_gated_provider():
             assert "authorize_vision" in text
         if rel == "src/llm/vision.py":
             assert "authorize_vision" in (_ROOT / "src/research_data/context_loader.py").read_text(encoding="utf-8")
-        if re.search(r"\bcreate_provider\(", text):
-            if rel in {"src/llm/model_router.py", "src/llm/availability.py", "src/llm/registry.py"}:
-                continue
-            if "GatedProvider(" not in text:  # fora do roteador, o provedor criado tem de ser envolvido
-                criadores.append(rel)
+    # provedores criados fora do roteador: ``test_provider_filter.py`` (listas explícitas de arquivos)
     assert not ofensores, f"chamada direta a generate_content fora da camada: {ofensores}"
-    assert not criadores, f"provedores criados fora do roteador e sem GatedProvider: {criadores}"
 
 
 def test_health_check_do_catalogo_nunca_gera_texto():
@@ -432,7 +427,7 @@ def test_juiz_do_benchmark_usa_provedor_envolvido():
 
 
 def test_roteador_devolve_sempre_provedor_envolvido():
-    from src.llm.model_router import ModelRouter
+    from src.egress.routing import ModelRouter
 
     ModelRouter.clear_cache()
     for role in ("researcher", "developer", "validator", "summarizer", "base", "planner"):
@@ -444,7 +439,7 @@ def test_roteador_devolve_sempre_provedor_envolvido():
 
 
 def test_destino_do_provedor_vem_do_catalogo():
-    from src.llm.model_router import ModelRouter
+    from src.egress.routing import ModelRouter
 
     ModelRouter.clear_cache()
     dest = ModelRouter.get_provider("developer").dest

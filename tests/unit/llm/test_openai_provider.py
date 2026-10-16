@@ -103,6 +103,7 @@ class TestMetering:
         provider = MagicMock()
         provider.model_name = "gpt-6-luna"
         type(provider).__name__ = "OpenAIProvider"
+        provider.unwrap.return_value = provider
         telemetry = MagicMock()
         metering.bind_execution("exec-1", "sess-1")
         with patch("src.llm.metering.get_telemetry", return_value=telemetry):

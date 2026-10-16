@@ -1,7 +1,7 @@
 """Registro único de provedores LLM (ADR 011, V16).
 
 Cada provedor se registra por nome com uma fábrica. O roteamento por papel
-(`src.llm.model_router.ModelRouter`) e o catálogo (`src.llm.catalog`) consultam este mesmo registro — adicionar um
+(`src.egress.routing.ModelRouter`) e o catálogo (`src.llm.catalog`) consultam este mesmo registro — adicionar um
 provedor passa a significar implementar `LLMProvider` e chamar
 `register_provider`, sem editar nenhum dos dois consumidores.
 """
@@ -95,7 +95,7 @@ def _resolve_base_url(canonical_name: str) -> str | None:
     # de verdade já resolvida na inicialização (ADR de configuração explícita),
     # e é o que os testes patcham (`patch("src.config.OLLAMA_BASE_URL", ...)`).
     # Um provedor novo que não declare sua variável em `config.py` simplesmente
-    # resolve para `None` aqui — só `factory.py`/`model_router.py` são
+    # resolve para `None` aqui — só `factory.py`/`egress/routing.py` são
     # protegidos de alteração pelo spec, não `config.py`.
     env_name = _BASE_URL_ENV_OVERRIDES.get(canonical_name, f"{canonical_name.upper()}_BASE_URL")
     return getattr(config, env_name, None)

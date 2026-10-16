@@ -35,12 +35,16 @@ class StopReason(str, Enum):
     EGRESS = "limite_egresso"  # v18.5-egress-gate (volume de saídas de execução enviadas fora do nó)
     INTERRUPTED = "interrompida_pesquisador"  # v18.5-operation-metrics (1º Ctrl+C: fechamento sem perda de avanço)
     PROVIDER_QUOTA = "limite_cota_provedor"  # v18.7-benchmark-fixes (cota ou teto de gasto esgotado no provedor)
+    SUSPENDED = "suspensa_sem_pesquisador"  # v18.7-background-sessions (assisted: o terminal saiu ou caiu)
 
 
 # v18.5-operation-metrics §2.6: o 1º Ctrl+C pede o fechamento gracioso da sessão em andamento. O pedido é um sinalizador
 # do processo (o handler de SIGINT roda na thread principal); o laço o consulta nos mesmos pontos dos limites.
 _INTERRUPT_REQUESTED = threading.Event()
 _SESSION_ACTIVE = threading.Event()
+# v18.7-background-sessions §1.6: a sessão ``assisted`` sem o terminal para de despachar subtarefas novas e deixa as em
+# curso terminarem (sem a carência que cancela), grava o checkpoint e sai com ``suspensa_sem_pesquisador``.
+_SUSPENSION_REQUESTED = threading.Event()
 
 
 def request_interrupt() -> None:
@@ -51,6 +55,21 @@ def request_interrupt() -> None:
 def interrupt_requested() -> bool:
     """True se o pesquisador já pediu a interrupção graciosa da sessão corrente."""
     return _INTERRUPT_REQUESTED.is_set()
+
+
+def request_suspension() -> None:
+    """Registra a ausência do terminal: a sessão ``assisted`` se suspende sem cancelar o que está em curso."""
+    _SUSPENSION_REQUESTED.set()
+
+
+def suspension_requested() -> bool:
+    """True se a ausência do terminal já foi detectada neste processo."""
+    return _SUSPENSION_REQUESTED.is_set()
+
+
+def clear_suspension() -> None:
+    """Limpa o pedido de suspensão (testes e início de um novo processo de sessão)."""
+    _SUSPENSION_REQUESTED.clear()
 
 
 def clear_interrupt() -> None:

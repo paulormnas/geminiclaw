@@ -274,16 +274,17 @@ async def test_suspensao_marca_curator_pendente(tmp_path):
     """I-8: sessão suspensa não passa pelo fechamento do Curator: fica marcada para consolidar na retomada."""
     w = World(tmp_path)
 
+    from src.orchestration.usage import clear_suspension, request_suspension
+
     async def suspend(self, master_session_id):
-        cur = self.orchestrator.session_manager.get(master_session_id)
-        self.orchestrator.session_manager.update(
-            master_session_id, status="suspended", payload={**cur.payload, "motivo_parada": "interrompida"}
-        )
-        return True
+        request_suspension()
 
     prep = await w.prepare()
-    with _slugs("sessao-b"), patch.object(AutonomousLoop, "_check_operational_thresholds", suspend):
-        await _run(w, prep)
+    try:
+        with _slugs("sessao-b"), patch.object(AutonomousLoop, "_check_operational_thresholds", suspend):
+            await _run(w, prep)
+    finally:
+        clear_suspension()
     cp, _ = read_checkpoint(w.base / "sessao-b")
     assert cp.estado == "interrompido" and cp.curator_pendente is True
 

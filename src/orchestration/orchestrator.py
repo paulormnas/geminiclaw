@@ -760,6 +760,19 @@ class Orchestrator:
         finally:
             self._recorders.pop(session_id, None)
 
+    def _record_exit_code(self, session_id: str) -> None:
+        """Grava ``payload["codigo_saida"]`` (``exit_code_for(motivo_parada)``) no fechamento; falha nunca derruba."""
+        from src.session.exit_codes import exit_code_for
+
+        try:
+            session = self.session_manager.get(session_id)
+            if session is None:
+                return
+            code = exit_code_for(session.payload.get("motivo_parada"))
+            self.session_manager.update(session_id, payload={**session.payload, "codigo_saida": code})
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Código de saída não gravado", extra={"error": type(exc).__name__})
+
     async def resume_curator_pending(self, session_id: str) -> None:
         """Executa, antes do novo planejamento, o fechamento do Curator que ficou pendente na sessão anterior."""
         resume = self._resumes.get(session_id)
@@ -1270,10 +1283,14 @@ class Orchestrator:
         final_status = "success" if result.succeeded == result.total and result.total > 0 else "failed"
         pre_final_session = self.session_manager.get(master_session.id)
         pre_final_payload = pre_final_session.payload if pre_final_session is not None else {}
-        suspended = pre_final_session is not None and pre_final_session.status == "suspended"
+        from src.session.states import PAUSED_STATUSES
+
+        # Sessão pausada pelo próprio laço (aguarda_pesquisador, suspensa_sem_pesquisador, suspended legado): continua
+        # retomável com o status que o laço gravou; as demais fecham.
+        suspended = pre_final_session is not None and pre_final_session.status in PAUSED_STATUSES
         self.session_manager.update(
             master_session.id,
-            status="suspended" if suspended else final_status,
+            status=pre_final_session.status if suspended and pre_final_session is not None else final_status,
             payload={
                 **pre_final_payload,
                 "prompt": prompt,
@@ -1294,6 +1311,7 @@ class Orchestrator:
         if ingestor is not None:
             await asyncio.to_thread(self._end_ingestion, ingestor, master_session.id, final_status, None)
         await self._finalize_checkpoint(master_session.id, final_status, suspended, curator_pending)
+        self._record_exit_code(master_session.id)
         if not suspended:  # sessão suspensa continua `suspended` (retomável); a fechada vira `closed`
             self.session_manager.close(master_session.id)
         self._end_exploration(master_session.id)

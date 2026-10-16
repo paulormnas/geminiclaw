@@ -25,6 +25,10 @@ UNFINISHED_STATUSES = (
     STATUS_SUSPENDED_LEGACY,
 )
 
+#: Sessões pausadas pelo próprio processo (o processo sai e a sessão continua retomável): o fechamento da requisição
+#: as mantém como estão, em vez de fechá-las.
+PAUSED_STATUSES = (STATUS_SUSPENDED_LEGACY, STATUS_AWAITING_RESEARCHER, STATUS_SUSPENDED_NO_RESEARCHER)
+
 MOTIVO_AGUARDA_PESQUISADOR = "aguarda_pesquisador"
 MOTIVO_SUSPENSA_SEM_PESQUISADOR = "suspensa_sem_pesquisador"
 MOTIVO_ENCERRADA_PESQUISADOR = "encerrada_pesquisador"

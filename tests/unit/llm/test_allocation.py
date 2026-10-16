@@ -94,7 +94,7 @@ async def test_orquestrador_grava_o_perfil_antes_do_primeiro_envio(nuvem):
 @pytest.mark.asyncio
 async def test_banner_com_bloco_alocacao(nuvem, capsys):
     """Cenário: Perfil no banner (uma linha por papel com trust, localidade e aceitação de dados brutos)."""
-    from src.cli.main import print_session_banner
+    from src.cli.banner import print_session_banner
 
     routing = await build_session_routing()
     print_session_banner("assisted", context_dir="/inexistente", llm_routing=routing)

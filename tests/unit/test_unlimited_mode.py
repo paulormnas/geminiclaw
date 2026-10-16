@@ -232,7 +232,7 @@ def test_so_cli_usage_e_unlimited_mode_constroem_orcamento_sem_limite() -> None:
     src = Path(__file__).resolve().parents[2] / "src"
     offenders = []
     for path in src.rglob("*.py"):
-        if path.relative_to(src).as_posix() in {"cli/main.py", "orchestration/usage.py", "orchestration/unlimited_mode.py"}:
+        if path.relative_to(src).as_posix() in {"cli/main.py", "cli/unlimited.py", "orchestration/usage.py", "orchestration/unlimited_mode.py"}:
             continue
         if re.search(r"unlimited\s*=\s*True", path.read_text(encoding="utf-8")):
             offenders.append(str(path.relative_to(src)))

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import os
 import threading
@@ -18,6 +19,7 @@ from src.knowledge.ingestion import SessionContext, ingest_session_start
 from src.knowledge.resume_context import build_resume_context
 from src.orchestration.autonomous_loop import AutonomousLoop
 from src.orchestration.orchestrator import AgentTask, Orchestrator
+from src.orchestration.usage import UsageBudget
 from src.session.continuity import (
     Checkpoint,
     CheckpointError,
@@ -376,30 +378,45 @@ async def test_s4_teto_acumulado_da_cadeia(tmp_path):
 
 @pytest.mark.asyncio
 async def test_s5_repl_nao_sobrescreve_o_modo_da_origem():
-    import src.cli.repl as cli
+    from src.cli.repl import Repl
+    from tests.support.session_fakes import FakeSessionManager
 
-    with patch("builtins.input", side_effect=["resume s1", "sair"]), \
-            patch.object(cli, "resume_session", AsyncMock(return_value=True)) as res, \
-            patch.object(cli, "print_session_banner"):
-        await cli.interactive_mode(MagicMock(), mode="assisted", explicit_mode=None)
-    assert res.await_args.kwargs["mode"] is None
+    manager = FakeSessionManager()
+    manager.add("s1", "interrompida", {"mode": "auto"})
+    starter = MagicMock()
+    started = MagicMock()
+    starter.start_resume = AsyncMock(return_value=started)
+    starter.wait_registered = AsyncMock(return_value=MagicMock(alias="a-01", pid=1))
+    repl = Repl(mode="assisted", explicit_mode=None, budget=MagicMock(), args=MagicMock(), starter=starter,
+                manager=manager, presence=MagicMock(), input_fn=lambda _p: "", console=MagicMock())
+    assert await repl.handle("resume s1") is True
+    assert starter.start_resume.await_args.kwargs["mode"] is None  # o modo da origem prevalece
 
 
 @pytest.mark.asyncio
-async def test_s6_run_resume_devolve_false_quando_handle_request_falha(tmp_path):
-    import src.cli.resume as cli
+async def test_s6_retomada_recusada_por_conflito_sai_com_1(tmp_path):
+    """O processo da sessão devolve 1 (e não 0) quando ``handle_request`` falha com ``ResumeConflictError``."""
+    from src.cli.session_process import SessionRunner
+    from src.session.exit_codes import EXIT_ERROR
+    from src.session.launcher import LaunchSpec, context_digest
 
     w = World(tmp_path)
     prep = await w.prepare()
     orch = MagicMock()
-    orch.recover_interrupted_sessions = AsyncMock()
+    orch.session_manager = w.sm
+    orch.output_manager.base_dir = w.base
     orch.handle_request = AsyncMock(side_effect=ResumeConflictError("perdi"))
+    spec = LaunchSpec(
+        tipo="retomada", prompt="p", modo="auto",
+        orcamento=dataclasses.asdict(UsageBudget(1000, 10.0, 3, 3, 0.05, 1_000_000)),
+        contexto={"dir": str(tmp_path), "digest": context_digest(tmp_path)}, primeiro_plano=True,
+        retomada={"session_id": "sessao-a", "confirmado_resolvida": False},
+    )
     with patch("src.session.resume.prepare_resume", AsyncMock(return_value=prep)), \
             patch("src.llm.session.build_session_routing", AsyncMock(return_value=ROUTING)), \
-            patch("src.llm.session.bind_session_routing"), patch.object(cli, "print_session_banner"), \
             patch("src.knowledge.factory.open_knowledge_runtime", return_value=None), \
             patch("src.knowledge.factory.open_graph_store", return_value=w.store):
-        assert await cli._run_resume(orch, "sessao-a") is False
+        assert await SessionRunner(spec, orchestrator=orch).run() == EXIT_ERROR
 
 
 @pytest.mark.asyncio

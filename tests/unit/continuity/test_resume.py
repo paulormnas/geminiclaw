@@ -198,15 +198,15 @@ async def test_continuar_o_projeto(world):
     with pytest.raises(ResumeError, match="não tem sessões"):
         select_session_for_project(world.sm, "01890000-0000-7000-8000-0000000000ff")
 
-    import src.cli.resume as cli
+    import src.cli.direct as direct
+    from tests.support.starter_world import BUDGET, args
 
-    orch = MagicMock(session_manager=world.sm)
-    orch.recover_interrupted_sessions = AsyncMock()
-    with patch.object(cli, "_run_resume", AsyncMock(return_value=True)) as run:
-        assert await cli.continue_project(orch, world.pid, mode="auto") is True
-    assert run.await_args.args[1] == "sessao-a" and run.await_args.kwargs["project_arg"] == world.pid
-    with patch.object(cli, "_run_resume", AsyncMock()) as run:
-        assert await cli.continue_project(orch, "nao-e-uuid") is False
+    starter = SimpleNamespace(manager=world.sm)
+    with patch.object(direct, "sweep_stopped"), patch.object(direct, "resume_research", AsyncMock(return_value=0)) as run:
+        assert await direct.continue_project(world.pid, args(), mode="auto", budget=BUDGET, starter=starter) == 0
+    assert run.await_args.args[0] == "sessao-a" and run.await_args.args[1].project == world.pid
+    with patch.object(direct, "sweep_stopped"), patch.object(direct, "resume_research", AsyncMock()) as run:
+        assert await direct.continue_project("nao-e-uuid", args(), mode=None, budget=BUDGET, starter=starter) == 1
     run.assert_not_awaited()
 
 
@@ -222,10 +222,10 @@ async def test_pesquisa_dada_como_resolvida_pede_confirmacao(tmp_path):
     assert "continuar explorando" in asked[0]
     prep = await w.prepare(confirm=lambda q: True)
     assert prep.state.source_session_id == "sessao-a"
-    import src.cli.resume as cli
+    from src.cli.session_start import SessionStarter
 
     with patch("src.cli.project_session.is_interactive", return_value=False):
-        assert cli._ask_yes_no("continuar?") is False
+        assert SessionStarter(session_manager=w.sm)._ask_yes_no("continuar?") is False
 
 
 @pytest.mark.asyncio

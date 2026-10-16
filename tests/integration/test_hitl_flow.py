@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.cli.main import resume_session
+from src.cli.session_start import LaunchRefused
 from src.orchestration.autonomous_loop import AutonomousLoop
 from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
 from src.research_consult import PENDING_MESSAGE
@@ -245,50 +245,48 @@ class TestDivergenceReport:
 @pytest.mark.unit
 @pytest.mark.asyncio
 class TestResumeSession:
-    """geminiclaw resume — retomada simplificada de sessão suspensa."""
+    """geminiclaw resume — o terminal valida a retomada e só então lança o processo da sessão."""
 
-    async def test_sessao_inexistente(self, capsys: pytest.CaptureFixture) -> None:
-        orchestrator = MagicMock()
-        orchestrator.session_manager.get.return_value = None
+    @staticmethod
+    def _starter(tmp_path, session):
+        from tests.support.session_fakes import FakeSessionManager
+        from tests.support.starter_world import make_starter
 
-        await resume_session(orchestrator, "sess_x")
+        manager = FakeSessionManager()
+        if session is not None:
+            manager.rows[session.id] = session
+        return make_starter(tmp_path, manager=manager)
 
-        assert "não encontrada" in capsys.readouterr().out
+    @staticmethod
+    async def _resume(starter, session_id):
+        from tests.support.starter_world import BUDGET, args, patched_terminal
 
-    async def test_sessao_ativa_nao_e_retomada(self, capsys: pytest.CaptureFixture, tmp_path) -> None:
-        orchestrator = MagicMock()
-        orchestrator.recover_interrupted_sessions = AsyncMock()
-        orchestrator.output_manager.base_dir = tmp_path
-        orchestrator.session_manager.get.return_value = _make_session("sess_1", status="active")
-        orchestrator.session_manager.find_continuation.return_value = None
-        orchestrator.handle_request = AsyncMock()
-
-        with patch("src.knowledge.factory.open_knowledge_runtime", side_effect=RuntimeError("sem grafo")), \
+        with patched_terminal(), \
+             patch("src.knowledge.factory.open_knowledge_runtime", side_effect=RuntimeError("sem grafo")), \
              patch("src.knowledge.factory.open_graph_store", side_effect=RuntimeError("sem grafo")):
-            ok = await resume_session(orchestrator, "sess_1")
+            return await starter.start_resume(
+                session_id, mode=None, budget=BUDGET, args=args(), terminal_id=None, foreground=False,
+                memory_policy="falhar",
+            )
 
-        assert ok is False
-        capsys.readouterr()
-        orchestrator.handle_request.assert_not_called()
+    async def test_sessao_inexistente(self, tmp_path) -> None:
+        starter, launched = self._starter(tmp_path, None)
+        with pytest.raises(LaunchRefused, match="não encontrada"):
+            await self._resume(starter, "sess_x")
+        assert launched == []
 
-    async def test_sessao_sem_checkpoint_nao_reinicia_do_prompt(
-        self, capsys: pytest.CaptureFixture, tmp_path
-    ) -> None:
+    async def test_sessao_ativa_nao_e_retomada(self, tmp_path) -> None:
+        starter, launched = self._starter(tmp_path, _make_session("sess_1", status="active"))
+        with pytest.raises(LaunchRefused):
+            await self._resume(starter, "sess_1")
+        assert launched == []
+
+    async def test_sessao_sem_checkpoint_nao_reinicia_do_prompt(self, tmp_path) -> None:
         """A retomada vem do checkpoint: sem ele, não reinicia a partir do prompt (limitação removida)."""
-        orchestrator = MagicMock()
-        orchestrator.recover_interrupted_sessions = AsyncMock()
-        orchestrator.output_manager.base_dir = tmp_path
-        (tmp_path / "sess_1").mkdir()
-        orchestrator.session_manager.get.return_value = _make_session(
-            "sess_1", payload={"prompt": "Reproduza a Tabela 3", "mode": "assisted"}, status="suspended"
-        )
-        orchestrator.session_manager.find_continuation.return_value = None
-        orchestrator.handle_request = AsyncMock()
-
-        with patch("src.knowledge.factory.open_knowledge_runtime", side_effect=RuntimeError("sem grafo")), \
-             patch("src.knowledge.factory.open_graph_store", side_effect=RuntimeError("sem grafo")):
-            ok = await resume_session(orchestrator, "sess_1")
-
-        assert ok is False
-        assert "checkpoint" in capsys.readouterr().out
-        orchestrator.handle_request.assert_not_called()
+        (tmp_path / "outputs" / "sess_1").mkdir(parents=True)
+        session = _make_session("sess_1", payload={"prompt": "Reproduza a Tabela 3", "mode": "assisted"},
+                                status="suspended")
+        starter, launched = self._starter(tmp_path, session)
+        with pytest.raises(LaunchRefused, match="checkpoint"):
+            await self._resume(starter, "sess_1")
+        assert launched == []

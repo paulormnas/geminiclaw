@@ -10,7 +10,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 import src.cli.main as cli
-import src.cli.repl as cli_repl
 from src.cli.project import handle_project_command
 from src.cli.project_session import (
     ProjectBinder,
@@ -18,10 +17,12 @@ from src.cli.project_session import (
     ensure_confirmed_problem,
     resolve_project,
 )
+from src.cli.session_start import LaunchRefused
 from src.knowledge import projects
 from src.knowledge.graph_store import InMemoryGraphStore
 from src.knowledge.problem import ProblemDraft
 from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
+from tests.support.starter_world import BUDGET, args, make_starter, patched_terminal
 from tests.support.task_loop import run_tasks
 from tests.unit.research_project.test_projects import make_draft
 
@@ -202,26 +203,28 @@ class TestCliProjeto:
         assert run("show", "../x") == 1
 
     @pytest.mark.asyncio
-    async def test_execute_prompt_recusa_sessao_sem_problema(self) -> None:
-        """execute_prompt não chama o orquestrador quando o vínculo é recusado."""
-        orch = MagicMock()
-        orch.handle_request = AsyncMock()
+    async def test_vinculo_recusado_nao_cria_o_processo(self, tmp_path) -> None:
+        """O iniciador não lança o processo da sessão quando o vínculo do projeto é recusado."""
         binder = MagicMock()
         binder.bind = AsyncMock(side_effect=ProjectFlowError("recusada"))
-        ok = await cli_repl.execute_prompt(orch, "p", mode="auto", project_binder=binder)
-        assert ok is False
-        orch.handle_request.assert_not_awaited()
+        starter, launched = make_starter(tmp_path, binder=binder)
+        with patched_terminal(), pytest.raises(LaunchRefused, match="recusada"):
+            await starter.start_new(
+                "p", mode="auto", budget=BUDGET, args=args(), terminal_id=None, foreground=False,
+                memory_policy="falhar",
+            )
+        assert launched == []
 
     @pytest.mark.asyncio
-    async def test_execute_prompt_repassa_projeto(self, monkeypatch) -> None:
-        orch = MagicMock()
-        orch.handle_request = AsyncMock(return_value=MagicMock(session_id=None))
-        binder = MagicMock()
-        binder.bind = AsyncMock(return_value=MagicMock(project_id="pid1", context_block="CTX"))
-        monkeypatch.setattr(cli_repl, "format_result", lambda _r: "ok")
-        assert await cli_repl.execute_prompt(orch, "p", mode="auto", project_binder=binder) is True
-        kwargs = orch.handle_request.await_args.kwargs
-        assert kwargs["project_id"] == "pid1" and kwargs["project_context"] == "CTX"
+    async def test_lancamento_repassa_projeto(self, tmp_path) -> None:
+        starter, launched = make_starter(tmp_path)
+        with patched_terminal():
+            started = await starter.start_new(
+                "p", mode="auto", budget=BUDGET, args=args(), terminal_id=None, foreground=False,
+                memory_policy="falhar",
+            )
+        assert started.spec.projeto == {"project_id": "pid1", "project_context": "CTX"}
+        assert started.spec.modo == "auto" and started.spec.tipo == "nova" and len(launched) == 1
 
 
 @pytest.mark.unit

@@ -276,6 +276,10 @@ class TerminalPresence:
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Fim da presença não gravado", extra={"error": type(exc).__name__})
 
+    def last_repl_end(self) -> float | None:
+        """Fim da última presença de REPL encerrada (para o resumo "desde a última vez")."""
+        return self._store.last_repl_end()
+
     def is_present(self, terminal_id: str | None = None) -> bool:
         """``terminal_id`` (padrão: o deste terminal) está presente (batimento dentro de ``stale_seconds``)."""
         return terminal_present(

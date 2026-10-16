@@ -823,6 +823,11 @@ class Orchestrator:
             recovered.append(session.id)
         return recovered
 
+    def recover_stopped_session(self, session: Any) -> None:
+        """Recupera uma sessão que o terminal acabou de marcar ``interrompida`` (``SessionWatch``): checkpoint
+        ``interrompido``, subtarefas em andamento como falha de infraestrutura e ingestão desses fatos no grafo."""
+        self._recover_one(session)
+
     def _recover_one(self, session: Any) -> None:
         from src.session.continuity import (
             ST_EM_ANDAMENTO,

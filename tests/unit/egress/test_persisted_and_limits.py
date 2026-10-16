@@ -148,7 +148,7 @@ def nuvem(monkeypatch):
 @pytest.mark.asyncio
 async def test_perfil_misto(nuvem, capsys):
     """Cenário "Perfil misto": o banner mostra o aviso com os papéis de cada grupo."""
-    from src.cli.main import print_session_banner
+    from src.cli.banner import print_session_banner
 
     routing = await build_session_routing()
     aviso = mixed_profile_warning(routing)

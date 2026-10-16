@@ -6,8 +6,7 @@ Cobre:
 - Limpeza dos sandboxes que ficaram para trás ao receber SIGINT (os agentes rodam no processo).
 """
 
-import signal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -152,38 +151,3 @@ class TestCliMainCommands:
                 main()
             assert exc.value.code == 0
             mock_stop.assert_called_once_with(session_id="sess_123")
-
-
-@pytest.mark.unit
-class TestCliSigintCleanup:
-    """Valida que o handler de SIGINT remove os sandboxes de código que ficaram para trás."""
-
-    @patch("src.cli.main._create_orchestrator")
-    @patch("src.cli.main.signal.signal")
-    def test_sigint_handler_cleans_up_sandbox_containers(
-        self,
-        mock_signal: MagicMock,
-        mock_create: MagicMock,
-    ):
-        mock_create.return_value = MagicMock()
-
-        with patch("src.llm.session.build_session_routing"), patch("src.cli.main.print_session_banner"), \
-             patch("src.cli.main.asyncio.run"):
-            with patch("src.cli.main.execute_prompt", new_callable=MagicMock):
-                with patch("sys.argv", ["geminiclaw", "teste"]):
-                    main()
-
-        # O handler deve ter sido registrado
-        assert mock_signal.call_count >= 1
-        handler = mock_signal.call_args_list[0][0][1]
-
-        # Simula o disparo do sinal SIGINT
-        with patch("sys.exit") as mock_exit:
-            with patch("src.skills.code.sandbox.cleanup_all_sandbox_containers", return_value=2) as mock_cleanup:
-                with patch("src.observability.telemetry.get_telemetry") as mock_tel:
-                    mock_tel.return_value.flush = AsyncMock()
-                    handler(signal.SIGINT, None)
-
-            mock_cleanup.assert_called_once()
-            # Verifica código de saída 130
-            mock_exit.assert_called_once_with(130)

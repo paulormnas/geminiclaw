@@ -9,13 +9,13 @@ import dataclasses
 import datetime
 import json
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Optional
 
 from src.db import get_connection
 from src.logger import get_logger
 from src.session.states import FINISHED_STATUSES
-from src.skills.memory.long_term import LongTermMemory
 
 logger = get_logger(__name__)
 
@@ -74,7 +74,9 @@ class SessionManager:
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         final_id = session_id or str(uuid.uuid4())
 
-        # Carrega resumo da memória de longo prazo
+        # Carrega resumo da memória de longo prazo (import tardio: o REPL não carrega embeddings ao abrir)
+        from src.skills.memory.long_term import LongTermMemory
+
         lt_memory = LongTermMemory()
         lt_summary = lt_memory.summarize_for_context(limit=5)
 
@@ -410,6 +412,63 @@ class SessionManager:
                 (slug.replace("%", "").replace("_", r"\_") + "-%",),
             ).fetchall()
         return [r["alias"] for r in rows or []]
+
+    def list_orchestrator(
+        self, statuses: Sequence[str] | None = None, *, updated_after: str | None = None, limit: int = 200
+    ) -> list[Session]:
+        """Sessões mestras (``agent_id='orchestrator'``), da alterada há mais tempo à mais recente.
+
+        Args:
+            statuses: Só estes status (todos, se omitido).
+            updated_after: Só as alteradas depois deste instante (ISO 8601).
+            limit: Quantidade máxima.
+        """
+        clauses, params = ["agent_id = 'orchestrator'"], []
+        if statuses is not None:
+            clauses.append("status = ANY(%s)")
+            params.append(list(statuses))
+        if updated_after is not None:
+            clauses.append("updated_at > %s")
+            params.append(updated_after)
+        with get_connection() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM agent_sessions WHERE {' AND '.join(clauses)} ORDER BY updated_at ASC LIMIT %s",
+                (*params, limit),
+            ).fetchall()
+        return [self._row_to_session(r) for r in rows or []]
+
+    def mark_interrupted(self, session_id: str, expected_updated_at: str) -> Session | None:
+        """Marca ``interrompida`` a sessão ``active`` cujo ``updated_at`` ainda é o lido (transição condicional).
+
+        Um batimento que chegou entre a leitura e a escrita muda ``updated_at`` e impede a marcação.
+
+        Returns:
+            A sessão marcada, ou ``None`` se ela já não estava ``active`` com aquele ``updated_at``.
+        """
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        patch = json.dumps({"motivo_parada": "interrompida"})
+        with get_connection() as conn:
+            row = conn.execute(
+                "UPDATE agent_sessions SET status = 'interrompida', payload = payload || %s::jsonb, updated_at = %s "
+                "WHERE id = %s AND agent_id = 'orchestrator' AND status = 'active' AND updated_at = %s RETURNING *",
+                (patch, now, session_id, expected_updated_at),
+            ).fetchone()
+        return self._row_to_session(row) if row else None
+
+    def close_by_researcher(self, session_id: str, statuses: Sequence[str]) -> bool:
+        """Fecha a sessão parada por decisão do pesquisador: ``closed`` e ``motivo_parada='encerrada_pesquisador'``.
+
+        Condicional ao status atual estar em ``statuses`` (uma sessão que voltou a ``active`` não é encerrada).
+        """
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        patch = json.dumps({"motivo_parada": "encerrada_pesquisador"})
+        with get_connection() as conn:
+            row = conn.execute(
+                "UPDATE agent_sessions SET status = 'closed', payload = payload || %s::jsonb, updated_at = %s "
+                "WHERE id = %s AND agent_id = 'orchestrator' AND status = ANY(%s) RETURNING id",
+                (patch, now, session_id, list(statuses)),
+            ).fetchone()
+        return row is not None
 
     def find_by_launch_id(self, launch_id: str) -> Session | None:
         """Sessão criada pelo lançamento ``launch_id`` (``payload.launch_id``), ou ``None`` se ainda não existe."""

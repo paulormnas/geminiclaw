@@ -12,6 +12,7 @@ import pytest
 from src.cli.main import resume_session
 from src.orchestration.autonomous_loop import AutonomousLoop
 from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
+from src.research_consult import PENDING_MESSAGE
 from src.session.manager import Session
 
 
@@ -39,13 +40,13 @@ def _create_orchestrator():
 class TestAskResearcherCore:
     """_ask_researcher_core: exibição, persistência e deduplicação."""
 
-    async def test_pergunta_nova_bloqueia_e_persiste(self) -> None:
+    async def test_pergunta_nova_vira_pendencia_sem_bloquear(self) -> None:
         orchestrator, _runtime, mock_sm = _create_orchestrator()
         mock_sm.get.return_value = _make_session("sess_1", payload={})
 
         task = AgentTask(agent_id="researcher", prompt="p", task_name="t1")
 
-        with patch("asyncio.to_thread", new=AsyncMock(return_value="Use /outputs/dados.csv")):
+        with patch("builtins.input", side_effect=AssertionError("o processo da sessão não lê stdin")):
             answer = await orchestrator._ask_researcher_core(
                 question="Onde está o dataset?",
                 context="ctx",
@@ -55,13 +56,14 @@ class TestAskResearcherCore:
                 master_session_id="sess_1",
             )
 
-        assert answer == "Use /outputs/dados.csv"
+        assert answer == PENDING_MESSAGE
         mock_sm.update.assert_called_once()
         _, kwargs = mock_sm.update.call_args
         interactions = kwargs["payload"]["researcher_interactions"]
         assert len(interactions) == 1
         assert interactions[0]["question"] == "Onde está o dataset?"
-        assert interactions[0]["researcher_response"] == "Use /outputs/dados.csv"
+        assert interactions[0]["respondido_por"] == "pendente_pesquisador"
+        assert interactions[0]["researcher_response"] == PENDING_MESSAGE
         assert interactions[0]["subtask_name"] == "t1"
 
     async def test_pergunta_similar_reaproveita_resposta_sem_bloquear(self) -> None:
@@ -99,17 +101,16 @@ class TestAskResearcherCore:
 
         task = AgentTask(agent_id="researcher", prompt="p", task_name="t3")
 
-        with patch("asyncio.to_thread", new=AsyncMock(return_value="resposta nova")):
-            answer = await orchestrator._ask_researcher_core(
-                question="Onde está o dataset de treino?",
-                context="",
-                why_cant_proceed="",
-                options=[],
-                task=task,
-                master_session_id="sess_1",
-            )
+        answer = await orchestrator._ask_researcher_core(
+            question="Onde está o dataset de treino?",
+            context="",
+            why_cant_proceed="",
+            options=[],
+            task=task,
+            master_session_id="sess_1",
+        )
 
-        assert answer == "resposta nova"
+        assert answer == PENDING_MESSAGE  # pergunta diferente não reaproveita: vira pendência
 
 
 @pytest.mark.unit

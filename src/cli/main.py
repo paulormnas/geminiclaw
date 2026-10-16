@@ -658,9 +658,9 @@ def main() -> None:
             return
         print(f"\n\n  {YELLOW}⚠  Interrupção recebida. Encerrando sandboxes de código...{RESET}")
         # Os agentes rodam no processo; só o sandbox de código pode ter deixado container para trás.
-        from src.skills.code.sandbox import cleanup_sandbox_containers
+        from src.skills.code.sandbox import cleanup_all_sandbox_containers
 
-        removed = cleanup_sandbox_containers()
+        removed = cleanup_all_sandbox_containers()  # provisório: o processo da sessão limpa só a sua (PR do REPL)
         print(f"  {GREEN}✅ Cleanup concluído ({removed} sandbox(es) removido(s)).{RESET}\n")
         # V11.1.2 — Flush de telemetria antes de encerrar via SIGINT
         try:

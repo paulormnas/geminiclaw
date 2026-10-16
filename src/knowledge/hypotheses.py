@@ -631,12 +631,20 @@ class HypothesisBook:
         a, b = _significant_tokens(decl.enunciado), _significant_tokens(suggestion.texto)
         return bool(a and b) and len(a & b) / min(len(a), len(b)) >= _LEXICAL_MIN_OVERLAP
 
-    def _declared_sources(self, decl: HypothesisDecl, suggestion: PendingSuggestion | None) -> list[Node]:
-        """Nós de origem (``DERIVADA_DE``) **verificados no grafo**: ID inventado ou de outro projeto é ignorado."""
+    def _declared_sources(
+        self, decl: HypothesisDecl, suggestion: PendingSuggestion | None, declared: dict[str, str] | None = None
+    ) -> list[Node]:
+        """Nós de origem (``DERIVADA_DE``) **verificados no grafo**: ID inventado ou de outro projeto é ignorado.
+
+        ``derivada_de`` aceita ``Insumo``, ``Descoberta`` e ``Oportunidade``, além de uma ``Hipotese`` do projeto (por
+        ``id``) ou de outra hipótese declarada **antes** no mesmo plano (por ``ref``, via ``declared``).
+        """
         ids = list(decl.derivada_de) + (list(suggestion.fundamento_ids) if suggestion else [])
         nodes: list[Node] = []
         for node_id in dict.fromkeys(ids):
-            node = self._project_node(node_id, ("Insumo", "Descoberta", "Oportunidade"))
+            if declared and node_id in declared:  # ``ref`` de hipótese declarada antes neste plano
+                node_id = declared[node_id]
+            node = self._project_node(node_id, ("Insumo", "Descoberta", "Oportunidade", "Hipotese"))
             if node is None and isinstance(node_id, str):
                 # Descoberta compartilhável de outro projeto (visível por desenho, ADR 015) também fundamenta.
                 other = self._store.get_node(node_id)
@@ -667,7 +675,7 @@ class HypothesisBook:
         if not decl.enunciado:
             report.rejeitadas[decl.ref] = "sem_enunciado"
             return
-        sources = self._declared_sources(decl, suggestion)
+        sources = self._declared_sources(decl, suggestion, report.ref_map)
         opportunity_sources = [n for n in sources if n.label == "Oportunidade"]
         if any(not opportunities.is_investigable(n) for n in opportunity_sources):
             # Oportunidade não aprovada pelo pesquisador: nunca é investigada (em nenhum modo); o pedido fica pendente.

@@ -1069,6 +1069,8 @@ class AutonomousLoop:
                 # v18.6-auto-metrics-and-stop-reasons: no modo auto o Researcher define a métrica no plano e o
                 # Validator a valida; só depois ela vale para o veredito. A sessão não deixa de iniciar.
                 exploration.require_metric_definition(unavailable[1])
+            if resume is not None:  # design §4.4: origem das hipóteses do sistema vinda do checkpoint
+                exploration.restore_system_origin(resume.checkpoint.hipoteses_do_sistema)
         cycle_no = 0
         rejected_plans = 0
         legacy_attempt = 0
@@ -1346,6 +1348,8 @@ class AutonomousLoop:
 
             if recorder is not None:
                 await asyncio.to_thread(recorder.set_plan, [plan_entry(t) for t in tasks])
+                if exploration is not None:  # design §4.4: a origem das hipóteses do sistema sobrevive à retomada
+                    await asyncio.to_thread(recorder.set_system_origin, exploration.system_origin_snapshot())
 
             final_results = []
             cycle_results: Dict[str, AgentResult] = {}  # resultado final de cada subtarefa executada NESTE ciclo

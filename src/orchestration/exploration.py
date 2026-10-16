@@ -326,6 +326,14 @@ class ExplorationSession:
             return None
         return metric_ref(node)
 
+    def system_origin_snapshot(self) -> dict[str, list[str]]:
+        """``system_origin`` serializável para o checkpoint (hipótese do sistema -> subtarefas de origem)."""
+        return {hid: sorted(names) for hid, names in self.system_origin.items()}
+
+    def restore_system_origin(self, origin: dict[str, list[str]]) -> None:
+        """Restaura ``system_origin`` do checkpoint da sessão retomada."""
+        self.system_origin = {hid: set(names) for hid, names in origin.items() if names}
+
     def linkage_feedback(self) -> list[dict[str, Any]]:
         """Itens do retorno ao Researcher produzidos pelo último ``prepare_cycle`` (retiradas primeiro)."""
         return list(self._feedback)

@@ -588,7 +588,7 @@ class _Writer:
                 node is not None
                 and node.label == "Hipotese"
                 and node.properties.get("projeto_id") == self.ctx.project_id
-                and node.properties.get("status") != "abandonada"
+                and self._accepts_tests(node)
             ):
                 return node.id
             logger.warning("Hipótese formal da subtarefa não encontrada no projeto; subtarefa sem TESTA")
@@ -616,6 +616,14 @@ class _Writer:
             },
             ACTOR_RESEARCHER,
         )
+
+    def _accepts_tests(self, node: Node) -> bool:
+        """A hipótese recebe ``TESTA``: não está abandonada, ou não foi abandonada pelo pesquisador (ADR 021 §3.5)."""
+        if node.properties.get("status") != "abandonada":
+            return True
+        from src.knowledge.exploration_reads import abandoned_by
+
+        return abandoned_by(node, self.store.audit_history(node.id, limit=1000)) != "pesquisador"
 
     # -- experimento ------------------------------------------------------
 

@@ -394,14 +394,20 @@ class HumanInterventionsReader:
 
     Fontes: ``researcher_interactions`` e ``divergence_reports`` do payload da sessão, e os eventos
     ``researcher_interruption`` e ``unlimited_*``. Aprovações, rejeições e edições de hipótese/oportunidade vivem no
-    grafo, sem vínculo com a sessão: ficam ``None`` (não medidas), nunca zero.
+    grafo, sem vínculo com a sessão: ficam ``None`` (não medidas), nunca zero, salvo quando o gate persistente é
+    informado (``gate_loader``): então vêm de ``gate_requests`` (pedidos resolvidos pelo pesquisador na cadeia).
     """
 
     group = "intervencoes_humanas"
     producer = "sessão e telemetria"
 
-    def __init__(self, payload_loader: Callable[[str], dict[str, Any]] | None = None) -> None:
+    def __init__(
+        self,
+        payload_loader: Callable[[str], dict[str, Any]] | None = None,
+        gate_loader: Callable[[str], list[Any]] | None = None,
+    ) -> None:
         self._payload_loader = payload_loader
+        self._gate_loader = gate_loader
 
     def read(self, session_id: str) -> dict[str, Any]:
         from src.observability.telemetry import get_telemetry
@@ -424,10 +430,27 @@ class HumanInterventionsReader:
             {"tipo": "interrupcao", "em": e["timestamp"], "referencia": e.get("task_name") or ""} for e in interruptions
         ]
         decisions = [r for r in (payload.get("divergence_reports") or []) if isinstance(r, dict) and r.get("decisao")]
+        approvals = rejections = edits = None
+        if self._gate_loader is not None:
+            # Aprovações, rejeições e edições vêm do gate persistente (``gate_requests``), nunca do grafo.
+            resolved = self._gate_loader(session_id)
+            approvals = rejections = edits = 0
+            for req in resolved:
+                action = (req.resposta or {}).get("acao")
+                if action in ("aprovar", "autorizar"):
+                    approvals += 1
+                elif action in ("rejeitar", "negar") or req.estado == "negada":
+                    rejections += 1
+                elif action == "editar":
+                    edits += 1
+                events.append(
+                    {"tipo": f"gate:{req.decisao}:{action or req.estado}", "em": req.resolvido_em,
+                     "referencia": req.referencia}
+                )
         return {
-            "aprovacoes": None,
-            "rejeicoes": None,
-            "edicoes": None,
+            "aprovacoes": approvals,
+            "rejeicoes": rejections,
+            "edicoes": edits,
             "respostas_ask_researcher": len(answered),
             "decisoes_divergencia": len(decisions) if decisions else None,
             "suspensoes": int(suspensions) if isinstance(suspensions, int) else None,
@@ -453,6 +476,17 @@ def default_readers(
     def budget_of(session_id: str) -> dict[str, Any]:
         return ((payload_loader(session_id) or {}).get("budget") or {}) if payload_loader else {}
 
+    def gate_of(session_id: str) -> list[Any]:
+        """Pedidos que o pesquisador resolveu na sessão e nas antecessoras da cadeia (``continues_session_id``)."""
+        from src.gate.persistent_gate import session_gate
+
+        chain, current = [], session_id
+        while current and current not in chain and len(chain) < 200 and payload_loader is not None:
+            chain.append(current)
+            nxt = (payload_loader(current) or {}).get("continues_session_id")
+            current = nxt if isinstance(nxt, str) else None
+        return session_gate().resolved(chain or [session_id])
+
     return [
         EgressMetricsReader(budget_loader=budget_of),
         NumericProvenanceReader(output_dir),
@@ -461,7 +495,7 @@ def default_readers(
         PlanRejectionReader(),
         HypothesisClosureReader(),
         CostResourcesReader(),
-        HumanInterventionsReader(payload_loader),
+        HumanInterventionsReader(payload_loader, gate_loader=gate_of),
         JudgeIndependenceReader(payload_loader),
     ]
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from src.gate.catalog import ACOES_NEGATIVAS, GATE_CATALOG, validate_request
@@ -44,6 +45,8 @@ class FakeRequest:
     resposta: dict[str, Any] | None = None
     obsoleto: bool = False
     respostas_ignoradas: int = 0
+    criado_em: str | None = None
+    resolvido_em: str | None = None
 
 
 class FakeGate:
@@ -159,7 +162,7 @@ class FakeGate:
                 raise GatePendingLimitReached("pedidos pendentes demais")
         request = FakeRequest(
             len(self.requests) + 1, decisao, referencia, pergunta=pergunta, opcoes=options, motivo=motivo,
-            session_id=session_id, project_id=project_id,
+            session_id=session_id, project_id=project_id, criado_em=datetime.now(timezone.utc).isoformat(),
         )
         self.requests.append(request)
         return request
@@ -187,12 +190,18 @@ class FakeGate:
         request.resposta = {**resposta, "acao": acao}
         request.estado = "negada" if acao in ACOES_NEGATIVAS else "autorizada"
         request.resolvido_por = source
+        request.resolvido_em = datetime.now(timezone.utc).isoformat()
         return request
 
     def pending_for(self, session_ids: Iterable[str] | None = None) -> list[FakeRequest]:
         ids = None if session_ids is None else set(session_ids)
         return [r for r in self.requests if r.estado == "pendente" and not r.obsoleto
                 and (ids is None or r.session_id in ids)]
+
+    def resolved(self, session_ids: Iterable[str]) -> list[FakeRequest]:
+        ids = set(session_ids)
+        return [r for r in self.requests if r.estado != "pendente" and r.resolvido_por in HUMAN_SOURCES
+                and r.session_id in ids]
 
     def find_in_chain(self, decisao: str, referencia: str, session_chain: Iterable[str]) -> FakeRequest | None:
         chain = set(session_chain)

@@ -91,7 +91,12 @@ def render_closing_report(
 
 
 def close_by_researcher(
-    session_manager: Any, base_dir: Path | str, session: Session, *, now: datetime.datetime | None = None
+    session_manager: Any,
+    base_dir: Path | str,
+    session: Session,
+    *,
+    now: datetime.datetime | None = None,
+    motivo: str = "encerrada_pesquisador",
 ) -> Path | None:
     """Encerra a pesquisa ``session`` (``suspensa_sem_pesquisador``, ``aguarda_pesquisador``, ``interrompida``...).
 
@@ -106,12 +111,12 @@ def close_by_researcher(
         checkpoint, _origin = read_checkpoint(session_dir, expected_session_id=session.id)
     except CheckpointError as exc:
         logger.warning("Encerramento sem checkpoint utilizável", extra={"error": str(exc)[:200]})
-    if not session_manager.close_by_researcher(session.id, UNFINISHED_STATUSES):
+    if not session_manager.close_by_researcher(session.id, UNFINISHED_STATUSES, motivo):
         return None
     if checkpoint is not None:
         checkpoint.curator_pendente = True  # a consolidação não se perde: a retomada a executa (tarefa 5.6)
         checkpoint.estado = "fechado"
-        checkpoint.motivo_parada = "encerrada_pesquisador"
+        checkpoint.motivo_parada = motivo
         write_checkpoint(session_dir, checkpoint)
     session_dir.mkdir(parents=True, exist_ok=True)
     path = session_dir / REPORT_NAME

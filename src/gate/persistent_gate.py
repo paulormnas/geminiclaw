@@ -186,6 +186,19 @@ class PersistentGate:
                 ).fetchall()
         return [_row_to_request(r) for r in rows or []]
 
+    def resolved(self, session_ids: Iterable[str]) -> list[GateRequest]:
+        """Pedidos das sessões da cadeia que o pesquisador já resolveu (consumidos ou não), do mais antigo ao mais novo.
+
+        Alimenta o grupo de métricas ``intervencoes_humanas``: a fonte é ``gate_requests``, nunca o grafo.
+        """
+        with get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM gate_requests WHERE session_id = ANY(%s) AND estado <> 'pendente' "
+                "AND resolvido_por = ANY(%s) ORDER BY id",
+                (list(session_ids), _HUMAN),
+            ).fetchall()
+        return [_row_to_request(r) for r in rows or []]
+
     def find_in_chain(self, decisao: str, referencia: str, session_chain: Iterable[str]) -> GateRequest | None:
         """Pedido ainda não consumido nem obsoleto de ``decisao`` + ``referencia`` em qualquer sessão da cadeia (o mais
         recente), ou ``None``. Na retomada, a sessão nova reaproveita o pedido da anterior (pendente ou respondido)."""

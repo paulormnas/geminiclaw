@@ -19,6 +19,7 @@ from typing import Any
 
 from src import config
 from src.cli.context_commands import clear_context
+from src.cli.gate_commands import decide, send_message, show_pending
 from src.cli.sandboxes import show_sandboxes, stop_sandboxes
 from src.cli.session_start import LaunchRefused, SessionStarter, Started
 from src.cli.sessions_view import (
@@ -30,7 +31,9 @@ from src.cli.sessions_view import (
     show_researches,
     summary_since,
 )
+from src.gate.persistent_gate import terminal_gate
 from src.logger import get_logger
+from src.session.chain import chain_session_ids
 from src.session.exit_codes import EXIT_ERROR
 from src.session.manager import SessionManager
 from src.session.presence import PgPresenceStore, TerminalAlreadyOpenError, TerminalPresence
@@ -48,7 +51,8 @@ logger = get_logger(__name__)
 EXIT_COMMANDS = {"exit", "quit", "sair"}
 PROMPT = f"  {MAGENTA}🔮 >{RESET} "
 NEW_RESEARCH_HINT = (
-    "Para iniciar uma pesquisa use: nova-pesquisa <tarefa>  (comandos: sessions, retomar, encerrar, sair)"
+    "Para iniciar uma pesquisa use: nova-pesquisa <tarefa>  "
+    "(comandos: sessions, pendentes, decidir, mensagem, retomar, encerrar, sair)"
 )
 
 
@@ -108,6 +112,49 @@ class SweepThread:
         self._thread.join(timeout=5)
 
 
+class ReminderThread:
+    """Lembrete periódico dos pedidos pendentes ao pesquisador (``GATE_REMINDER_SECONDS``)."""
+
+    def __init__(self, gate: Any, manager: Any, console: Console, interval: float) -> None:
+        self._gate = gate
+        self._manager = manager
+        self._console = console
+        self._interval = max(interval, 0.05)
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, name="geminiclaw-reminder", daemon=True)
+
+    def start(self) -> "ReminderThread":
+        self._thread.start()
+        return self
+
+    def remind(self) -> int:
+        """Escreve o lembrete se há pedidos pendentes; devolve quantos."""
+        from src.cli.gate_commands import aliases_for, format_request
+
+        try:
+            pending = self._gate.pending()
+        except Exception as exc:  # noqa: BLE001 - o lembrete nunca derruba o terminal
+            logger.warning("Lembrete de pedidos falhou", extra={"error": type(exc).__name__})
+            return 0
+        if not pending:
+            return 0
+        aliases = aliases_for(self._manager, pending)
+        lines = "\n    ".join(format_request(r, aliases.get(r.session_id or '')) for r in pending)
+        self._console.notify(
+            f"{YELLOW}{STATUS_ICONS['warning']} {len(pending)} pedido(s) aguardam você (use 'decidir <id>'):{RESET}"
+            f"\n    {lines}"
+        )
+        return len(pending)
+
+    def _run(self) -> None:
+        while not self._stop.wait(self._interval):
+            self.remind()
+
+    def stop(self) -> None:
+        self._stop.set()
+        self._thread.join(timeout=5)
+
+
 def make_recover(manager: SessionManager) -> Callable[[Any], None]:
     """Recuperação de uma sessão parada: o orquestrador só é criado quando há o que recuperar."""
     holder: dict[str, Any] = {}
@@ -140,6 +187,8 @@ class Repl:
         now: Callable[[], float] = time.time,
         sweep_interval: float | None = None,
         recover: Callable[[Any], None] | None = None,
+        gate: Any | None = None,
+        reminder_interval: float | None = None,
     ) -> None:
         self.mode = mode or config.SESSION_DEFAULT_MODE
         self.explicit_mode = explicit_mode
@@ -156,6 +205,11 @@ class Repl:
         self._sweep_interval = config.TERMINAL_STALE_CHECK_SECONDS if sweep_interval is None else sweep_interval
         self._recover = recover if recover is not None else make_recover(self.manager)
         self._sweep: SweepThread | None = None
+        self.gate = gate if gate is not None else terminal_gate()
+        self._reminder_interval = (
+            config.GATE_REMINDER_SECONDS if reminder_interval is None else reminder_interval
+        )
+        self._reminder: ReminderThread | None = None
 
     # -- abertura e fechamento -------------------------------------------------------------------------------------
 
@@ -174,6 +228,8 @@ class Repl:
     def close(self) -> None:
         if self._sweep is not None:
             self._sweep.stop()
+        if self._reminder is not None:
+            self._reminder.stop()
         self.presence.stop()
 
     # -- pesquisas não finalizadas ---------------------------------------------------------------------------------
@@ -188,8 +244,12 @@ class Repl:
             )
         unfinished = summary_since(self.manager, self._last_end, self.console.write)
         for session in unfinished:
+            try:
+                pending = self.gate.pending(chain_session_ids(self.manager, session.id))
+            except Exception:  # noqa: BLE001 - sem a lista de pedidos a pergunta aparece sem eles
+                pending = []
             answer = ask_unfinished(
-                session, self.starter.base_dir, self._input, self.console.write, self._now()
+                session, self.starter.base_dir, self._input, self.console.write, self._now(), pending
             )
             if answer == ANSWER_RESUME:
                 await self.resume(session)
@@ -198,6 +258,9 @@ class Repl:
         self._sweep = SweepThread(
             SessionWatch(self.manager, recover=self._recover, clock=self._now), self.console, self._sweep_interval
         ).start()
+        self._reminder = ReminderThread(self.gate, self.manager, self.console, self._reminder_interval)
+        self._reminder.remind()  # ao abrir
+        self._reminder.start()
 
     def close_research(self, session: Any) -> None:
         from src.session.closing import close_by_researcher
@@ -282,6 +345,16 @@ class Repl:
             await self._cmd_resume(rest)
         elif word == "encerrar":
             self._cmd_close(rest)
+        elif word == "pendentes":
+            show_pending(self.gate, self.manager, self.console.write, rest.split()[0] if rest else None, self._now())
+        elif word == "decidir":
+            await self._cmd_decide(rest)
+        elif word == "mensagem":
+            target, _, message = rest.partition(" ")
+            if not target or not message.strip():
+                self.console.write(f"\n  {RED}Use: mensagem <apelido> <texto>{RESET}\n")
+            else:
+                send_message(self.manager, target, message.strip(), self.console.write)
         elif lower == "sandboxes":
             show_sandboxes()
         elif word == "parar-sandboxes":
@@ -304,6 +377,58 @@ class Repl:
             self.console.write(f"\n  {RED}Use: retomar <apelido|id> (pesquisa não encontrada: '{target}'){RESET}\n")
             return
         await self.resume(session)
+
+    async def _cmd_decide(self, raw: str) -> None:
+        """``decidir <id>``; ao responder o último pedido de uma pesquisa ``aguarda_pesquisador`` ela é retomada."""
+        try:
+            request_id = int(raw.split()[0].lstrip("#"))
+        except (ValueError, IndexError):
+            self.console.write(f"\n  {RED}Use: decidir <id> (veja 'pendentes'){RESET}\n")
+            return
+        result = decide(self.gate, request_id, self._input, self.console.write, manager=self.manager)
+        if not result.resolved or result.request is None or not result.request.session_id:
+            return
+        session = self.manager.get(result.request.session_id)
+        if session is None or session.status != "aguarda_pesquisador":
+            return
+        remaining = self.gate.pending(chain_session_ids(self.manager, session.id))
+        if remaining:
+            ids = ", ".join(f"#{r.id}" for r in remaining)
+            self.console.write(f"  {DIM}{label(session)} ainda tem pedidos pendentes: {ids}.{RESET}\n")
+            return
+        if await self._apply_continuity(session, result.request):
+            return
+        self.console.write(f"  {DIM}Último pedido de {label(session)} respondido: retomando a pesquisa.{RESET}")
+        await self.resume(session)
+
+    async def _apply_continuity(self, session: Any, request: Any) -> bool:
+        """Efeito das respostas de ``decidir_continuidade`` (ADR 021 §5.2): ``parar``, ``aceitar_conjunto`` e
+        ``objetivo_atingido`` fecham a pesquisa pelo terminal, sem processo novo; ``orientar`` deixa o texto na caixa
+        de entrada (a sessão retomada o entrega ao Researcher). Devolve ``True`` se fechou a pesquisa."""
+        if request.decisao != "decidir_continuidade":
+            return False
+        action = (request.resposta or {}).get("acao")
+        if action == "orientar":
+            from src.session.inbox import InboxError, SessionInbox
+
+            try:
+                SessionInbox().post(session.id, str((request.resposta or {}).get("orientacao", "")))
+            except InboxError as exc:
+                self.console.write(f"  {RED}Orientação não gravada: {exc}{RESET}")
+            return False
+        reason = {
+            "parar": "planos_rejeitados" if request.motivo == "planos_rejeitados" else "encerrada_pesquisador",
+            "aceitar_conjunto": "solucao_encontrada",
+            "objetivo_atingido": "solucao_encontrada",
+        }.get(str(action))
+        if reason is None:
+            return False
+        from src.session.closing import close_by_researcher
+
+        report = close_by_researcher(self.manager, self.starter.base_dir, session, motivo=reason)
+        if report is not None:
+            self.console.write(f"  Pesquisa {label(session)} encerrada ({reason}). Relatório: {report}")
+        return True
 
     def _cmd_close(self, target: str) -> None:
         session = resolve_target(self.manager, target)

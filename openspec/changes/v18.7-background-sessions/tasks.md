@@ -1,6 +1,6 @@
 # Tarefas: v18.7-background-sessions
 
-**Estado (2026-10-16):** em andamento, em PRs sequenciais. PR 1 (#177): divisão do `cli/main.py` (0.9), schema e sessão (1.1 a 1.4), códigos de saída e apelido (2.1 e 2.2), retenção do registro de sessões. #179: renomeação `sandboxes`/`parar-sandboxes`. PR 2 (#180): lançamento e processo da sessão (3), configuração (7.1). PR 3 (#181): fim por modo e presença (4). PR 4 (`feat/v18.7-terminal-repl`): REPL e comando direto (5) e documentação (7.2). Falta o benchmark (6).
+**Estado (2026-10-16):** em andamento, em PRs sequenciais. PR 1 (#177): divisão do `cli/main.py` (0.9), schema e sessão (1.1 a 1.4), códigos de saída e apelido (2.1 e 2.2), retenção do registro de sessões. #179: renomeação `sandboxes`/`parar-sandboxes`. PR 2 (#180): lançamento e processo da sessão (3), configuração (7.1). PR 3 (#181): fim por modo e presença (4). PR 4 (`feat/v18.7-terminal-repl`): REPL e comando direto (5) e documentação (7.2). PR 5 (`feat/v18.7-benchmark-exit`): benchmark (6). `background-sessions` completa; resta a confirmação na bateria (6.3) e o arquivamento da mudança.
 
 **Decisões do pesquisador em 2026-10-16 (resposta à revisão desta mudança):**
 - Entrega: pode haver quantos PRs forem necessários; `background-sessions` e `persistent-human-gate` são mergeadas em sequência no mesmo dia, sem uso intermediário (Questão 1).
@@ -54,9 +54,9 @@
 - [x] 5.6 Retomada da etapa do Curator: já existia no laço (`Orchestrator.resume_curator_pending`, chamado antes do primeiro planejamento da sessão retomada, com testes em `tests/unit/continuity/test_resume.py`); novo: o encerramento pelo REPL marca `curator_pendente` no checkpoint e a retomada de `encerrada_pesquisador` pede confirmação (teste).
 
 ## 6. Benchmark
-- [ ] 6.1 `scripts/benchmark/run_benchmark.py`: `start_new_session=True`, `killpg` no tempo limite; `anomalies()` com código 4 e código divergente; `stop_class` devolve `interrupcao` para todo motivo terminado em `_pesquisador`.
-- [ ] 6.2 Testes de unidade do benchmark: tempo limite encerra o grupo (`kill_grace_seconds=1`); código 4; código divergente; `exit 0` com `solucao_encontrada` sem anomalia; `stop_class` dos motivos `*_pesquisador`; código 3 para `versao_modelo` e `planos_rejeitados` sem anomalia de código.
-- [ ] 6.3 Teste "Uma sessão por vez": dois comandos simulados que gravam PID, início e fim; o início da segunda é posterior ao fim da primeira e o grupo da primeira não existe mais.
+- [x] 6.1 `scripts/benchmark/run_benchmark.py`: o comando roda com `start_new_session=True`; no tempo limite `terminate_group` envia `SIGTERM` ao grupo e `SIGKILL` depois de `kill_grace_seconds` (padrão 10 s, parâmetro de `run_combination`); no fim normal `reap_group` encerra o que sobrar do grupo (parâmetro `command` para ensaiar o runner). `anomalies()` acusa o código 4 ("aguarda o pesquisador") e o código divergente de `exit_code_for(motivo_parada)`; `stop_class` devolve `interrupcao` para todo motivo terminado em `_pesquisador` e para `interrompida`. O processo da sessão trata `SIGTERM` como o `SIGINT` (1º: fechamento com checkpoint; 2º: limpeza dos sandboxes da sessão e saída).
+- [x] 6.2 Testes de unidade (`tests/unit/benchmark/test_session_process_runner.py`): tempo limite encerra o grupo com filho que ignora `SIGTERM` (`kill_grace_seconds=1`, 5 s); código 4; código divergente; `exit 0` com `solucao_encontrada` sem anomalia; `stop_class` dos motivos `*_pesquisador`; código 3 para `versao_modelo` e `planos_rejeitados` sem anomalia de código; timeout sem "divergente". Fixtures antigas com `stop_reason` que era nome de classe (`criterio_pesquisa`) passaram a usar um motivo real.
+- [x] 6.3 Teste "Uma sessão por vez": dois comandos reais que gravam PID, início e fim; o início da segunda é posterior ao fim da primeira e o processo da primeira não existe mais; mais um teste de que o fim normal não deixa processo órfão no grupo. **Conferir na próxima bateria** (Pi): um comando direto real de `main.py` com o processo da sessão de verdade.
 
 ## 7. Configuração e documentação
 - [x] 7.1 `src/config.py` com as variáveis do design §3 e validações; `.env.example` documentado.

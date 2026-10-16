@@ -292,7 +292,7 @@ class SessionRunner:
 
 
 def _install_sigint_handler(runner_ref: Callable[[], SessionRunner | None]) -> None:
-    """1º ``SIGINT``: fechamento gracioso com checkpoint; 2º: limpeza só dos sandboxes desta sessão e saída."""
+    """1º ``SIGINT``/``SIGTERM``: fechamento gracioso com checkpoint; 2º: limpeza dos sandboxes desta sessão e saída."""
 
     def handler(signum: int, frame: Any) -> None:
         from src.config import LIMIT_GRACE_SECONDS
@@ -324,6 +324,9 @@ def _install_sigint_handler(runner_ref: Callable[[], SessionRunner | None]) -> N
         os._exit(EXIT_INTERRUPTED)
 
     signal.signal(signal.SIGINT, handler)
+    # `SIGTERM` (o runner do benchmark encerra o grupo no tempo limite) tem o mesmo tratamento: pede o fechamento com
+    # checkpoint e, se repetido, limpa só os sandboxes desta sessão e sai.
+    signal.signal(signal.SIGTERM, handler)
 
 
 def main(

@@ -15,6 +15,8 @@ from urllib.parse import urlsplit, urlunsplit
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+# Tabelas que os testes de v18.7 escrevem; as que ainda não existem no schema são ignoradas.
+MUTABLE_TABLES = ("agent_sessions", "terminal_presence", "gate_requests", "session_inbox")
 MIGRATIONS_V187 = sorted((ROOT / "scripts" / "migrations").glob("v18_7_*.sql"))
 
 
@@ -67,7 +69,16 @@ def pg_db(temp_database_url: str, monkeypatch: pytest.MonkeyPatch) -> Iterator[s
     from src import config, db
 
     with psycopg.connect(temp_database_url, autocommit=True) as conn:
-        conn.execute("TRUNCATE agent_sessions, terminal_presence")
+        existing = [
+            r[0]
+            for r in conn.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' "
+                "AND table_name = ANY(%s)",
+                (list(MUTABLE_TABLES),),
+            ).fetchall()
+        ]
+        if existing:
+            conn.execute("TRUNCATE " + ", ".join(existing) + " RESTART IDENTITY")
     db.close_pool()
     monkeypatch.setattr(config, "DATABASE_URL", temp_database_url)
     try:

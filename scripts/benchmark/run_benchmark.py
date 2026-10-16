@@ -138,6 +138,9 @@ def build_env(base: dict[str, str], roles: dict[str, str], extra: dict[str, str]
         env[f"{role}_MODEL"] = spec
     env["LLM_DATA_POLICY"] = "third_party_allowed"
     env["LLM_ROUTING"] = "flexible"
+    # A comparação entre combinações exige sessões completas com a versão declarada: a bateria para a sessão quando a
+    # versão do modelo muda (v18.7-benchmark-fixes, design §1.7), em vez de retomar ou trocar o modelo.
+    env["ON_MODEL_VERSION_CHANGE"] = "parar"
     env.update({k: str(v) for k, v in (extra or {}).items()})
     return env
 
@@ -280,7 +283,9 @@ def stop_class(stop: str | None) -> str | None:
     if not stop:
         return None
     stop = str(stop)
-    if stop.startswith("limite_"):
+    if stop.startswith("limite_") or stop == "versao_modelo":
+        # ``versao_modelo`` só ocorre porque a bateria define ON_MODEL_VERSION_CHANGE=parar: a comparação exige
+        # sessões completas com a versão declarada, então é anomalia como os limites (v18.7-benchmark-fixes).
         return "limite"
     if stop == "erro":
         return "erro"

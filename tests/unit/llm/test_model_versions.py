@@ -50,12 +50,12 @@ def clean_digests():
     ollama_module.clear_known_digests()
 
 
-def _routing(tmp_path, *, strict: bool = False, doc: dict | None = None) -> SessionRouting:
+def _routing(tmp_path, *, strict: bool = False, doc: dict | None = None, policy: str = "parar") -> SessionRouting:
     catalog = load(tmp_path, doc)
     resolved = resolve_session(catalog, all_available(catalog), "third_party_allowed")
     return SessionRouting(
         "third_party_allowed", "strict" if strict else "flexible", catalog, resolved,
-        {i: Availability(True) for i in catalog.modelos}, VersionTracker(strict=strict),
+        {i: Availability(True) for i in catalog.modelos}, VersionTracker(strict=strict, policy=policy),
     )
 
 

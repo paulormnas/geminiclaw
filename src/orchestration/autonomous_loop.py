@@ -155,6 +155,67 @@ class AutonomousLoop:
             return StopReason.MODEL_VERSION
         return None
 
+    def _pending_stop(self, master_session_id: str) -> "StopReason | None":
+        """Ponto de verificação de limites: trata a mudança de versão do modelo (política ``retomar``) e consulta as
+        paradas pendentes. Falha ao tratar a versão nunca interrompe a pesquisa."""
+        try:
+            self._apply_model_version_policy(master_session_id)
+        except Exception:  # noqa: BLE001 — a política de versão nunca derruba a verificação de limites
+            logger.warning("Falha ao tratar a mudança de versão do modelo", exc_info=True)
+        return self._pending_model_stop(master_session_id)
+
+    def _apply_model_version_policy(self, master_session_id: str) -> None:
+        """``ON_MODEL_VERSION_CHANGE=retomar`` em ``strict``: checkpoint e continuação, ou troca do modelo do papel.
+
+        Versão nova informada: o evento ``versao_modelo_alterada`` já foi gravado e a sessão continua com o mesmo
+        modelo. Versão desconhecida: cada papel que usa o modelo passa ao próximo elegível da ``preferencia`` (evento
+        ``modelo_substituido``); sem elegível, a sessão fecha com ``versao_modelo`` e continua retomável.
+        """
+        from src.llm.session import current_session_routing
+
+        routing = current_session_routing()
+        if routing is None or not routing.versions.strict:
+            return
+        actions = routing.versions.drain_actions()
+        if not actions:
+            return
+        from src.llm.allocation import build_allocation_profile
+        from src.llm.model_substitution import REASON_UNKNOWN_VERSION, find_substitute, replace_role_model
+        from src.llm.versions import ACTION_UNKNOWN, EVENT_MODEL_REPLACED
+
+        replaced = False
+        for action in actions:
+            if action["tipo"] != ACTION_UNKNOWN:
+                logger.warning("Versão do modelo mudou; a sessão continua com o mesmo modelo", extra=action)
+                continue
+            roles = action["papeis"] or [r for r, res in routing.papeis.items() if res.id == action["provedor_modelo"]]
+            for role in roles:
+                old_id = routing.papeis[role].id
+                new_id = find_substitute(routing, role)
+                if new_id is None:
+                    logger.warning(
+                        "Sem modelo elegível para substituir: a sessão fecha por versao_modelo",
+                        extra={"papel": role, "modelo": old_id},
+                    )
+                    routing.versions.request_stop()
+                    continue
+                replace_role_model(routing, role, new_id, REASON_UNKNOWN_VERSION)
+                routing.versions.emit_event({
+                    "tipo": EVENT_MODEL_REPLACED, "papel": role, "anterior": old_id, "novo": new_id,
+                    "motivo": REASON_UNKNOWN_VERSION,
+                })
+                replaced = True
+        session_manager = self.orchestrator.session_manager
+        if replaced:
+            session = session_manager.get(master_session_id)
+            payload = dict(session.payload) if session is not None else {}
+            payload["llm_routing"] = routing.payload()
+            payload["allocation_profile"] = build_allocation_profile(routing)
+            session_manager.update(master_session_id, payload=payload)
+        recorder = self._recorder(master_session_id)
+        if recorder is not None:
+            recorder.set_usage()  # grava o checkpoint (o estado das subtarefas já está nele) antes de continuar
+
     @staticmethod
     async def _refresh_model_versions() -> None:
         """Relê o digest dos modelos Ollama da sessão (a cada checkpoint); falha nunca interrompe a pesquisa."""
@@ -270,7 +331,7 @@ class AutonomousLoop:
         self._usage_tracker = UsageTracker(
             effective_budget,
             execution_id=master_session_id,
-            pending_stop=lambda: self._pending_model_stop(master_session_id),
+            pending_stop=lambda: self._pending_stop(master_session_id),
         )
         self.orchestrator.register_usage_tracker(master_session_id, self._usage_tracker)
         self.max_retries = effective_budget.max_task_retries
@@ -977,7 +1038,7 @@ class AutonomousLoop:
             self._usage_tracker = UsageTracker(
                 UsageBudget.from_config(max_task_retries=self.max_retries),
                 execution_id=master_session_id,
-                pending_stop=lambda: self._pending_model_stop(master_session_id),
+                pending_stop=lambda: self._pending_stop(master_session_id),
             )
             self.orchestrator.register_usage_tracker(master_session_id, self._usage_tracker)
 

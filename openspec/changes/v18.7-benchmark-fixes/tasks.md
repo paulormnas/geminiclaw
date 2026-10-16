@@ -1,6 +1,10 @@
 # Tarefas: v18.7-benchmark-fixes
 
-**Estado (2026-10-15):** não iniciada.
+**Estado (2026-10-16):** em implementação, em três PRs. **PR 1 (esta etapa): diagnóstico (1.1, 1.2), cadeia de proveniência (§4) e egresso no relatório (§5.1 e a tabela de §5.2).** Pendentes: cota do provedor (§2, §3.0 a §3.8, `limite_cota_provedor`, `run_benchmark`/`stop_class`) e a política `ON_MODEL_VERSION_CHANGE` (§3.9, §3.10 e `build_env`).
+
+**Diagnóstico com os dados arquivados da bateria no Pi (1.1 e 1.2, só leitura, sem chamada de LLM):**
+- **1.1, texto literal do 429 do Google:** `429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'Your project has exceeded its monthly spending cap. Please go to AI Studio at https://ai.studio/spend to manage your project spend cap. Learn more at https://ai.google.dev/gemini-api/docs/billing#project-spend-caps. ', 'status': 'RESOURCE_EXHAUSTED'}}`. Sem `retryDelay`/`RetryInfo`, sem identificador de conta; o marcador `spending cap` (padrão do design) casa. Vale para `LLM_QUOTA_MARKERS_GOOGLE`.
+- **1.2, cadeia `divergente`:** aplicada offline a regra de `_check_files` às 7 sessões arquivadas com registros no Pi. Dos 23 arquivos `alterado` em 4 sessões divergentes (as demais sessões arquivadas estavam íntegras), 21 eram **entrada reescrita pela mesma execução** (a causa do design §2.1; a regra nova os resolve) e 2 eram `metricas_literais.json`, outra causa que a spec não previa: a **plataforma** grava esse arquivo na pasta da subtarefa (`write_findings`) depois do término de cada execução, a execução seguinte o registra como entrada com o hash antigo e a plataforma o reescreve depois do último término. Não é adulteração nem saída de código gerado. Todas as pontas dos checkpoints conferiram (`ok`), todas as sessões tinham uma só cadeia: a hipótese do design §2.3 (checkpoint de outra cadeia) não se confirmou. **Decisão tomada na implementação (a confirmar):** `PLATFORM_WRITTEN_FILES` em `src/provenance/verify.py` trata `metricas_literais.json` como `substituido` (detalhe "arquivo gravado pela plataforma depois do término"), com teste de que a constante cobre `LITERALS_FILE`. Alternativas se o Arquiteto preferir: registrar esse arquivo como saída da própria execução ou gravá-lo fora da pasta da subtarefa.
 
 ## 0. Pré-requisitos
 - [ ] 0.1 Mudança aprovada pelo pesquisador, inclusive o valor aditivo `limite_cota_provedor` em `Sessao.motivo_parada`.
@@ -8,8 +12,8 @@
 - [ ] 0.3 Worktree `.worktrees/fix-v18.7-benchmark-fixes` (ou uma por parte, §1 a §3 do design); spec confrontada com o código.
 
 ## 1. Diagnóstico (sem chamada de LLM, com confirmação do pesquisador antes de acessar o Pi)
-- [ ] 1.1 Extrair do `run.log` arquivado da tentativa interrompida da rodada 3 (`~/bench/bateria_v18_6.json.d/`) o texto literal do 429 de teto de gasto do Google e se ele traz `retryDelay`; fixar `LLM_QUOTA_MARKERS_GOOGLE` e registrar o texto (sem identificadores de conta) no PR.
-- [ ] 1.2 Com o `sessao.tar.gz` de uma execução `divergente`, aplicar offline a regra de `_check_files` aos registros exportados em `<sessão>/provenance/execution_records.jsonl` (gravados pelo relatório da sessão, `src/provenance/report.py:48`; script no scratchpad, fora do repositório) e confirmar se todos os `alterado` são entradas reescritas pela mesma execução (design §2.1) ou se há checkpoint de outra cadeia (§2.3). Registrar o resultado no PR; se aparecer outra causa, parar e voltar ao Arquiteto.
+- [x] 1.1 Extrair do `run.log` arquivado da tentativa interrompida da rodada 3 (`~/bench/bateria_v18_6.json.d/`) o texto literal do 429 de teto de gasto do Google e se ele traz `retryDelay`; fixar `LLM_QUOTA_MARKERS_GOOGLE` e registrar o texto (sem identificadores de conta) no PR.
+- [x] 1.2 Com o `sessao.tar.gz` de uma execução `divergente`, aplicar offline a regra de `_check_files` aos registros exportados em `<sessão>/provenance/execution_records.jsonl` (gravados pelo relatório da sessão, `src/provenance/report.py:48`; script no scratchpad, fora do repositório) e confirmar se todos os `alterado` são entradas reescritas pela mesma execução (design §2.1) ou se há checkpoint de outra cadeia (§2.3). Registrar o resultado no PR; se aparecer outra causa, parar e voltar ao Arquiteto.
 
 ## 2. Configuração
 - [ ] 2.1 `LLM_QUOTA_MARKERS_GOOGLE`, `LLM_QUOTA_MARKERS_ANTHROPIC`, `LLM_QUOTA_MARKERS_OPENAI`, `LLM_QUOTA_MARKERS_OPENAI_COMPATIBLE` e `LLM_RATE_LIMIT_MAX_COOLDOWN_SECONDS` em `src/config.py` e `.env.example`.
@@ -29,17 +33,17 @@
 - [ ] 3.10 Política `retomar` com `LLM_ROUTING=strict`: checkpoint e continuação no ponto de verificação de limites (`src/orchestrator.py`, `src/llm/versions.py`, `src/usage.py`, `src/continuity.py`); nova versão registrada na proveniência; substituição pelo próximo modelo elegível da `preferencia` do papel (ADR 017, ADR 020, ADR 019) com o evento `modelo_substituido`; sem elegível, fecha com `versao_modelo`. Testes: um por cenário do requisito "Mudança de versão dentro da sessão" de `specs/llm-providers`, com `FakeRecordingProvider` e catálogo de teste (nenhuma chamada paga).
 
 ## 4. Cadeia de proveniência (design §2)
-- [ ] 4.1 `_check_files`: entrada reescrita pela mesma execução vira `substituido`.
-- [ ] 4.2 `ProvenanceChainReader`: `cadeia.motivos` e `cadeia.arquivos_alterados_exemplos`.
-- [ ] 4.3 Testes: cenários de `specs/execution-provenance` (regressão da retentativa com `metrics.json`) e de "Causas da cadeia divergente".
+- [x] 4.1 `_check_files`: entrada reescrita pela mesma execução vira `substituido`.
+- [x] 4.2 `ProvenanceChainReader`: `cadeia.motivos` e `cadeia.arquivos_alterados_exemplos`.
+- [x] 4.3 Testes: cenários de `specs/execution-provenance` (regressão da retentativa com `metrics.json`) e de "Causas da cadeia divergente".
 
 ## 5. Egresso no relatório (design §3)
-- [ ] 5.1 `EgressMetricsReader.bytes_limitados`; seção Markdown com as duas grandezas.
-- [ ] 5.2 `scripts/benchmark/report.py`: três colunas de egresso, causa da cadeia; `run_benchmark.py`: `limite_cota_provedor` listado com provedor e modelo; `stop_class` devolve `limite` para `versao_modelo`; `build_env` define `ON_MODEL_VERSION_CHANGE=parar` no ambiente do subprocesso (junto de `LLM_ROUTING` e `LLM_DATA_POLICY`).
+- [x] 5.1 `EgressMetricsReader.bytes_limitados`; seção Markdown com as duas grandezas.
+- [ ] 5.2 (parte feita no PR 1: `scripts/benchmark/report.py` com três colunas de egresso e a causa da cadeia; falta o que segue) ~~`scripts/benchmark/report.py`: três colunas de egresso, causa da cadeia;~~ `run_benchmark.py`: `limite_cota_provedor` listado com provedor e modelo; `stop_class` devolve `limite` para `versao_modelo`; `build_env` define `ON_MODEL_VERSION_CHANGE=parar` no ambiente do subprocesso (junto de `LLM_ROUTING` e `LLM_DATA_POLICY`).
 - [ ] 5.3 Testes: cenários de `specs/operation-metrics` e `specs/benchmark`.
 
 ## 6. Validação
 - [ ] 6.1 `uv run ruff check .` sem erros novos; `uv run pytest -m "unit or integration" -v` verde.
-- [ ] 6.2 Regenerar o relatório da bateria V18.6 a partir de `bateria_v18_6.json` (sem nova execução) e conferir que as colunas de egresso mostram as saídas novas como `-` (resultado antigo) sem erro.
+- [x] 6.2 Regenerar o relatório da bateria V18.6 a partir de `bateria_v18_6.json` (sem nova execução) e conferir que as colunas de egresso mostram as saídas novas como `-` (resultado antigo) sem erro.
 - [ ] 6.3 Na próxima bateria (com confirmação do pesquisador): nenhuma cadeia `divergente` causada por `metrics.json` reescrito; se houver cota esgotada, a execução fecha com `limite_cota_provedor` em minutos.
 - [ ] 6.4 Atualizar `tasks.md` (caixas e **Estado**), a tabela de `openspec/README.md` e o achado 4, 5 e 6 do relatório da bateria no PR.

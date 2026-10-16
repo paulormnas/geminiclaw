@@ -177,9 +177,10 @@ def render_knowledge(results: list[dict]) -> str:
 def render_operation(results: list[dict]) -> str:
     """Métricas de operação (v18.5-operation-metrics) por combinação: egresso, proveniência, verificação e custo."""
     header = (
-        "| Combinação | Egresso (bytes) | Chamadas de busca | Cadeia de execuções | Números res/calc/src | "
-        "Não verificados | Afirmações (suportada/total) | Planos reprovados | Custo (USD) | CPU média (%) |\n"
-        "|---|---|---|---|---|---|---|---|---|---|"
+        "| Combinação | Egresso total (bytes) | Saídas novas (bytes) | Limite de saídas (bytes) | Chamadas de busca | "
+        "Cadeia de execuções | Números res/calc/src | Não verificados | Afirmações (suportada/total) | "
+        "Planos reprovados | Custo (USD) | CPU média (%) |\n"
+        "|---|---|---|---|---|---|---|---|---|---|---|---|"
     )
     rows = [header]
     for r in results:
@@ -196,9 +197,15 @@ def render_operation(results: list[dict]) -> str:
         chain = get("proveniencia", "cadeia", None)
         node = (metrics.get("custo_recursos") or {}).get("no") or {}
         claims_cell = f"{claims.get('suportada', 0)}/{sum(claims.values())}" if claims else "-"
+        limit_cell = get("egresso", "limite_bytes")
+        chain_cell = (chain or {}).get("resultado", "-")
+        first_cause = next((name for name, count in ((chain or {}).get("motivos") or {}).items() if count), None)
+        if chain_cell == "divergente" and first_cause:
+            chain_cell = f"divergente ({first_cause})"
         rows.append(
-            f"| {r['name']} | {get('egresso', 'bytes_total')} | {get('egresso', 'consultas_busca')} | "
-            f"{(chain or {}).get('resultado', '-')} | "
+            f"| {r['name']} | {get('egresso', 'bytes_total')} | {get('egresso', 'bytes_limitados')} | "
+            f"{'sem limite' if limit_cell is None else limit_cell} | {get('egresso', 'consultas_busca')} | "
+            f"{chain_cell} | "
             f"{'/'.join(str(origins[k]) for k in ('res', 'calc', 'src')) if origins else '-'} | "
             f"{get('proveniencia', 'numeros_nao_verificados')} | "
             f"{claims_cell} | "

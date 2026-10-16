@@ -1,4 +1,4 @@
-"""Comandos `sessions` e `stop`: listam e param containers de sandbox de código.
+"""Comandos `sandboxes` e `parar-sandboxes`: listam e param containers de sandbox de código.
 
 Movido de ``src/cli/main.py`` sem alterar o comportamento (v18.7-background-sessions, tarefa 0.9; ADR 024 §5).
 """
@@ -17,7 +17,7 @@ from src.utils.terminal import BOLD, CYAN, DIM, GREEN, RED, RESET, YELLOW
 logger = get_logger(__name__)
 
 
-def show_sessions(docker_client: Any | None = None) -> list[dict[str, Any]]:
+def show_sandboxes(docker_client: Any | None = None) -> list[dict[str, Any]]:
     """Lista os containers de sandbox de código ativos do GeminiClaw (Roadmap V14.6).
 
     Os agentes rodam no processo do orquestrador (ADR 014); o único container é o sandbox.
@@ -95,7 +95,7 @@ def show_sessions(docker_client: Any | None = None) -> list[dict[str, Any]]:
     return active_info
 
 
-def stop_sessions(
+def stop_sandboxes(
     session_id: str | None = None,
     docker_client: Any | None = None,
 ) -> int:

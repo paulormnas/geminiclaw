@@ -1,8 +1,8 @@
 """Testes de integração para gerenciamento de sessão via CLI (Roadmap V14.6).
 
 Cobre:
-- Listagem dos sandboxes de código ativos com `geminiclaw sessions`.
-- Encerramento dos sandboxes com `geminiclaw stop` e `geminiclaw stop --session <id>`.
+- Listagem dos sandboxes de código ativos com `geminiclaw sandboxes`.
+- Encerramento dos sandboxes com `geminiclaw parar-sandboxes` e `geminiclaw parar-sandboxes --session <id>`.
 - Limpeza dos sandboxes que ficaram para trás ao receber SIGINT (os agentes rodam no processo).
 """
 
@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.cli.main import build_parser, main, show_sessions, stop_sessions
+from src.cli.main import build_parser, main, show_sandboxes, stop_sandboxes
 
 
 def _make_mock_container(
@@ -44,38 +44,38 @@ class TestCliSessionParser:
 
     def test_parser_session_flag(self):
         parser = build_parser()
-        args = parser.parse_args(["stop", "--session", "sess_xyz"])
-        assert args.prompt == "stop"
+        args = parser.parse_args(["parar-sandboxes", "--session", "sess_xyz"])
+        assert args.prompt == "parar-sandboxes"
         assert args.session == "sess_xyz"
 
-    def test_parser_sessions_prompt(self):
+    def test_parser_sandboxes_prompt(self):
         parser = build_parser()
-        args = parser.parse_args(["sessions"])
-        assert args.prompt == "sessions"
+        args = parser.parse_args(["sandboxes"])
+        assert args.prompt == "sandboxes"
         assert args.session is None
 
 
 @pytest.mark.unit
 class TestCliSessionsListing:
-    """Valida comando `geminiclaw sessions`."""
+    """Valida comando `geminiclaw sandboxes`."""
 
-    def test_show_sessions_empty(self, capsys):
+    def test_show_sandboxes_empty(self, capsys):
         mock_client = MagicMock()
         mock_client.containers.list.return_value = []
 
-        res = show_sessions(docker_client=mock_client)
+        res = show_sandboxes(docker_client=mock_client)
         assert res == []
         captured = capsys.readouterr().out
         assert "Nenhum sandbox de código ativo encontrado" in captured
 
-    def test_show_sessions_with_active_containers(self, capsys):
+    def test_show_sandboxes_with_active_containers(self, capsys):
         c1 = _make_mock_container("c111111111111111", "sess_001", "developer", "geminiclaw-developer")
         c2 = _make_mock_container("c222222222222222", "sess_002", "researcher", "geminiclaw-researcher")
 
         mock_client = MagicMock()
         mock_client.containers.list.return_value = [c1, c2]
 
-        res = show_sessions(docker_client=mock_client)
+        res = show_sandboxes(docker_client=mock_client)
         assert len(res) == 2
         assert res[0]["session_id"] == "sess_001"
         assert res[0]["agent_id"] == "developer"
@@ -92,7 +92,7 @@ class TestCliSessionsListing:
 
 @pytest.mark.unit
 class TestCliStopSessions:
-    """Valida comando `geminiclaw stop`."""
+    """Valida comando `geminiclaw parar-sandboxes`."""
 
     def test_stop_all_sessions(self, capsys):
         c1 = _make_mock_container("c111111111111111", "sess_001")
@@ -101,7 +101,7 @@ class TestCliStopSessions:
         mock_client = MagicMock()
         mock_client.containers.list.return_value = [c1, c2]
 
-        count = stop_sessions(session_id=None, docker_client=mock_client)
+        count = stop_sandboxes(session_id=None, docker_client=mock_client)
         assert count == 2
         c1.stop.assert_called_once_with(timeout=10)
         c2.stop.assert_called_once_with(timeout=10)
@@ -116,7 +116,7 @@ class TestCliStopSessions:
         mock_client = MagicMock()
         mock_client.containers.list.return_value = [c1, c2]
 
-        count = stop_sessions(session_id="sess_target", docker_client=mock_client)
+        count = stop_sandboxes(session_id="sess_target", docker_client=mock_client)
         assert count == 1
         c1.stop.assert_called_once_with(timeout=10)
         c2.stop.assert_not_called()
@@ -129,25 +129,25 @@ class TestCliStopSessions:
 class TestCliMainCommands:
     """Valida despache dos comandos sessions e stop na função main()."""
 
-    @patch("src.cli.main.show_sessions")
-    def test_main_sessions_command(self, mock_show):
-        with patch("sys.argv", ["geminiclaw", "sessions"]):
+    @patch("src.cli.main.show_sandboxes")
+    def test_main_sandboxes_command(self, mock_show):
+        with patch("sys.argv", ["geminiclaw", "sandboxes"]):
             with pytest.raises(SystemExit) as exc:
                 main()
             assert exc.value.code == 0
             mock_show.assert_called_once()
 
-    @patch("src.cli.main.stop_sessions")
-    def test_main_stop_all_command(self, mock_stop):
-        with patch("sys.argv", ["geminiclaw", "stop"]):
+    @patch("src.cli.main.stop_sandboxes")
+    def test_main_parar_sandboxes_command(self, mock_stop):
+        with patch("sys.argv", ["geminiclaw", "parar-sandboxes"]):
             with pytest.raises(SystemExit) as exc:
                 main()
             assert exc.value.code == 0
             mock_stop.assert_called_once_with(session_id=None)
 
-    @patch("src.cli.main.stop_sessions")
-    def test_main_stop_with_flag(self, mock_stop):
-        with patch("sys.argv", ["geminiclaw", "stop", "--session", "sess_123"]):
+    @patch("src.cli.main.stop_sandboxes")
+    def test_main_parar_sandboxes_with_flag(self, mock_stop):
+        with patch("sys.argv", ["geminiclaw", "parar-sandboxes", "--session", "sess_123"]):
             with pytest.raises(SystemExit) as exc:
                 main()
             assert exc.value.code == 0

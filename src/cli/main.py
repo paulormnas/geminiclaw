@@ -27,7 +27,7 @@ from src.cli.infrastructure import ensure_infrastructure
 from src.cli.repl import execute_prompt, interactive_mode
 from src.cli.reports import show_history, show_metrics, show_session_logs
 from src.cli.resume import continue_project, resume_session
-from src.cli.sandboxes import show_sessions, stop_sessions
+from src.cli.sandboxes import show_sandboxes, stop_sandboxes
 from src.config import (
     APP_NAME,
     OUTPUT_BASE_DIR,
@@ -54,8 +54,8 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
 {RESET}
 {BOLD}USO:{RESET}
   geminiclaw [opções] "<tarefa>"
-  geminiclaw sessions
-  geminiclaw stop [--session <id>]
+  geminiclaw sandboxes
+  geminiclaw parar-sandboxes [--session <id>]
   geminiclaw resume --session <id>   (retoma a partir do checkpoint, em nova sessão com orçamento novo)
   geminiclaw continue --project <id> (retoma a sessão mais recente do projeto)
   geminiclaw convert --session <id> --format latex|html|docx
@@ -104,8 +104,8 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
   geminiclaw "Reproduza a Tabela 3 do artigo"
   geminiclaw --mode semi "Análise exploratória do dataset"
   geminiclaw --mode auto "Execute sem interrupção"
-  geminiclaw sessions
-  geminiclaw stop --session 20260922_iris
+  geminiclaw sandboxes
+  geminiclaw parar-sandboxes --session 20260922_iris
   geminiclaw convert --session 20260922_iris --format latex
 
 {BOLD}RELATÓRIO:{RESET}
@@ -183,7 +183,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=str,
         metavar="SESSION_ID",
         default=None,
-        help="ID da sessão alvo para operações direcionadas (ex: stop --session <id>).",
+        help="ID da sessão alvo para operações direcionadas (ex: parar-sandboxes --session <id>).",
     )
     parser.add_argument(
         "--mode",
@@ -681,14 +681,14 @@ def main() -> None:
         if p_lower == "history":
             show_history()
             sys.exit(0)
-        elif p_lower == "sessions":
-            show_sessions()
+        elif p_lower == "sandboxes":
+            show_sandboxes()
             sys.exit(0)
-        elif p_lower == "stop" or p_lower.startswith("stop "):
+        elif p_lower == "parar-sandboxes" or p_lower.startswith("parar-sandboxes "):
             target_sess = args.session
             if not target_sess and " " in args.prompt.strip():
                 target_sess = args.prompt.strip().split(maxsplit=1)[1]
-            stop_sessions(session_id=target_sess)
+            stop_sandboxes(session_id=target_sess)
             sys.exit(0)
         elif p_lower == "clear-context":
             clear_context()

@@ -188,7 +188,7 @@ def open_domain_search() -> DomainSearch:
         RuntimeError: Se ``KNOWLEDGE_READER_DATABASE_URL`` não está configurada.
     """
     from src.knowledge.factory import open_raw_graph_store
-    from src.utils.qdrant import _make_client
+    from src.memory.qdrant import _make_client
 
     store = open_raw_graph_store()
     return DomainSearch(store, SemanticIndex(store, _make_client(config.QDRANT_URL)))

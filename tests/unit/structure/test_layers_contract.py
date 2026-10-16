@@ -63,12 +63,10 @@ def test_importacao_de_verificacao_de_tipos_nao_conta(tmp_path) -> None:
     assert "src.knowledge.resume_context" in output and "src.session.continuity" in output
 
 
-def test_contrato_sem_excecoes_de_egresso_e_llm() -> None:
-    """``v18.7-layer-cycles``: a exceção ``egress`` <-> ``llm`` saiu; resta só a de ``config`` (questão em aberto)."""
+def test_contrato_sem_excecoes() -> None:
+    """``v18.7-layer-cycles``: a lista de importações ignoradas do contrato está vazia."""
     options = tomllib.loads(importlinter_section())["tool"]["importlinter"]
-    ignored = options["contracts"][0]["ignore_imports"]
-    assert ignored == ["src.config -> src.utils.node_id"]
-    assert not any("llm" in item or "egress" in item for item in ignored)
+    assert options["contracts"][0]["ignore_imports"] == []
     assert run_lint_imports(ROOT / "pyproject.toml").returncode == 0
 
 

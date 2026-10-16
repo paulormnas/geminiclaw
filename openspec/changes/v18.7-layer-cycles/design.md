@@ -71,4 +71,4 @@ Parecer do Analista de Segurança (2026-10-15): **Aprovado com ressalvas.** A di
 
 ## 7. Questões em aberto
 
-- **Ciclo `config` ↔ `utils` (achado em `v18.7-source-layout`, 2026-10-15).** `src/config.py` importa `src/utils/node_id.py` dentro de função e `src/utils/qdrant.py` importa `src.config`. Não há ciclo entre módulos, só entre pacotes, e o contrato de `v18.7-source-layout` o carrega como exceção (`src.config -> src.utils.node_id`). Como esta mudança deve deixar a lista de exceções vazia, o Arquiteto precisa decidir como desfazê-lo (por exemplo, o cliente do Qdrant receber a URL por parâmetro, ou sair de `utils`) e acrescentar a tarefa; `utils/qdrant.py` já existia antes da reorganização.
+- **Ciclo `config` ↔ `utils` (resolvida em 2026-10-15).** `src/config.py` importa `src/utils/node_id.py` dentro de função e `src/utils/qdrant.py` importava `src.config`. Decisão do pesquisador: arquivos de conexão com banco não ficam em `utils` quando há pacote mais descritivo; o cliente do Qdrant foi para `src/memory/qdrant.py`, e `utils` passou para baixo de `config` no contrato. A lista de exceções ficou vazia.

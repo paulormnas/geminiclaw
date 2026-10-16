@@ -94,6 +94,7 @@ def mock_db_connection(request):
         or "test_input_document_index_pg.py" in path
         or f"{os.sep}tests{os.sep}integration{os.sep}provenance_pg{os.sep}" in path
         or f"{os.sep}tests{os.sep}integration{os.sep}knowledge{os.sep}" in path
+        or f"{os.sep}tests{os.sep}integration{os.sep}background_sessions{os.sep}" in path
     ):
         yield
         return

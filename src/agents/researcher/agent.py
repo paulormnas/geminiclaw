@@ -116,6 +116,10 @@ Quando solicitado a gerar um plano (ou quando receber 'MODO: PLAN'):
      baseline, dispensa o limiar)
    - "expected_artifacts": list[str] (nomes dos arquivos a serem gerados em /outputs/)
    - "depends_on": list[str] (nomes de subtarefas pré-requisito)
+   - "discrimina": (opcional; só quando o objetivo do Problema é de discriminação) lista com as referências
+     (`h1`, `h2`...) ou ids das hipóteses concorrentes que o resultado desta subtarefa permite distinguir
+   - "experimento_fisico": (opcional) true quando distinguir as concorrentes exige bancada ou equipamento que o
+     sandbox não tem; essa subtarefa não é executada e vira pedido ao pesquisador
 5. Retorne a lista de subtarefas em formato JSON válido.
 
 REGRA DE DÚVIDA: Antes de gerar o plano, se o contexto disponível tiver uma ambiguidade BLOQUEANTE

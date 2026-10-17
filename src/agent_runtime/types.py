@@ -47,6 +47,12 @@ class AgentTask:
     papel_fonte: str = ""
     prepara_ids: list[str] | None = None  # ``None`` = não calculado; ``[]`` = preparação ligada ao Problema
     hypothesis_origin: str = ""
+    # v18.7-exploration-limits (objetivo ``discriminacao``): ids das concorrentes que a subtarefa distingue, marca de
+    # experimento que exige bancada ou equipamento fora do sandbox e as predições das concorrentes (preenchidas pelo
+    # laço) que o Validator confere na revisão.
+    discrimina: list[str] = field(default_factory=list)
+    experimento_fisico: bool = False
+    concorrentes_contexto: list[dict[str, str]] = field(default_factory=list)
     # v18.5-egress-gate: o ``prompt`` foi escrito por um modelo que aceita dados brutos (contaminado, ADR 019 §3.8);
     # o despacho o envolve na marca de contaminação ao montar o prompt da execução.
     prompt_tainted: bool = False

@@ -232,6 +232,7 @@ class SubtaskInput:
     review_outcome: str | None = None
     papel: str | None = None
     prepara_ids: list[str] | None = None
+    conferencia_predicoes: dict[str, str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serializa para o evento da fila."""
@@ -271,7 +272,18 @@ class SubtaskInput:
             review_outcome=_opt_text(data.get("review_outcome"), 32),
             papel=data.get("papel") if data.get("papel") in schema.PAPEIS_EXPERIMENTO else None,
             prepara_ids=_opt_id_list(data.get("prepara_ids")),
+            conferencia_predicoes=_opt_predictions(data.get("conferencia_predicoes")),
         )
+
+
+def _opt_predictions(value: object) -> dict[str, str] | None:
+    """``conferencia_predicoes`` da fila (arquivo não confiável): só pares id -> conferência válida."""
+    if not isinstance(value, dict):
+        return None
+    pairs = {
+        str(k)[:128]: v for k, v in value.items() if isinstance(k, str) and v in schema.CONFERENCIAS_PREDICAO
+    }
+    return pairs or None
 
 
 def _text_field(data: dict[str, Any], key: str, limit: int, *, required: bool = True) -> str:
@@ -869,6 +881,8 @@ class _Writer:
         }
         if sub.papel in schema.PAPEIS_EXPERIMENTO:
             props["papel"] = sub.papel
+        if sub.conferencia_predicoes:
+            props["conferencia_predicoes"] = dict(sub.conferencia_predicoes)
         if self._is_negative(sub):
             props["criterio_plano_atendido"] = False
         elif sub.review_status == "pass" and sub.review_verified and _has_quantitative(sub.validation_criteria):

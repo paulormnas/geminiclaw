@@ -54,6 +54,7 @@ async def ingest_subtask(
             hypothesis_id=task.hypothesis_id or None,
             papel=task.papel_decidido or None,
             prepara_ids=task.prepara_ids if task.papel_decidido == "preparacao" else None,
+            conferencia_predicoes=_prediction_checks(task, review),
         )
         applied = await asyncio.to_thread(ingestor.subtask, sub)
         _forward_notices(orchestrator, ingestor, master_session_id)
@@ -63,6 +64,17 @@ async def ingest_subtask(
             await asyncio.to_thread(orchestrator.knowledge_after_subtask, master_session_id, subtarefa_id)
     except Exception as exc:  # noqa: BLE001 - a ingestão nunca derruba a subtarefa
         logger.warning("Falha ao ingerir fatos da subtarefa", extra={"error": type(exc).__name__})
+
+
+def _prediction_checks(task: "AgentTask", review: Optional[dict[str, Any]]) -> Optional[dict[str, str]]:
+    """Conferência das predições da subtarefa que discrimina concorrentes (design §5.2); ``None`` nas demais."""
+    from src.knowledge.objective import Competitor, normalize_predictions
+
+    discrimina = tuple(task.discrimina or ())
+    if not discrimina or not task.concorrentes_contexto:
+        return None
+    rivals = [Competitor(str(r.get("hipotese_id")), r.get("predicao")) for r in task.concorrentes_contexto]
+    return normalize_predictions(rivals, discrimina, (review or {}).get("predicoes")) or None
 
 
 def _forward_notices(orchestrator: "Orchestrator", ingestor: Any, master_session_id: str) -> None:

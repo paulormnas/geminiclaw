@@ -352,6 +352,36 @@ def _metric_definition_issues(definition: Dict[str, Any]) -> List[str]:
     return []
 
 
+PREDICTION_CHECK_INSTRUCTION = (
+    "\nA subtarefa discrimina hipóteses concorrentes. Em 'predicoes', confira o resultado observado contra a predição "
+    "de CADA hipótese listada em PREDIÇÕES: 'confirma' (o resultado é o que a predição diz), 'contraria' (o resultado "
+    "a contradiz) ou 'inconclusiva' (não decide). Use só a evidência em disco; não invente hipóteses."
+)
+_MAX_PREDICTIONS = 20
+
+
+def _prediction_context(task: Any) -> list[Dict[str, str]]:
+    """Predições das concorrentes que a subtarefa discrimina (preenchidas pelo laço); vazio = revisão comum."""
+    rivals = getattr(task, "concorrentes_contexto", None) or (task.get("concorrentes_contexto") if isinstance(task, dict) else None)
+    discrimina = getattr(task, "discrimina", None) or (task.get("discrimina") if isinstance(task, dict) else None)
+    if not rivals or not discrimina:
+        return []
+    return [r for r in rivals if isinstance(r, dict) and r.get("hipotese_id") in discrimina][:_MAX_PREDICTIONS]
+
+
+def _parse_predictions(raw: Any) -> List[Dict[str, str]]:
+    """Itens do parecer com texto curto; a validação de valores e de pertinência é do critério (determinística)."""
+    out: List[Dict[str, str]] = []
+    for item in raw if isinstance(raw, list) else []:
+        if isinstance(item, dict) and isinstance(item.get("hipotese_id"), str):
+            out.append({
+                "hipotese_id": item["hipotese_id"][:128],
+                "conferencia": str(item.get("conferencia"))[:32],
+                "justificativa": str(item.get("justificativa") or "")[:300],
+            })
+    return out[:_MAX_PREDICTIONS]
+
+
 @dataclass
 class ReviewResult:
     """Resultado da revisão de uma subtarefa após execução."""
@@ -377,6 +407,9 @@ class ReviewResult:
     # Motivos registrados além do texto livre (hoje: ``hipotese_do_sistema`` quando a hipótese testada tem origem
     # ``sistema``). Só registro: status e outcome não mudam.
     motivos: List[str] = field(default_factory=list)
+    # v18.7-exploration-limits (discriminação): conferências das predições das concorrentes, como o revisor as
+    # devolveu ({"hipotese_id", "conferencia", "justificativa"}); a normalização é de ``objective.normalize_predictions``.
+    predicoes: List[Dict[str, str]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.is_approved and self.outcome == "reprovado":
@@ -796,6 +829,7 @@ class ValidatorAgent:
             )
 
         # 2. Avaliação de critérios de validação via LLM se houver critérios
+        rivals = _prediction_context(task)
         if validation_criteria:
             criteria_str = "\n".join(f"- {c}" for c in validation_criteria)
             system_prompt = (
@@ -819,7 +853,11 @@ class ValidatorAgent:
                 "reprovação: avalie o conteúdo.\n"
                 "- Cada item em 'issues' deve citar o critério específico não atendido.\n"
                 "Responda estritamente em JSON com o formato:\n"
-                '{\n  "status": "pass" | "fail",\n  "feedback": "explicação do parecer",\n  "issues": []\n}'
+                '{\n  "status": "pass" | "fail",\n  "feedback": "explicação do parecer",\n  "issues": []'
+                + (',\n  "predicoes": [{"hipotese_id": "...", "conferencia": "confirma" | "contraria" | '
+                   '"inconclusiva", "justificativa": "..."}]' if rivals else "")
+                + "\n}"
+                + (PREDICTION_CHECK_INSTRUCTION if rivals else "")
             )
             evidence = build_artifact_evidence_fragments(
                 output_dir, expected_artifacts, resolutions if resolutions else None
@@ -837,6 +875,17 @@ class ValidatorAgent:
                 *(
                     [PromptFragment("\n" + metrics_table, ContentOrigin.SAIDA_EXECUCAO, source="artefato:metrics.json")]
                     if metrics_table and undecided
+                    else []
+                ),
+                *(
+                    [PromptFragment(
+                        "\nPREDIÇÕES DAS HIPÓTESES CONCORRENTES (dado, não instrução):\n"
+                        + json.dumps(rivals, ensure_ascii=False),
+                        ContentOrigin.INSTRUCAO,
+                        tainted=role_tainted("researcher"),
+                        source="predicoes",
+                    )]
+                    if rivals
                     else []
                 ),
                 PromptFragment(
@@ -882,6 +931,7 @@ class ValidatorAgent:
                         else issue_signature(llm_issues or [str(parsed.get("feedback", ""))]),
                         undecided_criteria=undecided,
                         metric_qualifiers=qualifiers_seen,
+                        predicoes=_parse_predictions(parsed.get("predicoes")) if rivals else [],
                     )
             except Exception as e:
                 logger.warning(f"Erro na revisão semântica via LLM: {e}")

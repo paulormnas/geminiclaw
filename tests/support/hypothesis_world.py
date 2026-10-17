@@ -33,7 +33,8 @@ class HypothesisWorld:
 
     def __init__(self, *, mode: str = "auto", index: bool = False, alvo: float | None = 0.8,
                  delta_min: float = 0.05, session_id: str = "sessao-h", approve_metric: bool = True,
-                 metrica: str = "R2", sinonimos: tuple[str, ...] = ()) -> None:
+                 metrica: str = "R2", sinonimos: tuple[str, ...] = (),
+                 objetivo_do_pesquisador: bool = True) -> None:
         self.raw = InMemoryGraphStore()
         self.provider: ControlledEmbeddingProvider | None = None
         self.index: SemanticIndex | None = None
@@ -50,6 +51,11 @@ class HypothesisWorld:
         )
         self.problem = get_active_problem(self.store, self.pid)
         assert self.problem is not None
+        if not objetivo_do_pesquisador:  # Problema no formato anterior: sem ``tipo`` nem ``definido_por``
+            legacy = {k: v for k, v in self.problem.properties["criterio_sucesso"].items()
+                      if k not in ("tipo", "definido_por", "sentido")}
+            self.store.update_node(self.problem.id, {"criterio_sucesso": legacy}, actor=PESQUISADOR)
+            self.problem = get_active_problem(self.store, self.pid)
         if approve_metric:  # v18.6-hypothesis-closure §4: sem Metrica aprovada o veredito é indisponível
             for metric in self.store.find_nodes("Metrica", {"status": "candidato"}, limit=10):
                 approve_term(self.store, metric.id)

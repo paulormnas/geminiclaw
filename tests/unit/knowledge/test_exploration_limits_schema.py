@@ -112,7 +112,8 @@ def test_orquestrador_substitui_o_objetivo_do_pesquisador(world):
 
 
 def test_objetivo_do_agente_no_auto(world):
-    """Scenario: Objetivo do agente no auto."""
+    """Scenario: Objetivo do agente no auto (Problema confirmado sem objetivo do pesquisador)."""
+    _set_criterion(world, {"metrica": "R2"})
     _set_criterion(world, {"tipo": "cobertura", "definido_por": "agente"}, actor=ORQ)
     assert _criterion(world)["definido_por"] == "agente"
 

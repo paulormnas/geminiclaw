@@ -21,7 +21,9 @@ from src.knowledge import projects
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.graph_store import GraphStore
 from src.knowledge.problem import (
+    CONCORRENTES_FIELD,
     EDITABLE_FIELDS,
+    FRONTEIRA_RECUSADA,
     ProblemDraft,
     ProblemDraftError,
     apply_edit,
@@ -113,15 +115,26 @@ def resolve_project(
 
 def _format_draft(draft: ProblemDraft) -> str:
     dados = "; ".join(f"{k}={v}" for k, v in draft.caracteristicas_dados.items()) or "-"
+    kind = draft.effective_tipo
     delta = draft.delta_min if draft.delta_min is not None else "NÃO DEFINIDO"
+    if kind in (None, "limiar"):
+        objetivo = (
+            f"Métrica: {draft.metrica or '-'} | alvo: {draft.alvo if draft.alvo is not None else '-'}"
+            f" | delta_min: {delta} | baseline: {draft.baseline_descricao or '-'}\n"
+        )
+    elif kind == "discriminacao":
+        rivals = "\n".join(f"  - {c.enunciado} => {c.predicao}" for c in draft.concorrentes) or "  (nenhuma)"
+        objetivo = f"Concorrentes:\n{rivals}\n"
+    else:
+        objetivo = ""
     return (
         "\n--- Rascunho do Problema ---\n"
         f"Título: {draft.titulo}\n"
         f"Classe: {draft.classe or '-'}\n"
         f"Domínios: {'; '.join(draft.dominios) or '-'}\n"
         f"Dados: {dados}\n"
-        f"Métrica: {draft.metrica or '-'} | alvo: {draft.alvo if draft.alvo is not None else '-'}"
-        f" | delta_min: {delta} | baseline: {draft.baseline_descricao or '-'}\n"
+        f"Objetivo: {kind or 'NÃO DEFINIDO'} | ao atingir: {draft.ao_atingir_objetivo or 'padrão do modo'}\n"
+        f"{objetivo}"
         f"Resumo:\n{draft.resumo}\n"
         "----------------------------"
     )
@@ -143,6 +156,53 @@ def _ask_required_number(input_fn: Callable[[str], str], output_fn: Callable[[st
     return None
 
 
+_TIPOS_ATALHO = {
+    "l": "limiar", "limiar": "limiar", "d": "discriminacao", "discriminacao": "discriminacao",
+    "c": "cobertura", "cobertura": "cobertura", "f": "fronteira", "fronteira": "fronteira",
+}
+
+
+def _complete_objective(
+    draft: ProblemDraft,
+    input_fn: Callable[[str], str],
+    output_fn: Callable[[str], Any],
+    *,
+    objective_optional: bool,
+) -> ProblemDraft | None:
+    """Pede o que falta ao objetivo para o tipo escolhido; ``None`` volta ao menu (resposta vazia ou recusa)."""
+    if draft.effective_tipo is None and not objective_optional:
+        answer = input_fn("Tipo do objetivo ([l]iminar, [d]iscriminacao, [c]obertura; vazio volta): ").strip().lower()
+        if not answer:
+            return None
+        kind = _TIPOS_ATALHO.get(answer)
+        if kind is None:
+            output_fn("  Tipo inválido.")
+            return None
+        draft = apply_edit(draft, "tipo", kind)
+    kind = draft.effective_tipo
+    if kind == "fronteira":
+        output_fn(f"  {FRONTEIRA_RECUSADA.capitalize()}.")
+        return None
+    if kind == "limiar":
+        if not draft.metrica:
+            output_fn("  A métrica do critério de sucesso é obrigatória; edite o campo 'metrica'.")
+            return None
+        if draft.missing_delta_min:
+            value = _ask_required_number(input_fn, output_fn, "delta_min")
+            if value is None:
+                return None
+            draft = apply_edit(draft, "delta_min", str(value))
+    elif kind == "discriminacao" and len(draft.concorrentes) < 2:
+        raw = input_fn("Concorrentes ('enunciado :: predição' separados por ';', ao menos 2; vazio volta): ")
+        if not raw.strip():
+            return None
+        draft = apply_edit(draft, CONCORRENTES_FIELD, raw)
+        if len(draft.concorrentes) < 2:
+            output_fn("  Informe ao menos duas hipóteses concorrentes, cada uma com predição.")
+            return None
+    return draft
+
+
 async def ensure_confirmed_problem(
     store: GraphStore,
     projeto_id: str,
@@ -155,8 +215,13 @@ async def ensure_confirmed_problem(
     output_fn: Callable[[str], Any] = print,
     researcher_model: str | None = None,
     gate: TerminalGate | None = None,
+    objective_optional: bool = False,
 ) -> projects.ProjectDetail:
     """Garante um ``Problema`` confirmado antes do planejamento; pede a confirmação se faltar.
+
+    Args:
+        objective_optional: Modo ``auto``: o pesquisador pode confirmar sem objetivo (o Researcher o propõe no
+            primeiro plano). Nos demais modos o objetivo é obrigatório na confirmação.
 
     Returns:
         O ``ProjectDetail`` já com o problema confirmado.
@@ -186,8 +251,8 @@ async def ensure_confirmed_problem(
             if choice in ("q", "sair", "cancelar"):
                 raise ProjectFlowError("Confirmação do problema cancelada; a sessão não foi iniciada.")
             if choice in ("e", "editar"):
-                campo = input_fn(f"Campo ({', '.join(EDITABLE_FIELDS)}): ").strip().lower()
-                valor = input_fn(f"Novo valor de {campo} (domínios separados por ';'): ")
+                campo = input_fn(f"Campo ({', '.join((*EDITABLE_FIELDS, CONCORRENTES_FIELD))}): ").strip().lower()
+                valor = input_fn(f"Novo valor de {campo} (domínios e concorrentes separados por ';'): ")
                 try:
                     draft = apply_edit(draft, campo, valor)
                 except ProblemDraftError as exc:
@@ -203,14 +268,10 @@ async def ensure_confirmed_problem(
                 draft = await drafter(prompt, context, detail, comentario)
                 continue
             if choice in ("c", "confirmar"):
-                if draft.missing_delta_min:
-                    value = _ask_required_number(input_fn, output_fn, "delta_min")
-                    if value is None:
-                        continue
-                    draft = apply_edit(draft, "delta_min", str(value))
-                if not draft.metrica:
-                    output_fn("  A métrica do critério de sucesso é obrigatória; edite o campo 'metrica'.")
+                completed = _complete_objective(draft, input_fn, output_fn, objective_optional=objective_optional)
+                if completed is None:
                     continue
+                draft = completed
                 # Gate de decisão reservada: a confirmação só vale com a ação explícita do pesquisador neste terminal.
                 active_gate = gate or terminal_gate()
                 pedido = active_gate.resolve("confirmar_problema", projeto_id, source=Source.TERMINAL, approved=True)
@@ -220,6 +281,7 @@ async def ensure_confirmed_problem(
                 try:
                     projects.confirm_problem(
                         store, projeto_id, draft, researcher_model=researcher_model, sentido_metrica=sentido,
+                        objective_optional=objective_optional,
                     )
                 except projects.MetricSentidoRequired:
                     answer = input_fn("Métrica nova. Sentido ([m]aior_melhor / [n] menor_melhor): ").strip().lower()
@@ -256,7 +318,9 @@ class ProjectBinder:
         config_dir: Path | None = None,
         researcher_model: str | None = None,
         graph_optional: bool | None = None,
+        objective_optional: bool = False,
     ) -> None:
+        self._objective_optional = objective_optional
         self._store_factory = store_factory
         self._project_arg = project_arg
         self._drafter = drafter
@@ -321,6 +385,7 @@ class ProjectBinder:
                 store, projeto_id, prompt, context,
                 drafter=drafter, interactive=interactive, input_fn=self._input_fn,
                 output_fn=self._output_fn, researcher_model=self._researcher_model,
+                objective_optional=self._objective_optional,
             )
         except ProjectFlowError:
             raise

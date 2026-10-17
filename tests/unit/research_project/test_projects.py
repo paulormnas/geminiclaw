@@ -112,7 +112,7 @@ class TestConfirmacao:
         assert sum(1 for e in edges if e.rel_type == "NO_DOMINIO") == 2
         audits = [a for a in store.audit_log if a["node_id"] == problem_id]
         assert audits and audits[-1]["actor"] == "pesquisador"
-        assert audits[-1]["changes"] == {"status": "confirmado"}
+        assert audits[-1]["changes"]["status"] == "confirmado"
         assert projects.get_active_problem(store, pid).id == problem_id
 
     def test_metrica_resolvida_no_criterio(self, store, pid) -> None:

@@ -29,12 +29,25 @@ MAX_CARACTERISTICA_VALOR = 200
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
 EDITABLE_FIELDS: tuple[str, ...] = (
-    "titulo", "resumo", "classe", "dominios", "metrica", "alvo", "delta_min",
+    "titulo", "resumo", "classe", "dominios", "tipo", "metrica", "alvo", "delta_min", "ao_atingir_objetivo",
 )
+# ``concorrentes`` tem sintaxe própria (``enunciado :: predicao`` separados por ``;``), por isso fica fora da lista.
+CONCORRENTES_FIELD = "concorrentes"
+MAX_CONCORRENTES = 10
+MAX_ENUNCIADO_CONCORRENTE = 500
+FRONTEIRA_RECUSADA = "tipo `fronteira` ainda não suportado; será especificado com a V19 (equipamentos)"
 
 
 class ProblemDraftError(ValueError):
     """Rascunho de problema inválido (mensagem acionável, sem eco de conteúdo do LLM)."""
+
+
+@dataclass(frozen=True)
+class Concorrente:
+    """Hipótese concorrente do objetivo de discriminação: o enunciado e o que ela prediz."""
+
+    enunciado: str
+    predicao: str
 
 
 @dataclass(frozen=True)
@@ -51,6 +64,10 @@ class ProblemDraft:
         alvo: Valor-alvo da métrica, ou ``None``.
         delta_min: Menor melhoria relevante sobre o baseline; ``None`` até o pesquisador definir.
         baseline_descricao: Descrição do baseline de comparação; opcional.
+        tipo: Tipo do objetivo (``limiar``, ``discriminacao``, ``cobertura``, ``fronteira``); ``None`` = não definido.
+        ao_atingir_objetivo: Política ao atingir o objetivo (``parar``, ``perguntar``, ``continuar``); só o
+            pesquisador a define.
+        concorrentes: Hipóteses concorrentes do tipo ``discriminacao``.
     """
 
     titulo: str
@@ -62,20 +79,66 @@ class ProblemDraft:
     alvo: float | None = None
     delta_min: float | None = None
     baseline_descricao: str | None = None
+    tipo: str | None = None
+    ao_atingir_objetivo: str | None = None
+    concorrentes: tuple[Concorrente, ...] = ()
+
+    @property
+    def effective_tipo(self) -> str | None:
+        """Tipo declarado; sem ele, ``limiar`` quando há campos de limiar (rascunho no formato anterior)."""
+        if self.tipo:
+            return self.tipo
+        if self.metrica or self.alvo is not None or self.delta_min is not None:
+            return "limiar"
+        return None
 
     @property
     def missing_delta_min(self) -> bool:
-        """True quando ``delta_min`` ainda não foi definido (obrigatório para confirmar)."""
-        return self.delta_min is None
+        """True quando o tipo é ``limiar`` e ``delta_min`` ainda não foi definido (obrigatório para confirmar)."""
+        return self.effective_tipo == "limiar" and self.delta_min is None
+
+    def objective_gaps(self, *, objective_optional: bool = False) -> list[str]:
+        """O que falta para o objetivo poder ser confirmado (vazio = completo).
+
+        Args:
+            objective_optional: No modo ``auto`` o pesquisador pode confirmar sem objetivo; o Researcher o propõe
+                no primeiro plano.
+        """
+        kind = self.effective_tipo
+        if kind is None:
+            return [] if objective_optional else ["tipo do objetivo (limiar, discriminacao ou cobertura)"]
+        if kind == "fronteira":
+            return [FRONTEIRA_RECUSADA]
+        if kind == "limiar":
+            gaps = []
+            if not self.metrica:
+                gaps.append("metrica")
+            if self.delta_min is None:
+                gaps.append("delta_min")
+            return gaps
+        if kind == "discriminacao" and len(self.concorrentes) < 2:
+            return ["ao menos duas hipóteses concorrentes, cada uma com predição"]
+        return []
 
     def criterio_sucesso(self) -> dict[str, Any]:
-        """Monta o dicionário ``criterio_sucesso`` do nó ``Problema``."""
-        return {
-            "metrica": self.metrica,
-            "alvo": self.alvo,
-            "delta_min": self.delta_min,
-            "baseline_descricao": self.baseline_descricao,
-        }
+        """Monta o dicionário ``criterio_sucesso`` do nó ``Problema`` (campos do tipo; design §4.1)."""
+        kind = self.effective_tipo
+        criterio: dict[str, Any] = {}
+        if kind is not None:
+            criterio["tipo"] = kind
+        if self.metrica is not None or kind in (None, "limiar"):
+            criterio["metrica"] = self.metrica
+        if kind in (None, "limiar"):
+            criterio["alvo"] = self.alvo
+            criterio["delta_min"] = self.delta_min
+        criterio["baseline_descricao"] = self.baseline_descricao
+        if kind == "discriminacao":
+            criterio["hipoteses_concorrentes"] = [
+                {"enunciado": c.enunciado, "predicao": c.predicao} for c in self.concorrentes
+            ]
+        if self.ao_atingir_objetivo is not None:
+            criterio["ao_atingir_objetivo"] = self.ao_atingir_objetivo
+        return criterio
 
 
 def clean_text(
@@ -128,6 +191,61 @@ def parse_number(value: Any, name: str, *, positive: bool = False) -> float | No
     if positive and number <= 0:
         raise ProblemDraftError(f"Campo '{name}' deve ser maior que zero.")
     return number
+
+
+def _parse_tipo(value: Any) -> str | None:
+    from src.knowledge import schema
+
+    text = clean_text(value, "criterio_sucesso.tipo", 32, single_line=True)
+    if text is not None and text not in schema.TIPOS_OBJETIVO:
+        raise ProblemDraftError(f"Campo 'criterio_sucesso.tipo' deve ser um de: {', '.join(schema.TIPOS_OBJETIVO)}.")
+    return text
+
+
+def _parse_politica(value: Any) -> str | None:
+    from src.knowledge import schema
+
+    text = clean_text(value, "ao_atingir_objetivo", 32, single_line=True)
+    if text is not None and text not in schema.POLITICAS_OBJETIVO:
+        raise ProblemDraftError(f"Campo 'ao_atingir_objetivo' deve ser um de: {', '.join(schema.POLITICAS_OBJETIVO)}.")
+    return text
+
+
+def _parse_concorrentes(value: Any) -> tuple[Concorrente, ...]:
+    from src import config
+
+    if value is None:
+        return ()
+    if not isinstance(value, (list, tuple)):
+        raise ProblemDraftError("Campo 'hipoteses_concorrentes' deve ser uma lista.")
+    if len(value) > MAX_CONCORRENTES:
+        raise ProblemDraftError(f"Campo 'hipoteses_concorrentes' aceita no máximo {MAX_CONCORRENTES} itens.")
+    result: list[Concorrente] = []
+    for item in value:
+        if not isinstance(item, dict):
+            raise ProblemDraftError("Cada item de 'hipoteses_concorrentes' deve ser um objeto.")
+        result.append(
+            Concorrente(
+                clean_text(item.get("enunciado"), "hipoteses_concorrentes.enunciado", MAX_ENUNCIADO_CONCORRENTE,
+                           required=True, single_line=True),  # type: ignore[arg-type]
+                clean_text(item.get("predicao"), "hipoteses_concorrentes.predicao", config.HYPOTHESIS_TEXT_MAX_CHARS,
+                           required=True),  # type: ignore[arg-type]
+            )
+        )
+    return tuple(result)
+
+
+def parse_concorrentes_text(value: str) -> tuple[Concorrente, ...]:
+    """Edição de ``concorrentes`` pelo pesquisador: itens ``enunciado :: predicao`` separados por ``;``."""
+    items = []
+    for part in value.split(";"):
+        if not part.strip():
+            continue
+        enunciado, sep, predicao = part.partition("::")
+        if not sep:
+            raise ProblemDraftError("Cada concorrente deve ser 'enunciado :: predicao'.")
+        items.append({"enunciado": enunciado, "predicao": predicao})
+    return _parse_concorrentes(items)
 
 
 def _parse_dominios(value: Any) -> tuple[str, ...]:
@@ -198,6 +316,9 @@ def parse_problem_draft(raw: Any) -> ProblemDraft:
         baseline_descricao=clean_text(
             criterio.get("baseline_descricao"), "criterio_sucesso.baseline_descricao", MAX_BASELINE
         ),
+        tipo=_parse_tipo(criterio.get("tipo")),
+        # A política ao atingir o objetivo é do pesquisador: o valor do rascunho do LLM é descartado (design §4.1).
+        concorrentes=_parse_concorrentes(criterio.get("hipoteses_concorrentes")),
     )
 
 
@@ -212,8 +333,9 @@ def apply_edit(draft: ProblemDraft, campo: str, valor: str) -> ProblemDraft:
     Raises:
         ProblemDraftError: Campo não editável ou valor inválido.
     """
-    if campo not in EDITABLE_FIELDS:
-        raise ProblemDraftError(f"Campo '{campo}' não é editável; use um de: {', '.join(EDITABLE_FIELDS)}.")
+    editable = (*EDITABLE_FIELDS, CONCORRENTES_FIELD)
+    if campo not in editable:
+        raise ProblemDraftError(f"Campo '{campo}' não é editável; use um de: {', '.join(editable)}.")
     if campo == "titulo":
         return replace(draft, titulo=clean_text(valor, "titulo", MAX_TITULO, required=True, single_line=True))  # type: ignore[arg-type]
     if campo == "resumo":
@@ -222,6 +344,12 @@ def apply_edit(draft: ProblemDraft, campo: str, valor: str) -> ProblemDraft:
         return replace(draft, classe=clean_text(valor, "classe", MAX_CLASSE))
     if campo == "dominios":
         return replace(draft, dominios=_parse_dominios([p for p in valor.split(";")]))
+    if campo == "tipo":
+        return replace(draft, tipo=_parse_tipo(valor))
+    if campo == "ao_atingir_objetivo":
+        return replace(draft, ao_atingir_objetivo=_parse_politica(valor))
+    if campo == CONCORRENTES_FIELD:
+        return replace(draft, concorrentes=parse_concorrentes_text(valor))
     if campo == "metrica":
         return replace(draft, metrica=clean_text(valor, "metrica", MAX_METRICA))
     if campo == "alvo":

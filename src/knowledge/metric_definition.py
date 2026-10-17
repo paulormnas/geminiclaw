@@ -218,8 +218,10 @@ def apply_validated_metrics(
     if principal is None or principal.metric_id is None:
         return result
     result.principal_id = principal.metric_id
-    if problema is None or current_approved:
-        return result  # a métrica do Problema já valia (pesquisador ou Validator): nada a mudar
+    if problema is None or current_approved or criterio.get("definido_por") == "pesquisador":
+        # A métrica do Problema já valia (pesquisador ou Validator): nada a mudar. O objetivo do pesquisador é
+        # protegido no grafo (ADR 021 §5.2); o orquestrador não o reescreve.
+        return result
     principal_decl = next(d for d, o in zip(decls, result.outcomes) if o is principal)
     same_metric = current is not None and current.id == principal.metric_id
     node = store.get_node(principal.metric_id)

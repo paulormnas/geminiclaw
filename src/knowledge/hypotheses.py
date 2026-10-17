@@ -43,6 +43,7 @@ from src.knowledge.ingestion import (
     _Writer,
 )
 from src.knowledge.metric_definition import MetricDecl, parse_metrics
+from src.knowledge.objective_definition import ObjectiveDecl, parse_objective
 from src.knowledge.projects import get_active_problem
 from src.logger import get_logger
 from src.utils.normalization import clean_free_text, normalize_domain_term
@@ -73,7 +74,7 @@ _MAX_CONSULTED = 50
 _MAX_SIMILAR = 5
 _LEXICAL_MIN_OVERLAP = 0.5  # sem índice semântico: fração mínima de termos do menor enunciado em comum
 _MAX_DISCARDED = 10
-_PLAN_DATA_KEYS = ("hipoteses", "decisoes", "respostas_sugestoes", "metricas")
+_PLAN_DATA_KEYS = ("hipoteses", "decisoes", "respostas_sugestoes", "metricas", "objetivo")
 _AUDIT_SCAN = 1000
 
 
@@ -156,6 +157,8 @@ class PlanExtras:
     descartados_do_plano: int = 0  # entradas inválidas ignoradas (só contagem, para telemetria)
     # v18.6-auto-metrics-and-stop-reasons: métricas definidas no plano (modo auto); gravadas só após a validação.
     metricas: tuple[MetricDecl, ...] = ()
+    # v18.7-exploration-limits: objetivo proposto no plano; gravado (modo auto) só depois da aprovação do Validator.
+    objetivo: ObjectiveDecl | None = None
 
     @property
     def vazio(self) -> bool:
@@ -327,7 +330,10 @@ def split_plan(raw: Any) -> tuple[Any, PlanExtras]:
     decs, d2 = _parse_decisions(raw.get("decisoes"))
     replies, d3 = _parse_replies(raw.get("respostas_sugestoes"))
     metrics, d4 = parse_metrics(raw.get("metricas")) if "metricas" in raw else ([], 0)
-    return subtasks, PlanExtras(tuple(hips), tuple(decs), tuple(replies), True, d1 + d2 + d3 + d4, tuple(metrics))
+    objective = parse_objective(raw.get("objetivo"))
+    return subtasks, PlanExtras(
+        tuple(hips), tuple(decs), tuple(replies), True, d1 + d2 + d3 + d4, tuple(metrics), objective
+    )
 
 
 def legacy_hypotheses(tasks: list[dict[str, Any]]) -> tuple[HypothesisDecl, ...]:

@@ -340,6 +340,9 @@ class Checkpoint:
     # v18.7-hypothesis-linking (design §4.4): hipótese do sistema -> subtarefas de origem no plano corrente; sobrevive
     # à retomada para a hipótese sem tentativa cuja subtarefa saiu do plano poder ser abandonada pelo sistema.
     hipoteses_do_sistema: dict[str, list[str]] = field(default_factory=dict)
+    # v18.7-exploration-limits: estado do objetivo (memória do critério, atingimento, política efetiva, desfechos
+    # relatados); só números, ids e códigos.
+    exploracao_estado: dict[str, Any] = field(default_factory=dict)
 
     def find(self, task_name: str) -> SubtaskState | None:
         """Subtarefa pelo nome, ou ``None``."""
@@ -374,6 +377,7 @@ class Checkpoint:
             "provenance_pending": list(self.provenance_pending),
             "afirmacoes_pendentes": [dict(p) for p in self.afirmacoes_pendentes],
             "hipoteses_do_sistema": {k: list(v) for k, v in self.hipoteses_do_sistema.items()},
+            "exploracao_estado": dict(self.exploracao_estado),
         }
 
     @classmethod
@@ -468,6 +472,7 @@ class Checkpoint:
             provenance_pending=_id_list(data.get("provenance_pending"), "provenance_pending", MAX_IDS),
             afirmacoes_pendentes=_claims_pending(data.get("afirmacoes_pendentes")),
             hipoteses_do_sistema=_system_origin(data.get("hipoteses_do_sistema")),
+            exploracao_estado=_exploration_state(data.get("exploracao_estado")),
         )
 
 
@@ -512,6 +517,20 @@ def _claims_pending(value: object) -> list[dict[str, str]]:
             raise CheckpointError("afirmacoes_pendentes: item inválido.")
         out.append({"afirmacao_id": claim_id, "session_id": session, "conclusao_id": conclusion})
     return out
+
+
+_MAX_EXPLORATION_STATE_CHARS = 20_000
+
+
+def _exploration_state(value: object) -> dict[str, Any]:
+    """``exploracao_estado`` do checkpoint (dado não confiável): objeto JSON pequeno; o leitor valida os campos."""
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise CheckpointError("exploracao_estado deve ser um objeto.")
+    if len(json.dumps(value, default=str)) > _MAX_EXPLORATION_STATE_CHARS:
+        raise CheckpointError("exploracao_estado excede o tamanho máximo.")
+    return dict(value)
 
 
 def _system_origin(value: object) -> dict[str, list[str]]:
@@ -1013,6 +1032,14 @@ class CheckpointRecorder:
             cp.hipoteses_do_sistema = _system_origin(
                 {hid: sorted(names)[: config.CHECKPOINT_MAX_SUBTASKS] for hid, names in origin.items()}
             )
+
+        return self._update(mutate)
+
+    def set_exploration_state(self, state: Mapping[str, Any]) -> bool:
+        """Estado do objetivo da exploração (refeito a cada ciclo; só números, ids e códigos)."""
+
+        def mutate(cp: Checkpoint) -> None:
+            cp.exploracao_estado = _exploration_state(dict(state))
 
         return self._update(mutate)
 

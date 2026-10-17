@@ -6,7 +6,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.knowledge.hypothesis_cycle import ApprovalDecision, SolutionStatus
+from src.knowledge.hypothesis_cycle import ApprovalDecision
+from src.knowledge.objective import ObjectiveMemory, ObjectiveState
 from src.knowledge.suggestions import SuggestionError
 from src.orchestration.exploration import ExplorationSession
 from src.orchestration.usage import UsageBudget
@@ -164,8 +165,12 @@ async def test_sem_teto_a_subtarefa_dependente_executa_com_as_demais(tmp_path):
 
 
 def _solution(found=True) -> AsyncMock:
-    return patch.object(ExplorationSession, "check_solution",
-                        return_value=SolutionStatus(found, "h-1", 0.4, 0.9) if found else SolutionStatus(False))
+    """Objetivo ``limiar`` atingido pelo resultado ``r-1`` (o critério em si é testado em ``test_objective.py``)."""
+    state = ObjectiveState(
+        "limiar", found, None, found, "nao_avaliavel",
+        {"resultado_id": "r-1", "hipotese_id": "h-1", "valor": 0.9} if found else {}, ObjectiveMemory(),
+    )
+    return patch("src.orchestration.objective_tracking.evaluate", return_value=state)
 
 
 @pytest.mark.asyncio
@@ -182,7 +187,7 @@ async def test_parada_por_solucao_no_modo_automatico(tmp_path):
 @pytest.mark.asyncio
 async def test_parada_por_solucao_no_assistido_pergunta_e_encerra(tmp_path):
     """Scenario: Solução encontrada no modo assistido — o pesquisador escolhe encerrar."""
-    asked: list[SolutionStatus] = []
+    asked: list = []
 
     def confirmer(solution):
         asked.append(solution)
@@ -201,7 +206,7 @@ async def test_parada_por_solucao_no_assistido_pode_continuar_explorando(tmp_pat
     asked: list[str] = []
 
     def confirmer(solution):
-        asked.append(solution.hypothesis_id)
+        asked.append(solution.hipotese_id)
         return "continuar"
 
     first = plan([task("t1")], [hyp("h1")])

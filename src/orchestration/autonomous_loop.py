@@ -26,7 +26,6 @@ from src.config import (
 from src.egress.gate import role_tainted
 from src.egress.persisted import resumed_text_tainted, resumo_marca, tags_tainted, with_taint_tag
 from src.host.health import HealthMonitor
-from src.knowledge.hypothesis_cycle import SolutionStatus
 from src.knowledge.suggestions import SuggestionError
 from src.logger import get_logger
 from src.observability.telemetry import get_telemetry
@@ -1050,6 +1049,7 @@ class AutonomousLoop(LoopReportMixin):
                 exploration.require_metric_definition(unavailable[1])
             if resume is not None:  # design §4.4: origem das hipóteses do sistema vinda do checkpoint
                 exploration.restore_system_origin(resume.checkpoint.hipoteses_do_sistema)
+                exploration.restore_objective(resume.checkpoint.exploracao_estado)
         cycle_no = 0
         rejected_plans = 0
         legacy_attempt = 0
@@ -1764,35 +1764,37 @@ class AutonomousLoop(LoopReportMixin):
                 logger.debug("Checkpoint sem estado do grafo", extra={"error": type(exc).__name__})
 
             if exploration is not None:
-                # v18-hypothesis-loop §8: critério "solução encontrada" (veredito moderado e alvo atingido por
-                # resultado validado). Semi/auto param; o assisted pergunta ao pesquisador no terminal.
+                # v18.7-exploration-limits §5 e §6: avalia o objetivo tipado do Problema e aplica a política
+                # ao atingi-lo (parar, perguntar ou continuar). O veredito da hipótese não decide; a resposta do
+                # pesquisador vem do gate persistente, nunca do terminal da sessão.
                 try:
-                    solution = await asyncio.to_thread(exploration.check_solution)
+                    await asyncio.to_thread(exploration.evaluate_objective)
+                    decision = await asyncio.to_thread(exploration.objective_decision)
                 except asyncio.CancelledError:
                     raise
-                except Exception as exc:  # noqa: BLE001 - sem leitura do grafo não há como afirmar solução
-                    logger.warning("Critério de solução indisponível", extra={"error": type(exc).__name__})
-                    solution = SolutionStatus(False)
-                if solution.found and solution.hypothesis_id not in exploration.declined_solutions:
+                except Exception as exc:  # noqa: BLE001 - sem leitura do grafo não há como afirmar o objetivo
+                    logger.warning("Critério do objetivo indisponível", extra={"error": type(exc).__name__})
+                    decision = "seguir"
+                if recorder is not None:
+                    await asyncio.to_thread(recorder.set_exploration_state, exploration.objective_snapshot())
+                if decision != "seguir":
                     from src.orchestration.exploration import ExplorationStop
 
                     stop_args = (master_session_id, prompt, list(cumulative_tasks.values()), cumulative_dag,
                                  final_results)
-                    if self._session_mode in ("semi", "auto"):
-                        return await self._close_exploration(ExplorationStop.SOLUTION, *stop_args)
-                    answer = await asyncio.to_thread(exploration.confirm_solution, solution)
-                    while answer is None and self._session_mode == "assisted":
+                    while decision == "aguardar" and self._session_mode == "assisted":
                         waited = await self._wait_for_researcher(master_session_id, ("decidir_objetivo_atingido",))
                         if waited == "parar":
                             return await self._close_for_pending_stop(*stop_args)
-                        answer = await asyncio.to_thread(exploration.confirm_solution, solution)
-                    if answer == "encerrar":
+                        decision = await asyncio.to_thread(exploration.objective_decision)
+                    if decision == "encerrar":
                         return await self._close_exploration(ExplorationStop.SOLUTION, *stop_args)
-                    if answer is None:
+                    if decision == "aguardar" and self._session_mode == "assisted":
                         return await self._suspend_session(
                             master_session_id, list(cumulative_tasks.values()), final_results,
-                            "Sessão aguarda o pesquisador: critério de solução atingido, à espera da confirmação.",
+                            "Sessão aguarda o pesquisador: objetivo atingido, à espera da decisão.",
                         )
+                    # semi/auto sem resposta: segue com o que não depende dela (o pedido continua pendente)
 
             # Verifica se houve alguma falha
             failed_tasks = [t for t, state in dag_state.items() if state["status"] in ("failed", "cancelled")]
@@ -1824,6 +1826,9 @@ class AutonomousLoop(LoopReportMixin):
                     execution_feedback = self._exploration_feedback(cycle_no, cycle_results, abandoned_tasks)
                     if cycle_negatives:
                         execution_feedback += "\n" + negative_result_feedback(cycle_negatives)
+                    objective_note = exploration.objective_feedback()
+                    if objective_note:
+                        execution_feedback += "\n" + objective_note
                     explore_next = True
                     continue
 

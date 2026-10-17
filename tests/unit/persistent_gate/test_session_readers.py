@@ -13,8 +13,9 @@ from src.cli.unlimited import confirm_unlimited
 from src.gate.persistent_gate import session_gate, terminal_gate
 from src.gate.types import Source
 from src.knowledge.gate_approver import PersistentGateApprover, PersistentGateConfirmer
-from src.knowledge.hypothesis_cycle import ApprovalDecision, ApprovalItem, SolutionStatus
+from src.knowledge.hypothesis_cycle import ApprovalDecision, ApprovalItem
 from src.orchestration.exploration import ExplorationSession
+from src.orchestration.objective_tracking import Achievement
 from src.orchestration.orchestrator import AgentTask, Orchestrator
 from src.orchestration.usage import UsageBudget, clear_suspension, request_suspension
 from src.research_consult import PENDING_MESSAGE
@@ -61,8 +62,8 @@ def test_aprovador_na_retomada_mantem_o_pedido_pendente_da_anterior_sem_duplicar
     assert len(gate.requests) == 1 and gate.requests[0].session_id == "s1"
 
 
-def solution() -> SolutionStatus:
-    return SolutionStatus(True, hypothesis_id="h1", verdict=0.8, best_value=0.93)
+def solution() -> Achievement:
+    return Achievement("h1", "limiar", hipotese_id="h1", valor=0.93)
 
 
 def test_confirmador_pendente_depois_respondido_e_de_uso_unico():

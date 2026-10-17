@@ -71,6 +71,7 @@ from src.orchestration.exploration_prompts import (
     OBJECTIVE_DEFINITION_PLAN_INSTRUCTION,
     PLAN_FORMAT_INSTRUCTION,
 )
+from src.orchestration.exploration_restrictions import RestrictionsMixin
 from src.orchestration.exploration_roles import (
     FONTE_RESIDUAL,
     FONTES_PAPEL,
@@ -131,7 +132,7 @@ class CycleOutcome:
         return bool(self.selection.pending_approval)
 
 
-class ExplorationSession(StagnationMixin):
+class ExplorationSession(StagnationMixin, RestrictionsMixin):
     """Estado e operações de exploração de uma sessão mestra."""
 
     def __init__(
@@ -379,6 +380,7 @@ class ExplorationSession(StagnationMixin):
                 task.prepara_ids = None
         links = self._incremental_links(tasks, live, done, done_tasks or {})
 
+        self.apply_restrictions(live, dropped)  # v18.7-exploration-limits §8.2
         candidates = [t.hypothesis_id for t in live if t.papel_decidido == PAPEL_TESTE and t.hypothesis_id
                       and t.task_name not in dropped]
         selection = self.cycle.select(candidates, mode=self.mode, approver=self._approver, custos=costs)

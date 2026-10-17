@@ -265,6 +265,41 @@ async def test_parar_por_decisao_do_pesquisador_encerra_sem_processo_novo(tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_objetivo_atingido_na_cobertura_fecha_com_solucao_e_grava_o_marco(tmp_path):
+    """Scenario: Pesquisador declara o objetivo atingido (pedido ``cobertura_saturada``)."""
+    from src.knowledge import projects
+    from src.knowledge.graph_store import InMemoryGraphStore
+    from tests.unit.research_project.test_projects import make_draft
+
+    store = InMemoryGraphStore()
+    pid = projects.create_project(store, "P", "Obj", [])
+    problem_id = projects.confirm_problem(
+        store, pid, make_draft(tipo="cobertura", metrica=None, alvo=None, delta_min=None)
+    )
+    manager = FakeSessionManager()
+    origin = session(manager, payload={"project_id": pid})
+    gate = FakeGate()
+    req = gate.request("decidir_continuidade", "cobertura", "p", ("objetivo_atingido", "orientar", "continuar", "parar"),
+                       motivo="cobertura_saturada", session_id="b-01")
+    repl, out, _ = make_repl(tmp_path, ["objetivo_atingido"], gate, manager)
+    with patch("src.knowledge.factory.open_raw_graph_store", return_value=store):
+        await repl.handle(f"decidir {req.id}")
+    assert origin.payload["motivo_parada"] == "solucao_encontrada"
+    (mark,) = store.get_node(problem_id).properties["objetivo_atingido"]
+    assert mark["sessao_id"] == "b-01" and mark["declarado_por"] == "pesquisador"
+
+
+def test_marco_so_na_cobertura_e_sem_projeto_nao_levanta():
+    from types import SimpleNamespace
+
+    from src.cli.gate_commands import register_objective_reached
+
+    assert register_objective_reached(SimpleNamespace(id="s", payload={})) is False
+    assert register_objective_reached(SimpleNamespace(id="s", payload={"project_id": "p"}),
+                                      store_factory=lambda: (_ for _ in ()).throw(RuntimeError("sem grafo"))) is False
+
+
+@pytest.mark.asyncio
 async def test_parar_em_planos_rejeitados_fecha_com_o_motivo_proprio(tmp_path):
     manager = FakeSessionManager()
     origin = session(manager)

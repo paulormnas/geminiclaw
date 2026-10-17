@@ -426,6 +426,10 @@ class Repl:
         from src.session.closing import close_by_researcher
 
         report = close_by_researcher(self.manager, self.starter.base_dir, session, motivo=reason)
+        if report is not None and action == "objetivo_atingido":
+            from src.cli.gate_commands import register_objective_reached
+
+            register_objective_reached(session)
         if report is not None:
             self.console.write(f"  Pesquisa {label(session)} encerrada ({reason}). Relatório: {report}")
         return True

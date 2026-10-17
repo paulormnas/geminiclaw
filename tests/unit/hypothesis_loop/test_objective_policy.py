@@ -166,3 +166,40 @@ async def test_experimento_fisico_nao_executa_no_sandbox(tmp_path):
     cycle = next(p for k, p in events if k == "hypothesis_cycle")
     assert cycle["retiradas_por_motivo"] == {"experimento_fisico": 1}
     assert all(n.properties["status"] != "abandonada" for n in h.hypotheses())
+
+
+@pytest.mark.asyncio
+async def test_cobertura_com_novidade_baixa_avisa_e_pede_sem_fechar(tmp_path):
+    """Scenario: Aviso de novidade baixa — evento ``cobertura_aviso`` e pedido ``cobertura_saturada``."""
+    requests: list[tuple] = []
+    first = plan([task("t1")], [hyp("h1")])
+    h = LoopHarness(tmp_path, plans=[first, first, first])
+    events, emit = capture_events()
+    state = ObjectiveState("cobertura", False, None, False, "so_aviso", {"taxa": 0.2}, ObjectiveMemory())
+    h.extra_patches += [
+        patch("src.orchestration.objective_tracking.evaluate", return_value=state), emit,
+        patch.object(ExplorationSession, "_request_continuity", autospec=True,
+                     side_effect=lambda self, *args: requests.append(args)),
+    ]
+    await h.run()
+    assert h.stop_reason == "sem_caminhos_promissores"
+    assert [p["taxa"] for k, p in events if k == "cobertura_aviso"] == [0.2]
+    assert len(requests) == 1 and requests[0][0] == "cobertura_saturada" and "objetivo_atingido" in requests[0][2]
+
+
+@pytest.mark.asyncio
+async def test_aguarda_experimento_fisico_registra_o_desfecho_com_a_subtarefa_e_o_pedido(tmp_path):
+    """Scenario: Experimento físico — desfecho com o nome da subtarefa e pedido ``aguarda_experimento_fisico``."""
+    requests: list[tuple] = []
+    first = plan([task("t1")], [hyp("h1")])
+    h = LoopHarness(tmp_path, plans=[first, first])
+    events, emit = capture_events()
+    h.extra_patches += [
+        reached("aguarda_experimento_fisico", "discriminacao", {"subtarefa": "bancada"}, atingido=False), emit,
+        patch.object(ExplorationSession, "_request_continuity", autospec=True,
+                     side_effect=lambda self, *args: requests.append(args)),
+    ]
+    await h.run()
+    (outcome,) = [p for k, p in events if k == "objetivo_desfecho"]
+    assert outcome["desfecho"] == "aguarda_experimento_fisico" and outcome["subtarefa"] == "bancada"
+    assert [r[0] for r in requests] == ["aguarda_experimento_fisico"]

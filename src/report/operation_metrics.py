@@ -314,8 +314,13 @@ class CostResourcesReader:
     group = "custo_recursos"
     producer = "telemetria"
 
-    def __init__(self, runs_loader: Callable[[str], dict[str, Any] | None] | None = None) -> None:
+    def __init__(
+        self,
+        runs_loader: Callable[[str], dict[str, Any] | None] | None = None,
+        budget_loader: Callable[[str], dict[str, Any]] | None = None,
+    ) -> None:
         self._runs_loader = runs_loader
+        self._budget_loader = budget_loader
 
     def read(self, session_id: str) -> dict[str, Any]:
         from src.observability.telemetry import get_telemetry
@@ -334,7 +339,11 @@ class CostResourcesReader:
             entry = per_role.setdefault(str(row["agent_id"]), {"tokens": 0, "custos": []})
             entry["tokens"] += int(row["tokens"] or 0)
             entry["custos"].append(row["cost_usd"])
+        budget = (self._budget_loader(session_id) or {}) if self._budget_loader else {}
         return {
+            "custo_limite_usd": budget.get("max_cost_usd"),  # ``None`` no modo sem limite
+            "custo_por_provedor": self._cost_by_provider(telemetry, session_id),
+            "custo_limite_por_provedor": dict(budget.get("max_cost_usd_by_provider") or {}),
             "tokens_total": sum(int(r["tokens"] or 0) for r in rows),
             "custo_usd_total": cost([r["cost_usd"] for r in rows]),
             "chamadas_sem_custo": sum(int(r.get("calls_sem_custo") or 0) for r in rows),
@@ -360,6 +369,19 @@ class CostResourcesReader:
                 "incidentes_throttling": int(peaks.get("throttle_incidents") or 0),
             },
         }
+
+
+    @staticmethod
+    def _cost_by_provider(telemetry: Any, session_id: str) -> dict[str, float | None]:
+        """US$ por provedor; ``None`` para o provedor em que nenhuma chamada tem preço (nunca soma ausente como 0)."""
+        out: dict[str, float | None] = {}
+        for row in telemetry.get_token_summary(session_id).get("by_provider_model", []):
+            provider, value = str(row.get("llm_provider")), row.get("total_cost_usd")
+            if value is None:
+                out.setdefault(provider, None)
+            else:
+                out[provider] = round((out.get(provider) or 0.0) + float(value), 6)
+        return out
 
 
 class JudgeIndependenceReader:
@@ -503,7 +525,7 @@ def default_readers(
         ClaimVerificationReader(output_dir),
         PlanRejectionReader(),
         HypothesisClosureReader(),
-        CostResourcesReader(runs_loader=runs_of),
+        CostResourcesReader(runs_loader=runs_of, budget_loader=budget_of),
         HumanInterventionsReader(payload_loader, gate_loader=gate_of),
         JudgeIndependenceReader(payload_loader),
     ]
@@ -549,6 +571,8 @@ def _gaps(group: dict[str, Any]) -> list[str]:
 STOP_UNTESTED_HYPOTHESES = "hipoteses_nao_testadas"
 STOP_PROVIDER_QUOTA = "limite_cota_provedor"
 _STOP_DESCRIPTIONS = {
+    "limite_custo": "limite de custo da sessão atingido",
+    "saturacao": "a melhora possível ficou abaixo do erro da medida depois das intervenções",
     STOP_PROVIDER_QUOTA: (
         "cota ou teto de gasto esgotado no provedor; aumente o teto ou troque o provedor e retome a sessão"
     ),

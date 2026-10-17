@@ -234,12 +234,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Limite de volume (bytes) de saídas de execução enviadas fora do nó (padrão: EGRESS_SESSION_MAX_BYTES).",
     )
     parser.add_argument(
+        "--max-cost-usd",
+        type=float,
+        default=None,
+        metavar="USD",
+        help="Limite do custo estimado da sessão em US$, todos os provedores (padrão: SESSION_MAX_COST_USD).",
+    )
+    parser.add_argument(
         "--unlimited",
         action="store_true",
         help=(
             "Modo sem limite: tokens, tempo, custo e egresso não interrompem a sessão (retentativas e regras de "
             "localidade continuam). Pede confirmação digitada a cada execução; incompatível com --max-tokens, "
-            "--max-minutes e --max-egress-bytes."
+            "--max-minutes, --max-egress-bytes e --max-cost-usd."
         ),
     )
     parser.add_argument(
@@ -277,7 +284,7 @@ def build_usage_budget(args: "argparse.Namespace") -> UsageBudget:
 
     Returns:
         `UsageBudget` com os defaults de `src/config.py`, sobrescritos pelas
-        opções ``--max-tokens``, ``--max-minutes``, ``--max-task-retries`` e
+        opções ``--max-tokens``, ``--max-minutes``, ``--max-cost-usd``, ``--max-task-retries`` e
         ``--max-connection-retries`` quando fornecidas.
     """
     return UsageBudget.from_config(
@@ -286,6 +293,7 @@ def build_usage_budget(args: "argparse.Namespace") -> UsageBudget:
         max_task_retries=getattr(args, "max_task_retries", None),
         max_connection_retries=getattr(args, "max_connection_retries", None),
         max_egress_bytes=getattr(args, "max_egress_bytes", None),
+        max_cost_usd=getattr(args, "max_cost_usd", None),
         unlimited=bool(getattr(args, "unlimited", False)),
     )
 

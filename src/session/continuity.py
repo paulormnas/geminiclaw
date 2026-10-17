@@ -61,7 +61,8 @@ INTERRUPTION_CATEGORY = "interrupcao_inesperada"
 MOTIVOS_RETOMAVEIS = frozenset(
     {
         "limite_tokens", "limite_tempo", "limite_retentativas", "limite_conexao", "limite_execucoes", "limite_ciclos",
-        "limite_egresso", "limite_cota_provedor", "versao_modelo", "interrompida", "interrompida_pesquisador",
+        "limite_egresso", "limite_custo", "limite_cota_provedor", "versao_modelo", "interrompida",
+        "interrompida_pesquisador",
         "aguarda_pesquisador", "suspensa_sem_pesquisador",  # v18.7-background-sessions
     }
 )

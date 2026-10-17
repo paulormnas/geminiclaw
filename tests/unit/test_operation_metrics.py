@@ -142,6 +142,9 @@ class FakeTelemetry:
     def get_usage_by_task(self, execution_id):
         return self.rows
 
+    def get_token_summary(self, execution_id):
+        return {"by_provider_model": []}
+
     def get_hardware_peaks(self, execution_id):
         return self.peaks
 

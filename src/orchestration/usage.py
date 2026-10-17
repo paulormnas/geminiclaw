@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import threading
 import time
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from enum import Enum
 
 from src.logger import get_logger
@@ -28,6 +28,7 @@ class StopReason(str, Enum):
 
     TOKENS = "limite_tokens"
     TIME = "limite_tempo"
+    COST = "limite_custo"  # v18.7-exploration-limits (ADR 021 §5.4): custo estimado da sessão
     RETRIES = "limite_retentativas"
     CONNECTION = "limite_conexao"
     MODEL_VERSION = "versao_modelo"  # v18.5-model-catalog-locality (LLM_ROUTING=strict)
@@ -105,9 +106,13 @@ class UsageBudget:
         max_egress_bytes: Limite de volume, por sessão, dos bytes de saídas de execução (após o filtro) enviados a
             destinos fora do nó (v18.5-egress-gate, design §9). O modo sem limite e a opção ``--max-egress-bytes``
             são da ``v18.5-operation-metrics``, que lê este campo para desligar o limite num único ponto.
-        unlimited: Modo sem limite (v18.5-operation-metrics, design §2): tokens, tempo e egresso não interrompem a
-            sessão. Exige ``max_tokens``, ``max_minutes`` e ``max_egress_bytes`` ``None``; as retentativas continuam
-            limitadas. Só a CLI (com confirmação do pesquisador) o ativa; nenhuma variável de ambiente o faz.
+        unlimited: Modo sem limite (v18.5-operation-metrics, design §2): tokens, tempo, custo e egresso não
+            interrompem a sessão. Exige ``max_tokens``, ``max_minutes``, ``max_egress_bytes`` e ``max_cost_usd``
+            ``None`` (e ``max_cost_usd_by_provider`` vazio); as retentativas continuam limitadas. Só a CLI (com
+            confirmação do pesquisador) o ativa; nenhuma variável de ambiente o faz.
+        max_cost_usd: Teto do custo estimado da sessão em US$ (v18.7-exploration-limits, design §3.1). Fora do modo sem
+            limite deve ser positivo; ``None`` fora do modo sem limite assume ``SESSION_MAX_COST_USD``.
+        max_cost_usd_by_provider: Tetos opcionais por provedor (US$, positivos); vazio = só o total.
     """
 
     max_tokens: int | None
@@ -117,6 +122,8 @@ class UsageBudget:
     closing_reserve_pct: float
     max_egress_bytes: int | None = 2_000_000
     unlimited: bool = False
+    max_cost_usd: float | None = None
+    max_cost_usd_by_provider: Mapping[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Valida a consistência do orçamento.
@@ -127,7 +134,17 @@ class UsageBudget:
         if self.unlimited:
             if self.max_tokens is not None or self.max_minutes is not None or self.max_egress_bytes is not None:
                 raise ValueError("No modo sem limite, max_tokens, max_minutes e max_egress_bytes devem ser None.")
+            if self.max_cost_usd is not None or self.max_cost_usd_by_provider:
+                raise ValueError("No modo sem limite, max_cost_usd e max_cost_usd_by_provider devem estar vazios.")
         else:
+            if self.max_cost_usd is None:
+                from src import config as _config
+
+                object.__setattr__(self, "max_cost_usd", _config.SESSION_MAX_COST_USD)
+            if self.max_cost_usd <= 0:
+                raise ValueError("max_cost_usd deve ser positivo.")
+            if any(value <= 0 for value in self.max_cost_usd_by_provider.values()):
+                raise ValueError("Os valores de max_cost_usd_by_provider devem ser positivos.")
             if self.max_tokens is None or self.max_tokens <= 0:
                 raise ValueError("max_tokens deve ser positivo.")
             if self.max_minutes is None or self.max_minutes <= 0:
@@ -152,6 +169,13 @@ class UsageBudget:
             return None
         return int(self.max_tokens * (1 - self.closing_reserve_pct))
 
+    @property
+    def exploration_cost_ceiling(self) -> float | None:
+        """Custo disponível para exploração, descontada a reserva de fechamento (``None`` no modo sem limite)."""
+        if self.max_cost_usd is None:
+            return None
+        return self.max_cost_usd * (1 - self.closing_reserve_pct)
+
     def to_payload(self) -> dict:
         """Serializa o orçamento para gravação em ``agent_sessions.payload['budget']``.
 
@@ -167,6 +191,8 @@ class UsageBudget:
             "exploration_token_ceiling": self.exploration_token_ceiling,
             "max_egress_bytes": self.max_egress_bytes,
             "unlimited": self.unlimited,
+            "max_cost_usd": self.max_cost_usd,
+            "max_cost_usd_by_provider": dict(self.max_cost_usd_by_provider),
         }
 
     @classmethod
@@ -180,6 +206,7 @@ class UsageBudget:
         closing_reserve_pct: float | None = None,
         max_egress_bytes: int | None = None,
         unlimited: bool = False,
+        max_cost_usd: float | None = None,
     ) -> "UsageBudget":
         """Constrói o orçamento a partir dos defaults de ``src/config.py``.
 
@@ -193,20 +220,25 @@ class UsageBudget:
             max_connection_retries: Override para ``SESSION_MAX_CONNECTION_RETRIES``.
             closing_reserve_pct: Override para ``SESSION_CLOSING_RESERVE_PCT``.
             max_egress_bytes: Override para ``EGRESS_SESSION_MAX_BYTES``.
-            unlimited: Modo sem limite; incompatível com overrides de tokens, tempo e egresso.
+            unlimited: Modo sem limite; incompatível com overrides de tokens, tempo, custo e egresso.
+            max_cost_usd: Override para ``SESSION_MAX_COST_USD`` (``--max-cost-usd``).
 
         Returns:
             Um novo `UsageBudget` com os valores efetivos da sessão.
 
         Raises:
-            ValueError: Se ``unlimited`` for combinado com override de tokens, tempo ou egresso.
+            ValueError: Se ``unlimited`` for combinado com override de tokens, tempo, custo ou egresso.
         """
         from src import config as _config
 
         if unlimited:
-            if max_tokens is not None or max_minutes is not None or max_egress_bytes is not None:
+            if (
+                max_tokens is not None or max_minutes is not None or max_egress_bytes is not None
+                or max_cost_usd is not None
+            ):
                 raise ValueError(
-                    "As opções --max-tokens, --max-minutes e --max-egress-bytes são incompatíveis com --unlimited."
+                    "As opções --max-tokens, --max-minutes, --max-egress-bytes e --max-cost-usd são incompatíveis "
+                    "com --unlimited."
                 )
             return cls(
                 max_tokens=None,
@@ -248,6 +280,8 @@ class UsageBudget:
             max_egress_bytes=(
                 max_egress_bytes if max_egress_bytes is not None else _config.EGRESS_SESSION_MAX_BYTES
             ),
+            max_cost_usd=max_cost_usd if max_cost_usd is not None else _config.SESSION_MAX_COST_USD,
+            max_cost_usd_by_provider=dict(_config.SESSION_MAX_COST_USD_BY_PROVIDER),
         )
 
 
@@ -269,6 +303,12 @@ class LimitStatus:
     # v18.5-egress-gate: volume de saídas de execução enviadas fora do nó (bytes) e se o limite foi atingido.
     egress_bytes: int = 0
     egress_exhausted: bool = False
+    # v18.7-exploration-limits: custo estimado da sessão (US$), por provedor, e os tetos atingidos.
+    cost_usd: float = 0.0
+    cost_pct: float | None = None  # None no modo sem limite
+    cost_by_provider: Mapping[str, float] = field(default_factory=dict)
+    cost_exhausted: bool = False
+    cost_exhausted_provider: str | None = None  # preenchido quando o teto de um provedor (não o total) esgotou
 
     @property
     def should_close(self) -> bool:
@@ -276,6 +316,7 @@ class LimitStatus:
         return (
             self.tokens_exhausted
             or self.time_exhausted
+            or self.cost_exhausted
             or self.connection_retries_exhausted
             or self.egress_exhausted
             or self.pending_stop is not None
@@ -285,14 +326,17 @@ class LimitStatus:
     def stop_reason(self) -> StopReason | None:
         """Motivo de parada correspondente.
 
-        Segue a prioridade tokens > tempo > egresso > cota do provedor > conexão, coerente com a
-        ordem de avaliação em `UsageTracker.check`. A cota esgotada vem antes da conexão porque é a causa das
-        retentativas (v18.7-benchmark-fixes).
+        Segue a prioridade tokens > tempo > custo > egresso > cota do provedor > conexão, coerente com a
+        ordem de avaliação em `UsageTracker.check`. O custo da sessão (limite do pesquisador) vem antes da cota do
+        provedor (informada pela API); a cota esgotada vem antes da conexão porque é a causa das retentativas
+        (v18.7-benchmark-fixes, v18.7-exploration-limits §3.2).
         """
         if self.tokens_exhausted:
             return StopReason.TOKENS
         if self.time_exhausted:
             return StopReason.TIME
+        if self.cost_exhausted:
+            return StopReason.COST
         if self.egress_exhausted:
             return StopReason.EGRESS
         if self.pending_stop == StopReason.PROVIDER_QUOTA:
@@ -317,6 +361,29 @@ def _default_token_reader(execution_id: str) -> int:
     summary = get_telemetry().get_token_summary(execution_id)
     rows = summary.get("by_provider_model", [])
     return sum(r.get("total_tokens") or 0 for r in rows)
+
+
+def _default_cost_reader(execution_id: str) -> dict[str, float | None]:
+    """Custo estimado da sessão por provedor (US$), a partir da telemetria.
+
+    Args:
+        execution_id: ID da execução.
+
+    Returns:
+        Provedor -> soma do custo estimado; ``None`` para o provedor em que nenhuma chamada tem preço conhecido.
+    """
+    from src.observability.telemetry import get_telemetry
+
+    rows = get_telemetry().get_token_summary(execution_id).get("by_provider_model", [])
+    costs: dict[str, float | None] = {}
+    for row in rows:
+        provider = str(row.get("llm_provider"))
+        value = row.get("total_cost_usd")
+        if value is None:
+            costs.setdefault(provider, None)
+        else:
+            costs[provider] = (costs.get(provider) or 0.0) + float(value)
+    return costs
 
 
 def _default_connection_retry_reader(execution_id: str) -> int:
@@ -366,6 +433,7 @@ class UsageTracker:
         token_reader: Callable[[], int] | None = None,
         connection_retry_reader: Callable[[], int] | None = None,
         egress_reader: Callable[[], int] | None = None,
+        cost_reader: Callable[[], dict[str, float | None]] | None = None,
         clock: Callable[[], float] | None = None,
         pending_stop: Callable[[], StopReason | None] | None = None,
     ) -> None:
@@ -382,6 +450,9 @@ class UsageTracker:
                 testes; por padrão lê a telemetria via `execution_id`.
             egress_reader: Função sem argumentos que retorna o volume de egresso de saídas de execução da sessão
                 (bytes). Injetável para testes; por padrão lê ``egress_log`` via `execution_id` (v18.5-egress-gate).
+            cost_reader: Função sem argumentos que devolve o custo estimado da sessão por provedor (US$; ``None`` =
+                nenhuma chamada com preço, conta como 0). Injetável para testes; por padrão lê a telemetria
+                (v18.7-exploration-limits, design §3.2).
             clock: Função sem argumentos que retorna um timestamp monotônico
                 em segundos. Injetável para testes de limite de tempo.
             pending_stop: Função sem argumentos que devolve um motivo de parada pedido por outra fonte (versão do
@@ -396,6 +467,7 @@ class UsageTracker:
             lambda: _default_connection_retry_reader(execution_id)
         )
         self._egress_reader = egress_reader or (lambda: _default_egress_reader(execution_id))
+        self._cost_reader = cost_reader or (lambda: _default_cost_reader(execution_id))
         self._pending_stop = pending_stop
         self._task_retry_counts: dict[str, int] = {}
         self._abandoned_tasks: set[str] = set()
@@ -507,6 +579,20 @@ class UsageTracker:
         egress_bytes = self._egress_reader()
         egress_exhausted = self.budget.max_egress_bytes is not None and egress_bytes >= self.budget.max_egress_bytes
 
+        cost_by_provider = {p: (v or 0.0) for p, v in self._cost_reader().items()}
+        cost_usd = sum(cost_by_provider.values())
+        cost_ceiling = self.budget.exploration_cost_ceiling
+        cost_pct = (cost_usd / self.budget.max_cost_usd) if self.budget.max_cost_usd else None
+        cost_exhausted_provider = next(
+            (
+                provider
+                for provider, limit in self.budget.max_cost_usd_by_provider.items()
+                if cost_by_provider.get(provider, 0.0) >= limit
+            ),
+            None,
+        )
+        cost_exhausted = cost_exhausted_provider is not None or (cost_ceiling is not None and cost_usd >= cost_ceiling)
+
         status = LimitStatus(
             tokens_used=tokens_used,
             tokens_pct=tokens_pct,
@@ -520,6 +606,11 @@ class UsageTracker:
             pending_stop=self._pending_stop() if self._pending_stop is not None else None,
             egress_bytes=egress_bytes,
             egress_exhausted=egress_exhausted,
+            cost_usd=cost_usd,
+            cost_pct=cost_pct,
+            cost_by_provider=cost_by_provider,
+            cost_exhausted=cost_exhausted,
+            cost_exhausted_provider=cost_exhausted_provider,
         )
 
         if status.should_close:
@@ -535,6 +626,8 @@ class UsageTracker:
                     "max_minutes": self.budget.max_minutes,
                     "connection_retries": connection_retries,
                     "egress_bytes": egress_bytes,
+                    "cost_usd": round(cost_usd, 6),
+                    "cost_exhausted_provider": cost_exhausted_provider,
                 },
             )
         return status

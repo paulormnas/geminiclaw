@@ -98,6 +98,15 @@ def render_untested_stops(results: list[dict]) -> str:
     return "\n".join(rows)
 
 
+def render_rejected_plans_stops(results: list[dict]) -> str:
+    """Execuções fechadas por ``planos_rejeitados`` (política `parar` da bateria): parada de pesquisa, não erro."""
+    return "\n".join(
+        f"- {r['name']} (repetição {r.get('repeticao', 1)})"
+        for r in results
+        if r.get("status") != "skipped" and r.get("stop_reason") == "planos_rejeitados"
+    )
+
+
 def render_quota_stops(results: list[dict]) -> str:
     """Execuções fechadas por ``limite_cota_provedor``, com o provedor e o modelo do evento (anomalia identificada)."""
     return "\n".join(
@@ -281,6 +290,10 @@ if __name__ == "__main__":
         print()
         print("### Paradas por hipóteses não testadas (parada de pesquisa, não erro)")
         print(render_untested_stops(loaded))
+    if render_rejected_plans_stops(loaded):
+        print()
+        print("### Paradas por planos rejeitados (classe própria, não é erro)")
+        print(render_rejected_plans_stops(loaded))
     if render_quota_stops(loaded):
         print()
         print("### Paradas por cota ou teto de gasto do provedor (anomalia: aumente o teto ou troque o provedor)")

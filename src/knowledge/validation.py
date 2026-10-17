@@ -523,7 +523,8 @@ def validate_derived_authority(
 
     - ``restriction_id``: só a retirada de uma ``Hipotese`` (``abandonada`` / ``abandonada_por = "pesquisador"`` /
       ``motivo_abandono = "direcao_restrita:<id>"``), e só se a ``Restricao`` existe, é do pesquisador e está ``ativa``.
-    - ``request_id``: só a criação de ``Restricao``, com ``pedido_id`` igual ao pedido consumido.
+    - ``request_id``: a criação de ``Restricao``, com ``pedido_id`` igual ao pedido consumido, ou a revisão do
+      ``criterio_sucesso`` do ``Problema`` autorizada pelo pesquisador (único campo).
 
     Raises:
         HumanConfirmationRequiredError: A derivação não cabe nesta escrita.
@@ -543,6 +544,8 @@ def validate_derived_authority(
         if not valid:
             raise HumanConfirmationRequiredError(label, "restricao_id", "pesquisador derivado de restrição")
     if request_id is not None:
+        if label == "Problema" and set(changes) == {"criterio_sucesso"}:
+            return  # revisão do objetivo autorizada pelo pesquisador (pedido ``confirmar_problema`` consumido)
         if label != "Restricao" or changes.get("pedido_id") != request_id:
             field = "pedido_id" if label == "Restricao" else "status"
             raise HumanConfirmationRequiredError(label, field, "pesquisador derivado de pedido")

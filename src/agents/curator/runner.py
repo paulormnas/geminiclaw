@@ -36,7 +36,7 @@ from src.knowledge.curator_tools import CuratorLimits, CuratorToolkit, wrap_data
 from src.knowledge.graph_store import GraphStore, Node
 from src.knowledge.semantic_index import SemanticIndex
 from src.knowledge.similarity_queue import SimilarityQueue
-from src.knowledge.suggestions import Suggestion, SuggestionError
+from src.knowledge.suggestions import StallContext, Suggestion, SuggestionError
 from src.knowledge.suggestions import suggest_paths as suggest_paths_for_session
 from src.llm.base import LLMProvider
 from src.llm.metering import record_llm_call
@@ -156,7 +156,9 @@ class Curator:
         """Fim da sessão: consolida, revisa a fila de similaridade (no lote) e registra caminhos sem conclusão."""
         return await self._run(KIND_CLOSE, include_queue=True, motivo_parada=motivo_parada)
 
-    async def suggest_paths(self, max_suggestions: int | None = None) -> list[Suggestion]:
+    async def suggest_paths(
+        self, max_suggestions: int | None = None, intervencao: StallContext | None = None
+    ) -> list[Suggestion]:
         """Sugere novos caminhos ao Researcher (v18-hypothesis-loop, design §6). Determinístico, sem LLM.
 
         Só as fontes permitidas (``src.knowledge.suggestions``): oportunidades **aprovadas** (nunca ``documentada``),
@@ -165,6 +167,7 @@ class Curator:
 
         Args:
             max_suggestions: Máximo por ciclo (padrão: ``CURATOR_MAX_SUGGESTIONS``).
+            intervencao: Contexto da estagnação (modo intervenção, design §7): acrescenta direções de diversificação.
 
         Returns:
             As sugestões novas (lista vazia se o Curator está desligado ou não há sugestões).
@@ -178,6 +181,7 @@ class Curator:
             fresh = await asyncio.to_thread(
                 suggest_paths_for_session, self._store, self._project_id, self._session_dir,
                 index=self._index, max_suggestions=max_suggestions,
+                intervencao=intervencao,
             )
         except asyncio.CancelledError:
             raise

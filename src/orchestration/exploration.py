@@ -81,6 +81,7 @@ from src.orchestration.exploration_roles import (
     classify_role,
     declared_role,
 )
+from src.orchestration.exploration_stagnation import StagnationMixin
 from src.orchestration.objective_tracking import Confirmer, ObjectiveTracker
 
 logger = get_logger(__name__)
@@ -99,6 +100,8 @@ class ExplorationStop(str, Enum):
     REJECTED_PLANS = "planos_rejeitados"  # MAX_PLAN_RETRIES planos consecutivos rejeitados
     # v18.6-auto-metrics-and-stop-reasons: ciclos ociosos esgotados com hipótese em_teste sem nenhuma tentativa
     UNTESTED_HYPOTHESES = "hipoteses_nao_testadas"
+    SATURATION = "saturacao"  # v18.7-exploration-limits: intervenções esgotadas com a saturação confirmada (auto)
+    RESEARCHER = "encerrada_pesquisador"  # resposta ``parar`` a um pedido de estagnação ou saturação
     ERROR = "erro"
 
 
@@ -128,7 +131,7 @@ class CycleOutcome:
         return bool(self.selection.pending_approval)
 
 
-class ExplorationSession:
+class ExplorationSession(StagnationMixin):
     """Estado e operações de exploração de uma sessão mestra."""
 
     def __init__(
@@ -655,8 +658,8 @@ class ExplorationSession:
         self._emit("hypothesis_evaluation", counts)
         return counts
 
-    async def suggest(self) -> int:
-        """Sugestões do Curator ao fim do ciclo.
+    async def suggest(self, intervencao: Any | None = None) -> int:
+        """Sugestões do Curator ao fim do ciclo (``intervencao``: contexto da estagnação, design §7).
 
         Returns:
             Quantidade de sugestões novas (0 é "sem sugestões", um resultado válido).
@@ -668,7 +671,9 @@ class ExplorationSession:
         if self._curator_suggest is None:
             return 0
         try:
-            fresh = await self._curator_suggest()
+            fresh = await (
+                self._curator_suggest() if intervencao is None else self._curator_suggest(intervencao=intervencao)
+            )
         except asyncio.CancelledError:
             raise
         except SuggestionError:

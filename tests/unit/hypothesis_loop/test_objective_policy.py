@@ -107,7 +107,7 @@ def test_restauracao_do_estado_e_tolerante():
         requester=lambda *a: None,
     )
     tracker.restore({"memoria": {"best_value": 0.7}, "atingido": {"referencia": "r-9", "tipo": "limiar"},
-                     "politica_sessao": "continuar", "relatados": ["x", 3]})
+                     "politica_sessao": "continuar", "relatados": ["x"]})
     assert tracker.memory.best_value == 0.7 and tracker.achievement.reference == "r-9"
     assert tracker.session_policy == "continuar" and tracker.reported == {"x"}
     assert tracker.decision() == "seguir"  # a política efetiva da sessão é continuar

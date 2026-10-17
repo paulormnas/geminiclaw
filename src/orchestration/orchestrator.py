@@ -547,13 +547,13 @@ class Orchestrator:
                 approver=self.exploration_approver,
                 objective_confirmer=self.objective_confirmer,
                 telemetry=_telemetry,
-                curator_suggest=lambda: self.curator_suggest(session_id),
+                curator_suggest=lambda intervencao=None: self.curator_suggest(session_id, intervencao),
                 session_chain=lambda: chain_session_ids(self.session_manager, session_id),
             )
         except Exception as exc:  # noqa: BLE001 - sem exploração a sessão continua no laço de ciclo único
             logger.warning("Exploração de hipóteses não iniciada", extra={"error": type(exc).__name__})
 
-    async def curator_suggest(self, session_id: str) -> list[Any]:
+    async def curator_suggest(self, session_id: str, intervencao: Any | None = None) -> list[Any]:
         """Sugestões do Curator ao Researcher (determinísticas). Vazio sem Curator ou sem orçamento.
 
         Raises:
@@ -563,7 +563,7 @@ class Orchestrator:
         if curator is None or not self._curator_budget_left(session_id, closing=False):
             return []
         try:
-            return list(await curator.suggest_paths())
+            return list(await curator.suggest_paths(intervencao=intervencao))
         except asyncio.CancelledError:
             raise
         except SuggestionError:

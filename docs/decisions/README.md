@@ -30,7 +30,7 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 | [018](adr_018_imagem_sandbox_enxuta_e_imagens_por_plataforma.md) | Imagem Enxuta do Sandbox de Código e Seleção de Imagens por Plataforma (registro de ideias) | ✅ Aceito (2026-10-13; 5.5.1, 5.5.2 e medições no Pi pendentes) | 2026-09-29 |
 | [019](adr_019_localidade_dados_proveniencia_resultados.md) | Localidade dos Dados de Pesquisa e Proveniência dos Resultados | 🟠 Parcialmente implementado (8 mudanças V18.5 e 5 da V18.6 concluídas e arquivadas, incluindo as correções do parecer do perfil estrutural; §10 na V19; validação real e revisões de segurança da V18.5 pendentes) | 2026-09-29 |
 | [020](adr_020_independencia_validator.md) | Independência do Julgamento: Família de Modelo do Validator Diferente da do Developer | ✅ Aceito (2026-10-13; `v18.6-validator-independence`, `v18.6-benchmark-harness`, `v18.6-remove-unused-agents` e `v18.6-models-gemini4-gpt6` concluídas e arquivadas; matriz com bancos isolados e 3 repetições no Pi 5 e revisão do ADR depois dela ficam como acompanhamento) | 2026-10-13 |
-| [021](adr_021_exploracao_rastreavel_por_hipoteses.md) | Exploração Rastreável por Hipóteses: Estrutura dos Nós e Governança por Registro | 🟢 Aprovado (implementação não iniciada, V18.7) | 2026-10-15 |
+| [021](adr_021_exploracao_rastreavel_por_hipoteses.md) | Exploração Rastreável por Hipóteses: Estrutura dos Nós e Governança por Registro | 🟠 Parcialmente implementado (V18.7: 3 das 4 mudanças mergeadas; `v18.7-exploration-metrics` e a bateria pendentes) | 2026-10-15 |
 | [022](adr_022_contrato_contexto_por_chamada.md) | Contrato de Contexto por Chamada e Regimento da Pesquisa | 🟢 Aprovado (implementação não iniciada, V18.7) | 2026-10-15 |
 | [023](adr_023_pesquisa_em_segundo_plano.md) | Pesquisa em Segundo Plano com Acompanhamento pelo Terminal | 🟢 Aprovado (implementação não iniciada, V18.7) | 2026-10-15 |
 | [024](adr_024_organizacao_do_codigo.md) | Organização do Código por Responsabilidade e Regra de Camadas | 🟢 Aprovado (implementação não iniciada, V18.7) | 2026-10-15 |
@@ -114,6 +114,8 @@ ADR 010 (Propósito: Assistente de Pesquisa) ← define o escopo de tudo (substi
 ---
 
 ## Lacunas de especificação (2026-10-01)
+
+**Atualização 2026-10-17 (V18.7):** `v18.7-exploration-limits` (#187 a #199), `v18.7-hypothesis-linking` e `v18.7-graph-exploration-relations` estão implementadas e mergeadas; o ADR 021 passa a `Parcialmente implementado` (faltam `v18.7-exploration-metrics` e a bateria da V18.7 no Raspberry Pi, com confirmação do pesquisador). O estado dos ADRs 022 a 024 não foi revisto nesta atualização.
 
 **Atualização 2026-10-15 (V18.7):** os ADRs 021 a 024 (aprovados) têm as 13 mudanças OpenSpec `v18.7-*` em `openspec/changes/`, com o roadmap `roadmaps/roadmap_V18.7.md`; nenhuma implementada. O ADR 025 (rascunho) explora a calibração do veredito.
 

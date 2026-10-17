@@ -1,6 +1,6 @@
 # ADR 021 — Exploração Rastreável por Hipóteses: Estrutura dos Nós e Governança por Registro
 
-**Status:** Aprovado (2026-10-15)
+**Status:** Parcialmente implementado (2026-10-17; aprovado em 2026-10-15)
 **Data:** 2026-10-15
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** `roadmaps/roadmap_V18.7.md` (criado junto com as mudanças OpenSpec)
@@ -254,6 +254,17 @@ Alinhar o texto do Researcher e do Validator com `_is_bound` e informar as retir
 | `v18.7-graph-exploration-relations` | `knowledge-graph` | §2–§4, §9: `papel`, `origem=sistema`, chave estruturada, referência R fixada, `abandonada_por`, `PREPARA`, `REFERENCIA_DE`, `DERIVADA_DE -> Hipotese`, leitura compatível |
 | `v18.7-exploration-limits` | `hypothesis-loop`, `usage-limits`, `agent-runtime`, `operation-metrics`, `benchmark`, `session-continuity`, `research-project`, `knowledge-graph`, `researcher-consult` | §5: fim de `HYPOTHESES_PER_CYCLE`, `MAX_EXPLORATION_CYCLES` e `MAX_AGENT_RUNS_PER_SESSION` como parada; limite de custo por sessão (`limite_custo`); modo sem limite cobrindo custo; objetivo tipado (`limiar`, `discriminacao` e `cobertura` mínima nesta etapa, `fronteira` declarado para a V19), réplicas mínimas para saturação, `aguarda_experimento_fisico`, decisão reservada `restringir_direcao` e parada pelo critério do tipo, sem filtro de veredito no `limiar`; política `ao_atingir_objetivo`; estagnação como intervenção do Curator; saturação; restrições por direção; disjuntor por novos experimentos; espera do gate fora dos ciclos ociosos; objetivo obrigatório no `Problema` (confirmado pelo gate no `assisted`/`semi`); motivos novos na classificação do benchmark (`limite_custo` como limite, `saturacao` como critério de pesquisa) e na retomada (`src/continuity.py:64-67`: `limite_custo` retoma sem perguntar, como os demais limites; `saturacao` pergunta) |
 | `v18.7-exploration-metrics` | `operation-metrics`, `benchmark` | §8.4: contadores por papel e origem, substituição de `reprovacoes_sem_hipotese`; também ADR 022 §6.3 e §7 (hash do contrato por tentativa, tokens do contrato por execução) |
+
+### Estado da implementação (2026-10-17)
+
+| Mudança | Estado |
+|---|---|
+| `v18.7-graph-exploration-relations` | Implementada e mergeada. |
+| `v18.7-hypothesis-linking` | Implementada e mergeada. |
+| `v18.7-exploration-limits` | Implementada e mergeada (#187 a #199). Pendente a bateria da V18.7 no Raspberry Pi (tarefa 10.4), que exige a confirmação do pesquisador, e as pendências registradas em `tasks.md` (1.2 adiada; concorrente declarada no item de `hipoteses`; `viola_restricao` só no revisor LLM; revisão do objetivo para `discriminacao` não aplicada pela sessão). |
+| `v18.7-exploration-metrics` | Não iniciada (§8.4: contadores por papel e origem; ADR 022 §6.3 e §7). |
+
+O ADR passa a `Aceito` quando `v18.7-exploration-metrics` for implementada e a bateria da V18.7 confirmar o §5.1 (nenhuma parada por `limite_ciclos` ou `limite_execucoes`) e o §5.2 (sessões com acurácia validada no alvo fecham por `solucao_encontrada`).
 
 A mudança `v18.7-hypothesis-linking` também atualiza o cenário "Baseline sem hipótese" de `pipeline-robustness` e o tratamento de resultado negativo (§8.2) em `hypothesis-loop`.
 

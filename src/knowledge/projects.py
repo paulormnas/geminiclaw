@@ -436,6 +436,22 @@ def set_objective_policy(
     return problem.id
 
 
+def _append_achievement_mark(
+    store: GraphStore, problem: Node, decided_by: Actor, *, sessao_id: str, decided_at: str | None = None
+) -> None:
+    """Acrescenta o marco ``objetivo_atingido`` declarado pelo pesquisador (nunca sobrescreve os anteriores)."""
+    from datetime import UTC, datetime
+
+    marks = list(problem.properties.get("objetivo_atingido") or [])
+    marks.append(
+        {
+            "em": decided_at or datetime.now(UTC).isoformat(), "sessao_id": sessao_id, "tipo": "cobertura",
+            "declarado_por": "pesquisador",
+        }
+    )
+    store.update_node(problem.id, {"objetivo_atingido": marks}, actor=decided_by)
+
+
 def declare_objective_reached(
     store: GraphStore, projeto_id: str, *, decided_by: Actor = PESQUISADOR, decided_at: str | None = None
 ) -> str:
@@ -448,23 +464,30 @@ def declare_objective_reached(
         ProjectError: Autor que não é o pesquisador, projeto sem Problema confirmado ou objetivo diferente de
             ``cobertura``.
     """
-    from datetime import UTC, datetime
-
     problem, criterion = _problem_with_criterion(store, projeto_id, decided_by)
     if criterion.get("tipo") != "cobertura":
         raise ProjectError(
             "Só o objetivo de cobertura é declarado atingido pelo pesquisador; nos tipos limiar e discriminação o "
             "sistema decide pelos resultados validados."
         )
-    marks = list(problem.properties.get("objetivo_atingido") or [])
-    marks.append(
-        {
-            "em": decided_at or datetime.now(UTC).isoformat(), "sessao_id": CLI_SESSION_ID, "tipo": "cobertura",
-            "declarado_por": "pesquisador",
-        }
-    )
-    store.update_node(problem.id, {"objetivo_atingido": marks}, actor=decided_by)
+    _append_achievement_mark(store, problem, decided_by, sessao_id=CLI_SESSION_ID, decided_at=decided_at)
     return problem.id
+
+
+def record_objective_reached_by_session(
+    store: GraphStore, projeto_id: str, sessao_id: str, *, decided_by: Actor = PESQUISADOR
+) -> bool:
+    """Marco do objetivo declarado atingido pelo pesquisador ao fechar uma sessão pelo terminal (``cobertura``).
+
+    Returns:
+        ``True`` se o marco foi gravado; ``False`` quando o objetivo não é ``cobertura`` (nos outros tipos o sistema é
+        quem atinge o objetivo, pelos resultados validados).
+    """
+    problem, criterion = _problem_with_criterion(store, projeto_id, decided_by)
+    if criterion.get("tipo") != "cobertura":
+        return False
+    _append_achievement_mark(store, problem, decided_by, sessao_id=sessao_id)
+    return True
 
 
 # ---------------------------------------------------------------------------

@@ -221,6 +221,28 @@ def register_orientation(
         return None
 
 
+def register_objective_reached(
+    session: Any, *, store_factory: Callable[[], Any] | None = None
+) -> bool:
+    """Marco ``objetivo_atingido`` no ``Problema`` quando o pesquisador fecha a sessão declarando o objetivo atingido.
+
+    Vale só para a ``cobertura``. Sessão sem projeto ou grafo indisponível: ``False`` (o fechamento já foi feito; só o
+    marco falta).
+    """
+    project_id = (session.payload or {}).get("project_id")
+    if not project_id:
+        return False
+    try:
+        if store_factory is None:
+            from src.knowledge.factory import open_raw_graph_store as store_factory
+        from src.knowledge.projects import record_objective_reached_by_session
+
+        return record_objective_reached_by_session(store_factory(), str(project_id), session.id)
+    except Exception as exc:  # noqa: BLE001 - o marco é complementar ao fechamento
+        logger.warning("Marco do objetivo atingido não gravado", extra={"error": type(exc).__name__})
+        return False
+
+
 def send_message(
     manager: Any,
     target: str,

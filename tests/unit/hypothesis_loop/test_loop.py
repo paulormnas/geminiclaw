@@ -237,7 +237,8 @@ async def test_planos_rejeitados_em_sequencia_fecham_com_checkpoint(tmp_path):
     """Scenario: Planos rejeitados em sequência — MAX_PLAN_RETRIES planos seguidos rejeitados: fecha registrando."""
     h = LoopHarness(tmp_path, plans=["[]"], validator=AsyncMock(return_value=REJECTED))
     with patch("src.config.MAX_PLAN_RETRIES", 2), patch("src.orchestration.autonomous_loop.MAX_PLAN_RETRIES", 2), \
-            patch("src.orchestration.orchestrator.MAX_PLANNING_ITERATIONS", 1):
+            patch("src.orchestration.orchestrator.MAX_PLANNING_ITERATIONS", 1), \
+            patch("src.config.ON_PLAN_REJECTIONS", "parar"):
         await h.run()
     assert h.ran == [] and h.plan_calls == 2  # uma execução de planejamento por plano rejeitado
     assert h.stop_reason == "planos_rejeitados"

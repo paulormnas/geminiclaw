@@ -46,6 +46,12 @@ _STAGNATION_REQUESTS: dict[str, tuple[str, tuple[str, ...], str]] = {
 }
 
 
+def request_exhausted(requester: ContinuityRequester) -> None:
+    """Pedido ``intervencoes_esgotadas`` (não bloqueia a sessão)."""
+    motivo, options, question = _STAGNATION_REQUESTS["intervencoes_esgotadas"]
+    requester(motivo, "intervencoes_esgotadas", options, question)
+
+
 def patience(base: int, growth: float, interventions: int, fraction: float) -> int:
     """Paciência em ciclos: ``ceil(base × (1 + growth × intervenções) × (1 + f))`` (design §7, passo 2).
 

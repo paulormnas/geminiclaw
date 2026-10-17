@@ -68,10 +68,18 @@ class CycleProgress:
 
     succeeded: frozenset
     failure_signatures: frozenset
+    # v18.7-exploration-limits §9.1: na exploração com projeto, o progresso é do grafo (``None`` = laço da V17).
+    experiments: int | None = None
+    results: int | None = None
 
     def advanced_from(self, previous: "CycleProgress") -> bool:
-        """Há progresso se surgiram sucessos novos ou a assinatura dos erros mudou."""
-        return not self.succeeded <= previous.succeeded or self.failure_signatures != previous.failure_signatures
+        """Há progresso se o grafo ganhou ``Experimento`` ou ``Resultado`` (exploração com projeto) ou, sem projeto,
+        se surgiram sucessos novos; em ambos os casos, se a assinatura dos erros mudou."""
+        if self.failure_signatures != previous.failure_signatures:
+            return True
+        if self.experiments is not None and previous.experiments is not None:
+            return self.experiments > previous.experiments or (self.results or 0) > (previous.results or 0)
+        return not self.succeeded <= previous.succeeded
 
 
 DONE_STATUSES = ("success", "concluded_negative")  # estados do DAG que liberam as dependentes e contam como progresso
@@ -1061,6 +1069,7 @@ class AutonomousLoop(LoopReportMixin):
                 exploration.restore_objective(resume.checkpoint.exploracao_estado)
         cycle_no = 0
         rejected_plans = 0
+        rejection_issues: List[str] = []
         legacy_attempt = 0
         explore_next = False
         done_results: Dict[str, AgentResult] = {}  # subtarefas concluídas na sessão (nunca reexecutadas)
@@ -1078,13 +1087,45 @@ class AutonomousLoop(LoopReportMixin):
         while True:
             if exploring:
                 if rejected_plans >= max_plan_retries:
-                    logger.error("Planos consecutivos rejeitados: exploração encerrada", extra={"n": rejected_plans})
+                    # v18.7-exploration-limits §9.3: com ``explorar`` (padrão) a rejeição em sequência aciona o
+                    # Curator; com ``parar`` fecha no auto e pede ao pesquisador no assisted/semi.
+                    from src import config
                     from src.orchestration.exploration import ExplorationStop
 
-                    return await self._close_exploration(
-                        ExplorationStop.REJECTED_PLANS, master_session_id, prompt, list(cumulative_tasks.values()),
-                        cumulative_dag, final_results,
-                    )
+                    logger.error("Planos consecutivos rejeitados", extra={"n": rejected_plans})
+                    stop_args = (master_session_id, prompt, list(cumulative_tasks.values()), cumulative_dag,
+                                 final_results)
+                    if config.ON_PLAN_REJECTIONS == "explorar":
+                        try:
+                            intervened = await exploration.intervene_on_plan_rejections(
+                                rejection_issues, rejected_plans
+                            )
+                        except SuggestionError as exc:
+                            return await self._close_on_suggestion_failure(exc, *stop_args)
+                        if intervened:
+                            execution_feedback += (
+                                "\nOs últimos planos foram rejeitados repetidamente: proponha uma abordagem ou "
+                                "variação diferente, respondendo às sugestões do Curator."
+                            )
+                            explore_next = True
+                        rejected_plans = 0
+                        continue
+                    if self._session_mode == "auto":
+                        return await self._close_exploration(ExplorationStop.REJECTED_PLANS, *stop_args)
+                    await asyncio.to_thread(exploration.request_plan_rejections, rejection_issues, rejected_plans)
+                    answer = await asyncio.to_thread(exploration.plan_rejection_answer)
+                    while answer is None and self._session_mode == "assisted":
+                        if await self._wait_for_researcher(master_session_id, ("decidir_continuidade",)) == "parar":
+                            return await self._close_for_pending_stop(*stop_args)
+                        answer = await asyncio.to_thread(exploration.plan_rejection_answer)
+                    if answer == "parar":
+                        return await self._close_exploration(ExplorationStop.REJECTED_PLANS, *stop_args)
+                    if answer is None:
+                        return await self._suspend_session(
+                            master_session_id, list(cumulative_tasks.values()), final_results,
+                            "Sessão aguarda o pesquisador: planos rejeitados em sequência.",
+                        )
+                    rejected_plans = 0
                 plan_attempt = cycle_no
             else:
                 if legacy_attempt >= max_plan_retries:
@@ -1117,6 +1158,7 @@ class AutonomousLoop(LoopReportMixin):
                 logger.error("Planejamento encerrado por reprovação repetida", extra={"issues": stalled.issues})
                 if exploring:
                     rejected_plans += 1
+                    rejection_issues = [str(i) for i in stalled.issues]
                     issues_text = "; ".join(stalled.issues)[:500]
                     execution_feedback = f"O Validador reprovou o plano repetidamente: {issues_text}"
                     continue
@@ -1144,6 +1186,8 @@ class AutonomousLoop(LoopReportMixin):
                 execution_feedback = "O orquestrador falhou ao gerar um plano aprovado."
                 if exploring:
                     rejected_plans += 1
+                    last_issues = getattr(self.orchestrator, "last_plan_issues", {})
+                    rejection_issues = list(last_issues.get(master_session_id, []))
                 continue
             rejected_plans = 0
 
@@ -1895,11 +1939,21 @@ class AutonomousLoop(LoopReportMixin):
             # V12.5.1 — Circuit breaker: detecta progresso zero entre ciclos consecutivos
             # v16-pipeline-robustness §4 — progresso = mais sucessos OU mudança na assinatura dos
             # erros; dispara só após CIRCUIT_BREAKER_STALL_CYCLES ciclos consecutivos sem progresso.
+            graph_counts = (None, None)
+            if exploration is not None:
+                try:
+                    graph_counts = await asyncio.to_thread(exploration.session_progress)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 - sem o grafo vale a regra por nomes
+                    logger.warning("Progresso do grafo indisponível", extra={"error": type(exc).__name__})
             current_progress = CycleProgress(
                 succeeded=frozenset(succeeded_tasks),
                 failure_signatures=frozenset(
                     error_signature(t, dag_state[t].get("error")) for t in failed_tasks
                 ),
+                experiments=graph_counts[0],
+                results=graph_counts[1],
             )
             if _previous_progress is not None and not current_progress.advanced_from(_previous_progress):
                 _stalled_cycles += 1

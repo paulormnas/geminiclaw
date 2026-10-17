@@ -399,6 +399,75 @@ def set_unlimited_mode(
 
 
 # ---------------------------------------------------------------------------
+# Objetivo do Problema (comandos do pesquisador; v18.7-exploration-limits, ADR 021 §5.3)
+# ---------------------------------------------------------------------------
+
+
+def _problem_with_criterion(store: GraphStore, projeto_id: str, decided_by: Actor) -> tuple[Node, dict[str, Any]]:
+    if decided_by.kind != "pesquisador":
+        raise ProjectError("Só o pesquisador altera o objetivo do Problema.")
+    pid = validate_project_id(projeto_id)
+    _find_project_node(store, pid)
+    problem = get_active_problem(store, pid)
+    if problem is None:
+        raise ProjectError(f"O projeto {pid} não tem Problema confirmado.")
+    criterion = problem.properties.get("criterio_sucesso")
+    return problem, dict(criterion) if isinstance(criterion, dict) else {}
+
+
+def set_objective_policy(
+    store: GraphStore, projeto_id: str, policy: str, *, decided_by: Actor = PESQUISADOR
+) -> str:
+    """Muda ``criterio_sucesso.ao_atingir_objetivo`` (comando determinístico, auditado com autor ``pesquisador``).
+
+    Returns:
+        O id do ``Problema``.
+
+    Raises:
+        ProjectError: Autor que não é o pesquisador, projeto sem Problema confirmado ou política inválida.
+    """
+    from src.knowledge.schema import POLITICAS_OBJETIVO
+
+    if policy not in POLITICAS_OBJETIVO:
+        raise ProjectError(f"Política inválida '{policy}': use uma de {', '.join(POLITICAS_OBJETIVO)}.")
+    problem, criterion = _problem_with_criterion(store, projeto_id, decided_by)
+    criterion["ao_atingir_objetivo"] = policy
+    store.update_node(problem.id, {"criterio_sucesso": criterion}, actor=decided_by)
+    return problem.id
+
+
+def declare_objective_reached(
+    store: GraphStore, projeto_id: str, *, decided_by: Actor = PESQUISADOR, decided_at: str | None = None
+) -> str:
+    """Declara atingido o objetivo ``cobertura`` (só o pesquisador o atinge): acrescenta o marco ``objetivo_atingido``.
+
+    Returns:
+        O id do ``Problema``.
+
+    Raises:
+        ProjectError: Autor que não é o pesquisador, projeto sem Problema confirmado ou objetivo diferente de
+            ``cobertura``.
+    """
+    from datetime import UTC, datetime
+
+    problem, criterion = _problem_with_criterion(store, projeto_id, decided_by)
+    if criterion.get("tipo") != "cobertura":
+        raise ProjectError(
+            "Só o objetivo de cobertura é declarado atingido pelo pesquisador; nos tipos limiar e discriminação o "
+            "sistema decide pelos resultados validados."
+        )
+    marks = list(problem.properties.get("objetivo_atingido") or [])
+    marks.append(
+        {
+            "em": decided_at or datetime.now(UTC).isoformat(), "sessao_id": CLI_SESSION_ID, "tipo": "cobertura",
+            "declarado_por": "pesquisador",
+        }
+    )
+    store.update_node(problem.id, {"objetivo_atingido": marks}, actor=decided_by)
+    return problem.id
+
+
+# ---------------------------------------------------------------------------
 # Confirmação do Problema (somente pelo pesquisador)
 # ---------------------------------------------------------------------------
 

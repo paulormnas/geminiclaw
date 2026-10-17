@@ -1,4 +1,4 @@
-"""Subcomando ``geminiclaw project new|list|show|use`` (v17-research-project).
+"""Subcomando ``geminiclaw project new|list|show|use|objective`` (v17-research-project).
 
 Operações tipadas e determinísticas sobre o grafo, com autor ``pesquisador`` e sem LLM.
 """
@@ -70,7 +70,7 @@ def handle_project_command(
     drafter: Callable[..., Any] | None = None,
     interactive: bool | None = None,
 ) -> int:
-    """Trata ``geminiclaw project new|list|show|use``.
+    """Trata ``geminiclaw project new|list|show|use|objective``.
 
     Args:
         argv: Argumentos após ``project``.
@@ -102,6 +102,13 @@ def handle_project_command(
     unl_group = unl_p.add_mutually_exclusive_group(required=True)
     unl_group.add_argument("--on", action="store_true")
     unl_group.add_argument("--off", action="store_true")
+    obj_p = sub.add_parser(
+        "objective", help="Política ao atingir o objetivo (--ao-atingir) ou declara a cobertura atingida (--atingido)."
+    )
+    obj_p.add_argument("projeto_id")
+    obj_group = obj_p.add_mutually_exclusive_group(required=True)
+    obj_group.add_argument("--ao-atingir", choices=["parar", "perguntar", "continuar"], dest="ao_atingir")
+    obj_group.add_argument("--atingido", action="store_true")
     sub.add_parser(
         "confirm", help="Redige o rascunho do Problema e o confirma, sem iniciar uma sessão (exige terminal)."
     ).add_argument("projeto_id")
@@ -146,6 +153,13 @@ def handle_project_command(
                 store, args.projeto_id, drafter=drafter, interactive=interactive, input_fn=input_fn,
                 output_fn=output_fn,
             )
+        elif args.action == "objective":
+            if args.atingido:
+                projects.declare_objective_reached(store, args.projeto_id)
+                output_fn(f"Projeto {args.projeto_id}: objetivo de cobertura declarado atingido (marco gravado).")
+            else:
+                projects.set_objective_policy(store, args.projeto_id, args.ao_atingir)
+                output_fn(f"Projeto {args.projeto_id}: ao atingir o objetivo, a sessão vai {args.ao_atingir}.")
         elif args.action == "unlimited":
             pid = projects.set_unlimited_mode(store, args.projeto_id, bool(args.on))
             output_fn(

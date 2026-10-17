@@ -2448,6 +2448,7 @@ class AutonomousLoop(LoopReportMixin):
             "outcome": getattr(review, "outcome", None) or ("aprovado" if review.is_approved else "reprovado"),
             "negative_findings": list(getattr(review, "negative_findings", None) or []),
             "motivos": list(getattr(review, "motivos", None) or []),
+            "predicoes": list(getattr(review, "predicoes", None) or []),
         }
 
     async def _synthesize_results(

@@ -28,6 +28,7 @@ from src.egress.gate import EgressGate, any_role_raw, bind_gate, role_tainted
 from src.egress.persisted import resumo_marca
 from src.gate.persistent_gate import PersistentGate, session_gate
 from src.knowledge.hypotheses import PlanExtras, split_plan
+from src.knowledge.objective import parse_discrimina
 from src.knowledge.suggestions import SuggestionError
 from src.llm.allocation import build_allocation_profile
 from src.llm.metering import bind_execution, bound_execution_id
@@ -2432,6 +2433,8 @@ class Orchestrator:
                         approach=t.get("approach") if isinstance(t.get("approach"), dict) else None,
                         hypothesis_ref=str(t.get("hypothesis_ref") or "")[:128],
                         papel=declared_role(t.get("papel")),
+                        discrimina=parse_discrimina(t.get("discrimina")),
+                        experimento_fisico=t.get("experimento_fisico") is True,
                     ))
                 return tasks
             else:

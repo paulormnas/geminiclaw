@@ -159,6 +159,14 @@ class AutonomousLoop(LoopReportMixin):
             return StopReason.SUSPENDED
         return None
 
+    def _usage_fraction(self) -> float:
+        """Maior fração consumida entre os limites ativos (tokens, tempo, custo); 0 no modo sem limite (design §7)."""
+        tracker = self._usage_tracker
+        if tracker is None:
+            return 0.0
+        status = tracker.check()
+        return max((p for p in (status.tokens_pct, status.minutes_pct, status.cost_pct) if p is not None), default=0.0)
+
     def _pending_stop(self, master_session_id: str) -> "StopReason | None":
         """Ponto de verificação de limites: trata a mudança de versão do modelo (política ``retomar``) e consulta as
         paradas pendentes. Falha ao tratar a versão nunca interrompe a pesquisa."""
@@ -1047,6 +1055,7 @@ class AutonomousLoop(LoopReportMixin):
                 # v18.6-auto-metrics-and-stop-reasons: no modo auto o Researcher define a métrica no plano e o
                 # Validator a valida; só depois ela vale para o veredito. A sessão não deixa de iniciar.
                 exploration.require_metric_definition(unavailable[1])
+            exploration.set_usage_fraction(self._usage_fraction)
             if resume is not None:  # design §4.4: origem das hipóteses do sistema vinda do checkpoint
                 exploration.restore_system_origin(resume.checkpoint.hipoteses_do_sistema)
                 exploration.restore_objective(resume.checkpoint.exploracao_estado)
@@ -1767,8 +1776,9 @@ class AutonomousLoop(LoopReportMixin):
                 # v18.7-exploration-limits §5 e §6: avalia o objetivo tipado do Problema e aplica a política
                 # ao atingi-lo (parar, perguntar ou continuar). O veredito da hipótese não decide; a resposta do
                 # pesquisador vem do gate persistente, nunca do terminal da sessão.
+                objective_state = None
                 try:
-                    await asyncio.to_thread(exploration.evaluate_objective)
+                    objective_state = await asyncio.to_thread(exploration.evaluate_objective)
                     decision = await asyncio.to_thread(exploration.objective_decision)
                 except asyncio.CancelledError:
                     raise
@@ -1795,6 +1805,32 @@ class AutonomousLoop(LoopReportMixin):
                             "Sessão aguarda o pesquisador: objetivo atingido, à espera da decisão.",
                         )
                     # semi/auto sem resposta: segue com o que não depende dela (o pedido continua pendente)
+                else:
+                    # v18.7-exploration-limits §7: estagnação (intervenção do Curator) e saturação; a sessão nunca
+                    # fecha por estagnação, só por saturação confirmada no auto ou por ``parar`` do pesquisador.
+                    from src.orchestration.exploration import ExplorationStop
+
+                    try:
+                        stall_stop = await exploration.manage_stagnation(objective_state)
+                    except SuggestionError as exc:
+                        return await self._close_on_suggestion_failure(
+                            exc, master_session_id, prompt, list(cumulative_tasks.values()), cumulative_dag,
+                            final_results,
+                        )
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:  # noqa: BLE001 - a estagnação nunca derruba a pesquisa
+                        logger.warning("Estagnação não avaliada", extra={"error": type(exc).__name__})
+                        stall_stop = None
+                    if stall_stop is not None:
+                        if recorder is not None:
+                            await asyncio.to_thread(recorder.set_exploration_state, exploration.objective_snapshot())
+                        return await self._close_exploration(
+                            ExplorationStop(stall_stop), master_session_id, prompt, list(cumulative_tasks.values()),
+                            cumulative_dag, final_results,
+                        )
+                    if recorder is not None:
+                        await asyncio.to_thread(recorder.set_exploration_state, exploration.objective_snapshot())
 
             # Verifica se houve alguma falha
             failed_tasks = [t for t, state in dag_state.items() if state["status"] in ("failed", "cancelled")]

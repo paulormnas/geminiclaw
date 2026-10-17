@@ -38,7 +38,13 @@ TIPO_OPORTUNIDADE = "oportunidade_aprovada"
 TIPO_CAMINHO = "caminho_sem_conclusao"
 TIPO_LICAO = "licao_de_caminho"
 TIPO_VARIACAO = "abordagem_em_problema_similar"
-SUGGESTION_TYPES = (TIPO_OPORTUNIDADE, TIPO_CAMINHO, TIPO_LICAO, TIPO_VARIACAO)
+# v18.7-exploration-limits (design §7): direções que só o modo intervenção (estagnação) sugere.
+TIPO_DIVERSIFICACAO = "diversificacao"
+TIPO_DERIVADA = "hipotese_derivada"
+SUGGESTION_TYPES = (
+    TIPO_OPORTUNIDADE, TIPO_CAMINHO, TIPO_LICAO, TIPO_VARIACAO, TIPO_DIVERSIFICACAO, TIPO_DERIVADA,
+)
+_MAX_TRIED = 10
 _MAX_TEXT = 300
 _MAX_FILE_BYTES = 1024 * 1024
 _MAX_SCAN = 500
@@ -247,6 +253,74 @@ def build_candidates(store: GraphStore, project_id: str, index: Any | None = Non
     return [s for s in out if s.texto and normalize_domain_term(s.texto) not in texts]
 
 
+@dataclass(frozen=True)
+class StallContext:
+    """Contexto da intervenção por estagnação (design §7): só contagens, ids e valores numéricos.
+
+    Attributes:
+        intervencao: Número da intervenção (1, 2, ...).
+        ciclos_sem_avanco: Ciclos sem avanço que a motivaram.
+        melhor_valor: Melhor valor elegível até aqui (``limiar``), se houver.
+        melhor_hipotese_id: Hipótese do melhor valor, se houver.
+        issues: Pontos recusados pelo Validator nos últimos planos (planos rejeitados, §9.3); texto de agente, saneado.
+    """
+
+    intervencao: int
+    ciclos_sem_avanco: int
+    melhor_valor: float | None = None
+    melhor_hipotese_id: str | None = None
+    issues: tuple[str, ...] = ()
+
+
+def _tried_approaches(store: GraphStore, project_id: str) -> list[str]:
+    """Nomes saneados das abordagens que as hipóteses do projeto já propuseram (só o próprio projeto)."""
+    names: list[str] = []
+    for _, approach_id in sorted(_project_approach_ids(store, project_id)):
+        node = store.get_node(approach_id)
+        name = _clean(node.properties.get("nome")) if node is not None else ""
+        if name and name not in names:
+            names.append(name)
+    return names[:_MAX_TRIED]
+
+
+def _project_approach_ids(store: GraphStore, project_id: str) -> set[tuple[str, str]]:
+    pairs: set[tuple[str, str]] = set()
+    for node in store.find_nodes("Hipotese", {"projeto_id": project_id}, limit=_MAX_SCAN):
+        sub = store.neighbors(node.id, ["PROPOE"], direction="out", depth=1)
+        pairs.update((node.id, e.dst_id) for e in sub.edges if e.src_id == node.id and e.rel_type == "PROPOE")
+    return pairs
+
+
+def intervention_candidates(store: GraphStore, project_id: str, context: StallContext) -> list[Suggestion]:
+    """Direções novas pedidas pela estagnação: diversificar a abordagem e derivar da melhor hipótese.
+
+    Determinístico e restrito ao próprio projeto (as abordagens citadas são as que as hipóteses do projeto propuseram).
+    O que o Researcher já tentou entra no texto como dado; o ID muda a cada intervenção, para a sugestão não ser
+    tratada como repetida.
+    """
+    tried = _tried_approaches(store, project_id)
+    marker = f"intervencao-{context.intervencao}"
+    best = f" (melhor valor {context.melhor_valor:g})" if context.melhor_valor is not None else ""
+    text = f"Estagnação: {context.ciclos_sem_avanco} ciclos sem avanço{best}."
+    if tried:
+        text += f" Abordagens já tentadas: {', '.join(tried)}."
+    text += " Proponha uma abordagem ainda não tentada ou mude o fator que se manteve fixo."
+    if context.issues:
+        text += f" Pontos recusados nos últimos planos: {'; '.join(_clean(i) for i in context.issues[:5])}."
+    diversification = Suggestion(
+        suggestion_id(TIPO_DIVERSIFICACAO, [marker]), sanitize_text(text, _MAX_TEXT), (), TIPO_DIVERSIFICACAO
+    )
+    out = [diversification]
+    node = store.get_node(context.melhor_hipotese_id) if context.melhor_hipotese_id else None
+    if node is not None and node.label == "Hipotese" and node.properties.get("projeto_id") == project_id:
+        derived = f"Derive uma hipótese nova de '{_clean(node.properties.get('enunciado'))}', a de melhor resultado."
+        out.append(
+            Suggestion(suggestion_id(TIPO_DERIVADA, [node.id, marker]), sanitize_text(derived, _MAX_TEXT), (node.id,),
+                       TIPO_DERIVADA)
+        )
+    return out
+
+
 def suggest_paths(
     store: GraphStore,
     project_id: str,
@@ -254,6 +328,7 @@ def suggest_paths(
     *,
     index: Any | None = None,
     max_suggestions: int | None = None,
+    intervencao: StallContext | None = None,
 ) -> list[Suggestion]:
     """Gera até ``max_suggestions`` sugestões novas e as grava em ``curator_suggestions.jsonl``.
 
@@ -263,6 +338,7 @@ def suggest_paths(
         session_dir: ``outputs/<sessão>/``.
         index: Índice semântico (fonte "abordagens em problemas similares"); opcional.
         max_suggestions: Máximo por ciclo (padrão: ``CURATOR_MAX_SUGGESTIONS``).
+        intervencao: Contexto da estagnação; as direções de diversificação vêm antes das fontes comuns.
 
     Returns:
         As sugestões **novas** gravadas neste ciclo (as pendentes antigas continuam pendentes até a resposta).
@@ -272,5 +348,8 @@ def suggest_paths(
         return []
     sugestoes = SuggestionStore(session_dir)
     known = sugestoes.known_ids()
-    fresh = [c for c in build_candidates(store, project_id, index) if c.id not in known]
+    candidates = build_candidates(store, project_id, index)
+    if intervencao is not None:
+        candidates = [*intervention_candidates(store, project_id, intervencao), *candidates]
+    fresh = [c for c in candidates if c.id not in known]
     return sugestoes.add(fresh[:limit])

@@ -11,6 +11,7 @@ sessão (``exploracao_estado``) para a retomada.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -138,6 +139,7 @@ class ObjectiveTracker:
         self.session_policy: str | None = None  # ``continuar`` depois da resposta do pesquisador
         self.reported: set[str] = set()
         self.last_state: ObjectiveState | None = None
+        self.criterion: dict[str, Any] | None = None
         self._feedback = ""
 
     # ------------------------------------------------------------------ política
@@ -170,6 +172,7 @@ class ObjectiveTracker:
             return None
         self.memory = state.memory
         self.last_state = state
+        self.criterion = dict(criterion)
         self._feedback = ""
         if state.atingido and self.achievement is None:
             self._record_achievement(store, problem.id, dict(criterion), state)
@@ -228,10 +231,18 @@ class ObjectiveTracker:
             self._request(motivo, "cobertura", options, question)
 
     def _once(self, key: str) -> bool:
+        return self.once(key)
+
+    def once(self, key: str) -> bool:
+        """``True`` na primeira vez que ``key`` é vista (a chave entra no checkpoint); ``False`` depois."""
         if key in self.reported:
             return False
         self.reported.add(key)
         return True
+
+    def forget(self, prefix: str) -> None:
+        """Esquece as chaves relatadas que começam por ``prefix`` (um avanço ou uma resposta reabre o relato)."""
+        self.reported = {k for k in self.reported if not k.startswith(prefix)}
 
     def feedback(self) -> str:
         """Texto para o replanejamento (``todas_contrariadas`` pede hipóteses novas); vazio sem desfecho."""
@@ -270,10 +281,52 @@ class ObjectiveTracker:
         """Estado do checkpoint (dado não confiável): valor inválido volta ao padrão, nunca levanta."""
         if not isinstance(raw, dict):
             return
+        invalid = invalid_state_field(raw)
+        if invalid is not None:
+            logger.warning("Estado da exploração do checkpoint descartado", extra={"extra": {"campo": invalid}})
+            self._emit("exploracao_estado_descartado", {"campo": invalid})
+            return
         self.memory = ObjectiveMemory.from_dict(raw.get("memoria"))
         self.achievement = Achievement.from_dict(raw.get("atingido"))
         self.session_policy = "continuar" if raw.get("politica_sessao") == "continuar" else None
         self.reported = {str(v)[:128] for v in (raw.get("relatados") or []) if isinstance(v, str)}
+
+
+_MAX_COUNT = 1_000_000
+
+
+def _is_count(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= _MAX_COUNT
+
+
+def invalid_state_field(raw: dict[str, Any]) -> str | None:
+    """Primeiro campo inválido do ``exploracao_estado`` (dado não confiável: tipos, faixas e tamanho), ou ``None``.
+
+    O estado inteiro é descartado quando algum campo é inválido: uma contagem aceita pela metade falsearia a
+    estagnação.
+    """
+    memory = raw.get("memoria")
+    if memory is None:
+        return None
+    if not isinstance(memory, dict):
+        return "memoria"
+    for key in ("cycles_without_advance", "interventions"):
+        if key in memory and not _is_count(memory[key]):
+            return key
+    best = memory.get("best_value")
+    if best is not None and (isinstance(best, bool) or not isinstance(best, (int, float)) or not math.isfinite(best)):
+        return "best_value"
+    novelty = memory.get("novelty", [])
+    if not isinstance(novelty, list) or len(novelty) > 100 or not all(_is_count(v) for v in novelty):
+        return "novelty"
+    for key in ("seen_experiments", "contradicted"):
+        items = memory.get(key, [])
+        if not isinstance(items, list) or len(items) > 2000 or not all(isinstance(v, str) for v in items):
+            return key
+    reported = raw.get("relatados", [])
+    if not isinstance(reported, list) or len(reported) > 100 or not all(isinstance(v, str) for v in reported):
+        return "relatados"
+    return None
 
 
 def _ids(state: ObjectiveState) -> dict[str, Any]:

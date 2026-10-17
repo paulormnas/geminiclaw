@@ -389,6 +389,8 @@ class Repl:
         if not result.resolved or result.request is None or not result.request.session_id:
             return
         session = self.manager.get(result.request.session_id)
+        if session is not None and session.status != "aguarda_pesquisador":
+            self._post_orientation(session, result.request)  # sessão em andamento: a orientação vai à caixa agora
         if session is None or session.status != "aguarda_pesquisador":
             return
         remaining = self.gate.pending(chain_session_ids(self.manager, session.id))
@@ -401,6 +403,17 @@ class Repl:
         self.console.write(f"  {DIM}Último pedido de {label(session)} respondido: retomando a pesquisa.{RESET}")
         await self.resume(session)
 
+    def _post_orientation(self, session: Any, request: Any) -> None:
+        """Orientação de uma resposta ``orientar`` de ``decidir_continuidade`` vai à caixa de entrada da sessão."""
+        if request.decisao != "decidir_continuidade" or (request.resposta or {}).get("acao") != "orientar":
+            return
+        from src.session.inbox import InboxError, SessionInbox
+
+        try:
+            SessionInbox().post(session.id, str((request.resposta or {}).get("orientacao", "")))
+        except InboxError as exc:
+            self.console.write(f"  {RED}Orientação não gravada: {exc}{RESET}")
+
     async def _apply_continuity(self, session: Any, request: Any) -> bool:
         """Efeito das respostas de ``decidir_continuidade`` (ADR 021 §5.2): ``parar``, ``aceitar_conjunto`` e
         ``objetivo_atingido`` fecham a pesquisa pelo terminal, sem processo novo; ``orientar`` deixa o texto na caixa
@@ -409,12 +422,7 @@ class Repl:
             return False
         action = (request.resposta or {}).get("acao")
         if action == "orientar":
-            from src.session.inbox import InboxError, SessionInbox
-
-            try:
-                SessionInbox().post(session.id, str((request.resposta or {}).get("orientacao", "")))
-            except InboxError as exc:
-                self.console.write(f"  {RED}Orientação não gravada: {exc}{RESET}")
+            self._post_orientation(session, request)
             return False
         reason = {
             "parar": "planos_rejeitados" if request.motivo == "planos_rejeitados" else "encerrada_pesquisador",

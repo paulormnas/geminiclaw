@@ -328,6 +328,14 @@ async def run_agent_loop(
         _versao_efetiva = record_call_version(
             _provider_name, _model_name, normalize_version(getattr(response, "versao_efetiva", None))
         )
+        _cost = estimate_cost(
+            _provider_name, _model_name, _prompt_tokens, _completion_tokens,
+            response.usage.get("cached_tokens", 0) or 0,
+        )
+        if _cost is None:
+            from src.llm.metering import note_unpriced_model
+
+            note_unpriced_model(_exec_id, _session_id, _provider_name, _model_name)
         _telemetry.record_token_usage(
             execution_id=_exec_id,
             session_id=_session_id,
@@ -338,10 +346,7 @@ async def run_agent_loop(
             completion_tokens=_completion_tokens,
             latency_ms=_llm_latency_ms,
             task_name=_task_name,
-            estimated_cost_usd=estimate_cost(
-                _provider_name, _model_name, _prompt_tokens, _completion_tokens,
-                response.usage.get("cached_tokens", 0) or 0,
-            ),
+            estimated_cost_usd=_cost,
             context_window_used=_prompt_tokens + _completion_tokens,
             context_window_max=max_ctx,
             was_compressed=was_compressed,

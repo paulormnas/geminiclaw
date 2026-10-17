@@ -40,6 +40,10 @@ def confirmation_prompt(budget: UsageBudget, *, interval_minutes: float, token_s
         "⚠ MODO SEM LIMITE: tokens, tempo, custo e volume de egresso não interrompem a sessão.\n"
         f"  Retentativas por tarefa ({budget.max_task_retries}) e de conexão ({budget.max_connection_retries}) "
         "continuam limitadas.\n"
+        "  Sem limites, não há parada automática garantida: a sessão segue até o objetivo (conforme a política), a "
+        "falta de caminho, a saturação, o pesquisador ou uma falha.\n"
+        "  No modo autônomo ela pode rodar indefinidamente; só wait_for_health e SANDBOX_MIN_FREE_BYTES protegem o "
+        "hardware.\n"
         "  As regras de localidade dos dados continuam valendo.\n"
         f"  Avisos de consumo a cada {interval_minutes:g} min ou {token_step:,} tokens.\n"
         f'  Digite "{CONFIRMATION_PHRASE}" para confirmar: '

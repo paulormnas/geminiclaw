@@ -616,6 +616,7 @@ SESSION_MAX_COST_USD_BY_PROVIDER: dict[str, float] = _provider_costs(
 OPERATIONAL_THRESHOLD_COST_USAGE_PCT = float(
     _bounded_number("OPERATIONAL_THRESHOLD_COST_USAGE_PCT", "0.80", float, "um número em (0, 1]", lambda v: 0 < v <= 1)
 )
+OPERATIONAL_THRESHOLDS["cost_usage_pct"] = OPERATIONAL_THRESHOLD_COST_USAGE_PCT
 # Estagnação, intervenção do Curator e saturação (0 em EXPLORATION_STALL_CYCLES desliga as três).
 EXPLORATION_STALL_CYCLES = int(
     _bounded_number("EXPLORATION_STALL_CYCLES", "5", int, "um inteiro >= 0 (0 desliga)", lambda v: v >= 0)

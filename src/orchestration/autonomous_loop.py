@@ -575,6 +575,7 @@ class AutonomousLoop(LoopReportMixin):
         token_summary = telemetry.get_token_summary(master_session_id)
         rows = token_summary.get("by_provider_model", [])
         total_tokens = sum(r.get("total_tokens") or 0 for r in rows)
+        total_cost = sum(r.get("total_cost_usd") or 0 for r in rows)
 
         token_pct = (total_tokens / session_max_tokens) if session_max_tokens else 0.0
         duration_min = (time.time() - getattr(self, "_session_started_at", time.time())) / 60
@@ -585,6 +586,11 @@ class AutonomousLoop(LoopReportMixin):
         triggered: list[str] = []
         if not budget.unlimited and token_pct >= OPERATIONAL_THRESHOLDS["token_usage_pct"]:
             triggered.append(f"Uso de tokens: {token_pct*100:.0f}% do limite ({total_tokens}/{session_max_tokens})")
+        cost_pct = (total_cost / budget.max_cost_usd) if budget.max_cost_usd else 0.0
+        if not budget.unlimited and cost_pct >= OPERATIONAL_THRESHOLDS["cost_usage_pct"]:
+            triggered.append(
+                f"Custo estimado: {cost_pct*100:.0f}% do limite (US$ {total_cost:.2f}/US$ {budget.max_cost_usd:.2f})"
+            )
         if not budget.unlimited and duration_pct >= OPERATIONAL_THRESHOLDS["session_duration_pct"]:
             triggered.append(
                 f"Duração da sessão: {duration_pct*100:.0f}% do limite "

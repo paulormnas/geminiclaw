@@ -48,7 +48,8 @@ def resolve_unlimited_budget(
 
     origin: str | None = ORIGIN_CLI if budget.unlimited else None
     explicit_limits = any(
-        getattr(args, name, None) is not None for name in ("max_tokens", "max_minutes", "max_egress_bytes")
+        getattr(args, name, None) is not None
+        for name in ("max_tokens", "max_minutes", "max_egress_bytes", "max_cost_usd")
     )
     if origin is None and not explicit_limits and project_marked is not None:
         try:

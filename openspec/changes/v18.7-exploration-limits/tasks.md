@@ -1,6 +1,6 @@
 # Tarefas: v18.7-exploration-limits
 
-**Estado (2026-10-16):** aprovada pelo pesquisador (schema do grafo, remoção das variáveis de teto, Questões 4 e 5 do design §17 decididas); tarefa 0.9 (divisão do módulo) feita; seções 1, 2 e 4 feitas (as variáveis de teto saíram junto com seus usos; `.env` do Mac e do Pi migrados em 2026-10-17; o aviso G5 de custo absoluto e o de execuções saíram e o de percentual de custo volta na 3.4; `StopReason.RUNS` saiu, `StopReason.COST` entra na 3.1; a verificação de veredito mínimo de `check_solution` saiu e o critério por tipo vem na 5.4); a validação de `Restricao` pela sessão com pedido consumido é a 7.5 (até lá só o pesquisador a grava); seção 3 e 5 em diante não iniciadas. Todo valor de variável que precise de ajuste é validado em bateria de testes antes de mudar o padrão.
+**Estado (2026-10-17):** aprovada pelo pesquisador (schema do grafo, remoção das variáveis de teto, Questões 4 e 5 do design §17 decididas); tarefa 0.9 (divisão do módulo) feita; seções 1, 2, 3 e 4 feitas (#187, #188 e o PR do limite de custo): as variáveis de teto saíram junto com seus usos, os `.env` do Mac e do Pi foram migrados, `StopReason.RUNS` saiu e `StopReason.COST` entrou, o limite de custo (total e por provedor), a verificação de preço, `--max-cost-usd` e o aviso G5 por percentual de custo existem; da seção 9 já foram `limite_custo` em `MOTIVOS_RETOMAVEIS`, `describe_stop_reason` e `custo_recursos` (custo por provedor, limites, execuções); a validação de `Restricao` pela sessão com pedido consumido é a 7.5 (até lá só o pesquisador a grava); seções 5 a 8 e o restante da 9 não iniciadas. Todo valor de variável que precise de ajuste é validado em bateria de testes antes de mudar o padrão.
 
 ## 0. Pré-requisitos
 - [x] 0.1 Mudança aprovada pelo pesquisador, inclusive o schema aditivo do grafo (`Restricao`, `RESTRINGE`, motivos, propriedades) e a remoção das variáveis de teto com falha na inicialização.
@@ -23,11 +23,11 @@
 - [x] 2.5 (o `Actor` da sessão com pedido consumido fica na 7.5) Barreira de `ao_atingir_objetivo` e `definido_por = "pesquisador"` em `src/knowledge/validation.py` (mecanismo de `HUMAN_ONLY_TRANSITIONS`); testes do requisito "Campos do pesquisador no objetivo protegidos no grafo" com os actors `orquestrador`, agente e `pesquisador` (parecer de segurança, item 1).
 
 ## 3. Limite de custo
-- [ ] 3.1 `src/usage.py`: `UsageBudget` com custo; `UsageTracker(cost_reader=...)`; `LimitStatus` com custo e precedência (design §3.2); `StopReason.COST`; remover `StopReason.RUNS`.
-- [ ] 3.2 Verificação de preço na inicialização da sessão e evento `custo_nao_estimado` (design §3.3).
-- [ ] 3.3 `src/cli.py` e `src/unlimited_mode.py`: `--max-cost-usd`, incompatibilidade com `--unlimited`, texto da confirmação, banner.
-- [ ] 3.4 Aviso G5 por percentual de custo; remover aviso de execuções (`src/autonomous_loop.py:452-510`).
-- [ ] 3.5 Testes dos cenários de `specs/usage-limits/spec.md` e `specs/operation-metrics/spec.md`, inclusive "Modelo de reserva sem preço" (verificação de início sobre os modelos de reserva, parecer de segurança, item 4) e o texto da confirmação com "indefinidamente", `wait_for_health` e `SANDBOX_MIN_FREE_BYTES` (item 5).
+- [x] 3.1 `src/usage.py`: `UsageBudget` com custo; `UsageTracker(cost_reader=...)`; `LimitStatus` com custo e precedência (design §3.2); `StopReason.COST`; remover `StopReason.RUNS`.
+- [x] 3.2 Verificação de preço na inicialização da sessão e evento `custo_nao_estimado` (design §3.3).
+- [x] 3.3 `src/cli.py` e `src/unlimited_mode.py`: `--max-cost-usd`, incompatibilidade com `--unlimited`, texto da confirmação, banner.
+- [x] 3.4 Aviso G5 por percentual de custo; remover aviso de execuções (`src/autonomous_loop.py:452-510`).
+- [x] 3.5 Testes dos cenários de `specs/usage-limits/spec.md` e `specs/operation-metrics/spec.md`, inclusive "Modelo de reserva sem preço" (verificação de início sobre os modelos de reserva, parecer de segurança, item 4) e o texto da confirmação com "indefinidamente", `wait_for_health` e `SANDBOX_MIN_FREE_BYTES` (item 5).
 
 ## 4. Fim dos tetos de hipóteses, ciclos e execuções
 - [x] 4.1 `HypothesisCycle.select` sem `per_cycle` nem `deferred`; ordem de despacho por prioridade; remover `hipotese_adiada_por_prioridade` de `prepare_cycle`.

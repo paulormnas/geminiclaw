@@ -42,6 +42,40 @@ def provider_name(provider: LLMProvider) -> str:
     return type(inner).__name__.removesuffix("Provider").lower() or "unknown"
 
 
+_unpriced_noted: set[tuple[str, str]] = set()
+
+
+def note_unpriced_model(execution_id: str, session_id: str, provider: str, model: str) -> None:
+    """Emite ``custo_nao_estimado`` uma vez por modelo e sessão para chamada não local sem preço (design §3.3).
+
+    Modelo ``no_no`` (local) custa 0 e não gera evento. Nunca levanta: a telemetria não interrompe a chamada.
+    """
+    from src.llm.session import current_session_routing
+
+    key = (execution_id, f"{provider}/{model}")
+    if key in _unpriced_noted:
+        return
+    try:
+        routing = current_session_routing()
+        if routing is not None:
+            from src.llm.pricing_check import is_local
+
+            ids = [r.id for r in routing.papeis.values()]
+            match = next((i for i in ids if i.replace("_", "").lower() == f"{provider}/{model}".lower()), None)
+            if is_local(routing, match or f"{provider}/{model}"):
+                return
+        _unpriced_noted.add(key)
+        get_telemetry().record_agent_event(
+            execution_id=execution_id,
+            session_id=session_id,
+            agent_id="metering",
+            event_type="custo_nao_estimado",
+            payload={"modelo": f"{provider}/{model}"},
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("Evento custo_nao_estimado não registrado", exc_info=True)
+
+
 def record_llm_call(
     provider: LLMProvider,
     response: LLMResponse,
@@ -73,6 +107,9 @@ def record_llm_call(
     versao = record_call_version(name, model, normalize_version(getattr(response, "versao_efetiva", None)))
     if funcao:
         logger.debug("Chamada LLM", extra={"agent_id": agent_id, "funcao": funcao, "task_name": task_name})
+    cost = estimate_cost(name, model, prompt_tokens, completion_tokens, usage.get("cached_tokens", 0) or 0)
+    if cost is None:
+        note_unpriced_model(execution_id, session_id, name, model)
     get_telemetry().record_token_usage(
         execution_id=execution_id,
         session_id=session_id,
@@ -83,8 +120,6 @@ def record_llm_call(
         completion_tokens=completion_tokens,
         latency_ms=latency_ms,
         task_name=task_name,
-        estimated_cost_usd=estimate_cost(
-            name, model, prompt_tokens, completion_tokens, usage.get("cached_tokens", 0) or 0
-        ),
+        estimated_cost_usd=cost,
         versao_efetiva=versao,
     )

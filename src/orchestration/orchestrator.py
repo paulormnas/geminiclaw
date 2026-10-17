@@ -31,6 +31,7 @@ from src.knowledge.hypotheses import PlanExtras, split_plan
 from src.knowledge.suggestions import SuggestionError
 from src.llm.allocation import build_allocation_profile
 from src.llm.metering import bind_execution, bound_execution_id
+from src.llm.pricing_check import require_priced_models
 from src.llm.rate_limiter import AdaptiveRateLimiter
 from src.llm.session import SessionRouting, bind_session_routing, build_session_routing, get_session_routing
 from src.llm.vision import VisionConfigError
@@ -1101,11 +1102,12 @@ class Orchestrator:
 
         require_locality_min_group_size()
 
-        master_session = self.session_manager.create("orchestrator", session_id=session_slug)
-
-        # V18/usage-limits — orçamento efetivo da sessão (CLI > config), gravado no
-        # payload da sessão para consulta/depuração e exibição no início da sessão.
+        # V18/usage-limits — orçamento efetivo da sessão (CLI > config). v18.7-exploration-limits §3.3: com limite de
+        # custo, todo modelo alcançável tem preço; senão a sessão não inicia, antes de criar qualquer registro.
         effective_budget = budget or UsageBudget.from_config()
+        require_priced_models(routing, unlimited=effective_budget.unlimited)
+
+        master_session = self.session_manager.create("orchestrator", session_id=session_slug)
 
         # v18.5-egress-gate — ponto único de saída da sessão (LLM, visão, busca, leitura web) com registro de egresso.
         egress_gate = EgressGate(

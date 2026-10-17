@@ -96,6 +96,8 @@ class TestUsageBudgetDerived:
             "exploration_token_ceiling": 95_000,
             "max_egress_bytes": 2_000_000,
             "unlimited": False,
+            "max_cost_usd": 20.0,
+            "max_cost_usd_by_provider": {},
         }
 
     def test_budget_e_imutavel(self):

@@ -108,6 +108,7 @@ def print_session_banner(
             f"  {DIM}Orçamento: {RESET}{effective_budget.max_tokens:,} tokens "
             f"({effective_budget.closing_reserve_pct*100:.0f}% reservados p/ fechamento) │ "
             f"{effective_budget.max_minutes:.0f}min │ "
+            f"US$ {effective_budget.max_cost_usd:.2f} │ "
             f"{effective_budget.max_task_retries} retentativas/tarefa │ "
             f"{effective_budget.max_connection_retries} retentativas de conexão"
         )

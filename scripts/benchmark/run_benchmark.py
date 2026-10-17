@@ -144,8 +144,31 @@ def build_env(base: dict[str, str], roles: dict[str, str], extra: dict[str, str]
     # A comparação entre combinações exige sessões completas com a versão declarada: a bateria para a sessão quando a
     # versão do modelo muda (v18.7-benchmark-fixes, design §1.7), em vez de retomar ou trocar o modelo.
     env["ON_MODEL_VERSION_CHANGE"] = "parar"
+    # Sem a política `parar` a sessão exploraria depois de planos rejeitados e a comparação perderia o desfecho
+    # (v18.7-exploration-limits, design §9.3). O ambiente base não é alterado.
+    env["ON_PLAN_REJECTIONS"] = "parar"
     env.update({k: str(v) for k, v in (extra or {}).items()})
     return env
+
+
+def validate_matrix(matrix: dict) -> None:
+    """Recusa a matriz sem ``env.SESSION_MAX_COST_USD`` positivo, antes de qualquer execução (ADR 021 §5.4).
+
+    O teto por sessão é distinto de ``budget_usd`` (por provedor e por rodada, do runner).
+
+    Raises:
+        ValueError: Teto ausente, não numérico ou não positivo.
+    """
+    raw = (matrix.get("env") or {}).get("SESSION_MAX_COST_USD")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        value = 0.0
+    if value <= 0:
+        raise ValueError(
+            "A matriz deve declarar env.SESSION_MAX_COST_USD > 0 (teto de custo por sessão); "
+            f"valor recebido: {raw!r}."
+        )
 
 
 def check_pins(roles: dict[str, str], llm_routing: dict | None, controle: bool = False) -> list[str]:
@@ -273,12 +296,15 @@ def _stop_reason(session_dir: Path) -> str | None:
 
 STOP_UNTESTED_HYPOTHESES = "hipoteses_nao_testadas"
 STOP_PROVIDER_QUOTA = "limite_cota_provedor"
+STOP_REJECTED_PLANS = "planos_rejeitados"  # só ocorre na bateria, que define ON_PLAN_REJECTIONS=parar
 
 
 def stop_class(stop: str | None) -> str | None:
-    """Classe do ``motivo_parada``: limite, erro, interrupção, critério de pesquisa ou hipótese não testada.
+    """Classe do ``motivo_parada``: limite, erro, interrupção, critério de pesquisa ou parada de pesquisa própria.
 
-    Valores: ``limite``, ``erro``, ``interrupcao``, ``hipoteses_nao_testadas`` e ``criterio_pesquisa``.
+    Valores: ``limite``, ``erro``, ``interrupcao``, ``hipoteses_nao_testadas``, ``planos_rejeitados`` e
+    ``criterio_pesquisa`` (inclui ``saturacao``). ``planos_rejeitados`` tem classe própria, identificável nos
+    relatórios e fora das anomalias (``v18.7-exploration-limits``).
     ``hipoteses_nao_testadas`` é parada de pesquisa (o Researcher não testou as hipóteses que abriu): fica
     identificável nos relatórios, mas não é anomalia nem erro (``v18.6-auto-metrics-and-stop-reasons``).
     ``None`` sem motivo registrado.
@@ -296,8 +322,8 @@ def stop_class(stop: str | None) -> str | None:
         # Inclui `aguarda_pesquisador`, `suspensa_sem_pesquisador`, `encerrada_pesquisador` e `pausada_pesquisador`
         # (v18.7-background-sessions): a sessão `auto` não terminou por critério de pesquisa.
         return "interrupcao"
-    if stop == STOP_UNTESTED_HYPOTHESES:
-        return STOP_UNTESTED_HYPOTHESES
+    if stop in (STOP_UNTESTED_HYPOTHESES, STOP_REJECTED_PLANS):
+        return stop
     return "criterio_pesquisa"
 
 
@@ -321,12 +347,14 @@ def anomalies(result: dict) -> list[str]:
         return []
     problems: list[str] = []
     status = str(result.get("status"))
-    if status != "exit 0":
+    stop = result.get("stop_reason")
+    code = _exit_number(status)
+    # `planos_rejeitados` fecha com o código de saída de limite (3) por desenho: parada de pesquisa esperada da bateria.
+    expected_exit = stop_class(stop) == STOP_REJECTED_PLANS and code == exit_code_for(str(stop))
+    if status != "exit 0" and not expected_exit:
         problems.append(f"processo terminou com '{status}'")
     if "Traceback (most recent call last)" in (result.get("log_tail") or ""):
         problems.append("traceback no fim do log")
-    stop = result.get("stop_reason")
-    code = _exit_number(status)
     if stop == STOP_PROVIDER_QUOTA:
         problems.append(
             f"sessão fechada por '{stop}' antes de concluir: cota ou teto de gasto esgotado em {quota_label(result)}; "
@@ -644,6 +672,11 @@ def main() -> None:
     if args.repeat < 1:
         parser.error("--repeat deve ser >= 1")
     matrix = json.loads(args.matrix.read_text(encoding="utf-8"))
+    try:
+        validate_matrix(matrix)
+    except ValueError as exc:
+        print(f"[benchmark] MATRIZ RECUSADA: {exc}", file=sys.stderr, flush=True)
+        sys.exit(2)
     task = Path(matrix["task_file"]).expanduser().read_text(encoding="utf-8")
     env_base = {**os.environ, **{k: v for k, v in dotenv_values(".env").items() if v is not None}}
     target = None

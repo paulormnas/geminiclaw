@@ -66,6 +66,7 @@ from src.orchestration.exploration_linking import (
     served_hypotheses,
     transitive_dependencies,
 )
+from src.orchestration.exploration_objective_revision import ObjectiveRevisionMixin
 from src.orchestration.exploration_prompts import (
     METRIC_DEFINITION_PLAN_INSTRUCTION,
     OBJECTIVE_DEFINITION_PLAN_INSTRUCTION,
@@ -132,7 +133,7 @@ class CycleOutcome:
         return bool(self.selection.pending_approval)
 
 
-class ExplorationSession(StagnationMixin, RestrictionsMixin):
+class ExplorationSession(StagnationMixin, RestrictionsMixin, ObjectiveRevisionMixin):
     """Estado e operações de exploração de uma sessão mestra."""
 
     def __init__(
@@ -343,6 +344,7 @@ class ExplorationSession(StagnationMixin, RestrictionsMixin):
         Raises:
             HypothesisError / GraphStoreError: o grafo não aceitou o plano (o laço fecha a sessão com checkpoint).
         """
+        self.apply_objective_revisions()  # resposta ao pedido ``revisao_objetivo`` (5.2 e 9)
         extras = self._with_unanswered_refused(extras)
         extras, legacy = bind_legacy_refs(tasks, extras)
         report = self.book.record(extras) if not extras.vazio else RecordReport()
@@ -878,8 +880,10 @@ class ExplorationSession(StagnationMixin, RestrictionsMixin):
         try:
             from src.gate.persistent_gate import session_gate
 
+            reference = f"{problem.id}:objetivo:{decl.tipo}"
+            self.remember_revision(reference, decl.tipo)
             session_gate().request(
-                "confirmar_problema", f"{problem.id}:objetivo:{decl.tipo}", question, ("autorizar", "negar"),
+                "confirmar_problema", reference, question, ("autorizar", "negar"),
                 motivo="revisao_objetivo", session_id=self.ctx.session_id, project_id=self.ctx.project_id,
             )
         except Exception as exc:  # noqa: BLE001 - sem o pedido o evento ainda registra a proposta

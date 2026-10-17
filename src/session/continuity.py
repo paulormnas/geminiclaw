@@ -1175,6 +1175,12 @@ def evaluate_resumability(
         return Resumability(
             RESUME_CONFIRM, "a pesquisa foi dada como resolvida (solucao_encontrada); continuar explorando?"
         )
+    if motivo == "saturacao":
+        return Resumability(
+            RESUME_CONFIRM,
+            "a exploração saturou (saturacao): a melhora possível ficou abaixo do erro da medida; continuar "
+            "explorando?",
+        )
     if motivo == "planos_rejeitados":
         return Resumability(
             RESUME_CONFIRM,

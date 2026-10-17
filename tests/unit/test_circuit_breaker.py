@@ -9,10 +9,8 @@ Cobre:
            contado cumulativamente entre ciclos — ver src/orchestration/usage.py), e o
            restante do DAG e a sessão continuam, em vez de abortar a sessão
            inteira. Ver `test_persistent_task_failure_is_abandoned_not_session_aborted`.
-  V12.5.2: Limite de execuções de agente por sessão — ao atingir o limite efetivo em
-           _execute_agent, levanta AgentRunLimitReached (subclasse de RuntimeError) com mensagem
-           descritiva; o AutonomousLoop a captura e fecha a sessão com consolidação
-           (v16-pipeline-robustness §5; ver tests/unit/test_progress_and_run_limits.py).
+  V12.5.2: Execuções de agente por sessão — só contadas, sem limite (ADR 021 §5.1; ver
+           tests/unit/test_progress_and_run_limits.py).
   v16-pipeline-robustness §4: o disjuntor de "zero progresso" só dispara após
            CIRCUIT_BREAKER_STALL_CYCLES ciclos sem mudança de sucessos nem de erros.
 """
@@ -197,20 +195,21 @@ def _orchestrator_with_mocks():
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_circuit_breaker_aborta_ao_atingir_limite_de_execucoes():
-    """_execute_agent deve levantar RuntimeError ao ultrapassar
-    MAX_AGENT_RUNS_PER_SESSION execuções de agente na mesma sessão."""
-    from src.orchestration.orchestrator import AgentTask
+async def test_execucao_alem_de_qualquer_contagem_anterior_nao_e_bloqueada():
+    """_execute_agent não interrompe a sessão por número de execuções (ADR 021 §5.1)."""
+    from src.orchestration.orchestrator import AgentResult, AgentTask
 
     orchestrator, mock_runtime = _orchestrator_with_mocks()
+    mock_runtime.run.return_value = AgentResult(
+        agent_id="base", session_id="sess_abc", status="success", response={"text": "ok"}
+    )
     task = AgentTask(agent_id="base", prompt="teste", task_name="tarefa_x")
+    orchestrator._session_agent_run_counts = {"master_sess": 500}
 
-    with patch("src.orchestration.orchestrator.MAX_AGENT_RUNS_PER_SESSION", 3):
-        orchestrator._session_agent_run_counts = {"master_sess": 3}
-        with pytest.raises(RuntimeError, match="[Ll]imite.*[Ee]xecuç"):
-            await orchestrator._execute_agent(task, "master_sess")
+    with patch("src.orchestration.orchestrator.get_telemetry", return_value=MagicMock()):
+        result = await orchestrator._execute_agent(task, "master_sess")
 
-    mock_runtime.run.assert_not_called()
+    assert result.status == "success" and orchestrator._session_agent_run_counts["master_sess"] == 501
 
 
 @pytest.mark.unit

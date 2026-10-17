@@ -91,3 +91,35 @@ def test_env_example_documenta_as_variaveis():
                  "SATURATION_MIN_REPLICATES", "SATURATION_SE_MULTIPLIER", "COVERAGE_NOVELTY_WINDOW",
                  "COVERAGE_NOVELTY_MIN_RATE", "RESTRICTION_SIMILARITY", "ON_PLAN_REJECTIONS"):
         assert f"\n{name}=" in text
+
+
+def test_teto_de_ciclos_antigo_no_env_falha_citando_as_duas_variaveis():
+    """Scenario: Teto de ciclos antigo no .env."""
+    with env_override({"MAX_EXPLORATION_CYCLES": "20", "OPERATIONAL_THRESHOLD_COST_USD": "5"}) as load:
+        with pytest.raises(ConfigurationError) as err:
+            load()
+    text = str(err.value)
+    assert "MAX_EXPLORATION_CYCLES" in text and "OPERATIONAL_THRESHOLD_COST_USD" in text
+    assert "ADR 021 §5.1" in text and "OPERATIONAL_THRESHOLD_COST_USAGE_PCT" in text
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "HYPOTHESES_PER_CYCLE", "MAX_EXPLORATION_CYCLES", "SOLUTION_MIN_VERDICT", "MAX_AGENT_RUNS_PER_SESSION",
+        "MAX_CONTAINERS_PER_SESSION", "MAX_PLANNING_RUNS_PER_SESSION", "OPERATIONAL_THRESHOLD_AGENT_RUNS_PCT",
+        "OPERATIONAL_THRESHOLD_CONTAINER_COUNT_PCT", "OPERATIONAL_THRESHOLD_COST_USD",
+    ],
+)
+def test_variavel_de_teto_removida_falha_na_importacao(name):
+    with env_override({name: "1"}) as load:
+        with pytest.raises(ConfigurationError, match=name):
+            load()
+
+
+def test_env_example_nao_traz_as_variaveis_removidas():
+    text = (ROOT / ".env.example").read_text(encoding="utf-8")
+    for name in ("HYPOTHESES_PER_CYCLE", "MAX_EXPLORATION_CYCLES", "SOLUTION_MIN_VERDICT", "MAX_AGENT_RUNS_PER_SESSION",
+                 "MAX_PLANNING_RUNS_PER_SESSION", "OPERATIONAL_THRESHOLD_AGENT_RUNS_PCT",
+                 "OPERATIONAL_THRESHOLD_COST_USD"):
+        assert f"\n{name}=" not in text

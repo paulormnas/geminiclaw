@@ -197,11 +197,10 @@ Implementado em `src/orchestration/autonomous_loop.py`, o loop gerencia tarefas 
 - `MAX_RETRY_PER_SUBTASK=3` — máximo de tentativas por subtarefa
 - `MAX_SUBTASKS_PER_TASK=10` — limite de subtarefas por tarefa
 - `MAX_PLAN_RETRIES=5` — ciclos máximos de replanejamento (V12.1)
-- `MAX_AGENT_RUNS_PER_SESSION=30` — limite de execuções de agente por sessão; interrompe a execução ao atingir (circuit breaker V12.5)
 
 **Circuit Breakers (V12.5):**
 - **Progresso zero**: Se dois ciclos de replanejamento consecutivos produzirem o mesmo conjunto de subtarefas bem-sucedidas, o loop é interrompido com mensagem diagnóstica.
-- **Limite de execuções**: Se o número de agentes executados em uma sessão atingir `MAX_AGENT_RUNS_PER_SESSION`, o orquestrador lança `RuntimeError` antes da execução seguinte.
+- **Execuções de agente**: só contadas e relatadas nas métricas de operação; não há limite de execuções, de hipóteses por ciclo nem de ciclos (ADR 021 §5.1). O gasto é limitado por tokens, tempo e, em seguida, custo.
 
 ---
 

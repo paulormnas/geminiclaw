@@ -30,7 +30,6 @@ class StopReason(str, Enum):
     TIME = "limite_tempo"
     RETRIES = "limite_retentativas"
     CONNECTION = "limite_conexao"
-    RUNS = "limite_execucoes"
     MODEL_VERSION = "versao_modelo"  # v18.5-model-catalog-locality (LLM_ROUTING=strict)
     EGRESS = "limite_egresso"  # v18.5-egress-gate (volume de saídas de execução enviadas fora do nó)
     INTERRUPTED = "interrompida_pesquisador"  # v18.5-operation-metrics (1º Ctrl+C: fechamento sem perda de avanço)

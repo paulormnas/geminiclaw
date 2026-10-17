@@ -89,7 +89,6 @@ class ExplorationStop(str, Enum):
 
     SOLUTION = "solucao_encontrada"
     NO_PATHS = "sem_caminhos_promissores"
-    CYCLES = "limite_ciclos"  # teto de ciclos (MAX_EXPLORATION_CYCLES)
     REJECTED_PLANS = "planos_rejeitados"  # MAX_PLAN_RETRIES planos consecutivos rejeitados
     # v18.6-auto-metrics-and-stop-reasons: ciclos ociosos esgotados com hipótese em_teste sem nenhuma tentativa
     UNTESTED_HYPOTHESES = "hipoteses_nao_testadas"
@@ -370,7 +369,11 @@ class ExplorationSession:
             hid: reason for hid in dict.fromkeys(candidates) if (reason := hypothesis_drop_reason(hid, selection))
         }
         cascade_drops(tasks, dropped, done=done, served=served, hypothesis_drops=hypothesis_drops)
-        kept = [t for t in tasks if t.task_name not in dropped]
+        # Sem teto por ciclo: todas executam, despachadas por prioridade da hipótese (estável; sem prioridade, antes).
+        kept = sorted(
+            (t for t in tasks if t.task_name not in dropped),
+            key=lambda t: -selection.priorities.get(t.hypothesis_id, float("inf")),
+        )
 
         removed = sorted(n for n in self._queue if n not in {t.task_name for t in tasks} and n not in done)
         for name in removed:
@@ -482,7 +485,7 @@ class ExplorationSession:
     def _abandon_orphans(self, live: list[Any], dropped: dict[str, str], removed: set[str]) -> int:
         """Abandona pelo sistema a hipótese do sistema sem tentativa cujas subtarefas de origem todas saíram.
 
-        Saem pela governança (exceto ``hipotese_aguarda_aprovacao`` e ``hipotese_adiada_por_prioridade``, que a deixam
+        Saem pela governança (exceto ``hipotese_aguarda_aprovacao``, que a deixa
         pendente) ou pelo replanejamento. Refaz ``system_origin`` com o plano corrente (design §4.4).
         """
         current: dict[str, set[str]] = {}

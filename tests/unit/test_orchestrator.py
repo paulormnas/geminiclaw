@@ -273,18 +273,17 @@ class TestOrchestratorInProcessRuntime:
         assert result.results[0].status == "error"
         assert result.results[0].error == "falha simulada"
 
-    async def test_circuit_breaker_max_agent_runs_per_session(self) -> None:
-        """Cenário: Limite de execuções de agentes interrompe novas execuções."""
-        from src.config import MAX_AGENT_RUNS_PER_SESSION
-
+    async def test_execucoes_de_agente_nao_tem_limite_por_sessao(self) -> None:
+        """Cenário: muitas execuções na sessão não interrompem novas execuções (ADR 021 §5.1)."""
         orchestrator, runtime, mock_sm = _create_orchestrator()
         mock_sm.create.return_value = _make_session("a1", "s1")
-        orchestrator._session_agent_run_counts["sess_master"] = MAX_AGENT_RUNS_PER_SESSION
+        runtime.run.return_value = _make_agent_result("a1", "s1", response={"text": "ok"})
+        orchestrator._session_agent_run_counts["sess_master"] = 1000
 
-        with pytest.raises(RuntimeError, match="Limite de execuções de agente"):
-            await orchestrator._execute_agent(AgentTask(agent_id="a1", prompt="hello"), master_session_id="sess_master")
+        await orchestrator._execute_agent(AgentTask(agent_id="a1", prompt="hello"), master_session_id="sess_master")
 
-        runtime.run.assert_not_called()
+        runtime.run.assert_called_once()
+        assert orchestrator._session_agent_run_counts["sess_master"] == 1001
 
     async def test_ask_researcher_callback_delegates_to_core(self) -> None:
         """Cenário: o callback ask_researcher do AgentContext reutiliza dedup/registro (Spec G5)."""

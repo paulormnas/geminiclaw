@@ -46,6 +46,13 @@ class LoopReportMixin:
         try:
             await telemetry.flush()  # tokens e snapshots ainda em buffer entram na agregação
             payload = await asyncio.to_thread(self._session_payload, master_session_id)
+            counts = {
+                "planejamento": self.orchestrator._session_planning_run_counts.get(master_session_id, 0),
+                "execucao": self.orchestrator._session_agent_run_counts.get(master_session_id, 0),
+            }
+            self.orchestrator.session_manager.update(
+                master_session_id, payload={**payload, "execucoes_agente": counts}
+            )
             metrics = await asyncio.to_thread(
                 aggregate_operation_metrics,
                 master_session_id,

@@ -19,7 +19,6 @@ from src.artifacts.subtask_output import negative_result_feedback
 from src.config import (
     CIRCUIT_BREAKER_STALL_CYCLES,
     LIMIT_GRACE_SECONDS,
-    MAX_EXPLORATION_CYCLES,
     MAX_PLAN_RETRIES,
     MAX_SUBTASKS_PER_TASK,
     SESSION_MAX_TASK_RETRIES,
@@ -31,7 +30,7 @@ from src.knowledge.hypothesis_cycle import SolutionStatus
 from src.knowledge.suggestions import SuggestionError
 from src.logger import get_logger
 from src.observability.telemetry import get_telemetry
-from src.orchestration.errors import AgentRunLimitReached, PlanningStalled
+from src.orchestration.errors import PlanningStalled
 from src.orchestration.loop_report import LoopReportMixin
 from src.orchestration.subtask_ingestion import ingest_subtask, link_preparations
 from src.orchestration.triage import TriageClassifier
@@ -557,15 +556,12 @@ class AutonomousLoop(LoopReportMixin):
         )
 
     async def _check_operational_thresholds(self, master_session_id: str) -> None:
-        """Monitora limites operacionais (tokens, custo, duração, containers) (Roadmap V15.3 / Spec G5).
+        """Monitora limites operacionais (tokens, duração) (Roadmap V15.3 / Spec G5).
 
         Nunca bloqueia, em nenhum modo: apenas registra o aviso no log. O processo da sessão não lê o terminal
         (v18.7-background-sessions §1.10); a pausa pelo pesquisador vem em ``v18.7-session-events-terminal``.
         """
-        from src.config import (
-            MAX_AGENT_RUNS_PER_SESSION,
-            OPERATIONAL_THRESHOLDS,
-        )
+        from src.config import OPERATIONAL_THRESHOLDS
 
         # v18.5-operation-metrics §6: percentuais do orçamento efetivo (inclui overrides da CLI); no modo sem
         # limite os avisos de tokens, tempo e custo não existem (os avisos periódicos os substituem).
@@ -579,17 +575,8 @@ class AutonomousLoop(LoopReportMixin):
         token_summary = telemetry.get_token_summary(master_session_id)
         rows = token_summary.get("by_provider_model", [])
         total_tokens = sum(r.get("total_tokens") or 0 for r in rows)
-        total_cost = sum(r.get("total_cost_usd") or 0 for r in rows)
 
         token_pct = (total_tokens / session_max_tokens) if session_max_tokens else 0.0
-        run_counts = getattr(self.orchestrator, "_session_agent_run_counts", None)
-        agent_runs = run_counts.get(master_session_id, 0) if isinstance(run_counts, dict) else 0
-        run_limit = MAX_AGENT_RUNS_PER_SESSION
-        limit_fn = getattr(self.orchestrator, "effective_run_limit", None)
-        if callable(limit_fn):
-            effective = limit_fn(master_session_id)
-            run_limit = effective if isinstance(effective, int) else run_limit
-        agent_runs_pct = (agent_runs / run_limit) if run_limit else 0.0
         duration_min = (time.time() - getattr(self, "_session_started_at", time.time())) / 60
         # V18/usage-limits — avisos da Spec G5 agora são percentuais dos limites reais
         # do UsageBudget (session_max_minutes), não mais minutos absolutos.
@@ -598,19 +585,10 @@ class AutonomousLoop(LoopReportMixin):
         triggered: list[str] = []
         if not budget.unlimited and token_pct >= OPERATIONAL_THRESHOLDS["token_usage_pct"]:
             triggered.append(f"Uso de tokens: {token_pct*100:.0f}% do limite ({total_tokens}/{session_max_tokens})")
-        if not budget.unlimited and total_cost >= OPERATIONAL_THRESHOLDS["cost_usd"]:
-            triggered.append(f"Custo estimado: ${total_cost:.2f} (limite ${OPERATIONAL_THRESHOLDS['cost_usd']:.2f})")
         if not budget.unlimited and duration_pct >= OPERATIONAL_THRESHOLDS["session_duration_pct"]:
             triggered.append(
                 f"Duração da sessão: {duration_pct*100:.0f}% do limite "
                 f"({duration_min:.0f}min/{session_max_minutes:.0f}min)"
-            )
-        planning_counts = getattr(self.orchestrator, "_session_planning_run_counts", None)
-        planning_runs = planning_counts.get(master_session_id, 0) if isinstance(planning_counts, dict) else 0
-        if agent_runs_pct >= OPERATIONAL_THRESHOLDS["agent_runs_pct"]:
-            triggered.append(
-                f"Execuções de agente: {agent_runs_pct*100:.0f}% do limite ({agent_runs}/{run_limit}); "
-                f"execuções de planejamento: {planning_runs}"
             )
 
         if not triggered:
@@ -1084,14 +1062,6 @@ class AutonomousLoop(LoopReportMixin):
 
         while True:
             if exploring:
-                if cycle_no >= MAX_EXPLORATION_CYCLES:
-                    logger.warning("Teto de ciclos de exploração atingido", extra={"cycles": cycle_no})
-                    from src.orchestration.exploration import ExplorationStop
-
-                    return await self._close_exploration(
-                        ExplorationStop.CYCLES, master_session_id, prompt, list(cumulative_tasks.values()),
-                        cumulative_dag, final_results,
-                    )
                 if rejected_plans >= max_plan_retries:
                     logger.error("Planos consecutivos rejeitados: exploração encerrada", extra={"n": rejected_plans})
                     from src.orchestration.exploration import ExplorationStop
@@ -1127,11 +1097,6 @@ class AutonomousLoop(LoopReportMixin):
                     previous_plan=current_plan_dicts if current_plan_dicts else None,
                     execution_feedback=execution_feedback,
                     **planning_kwargs,
-                )
-            except AgentRunLimitReached as limit_exc:
-                self._record_run_limit(master_session_id, limit_exc)
-                return await self._close_session(
-                    StopReason.RUNS, master_session_id, prompt, tasks, {}, final_results
                 )
             except PlanningStalled as stalled:
                 logger.error("Planejamento encerrado por reprovação repetida", extra={"issues": stalled.issues})
@@ -1361,8 +1326,6 @@ class AutonomousLoop(LoopReportMixin):
                         "error": None
                     }
 
-            limit_hits: List[AgentRunLimitReached] = []
-
             async def _execute_task_in_dag(task: AgentTask, index: int):
                 # V18/usage-limits — chave de contabilização de retentativas da MESMA
                 # tarefa (design §2): conta cumulativamente entre ciclos de replanejamento
@@ -1518,14 +1481,7 @@ class AutonomousLoop(LoopReportMixin):
                             payload={"depends_on": task.depends_on},
                         )
 
-                    try:
-                        result = await self.orchestrator._execute_agent(enriched_task, master_session_id)
-                    except AgentRunLimitReached as limit_exc:
-                        limit_hits.append(limit_exc)
-                        if task.task_name:
-                            dag_state[task.task_name]["status"] = "cancelled"
-                            dag_state[task.task_name]["future"].set_result(None)
-                        return
+                    result = await self.orchestrator._execute_agent(enriched_task, master_session_id)
                     last_result = result
                     last_review = None
 
@@ -1757,12 +1713,6 @@ class AutonomousLoop(LoopReportMixin):
                     StopReason.TIME, master_session_id, prompt, tasks, dag_state, final_results
                 )
 
-            if limit_hits:
-                self._record_run_limit(master_session_id, limit_hits[0])
-                return await self._close_session(
-                    StopReason.RUNS, master_session_id, prompt, tasks, dag_state, final_results
-                )
-
             if exploration is not None:
                 # Acumula o que o ciclo produziu (a sessão agora tem vários ciclos) e fecha o ciclo no grafo: status
                 # das hipóteses e avaliação das decisões, só a partir do veredito calculado.
@@ -1874,11 +1824,7 @@ class AutonomousLoop(LoopReportMixin):
                 if succeeded > 0:
                     await self._promote_findings(prompt, master_session_id)
                     # Etapa V6.7: Síntese final com o Summarizer
-                    try:
-                        final_report = await self._synthesize_results(prompt, final_results, master_session_id)
-                    except AgentRunLimitReached as limit_exc:
-                        self._record_run_limit(master_session_id, limit_exc)
-                        final_report = None
+                    final_report = await self._synthesize_results(prompt, final_results, master_session_id)
                     if final_report:
                         # Adiciona o relatório final aos resultados
                         final_results.append(final_report)
@@ -2052,23 +1998,6 @@ class AutonomousLoop(LoopReportMixin):
             "a partir deles e das sugestões do Curator."
         )
         return "\n".join(lines)
-
-    def _record_run_limit(self, master_session_id: str, exc: AgentRunLimitReached) -> None:
-        """Registra o evento ``limit_reached`` do limite de execuções (observabilidade segura)."""
-        logger.warning(
-            "Limite de execuções de agente atingido",
-            extra={"kind": exc.kind, "count": exc.count, "limit": exc.limit},
-        )
-        try:
-            get_telemetry().record_agent_event(
-                execution_id=master_session_id,
-                session_id=master_session_id,
-                agent_id="autonomous_loop",
-                event_type="limit_reached",
-                payload={"limit": "agent_runs", "kind": exc.kind, "count": exc.count, "max": exc.limit},
-            )
-        except Exception as err:
-            logger.warning("Falha ao registrar limit_reached", extra={"error": str(err)})
 
     async def _close_session(
         self,

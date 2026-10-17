@@ -67,15 +67,15 @@ async def test_plano_replanejado_executa_so_o_novo(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_modo_autonomo_executa_as_duas_hipoteses_de_maior_prioridade(tmp_path):
-    """Scenario: Modo autônomo — 4 propostas e HYPOTHESES_PER_CYCLE=2: só 2 executam no ciclo."""
+async def test_modo_autonomo_executa_todas_as_hipoteses_por_prioridade(tmp_path):
+    """Scenario: Modo autônomo sem teto — 4 propostas: as 4 executam, despachadas da maior para a menor prioridade."""
     hips = [hyp(f"h{i}", custo_estimado=c) for i, c in enumerate(["alto", "baixo", "medio", "baixo"])]
     tasks = [task(f"t{i}", f"h{i}") for i in range(4)]
-    h = LoopHarness(tmp_path, plans=[plan(tasks, hips), plan([task("t1", "h1"), task("t3", "h3")])])
+    h = LoopHarness(tmp_path, plans=[plan(tasks, hips), plan(tasks)])
     await h.run()
-    assert sorted(h.ran) == ["t1", "t3"]  # os de custo baixo; o de custo alto fica de fora do ciclo
-    statuses = sorted(n.properties["status"] for n in h.hypotheses())
-    assert statuses == ["em_teste", "em_teste", "proposta", "proposta"]
+    assert sorted(h.ran) == ["t0", "t1", "t2", "t3"]
+    assert h.ran == ["t1", "t3", "t2", "t0"]  # baixo (desempate pelo id), médio e alto
+    assert {n.properties["status"] for n in h.hypotheses()} == {"em_teste"}
 
 
 @pytest.mark.asyncio
@@ -151,14 +151,13 @@ async def test_subtarefa_sem_hypothesis_ref_executa_com_a_hipotese_do_sistema(tm
 
 
 @pytest.mark.asyncio
-async def test_dependente_de_subtarefa_retirada_tambem_e_retirada(tmp_path):
+async def test_sem_teto_a_subtarefa_dependente_executa_com_as_demais(tmp_path):
     hips = [hyp("h1", "Hipótese um"), hyp("h2", "Hipótese dois"), hyp("h3", "Hipótese três")]
     p = plan([task("a", "h1"), task("b", "h2"), task("c", "h3"), task("d", None, task_type="eda", depends_on=["c"])],
              hips)
     h = LoopHarness(tmp_path, plans=[p, p])
-    with patch("src.orchestration.autonomous_loop.MAX_EXPLORATION_CYCLES", 1):  # só o primeiro ciclo
-        await h.run()
-    assert ("c" in h.ran) == ("d" in h.ran) and len([n for n in h.ran if n in "abc"]) == 2
+    await h.run()
+    assert sorted(h.ran) == ["a", "b", "c", "d"] and h.ran.index("c") < h.ran.index("d")
 
 
 # -- critérios de parada ---------------------------------------------------------------------------------------
@@ -251,15 +250,14 @@ async def test_um_plano_aprovado_zera_a_contagem_de_rejeitados(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_teto_de_ciclos_de_exploracao_e_a_prova_de_laco_infinito(tmp_path):
-    """Cada ciclo traz uma subtarefa nova; o teto MAX_EXPLORATION_CYCLES encerra mesmo assim."""
+async def test_sem_teto_de_ciclos_a_sessao_passa_de_25_ciclos(tmp_path):
+    """Scenario: Sem teto de ciclos — cada ciclo traz uma subtarefa nova; nenhum ``limite_ciclos`` é gravado."""
     plans = [plan([task(f"t{i}", f"h{i}") for i in range(1, n + 1)], [hyp(f"h{n}", f"Hipótese número {n} única")])
-             for n in range(1, 8)]
+             for n in range(1, 28)]
     h = LoopHarness(tmp_path, plans=plans)
-    with patch("src.orchestration.autonomous_loop.MAX_EXPLORATION_CYCLES", 3):
-        await h.run()
-    assert h.stop_reason == "limite_ciclos" and h.plan_calls == 3
-    assert h.checkpoint().estado == "fechado"
+    await h.run()
+    assert h.plan_calls > 25 and len(h.ran) == 27
+    assert h.stop_reason == "sem_caminhos_promissores" and h.stop_reason != "limite_ciclos"
 
 
 @pytest.mark.asyncio

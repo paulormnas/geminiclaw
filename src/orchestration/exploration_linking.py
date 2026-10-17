@@ -44,10 +44,9 @@ def bind_legacy_refs(tasks: list[Any], extras: PlanExtras) -> tuple[PlanExtras, 
 DROP_REJECTED = "hipotese_rejeitada_pelo_pesquisador"
 DROP_PENDING = "hipotese_aguarda_aprovacao"
 DROP_ABANDONED = "hipotese_abandonada_pelo_pesquisador"
-DROP_DEFERRED = "hipotese_adiada_por_prioridade"
 DROP_DEPENDS = "depende_de_subtarefa_retirada"
-# Retiradas que mantêm a hipótese viva (pendente ou adiada): não abandonam a hipótese do sistema (design §4.4).
-KEEPS_HYPOTHESIS_ALIVE = frozenset({DROP_PENDING, DROP_DEFERRED})
+# Retiradas que mantêm a hipótese viva (pendente): não abandonam a hipótese do sistema (design §4.4).
+KEEPS_HYPOTHESIS_ALIVE = frozenset({DROP_PENDING})
 _FORMAT_REJECTIONS = ("id_inexistente", "sem_enunciado")  # falha de formato: vira hipótese do sistema
 
 
@@ -152,8 +151,6 @@ def hypothesis_drop_reason(hid: str, selection: Selection) -> str | None:
         return DROP_PENDING
     if hid in selection.rejected:
         return DROP_REJECTED
-    if hid in selection.deferred:
-        return DROP_DEFERRED
     return DROP_ABANDONED
 
 

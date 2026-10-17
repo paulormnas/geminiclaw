@@ -191,12 +191,12 @@ class Orchestrator:
         # v17-input-document-index — metadados do projeto por sessão mestra (cabeçalho da ingestão de artefatos).
         self._project_metas: dict[str, ProjectMeta] = {}
         # v18-hypothesis-loop — exploração ativa por sessão mestra e declarações do último plano aprovado.
-        # ``exploration_approver``/``solution_confirmer`` são injetáveis (testes); em produção o pesquisador
+        # ``exploration_approver``/``objective_confirmer`` são injetáveis (testes); em produção o pesquisador
         # decide no terminal interativo (sem TTY nada é aprovado).
         self._explorations: dict[str, ExplorationSession] = {}
         self._plan_extras: dict[str, PlanExtras] = {}
         self.exploration_approver: Any = None
-        self.solution_confirmer: Any = None
+        self.objective_confirmer: Any = None
 
     def _open_knowledge_store(self) -> "GraphStore":
         """Abre (uma vez) o grafo para a ingestão; falhas propagam e o ``FactIngestor`` as enfileira.
@@ -545,7 +545,7 @@ class Orchestrator:
                 mode=mode,
                 index=runtime.index if runtime is not None else None,
                 approver=self.exploration_approver,
-                solution_confirmer=self.solution_confirmer,
+                objective_confirmer=self.objective_confirmer,
                 telemetry=_telemetry,
                 curator_suggest=lambda: self.curator_suggest(session_id),
                 session_chain=lambda: chain_session_ids(self.session_manager, session_id),

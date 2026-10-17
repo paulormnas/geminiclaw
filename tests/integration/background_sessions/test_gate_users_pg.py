@@ -15,7 +15,8 @@ import pytest
 from src.gate.persistent_gate import PersistentGate, TerminalGate
 from src.gate.types import Source
 from src.knowledge.gate_approver import PersistentGateApprover, PersistentGateConfirmer
-from src.knowledge.hypothesis_cycle import ApprovalItem, SolutionStatus
+from src.knowledge.hypothesis_cycle import ApprovalItem
+from src.orchestration.objective_tracking import Achievement
 from src.orchestration.orchestrator import AgentTask, Orchestrator
 from src.orchestration.usage import UsageBudget
 from tests.support.pg import pg_db, skip_if_no_postgres, temp_database_url  # noqa: F401
@@ -43,7 +44,7 @@ def item(hid="h1") -> ApprovalItem:
 def test_aprovador_e_confirmador_no_banco_real_com_retomada(pg_db):  # noqa: F811
     terminal, session = TerminalGate(), PersistentGate()
     PersistentGateApprover(session, "s1", project_id="p")([item()])
-    PersistentGateConfirmer(session, "s1", project_id="p")(SolutionStatus(True, hypothesis_id="h1"))
+    PersistentGateConfirmer(session, "s1", project_id="p")(Achievement("h1", "limiar"))
     pend = {r.decisao: r for r in session.pending(["s1"])}
     assert set(pend) == {"aprovar_hipotese", "decidir_objetivo_atingido"}
     terminal.answer(pend["aprovar_hipotese"].id, source=Source.TERMINAL, resposta={"acao": "aprovar"})
@@ -52,7 +53,7 @@ def test_aprovador_e_confirmador_no_banco_real_com_retomada(pg_db):  # noqa: F81
     resumed = PersistentGateApprover(session, "s2", ["s2", "s1"], "p")
     assert set(resumed([item()])) == {"h1"}
     assert session.find_in_chain("aprovar_hipotese", "h1", ["s2", "s1"]) is None  # consumido: uso único
-    assert PersistentGateConfirmer(session, "s2", ["s2", "s1"], "p")(SolutionStatus(True, hypothesis_id="h1")) == "encerrar"
+    assert PersistentGateConfirmer(session, "s2", ["s2", "s1"], "p")(Achievement("h1", "limiar")) == "encerrar"
     assert session.pending(["s1", "s2"]) == []  # nenhum pedido duplicado
 
 

@@ -43,10 +43,10 @@ from src.knowledge.hypothesis_cycle import (
     Approver,
     HypothesisCycle,
     Selection,
-    SolutionStatus,
 )
 from src.knowledge.ingestion import SessionContext
 from src.knowledge.metric_definition import AppliedMetrics, apply_validated_metrics
+from src.knowledge.objective import CycleView, DiscriminatingTask, parse_discrimina
 from src.knowledge.projects import get_active_problem
 from src.knowledge.schema import PAPEIS_EXPERIMENTO
 from src.knowledge.suggestions import Suggestion, SuggestionError, SuggestionStore
@@ -54,6 +54,7 @@ from src.knowledge.system_hypotheses import MetricRef, metric_ref
 from src.logger import get_logger
 from src.orchestration.exploration_feedback import LinkageFeedback, looks_like_baseline
 from src.orchestration.exploration_linking import (
+    DROP_PHYSICAL,
     KEEPS_HYPOTHESIS_ALIVE,
     bind_legacy_refs,
     cascade_drops,
@@ -74,13 +75,13 @@ from src.orchestration.exploration_roles import (
     classify_role,
     declared_role,
 )
+from src.orchestration.objective_tracking import Confirmer, ObjectiveTracker
 
 logger = get_logger(__name__)
 
 __all__ = ["CycleOutcome", "ExplorationSession", "ExplorationStop", "SuggestionError", "split_plan"]
 
 _MAX_BLOCK_ITEMS = 20
-SolutionConfirmer = Callable[[SolutionStatus], "str | None"]
 Telemetry = Callable[[str, dict[str, Any]], None]
 
 
@@ -133,7 +134,7 @@ class ExplorationSession:
         mode: str,
         index: Any | None = None,
         approver: Approver | ApprovalPort | None = None,
-        solution_confirmer: SolutionConfirmer | None = None,
+        objective_confirmer: Confirmer | None = None,
         telemetry: Telemetry | None = None,
         output_fn: Callable[[str], Any] = print,
         curator_suggest: Callable[[], Any] | None = None,
@@ -148,7 +149,8 @@ class ExplorationSession:
             mode: ``SessionMode`` da sessão.
             index: ``SemanticIndex`` (deduplicação, prioridade, sugestões).
             approver: Aprovação do ``assisted`` (padrão: ``PersistentGateApprover`` sobre o gate persistente).
-            solution_confirmer: Confirmação de solução no ``assisted`` (padrão: ``PersistentGateConfirmer``).
+            objective_confirmer: Pedido ``decidir_objetivo_atingido`` da política ``perguntar`` (padrão:
+                ``PersistentGateConfirmer``).
             telemetry: Callback ``(event_type, payload)``; só recebe contagens e IDs.
             output_fn: Saída de avisos ao pesquisador.
             curator_suggest: Coroutine do Curator (``suggest_paths``); ``None`` sem Curator.
@@ -161,14 +163,16 @@ class ExplorationSession:
         self._index = index
         self._session_chain = session_chain
         self._approver: ApprovalPort = as_approval_port(approver if approver is not None else self._gate_approver())
-        self._confirmer = solution_confirmer
+        self._confirmer = objective_confirmer
         self._telemetry = telemetry
         self._out = output_fn
         self._curator_suggest = curator_suggest
         self._book: HypothesisBook | None = None
         self._cycle: HypothesisCycle | None = None
         self._suggestions = SuggestionStore(self.session_dir)
-        self.declined_solutions: set[str] = set()
+        self._objective: ObjectiveTracker | None = None
+        self._cycle_new_hypotheses = 0
+        self._discriminating: tuple[DiscriminatingTask, ...] = ()
         self.cycles = 0
         self.idle_cycles = 0
         # v18.6-auto-metrics-and-stop-reasons: no modo auto, sem Metrica aprovada, o Researcher define as métricas.
@@ -365,6 +369,7 @@ class ExplorationSession:
                       and t.task_name not in dropped]
         selection = self.cycle.select(candidates, mode=self.mode, approver=self._approver, custos=costs)
         governance_drops(tasks, selection, dropped, done=done)
+        self._prepare_discrimination(live, report, dropped)
         hypothesis_drops = {
             hid: reason for hid in dict.fromkeys(candidates) if (reason := hypothesis_drop_reason(hid, selection))
         }
@@ -375,6 +380,7 @@ class ExplorationSession:
             key=lambda t: -selection.priorities.get(t.hypothesis_id, float("inf")),
         )
 
+        self._cycle_new_hypotheses = len(report.criadas)
         removed = sorted(n for n in self._queue if n not in {t.task_name for t in tasks} and n not in done)
         for name in removed:
             feedback.removed(name)
@@ -390,6 +396,38 @@ class ExplorationSession:
         if self.mode != "assisted" and selection.execute:
             self._out(f"Ciclo de exploração: {len(selection.execute)} hipótese(s) em teste (modo {self.mode}).")
         return CycleOutcome(kept, selection, report, dropped, extras.novo_formato, links)
+
+    def _prepare_discrimination(self, live: list[Any], report: RecordReport, dropped: dict[str, str]) -> None:
+        """Resolve ``discrimina`` (ref do plano ou id), entrega as predições à revisão e retira o experimento físico.
+
+        A subtarefa com ``experimento_fisico`` não executa no sandbox: sai com o código ``experimento_fisico`` (registro
+        e retorno ao Researcher, não é governança) e fica na lista que o critério de discriminação consulta.
+        """
+        tasks = [t for t in live if getattr(t, "discrimina", None) or getattr(t, "experimento_fisico", False)]
+        found: list[DiscriminatingTask] = []
+        if tasks:
+            rivals = {c.hipotese_id: c.predicao for c in self._competitors()}
+            for task in tasks:
+                ids = [report.ref_map.get(x, x) for x in parse_discrimina(task.discrimina)]
+                task.discrimina = [i for i in ids if i in rivals]
+                task.concorrentes_contexto = [{"hipotese_id": i, "predicao": rivals[i] or ""} for i in task.discrimina]
+                if task.discrimina:
+                    found.append(
+                        DiscriminatingTask(task.task_name, tuple(task.discrimina), bool(task.experimento_fisico))
+                    )
+                if task.experimento_fisico and task.task_name not in dropped:
+                    dropped[task.task_name] = DROP_PHYSICAL
+        self._discriminating = tuple(found)
+
+    def _competitors(self) -> list[Any]:
+        from src.knowledge.objective import GraphObjectiveReader
+        from src.knowledge.service import KnowledgeService
+
+        problem = get_active_problem(self.store, self.ctx.project_id)
+        if problem is None:
+            return []
+        service = KnowledgeService(self.store)
+        return GraphObjectiveReader(self.store, service, self.ctx.project_id, problem.id).competitors()
 
     @staticmethod
     def _restore_done(tasks: list[Any], done: set[str], done_tasks: dict[str, Any]) -> None:
@@ -641,23 +679,59 @@ class ExplorationSession:
 
         return PersistentGateApprover(session_gate(), self.ctx.session_id, self._chain(), self.ctx.project_id)
 
-    def check_solution(self) -> SolutionStatus:
-        """Critério de solução (veredito moderado e alvo atingido por resultado validado)."""
-        return self.cycle.check_solution()
+    # ------------------------------------------------------------------ objetivo (design §5 e §6)
 
-    def confirm_solution(self, solution: SolutionStatus) -> str | None:
-        """``encerrar``/``continuar`` (``assisted`` pede ao pesquisador pelo gate) ou ``None`` sem resposta humana."""
-        confirmer = self._confirmer or self._gate_confirmer()
-        answer = confirmer(solution)
-        if answer == "continuar" and solution.hypothesis_id:
-            self.declined_solutions.add(solution.hypothesis_id)
-        return answer
+    @property
+    def objective(self) -> ObjectiveTracker:
+        if self._objective is None:
+            self._objective = ObjectiveTracker(
+                self._store_getter, self.ctx.project_id, self.ctx.session_id, mode=self.mode, emit=self._emit,
+                confirmer=self._confirmer or self._gate_confirmer(), requester=self._request_continuity,
+            )
+        return self._objective
 
-    def _gate_confirmer(self) -> SolutionConfirmer:
+    def evaluate_objective(self) -> Any:
+        """Avalia o objetivo do ``Problema`` ao fim do ciclo (síncrono: usar ``to_thread``); ``None`` sem objetivo."""
+        from src.knowledge.service import KnowledgeService
+
+        view = CycleView(self.cycles, self._cycle_new_hypotheses, self._discriminating)
+        return self.objective.evaluate(view, KnowledgeService(self.store))
+
+    def objective_decision(self) -> str:
+        """``encerrar``, ``seguir`` ou ``aguardar`` (política ao atingir o objetivo; síncrono)."""
+        problem = get_active_problem(self.store, self.ctx.project_id)
+        criterion = problem.properties.get("criterio_sucesso") if problem is not None else None
+        return self.objective.decision(criterion if isinstance(criterion, dict) else None)
+
+    def objective_feedback(self) -> str:
+        """Texto do desfecho do objetivo para o replanejamento (vazio sem desfecho)."""
+        return self._objective.feedback() if self._objective is not None else ""
+
+    def objective_snapshot(self) -> dict[str, Any]:
+        """Estado do objetivo para o checkpoint da sessão."""
+        return self.objective.snapshot()
+
+    def restore_objective(self, state: Any) -> None:
+        """Restaura o estado do objetivo do checkpoint da sessão retomada."""
+        self.objective.restore(state)
+
+    def _gate_confirmer(self) -> Confirmer:
         from src.gate.persistent_gate import session_gate
         from src.knowledge.gate_approver import PersistentGateConfirmer
 
         return PersistentGateConfirmer(session_gate(), self.ctx.session_id, self._chain(), self.ctx.project_id)
+
+    def _request_continuity(self, motivo: str, reference: str, options: tuple[str, ...], question: str) -> None:
+        """Pedido ``decidir_continuidade`` de um desfecho do objetivo; a falha do gate nunca derruba a pesquisa."""
+        try:
+            from src.gate.persistent_gate import session_gate
+
+            session_gate().request(
+                "decidir_continuidade", reference, question, options, motivo=motivo,
+                session_id=self.ctx.session_id, project_id=self.ctx.project_id,
+            )
+        except Exception as exc:  # noqa: BLE001 - sem o pedido o evento ainda registra o desfecho
+            logger.warning("Pedido de continuidade não registrado", extra={"extra": {"erro": type(exc).__name__}})
 
     def verdict_availability(self) -> tuple[str, str] | None:
         """Confere se o veredito pode ser calculado (``v18.6-hypothesis-closure`` §4).

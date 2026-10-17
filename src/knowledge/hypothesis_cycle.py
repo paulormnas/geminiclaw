@@ -8,7 +8,6 @@ Tudo aqui é **determinístico** (sem LLM, exceto o ``custo_estimado`` que o Res
 - prioridade ``0,35·relevância + 0,30·apoio_prévio + 0,20·novidade + 0,15·(1 − custo)`` (pesos configuráveis);
 - ``sync_statuses``: ``validada``/``refutada`` **só** a partir do veredito calculado (nunca por julgamento de LLM);
 - ``evaluate_decisions``: ``Decisao.resultado_posterior`` preenchido deterministicamente;
-- ``check_solution``: critério "solução encontrada" (melhor resultado *validado* no alvo).
 
 A aprovação do ``assisted`` é uma ação do **pesquisador no terminal**, registrada no gate persistente: a resposta de
 ``ask_researcher`` (inclusive a do consultor), de agente ou de documento nunca aprova hipótese — sem TTY nada é
@@ -22,7 +21,6 @@ from typing import Any, Callable
 
 from src import config
 from src.knowledge import opportunities
-from src.knowledge.errors import GraphStoreError
 from src.knowledge.graph_store import GraphStore, Node
 from src.knowledge.graph_views import sanitize_text
 from src.knowledge.hypotheses import (
@@ -40,7 +38,6 @@ from src.knowledge.provenance import Actor
 from src.knowledge.schema import MOTIVO_ABANDONO_MAX_CHARS, ORIGEM_SISTEMA
 from src.knowledge.service import KnowledgeService
 from src.knowledge.validation import REVERT_ON_REOPEN_ROLE
-from src.knowledge.verdict import Attempt, Criterion
 from src.logger import get_logger
 from src.utils.normalization import clean_free_text, normalize_domain_term
 
@@ -127,16 +124,6 @@ class Transition:
     status_novo: str
     veredito_novo: float
     veredito_anterior: float | None
-
-
-@dataclass(frozen=True)
-class SolutionStatus:
-    """Resultado de ``check_solution`` (valores numéricos e IDs; nada de texto de pesquisa)."""
-
-    found: bool
-    hypothesis_id: str | None = None
-    verdict: float | None = None
-    best_value: float | None = None
 
 
 def _clamp01(value: float) -> float:
@@ -612,52 +599,6 @@ class HypothesisCycle:
         return evaluated
 
     # ------------------------------------------------------------------ parada
-
-    @staticmethod
-    def _meets_target(attempt: Attempt, criterion: Criterion) -> bool:
-        """Resultado *validado* que atinge o ``alvo`` (ou, sem alvo, supera o baseline em ``delta_min``)."""
-        if attempt.outcome_kind != "resultado" or attempt.validation != "validado" or attempt.value is None:
-            return False
-        better = (lambda a, b: a >= b) if criterion.sentido == "maior_melhor" else (lambda a, b: a <= b)
-        if criterion.alvo is not None:
-            return better(attempt.value, criterion.alvo)
-        if criterion.delta_min is not None and attempt.baseline is not None:
-            delta = (
-                attempt.value - attempt.baseline
-                if criterion.sentido == "maior_melhor"
-                else attempt.baseline - attempt.value
-            )
-            return delta >= criterion.delta_min
-        return False
-
-    def check_solution(self) -> SolutionStatus:
-        """Critério "solução encontrada" (design §8): alvo atingido por resultado validado.
-
-        Só conta resultado ``validado`` (honestidade epistemológica); hipótese ``abandonada`` não conta. O veredito é
-        recalculado agora pelo ``KnowledgeService`` (a única fonte do cálculo).
-        """
-        problem = get_active_problem(self._store, self._project_id)
-        if problem is None:
-            return SolutionStatus(False)
-        try:
-            criterion, _ = self._service.criterion_for(problem)
-        except GraphStoreError:
-            return SolutionStatus(False)
-        best: SolutionStatus = SolutionStatus(False)
-        for node in self.project_hypotheses():
-            if node.properties.get("status") == STATUS_ABANDONADA:
-                continue
-            try:
-                result, collected, _ = self._service.verdict_for_hypothesis(node.id)
-            except GraphStoreError:
-                continue
-            hits = [c.attempt.value for c in collected if self._meets_target(c.attempt, criterion)]
-            if not hits:
-                continue
-            value = max(hits) if criterion.sentido == "maior_melhor" else min(hits)  # type: ignore[type-var]
-            if not best.found or result.veredito > (best.verdict or 0.0):
-                best = SolutionStatus(True, node.id, round(result.veredito, 6), float(value))
-        return best
 
     # ------------------------------------------------------------------ pendências
 

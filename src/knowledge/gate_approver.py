@@ -9,6 +9,7 @@ continua pendente; a sessão não espera por ele. Fica em ``knowledge`` (e não 
 from __future__ import annotations
 
 from collections.abc import Iterable
+from typing import Any
 
 from src.gate.persistent_gate import PersistentGate
 from src.gate.types import GateAuthorizationRefused, GatePendingLimitReached
@@ -18,7 +19,6 @@ from src.knowledge.hypothesis_cycle import (
     ACTION_REJECT,
     ApprovalDecision,
     ApprovalItem,
-    SolutionStatus,
 )
 from src.logger import get_logger
 from src.utils.display_text import sanitize_line
@@ -94,10 +94,10 @@ CONFIRM_OPCOES = ("encerrar", "continuar")
 
 
 class PersistentGateConfirmer:
-    """Confirmação de solução do ``assisted`` pelo gate persistente: ``encerrar``, ``continuar`` ou ``None`` (pendente).
+    """Pedido ``decidir_objetivo_atingido`` (política ``perguntar``): ``encerrar``, ``continuar`` ou ``None``.
 
-    Substitui ``terminal_solution_confirmer``: o processo da sessão não lê o terminal. O pedido
-    ``decidir_objetivo_atingido`` leva o id da hipótese como referência e só vale uma vez (``consume_authorized``).
+    O processo da sessão não lê o terminal. O pedido leva a referência do que foi atingido (resultado ou hipótese) e só
+    vale uma vez (``consume_authorized``).
     """
 
     def __init__(
@@ -112,13 +112,12 @@ class PersistentGateConfirmer:
         self._chain = list(session_chain) if session_chain else [session_id]
         self._project_id = project_id
 
-    def __call__(self, solution: SolutionStatus) -> str | None:
-        reference = solution.hypothesis_id or "-"
-        value = f"{solution.best_value:g}" if solution.best_value is not None else "-"
-        verdict = f"{solution.verdict:+.2f}" if solution.verdict is not None else "-"
+    def __call__(self, achievement: Any) -> str | None:
+        reference = str(achievement.reference or "-")
+        value = f"{achievement.valor:g}" if achievement.valor is not None else "-"
         question = (
-            f"Critério de solução atingido na hipótese {sanitize_line(reference, 64)} (veredito {verdict}, melhor "
-            f"resultado validado {value}). Encerrar a pesquisa agora ou continuar explorando?"
+            f"Objetivo ({sanitize_line(str(achievement.tipo), 32)}) atingido em {sanitize_line(reference, 64)} "
+            f"(valor {value}). Encerrar a pesquisa agora ou continuar explorando?"
         )
         try:
             req = self._gate.find_in_chain(CONFIRM_DECISAO, reference, self._chain) or self._gate.request(

@@ -72,7 +72,7 @@ class LoopHarness:
         self.orch.rate_limiter.acquire = AsyncMock()
         self.orch.validator.validate_plan = validator or AsyncMock(return_value=APPROVED)
         self.orch.exploration_approver = approver
-        self.orch.solution_confirmer = confirmer
+        self.orch.objective_confirmer = confirmer
         self.orch.curator_consolidate = AsyncMock()
         self.orch.curator_close = AsyncMock(return_value=False)
         self.session_dir = self.orch.output_manager.base_dir / self.w.sid

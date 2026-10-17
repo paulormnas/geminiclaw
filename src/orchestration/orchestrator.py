@@ -2349,10 +2349,14 @@ class Orchestrator:
             metric_definition = (
                 exploration.metric_definition_for_validation(extras) if exploration is not None else None
             )
+            objective_definition = (
+                exploration.objective_definition_for_validation(extras) if exploration is not None else None
+            )
             val_result = await self.validator.validate_plan(
                 plan=current_plan_data,
                 prompt=prompt,
                 **({"metric_definition": metric_definition} if metric_definition is not None else {}),
+                **({"objective_definition": objective_definition} if objective_definition is not None else {}),
             )
 
             # v16-pipeline-robustness §1.3 — reprovação repetida: a determinística encerra o
@@ -2364,7 +2368,13 @@ class Orchestrator:
                 last_signature = val_result.signature
                 # Métricas nunca são validadas "por cansaço": sem parecer favorável a elas, a reprovação segue valendo.
                 metrics_gate_open = metric_definition is None or bool(getattr(val_result, "metrics_approved", False))
-                if repeats >= PLAN_REJECTION_STALL_LIMIT and not val_result.deterministic and metrics_gate_open:
+                objective_gate_open = objective_definition is None or bool(
+                    getattr(val_result, "objective_approved", False)
+                )
+                if (
+                    repeats >= PLAN_REJECTION_STALL_LIMIT and not val_result.deterministic
+                    and metrics_gate_open and objective_gate_open
+                ):
                     val_result.is_valid = True
                     val_result.status = "approved"
                     val_result.approved_with_warnings = True
@@ -2405,6 +2415,10 @@ class Orchestrator:
                     self._plan_extras[master_session_id] = extras
                     if metric_definition is not None and getattr(val_result, "metrics_approved", False):
                         await self._apply_validated_metrics(exploration, extras, master_session_id)
+                    if objective_definition is not None and getattr(val_result, "objective_approved", False):
+                        exploration.accept_objective(extras)
+                    elif objective_definition is None and extras.objetivo is not None:
+                        await asyncio.to_thread(exploration.propose_objective_revision, extras)
                 self._resume_planning.discard(master_session_id)
                 self._session_plan_summary[master_session_id] = "\n".join(
                     f"- {t.get('task_name', '?')} ({t.get('agent_id', 'base')}): "

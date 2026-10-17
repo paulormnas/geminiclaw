@@ -25,10 +25,25 @@ ganham "hypothesis_ref").
   sem ele o sistema decide o papel pela estrutura do plano.
 - Hipóteses de agentes dependem de aprovação do pesquisador conforme o modo da sessão; oportunidades só viram
   hipótese depois de aprovadas pelo pesquisador.
+- "objetivo": (opcional) só para propor outro tipo de objetivo para o Problema ({"tipo": "limiar" | "discriminacao" |
+  "cobertura", "justificativa": "..."}); no modo assistido ou semi a proposta vira pedido ao pesquisador e não muda
+  nada antes da resposta. Nunca inclua a política ao atingir o objetivo.
 - Subtarefas já concluídas continuam no plano, inalteradas (para manter as dependências); não são reexecutadas.
 - Se você não vê mais nenhum caminho promissor, devolva o plano só com as subtarefas já concluídas e sem hipótese
   nova: a sessão será encerrada como "sem caminhos promissores"."""
 
+
+OBJECTIVE_DEFINITION_PLAN_INSTRUCTION = """DEFINIÇÃO DE OBJETIVO (obrigatória neste plano): o Problema deste
+projeto não tem objetivo válido ({motivo}). Inclua no plano a chave "objetivo":
+{{"tipo": "limiar" | "discriminacao" | "cobertura",
+"justificativa": "por que este objetivo serve a este problema"}}.
+- "limiar": alcançar um valor da métrica principal (a métrica, o limiar e "delta_min" vêm da chave "metricas").
+- "discriminacao": decidir entre explicações rivais. Acrescente "hipoteses_concorrentes": ao menos 2 itens
+  {{"ref": "<ref de uma hipótese declarada em hipoteses>", "predicao": "o que se observaria se ela fosse a correta"}};
+  as predições devem ser testáveis e diferentes entre si.
+- "cobertura": explorar o espaço de hipóteses, sem alvo; só o pesquisador a dá por atingida.
+Não escreva a política ao atingir o objetivo (é do pesquisador) e não use "fronteira" (ainda não suportado). O Validator
+avalia o objetivo junto com o plano; ele só vale depois de aprovado, e um plano sem "objetivo" é reprovado."""
 
 METRIC_DEFINITION_PLAN_INSTRUCTION = """DEFINIÇÃO DE MÉTRICAS (obrigatória neste plano): o Problema deste projeto não
 tem métrica aprovada ({motivo}). Inclua no plano a chave "metricas": a métrica (ou o conjunto de métricas) que melhor

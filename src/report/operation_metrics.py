@@ -314,6 +314,9 @@ class CostResourcesReader:
     group = "custo_recursos"
     producer = "telemetria"
 
+    def __init__(self, runs_loader: Callable[[str], dict[str, Any] | None] | None = None) -> None:
+        self._runs_loader = runs_loader
+
     def read(self, session_id: str) -> dict[str, Any]:
         from src.observability.telemetry import get_telemetry
 
@@ -335,6 +338,8 @@ class CostResourcesReader:
             "tokens_total": sum(int(r["tokens"] or 0) for r in rows),
             "custo_usd_total": cost([r["cost_usd"] for r in rows]),
             "chamadas_sem_custo": sum(int(r.get("calls_sem_custo") or 0) for r in rows),
+            # Execuções de agente da sessão (sem limite, ADR 021 §5.1): só relatadas; ``None`` sem o registro.
+            "execucoes_agente": self._runs_loader(session_id) if self._runs_loader else None,
             "por_tarefa": [
                 {
                     "task_name": r["task_name"], "agent_id": r["agent_id"], "tokens": int(r["tokens"] or 0),
@@ -487,6 +492,10 @@ def default_readers(
             current = nxt if isinstance(nxt, str) else None
         return session_gate().resolved(chain or [session_id])
 
+    def runs_of(session_id: str) -> dict[str, Any] | None:
+        runs = (payload_loader(session_id) or {}).get("execucoes_agente") if payload_loader else None
+        return runs if isinstance(runs, dict) else None
+
     return [
         EgressMetricsReader(budget_loader=budget_of),
         NumericProvenanceReader(output_dir),
@@ -494,7 +503,7 @@ def default_readers(
         ClaimVerificationReader(output_dir),
         PlanRejectionReader(),
         HypothesisClosureReader(),
-        CostResourcesReader(),
+        CostResourcesReader(runs_loader=runs_of),
         HumanInterventionsReader(payload_loader, gate_loader=gate_of),
         JudgeIndependenceReader(payload_loader),
     ]

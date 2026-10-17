@@ -29,13 +29,6 @@ def test_solucao_com_veredito_moderado_e_alvo_atingido_por_resultado_validado():
     assert status.found and status.hypothesis_id == hid and status.verdict >= 0.3 and status.best_value == 0.9
 
 
-def test_veredito_baixo_nao_e_solucao_mesmo_com_alvo_atingido():
-    w = HypothesisWorld()
-    hid = w.hypothesis("H", status="em_teste")
-    _attempts(w, hid, [0.95])  # uma só tentativa: evidência insuficiente (veredito < 0,3)
-    assert not _cycle(w).check_solution().found
-
-
 def test_veredito_alto_sem_atingir_o_alvo_nao_e_solucao():
     w = HypothesisWorld(alvo=0.95)
     hid = w.hypothesis("H", status="em_teste")
@@ -76,13 +69,13 @@ def test_sem_alvo_vale_a_melhoria_minima_sobre_o_baseline():
     assert _cycle(w).check_solution().found
 
 
-def test_veredito_limiar_vem_da_configuracao(monkeypatch):
+def test_alvo_atingido_vale_sem_filtro_de_veredito():
+    """ADR 021 §5.2: ``SOLUTION_MIN_VERDICT`` saiu; o resultado validado no alvo basta, mesmo com veredito baixo."""
     w = HypothesisWorld()
     hid = w.hypothesis("H", status="em_teste")
     _attempts(w, hid, [0.85, 0.86])  # veredito ~0,25
-    assert not _cycle(w).check_solution().found
-    monkeypatch.setattr("src.config.SOLUTION_MIN_VERDICT", 0.2)
-    assert _cycle(w).check_solution().found
+    status = _cycle(w).check_solution()
+    assert status.found and status.hypothesis_id == hid
 
 
 def test_hipotese_refutada_nao_vira_fato():

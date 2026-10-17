@@ -71,6 +71,11 @@ def _deployment_profile_message(value: str) -> str:
     return "'DEPLOYMENT_PROFILE' foi removida (ADR 023 §1.1): remova a linha do .env."
 
 
+_NO_CAP_MESSAGE = (
+    "removida pelo ADR 021 §5.1; a exploração não tem teto de hipóteses, ciclos ou execuções; "
+    "use os limites de custo, tokens e tempo; remova a linha."
+)
+
 # Nomes de configuração removidos: nome -> mensagem fixa ou função do valor. Quem remove uma variável acrescenta
 # aqui o nome dela (nunca lê o nome antigo como sinônimo). v18.7-resource-monitor-config.
 _REMOVED_VARIABLES: dict[str, str | Callable[[str], str]] = {
@@ -83,6 +88,26 @@ _REMOVED_VARIABLES: dict[str, str | Callable[[str], str]] = {
     "OPERATIONAL_THRESHOLD_WAIT_SECONDS": (
         "'OPERATIONAL_THRESHOLD_WAIT_SECONDS' foi removida (v18.7-background-sessions): o processo da sessão não "
         "pergunta no terminal; o aviso de limite operacional só é registrado. Remova a linha do .env."
+    ),
+    **{
+        name: f"'{name}' foi {_NO_CAP_MESSAGE}"
+        for name in (
+            "HYPOTHESES_PER_CYCLE",
+            "MAX_EXPLORATION_CYCLES",
+            "MAX_AGENT_RUNS_PER_SESSION",
+            "MAX_CONTAINERS_PER_SESSION",
+            "MAX_PLANNING_RUNS_PER_SESSION",
+            "OPERATIONAL_THRESHOLD_AGENT_RUNS_PCT",
+            "OPERATIONAL_THRESHOLD_CONTAINER_COUNT_PCT",
+        )
+    },
+    "SOLUTION_MIN_VERDICT": (
+        "'SOLUTION_MIN_VERDICT' foi removida pelo ADR 021 §5.2; a parada usa o objetivo do Problema; "
+        "remova a linha."
+    ),
+    "OPERATIONAL_THRESHOLD_COST_USD": (
+        "'OPERATIONAL_THRESHOLD_COST_USD' foi substituída por OPERATIONAL_THRESHOLD_COST_USAGE_PCT "
+        "(percentual do limite de custo); remova a linha."
     ),
 }
 
@@ -273,15 +298,6 @@ if GATE_ASK_WAIT_SECONDS < 0 or (AGENT_TIMEOUT_SECONDS is not None and AGENT_TIM
 # Limites de planejamento (Roadmap V4)
 MAX_PLANNING_ITERATIONS = int(get_env("MAX_PLANNING_ITERATIONS", default="10"))
 MAX_PLAN_RETRIES = int(get_env("MAX_PLAN_RETRIES", default="5"))
-
-# Roadmap V16/ADR 014 — circuit breaker de execuções de agente por sessão.
-# MAX_CONTAINERS_PER_SESSION (nome da época dos agentes em container) segue aceito como alias.
-MAX_AGENT_RUNS_PER_SESSION = int(
-    get_env("MAX_AGENT_RUNS_PER_SESSION") or get_env("MAX_CONTAINERS_PER_SESSION", default="30")
-)
-# Piso do limite de execuções de subtarefa; o limite efetivo cresce com o plano aprovado
-# (v16-pipeline-robustness, design §5). Execuções de planejamento têm limite próprio.
-MAX_PLANNING_RUNS_PER_SESSION = int(get_env("MAX_PLANNING_RUNS_PER_SESSION", default="20"))
 
 # v16-pipeline-robustness — robustez do planejamento, da revisão e do disjuntor.
 PLAN_NORMALIZER_ENABLED = get_env_bool("PLAN_NORMALIZER_ENABLED", default=True)
@@ -545,17 +561,11 @@ else:
     _session_duration_pct_default = 0.5
 OPERATIONAL_THRESHOLDS: dict[str, float] = {
     "token_usage_pct": float(get_env("OPERATIONAL_THRESHOLD_TOKEN_USAGE_PCT", default="0.80")),
-    "cost_usd": float(get_env("OPERATIONAL_THRESHOLD_COST_USD", default="5.0")),
     "session_duration_pct": float(
         get_env(
             "OPERATIONAL_THRESHOLD_SESSION_DURATION_PCT",
             default=str(_session_duration_pct_default),
         )
-    ),
-    # OPERATIONAL_THRESHOLD_CONTAINER_COUNT_PCT (nome antigo) segue aceito como alias.
-    "agent_runs_pct": float(
-        get_env("OPERATIONAL_THRESHOLD_AGENT_RUNS_PCT")
-        or get_env("OPERATIONAL_THRESHOLD_CONTAINER_COUNT_PCT", default="0.85")
     ),
 }
 # Alias de retrocompatibilidade: MAX_SESSION_TOKENS é o nome antigo de SESSION_MAX_TOKENS.
@@ -752,8 +762,6 @@ if len(HYPOTHESIS_PRIORITY_WEIGHTS) != 4 or any(w < 0 for w in HYPOTHESIS_PRIORI
     abs(sum(HYPOTHESIS_PRIORITY_WEIGHTS) - 1.0) < 1e-6
 ):
     raise ValueError("HYPOTHESIS_PRIORITY_WEIGHTS deve ter 4 pesos não negativos que somam 1 (0.35,0.30,0.20,0.15).")
-# Hipóteses executadas por ciclo nos modos `semi`/`auto` (as de maior prioridade); `assisted` executa as aprovadas.
-HYPOTHESES_PER_CYCLE = max(int(get_env("HYPOTHESES_PER_CYCLE", default="2")), 1)
 # Similaridade semântica a partir da qual uma hipótese nova reutiliza a existente do projeto.
 HYPOTHESIS_DEDUP_SIMILARITY = float(get_env("HYPOTHESIS_DEDUP_SIMILARITY", default="0.90"))
 # |veredito| a partir do qual a hipótese escolhida avalia a `Decisao` ("acertada"/"nao_acertada") e a hipótese
@@ -761,11 +769,6 @@ HYPOTHESIS_DEDUP_SIMILARITY = float(get_env("HYPOTHESIS_DEDUP_SIMILARITY", defau
 DECISION_EVAL_MIN_VERDICT = float(get_env("DECISION_EVAL_MIN_VERDICT", default="0.3"))
 # Sugestões do Curator ao Researcher por ciclo.
 CURATOR_MAX_SUGGESTIONS = max(int(get_env("CURATOR_MAX_SUGGESTIONS", default="3")), 0)
-# Menor veredito de uma hipótese sobre o Problema para a solução ser considerada encontrada (evidência moderada).
-SOLUTION_MIN_VERDICT = float(get_env("SOLUTION_MIN_VERDICT", default="0.3"))
-# Ciclos de exploração por sessão (planejar -> executar -> consolidar -> sugerir): teto de iteração à prova de laço
-# infinito, além dos limites de uso (tokens, tempo, retentativas, execuções) e do circuito de progresso zero.
-MAX_EXPLORATION_CYCLES = max(int(get_env("MAX_EXPLORATION_CYCLES", default="20")), 1)
 # Tamanho máximo (caracteres) dos textos de hipótese, decisão e sugestão aceitos do plano (recusa, não trunca) e
 # quantidades máximas por plano.
 HYPOTHESIS_TEXT_MAX_CHARS = int(get_env("HYPOTHESIS_TEXT_MAX_CHARS", default="1000"))

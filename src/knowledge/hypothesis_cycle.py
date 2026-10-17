@@ -4,11 +4,11 @@ Tudo aqui é **determinístico** (sem LLM, exceto o ``custo_estimado`` que o Res
 ``GraphStore``:
 
 - ``HypothesisCycle.select``: governança por ``SessionMode`` (``assisted`` exige aprovação do pesquisador para
-  hipóteses de agentes; ``semi``/``auto`` executam as ``HYPOTHESES_PER_CYCLE`` de maior prioridade);
+  hipóteses de agentes; ``semi``/``auto`` executam todas as não bloqueadas, por prioridade);
 - prioridade ``0,35·relevância + 0,30·apoio_prévio + 0,20·novidade + 0,15·(1 − custo)`` (pesos configuráveis);
 - ``sync_statuses``: ``validada``/``refutada`` **só** a partir do veredito calculado (nunca por julgamento de LLM);
 - ``evaluate_decisions``: ``Decisao.resultado_posterior`` preenchido deterministicamente;
-- ``check_solution``: critério "solução encontrada" (veredito moderado **e** melhor resultado *validado* no alvo).
+- ``check_solution``: critério "solução encontrada" (melhor resultado *validado* no alvo).
 
 A aprovação do ``assisted`` é uma ação do **pesquisador no terminal**, registrada no gate persistente: a resposta de
 ``ask_researcher`` (inclusive a do consultor), de agente ou de documento nunca aprova hipótese — sem TTY nada é
@@ -97,7 +97,6 @@ class Selection:
     Attributes:
         execute: IDs das hipóteses que podem executar neste ciclo.
         pending_approval: IDs que aguardam o pesquisador (``assisted`` sem resposta) — **não** executam.
-        deferred: IDs de menor prioridade (``semi``/``auto``) que ficam ``proposta`` para um próximo ciclo.
         rejected: ID -> motivo das rejeitadas pelo pesquisador (viraram ``abandonada``).
         excluded: IDs que não executam por já estarem concluídas ou abandonadas.
         priorities: ID -> prioridade calculada.
@@ -105,7 +104,6 @@ class Selection:
 
     execute: list[str] = field(default_factory=list)
     pending_approval: list[str] = field(default_factory=list)
-    deferred: list[str] = field(default_factory=list)
     rejected: dict[str, str] = field(default_factory=dict)
     excluded: list[str] = field(default_factory=list)
     priorities: dict[str, float] = field(default_factory=dict)
@@ -115,7 +113,6 @@ class Selection:
         return {
             "executadas": len(self.execute),
             "pendentes_de_aprovacao": len(self.pending_approval),
-            "adiadas": len(self.deferred),
             "rejeitadas": len(self.rejected),
             "excluidas": len(self.excluded),
         }
@@ -164,7 +161,6 @@ class HypothesisCycle:
         index: Any | None = None,
         service: KnowledgeService | None = None,
         weights: tuple[float, float, float, float] | None = None,
-        per_cycle: int | None = None,
     ) -> None:
         """Inicializa o ciclo.
 
@@ -175,7 +171,6 @@ class HypothesisCycle:
             index: ``SemanticIndex`` (relevância/novidade/apoio prévio); sem ele, os termos semânticos ficam neutros.
             service: ``KnowledgeService`` (veredito); padrão: um novo sobre ``store``.
             weights: Pesos da prioridade (padrão: ``HYPOTHESIS_PRIORITY_WEIGHTS``).
-            per_cycle: Hipóteses por ciclo no ``semi``/``auto`` (padrão: ``HYPOTHESES_PER_CYCLE``).
         """
         self._store = store
         self._project_id = project_id
@@ -183,7 +178,6 @@ class HypothesisCycle:
         self._index = index
         self._service = service or KnowledgeService(store)
         self._weights = weights or config.HYPOTHESIS_PRIORITY_WEIGHTS
-        self._per_cycle = per_cycle if per_cycle is not None else config.HYPOTHESES_PER_CYCLE
         self.transitions: list[Transition] = []  # da última chamada de ``sync_statuses``
 
     # ------------------------------------------------------------------ leitura
@@ -321,7 +315,7 @@ class HypothesisCycle:
         - ``pesquisador``: sempre executa (qualquer modo);
         - ``assisted``: hipóteses de agente ainda ``proposta`` exigem aprovação do pesquisador (lote, uma vez);
           sem ``approver`` ou sem resposta, ficam **pendentes** e não executam;
-        - ``semi``/``auto``: as ``HYPOTHESES_PER_CYCLE`` de maior prioridade executam; as demais ficam ``proposta``;
+        - ``semi``/``auto``: todas as não bloqueadas executam, em ordem de prioridade (ADR 021 §5.1);
         - modo desconhecido: tratado como ``assisted`` (falha fechada);
         - hipótese ``abandonada`` (pelo pesquisador) nunca executa de novo; ``validada`` e ``refutada`` recebem novos
           testes sem mudar de status no meio do ciclo (``v18.7-hypothesis-linking`` §5.2).
@@ -362,10 +356,9 @@ class HypothesisCycle:
 
     def _select_autonomous(self, nodes: list[Node], selection: Selection) -> None:
         ranked = sorted(nodes, key=lambda n: (-selection.priorities[n.id], n.id))
-        for node in ranked[: self._per_cycle]:
+        for node in ranked:
             selection.execute.append(node.id)
             self._mark_in_test(node, ORQUESTRADOR)
-        selection.deferred.extend(n.id for n in ranked[self._per_cycle :])
 
     def _select_assisted(self, nodes: list[Node], selection: Selection, approver: Approver | None) -> None:
         awaiting = [n for n in nodes if n.properties.get("status") == STATUS_PROPOSTA]
@@ -638,7 +631,7 @@ class HypothesisCycle:
         return False
 
     def check_solution(self) -> SolutionStatus:
-        """Critério "solução encontrada" (design §8): veredito >= ``SOLUTION_MIN_VERDICT`` **e** alvo atingido.
+        """Critério "solução encontrada" (design §8): alvo atingido por resultado validado.
 
         Só conta resultado ``validado`` (honestidade epistemológica); hipótese ``abandonada`` não conta. O veredito é
         recalculado agora pelo ``KnowledgeService`` (a única fonte do cálculo).
@@ -657,8 +650,6 @@ class HypothesisCycle:
             try:
                 result, collected, _ = self._service.verdict_for_hypothesis(node.id)
             except GraphStoreError:
-                continue
-            if result.veredito < config.SOLUTION_MIN_VERDICT:
                 continue
             hits = [c.attempt.value for c in collected if self._meets_target(c.attempt, criterion)]
             if not hits:

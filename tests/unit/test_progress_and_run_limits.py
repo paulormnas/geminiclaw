@@ -5,9 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.orchestration.autonomous_loop import AutonomousLoop, CycleProgress, error_signature
-from src.orchestration.errors import AgentRunLimitReached
 from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator
-from src.orchestration.usage import StopReason
 
 pytestmark = pytest.mark.unit
 
@@ -91,7 +89,7 @@ async def test_um_ciclo_identico_nao_encerra_com_padrao_dois():
     assert calls["planning"] == 4
 
 
-# --- Limites de execução ----------------------------------------------------------------------
+# --- Execuções sem limite ---------------------------------------------------------------------
 
 def _orch():
     session_manager = MagicMock()
@@ -119,57 +117,47 @@ async def test_planejamento_nao_consome_o_limite_de_subtarefas():
     assert orch._session_agent_run_counts.get("m", 0) == 0
 
 
-def test_limite_acompanha_o_plano():
-    """Scenario: Limite acompanha o plano."""
+@pytest.mark.asyncio
+async def test_muitas_execucoes_nao_encerram_a_sessao():
+    """Scenario: Muitas execuções não encerram a sessão (ADR 021 §5.1)."""
     orch = _orch()
-    orch._session_plan_size["m"] = 10
-    with patch("src.orchestration.orchestrator.MAX_AGENT_RUNS_PER_SESSION", 30), \
-            patch("src.orchestration.orchestrator.SESSION_MAX_TASK_RETRIES", 3):
-        assert orch.effective_run_limit("m") == 42
-        assert orch.effective_run_limit("sem_plano") == 30
+    orch._session_agent_run_counts["m"] = 45
+    orch._session_planning_run_counts["m"] = 25
+    with patch("src.orchestration.orchestrator.get_telemetry"):
+        result = await orch._execute_agent(_task(), "m")
+    assert result.status == "success"
+    assert orch._session_agent_run_counts["m"] == 46 and orch._session_planning_run_counts["m"] == 25
+
+
+def test_nao_ha_mais_limite_de_execucoes_no_codigo():
+    from src.orchestration import errors, usage
+
+    assert not hasattr(errors, "AgentRunLimitReached") and not hasattr(Orchestrator, "effective_run_limit")
+    assert "limite_execucoes" not in {reason.value for reason in usage.StopReason}
 
 
 @pytest.mark.asyncio
-async def test_limite_de_planejamento_levanta_erro_tipado():
-    orch = _orch()
-    with patch("src.orchestration.orchestrator.MAX_PLANNING_RUNS_PER_SESSION", 2), patch("src.orchestration.orchestrator.get_telemetry"):
-        await orch._execute_agent(_task(), "m", run_kind="planning")
-        await orch._execute_agent(_task(), "m", run_kind="planning")
-        with pytest.raises(AgentRunLimitReached) as err:
-            await orch._execute_agent(_task(), "m", run_kind="planning")
-    assert err.value.kind == "planning" and err.value.limit == 2 and err.value.count == 2
+async def test_contagens_de_execucao_vao_para_as_metricas_de_operacao():
+    """Scenario: ``custo_recursos.execucoes_agente`` registra planejamento e execução no fechamento."""
+    from src.report.operation_metrics import CostResourcesReader
 
-
-@pytest.mark.asyncio
-async def test_sessao_fecha_com_limite_execucoes_ao_estourar_o_planejamento():
-    """Scenario: Limite de planejamento atingido."""
     orch = MagicMock()
-    orch._run_planning_loop = AsyncMock(side_effect=AgentRunLimitReached("planning", 20, 20, "s"))
-    orch.output_manager = MagicMock()
-    orch.output_manager.list_artifacts.return_value = []
+    orch._session_planning_run_counts = {"m": 25}
+    orch._session_agent_run_counts = {"m": 46}
+    payloads: dict = {}
+    orch.session_manager.get.side_effect = lambda sid: MagicMock(payload=dict(payloads))
+    orch.session_manager.update.side_effect = lambda sid, payload: payloads.update(payload)
     loop = AutonomousLoop(orch)
-    close = AsyncMock(return_value="fechada")
-    with patch("src.orchestration.autonomous_loop.get_telemetry") as tel, patch.object(loop, "_close_session", close):
-        with patch.object(loop, "_is_complex_triage", AsyncMock(return_value=True)):
-            result = await loop.run("tarefa", "exec_lim")
-    assert result == "fechada"
-    assert close.call_args.args[0] == StopReason.RUNS and StopReason.RUNS.value == "limite_execucoes"
-    payloads = [c.kwargs["payload"] for c in tel.return_value.record_agent_event.call_args_list
-                if c.kwargs.get("event_type") == "limit_reached"]
-    assert payloads[0]["limit"] == "agent_runs" and payloads[0]["kind"] == "planning"
+    with patch("src.orchestration.loop_report.get_telemetry") as tel, patch(
+        "src.report.operation_metrics.aggregate_operation_metrics", return_value={}
+    ):
+        tel.return_value.flush = AsyncMock()
+        await loop.record_operation_metrics("m", parcial=False)
+    assert payloads["execucoes_agente"] == {"planejamento": 25, "execucao": 46}
 
-
-@pytest.mark.asyncio
-async def test_sessao_fecha_com_consolidacao_ao_estourar_a_execucao_sem_excecao():
-    """Scenario: Limite de execução atingido."""
-    orch = MagicMock()
-    orch._run_planning_loop = AsyncMock(return_value=[AgentTask(agent_id="base", prompt="x", task_name="t")])
-    orch._execute_agent = AsyncMock(side_effect=AgentRunLimitReached("execution", 30, 30, "s"))
-    orch.output_manager = MagicMock()
-    orch.output_manager.list_artifacts.return_value = []
-    loop = AutonomousLoop(orch)
-    close = AsyncMock(return_value="fechada")
-    with patch("src.orchestration.autonomous_loop.get_telemetry"), patch.object(loop, "_close_session", close):
-        with patch.object(loop, "_is_complex_triage", AsyncMock(return_value=True)):
-            result = await loop.run("tarefa", "exec_lim2")
-    assert result == "fechada" and close.call_args.args[0] == StopReason.RUNS
+    reader = CostResourcesReader(runs_loader=lambda sid: payloads["execucoes_agente"])
+    with patch("src.observability.telemetry.get_telemetry") as tel:
+        tel.return_value.get_usage_by_task.return_value = []
+        tel.return_value.get_hardware_peaks.return_value = {}
+        tel.return_value.get_average_cpu.return_value = None
+        assert reader.read("m")["execucoes_agente"] == {"planejamento": 25, "execucao": 46}

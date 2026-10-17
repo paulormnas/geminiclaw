@@ -19,13 +19,10 @@ from src.artifacts.output_manager import OutputManager, generate_session_slug
 from src.config import (
     GEMINI_RATE_LIMIT_COOLDOWN_SECONDS,
     GEMINI_REQUESTS_PER_MINUTE,
-    MAX_AGENT_RUNS_PER_SESSION,
     MAX_PLANNING_ITERATIONS,
-    MAX_PLANNING_RUNS_PER_SESSION,
     OLLAMA_ENABLE_THINKING,
     PLAN_NORMALIZER_ENABLED,
     PLAN_REJECTION_STALL_LIMIT,
-    SESSION_MAX_TASK_RETRIES,
 )
 from src.egress.gate import EgressGate, any_role_raw, bind_gate, role_tainted
 from src.egress.persisted import resumo_marca
@@ -40,7 +37,7 @@ from src.llm.vision import VisionConfigError
 from src.logger import get_logger
 from src.observability.telemetry import get_telemetry
 from src.orchestration.autonomous_loop import AutonomousLoop
-from src.orchestration.errors import AgentRunLimitReached, PlanningStalled
+from src.orchestration.errors import PlanningStalled
 from src.orchestration.exploration_roles import declared_role, declared_roles
 from src.orchestration.plan_normalizer import normalize_plan
 from src.orchestration.unlimited_mode import budget_payload, record_confirmation_event
@@ -151,7 +148,6 @@ class Orchestrator:
         # Roadmap V16/ADR 014 — Rastreia execuções de agente por master_session_id
         self._session_agent_run_counts: dict[str, int] = {}
         self._session_planning_run_counts: dict[str, int] = {}
-        self._session_plan_size: dict[str, int] = {}
         # V18/researcher-consult — resumo do plano aprovado, rastreadores de uso e contagem de
         # consultas por sessão mestra; provedor e skills do consultor são injetáveis (testes).
         self._session_plan_summary: dict[str, str] = {}
@@ -1917,24 +1913,13 @@ class Orchestrator:
             return _finish(PENDENTE_PESQUISADOR, RESERVED_MESSAGE, None, consulta | {"reservada": True})
         return _finish(RESPONDIDO_RESEARCHER, format_answer(outcome.resposta), None, consulta)
 
-    def effective_run_limit(self, master_session_id: str, kind: str = "execution") -> int:
-        """Limite efetivo de execuções de agente da sessão (v16-pipeline-robustness §5.1).
-
-        O de subtarefas tem como piso ``MAX_AGENT_RUNS_PER_SESSION`` e cresce com o plano
-        aprovado: ``n * (1 + SESSION_MAX_TASK_RETRIES) + 2``.
-        """
-        if kind == "planning":
-            return MAX_PLANNING_RUNS_PER_SESSION
-        n = self._session_plan_size.get(master_session_id, 0)
-        return max(MAX_AGENT_RUNS_PER_SESSION, n * (1 + SESSION_MAX_TASK_RETRIES) + 2 if n else 0)
-
     async def _execute_agent(
         self, task: AgentTask, master_session_id: str | None = None, run_kind: str = "execution"
     ) -> AgentResult:
         """Executa um agente em processo via ``AgentRuntime`` (Roadmap V16/ADR 014).
 
         Faz uma chamada direta e supervisionada dentro do processo do orquestrador, com
-        telemetria, circuit breaker de execuções por sessão e persistência da sessão do agente.
+        telemetria, contagem de execuções por sessão (sem limite: ADR 021 §5.1) e persistência da sessão do agente.
 
         Args:
             task: Definição da tarefa do agente.
@@ -1946,15 +1931,10 @@ class Orchestrator:
         # Rate limiting adaptativo (Roadmap V3 - Etapa V8)
         await self.rate_limiter.acquire()
 
-        # Roadmap V16/ADR 014 — Circuit breaker: limite de execuções de agente por sessão,
-        # com contadores separados para planejamento e execução (v16-pipeline-robustness §5).
+        # Contadores separados para planejamento e execução: só relatados nas métricas, sem limite (ADR 021 §5.1).
         if master_session_id:
             counts = self._session_planning_run_counts if run_kind == "planning" else self._session_agent_run_counts
-            count = counts.get(master_session_id, 0)
-            limit = self.effective_run_limit(master_session_id, run_kind)
-            if count >= limit:
-                raise AgentRunLimitReached(run_kind, count, limit, master_session_id)
-            counts[master_session_id] = count + 1
+            counts[master_session_id] = counts.get(master_session_id, 0) + 1
 
         telemetry = get_telemetry()
         _exec_id = master_session_id or "unknown"
@@ -2423,7 +2403,6 @@ class Orchestrator:
                     if metric_definition is not None and getattr(val_result, "metrics_approved", False):
                         await self._apply_validated_metrics(exploration, extras, master_session_id)
                 self._resume_planning.discard(master_session_id)
-                self._session_plan_size[master_session_id] = len(current_plan_data)
                 self._session_plan_summary[master_session_id] = "\n".join(
                     f"- {t.get('task_name', '?')} ({t.get('agent_id', 'base')}): "
                     f"{str(t.get('description') or t.get('prompt') or '')[:160]}"

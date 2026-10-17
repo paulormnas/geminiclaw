@@ -143,35 +143,31 @@ def test_resposta_do_consultor_nao_aprova_hipotese():
 # -- semi / auto ---------------------------------------------------------------------------------------------
 
 
-def test_modo_autonomo_executa_as_duas_de_maior_prioridade():
-    """Scenario: Modo autônomo — 4 propostas, HYPOTHESES_PER_CYCLE=2: as 2 de maior prioridade executam."""
+def test_modo_autonomo_executa_todas_por_prioridade():
+    """Scenario: Modo autônomo sem teto — 4 propostas: as 4 executam, da maior para a menor prioridade."""
     w = HypothesisWorld(mode="auto")
     ids = [w.hypothesis(f"H{i}") for i in range(4)]
     custos = {ids[0]: "alto", ids[1]: "baixo", ids[2]: "medio", ids[3]: "baixo"}
-    sel = _cycle(w, per_cycle=2).select(ids, mode="auto", custos=custos)
+    sel = _cycle(w).select(ids, mode="auto", custos=custos)
     ranked = sorted(ids, key=lambda i: (-sel.priorities[i], i))
-    assert sel.execute == ranked[:2] and sel.deferred == ranked[2:]
-    assert ids[0] in sel.deferred  # o de custo alto perde para os baratos (mesmos demais termos)
-    for hid in sel.execute:
-        assert _status(w, hid) == "em_teste"
-    for hid in sel.deferred:
-        assert _status(w, hid) == "proposta"
+    assert sel.execute == ranked and set(sel.execute) == set(ids)
+    assert sel.execute[-1] == ids[0]  # o de custo alto fica por último (mesmos demais termos)
+    assert all(_status(w, hid) == "em_teste" for hid in ids)
 
 
-def test_modo_semi_tambem_usa_prioridade_e_respeita_a_config(monkeypatch):
-    monkeypatch.setattr("src.config.HYPOTHESES_PER_CYCLE", 1)
+def test_modo_semi_tambem_executa_todas():
     w = HypothesisWorld(mode="semi")
     ids = [w.hypothesis(f"H{i}") for i in range(3)]
     sel = _cycle(w).select(ids, mode="semi")
-    assert len(sel.execute) == 1 and len(sel.deferred) == 2
+    assert sorted(sel.execute) == sorted(ids) and not hasattr(sel, "deferred")
 
 
-def test_pesquisador_nao_consome_a_cota_do_ciclo():
+def test_hipotese_do_pesquisador_executa_junto_com_as_de_agente():
     w = HypothesisWorld(mode="auto")
     mine = w.hypothesis("minha", origem="pesquisador")
     ids = [w.hypothesis(f"H{i}") for i in range(3)]
-    sel = _cycle(w, per_cycle=2).select([mine, *ids], mode="auto")
-    assert mine in sel.execute and len(sel.execute) == 3
+    sel = _cycle(w).select([mine, *ids], mode="auto")
+    assert mine in sel.execute and len(sel.execute) == 4
 
 
 def test_concluidas_recebem_novos_testes_e_abandonada_pelo_pesquisador_nao_executa():

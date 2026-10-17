@@ -45,7 +45,7 @@ def to_task(item: dict[str, Any]) -> AgentTask:
 class LinkingCycle:
     """Mundo + ``ExplorationSession`` + atalhos para planos, eventos e ciclos sucessivos."""
 
-    def __init__(self, tmp_path: Path, *, mode: str = "auto", approver: Any = None, per_cycle: int = 50,
+    def __init__(self, tmp_path: Path, *, mode: str = "auto", approver: Any = None,
                  **world_kw: Any) -> None:
         world_kw.setdefault("metrica", "acuracia")
         world_kw.setdefault("sinonimos", ACURACIA)
@@ -55,7 +55,6 @@ class LinkingCycle:
             lambda: self.w.store, self.w.ctx, tmp_path, mode=mode, approver=approver,
             telemetry=lambda kind, payload: self.events.append((kind, payload)),
         )
-        self.session.cycle._per_cycle = per_cycle  # noqa: SLF001 - o teto de hipóteses por ciclo não é o assunto aqui
         self.done_tasks: dict[str, AgentTask] = {}
         self.tasks: dict[str, AgentTask] = {}
 

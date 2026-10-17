@@ -413,17 +413,20 @@ def confirm_problem(
     sentido_metrica: str | None = None,
     semantic_search: SemanticSearch | None = None,
     confirmed_by: Actor = PESQUISADOR,
+    objective_optional: bool = False,
 ) -> str:
     """Grava o ``Problema`` e o confirma em nome do pesquisador.
 
     Sequência (falha fechada: qualquer erro antes do passo 3 deixa o projeto sem problema
     confirmado):
 
-    1. Valida o rascunho (``metrica`` e ``delta_min`` obrigatórios) e resolve a métrica.
+    1. Valida o objetivo do rascunho (campos por tipo, design §4.1) e resolve a métrica.
     2. Cria o ``Problema`` com ``status="rascunho"`` e autoria do Researcher.
     3. Liga ``Projeto -INVESTIGA-> Problema`` e ``Problema -NO_DOMINIO-> Dominio``.
-    4. **Por último**, muda ``status`` para ``confirmado`` com autor ``pesquisador`` (auditado; o
-       ``GraphStore`` recusa qualquer outro ator) e recusa se já houver outro confirmado.
+    4. No tipo ``discriminacao``, cria as hipóteses concorrentes (``origem="pesquisador"``).
+    5. **Por último**, muda ``status`` para ``confirmado`` com autor ``pesquisador`` (auditado; o
+       ``GraphStore`` recusa qualquer outro ator), grava ``definido_por`` e a política ao atingir o objetivo
+       (campos do pesquisador) e recusa se já houver outro confirmado.
 
     Args:
         store: Grafo de conhecimento.
@@ -434,6 +437,7 @@ def confirm_problem(
         sentido_metrica: ``maior_melhor``/``menor_melhor``; só necessário se a métrica for nova.
         semantic_search: Busca semântica injetada para domínios/métrica.
         confirmed_by: Quem confirma; só ``Actor(kind="pesquisador")`` é aceito.
+        objective_optional: Modo ``auto``: o objetivo pode faltar; o Researcher o propõe no primeiro plano.
 
     Returns:
         O ID do nó ``Problema`` confirmado.
@@ -441,7 +445,7 @@ def confirm_problem(
     Raises:
         ProjectError: Confirmação por quem não é humano, projeto inexistente ou já com problema
             confirmado.
-        ProblemDraftError: ``delta_min`` ou ``metrica`` ausentes.
+        ProblemDraftError: Objetivo incompleto para o tipo, ou tipo ``fronteira``.
         MetricSentidoRequired: Métrica nova sem ``sentido_metrica``.
     """
     if confirmed_by.kind != "pesquisador":
@@ -450,30 +454,37 @@ def confirm_problem(
     project_node = _find_project_node(store, pid)
     if get_active_problem(store, pid) is not None:
         raise ProjectError("O projeto já possui um Problema confirmado; alterações passam pelo Curator.")
-    if draft.delta_min is None or not math.isfinite(draft.delta_min) or draft.delta_min <= 0:
-        raise ProblemDraftError("delta_min é obrigatório e positivo para confirmar o problema.")
-    if not draft.metrica:
-        raise ProblemDraftError("A métrica do critério de sucesso é obrigatória para confirmar o problema.")
+    gaps = draft.objective_gaps(objective_optional=objective_optional)
+    if gaps:
+        raise ProblemDraftError("Objetivo incompleto para confirmar o problema: " + "; ".join(gaps) + ".")
+    if draft.delta_min is not None and (not math.isfinite(draft.delta_min) or draft.delta_min <= 0):
+        raise ProblemDraftError("delta_min deve ser positivo.")
 
     agent = Actor(kind="agente", role="researcher", model=researcher_model)
-    try:
-        # Termos vindos do rascunho do LLM entram no vocabulário como candidatos do Researcher
-        # (a autoria do humano é só a da confirmação).
-        metric_res = resolve_metric(
-            store, draft.metrica, actor=agent, sessao_id=sessao_id,
-            sentido=sentido_metrica, semantic_search=semantic_search,
-        )
-    except VocabularyError as exc:
-        if sentido_metrica is None:
-            raise MetricSentidoRequired(
-                f"A métrica '{draft.metrica}' é nova; informe o sentido (maior_melhor ou menor_melhor)."
-            ) from exc
-        raise
-    metric_node = store.get_node(metric_res.node_id) if metric_res.node_id else None
     criterio = draft.criterio_sucesso()
+    # A política e a autoria do objetivo são do pesquisador: entram só na promoção, com o ator dele.
+    policy = criterio.pop("ao_atingir_objetivo", None)
+    metric_node = None
+    if draft.metrica:
+        try:
+            # Termos vindos do rascunho do LLM entram no vocabulário como candidatos do Researcher
+            # (a autoria do humano é só a da confirmação).
+            metric_res = resolve_metric(
+                store, draft.metrica, actor=agent, sessao_id=sessao_id,
+                sentido=sentido_metrica, semantic_search=semantic_search,
+            )
+        except VocabularyError as exc:
+            if sentido_metrica is None:
+                raise MetricSentidoRequired(
+                    f"A métrica '{draft.metrica}' é nova; informe o sentido (maior_melhor ou menor_melhor)."
+                ) from exc
+            raise
+        metric_node = store.get_node(metric_res.node_id) if metric_res.node_id else None
     if metric_node is not None:
         criterio["metrica"] = str(metric_node.properties.get("nome", draft.metrica))
         criterio["metrica_id"] = metric_node.id
+        if criterio.get("tipo") == "limiar":
+            criterio["sentido"] = metric_node.properties.get("sentido")
 
     problem_id = store.create_node(
         "Problema",
@@ -496,7 +507,17 @@ def confirm_problem(
     store.create_edge(project_node.id, "INVESTIGA", problem_id, {}, actor=confirmed_by)
     _link_domains(store, problem_id, draft.dominios, sessao_id=sessao_id, semantic_search=semantic_search,
                   actor=agent)
-    store.update_node(problem_id, {"status": "confirmado"}, actor=confirmed_by)
+    promotion: dict[str, Any] = {"status": "confirmado"}
+    if criterio.get("tipo") is not None or policy is not None:
+        final = dict(criterio)
+        if criterio.get("tipo") is not None:
+            final["definido_por"] = "pesquisador"
+        if policy is not None:
+            final["ao_atingir_objetivo"] = policy
+        if draft.effective_tipo == "discriminacao":
+            final["hipoteses_concorrentes"] = _create_rivals(store, draft, problem_id, pid, sessao_id, confirmed_by)
+        promotion["criterio_sucesso"] = final
+    store.update_node(problem_id, promotion, actor=confirmed_by)
     try:
         get_active_problem(store, pid)  # levanta ProjectError se a promoção criou um segundo confirmado
     except ProjectError:
@@ -504,6 +525,31 @@ def confirm_problem(
         raise
     logger.info("Problema confirmado", extra={"extra": {"projeto_id": pid, "problema_id": problem_id}})
     return problem_id
+
+
+def _create_rivals(
+    store: GraphStore, draft: ProblemDraft, problem_id: str, projeto_id: str, sessao_id: str, author: Actor
+) -> list[dict[str, str]]:
+    """Cria as hipóteses concorrentes do objetivo de discriminação (design §4.2) e devolve os itens do critério."""
+    items: list[dict[str, str]] = []
+    for rival in draft.concorrentes:
+        hypothesis_id = store.create_node(
+            "Hipotese",
+            {
+                "projeto_id": projeto_id,
+                "sessao_id": sessao_id,
+                "enunciado": rival.enunciado,
+                "justificativa": "Hipótese concorrente do objetivo de discriminação, definida pelo pesquisador.",
+                "status": "proposta",
+                "origem": "pesquisador",
+                "concorrente": True,
+                "predicao": rival.predicao,
+            },
+            actor=author,
+        )
+        store.create_edge(hypothesis_id, "SOBRE", problem_id, {"origem": "afirmado"}, actor=author)
+        items.append({"hipotese_id": hypothesis_id, "predicao": rival.predicao})
+    return items
 
 
 # ---------------------------------------------------------------------------
@@ -536,10 +582,14 @@ def format_project_context(detail: ProjectDetail) -> str:
         crit = props.get("criterio_sucesso") or {}
         if isinstance(crit, dict):
             lines.append(
-                "Critério de sucesso: métrica={m}; alvo={a}; delta_min={d}; baseline={b}".format(
-                    m=_short(crit.get("metrica"), 120), a=crit.get("alvo"), d=crit.get("delta_min"),
-                    b=_short(crit.get("baseline_descricao"), 300),
+                "Critério de sucesso: tipo={t}; métrica={m}; alvo={a}; delta_min={d}; baseline={b}".format(
+                    t=crit.get("tipo") or "limiar", m=_short(crit.get("metrica"), 120), a=crit.get("alvo"),
+                    d=crit.get("delta_min"), b=_short(crit.get("baseline_descricao"), 300),
                 )
             )
+            for rival in crit.get("hipoteses_concorrentes") or []:
+                if isinstance(rival, dict):
+                    prediction = _short(rival.get("predicao"), 300)
+                    lines.append(f"Hipótese concorrente {rival.get('hipotese_id')}: predição={prediction}")
     lines.append("=== FIM DO PROJETO ===")
     return "\n".join(lines)

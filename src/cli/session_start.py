@@ -146,7 +146,13 @@ class SessionStarter:
             researcher_model: str | None = routing.resolution("researcher").id
         except Exception:  # noqa: BLE001 - sem modelo conhecido, a autoria do rascunho fica só com o papel
             researcher_model = None
-        return ProjectBinder(open_store, project_arg=getattr(args, "project", None), researcher_model=researcher_model)
+        from src import config
+
+        mode = getattr(args, "mode", None) or config.SESSION_DEFAULT_MODE
+        return ProjectBinder(
+            open_store, project_arg=getattr(args, "project", None), researcher_model=researcher_model,
+            objective_optional=str(getattr(mode, "value", mode)) == "auto",
+        )
 
     def _ensure_prerequisites(self) -> None:
         """Verificação da infraestrutura (daemon, imagem do sandbox, PostgreSQL, Qdrant) antes da primeira pesquisa."""

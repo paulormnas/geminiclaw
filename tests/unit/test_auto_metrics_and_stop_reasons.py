@@ -58,7 +58,7 @@ def _events(telemetry: MagicMock, kind: str) -> list[dict]:
 def _harness(tmp_path: Path, plans: list, *, validator=None, alvo: float | None = 0.8, mode: str = "auto"):
     telemetry = MagicMock()
     h = LoopHarness(tmp_path, mode=mode, plans=plans, validator=validator,
-                    world_kw={"approve_metric": False, "alvo": alvo})
+                    world_kw={"approve_metric": False, "alvo": alvo, "objetivo_do_pesquisador": False})
     h.extra_patches.append(patch("src.orchestration.autonomous_loop.get_telemetry", return_value=telemetry))
     return h, telemetry
 
@@ -215,7 +215,7 @@ def test_sentido_divergente_descarta_a_definicao():
 
 def test_gravacao_com_origem_do_agente_e_ator_orquestrador():
     """Scenario: Gravação com origem do agente."""
-    w = HypothesisWorld(approve_metric=False)
+    w = HypothesisWorld(approve_metric=False, objetivo_do_pesquisador=False)
     applied = apply_validated_metrics(
         w.raw, w.pid, w.sid,
         [MetricDecl("R2", "maior_melhor", 0.85, "J principal"), MetricDecl("MAE", "menor_melhor", 0.2, "J extra")],
@@ -410,3 +410,11 @@ def test_secao_do_relatorio_descreve_o_motivo():
     assert "hipoteses_nao_testadas (hipóteses em teste sem nenhuma tentativa" in text
     assert "hipóteses sem tentativa no fechamento: 2" in text and "sem_hipotese" in text
     assert describe_stop_reason("limite_tokens") == "limite_tokens" and describe_stop_reason(None) is None
+
+
+def test_objetivo_do_pesquisador_nao_e_reescrito_pelas_metricas_do_plano():
+    """O orquestrador aprova a métrica, mas o critério definido pelo pesquisador fica intacto (ADR 021 §5.2)."""
+    w = HypothesisWorld(approve_metric=False)
+    before = w.raw.get_node(w.problem.id).properties["criterio_sucesso"].copy()
+    apply_validated_metrics(w.raw, w.pid, w.sid, [MetricDecl("R2", "maior_melhor", 0.99, "J")])
+    assert w.raw.get_node(w.problem.id).properties["criterio_sucesso"] == before

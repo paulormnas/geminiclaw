@@ -1,4 +1,4 @@
-"""Subcomando ``geminiclaw project new|list|show|use|objective`` (v17-research-project).
+"""Subcomando ``geminiclaw project`` (new, list, show, use, objective, restrict, restrictions, unrestrict).
 
 Operações tipadas e determinísticas sobre o grafo, com autor ``pesquisador`` e sem LLM.
 """
@@ -109,6 +109,16 @@ def handle_project_command(
     obj_group = obj_p.add_mutually_exclusive_group(required=True)
     obj_group.add_argument("--ao-atingir", choices=["parar", "perguntar", "continuar"], dest="ao_atingir")
     obj_group.add_argument("--atingido", action="store_true")
+    res_p = sub.add_parser("restrict", help="Veda uma direção de pesquisa (restrição do projeto ou do Problema).")
+    res_p.add_argument("projeto_id")
+    res_p.add_argument("--direcao", required=True, help="Texto da direção vedada.")
+    res_p.add_argument("--categoria", required=True, choices=["seguranca", "etica", "recurso"])
+    res_p.add_argument("--abordagem", action="append", default=[], metavar="NOME", help="Abordagem vedada (repetível).")
+    res_p.add_argument("--problema", action="store_true", help="Vale só para o Problema confirmado (padrão: projeto).")
+    sub.add_parser("restrictions", help="Lista as restrições de direção do projeto.").add_argument("projeto_id")
+    sub.add_parser("unrestrict", help="Revoga uma restrição (o nó permanece, com status revogada).").add_argument(
+        "restricao_id"
+    )
     sub.add_parser(
         "confirm", help="Redige o rascunho do Problema e o confirma, sem iniciar uma sessão (exige terminal)."
     ).add_argument("projeto_id")
@@ -160,6 +170,29 @@ def handle_project_command(
             else:
                 projects.set_objective_policy(store, args.projeto_id, args.ao_atingir)
                 output_fn(f"Projeto {args.projeto_id}: ao atingir o objetivo, a sessão vai {args.ao_atingir}.")
+        elif args.action == "restrict":
+            from src.knowledge import restrictions
+
+            rid = restrictions.create_restriction(
+                store, args.projeto_id, direcao=args.direcao, categoria=args.categoria, abordagens=args.abordagem,
+                problema=args.problema,
+            )
+            output_fn(f"Restrição criada: {rid}")
+        elif args.action == "restrictions":
+            from src.knowledge import restrictions
+
+            found = restrictions.list_restrictions(store, args.projeto_id)
+            if not found:
+                output_fn("Nenhuma restrição.")
+            for item in found:
+                names = ", ".join(item.abordagens) or "-"
+                output_fn(f"{item.id}  {item.status}  {item.escopo}  {item.categoria}  abordagens: {names}")
+                output_fn(f"    {item.direcao}")
+        elif args.action == "unrestrict":
+            from src.knowledge import restrictions
+
+            restrictions.revoke_restriction(store, args.restricao_id)
+            output_fn(f"Restrição {args.restricao_id} revogada (as hipóteses já retiradas não são reabertas).")
         elif args.action == "unlimited":
             pid = projects.set_unlimited_mode(store, args.projeto_id, bool(args.on))
             output_fn(

@@ -221,6 +221,14 @@ class GraphStore(ABC):
         """
         raise NotImplementedError(f"{type(self).__name__} não implementa audit_history.")
 
+    def _check_derived_authority(self, label: str, changes: dict[str, Any], actor: Actor) -> None:
+        """Autoridade derivada do ``Actor`` pesquisador (restrição ativa ou pedido consumido; ver ``validation``)."""
+        if actor.restriction_id is not None or actor.request_id is not None:
+            validation.validate_derived_authority(
+                label, changes, restriction_id=actor.restriction_id, request_id=actor.request_id,
+                lookup=self.get_node,
+            )
+
     @abstractmethod
     def get_node(self, node_id: str) -> Node | None:
         """Busca um nó pelo ID.
@@ -334,6 +342,7 @@ class InMemoryGraphStore(GraphStore):
         validation.validate_node_write(
             label, full_props, requires_agent_provenance=actor.requires_provenance_justification
         )
+        self._check_derived_authority(label, full_props, actor)
         validation.validate_human_only(label, current=None, changes=full_props, actor_kind=actor.kind)
         node = Node(id=full_props["id"], label=label, properties=full_props)
         self._nodes[node.id] = node
@@ -349,6 +358,7 @@ class InMemoryGraphStore(GraphStore):
             raise NodeNotFoundError(node_id)
 
         validation.validate_node_update(node.label, changes)
+        self._check_derived_authority(node.label, changes, actor)
         validation.validate_human_only(
             node.label, current=node.properties, changes=changes, actor_kind=actor.kind, actor_role=actor.role
         )
@@ -730,6 +740,7 @@ class AgeGraphStore(GraphStore):
         validation.validate_node_write(
             label, full_props, requires_agent_provenance=actor.requires_provenance_justification
         )
+        self._check_derived_authority(label, full_props, actor)
         validation.validate_human_only(label, current=None, changes=full_props, actor_kind=actor.kind)
 
         cypher_body = f"CREATE (n:{label} {self._property_map('props', full_props)}) RETURN n"
@@ -747,6 +758,7 @@ class AgeGraphStore(GraphStore):
             raise NodeNotFoundError(node_id)
 
         validation.validate_node_update(node.label, changes)
+        self._check_derived_authority(node.label, changes, actor)
         validation.validate_human_only(
             node.label, current=node.properties, changes=changes, actor_kind=actor.kind, actor_role=actor.role
         )

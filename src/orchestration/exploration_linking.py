@@ -47,7 +47,9 @@ DROP_ABANDONED = "hipotese_abandonada_pelo_pesquisador"
 DROP_DEPENDS = "depende_de_subtarefa_retirada"
 # Retiradas que mantêm a hipótese viva (pendente): não abandonam a hipótese do sistema (design §4.4).
 DROP_PHYSICAL = "experimento_fisico"  # v18.7-exploration-limits: bancada ou equipamento fora do sandbox
-KEEPS_HYPOTHESIS_ALIVE = frozenset({DROP_PENDING, DROP_PHYSICAL})
+DROP_RESTRICTED = "hipotese_direcao_restrita"  # v18.7-exploration-limits: a hipótese caiu numa restrição de direção
+DROP_DOUBT = "hipotese_aguarda_decisao_restricao"  # caso duvidoso à espera do pesquisador (a hipótese segue viva)
+KEEPS_HYPOTHESIS_ALIVE = frozenset({DROP_PENDING, DROP_PHYSICAL, DROP_DOUBT})
 _FORMAT_REJECTIONS = ("id_inexistente", "sem_enunciado")  # falha de formato: vira hipótese do sistema
 
 

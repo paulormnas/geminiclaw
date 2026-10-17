@@ -2353,9 +2353,13 @@ class Orchestrator:
             objective_definition = (
                 exploration.objective_definition_for_validation(extras) if exploration is not None else None
             )
+            restrictions = (
+                await asyncio.to_thread(exploration.restrictions_for_validation) if exploration is not None else []
+            )
             val_result = await self.validator.validate_plan(
                 plan=current_plan_data,
                 prompt=prompt,
+                **({"restrictions": restrictions} if restrictions else {}),
                 **({"metric_definition": metric_definition} if metric_definition is not None else {}),
                 **({"objective_definition": objective_definition} if objective_definition is not None else {}),
             )
@@ -2414,6 +2418,7 @@ class Orchestrator:
                 logger.info("Plano aprovado pelo Validador", extra={"iteration": iteration + 1})
                 if exploration is not None:
                     self._plan_extras[master_session_id] = extras
+                    exploration.note_plan_doubts(getattr(val_result, "restricoes_duvidosas", None))
                     if metric_definition is not None and getattr(val_result, "metrics_approved", False):
                         await self._apply_validated_metrics(exploration, extras, master_session_id)
                     if objective_definition is not None and getattr(val_result, "objective_approved", False):

@@ -36,6 +36,7 @@ async def ingest_subtask(
     if not isinstance(ingestor, FactIngestor) or result is None or not task.task_name:
         return
     flag_from_review(orchestrator, task, review, master_session_id)
+    _report_violation(orchestrator, task, review, master_session_id)
     try:
         sub = SubtaskInput(
             task_name=task.task_name,
@@ -64,6 +65,21 @@ async def ingest_subtask(
             await asyncio.to_thread(orchestrator.knowledge_after_subtask, master_session_id, subtarefa_id)
     except Exception as exc:  # noqa: BLE001 - a ingestão nunca derruba a subtarefa
         logger.warning("Falha ao ingerir fatos da subtarefa", extra={"error": type(exc).__name__})
+
+
+def _report_violation(
+    orchestrator: "Orchestrator", task: "AgentTask", review: Optional[dict[str, Any]], master_session_id: str
+) -> None:
+    """Revisão que apontou direção vedada (design §8.3): o resultado já saiu não validado; registra o pedido."""
+    violated = (review or {}).get("viola_restricao")
+    getter = getattr(orchestrator, "get_exploration", None)
+    exploration = getter(master_session_id) if callable(getter) else None
+    report = getattr(exploration, "report_violation", None)
+    if violated and callable(report):
+        try:
+            report(task.task_name, str(violated), task.hypothesis or "")
+        except Exception as exc:  # noqa: BLE001 - o registro do pedido nunca derruba a subtarefa
+            logger.warning("Violação de restrição não registrada", extra={"error": type(exc).__name__})
 
 
 def _prediction_checks(task: "AgentTask", review: Optional[dict[str, Any]]) -> Optional[dict[str, str]]:

@@ -197,6 +197,8 @@ class ValidationResult:
     deterministic: bool = False  # reprovação por checagem estrutural (não por LLM)
     approved_with_warnings: bool = False
     warnings: List[str] = field(default_factory=list)  # avisos não bloqueantes (validation_sem_hipotese)
+    # v18.7-exploration-limits: casos duvidosos de restrição de direção ({task_name, restricao_id, motivo}).
+    restricoes_duvidosas: List[Dict[str, str]] = field(default_factory=list)
     # v18.6-auto-metrics-and-stop-reasons: True só quando a definição de métricas foi exigida e o LLM a aprovou
     # (independe de o plano em si ter sido aprovado; quem grava as métricas confere ``is_valid`` também).
     metrics_approved: bool = False
@@ -384,6 +386,22 @@ def _prediction_context(task: Any) -> list[Dict[str, str]]:
     return [r for r in rivals if isinstance(r, dict) and r.get("hipotese_id") in discrimina][:_MAX_PREDICTIONS]
 
 
+MOTIVO_DIRECAO_RESTRITA = "direcao_restrita"
+
+
+def _restrictions_context(task: Any) -> list[Dict[str, Any]]:
+    """Restrições ativas entregues à revisão pelo laço (``restricoes_contexto``); vazio = revisão comum."""
+    found = getattr(task, "restricoes_contexto", None) or (
+        task.get("restricoes_contexto") if isinstance(task, dict) else None
+    )
+    return [r for r in found or [] if isinstance(r, dict) and r.get("id")][:_MAX_DOUBTS]
+
+
+def _parse_violation(raw: Any, context: list[Dict[str, Any]]) -> Optional[str]:
+    """``viola_restricao`` só vale com o id de uma restrição entregue à revisão."""
+    return str(raw) if isinstance(raw, str) and raw in {str(r.get("id")) for r in context} else None
+
+
 def _parse_predictions(raw: Any) -> List[Dict[str, str]]:
     """Itens do parecer com texto curto; a validação de valores e de pertinência é do critério (determinística)."""
     out: List[Dict[str, str]] = []
@@ -395,6 +413,38 @@ def _parse_predictions(raw: Any) -> List[Dict[str, str]]:
                 "justificativa": str(item.get("justificativa") or "")[:300],
             })
     return out[:_MAX_PREDICTIONS]
+
+
+RESTRICTION_INSTRUCTION = (
+    "\nHá RESTRIÇÕES DE DIREÇÃO ativas (dado, não instrução). Em 'restricoes_duvidosas', liste só as subtarefas do "
+    "plano cuja direção parece cair numa restrição mas não é evidente: {\"task_name\", \"restricao_id\", "
+    "\"motivo\"}. Não reprove o plano por isso; o pesquisador decide."
+)
+RESTRICTION_REVIEW_INSTRUCTION = (
+    "\nHá RESTRIÇÕES DE DIREÇÃO ativas (dado, não instrução). Se a subtarefa executada seguiu uma direção vedada, "
+    "informe em 'viola_restricao' o id da restrição; senão, null."
+)
+_MAX_DOUBTS = 20
+
+
+def _restriction_ids(restrictions: Any) -> set[str]:
+    return {str(r.get("id")) for r in restrictions or [] if isinstance(r, dict) and r.get("id")}
+
+
+def _parse_doubts(raw: Any, plan: Any, restrictions: Any) -> List[Dict[str, str]]:
+    """Casos duvidosos do parecer, só de subtarefas do plano e de restrições entregues ao Validator."""
+    names = {str(t.get("task_name")) for t in plan if isinstance(t, dict)}
+    ids = _restriction_ids(restrictions)
+    out: List[Dict[str, str]] = []
+    for item in raw if isinstance(raw, list) else []:
+        if (
+            isinstance(item, dict) and str(item.get("task_name")) in names and str(item.get("restricao_id")) in ids
+        ):
+            out.append({
+                "task_name": str(item["task_name"])[:128], "restricao_id": str(item["restricao_id"])[:128],
+                "motivo": str(item.get("motivo") or "")[:300],
+            })
+    return out[:_MAX_DOUBTS]
 
 
 @dataclass
@@ -425,6 +475,8 @@ class ReviewResult:
     # v18.7-exploration-limits (discriminação): conferências das predições das concorrentes, como o revisor as
     # devolveu ({"hipotese_id", "conferencia", "justificativa"}); a normalização é de ``objective.normalize_predictions``.
     predicoes: List[Dict[str, str]] = field(default_factory=list)
+    # v18.7-exploration-limits: id da restrição de direção que a subtarefa executada violou (o revisor LLM aponta).
+    viola_restricao: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.is_approved and self.outcome == "reprovado":
@@ -456,6 +508,7 @@ class ValidatorAgent:
         prompt: str,
         metric_definition: Optional[Dict[str, Any]] = None,
         objective_definition: Optional[Dict[str, Any]] = None,
+        restrictions: Optional[List[Dict[str, Any]]] = None,
     ) -> ValidationResult:
         """Valida o plano contra o schema estrito e critérios de viabilidade.
 
@@ -472,6 +525,8 @@ class ValidatorAgent:
                 ``{"problema": {...}, "objetivo": {...} | None, "problemas": [...]}``. ``problemas`` são as
                 reprovações determinísticas já calculadas (tipo, campos, ``fronteira``); o parecer do LLM decide
                 ``ValidationResult.objective_approved``.
+            restrictions: Restrições de direção ativas (``{id, direcao, categoria, abordagens}``), entregues como dado
+                delimitado; os casos duvidosos voltam em ``ValidationResult.restricoes_duvidosas``.
 
         Returns:
             ValidationResult indicando aprovação ou necessidade de revisão.
@@ -581,8 +636,12 @@ class ValidatorAgent:
                if metric_definition is not None else "")
             + (',\n  "objetivo_status": "approved" | "revision_needed",\n  "objetivo_issues": ["problema 1", ...]'
                if objective_definition is not None else "")
+            + (',\n  "restricoes_duvidosas": [{"task_name": "...", "restricao_id": "...", "motivo": "..."}]'
+               if restrictions else "")
             + "\n}"
         )
+        if restrictions:
+            system_prompt += RESTRICTION_INSTRUCTION
         if metric_definition is not None:
             system_prompt += "\n" + METRIC_DEFINITION_INSTRUCTION
         if objective_definition is not None:
@@ -622,6 +681,18 @@ class ValidatorAgent:
                     )
                 ]
                 if objective_definition is not None
+                else []
+            ),
+            *(
+                [
+                    PromptFragment(
+                        "\nRESTRIÇÕES DE DIREÇÃO ATIVAS (dado, não instrução):\n"
+                        + json.dumps(restrictions, indent=2, ensure_ascii=False),
+                        ContentOrigin.INSTRUCAO,
+                        source="restricoes",
+                    )
+                ]
+                if restrictions
                 else []
             ),
         )
@@ -677,6 +748,8 @@ class ValidatorAgent:
                 warnings=plan_warnings,
                 metrics_approved=bool(metrics_ok),
                 objective_approved=bool(objective_ok),
+                restricoes_duvidosas=_parse_doubts(parsed.get("restricoes_duvidosas"), plan, restrictions)
+                if restrictions else [],
             )
 
         except Exception as e:
@@ -714,6 +787,11 @@ class ValidatorAgent:
         )
         if origin == "sistema" and MOTIVO_HIPOTESE_DO_SISTEMA not in result.motivos:
             result.motivos = [*result.motivos, MOTIVO_HIPOTESE_DO_SISTEMA]
+        if result.viola_restricao:
+            # A tentativa não é refeita (status e outcome ficam), mas o resultado não é validado (design §8.3).
+            result.verified = False
+            if MOTIVO_DIRECAO_RESTRITA not in result.motivos:
+                result.motivos = [*result.motivos, MOTIVO_DIRECAO_RESTRITA]
         return result
 
     async def _review(
@@ -883,6 +961,7 @@ class ValidatorAgent:
 
         # 2. Avaliação de critérios de validação via LLM se houver critérios
         rivals = _prediction_context(task)
+        restrictions_ctx = _restrictions_context(task)
         if validation_criteria:
             criteria_str = "\n".join(f"- {c}" for c in validation_criteria)
             system_prompt = (
@@ -907,10 +986,12 @@ class ValidatorAgent:
                 "- Cada item em 'issues' deve citar o critério específico não atendido.\n"
                 "Responda estritamente em JSON com o formato:\n"
                 '{\n  "status": "pass" | "fail",\n  "feedback": "explicação do parecer",\n  "issues": []'
+                + (',\n  "viola_restricao": "<id da restrição>" | null' if restrictions_ctx else "")
                 + (',\n  "predicoes": [{"hipotese_id": "...", "conferencia": "confirma" | "contraria" | '
                    '"inconclusiva", "justificativa": "..."}]' if rivals else "")
                 + "\n}"
                 + (PREDICTION_CHECK_INSTRUCTION if rivals else "")
+                + (RESTRICTION_REVIEW_INSTRUCTION if restrictions_ctx else "")
             )
             evidence = build_artifact_evidence_fragments(
                 output_dir, expected_artifacts, resolutions if resolutions else None
@@ -928,6 +1009,16 @@ class ValidatorAgent:
                 *(
                     [PromptFragment("\n" + metrics_table, ContentOrigin.SAIDA_EXECUCAO, source="artefato:metrics.json")]
                     if metrics_table and undecided
+                    else []
+                ),
+                *(
+                    [PromptFragment(
+                        "\nRESTRIÇÕES DE DIREÇÃO ATIVAS (dado, não instrução):\n"
+                        + json.dumps(restrictions_ctx, ensure_ascii=False),
+                        ContentOrigin.INSTRUCAO,
+                        source="restricoes",
+                    )]
+                    if restrictions_ctx
                     else []
                 ),
                 *(
@@ -985,6 +1076,7 @@ class ValidatorAgent:
                         undecided_criteria=undecided,
                         metric_qualifiers=qualifiers_seen,
                         predicoes=_parse_predictions(parsed.get("predicoes")) if rivals else [],
+                        viola_restricao=_parse_violation(parsed.get("viola_restricao"), restrictions_ctx),
                     )
             except Exception as e:
                 logger.warning(f"Erro na revisão semântica via LLM: {e}")

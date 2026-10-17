@@ -69,6 +69,9 @@ FULL_HELP_TEXT = f"""{CYAN}{BOLD}
   geminiclaw project confirm <id>   (confirma o Problema do projeto sem iniciar uma sessão)
   geminiclaw project objective <id> --ao-atingir parar|perguntar|continuar   (política ao atingir o objetivo)
   geminiclaw project objective <id> --atingido   (declara atingido um objetivo de cobertura)
+  geminiclaw project restrict <id> --direcao "<texto>" --categoria seguranca|etica|recurso [--abordagem <nome>]...
+  geminiclaw project restrictions <id>   (lista as restrições de direção)
+  geminiclaw project unrestrict <restricao_id>   (revoga; o nó permanece)
   geminiclaw project unlimited <id> --on|--off   (marca o projeto para o modo sem limite; cada sessão ainda confirma)
   geminiclaw --project <id> "<tarefa>"
   geminiclaw --unlimited "<tarefa>"   (sem limite de tokens, tempo, custo e egresso; pede confirmação digitada)

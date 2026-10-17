@@ -31,14 +31,38 @@ class Actor:
         model: Modelo usado pelo agente (ex.: ``"qwen3:8b"``), opcional.
     """
 
-    __slots__ = ("kind", "role", "model")
+    __slots__ = ("kind", "role", "model", "restriction_id", "request_id")
 
-    def __init__(self, kind: ActorKind, role: str | None = None, model: str | None = None) -> None:
+    def __init__(
+        self,
+        kind: ActorKind,
+        role: str | None = None,
+        model: str | None = None,
+        *,
+        restriction_id: str | None = None,
+        request_id: int | None = None,
+    ) -> None:
         if kind == "agente" and not role:
             raise ValueError("Actor do tipo 'agente' requer 'role' (ex.: 'curator').")
         self.kind = kind
         self.role = role
         self.model = model
+        # v18.7-exploration-limits (parecer de segurança, itens 2 e 3): autoridade derivada de uma decisão do
+        # pesquisador. ``restriction_id`` (retirada de hipótese por restrição ativa) e ``request_id`` (criação de
+        # ``Restricao`` pela sessão, com o pedido autorizado e consumido) só valem com ``kind == "pesquisador"`` e são
+        # conferidos pela porta de escrita (``validation.validate_derived_authority``).
+        self.restriction_id = restriction_id
+        self.request_id = request_id
+
+    @classmethod
+    def under_restriction(cls, restriction_id: str) -> "Actor":
+        """Pesquisador derivado de uma ``Restricao`` ativa: só a retirada de hipótese por ela é aceita."""
+        return cls("pesquisador", restriction_id=restriction_id)
+
+    @classmethod
+    def under_request(cls, request_id: int) -> "Actor":
+        """Pesquisador derivado de um pedido ``restringir_direcao`` consumido (criação de ``Restricao``)."""
+        return cls("pesquisador", request_id=request_id)
 
     @property
     def criado_por(self) -> str:
@@ -64,7 +88,9 @@ class Actor:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Actor):
             return NotImplemented
-        return (self.kind, self.role, self.model) == (other.kind, other.role, other.model)
+        return (self.kind, self.role, self.model, self.restriction_id, self.request_id) == (
+            other.kind, other.role, other.model, other.restriction_id, other.request_id,
+        )
 
 
 def prepare_node_properties(caller_props: dict[str, object], actor: Actor) -> dict[str, object]:

@@ -8,6 +8,7 @@ de validação garante paridade de comportamento entre os testes unitários
 from __future__ import annotations
 
 import math
+from typing import Any, Callable
 
 from src.knowledge import schema
 from src.knowledge.errors import (
@@ -505,6 +506,46 @@ def validate_human_only(
     old = (current or {}).get(field)
     if new == protected or (old == protected and new != protected):
         raise HumanConfirmationRequiredError(label, field, actor_kind)
+
+
+_RESTRICTION_WITHDRAWAL_FIELDS = frozenset({"status", "abandonada_por", "motivo_abandono"})
+
+
+def validate_derived_authority(
+    label: str,
+    changes: dict[str, object],
+    *,
+    restriction_id: str | None,
+    request_id: int | None,
+    lookup: Callable[[str], Any],
+) -> None:
+    """Confere a autoridade derivada do ``Actor`` pesquisador (parecer de segurança, itens 2 e 3).
+
+    - ``restriction_id``: só a retirada de uma ``Hipotese`` (``abandonada`` / ``abandonada_por = "pesquisador"`` /
+      ``motivo_abandono = "direcao_restrita:<id>"``), e só se a ``Restricao`` existe, é do pesquisador e está ``ativa``.
+    - ``request_id``: só a criação de ``Restricao``, com ``pedido_id`` igual ao pedido consumido.
+
+    Raises:
+        HumanConfirmationRequiredError: A derivação não cabe nesta escrita.
+    """
+    if restriction_id is not None:
+        node = lookup(restriction_id)
+        props = node.properties if node is not None and node.label == "Restricao" else {}
+        valid = (
+            label == "Hipotese"
+            and props.get("decidida_por") == "pesquisador"
+            and props.get("status") == "ativa"
+            and set(changes) <= _RESTRICTION_WITHDRAWAL_FIELDS
+            and changes.get("status") == "abandonada"
+            and changes.get("abandonada_por") == "pesquisador"
+            and changes.get("motivo_abandono") == f"direcao_restrita:{restriction_id}"
+        )
+        if not valid:
+            raise HumanConfirmationRequiredError(label, "restricao_id", "pesquisador derivado de restrição")
+    if request_id is not None:
+        if label != "Restricao" or changes.get("pedido_id") != request_id:
+            field = "pedido_id" if label == "Restricao" else "status"
+            raise HumanConfirmationRequiredError(label, field, "pesquisador derivado de pedido")
 
 
 def _validate_objective_authority(current: dict[str, object] | None, new: object, actor_kind: str) -> None:

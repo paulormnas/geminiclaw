@@ -322,6 +322,16 @@ class TestDecisoesReservadas:
         assert h.interactions[0]["respondido_por"] == "pendente_pesquisador"
         assert "reservada ao pesquisador" in result.output.lower()
 
+    async def test_restricao_de_direcao_pedida_por_agente(self, tmp_path: Path) -> None:
+        """Scenario: Restrição de direção pedida por agente (v18.7-exploration-limits): sem consultor e sem Restricao."""
+        h = _make(tmp_path, [])
+        result = await h.ask(
+            "encerrar a linha que usa o reagente X?", decisao_reservada="restringir_direcao"
+        )
+        assert h.provider.calls == []
+        assert h.interactions[0]["respondido_por"] == "pendente_pesquisador"
+        assert "reservada ao pesquisador" in result.output.lower()
+
     async def test_classificacao_pelo_consultor(self, tmp_path: Path) -> None:
         """Scenario: Classificação pelo consultor."""
         h = _make(tmp_path, [_final({"reservada": True})])

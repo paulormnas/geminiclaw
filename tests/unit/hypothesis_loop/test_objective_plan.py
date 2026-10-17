@@ -151,7 +151,7 @@ async def test_objetivo_reprovado_nao_e_gravado(tmp_path):
                                 signature="s")
     h = auto_without_objective(tmp_path, [p], validator=AsyncMock(return_value=rejected))
     with patch("src.orchestration.orchestrator.MAX_PLANNING_ITERATIONS", 1), patch("src.config.MAX_PLAN_RETRIES", 1), \
-            patch("src.orchestration.autonomous_loop.MAX_PLAN_RETRIES", 1):
+            patch("src.orchestration.autonomous_loop.MAX_PLAN_RETRIES", 1), patch("src.config.ON_PLAN_REJECTIONS", "parar"):
         await h.run()
     assert "tipo" not in h.w.raw.get_node(h.w.problem.id).properties["criterio_sucesso"]
 

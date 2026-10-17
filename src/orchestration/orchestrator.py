@@ -195,6 +195,7 @@ class Orchestrator:
         # decide no terminal interativo (sem TTY nada é aprovado).
         self._explorations: dict[str, ExplorationSession] = {}
         self._plan_extras: dict[str, PlanExtras] = {}
+        self.last_plan_issues: dict[str, list[str]] = {}  # últimas issues do Validator por sessão (design §9.3)
         self.exploration_approver: Any = None
         self.objective_confirmer: Any = None
 
@@ -2453,6 +2454,7 @@ class Orchestrator:
                 return tasks
             else:
                 issues_str = "\n".join(f"- {i}" for i in val_result.issues) if val_result.issues else val_result.reason
+                self.last_plan_issues[master_session_id] = [str(i) for i in (val_result.issues or [val_result.reason])]
                 feedback = f"O Validador identificou os seguintes problemas:\n{issues_str}"
                 logger.info("Solicitando revisão do plano", extra={"iteration": iteration + 1, "reason": feedback})
 

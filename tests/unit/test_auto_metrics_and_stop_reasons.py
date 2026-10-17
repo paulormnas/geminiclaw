@@ -138,7 +138,8 @@ async def test_reprovacao_repetida_nao_aprova_por_cansaco(tmp_path, _no_curator)
     )
     h, _ = _harness(tmp_path, [plan([task("t1")], [hyp("h1")], metricas=[METRICA])],
                     validator=AsyncMock(return_value=rejected))
-    await h.run()
+    with patch("src.config.ON_PLAN_REJECTIONS", "parar"):
+        await h.run()
     assert _metric(h.w).properties["status"] == "candidato"
     assert h.ran == [] and h.stop_reason in ("planos_rejeitados", "limite_execucoes")  # o plano nunca é aprovado
 

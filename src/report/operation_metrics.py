@@ -21,7 +21,7 @@ from src.logger import get_logger
 
 logger = get_logger(__name__)
 
-VERSION = 1
+VERSION = 2
 BEGIN_MARK = "<!-- operation-metrics:begin -->"
 END_MARK = "<!-- operation-metrics:end -->"
 SECTION_TITLE = "Métricas de operação"
@@ -30,7 +30,9 @@ STATE_OK = "disponivel"
 STATE_UNAVAILABLE = "indisponivel"
 STATE_ERROR = "erro"
 
-GROUPS: tuple[str, ...] = ("egresso", "proveniencia", "verificacao", "custo_recursos", "intervencoes_humanas")
+GROUPS: tuple[str, ...] = (
+    "egresso", "proveniencia", "verificacao", "custo_recursos", "intervencoes_humanas", "exploracao",
+)
 
 
 class MetricsUnavailable(Exception):
@@ -99,6 +101,23 @@ def _aggregate_group(group: str, session_id: str, readers: Sequence[Any]) -> dic
     )
 
 
+_EXPLORATION_BLOCKS = ("ligacao", "parada", "contrato")
+
+
+def _exploration_state(group: dict[str, Any]) -> dict[str, Any]:
+    """O grupo ``exploracao`` é ``disponivel`` se ao menos um bloco o for; senão ``indisponivel`` (ou ``erro``)."""
+    blocks = {name: group[name] for name in _EXPLORATION_BLOCKS if isinstance(group.get(name), dict)}
+    if not blocks:
+        return group
+    states = {block.get("estado") for block in blocks.values()}
+    if STATE_OK in states:
+        return {**group, "estado": STATE_OK}
+    if states == {STATE_ERROR}:
+        return {**group, "estado": STATE_ERROR, "mensagem": "; ".join(b.get("mensagem", "") for b in blocks.values())}
+    producers = sorted({str(b.get("produtor")) for b in blocks.values() if b.get("produtor")})
+    return {**group, "estado": STATE_UNAVAILABLE, "produtor": ", ".join(producers), "motivo": "sem dados de exploração"}
+
+
 def aggregate_operation_metrics(
     session_id: str,
     *,
@@ -129,6 +148,8 @@ def aggregate_operation_metrics(
     }
     for group in GROUPS:
         outcome = _aggregate_group(group, session_id, [r for r in readers if r.group == group])
+        if group == "exploracao":
+            outcome = _exploration_state(outcome)
         result[group] = outcome
         if outcome["estado"] == STATE_ERROR and on_error is not None:
             on_error(group, str(outcome.get("mensagem", "")))
@@ -271,7 +292,8 @@ class HypothesisClosureReader:
     """Grupo ``verificacao`` (``v18.6-hypothesis-closure``): resultados sem ``MEDE``, subtarefas com resultado
     negativo e hipóteses sem tentativa no fechamento (eventos ``resultado_sem_mede``, ``subtask_review`` e
     ``hipoteses_sem_tentativa``). ``v18.6-auto-metrics-and-stop-reasons``: fechamento por
-    ``hipoteses_nao_testadas`` (evento ``exploration_stop``) e reprovações com o motivo ``sem_hipotese``."""
+    ``hipoteses_nao_testadas`` (evento ``exploration_stop``). O contador ``reprovacoes_sem_hipotese`` deixou de existir
+    (ADR 021 §8.1); os contadores de ligação estão no grupo ``exploracao``."""
 
     group = "verificacao"
     producer = "orquestrador (fechamento de hipóteses)"
@@ -289,11 +311,6 @@ class HypothesisClosureReader:
             for e in reviews
             if (e.get("payload") or {}).get("outcome") == "resultado_negativo"
         }
-        no_hypothesis_tasks = {
-            e.get("task_name")
-            for e in reviews
-            if "sem_hipotese" in ((e.get("payload") or {}).get("motivos") or [])
-        }
         last = untested[-1] if untested else None
         return {
             "resultados_sem_mede": len(no_mede),
@@ -304,8 +321,182 @@ class HypothesisClosureReader:
             "fechada_por_hipoteses_nao_testadas": any(
                 (e.get("payload") or {}).get("motivo_parada") == STOP_UNTESTED_HYPOTHESES for e in stops
             ),
-            "reprovacoes_sem_hipotese": len(no_hypothesis_tasks),
         }
+
+
+def _guarded_block(name: str, producer: str, session_id: str, read: Callable[[str], dict[str, Any]]) -> dict[str, Any]:
+    """Bloco do grupo ``exploracao``: ``indisponivel`` com o produtor, ou ``erro``, sem derrubar os outros blocos."""
+    try:
+        return {name: read(session_id)}
+    except MetricsUnavailable as exc:
+        return {name: {"estado": STATE_UNAVAILABLE, "produtor": exc.producer or producer, "motivo": str(exc)}}
+    except Exception as exc:  # noqa: BLE001 - falha de leitura de um bloco não bloqueia os outros
+        logger.error(
+            "Falha ao ler o bloco de exploração",
+            extra={"block": name, "error": type(exc).__name__, "session_id": session_id},
+        )
+        return {name: {"estado": STATE_ERROR, "mensagem": f"{type(exc).__name__}: {exc}"[:300]}}
+
+
+class ExplorationLinkingReader:
+    """Grupo ``exploracao`` (bloco ``ligacao``): experimentos por papel e testes por origem da hipótese.
+
+    Os papéis e as origens vêm do grafo, sobre os ``Experimento`` executados na sessão (``EXECUTADO_EM``); os
+    contadores de ligação derivada e de hipóteses do sistema, da soma dos eventos ``hypothesis_cycle``
+    (produtor: ``v18.7-hypothesis-linking``). Sem os campos do produtor o bloco fica ``indisponivel``.
+    """
+
+    group = "exploracao"
+    producer = "v18.7-hypothesis-linking"
+
+    def __init__(self, store_getter: Callable[[], Any] | None = None) -> None:
+        self._store_getter = store_getter
+
+    @staticmethod
+    def _sum(cycles: list[dict[str, Any]], key: str) -> int:
+        return sum(int(c.get(key) or 0) for c in cycles)
+
+    def read(self, session_id: str) -> dict[str, Any]:
+        return _guarded_block("ligacao", self.producer, session_id, self._read)
+
+    def _read(self, session_id: str) -> dict[str, Any]:
+        from src.observability.telemetry import get_telemetry
+
+        if self._store_getter is None:
+            raise MetricsUnavailable("grafo de conhecimento indisponível", self.producer)
+        cycles = [e.get("payload") or {} for e in get_telemetry().get_events(session_id, "hypothesis_cycle")]
+        store = self._store_getter()
+        roles = {"teste": 0, "preparacao": 0, "referencia": 0}
+        origins = {"pesquisador": 0, "researcher": 0, "curator": 0, "oportunidade": 0, "sistema": 0}
+        has_role = False
+        for session in store.find_nodes("Sessao", {"sessao_id": session_id}, limit=2):
+            for exp in store.neighbors(session.id, ["EXECUTADO_EM"], direction="in", depth=1).nodes:
+                if exp.label != "Experimento":
+                    continue
+                declared = exp.properties.get("papel")
+                has_role = has_role or declared in roles
+                role = declared if declared in roles else "teste"  # sem papel (nó antigo) conta como teste
+                roles[role] += 1
+                if role != "teste":
+                    continue
+                for hyp in store.neighbors(exp.id, ["TESTA"], direction="out", depth=1).nodes:
+                    if hyp.label == "Hipotese":
+                        origin = str(hyp.properties.get("origem") or "researcher")
+                        if origin in origins:
+                            origins[origin] += 1
+        produced = has_role or any("ligacoes_prepara" in c or "hipoteses_sistema_criadas" in c for c in cycles)
+        if not produced:
+            raise MetricsUnavailable("campos de ligação ausentes nos eventos e nos Experimento", self.producer)
+        tests = roles["teste"]
+        return {
+            "estado": STATE_OK,
+            "experimentos_por_papel": roles,
+            "testes_por_origem": origins,
+            "proporcao_testes_sistema": round(origins["sistema"] / tests, 3) if tests else None,
+            "ligacoes_prepara_derivadas": self._sum(cycles, "ligacoes_prepara"),
+            "hipoteses_sistema_criadas": self._sum(cycles, "hipoteses_sistema_criadas"),
+            "hipoteses_sistema_abandonadas": self._sum(cycles, "hipoteses_sistema_abandonadas"),
+            "removidas_pelo_replanejamento": sum(len(c.get("removidas_pelo_replanejamento") or []) for c in cycles),
+        }
+
+
+class ExplorationStopReader:
+    """Grupo ``exploracao`` (bloco ``parada``): estagnação, saturação, objetivo e retiradas por restrição.
+
+    Lê os eventos de ``v18.7-exploration-limits``; sem nenhum deles (nem ciclo de exploração) o bloco fica
+    ``indisponivel`` com o nome do produtor.
+    """
+
+    group = "exploracao"
+    producer = "v18.7-exploration-limits"
+    _EVENTS = (
+        "estagnacao_intervencao", "intervencoes_esgotadas", "saturacao_avaliada", "objetivo_atingido",
+        "objetivo_desfecho", "restricao_retirada", "hypothesis_cycle",
+    )
+
+    def read(self, session_id: str) -> dict[str, Any]:
+        return _guarded_block("parada", self.producer, session_id, self._read)
+
+    def _read(self, session_id: str) -> dict[str, Any]:
+        from src import config
+        from src.observability.telemetry import get_telemetry
+
+        telemetry = get_telemetry()
+        events = {
+            name: [e.get("payload") or {} for e in telemetry.get_events(session_id, name)] for name in self._EVENTS
+        }
+        if not any(events.values()):
+            raise MetricsUnavailable("nenhum evento de exploração nesta sessão", self.producer)
+        withdrawals = events["restricao_retirada"]
+        by_criterion: dict[str, int] = {}
+        for item in withdrawals:
+            criterion = str(item.get("criterio") or "desconhecido")
+            by_criterion[criterion] = by_criterion.get(criterion, 0) + 1
+        similarity = [
+            {
+                "hipotese_id": str(w.get("hipotese_id")), "restricao_id": str(w.get("restricao_id")),
+                "similaridade": w.get("similaridade"),
+            }
+            for w in withdrawals if w.get("criterio") == "similaridade"
+        ]
+        limit = int(config.OPERATION_METRICS_LIST_MAX_ITEMS)
+        outcomes = events["objetivo_desfecho"]
+        return {
+            "estado": STATE_OK,
+            "ciclos": len(events["hypothesis_cycle"]),
+            "intervencoes_estagnacao": len(events["estagnacao_intervencao"]),
+            "saturacao_avaliada": bool(events["saturacao_avaliada"]),
+            "objetivo_atingido": bool(events["objetivo_atingido"]),
+            "desfecho_objetivo": outcomes[-1].get("desfecho") if outcomes else None,
+            "retiradas_restricao": by_criterion,
+            "retiradas_restricao_similaridade": similarity[:limit],
+            "retiradas_restricao_similaridade_omitidas": max(len(similarity) - limit, 0),
+        }
+
+
+class ContractReader:
+    """Grupo ``exploracao`` (bloco ``contrato``): tentativas, tokens estimados e hashes do contrato da subtarefa.
+
+    Produtor: ``v18.7-subtask-contract`` (eventos ``subtask_attempt``, ``subtask_review`` e ``contrato_divergente``).
+    """
+
+    group = "exploracao"
+    producer = "v18.7-subtask-contract"
+
+    def read(self, session_id: str) -> dict[str, Any]:
+        return _guarded_block("contrato", self.producer, session_id, self._read)
+
+    def _read(self, session_id: str) -> dict[str, Any]:
+        from src.observability.telemetry import get_telemetry
+
+        telemetry = get_telemetry()
+        attempts = [e.get("payload") or {} for e in telemetry.get_events(session_id, "subtask_attempt")]
+        if not attempts:
+            raise MetricsUnavailable("nenhuma tentativa com o evento subtask_attempt", self.producer)
+        divergences = len(telemetry.get_events(session_id, "contrato_divergente"))
+        with_hash = [a for a in attempts if a.get("contrato_sha256")]
+        tokens = [int(a.get("contrato_tokens_estimados") or 0) for a in with_hash]
+        total = sum(tokens)
+        prompt_tokens = self._prompt_tokens(telemetry, session_id)
+        return {
+            "estado": STATE_OK,
+            "tentativas": len(attempts),
+            "tokens_estimados_total": total,
+            "tokens_estimados_medio": round(total / len(with_hash)) if with_hash else None,
+            "fracao_entrada": round(total / prompt_tokens, 3) if prompt_tokens else None,
+            "divergencias": divergences,
+            "tentativas_sem_hash": len(attempts) - len(with_hash),
+            "tarefa_original_truncada": sum(1 for a in attempts if a.get("tarefa_original_truncada")),
+        }
+
+    @staticmethod
+    def _prompt_tokens(telemetry: Any, session_id: str) -> int:
+        """Soma dos ``prompt_tokens`` das chamadas dos papéis developer e validator da sessão."""
+        total = 0
+        for row in telemetry.get_usage_by_role(session_id):
+            if str(row.get("agent_id")) in ("developer", "validator"):
+                total += int(row.get("prompt_tokens") or 0)
+        return total
 
 
 class CostResourcesReader:
@@ -490,6 +681,7 @@ def default_readers(
     output_dir: Path | str | None = None,
     *,
     payload_loader: Callable[[str], dict[str, Any]] | None = None,
+    store_getter: Callable[[], Any] | None = None,
 ) -> list[MetricsGroupReader]:
     """Leitores padrão: um por produtor (cada mudança produtora registra o seu aqui)."""
     from src.claims.metrics import ClaimVerificationReader
@@ -528,6 +720,9 @@ def default_readers(
         CostResourcesReader(runs_loader=runs_of, budget_loader=budget_of),
         HumanInterventionsReader(payload_loader, gate_loader=gate_of),
         JudgeIndependenceReader(payload_loader),
+        ExplorationLinkingReader(store_getter),
+        ExplorationStopReader(),
+        ContractReader(),
     ]
 
 
@@ -592,6 +787,65 @@ def describe_stop_reason(stop_reason: str | None) -> str | None:
         return None
     explanation = _STOP_DESCRIPTIONS.get(stop_reason)
     return f"{stop_reason} ({explanation})" if explanation else stop_reason
+
+
+def _block_unavailable(title: str, block: dict[str, Any]) -> str:
+    if block.get("estado") == STATE_ERROR:
+        return f"  - {title}: erro de leitura: {block.get('mensagem', '')}"
+    return f"  - {title}: indisponível ({block.get('produtor', '?')})"
+
+
+def _exploration_lines(group: dict[str, Any]) -> list[str]:
+    """Linha "Exploração" e sublinhas dos blocos ``ligacao``, ``parada`` e ``contrato`` (design §4)."""
+    lines = ["- **Exploração:**"]
+    link = group.get("ligacao") or {}
+    if link.get("estado") != STATE_OK:
+        lines.append(_block_unavailable("ligação", link))
+    else:
+        roles = link.get("experimentos_por_papel") or {}
+        origins = link.get("testes_por_origem") or {}
+        share = link.get("proporcao_testes_sistema")
+        lines.append(
+            "  - ligação: experimentos por papel: " + ("; ".join(f"{k}={_fmt(v)}" for k, v in roles.items()) or "n/d")
+            + "; testes por origem: " + ("; ".join(f"{k}={_fmt(v)}" for k, v in origins.items()) or "n/d")
+            + f"; proporção de testes do sistema: {'n/d' if share is None else _fmt(float(share))}"
+            + f"; PREPARA derivadas: {_fmt(link.get('ligacoes_prepara_derivadas'))}"
+            + f"; hipóteses do sistema criadas/abandonadas: {_fmt(link.get('hipoteses_sistema_criadas'))}"
+            + f"/{_fmt(link.get('hipoteses_sistema_abandonadas'))}"
+        )
+    stop = group.get("parada") or {}
+    if stop.get("estado") != STATE_OK:
+        lines.append(_block_unavailable("parada", stop))
+    else:
+        outcome = stop.get("desfecho_objetivo")
+        withdrawals = stop.get("retiradas_restricao") or {}
+        lines.append(
+            f"  - parada: ciclos: {_fmt(stop.get('ciclos'))}; intervenções por estagnação: "
+            f"{_fmt(stop.get('intervencoes_estagnacao'))}; saturação avaliada: {_fmt(stop.get('saturacao_avaliada'))}; "
+            f"objetivo atingido: {_fmt(stop.get('objetivo_atingido'))}" + (f" (desfecho: {outcome})" if outcome else "")
+            + "; retiradas por restrição: "
+            + ("; ".join(f"{k}={_fmt(v)}" for k, v in sorted(withdrawals.items())) or "nenhuma")
+        )
+        for item in stop.get("retiradas_restricao_similaridade") or []:
+            lines.append(
+                f"    - retirada por similaridade: restrição {item['restricao_id']}, hipótese {item['hipotese_id']}, "
+                f"similaridade {item['similaridade']}"
+            )
+        if stop.get("retiradas_restricao_similaridade_omitidas"):
+            lines.append(f"    - e mais {_fmt(stop['retiradas_restricao_similaridade_omitidas'])} retiradas omitidas")
+    contract = group.get("contrato") or {}
+    if contract.get("estado") != STATE_OK:
+        lines.append(_block_unavailable("contrato", contract))
+    else:
+        fraction = contract.get("fracao_entrada")
+        lines.append(
+            f"  - contrato: tentativas: {_fmt(contract.get('tentativas'))}; tokens estimados: "
+            f"{_fmt(contract.get('tokens_estimados_total'))} (médio {_fmt(contract.get('tokens_estimados_medio'))}); "
+            f"fração da entrada: {'n/d' if fraction is None else _fmt(float(fraction))}; "
+            f"divergências de hash: {_fmt(contract.get('divergencias'))}; "
+            f"tentativas sem hash: {_fmt(contract.get('tentativas_sem_hash'))}"
+        )
+    return lines
 
 
 def render_operation_metrics_section(metrics: dict[str, Any], *, stop_reason: str | None = None) -> str:
@@ -680,11 +934,6 @@ def render_operation_metrics_section(metrics: dict[str, Any], *, stop_reason: st
             lines.append(
                 f"  - hipóteses sem tentativa no fechamento: {_fmt(ver.get('hipoteses_sem_tentativa_no_fechamento'))}"
             )
-        if ver.get("reprovacoes_sem_hipotese"):
-            lines.append(
-                "  - subtarefas reprovadas por limiar sem hipótese (sem_hipotese): "
-                f"{_fmt(ver['reprovacoes_sem_hipotese'])}"
-            )
         if ver.get("independencia_julgamento_modo") is not None:
             families = ver.get("independencia_julgamento_familias") or {}
             lines.append(
@@ -728,6 +977,13 @@ def render_operation_metrics_section(metrics: dict[str, Any], *, stop_reason: st
             f"decisões de divergência: {_fmt(human['decisoes_divergencia'])}; suspensões: {_fmt(human['suspensoes'])}; "
             f"interrupções: {_fmt(human['interrupcoes'])}; aprovações/rejeições/edições: não medidas por sessão"
         )
+    exploration = metrics.get("exploracao")
+    if exploration is None:
+        lines.append("- **Exploração:** n/d (métricas anteriores à versão 2)")
+    elif exploration["estado"] != STATE_OK:
+        lines.append(_unavailable_line("Exploração", exploration))
+    else:
+        lines.extend(_exploration_lines(exploration))
     lines.extend(["", f"_Gerado em {metrics.get('gerado_em')} (versão {metrics.get('versao')})._", END_MARK])
     return "\n".join(lines)
 

@@ -22,6 +22,7 @@ def summarize_events(events: list[dict[str, Any]]) -> dict:
     questions = [e["payload"] for e in events if e["event_type"] == "ask_researcher"]
     reason_counts = Counter(m for r in reviews if not r.get("approved") for m in (r.get("motivos") or []))
     quotas = [e["payload"] for e in events if e["event_type"] == "cota_provedor_esgotada"]
+    attempts = [e["payload"] for e in events if e["event_type"] == "subtask_attempt"]
     return {
         "event_counts": dict(counts),
         "messages": sum(counts[t] for t in MESSAGE_EVENTS),
@@ -34,10 +35,18 @@ def summarize_events(events: list[dict[str, Any]]) -> dict:
             "total": len(reviews),
             "approved": sum(1 for r in reviews if r.get("approved")),
             "rejections": [r.get("issues") or [r.get("feedback")] for r in reviews if not r.get("approved")],
-            # v18.6-auto-metrics-and-stop-reasons: motivos de reprovação registrados (ex.: sem_hipotese); a chave só
+            # motivos de reprovação registrados, sem lista fixa (ex.: hipotese_do_sistema, direcao_restrita); a chave só
             # existe quando algum foi registrado (o resumo sem motivos segue idêntico ao anterior).
             **({"motivos": dict(reason_counts)} if reason_counts else {}),
         },
+        # v18.7-exploration-metrics: tentativas de subtarefa com hash do contrato e o custo estimado dele; divergência
+        # de hash entre a execução e a revisão (aviso de placar, não anomalia de parada).
+        "subtask_attempts": {
+            "total": len(attempts),
+            "com_hash": sum(1 for a in attempts if a.get("contrato_sha256")),
+            "tokens_contrato_total": sum(int(a.get("contrato_tokens_estimados") or 0) for a in attempts),
+        },
+        "contrato_divergente": counts.get("contrato_divergente", 0),
         "ask_researcher": [
             {"question": q.get("question"), "why": q.get("why_cant_proceed"), "options": q.get("options")}
             for q in questions

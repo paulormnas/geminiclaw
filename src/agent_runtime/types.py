@@ -63,6 +63,9 @@ class AgentTask:
     # v18.7-dependency-artifacts: saídas das dependências concluídas (``DependencyMount``) que o sandbox monta somente
     # leitura; preenchido pelo laço a cada tentativa.
     dependency_mounts: tuple[Any, ...] = ()
+    # v18.7-agent-system-prompts: hash do recorte do regimento usado na tentativa (``None`` até aquela mudança); o laço
+    # o registra no evento ``subtask_attempt`` (v18.7-exploration-metrics).
+    recorte_sha256: str | None = None
 
 
 @dataclass

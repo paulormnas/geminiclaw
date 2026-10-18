@@ -334,6 +334,11 @@ if DEPENDENCY_ARTIFACTS_SCOPE not in ("transitivas", "diretas"):
     )
 DEPENDENCY_ARTIFACTS_MAX_MOUNTS = int(get_env("DEPENDENCY_ARTIFACTS_MAX_MOUNTS", default="16"))
 DEPENDENCY_ARTIFACTS_LIST_MAX = int(get_env("DEPENDENCY_ARTIFACTS_LIST_MAX", default="20"))
+
+# v18.7-exploration-metrics — itens de listas nas métricas de operação e no relatório (ex.: retiradas por similaridade).
+OPERATION_METRICS_LIST_MAX_ITEMS = int(get_env("OPERATION_METRICS_LIST_MAX_ITEMS", default="50"))
+if OPERATION_METRICS_LIST_MAX_ITEMS < 1:
+    raise ValueError("OPERATION_METRICS_LIST_MAX_ITEMS deve ser um inteiro >= 1.")
 if DEPENDENCY_ARTIFACTS_MAX_MOUNTS < 1 or DEPENDENCY_ARTIFACTS_LIST_MAX < 1:
     raise ValueError("DEPENDENCY_ARTIFACTS_MAX_MOUNTS e DEPENDENCY_ARTIFACTS_LIST_MAX devem ser inteiros >= 1.")
 

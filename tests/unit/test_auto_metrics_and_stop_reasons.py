@@ -380,19 +380,20 @@ def test_contadores_de_operacao_novos():
             {"task_name": "a", "payload": {"outcome": "reprovado", "motivos": ["sem_hipotese"]}},
         ],
     }
+    # v18.7-exploration-metrics: o motivo sem_hipotese deixou de existir; o contador foi removido.
     telemetry = MagicMock()
     telemetry.get_events.side_effect = lambda sid, kind: events.get(kind, [])
     with patch("src.observability.telemetry.get_telemetry", return_value=telemetry):
         out = HypothesisClosureReader().read("s")
     assert out["fechada_por_hipoteses_nao_testadas"] is True
-    assert out["hipoteses_sem_tentativa_no_fechamento"] == 2 and out["reprovacoes_sem_hipotese"] == 1
+    assert out["hipoteses_sem_tentativa_no_fechamento"] == 2 and "reprovacoes_sem_hipotese" not in out
 
 
 def test_secao_do_relatorio_descreve_o_motivo():
     """Scenario: Seção do relatório."""
     verificacao = {
         "estado": "disponivel", "afirmacoes_por_status": {}, "ciclos_rejeicao_plano": 0,
-        "hipoteses_sem_tentativa_no_fechamento": 2, "reprovacoes_sem_hipotese": 1,
+        "hipoteses_sem_tentativa_no_fechamento": 2,
     }
     ok = {"estado": "disponivel"}
     metrics = {
@@ -409,7 +410,7 @@ def test_secao_do_relatorio_descreve_o_motivo():
     }
     text = render_operation_metrics_section(metrics, stop_reason="hipoteses_nao_testadas")
     assert "hipoteses_nao_testadas (hipóteses em teste sem nenhuma tentativa" in text
-    assert "hipóteses sem tentativa no fechamento: 2" in text and "sem_hipotese" in text
+    assert "hipóteses sem tentativa no fechamento: 2" in text and "sem_hipotese" not in text
     assert describe_stop_reason("limite_tokens") == "limite_tokens" and describe_stop_reason(None) is None
 
 

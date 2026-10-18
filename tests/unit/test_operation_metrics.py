@@ -68,6 +68,7 @@ def _all_ok() -> list[Fake]:
             "aprovacoes": None, "rejeicoes": None, "edicoes": None, "respostas_ask_researcher": 2,
             "decisoes_divergencia": None, "suspensoes": None, "interrupcoes": 1, "eventos": [],
         }),
+        Fake("exploracao", {"ligacao": {"estado": "disponivel"}}),
     ]
 
 
@@ -77,7 +78,7 @@ def _aggregate(readers, **kw) -> dict[str, Any]:
 
 def test_agrega_os_cinco_grupos_e_mescla_leitores_do_mesmo_grupo() -> None:
     metrics = _aggregate(_all_ok())
-    assert metrics["versao"] == 1 and metrics["parcial"] is False and metrics["gerado_em"] == FIXED.isoformat()
+    assert metrics["versao"] == 2 and metrics["parcial"] is False and metrics["gerado_em"] == FIXED.isoformat()
     assert all(metrics[g]["estado"] == "disponivel" for g in GROUPS)
     assert metrics["proveniencia"]["numeros_por_origem"]["res"] == 5 and metrics["proveniencia"]["cadeia"]["resultado"] == "integra"
     assert metrics["verificacao"]["ciclos_rejeicao_plano"] == 2 and metrics["verificacao"]["afirmacoes_por_status"]["suportada"] == 3
@@ -114,7 +115,7 @@ def test_excecao_vira_erro_sem_bloquear_os_demais_e_chama_on_error() -> None:
     seen: list[tuple[str, str]] = []
     metrics = _aggregate(readers, on_error=lambda g, m: seen.append((g, m)))
     assert metrics["custo_recursos"]["estado"] == "erro" and "banco caiu" in metrics["custo_recursos"]["mensagem"]
-    assert [metrics[g]["estado"] for g in GROUPS if g != "custo_recursos"] == ["disponivel"] * 4
+    assert [metrics[g]["estado"] for g in GROUPS if g != "custo_recursos"] == ["disponivel"] * 5
     assert seen and seen[0][0] == "custo_recursos"
 
 

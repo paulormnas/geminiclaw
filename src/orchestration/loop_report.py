@@ -58,7 +58,9 @@ class LoopReportMixin:
                 master_session_id,
                 parcial=parcial,
                 readers=default_readers(
-                    self.orchestrator.output_manager.base_dir, payload_loader=self._session_payload
+                    self.orchestrator.output_manager.base_dir,
+                    payload_loader=self._session_payload,
+                    store_getter=self.orchestrator._open_knowledge_store,
                 ),
                 unlimited=unlimited_block(payload.get("budget"), self._unlimited_notices),
                 on_error=on_error,

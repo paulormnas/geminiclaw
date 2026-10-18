@@ -17,9 +17,12 @@ import re
 import unicodedata
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 from src import config
+from src.artifacts.profile import read_head_text
+from src.egress.filters import mask_numbers
 from src.egress.gate import role_tainted
 from src.knowledge.metric_criteria import criterion_comparisons
 from src.utils.egress_fragments import (
@@ -322,6 +325,41 @@ def oversized_fields(contract: SubtaskContract) -> list[str]:
         "consumidores": sum(len(a) + sum(len(w) for w in who) for a, who in contract.consumed_by),
     }
     return [name for name, size in sizes.items() if size > limit]
+
+
+def threshold_masked(contract: SubtaskContract, developer_accepts_raw: bool) -> bool:
+    """O limiar chega mascarado ao Developer (regra provisória do design §11.1, ADR 019 prevalece).
+
+    Verdadeiro quando o texto do Researcher é contaminado, o destino do Developer não aceita dados brutos e os
+    critérios ou o objetivo têm número literal que o ``EgressGate`` troca por marcador.
+    """
+    if developer_accepts_raw or not contract.researcher_tainted:
+        return False
+    texts = [text for _, text in contract.criteria]
+    if contract.objective is not None:
+        texts.append(_objective_text(contract.objective))
+    return any(mask_numbers(text)[1] > 0 for text in texts)
+
+
+def script_fragment(task_dir: Path | str) -> PromptFragment | None:
+    """Script executado da subtarefa para a revisão, como trecho de origem ``codigo`` (design §6.2 e §8.1 item 8).
+
+    O trecho é contaminado se o modelo do Developer aceita dados brutos; o ``EgressGate`` aplica a política do
+    destino do Validator (números viram marcadores) e registra o envio com fonte ``codigo``. Sem script legível
+    (ausente, link simbólico, ilegível): ``None``.
+    """
+    limit = config.REVIEW_SCRIPT_MAX_CHARS
+    try:
+        code = read_head_text(Path(task_dir) / "script.py", limit + 1)
+    except OSError:
+        return None
+    if not code.strip():
+        return None
+    if len(code) > limit:
+        code = code[:limit] + f"\n# [script cortado em {limit} caracteres]"
+    return PromptFragment(
+        code, ContentOrigin.CODIGO, tainted=role_tainted("developer"), source="codigo", produced_by="developer"
+    )
 
 
 # ---------------------------------------------------------------------------

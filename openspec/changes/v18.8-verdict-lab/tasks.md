@@ -38,4 +38,5 @@
 - [x] 6.2 Família A (recordes por acaso) no catálogo.
 - [x] 6.3 Critério de aceite na simulação (`--fv-max`, tabela `aceite`).
 - [x] 6.4 Testes dos requisitos "Alternativas de ajuste depois da etapa 2" e "Critério de aceite na simulação".
-- [ ] 6.5 Segunda rodada da grade, da simulação e da sensibilidade no Raspberry Pi, com o relatório em `docs/calibracao-veredito/`, em PR próprio.
+- [x] 6.5 Comando `selecao` (design §14): combina o critério de aceite da simulação com o catálogo da grade.
+- [ ] 6.6 Segunda rodada da grade, da simulação e da sensibilidade no Raspberry Pi, com o relatório em `docs/calibracao-veredito/`, em PR próprio.

@@ -1593,7 +1593,10 @@ class AutonomousLoop(LoopReportMixin):
                         from src.config import REVIEW_ENABLED, REVIEW_MODE
                         if REVIEW_ENABLED and REVIEW_MODE == "per_subtask" and task.validation_criteria:
                             logger.info(f"Iniciando revisão da subtarefa {task.task_name}")
-                            review = await self._review_subtask(task, result, master_session_id, attempt_number)
+                            review = await self._review_subtask(
+                                task, result, master_session_id, attempt_number,
+                                **({"contract": enriched_task.contract} if enriched_task.contract is not None else {}),
+                            )
                             last_review = review
                             if review.get("status") == "fail" and review.get("outcome") == "resultado_negativo":
                                 # v18.6-hypothesis-closure: hipótese refutada por limiar é conclusão, não falha.
@@ -2505,7 +2508,8 @@ class AutonomousLoop(LoopReportMixin):
                     logger.info("Padrão de código extraído e salvo na memória", extra={"key": key})
 
     async def _review_subtask(
-        self, task: "AgentTask", result: "AgentResult", master_session_id: str, attempt: int = 1
+        self, task: "AgentTask", result: "AgentResult", master_session_id: str, attempt: int = 1,
+        contract: "SubtaskContract | None" = None,
     ) -> Dict[str, Any]:
         """Invoca o Agente Revisor para avaliar o resultado de uma subtarefa.
 
@@ -2513,6 +2517,7 @@ class AutonomousLoop(LoopReportMixin):
             task: A definição da tarefa com critérios de validação.
             result: O resultado produzido pelo agente executor.
             master_session_id: ID da sessão mestra.
+            contract: Contrato da tentativa executada (v18.7-subtask-contract); o revisor julga pelo mesmo contrato.
 
         Returns:
             Dicionário com o status da revisão e feedback.
@@ -2537,6 +2542,7 @@ class AutonomousLoop(LoopReportMixin):
             response_text=result.response.get("text", ""),
             artifacts_on_disk=artifacts_on_disk,
             output_dir=output_manager.base_dir / master_session_id,
+            **({"contract": contract} if contract is not None else {}),
         )
         from src.llm.metering import bound_execution_id
         from src.observability.telemetry import get_telemetry
@@ -2565,6 +2571,8 @@ class AutonomousLoop(LoopReportMixin):
                     "metric_qualifiers": dict(list((getattr(review, "metric_qualifiers", None) or {}).items())[:20]),
                     "outcome": getattr(review, "outcome", None) or ("aprovado" if review.is_approved else "reprovado"),
                     "motivos": [str(m)[:64] for m in (getattr(review, "motivos", None) or [])][:8],
+                    "contrato_sha256": getattr(review, "contract_sha256", "") or None,
+                    "observacoes": [str(o)[:200] for o in (getattr(review, "observations", None) or [])][:10],
                 },
             )
         except Exception as exc:
@@ -2580,6 +2588,9 @@ class AutonomousLoop(LoopReportMixin):
             "motivos": list(getattr(review, "motivos", None) or []),
             "predicoes": list(getattr(review, "predicoes", None) or []),
             "viola_restricao": getattr(review, "viola_restricao", None),
+            "typed_issues": list(getattr(review, "typed_issues", None) or []),
+            "observacoes": list(getattr(review, "observations", None) or []),
+            "contrato_sha256": getattr(review, "contract_sha256", "") or "",
         }
 
     async def _synthesize_results(

@@ -247,3 +247,14 @@ def read_literal_metrics(session_dir: Path) -> set[tuple[str, str]]:
         except (OSError, ValueError, AttributeError):
             continue
     return found
+
+
+def read_task_findings(session_dir: Path, task_name: str) -> list[dict[str, Any]]:
+    """Achados da execução mais recente de ``task_name`` (``metricas_literais/<tarefa>.json``); vazio sem arquivo."""
+    if not task_name or "/" in task_name or ".." in task_name:
+        return []
+    try:
+        data = json.loads((session_dir / LITERALS_DIR / f"{task_name}.json").read_text(encoding="utf-8"))
+        return [dict(item) for item in data.get("achados") or [] if isinstance(item, dict)]
+    except (OSError, ValueError, AttributeError):
+        return []

@@ -182,7 +182,7 @@ async def test_dependente_roda_e_a_subtarefa_negativa_nao_repete():
     ]
     loop = _loop_with(execute, AsyncMock(return_value=tasks))
 
-    async def review(t, result, sid, attempt=1):
+    async def review(t, result, sid, attempt=1, **kwargs):
         return dict(NEGATIVE_REVIEW)
 
     with patch("src.orchestration.autonomous_loop.get_telemetry", return_value=MagicMock()), \
@@ -228,7 +228,7 @@ async def test_feedback_ao_researcher_cita_hipotese_valor_e_limiar():
 
     loop = _loop_with(execute, AsyncMock(side_effect=planning))
 
-    async def review(t, result, sid, attempt=1):
+    async def review(t, result, sid, attempt=1, **kwargs):
         return dict(NEGATIVE_REVIEW)
 
     from src.orchestration.usage import UsageBudget

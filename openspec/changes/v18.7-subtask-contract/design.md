@@ -253,3 +253,44 @@ Todas em `src/config.py` e `.env.example`.
 | Observações demais ao Researcher | `REVIEW_OBSERVATIONS_MAX` e deduplicação por texto |
 | `criterio_ambiguo` repetido em todo ciclo | Contado por sessão; a observação diz exatamente como corrigir; o Validator do plano tem a regra `criterio_sem_chave` |
 | Revisor mais severo por ver o script | A guarda só aceita reprovação com id de critério ou de regra |
+
+## 13. Revisão contra o código (2026-10-18, AGENTS.md §1.10)
+
+As referências de caminho e linha deste design, da proposta e das specs são de 2026-10-15, antes da reorganização do ADR 024. Onde houver divergência, vale esta tabela; os números de linha não são mais confiáveis, valem os símbolos.
+
+| Citado | Hoje |
+|---|---|
+| `src/autonomous_loop.py`, `src/orchestrator.py` | `src/orchestration/autonomous_loop.py` (`_build_context_prefix`, `_dispatch_subtask`, `_execute_task_in_dag`, `_review_subtask`), `src/orchestration/orchestrator.py` (`_run_planning_loop`, chamada de `validate_plan`) |
+| `src/agents/validator_agent.py` | `src/agents/validator/agent.py` (`validate_plan`, `review_result`/`_review`, `ReviewResult`) |
+| `AgentTask` em `src/orchestrator.py` | `src/agent_runtime/types.py` (já tem `papel`, `papel_decidido`, `prepara_ids`, `hypothesis_origin`, `discrimina`, `restricoes_contexto`, `prompt_tainted`) |
+| `src/egress/fragments.py` | `src/utils/egress_fragments.py` (`PromptFragment`, `ARTIFACT_NAMES_SOURCE`, `strip_marks`); o delimitador de dado é `⟦D:…⟧`/`⟦/D⟧`, não `<<<DADO…>>>` (o exemplo do §3 é ilustrativo) |
+| `src/egress/gate.py` | igual; `role_tainted` em `:773` |
+| `src/usage.py` | `src/orchestration/usage.py` (`UsageTracker.record_task_attempt`) |
+| `src/plan_normalizer.py` | `src/orchestration/plan_normalizer.py` |
+| `src/continuity.py` | `src/session/continuity.py`; `FailureCause = Literal["infraestrutura","abordagem","ambigua"]` em `src/knowledge/verdict.py:32` |
+| `_metric_criteria` | `src/knowledge/metric_criteria.py:102` |
+| `src/subtask_contract.py` (novo) | **`src/agents/subtask_contract.py`** (ver abaixo) |
+
+**Onde mora o módulo do contrato.** O ADR 024 §3 proíbe módulos novos na raiz de `src/` e o contrato é lido por `orchestration` (montagem), `agent_runtime` (prefixo fixado) e pelo Validator (revisão). O Validator está em `agents`, que não pode importar `orchestration` (regra de camadas, `uv run lint-imports`). O módulo fica em `src/agents/subtask_contract.py`: acima de `knowledge` (vocabulário, critérios de métrica), `egress` e `utils`, e abaixo de `agent_runtime` e `orchestration`. Os construtores recebem a `AgentTask` por tipo estrutural (`TYPE_CHECKING`), sem importar `agent_runtime`. A tarefa 0.9 ("extrair para módulo próprio em `src/orchestration/`") fica substituída pela tarefa 2.0: os construtores de contexto do Researcher e do Validator do plano são movidos para esse módulo no início da seção 2, sem mudar comportamento, com a suíte verde antes do comportamento novo.
+
+**Já existe e muda o escopo:**
+
+- `validate_plan` já recebe `objective_definition` (`v18.7-exploration-limits`, só no modo `auto` sem objetivo válido), mas não o objetivo do Problema em geral: a tarefa 6.1 acrescenta o fragmento `contrato:objetivo` com o `ProblemObjective` e não reaproveita aquele parâmetro.
+- `AgentTask` já traz o papel do experimento e a hipótese resolvida (`hypothesis-linking`): o item 1 e o item 4 do contrato leem `papel_decidido`, `hypothesis_origin`, `prepara_ids` e `hypothesis_id`.
+- `_execute_task_in_dag` recria a `AgentTask` (`enriched_task`) só com oito campos e `_dispatch_subtask` faz o mesmo: os dois descartam `task_type`, `hypothesis*`, `papel*`, `prompt_tainted`, `discrimina`, `restricoes_contexto`. A tarefa 3.1 troca ambos por `dataclasses.replace`. Efeito colateral a conferir: o `prompt_tainted` hoje é aplicado antes (`taint_if`) e não deve ser aplicado duas vezes.
+
+## 14. Achado novo: o contrato não entrega os artefatos das dependências (2026-10-18)
+
+**Defeito (bateria parcial de 2026-10-18, `haiku-dev-sol-juiz`).** `treinar_regressao_logistica` falhou em ciclos seguidos porque `/outputs/baseline_metrics.json` e `y_train.csv`, produzidos por subtarefas das quais ela depende, não existiam no sandbox dela.
+
+**Causa no código.** O `/outputs` do sandbox é um bind mount da pasta da própria subtarefa (`<saída>/<sessão>/<task_name>`, `src/skills/code/sandbox.py`, volume `abs_output_dir`). Só são montados à parte os insumos do projeto (`/inputs`), as sessões anteriores da cadeia de continuidade (`/prior/<sessão>`, somente leitura) e as dependências de pacote (`/deps`). Nada copia nem monta, para uma subtarefa, as saídas das subtarefas de que ela depende na **mesma** sessão. O prefixo de contexto (`_build_context_prefix` → `SubtaskOutput.to_context_string`) diz ao Developer o nome e o caminho do artefato, e o prompt do Developer (regra 2) manda lê-lo de `/outputs/`, onde ele não está.
+
+**O contrato cobre?** Não. O item 8 é o lado **produtor** ("não renomeie nem mova os artefatos que outras subtarefas consomem"). Não há item, regra de montagem nem requisito de spec para o lado **consumidor** ("estes artefatos das dependências estarão em tal caminho, somente leitura"). O ADR 022 §2 e §8 também não o tratam. Hipótese de trabalho: a nomeação correta (item 8 e colisão do §8) é necessária e insuficiente; sem a entrega, um plano perfeito ainda falha.
+
+**Decisão pendente do pesquisador (não implementada nesta mudança até a resposta).** Ampliar o escopo exigiria, no mínimo, (a) uma regra de montagem no sandbox (montar as saídas das dependências diretas e transitivas em um caminho somente leitura, por exemplo `/deps_out/<task_name>`, ou copiá-las para `/inputs`-like), com parecer do Analista de Segurança (nova superfície de leitura entre pastas de subtarefas, ADR 014 e ADR 019), e (b) um item novo do contrato com o caminho de cada artefato de dependência. Opções:
+
+1. **Montagem somente leitura das saídas das dependências** em `/deps_out/<task_name>` (diretas e transitivas do `depends_on`). Preserva a proveniência (o arquivo lido é o gravado pelo produtor, com o mesmo hash) e não duplica dados; exige mudança em `sandbox.py` e parecer de segurança, porque abre leitura entre pastas de subtarefas.
+2. **Cópia para o `/outputs` da consumidora** antes da execução. Simples para o Developer (o caminho é o do prompt atual), mas duplica dados, mistura insumo com produto no `/outputs` (o Validator e a proveniência passariam a ver artefatos que a subtarefa não produziu) e precisa de lista de exclusão.
+3. **Só instruir** (item 10 do contrato com o caminho real, sem entrega). Barato, mas não resolve: o arquivo continua ausente.
+
+Recomendação: opção 1, em mudança OpenSpec própria (`v18.7-dependency-artifacts`), depois desta; o contrato ganharia o item 10 apontando para os caminhos montados. Enquanto não houver decisão, as seções 1 a 7 seguem sem esse item.

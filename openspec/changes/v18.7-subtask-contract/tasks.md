@@ -1,19 +1,20 @@
 # Tarefas: v18.7-subtask-contract
 
-**Estado (2026-10-15):** não iniciada.
+**Estado (2026-10-18):** em andamento. Seção 0 em revisão (PR da especificação): spec confrontada com o código (design §13) e achado novo registrado (design §14, aguarda decisão do pesquisador). Seções 1 a 7 não iniciadas.
 
 ## 0. Pré-requisitos
-- [ ] 0.1 Mudança aprovada pelo pesquisador, com as questões do design §11 decididas.
-- [ ] 0.2 Parecer do Analista de Segurança registrado no design §8.
-- [ ] 0.3 `v18.7-hypothesis-linking` mergeada (papel do experimento e hipótese do sistema); conferir no código os nomes reais dos campos usados nos itens 1 e 4. Se `v18.7-exploration-limits` já estiver mergeada (recomendado, mesma onda), rebase: o parecer tipado de revisão (design §6.3) preserva os campos `predicoes` e `viola_restricao` que aquela mudança acrescentou, e o item 6 usa o tipo do objetivo.
-- [ ] 0.4 Revisar a spec contra o código (`src/autonomous_loop.py`, `src/llm/agent_loop.py`, `src/agents/validator_agent.py`) e ajustar as referências de linha; criar o worktree `.worktrees/feat-v18.7-subtask-contract`.
-- [ ] 0.9 Divisão do módulo grande antes do comportamento novo (ADR 024 §5), só movendo código, com a suíte verde antes de seguir: `src/orchestration/orchestrator.py`: extrair para módulo próprio em `src/orchestration/` os construtores de contexto por papel e o contrato da subtarefa. Os caminhos citados nesta mudança valem pela tabela de `v18.7-source-layout`.
+- [x] 0.1 Mudança aprovada pelo pesquisador, com as questões do design §11 decididas.
+- [x] 0.2 Parecer do Analista de Segurança registrado no design §8.
+- [x] 0.3 `v18.7-hypothesis-linking` mergeada (papel do experimento e hipótese do sistema); conferir no código os nomes reais dos campos usados nos itens 1 e 4. Se `v18.7-exploration-limits` já estiver mergeada (recomendado, mesma onda), rebase: o parecer tipado de revisão (design §6.3) preserva os campos `predicoes` e `viola_restricao` que aquela mudança acrescentou, e o item 6 usa o tipo do objetivo.
+- [x] 0.4 Revisar a spec contra o código (`src/autonomous_loop.py`, `src/llm/agent_loop.py`, `src/agents/validator_agent.py`) e ajustar as referências de linha; criar o worktree `.worktrees/feat-v18.7-subtask-contract`.
+- [x] 0.9 Substituída pela 2.0: o módulo do contrato mora em `src/agents/subtask_contract.py` (camadas, design §13), então a extração dos construtores existentes é feita ao criá-lo. Os caminhos citados nesta mudança valem pela tabela do design §13.
 
 ## 1. Configuração
 - [ ] 1.1 `SUBTASK_CONTRACT_ENABLED`, `CONTRACT_TASK_MAX_CHARS`, `CONTRACT_FIELD_MAX_CHARS`, `REVIEW_INTEGRITY_ALWAYS`, `REVIEW_SCRIPT_MAX_CHARS`, `REVIEW_OBSERVATIONS_MAX` e `PLAN_ARTIFACT_COLLISION_CHECK` em `src/config.py` e `.env.example` (design §9).
 
 ## 2. Contrato e construtores
-- [ ] 2.1 `src/subtask_contract.py`: `MetricKey`, `ProblemObjective`, `SubtaskContract` (com `sha256()` e `fragments()`), `INTEGRITY_RULES` e os quatro construtores (design §2).
+- [ ] 2.0 Mover para `src/agents/subtask_contract.py`, sem mudar comportamento e com a suíte verde, os construtores de contexto do Researcher (`_run_planning_loop`) e do Validator do plano (ADR 024 §5).
+- [ ] 2.1 `src/agents/subtask_contract.py`: `MetricKey`, `ProblemObjective`, `SubtaskContract` (com `sha256()` e `fragments()`), `INTEGRITY_RULES` e os quatro construtores (design §2).
 - [ ] 2.2 Layout do bloco do design §3, com "não se aplica" para itens vazios e corte literal do item 5.
 - [ ] 2.3 Derivação das chaves de métrica (split, vocabulário, termo novo) e dos consumidores pelo `depends_on` inverso.
 - [ ] 2.4 Testes: cenários "Itens do contrato", "Preparação sem hipótese própria", "Métrica fora do vocabulário", "Tarefa original longa", "Ponto único de montagem"; teste de estabilidade do hash (mesmos campos, mesmo hash; ordem de chaves irrelevante).
@@ -40,7 +41,7 @@
 - [ ] 5.6 Testes: "Critério fraco vira observação", "Integridade reprova sempre", "Formato antigo do parecer", "Hash do contrato no parecer", "Só critérios de métrica, aprovados", "Integridade desligada", "Métrica literal", "Chave sem qualificador presente", "Ambiguidade", "Ambiguidade repetida", "Critério cita a chave qualificada", "Observação no replanejamento", "Artefato consumido no contrato"; atualizar os testes de `v18.6-review-evidence` do cenário "Grupo não nomeado" e rodar os demais cenários modificados sem mudança de resultado.
 
 ## 6. Validação do plano
-- [ ] 6.1 `validate_plan` com `problem` (fragmento `contrato:objetivo`) e chamada atualizada em `src/orchestrator.py:2238`.
+- [ ] 6.1 `validate_plan` com `problem` (fragmento `contrato:objetivo`) e chamada atualizada na chamada de `validate_plan` em `src/orchestration/orchestrator.py`.
 - [ ] 6.2 Colisão de artefatos (fecho de `depends_on`), aviso `artefato_atualizado`.
 - [ ] 6.3 Teto dos campos do contrato na validação; padrão de nome de artefato no normalizador.
 - [ ] 6.4 Regra `criterio_sem_chave` na instrução do Validator do plano.

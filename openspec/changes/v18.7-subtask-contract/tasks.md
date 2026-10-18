@@ -1,6 +1,6 @@
 # Tarefas: v18.7-subtask-contract
 
-**Estado (2026-10-18):** em andamento. Seções 0 (#203), 1 (#204), 2 (#205), 3 (#206) e 4 concluídas; achado das dependências decidido (design §14: mudança própria `v18.7-dependency-artifacts`, caminho `/deps_out/<projeto>/<task_name>`). Seções 5 a 7 não iniciadas.
+**Estado (2026-10-18):** em andamento. Seções 0 (#203), 1 (#204), 2 (#205), 3 (#206), 4 (#207) e 5.1 a 5.3 concluídas (revisão com contrato, parecer tipado, integridade sempre ativa); faltam 5.4 a 5.6 (chaves de métrica, `criterio_ambiguo`, observações ao Researcher) e as seções 6 e 7. Achado das dependências decidido (design §14: mudança própria `v18.7-dependency-artifacts`, caminho `/deps_out/<projeto>/<task_name>`).
 
 ## 0. Pré-requisitos
 - [x] 0.1 Mudança aprovada pelo pesquisador, com as questões do design §11 decididas.
@@ -33,9 +33,9 @@
 - [x] 4.3 Testes: "Critério com instrução embutida", "Rótulo de origem do texto do Researcher", "Researcher com dados brutos, Developer sem", "Researcher sem dados brutos", "Nome com dado", "Developer local, Validator de nuvem", "Developer e Validator sem restrição".
 
 ## 5. Revisão de subtarefa
-- [ ] 5.1 `review_result` recebe o contrato; mensagem com contrato, regras de integridade, evidência, script executado e resposta (design §6.2).
-- [ ] 5.2 Parecer tipado, guarda determinística e leitura do formato antigo (design §6.3); `ReviewResult.typed_issues`, `observations`, `contract_sha256`; evento `subtask_review` com `contrato_sha256` e `observacoes`.
-- [ ] 5.3 Integridade sempre revisada (`REVIEW_INTEGRITY_ALWAYS`) e reprovação por métrica literal via `read_literal_findings`.
+- [x] 5.1 `review_result` recebe o contrato; mensagem com contrato, regras de integridade, evidência, script executado e resposta (design §6.2).
+- [x] 5.2 Parecer tipado, guarda determinística e leitura do formato antigo (design §6.3); `ReviewResult.typed_issues`, `observations`, `contract_sha256`; evento `subtask_review` com `contrato_sha256` e `observacoes`.
+- [x] 5.3 Integridade sempre revisada (`REVIEW_INTEGRITY_ALWAYS`) e reprovação por métrica literal via `read_literal_findings`.
 - [ ] 5.4 Tabela de chaves de métrica do design §5; desfecho `criterio_ambiguo`; `UsageTracker.refund_task_attempt`, no máximo uma devolução por `task_name` em cada sessão, com `devolucao_recusada` no evento (design §8.1 item 10); checkpoint `falhou` com `causa_falha = "ambigua"`.
 - [ ] 5.5 Observações e casos `criterio_ambiguo` no `feedback` do replanejamento (design §6.4).
 - [ ] 5.6 Testes: "Critério fraco vira observação", "Integridade reprova sempre", "Formato antigo do parecer", "Hash do contrato no parecer", "Só critérios de métrica, aprovados", "Integridade desligada", "Métrica literal", "Chave sem qualificador presente", "Ambiguidade", "Ambiguidade repetida", "Critério cita a chave qualificada", "Observação no replanejamento", "Artefato consumido no contrato"; atualizar os testes de `v18.6-review-evidence` do cenário "Grupo não nomeado" e rodar os demais cenários modificados sem mudança de resultado.

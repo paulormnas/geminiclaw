@@ -24,7 +24,8 @@ from src import config
 from src.artifacts.profile import read_head_text
 from src.egress.filters import mask_numbers
 from src.egress.gate import role_tainted
-from src.knowledge.metric_criteria import criterion_comparisons
+from src.knowledge.metric_criteria import _METRIC_ALIASES, criterion_comparisons
+from src.numeric_refs.literal_metrics import read_task_findings
 from src.utils.egress_fragments import (
     ARTIFACT_NAMES_SOURCE,
     CONTRACT_SOURCE_PREFIX,
@@ -33,7 +34,7 @@ from src.utils.egress_fragments import (
     labeled,
     strip_marks,
 )
-from src.utils.normalization import normalize_metric_name
+from src.utils.normalization import normalize_metric_name, split_metric_name
 
 CONTRACT_VERSION = 1
 
@@ -160,8 +161,6 @@ def _snake(text: str) -> str:
 
 def _alias_word(raw_name: str, known_metric: str | None) -> str:
     """Palavra do nome citado que identifica a métrica conhecida ("acurácia no teste" -> ``acuracia``)."""
-    from src.knowledge.metric_criteria import _METRIC_ALIASES  # tabela de sinônimos da avaliação de critérios
-
     for word in re.split(r"\s+", raw_name.strip()):
         norm = normalize_metric_name(word)
         if _METRIC_ALIASES.get(norm) == known_metric and norm:
@@ -177,8 +176,6 @@ def _direction(operator: str) -> str | None:
 def _metric_keys(
     criteria: Sequence[tuple[str, str]], objective: ProblemObjective | None, resolver: MetricResolver | None
 ) -> tuple[MetricKey, ...]:
-    from src.knowledge.metric_criteria import _METRIC_ALIASES
-
     objective_key = _METRIC_ALIASES.get(normalize_metric_name(objective.metric)) if objective else None
     found: dict[tuple[str, str], dict[str, Any]] = {}
     for cid, text in criteria:
@@ -460,6 +457,113 @@ def _render(c: SubtaskContract) -> list[PromptFragment]:
 # ---------------------------------------------------------------------------
 # Revisão de subtarefa e validação do plano
 # ---------------------------------------------------------------------------
+
+_MAX_OBSERVATIONS = 20
+_OBSERVATION_CHARS = 400
+MOTIVO_ISSUE_SEM_TIPO = "issue_sem_tipo"
+
+
+def _family(name: str) -> str:
+    """Família de uma métrica: o sinônimo conhecido (``test_accuracy`` -> ``accuracy``) ou o nome base normalizado."""
+    base = split_metric_name(name).base
+    return _METRIC_ALIASES.get(base, base)
+
+
+def literal_metric_issues(contract: SubtaskContract, session_dir: Path | str | None) -> list[dict[str, str]]:
+    """Métricas do item 7 gravadas como literal no script da subtarefa (reprovação determinística por integridade).
+
+    Lê os achados da execução (``metricas_literais/<tarefa>.json``). Sem item 7 ou sem achado, vazio.
+    """
+    if session_dir is None or not contract.metric_keys:
+        return []
+    required = {_family(k.qualified.split(".")[-1] if k.qualified else k.canonical) for k in contract.metric_keys}
+    issues: list[dict[str, str]] = []
+    for finding in read_task_findings(Path(session_dir), contract.task_name):
+        name = str(finding.get("metrica", ""))
+        if _family(name) in required:
+            issues.append({
+                "tipo": "integridade", "regra": "metricas_calculadas",
+                "texto": f"a métrica '{name}' é um valor literal no código (linha {finding.get('linha', '?')}), "
+                         "não calculada a partir dos dados",
+            })
+    return issues
+
+
+@dataclass(frozen=True)
+class GuardedReview:
+    """Parecer do revisor depois da guarda determinística (design §6.3)."""
+
+    issues: tuple[dict[str, str], ...]  # só problemas válidos: aceite com id de critério, integridade com id de regra
+    observations: tuple[str, ...]
+    untyped: int  # problemas em texto livre que não casaram com nenhum critério (``issue_sem_tipo``)
+
+    @property
+    def failed(self) -> bool:
+        return bool(self.issues)
+
+
+def _text(value: Any) -> str:
+    return clean_plan_text(value)[:_OBSERVATION_CHARS]
+
+
+def guard_review(
+    parsed: Mapping[str, Any],
+    contract: SubtaskContract,
+    rules: Sequence[IntegrityRule],
+    allowed_criteria: Sequence[str] | None = None,
+) -> GuardedReview:
+    """Aplica a guarda: o revisor só reprova citando o id de um critério do contrato ou de uma regra de integridade.
+
+    Problema de ``aceite`` cujo ``item`` não é um dos critérios enviados ao revisor, ou de ``integridade`` cuja
+    ``regra`` não está na lista, vira observação. Texto livre (formato antigo) só fica como ``aceite`` se contiver
+    literalmente o texto de um critério; senão vira observação e conta como ``issue_sem_tipo``. O status final é
+    recalculado por quem chama: ``fail`` se e só se sobra ao menos um problema válido.
+    """
+    criteria = dict(contract.criteria)
+    allowed = set(allowed_criteria) if allowed_criteria is not None else set(criteria)
+    rule_ids = {r.id for r in rules}
+    valid: list[dict[str, str]] = []
+    observations: list[str] = []
+    untyped = 0
+    raw_issues = parsed.get("issues")
+    for item in raw_issues if isinstance(raw_issues, list) else []:
+        if isinstance(item, Mapping):
+            inferred = "integridade" if item.get("regra") else "aceite" if item.get("item") else ""
+            kind = str(item.get("tipo") or inferred)
+            text = _text(item.get("texto") or item.get("feedback") or item.get("descricao") or "")
+            if kind == "aceite" and str(item.get("item")) in allowed:
+                valid.append({"tipo": "aceite", "item": str(item["item"]), "texto": text})
+                continue
+            if kind == "integridade" and str(item.get("regra")) in rule_ids:
+                valid.append({"tipo": "integridade", "regra": str(item["regra"]), "texto": text})
+                continue
+            observations.append(text or _text("; ".join(f"{k}: {v}" for k, v in item.items())))
+            continue
+        text = _text(item)
+        match = next(
+            (cid for cid, ctext in criteria.items() if cid in allowed and ctext and ctext.lower() in text.lower()),
+            None,
+        )
+        if match is not None:
+            valid.append({"tipo": "aceite", "item": match, "texto": text})
+        else:
+            untyped += 1
+            observations.append(text)
+    raw_obs = parsed.get("observacoes")
+    for item in raw_obs if isinstance(raw_obs, list) else []:
+        observations.append(_text(item))
+    seen: list[str] = []
+    for obs in observations:
+        if obs and obs not in seen:
+            seen.append(obs)
+    return GuardedReview(tuple(valid), tuple(seen[:_MAX_OBSERVATIONS]), untyped)
+
+
+def issue_line(issue: Mapping[str, str]) -> str:
+    """Texto do problema válido para ``ReviewResult.issues`` (cita o id)."""
+    ref = issue.get("item") or issue.get("regra") or ""
+    return f"{ref}: {issue.get('texto', '')}".strip(": ")
+
 
 
 def build_review_context(contract: SubtaskContract, integrity_rules: Sequence[IntegrityRule]) -> list[PromptFragment]:

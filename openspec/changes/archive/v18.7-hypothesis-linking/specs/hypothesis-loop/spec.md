@@ -5,7 +5,7 @@ Convenções dos cenários: grafo `InMemoryGraphStore` com o vocabulário semead
 ## MODIFIED Requirements
 
 ### Requirement: Hipóteses formais no plano
-_Origem: ADR 021 §1, §2.1 e §3 (antes: [`v18-hypothesis-loop`](../../../archive/v18-hypothesis-loop/proposal.md))_
+_Origem: ADR 021 §1, §2.1 e §3 (antes: [`v18-hypothesis-loop`](../../../v18-hypothesis-loop/proposal.md))_
 O Researcher SHALL declarar as hipóteses do plano e SHOULD referenciar em cada subtarefa de teste a hipótese que ela testa (`hypothesis_ref`) e declarar o `papel` de cada subtarefa. O sistema SHALL gravar as hipóteses declaradas como nós `Hipotese` ligados ao problema. A falta de `hypothesis_ref` ou de `papel` MUST NOT reprovar o plano nem retirar a subtarefa: o sistema SHALL derivar a ligação e registrá-la.
 (Antes: cada subtarefa SHALL referenciar a hipótese que testa, e a subtarefa sem referência era retirada por `sem_hipotese`.)
 
@@ -33,7 +33,7 @@ O Researcher SHALL declarar as hipóteses do plano e SHOULD referenciar em cada 
 - **AND** a subtarefa com `papel = "exploratoria"` é classificada como se não tivesse o campo, e o retorno ao Researcher registra `papel_invalido`
 
 ### Requirement: Resultado negativo na revisão
-_Origem: ADR 021 §8.1 e §8.2 (antes: [`v18.6-auto-metrics-and-stop-reasons`](../../../archive/v18.6-auto-metrics-and-stop-reasons/proposal.md))_
+_Origem: ADR 021 §8.1 e §8.2 (antes: [`v18.6-auto-metrics-and-stop-reasons`](../../../v18.6-auto-metrics-and-stop-reasons/proposal.md))_
 O revisor SHALL devolver `outcome = "resultado_negativo"` quando a subtarefa tem hipótese resolvida (declarada ou do sistema), todos os artefatos esperados foram resolvidos e as únicas reprovações são comparações determinísticas com a métrica presente e numérica, com os demais critérios aprovados. Em qualquer outro caso de reprovação, inclusive falha de execução e artefato ou `metrics.json` ausente, o `outcome` SHALL ser `reprovado`. O revisor MUST NOT registrar o motivo `sem_hipotese`. Quando a hipótese da subtarefa tem `origem = "sistema"`, o revisor SHALL registrar o motivo `hipotese_do_sistema` em `motivos`, no resultado e no evento `subtask_review`, sem alterar `status` nem `outcome`.
 (Antes: o revisor registrava `sem_hipotese` quando só faltava a hipótese para o resultado ser negativo.)
 

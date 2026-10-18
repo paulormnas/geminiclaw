@@ -5,7 +5,7 @@ Cenários avaliados pela checagem estrutural determinística do Validator do pla
 ## MODIFIED Requirements
 
 ### Requirement: Limiar numérico obrigatório em subtarefa confirmatória
-_Origem: ADR 021 §2 (antes: [`v18.6-review-evidence`](../../../archive/v18.6-review-evidence/proposal.md))_
+_Origem: ADR 021 §2 (antes: [`v18.6-review-evidence`](../../../v18.6-review-evidence/proposal.md))_
 O Validator SHALL reprovar de forma determinística um plano com subtarefa `reproduction`, ou `validation` com `hypothesis_ref` preenchido, sem critério quantitativo. Subtarefa `validation` declarada com `papel = "referencia"` SHALL passar pela checagem estrutural sem limiar numérico e sem aviso, e o evento `plan_validation` SHALL registrar o papel declarado. Subtarefa `validation` sem `hypothesis_ref` e sem `papel` SHALL passar pela checagem estrutural, com aviso `validation_sem_hipotese` no evento `plan_validation`. A ausência ou o valor inválido de `papel` MUST NOT reprovar o plano.
 (Antes: o baseline era reconhecido só por não ter `hypothesis_ref` e sempre gerava o aviso `validation_sem_hipotese`.)
 

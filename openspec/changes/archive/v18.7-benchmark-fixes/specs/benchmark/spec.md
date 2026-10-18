@@ -4,7 +4,7 @@
 
 ### Requirement: Classificação dos motivos de parada
 _Esta redação vale até `v18.7-exploration-limits` (onda 3), que a substitui por uma versão que a contém por inteiro e acrescenta `limite_custo`, `saturacao` e `planos_rejeitados`._
-_Origem: [`v18.6-auto-metrics-and-stop-reasons`](../../../archive/v18.6-auto-metrics-and-stop-reasons/proposal.md); modificado por `v18.7-benchmark-fixes`._
+_Origem: [`v18.6-auto-metrics-and-stop-reasons`](../../../v18.6-auto-metrics-and-stop-reasons/proposal.md); modificado por `v18.7-benchmark-fixes`._
 O benchmark SHALL classificar o `motivo_parada` de cada execução em `limite`, `erro`, `interrupcao`, `criterio_pesquisa` ou `hipoteses_nao_testadas`. Somente `limite`, `erro` e `interrupcao` SHALL ser anomalia. `versao_modelo` SHALL ser classificado como `limite` (anomalia: a comparação exige sessões completas com a versão declarada) e só ocorre porque a bateria define `ON_MODEL_VERSION_CHANGE=parar`. `limite_cota_provedor` SHALL ser classificado como `limite` e listado no relatório com o provedor e o modelo do evento `cota_provedor_esgotada`. `hipoteses_nao_testadas` SHALL ser tratado como parada de pesquisa, listado no relatório e nunca contado como erro. O resumo de interações SHALL contar os motivos de reprovação de subtarefa (`sem_hipotese`).
 
 #### Scenario: Parada por hipótese não testada não é anomalia

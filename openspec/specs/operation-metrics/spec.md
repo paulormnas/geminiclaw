@@ -3,7 +3,7 @@
 Verdade atual consolidada a partir das mudanças arquivadas (2026-10-13). Cada requisito indica a
 mudança que o definiu por último; os cenários vêm do delta original, em GIVEN/WHEN/THEN.
 
-**Mudanças de origem:** [`v18.5-operation-metrics`](../../changes/archive/v18.5-operation-metrics/proposal.md), [`v18.6-auto-metrics-and-stop-reasons`](../../changes/archive/v18.6-auto-metrics-and-stop-reasons/proposal.md)
+**Mudanças de origem:** [`v18.5-operation-metrics`](../../changes/archive/v18.5-operation-metrics/proposal.md), [`v18.6-auto-metrics-and-stop-reasons`](../../changes/archive/v18.6-auto-metrics-and-stop-reasons/proposal.md), [`v18.7-resource-monitor-config`](../../changes/archive/v18.7-resource-monitor-config/proposal.md), [`v18.7-benchmark-fixes`](../../changes/archive/v18.7-benchmark-fixes/proposal.md), [`v18.7-exploration-limits`](../../changes/archive/v18.7-exploration-limits/proposal.md)
 
 ## Requirements
 
@@ -81,50 +81,39 @@ sessão como condição de parada graciosa, com `motivo_parada="limite_egresso"`
 - **AND** a sessão pode ser retomada
 
 ### Requirement: Modo sem limite explícito
-_Origem: [`v18.5-operation-metrics`](../../changes/archive/v18.5-operation-metrics/proposal.md)_
-O sistema SHALL oferecer o modo sem limite apenas por opção explícita do pesquisador, por
-sessão (`--unlimited`) ou por projeto, e SHALL exigir confirmação interativa no início de cada
-execução. O modo SHALL NOT ser ativado por padrão, por variável de ambiente, por configuração
-ou por qualquer agente.
+_Origem: [`v18.7-exploration-limits`](../../changes/archive/v18.7-exploration-limits/proposal.md)_
+O sistema SHALL oferecer o modo sem limite apenas por opção explícita do pesquisador, por sessão (`--unlimited`) ou por projeto, e SHALL exigir confirmação no início de cada execução, no terminal (ADR 023 §1) ou pelo gate persistente quando a sessão já roda em segundo plano. O modo SHALL NOT ser ativado por padrão, por variável de ambiente, por configuração ou por qualquer agente. O texto da confirmação SHALL dizer que tokens, tempo, custo e volume de egresso não interrompem a sessão e que, sem limites, não há parada automática garantida: a sessão segue até o objetivo (conforme a política), a falta de caminho, a saturação, o pesquisador ou uma falha. O texto SHALL dizer também que, no `auto`, a sessão pode rodar indefinidamente e que só `wait_for_health` e `SANDBOX_MIN_FREE_BYTES` protegem o hardware (ADR 021 §5.4, §5.5; parecer de segurança, item 5).
 
 #### Scenario: Ativação por sessão confirmada
 - **WHEN** o pesquisador executa `geminiclaw --unlimited "<prompt>"` e digita "sem limite" na confirmação
-- **THEN** a sessão inicia com `UsageBudget(unlimited=True)` e `payload["budget"]` registra `unlimited=true`, a origem `cli` e o instante da confirmação
+- **THEN** a sessão inicia com `UsageBudget(unlimited=True)`, `max_cost_usd = None`, e `payload["budget"]` registra `unlimited=true`, a origem `cli` e o instante da confirmação
+
+#### Scenario: Texto da confirmação
+- **WHEN** a confirmação é exibida
+- **THEN** o texto contém "custo" e "não há parada automática garantida"
+- **AND** o texto contém "indefinidamente", `wait_for_health` e `SANDBOX_MIN_FREE_BYTES`
 
 #### Scenario: Confirmação ausente
 - **WHEN** o pesquisador executa com `--unlimited` e responde outra coisa, ou não há terminal interativo
 - **THEN** a sessão não inicia e a CLI sai com mensagem acionável
 - **AND** a sessão não é iniciada no modo limitado em seu lugar
 
-#### Scenario: Ativação por projeto
-- **GIVEN** o projeto marcado com `geminiclaw project unlimited <id> --on`
-- **WHEN** uma nova execução do projeto começa
-- **THEN** a confirmação é pedida e, confirmada, a sessão registra a origem `projeto`
-
-#### Scenario: Retomada não herda o modo
-- **GIVEN** uma sessão anterior no modo sem limite, em projeto sem a marcação
-- **WHEN** o pesquisador executa `geminiclaw continue --project <id>` sem `--unlimited`
-- **THEN** a nova sessão usa o orçamento limitado de `config`
-
 #### Scenario: Agente não ativa o modo
 - **GIVEN** uma sessão limitada
-- **WHEN** um agente produz plano, resposta ou mensagem IPC pedindo execução sem limite
+- **WHEN** um agente produz plano, resposta ou mensagem pedindo execução sem limite
 - **THEN** o orçamento da sessão permanece igual ao do início
 
 #### Scenario: Opções incompatíveis
-- **WHEN** o pesquisador combina `--unlimited` com `--max-tokens`, `--max-minutes` ou `--max-egress-bytes`
+- **WHEN** o pesquisador combina `--unlimited` com `--max-tokens`, `--max-minutes`, `--max-egress-bytes` ou `--max-cost-usd`
 - **THEN** a CLI recusa o orçamento com erro e não inicia a sessão
 
 ### Requirement: Limites removidos e mantidos no modo sem limite
-_Origem: [`v18.5-operation-metrics`](../../changes/archive/v18.5-operation-metrics/proposal.md)_
-No modo sem limite, o sistema SHALL NOT parar a sessão por tokens, tempo, custo ou volume de
-egresso, e SHALL manter os limites de retentativas da mesma tarefa e de conexão, os
-critérios de parada da V18, as rejeições consecutivas do Validator e o circuit breaker de
-progresso zero.
+_Origem: [`v18.7-exploration-limits`](../../changes/archive/v18.7-exploration-limits/proposal.md)_
+No modo sem limite, o sistema SHALL NOT parar a sessão por tokens, tempo, custo ou volume de egresso, e SHALL manter os limites de retentativas da mesma tarefa e de conexão, a parada pelo objetivo do `Problema` conforme a política, a falta de caminhos, as rejeições consecutivas do Validator, o disjuntor de progresso zero, a estagnação com intervenção e a saturação (ADR 021 §5.4, §5.5).
 
-#### Scenario: Tokens e tempo não param
+#### Scenario: Tokens, tempo e custo não param
 - **GIVEN** uma sessão no modo sem limite
-- **WHEN** o consumo ultrapassa `SESSION_MAX_TOKENS` e o tempo ultrapassa `SESSION_MAX_MINUTES`
+- **WHEN** o consumo ultrapassa `SESSION_MAX_TOKENS`, o tempo ultrapassa `SESSION_MAX_MINUTES` e o custo ultrapassa `SESSION_MAX_COST_USD`
 - **THEN** a sessão continua despachando trabalho
 
 #### Scenario: Retentativas continuam limitadas
@@ -132,20 +121,15 @@ progresso zero.
 - **WHEN** as retentativas de conexão atingem `max_connection_retries`
 - **THEN** a sessão fecha com `motivo_parada="limite_conexao"`
 
-#### Scenario: Retentativas da mesma tarefa
-- **GIVEN** uma sessão no modo sem limite
-- **WHEN** uma tarefa atinge `max_task_retries`
-- **THEN** a tarefa é abandonada, como no modo limitado
-
-#### Scenario: Solução encontrada
-- **GIVEN** uma sessão `auto` no modo sem limite
-- **WHEN** o critério `solucao_encontrada` é satisfeito
+#### Scenario: Objetivo atingido
+- **GIVEN** uma sessão `auto` no modo sem limite e política `parar`
+- **WHEN** o objetivo é atingido
 - **THEN** a sessão fecha com `motivo_parada="solucao_encontrada"`
 
-#### Scenario: Sem caminhos promissores
-- **GIVEN** uma sessão no modo sem limite
-- **WHEN** não há hipótese nova, aprovada pendente nem sugestão do Curator
-- **THEN** a sessão fecha com `motivo_parada="sem_caminhos_promissores"`
+#### Scenario: Saturação continua valendo
+- **GIVEN** uma sessão `auto` no modo sem limite com a saturação do `limiar` confirmada depois das intervenções
+- **WHEN** a paciência se esgota
+- **THEN** a sessão fecha com `motivo_parada="saturacao"`
 
 ### Requirement: Localidade inalterada no modo sem limite
 _Origem: [`v18.5-operation-metrics`](../../changes/archive/v18.5-operation-metrics/proposal.md)_
@@ -210,14 +194,18 @@ relatório final.
 - **AND** a seção "Métricas de operação" do relatório indica o modo e a origem
 
 ### Requirement: Avisos G5 sobre o orçamento efetivo
-_Origem: [`v18.5-operation-metrics`](../../changes/archive/v18.5-operation-metrics/proposal.md)_
-O sistema SHALL calcular os percentuais dos avisos operacionais da Spec G5 sobre o orçamento
-efetivo da sessão e SHALL omitir os avisos de tokens, tempo e custo no modo sem limite.
+_Origem: [`v18.7-exploration-limits`](../../changes/archive/v18.7-exploration-limits/proposal.md)_
+O sistema SHALL calcular os percentuais dos avisos operacionais da Spec G5 sobre o orçamento efetivo da sessão, inclusive o custo (`OPERATIONAL_THRESHOLD_COST_USAGE_PCT`, padrão 0.80, fração de `max_cost_usd`), SHALL omitir os avisos de tokens, tempo e custo no modo sem limite e MUST NOT emitir aviso de execuções de agente (não há limite de execuções, ADR 021 §5.1).
 
 #### Scenario: Override da CLI respeitado
 - **GIVEN** `SESSION_MAX_TOKENS=500000` e a sessão iniciada com `--max-tokens 100000`
 - **WHEN** o consumo chega a 80 000 tokens
 - **THEN** o aviso de `token_usage_pct` (0,80) é emitido
+
+#### Scenario: Aviso de custo por percentual
+- **GIVEN** `--max-cost-usd 5` e `OPERATIONAL_THRESHOLD_COST_USAGE_PCT=0.80`
+- **WHEN** o custo estimado chega a US$ 4,00
+- **THEN** o aviso de `cost_usage_pct` (0,80) é emitido
 
 ### Requirement: Motivos de parada e de reprovação nas métricas de operação
 _Origem: [`v18.6-auto-metrics-and-stop-reasons`](../../changes/archive/v18.6-auto-metrics-and-stop-reasons/proposal.md)_
@@ -234,3 +222,64 @@ o motivo de parada `hipoteses_nao_testadas` com a contagem de hipóteses sem ten
 - **GIVEN** `stop_reason = "hipoteses_nao_testadas"`
 - **WHEN** a seção é renderizada
 - **THEN** o texto contém o motivo e a explicação "hipóteses em teste sem nenhuma tentativa"
+
+### Requirement: Instantâneo de hardware sem valores fixos
+_Origem: [`v18.7-resource-monitor-config`](../../changes/archive/v18.7-resource-monitor-config/proposal.md)_
+O instantâneo de hardware gravado após cada subtarefa (`hardware_snapshots`) SHALL conter somente valores lidos pelo `HealthMonitor`, com `NULL` para o que a plataforma não expõe; `is_throttled` SHALL ser a temperatura frente a `TEMPERATURE_LIMIT` e SHALL ser `NULL` sem limite configurado ou sem leitura de temperatura; os picos de CPU, RAM e temperatura nas métricas de operação SHALL ser `null` quando não houver leitura (ADR 023 §1.1, itens 1 e 2).
+
+#### Scenario: macOS sem sensor
+- **GIVEN** um monitor simulado sem temperatura e com memória e CPU lidas
+- **WHEN** uma subtarefa termina com `HEALTH_CHECK_ENABLED=true`
+- **THEN** o instantâneo gravado tem `cpu_temp_c=NULL` e `is_throttled=NULL`, e `mem_available_mb` igual à leitura
+- **AND** `custo_recursos` nas métricas de operação traz pico de temperatura `null`
+
+#### Scenario: Limitação derivada
+- **GIVEN** `TEMPERATURE_LIMIT=75` e temperatura lida de 77,0 °C
+- **WHEN** o instantâneo é gravado
+- **THEN** `is_throttled=true`
+
+### Requirement: Egresso limitado separado do total
+_Origem: [`v18.7-benchmark-fixes`](../../changes/archive/v18.7-benchmark-fixes/proposal.md)_
+O grupo `egresso` SHALL registrar `bytes_limitados`, igual à soma de `bytes_saida_execucao_novos` da sessão (a mesma grandeza que o `UsageTracker` compara com `max_egress_bytes`), além de `bytes_total`. A seção Markdown "Métricas de operação" SHALL mostrar o limite ao lado de `bytes_limitados`, nunca ao lado de `bytes_total`, e SHALL nomear as duas grandezas.
+
+#### Scenario: Total acima do limite sem violação
+- **GIVEN** uma sessão com `bytes_total=3942301`, soma de `bytes_saida_execucao_novos` igual a 412000 e `limite_bytes=2000000`
+- **WHEN** a seção é renderizada
+- **THEN** o texto contém `3942301` como total enviado fora do nó e `412000 de 2000000` para as saídas de execução novas sujeitas ao limite
+- **AND** o grupo `egresso` traz `bytes_limitados=412000`
+
+#### Scenario: Igualdade com o contador do limite
+- **GIVEN** registros de `egress_log` de uma sessão em banco de teste
+- **WHEN** o leitor de `egresso` e o leitor de egresso do `UsageTracker` leem a sessão
+- **THEN** `bytes_limitados` é igual ao valor do `UsageTracker`
+
+### Requirement: Causas da cadeia divergente
+_Origem: [`v18.7-benchmark-fixes`](../../changes/archive/v18.7-benchmark-fixes/proposal.md)_
+O grupo `proveniencia` SHALL registrar em `cadeia.motivos` as contagens `cadeia`, `pares`, `arquivos_alterados`, `checkpoints_divergentes` e `conflitos_pendencia` somadas dos relatórios de `verify_session`, e `cadeia.arquivos_alterados_exemplos` com até 5 caminhos alterados.
+
+#### Scenario: Cadeia divergente por arquivo alterado
+- **GIVEN** um relatório de verificação com um arquivo `alterado` em `s1/treino/metrics.json` e nenhum outro problema
+- **WHEN** o leitor `proveniencia` lê a sessão
+- **THEN** `cadeia.resultado` é `divergente`, `cadeia.motivos.arquivos_alterados` é 1, as demais contagens são 0 e `cadeia.arquivos_alterados_exemplos` contém `s1/treino/metrics.json`
+
+### Requirement: Motivo de parada por cota descrito
+_Origem: [`v18.7-benchmark-fixes`](../../changes/archive/v18.7-benchmark-fixes/proposal.md)_
+`describe_stop_reason("limite_cota_provedor")` SHALL devolver o motivo com a explicação "cota ou teto de gasto esgotado no provedor; aumente o teto ou troque o provedor e retome a sessão".
+
+#### Scenario: Seção do relatório
+- **GIVEN** `stop_reason = "limite_cota_provedor"`
+- **WHEN** a seção é renderizada
+- **THEN** o texto contém `limite_cota_provedor` e `cota ou teto de gasto esgotado no provedor`
+
+### Requirement: Custo e execuções nas métricas de operação
+_Origem: [`v18.7-exploration-limits`](../../changes/archive/v18.7-exploration-limits/proposal.md)_
+O grupo `custo_recursos` SHALL registrar `custo_limite_usd` (ou `null` no modo sem limite), `custo_por_provedor` (US$ por provedor, `null` para provedor só com chamadas sem preço), `custo_limite_por_provedor` e `execucoes_agente` (`planejamento`, `execucao`). `describe_stop_reason` SHALL descrever `limite_custo` ("limite de custo da sessão atingido") e `saturacao` ("a melhora possível ficou abaixo do erro da medida depois das intervenções"), mantendo a descrição de `limite_cota_provedor` de `v18.7-benchmark-fixes`.
+
+#### Scenario: Custo por provedor
+- **GIVEN** uma sessão com custo `{"anthropic": 1.2, "google": 0.4}` e `max_cost_usd = 10`
+- **WHEN** as métricas são agregadas
+- **THEN** `custo_recursos.custo_por_provedor` é `{"anthropic": 1.2, "google": 0.4}` e `custo_limite_usd` é 10
+
+#### Scenario: Descrição dos motivos
+- **WHEN** `describe_stop_reason` recebe `limite_custo`, `saturacao` e `limite_cota_provedor`
+- **THEN** os três textos são não vazios e distintos

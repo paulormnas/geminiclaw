@@ -108,18 +108,40 @@ def project_graph(project_id: str, store: Any | None = None) -> dict[str, Any]:
 
 
 def project_graph_full(project_id: str, store: Any | None = None) -> dict[str, Any]:
-    """Nós (com propriedades) e arestas do subgrafo do projeto, para o arquivamento da repetição."""
+    """Nós (com propriedades) e arestas do subgrafo do projeto, para o arquivamento da repetição.
+
+    Inclui os nós ``Metrica`` (vocabulário, fora do projeto) ligados por ``MEDE`` aos ``Resultado`` do projeto, para
+    que o veredito possa ser recalculado do arquivo (``v18.8-verdict-lab``).
+    """
     try:
         if store is None:
             from src.knowledge.factory import open_raw_graph_store
 
             store = open_raw_graph_store()
         sub = store.project_subgraph(project_id)
+        nodes = list(sub.nodes)
+        edges = list(sub.edges)
+        known = {n.id for n in nodes}
+        seen_edges = {(e.src_id, e.rel_type, e.dst_id) for e in edges}
+        for result in [n for n in sub.nodes if n.label == "Resultado"]:
+            for edge in store.neighbors(result.id, ["MEDE"], "out", 1).edges:
+                if edge.src_id != result.id or edge.rel_type != "MEDE":
+                    continue
+                if edge.dst_id not in known:
+                    metric = store.get_node(edge.dst_id)
+                    if metric is None:
+                        continue
+                    nodes.append(metric)
+                    known.add(metric.id)
+                key = (edge.src_id, edge.rel_type, edge.dst_id)
+                if key not in seen_edges:
+                    edges.append(edge)
+                    seen_edges.add(key)
         return {
-            "nos": [{"id": n.id, "label": n.label, "propriedades": n.properties} for n in sub.nodes],
+            "nos": [{"id": n.id, "label": n.label, "propriedades": n.properties} for n in nodes],
             "arestas": [
                 {"origem": e.src_id, "tipo": e.rel_type, "destino": e.dst_id, "propriedades": e.properties}
-                for e in sub.edges
+                for e in edges
             ],
         }
     except Exception as exc:  # noqa: BLE001

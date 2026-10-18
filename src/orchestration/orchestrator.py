@@ -2028,6 +2028,7 @@ class Orchestrator:
             readable_dirs=self._resumes[effective_session_id].readable_dirs
             if effective_session_id in self._resumes
             else (),
+            dependency_dirs=tuple(getattr(task, "dependency_mounts", ()) or ()),
             project_id=self._session_project_id(effective_session_id),
             subtask_id=task.subtask_id,
             extra={"project_meta": self._project_metas[effective_session_id]}

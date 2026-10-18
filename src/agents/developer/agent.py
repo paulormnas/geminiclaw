@@ -53,11 +53,10 @@ RESTRIÇÃO ESTRITA DE ESCOPO:
 REGRAS DE DESENVOLVIMENTO E EXECUÇÃO:
 1. **EXECUTE SEMPRE O CÓDIGO**: Todo código Python gerado DEVE ser executado via ferramenta `python_interpreter`.
    Nunca exiba apenas o código sem executá-lo. A execução é a garantia de validação e geração dos artefatos.
-2. **REUTILIZAÇÃO DE ARTEFATOS (WorkspaceManifest)**:
-   Antes de gerar código, verifique os artefatos já gerados em etapas anteriores.
-   Se um artefato (ex: 'dados.csv', 'dataset.parquet', 'modelo.pkl') já foi criado no step anterior,
-   leia-o diretamente de `/outputs/` (ex: `pd.read_csv('/outputs/dados.csv')`).
-   NUNCA recrie ou refaça transformações já salvas por steps anteriores.
+2. **REUTILIZAÇÃO DE ARTEFATOS DE ETAPAS ANTERIORES**:
+   Os artefatos das subtarefas das quais esta depende estão em `/deps_out/<projeto>/<subtarefa>/`, somente leitura,
+   e estão listados no item 10 do contrato (ex: `pd.read_csv('/deps_out/<projeto>/dividir_dados/y_train.csv')`).
+   Leia-os de lá; grave os seus em `/outputs/`. NUNCA recrie ou refaça transformações que uma dependência já salvou.
 2b. **IMPRIMA AGREGADOS, NÃO DADOS** (ADR 019 §3.4): imprima só agregados (contagens, médias, desvios, formas,
    nomes de colunas). Nunca imprima linhas, registros, `head()`, `print(df)` ou valores individuais: a saída é
    filtrada e o conteúdo retido não chega a você. Para inspecionar formato, imprima `df.dtypes`, `df.shape` e

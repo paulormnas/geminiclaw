@@ -15,7 +15,12 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
-from src.agents.subtask_contract import build_developer_contract, oversized_fields, threshold_masked
+from src.agents.subtask_contract import (
+    build_developer_contract,
+    dependency_files,
+    oversized_fields,
+    threshold_masked,
+)
 from src.artifacts.subtask_output import negative_result_feedback
 from src.config import (
     CIRCUIT_BREAKER_STALL_CYCLES,
@@ -30,6 +35,7 @@ from src.host.health import HealthMonitor
 from src.knowledge.suggestions import SuggestionError
 from src.logger import get_logger
 from src.observability.telemetry import get_telemetry
+from src.orchestration.dependency_artifacts import resolve_dependency_mounts
 from src.orchestration.errors import PlanningStalled
 from src.orchestration.exploration_contract import contract_applies
 from src.orchestration.exploration_feedback import review_observations_feedback
@@ -47,6 +53,7 @@ from src.session.continuity import (
     list_task_artifacts,
     plan_entry,
 )
+from src.skills.code.sandbox import dependency_target
 from src.skills.memory.short_term import ShortTermMemory
 from src.utils.egress_fragments import mark_artifact_names, mark_execution_output, taint_if
 from src.utils.terminal import print_status
@@ -735,7 +742,9 @@ class AutonomousLoop(LoopReportMixin):
         payload["divergence_reports"] = reports
         self.orchestrator.session_manager.update(master_session_id, payload=payload)
 
-    def _build_context_prefix(self, master_session_id: str, depends_on: list[str]) -> str:
+    def _build_context_prefix(
+        self, master_session_id: str, depends_on: list[str], mounted: Optional[Dict[str, str]] = None
+    ) -> str:
         """Constrói o prefixo de contexto das subtarefas anteriores das quais esta depende.
 
         Lê os resultados já completados da ShortTermMemory e monta um bloco de
@@ -746,6 +755,8 @@ class AutonomousLoop(LoopReportMixin):
         Args:
             master_session_id: ID da sessão mestra (chave da ShortTermMemory).
             depends_on: Lista de task_names cujos resultados devem ser incluídos.
+            mounted: ``task_name`` -> caminho no container (``/deps_out/...``) das dependências montadas; o contexto
+                mostra esse caminho em vez do caminho do host.
 
         Returns:
             String com o bloco de contexto pronta para prefilar o prompt,
@@ -761,7 +772,7 @@ class AutonomousLoop(LoopReportMixin):
             if entry:
                 try:
                     output = SubtaskOutput.from_json(entry.value)
-                    parts.append(output.to_context_string())
+                    parts.append(output.to_context_string(mounted_at=(mounted or {}).get(task_name)))
                 except Exception:
                     # Fallback para texto bruto se não for JSON válido (compatibilidade)
                     parts.append(f"### Resultado de `{task_name}`\n{taint_if(entry.value, tags_tainted(entry.tags))}")
@@ -838,14 +849,55 @@ class AutonomousLoop(LoopReportMixin):
         except Exception as exc:  # noqa: BLE001
             logger.warning("Falha ao registrar subtask_contract", extra={"error": str(exc)})
 
+    def _dependency_mounts(
+        self, task: "AgentTask", plan: List["AgentTask"], resumed_deps: Dict[str, List[str]],
+        dag_state: Dict[str, Any], resume: Any, master_session_id: str,
+    ) -> tuple[Any, ...]:
+        """Saídas das dependências concluídas da subtarefa, para a montagem somente leitura no sandbox (ADR 022 §9)."""
+        depends: Dict[str, List[str]] = {t.task_name: [*t.depends_on, *resumed_deps.get(t.task_name, [])] for t in plan}
+        concluded: Dict[str, str] = {
+            name: master_session_id for name, state in dag_state.items() if state.get("status") in DONE_STATUSES
+        }
+        if resume is not None:
+            for name, state in resume.completed.items():
+                concluded.setdefault(name, resume.source_session_id)
+                depends.setdefault(name, list(getattr(state, "depends_on", []) or []))
+        return resolve_dependency_mounts(
+            task.task_name, depends, concluded, self.orchestrator.output_manager.base_dir
+        )
+
+    def _dependency_listing(
+        self, mounts: tuple[Any, ...], plan: List["AgentTask"], master_session_id: str, project_id: Optional[str]
+    ) -> list[tuple[str, str, tuple[str, ...], int]]:
+        """Item 10 do contrato: caminho montado e arquivos de cada dependência (nome real quando há alias)."""
+        from src.artifacts.subtask_output import SubtaskOutput
+
+        listing = []
+        for mount in mounts:
+            expected = next((t.expected_artifacts for t in plan if t.task_name == mount.task_name), [])
+            aliases: Dict[str, str] = {}
+            entry = self._short_term_memory.read(master_session_id, f"result:{mount.task_name}")
+            if entry:
+                try:
+                    aliases = dict(SubtaskOutput.from_json(entry.value).artifact_aliases or {})
+                except Exception:  # noqa: BLE001 - sem alias a listagem usa os nomes presentes
+                    aliases = {}
+            files, extra = dependency_files(mount.source, expected, aliases)
+            listing.append((mount.task_name, dependency_target(project_id, mount.task_name) + "/", files, extra))
+        return listing
+
     async def _attempt_contract(
-        self, task: "AgentTask", plan: List["AgentTask"], original_task: str, master_session_id: str
+        self, task: "AgentTask", plan: List["AgentTask"], original_task: str, master_session_id: str,
+        mounts: tuple[Any, ...] = (), project_id: Optional[str] = None,
     ) -> "SubtaskContract":
         """Contrato da tentativa do Developer, a partir do plano vigente (ADR 022 §2)."""
+        listing = await asyncio.to_thread(self._dependency_listing, mounts, plan, master_session_id, project_id)
         exploration = self._exploration(master_session_id)
         if exploration is not None:
-            return await asyncio.to_thread(exploration.build_contract, task, plan, original_task)
-        return build_developer_contract(task, plan, None, original_task)
+            return await asyncio.to_thread(
+                exploration.build_contract, task, plan, original_task, dependency_artifacts=listing
+            )
+        return build_developer_contract(task, plan, None, original_task, dependency_artifacts=listing)
 
     def _exploration(self, master_session_id: str) -> "ExplorationSession | None":
         """Exploração ativa da sessão (v18-hypothesis-loop); ``None`` mantém o laço de ciclo único da V17."""
@@ -1220,10 +1272,14 @@ class AutonomousLoop(LoopReportMixin):
                 continue
             rejected_plans = 0
 
+            # v18.7-dependency-artifacts: dependências concluídas na sessão anterior saem de ``depends_on`` abaixo, mas
+            # o consumidor ainda lê as saídas delas (montagem em /deps_out); guardadas aqui antes da poda.
+            resumed_deps: Dict[str, List[str]] = {}
             if resume is not None:
                 # Dependências concluídas na sessão anterior têm o resultado pré-carregado: não exigem nó no plano.
                 names = {t.task_name for t in tasks if t.task_name}
                 for t in tasks:
+                    resumed_deps[t.task_name] = [d for d in t.depends_on if d not in names and d in resume.completed]
                     t.depends_on = [d for d in t.depends_on if d in names or d not in resume.completed]
             try:
                 # v18.7-hypothesis-linking §1: DAG inválido volta ao Researcher antes da governança (``prepare_cycle``
@@ -1507,7 +1563,13 @@ class AutonomousLoop(LoopReportMixin):
                 )
 
                 # V2: Constrói prefixo de contexto
-                context_prefix = self._build_context_prefix(master_session_id, task.depends_on)
+                project_id = self.orchestrator._session_project_id(master_session_id)
+                first_mounts = self._dependency_mounts(task, tasks, resumed_deps, dag_state, resume, master_session_id)
+                context_prefix = self._build_context_prefix(
+                    master_session_id,
+                    task.depends_on,
+                    {m.task_name: dependency_target(project_id, m.task_name) for m in first_mounts},
+                )
                 # v18.5-egress-gate — prompt escrito por modelo que aceita dados brutos leva a marca de contaminação.
                 own_prompt = taint_if(task.prompt, task.prompt_tainted)
                 task_prompt = context_prefix + own_prompt if context_prefix else own_prompt
@@ -1561,9 +1623,13 @@ class AutonomousLoop(LoopReportMixin):
                             payload={"depends_on": task.depends_on},
                         )
 
+                    mounts = self._dependency_mounts(task, tasks, resumed_deps, dag_state, resume, master_session_id)
+                    enriched_task = replace(enriched_task, dependency_mounts=mounts)
                     if contract_applies(enriched_task):
                         # v18.7-subtask-contract: reconstruído do plano vigente a cada tentativa (design §4).
-                        contract = await self._attempt_contract(task, tasks, prompt, master_session_id)
+                        contract = await self._attempt_contract(
+                            task, tasks, prompt, master_session_id, enriched_task.dependency_mounts, project_id
+                        )
                         long_fields = oversized_fields(contract)
                         if long_fields:
                             # Plano aprovado com avisos não despacha campo acima do teto (design §8.1 item 9).
@@ -1718,6 +1784,7 @@ class AutonomousLoop(LoopReportMixin):
                             prompt=enriched_task.prompt + artifact_context + error_context,
                             retry_attempt=attempt + 1,  # V12.3.3: próxima tentativa
                             contract=None,  # reconstruído do plano vigente na próxima tentativa
+                            dependency_mounts=(),  # recalculadas na próxima tentativa
                         )
                         await asyncio.sleep(1)
 

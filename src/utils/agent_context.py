@@ -26,6 +26,21 @@ ConsultResearcherCallback = Callable[[str, str, str, list[str], Optional[str]], 
 
 
 @dataclass(frozen=True)
+class DependencyMount:
+    """Saída de uma dependência concluída, montada somente leitura no sandbox (v18.7-dependency-artifacts).
+
+    Args:
+        task_name: Subtarefa produtora.
+        source: Pasta da produtora no host (``<saída>/<sessão>/<task_name>``).
+        session_id: Sessão onde a produtora executou (a atual ou uma da cadeia de continuidade).
+    """
+
+    task_name: str
+    source: Path
+    session_id: str
+
+
+@dataclass(frozen=True)
 class AgentContext:
     """Estado de execução de uma única tarefa de agente.
 
@@ -51,6 +66,8 @@ class AgentContext:
             ``session_id`` quando não houver um execution_id dedicado.
         readable_dirs: Diretórios de outputs de sessões anteriores da cadeia (mesmo projeto), **somente leitura**
             (v18-research-continuity); a escrita continua confinada a ``output_dir``.
+        dependency_dirs: Saídas das dependências concluídas da subtarefa, montadas somente leitura em
+            ``/deps_out/<projeto>/<task_name>`` (v18.7-dependency-artifacts, ADR 022 §9).
         ask_researcher: Callback opcional para round-trip com o pesquisador
             humano (Spec G5), ligado a ``Orchestrator._handle_ask_researcher``
             sem passar por IPC. ``None`` quando a skill deve usar o caminho
@@ -77,6 +94,7 @@ class AgentContext:
     enable_thinking: bool = False
     execution_id: str = ""
     readable_dirs: tuple[Path, ...] = ()
+    dependency_dirs: tuple[DependencyMount, ...] = ()
     ask_researcher: Optional[AskResearcherCallback] = None
     consult_researcher: Optional[ConsultResearcherCallback] = None
     project_id: Optional[str] = None

@@ -92,11 +92,21 @@ def _entry(path: Path, base: Path, cache: HashCache | None) -> dict[str, Any]:
 
 
 def collect_inputs(
-    *, output_root: Path, session_id: str, task_name: str, prior_dirs: Iterable[Path], cache: HashCache | None
+    *,
+    output_root: Path,
+    session_id: str,
+    task_name: str,
+    prior_dirs: Iterable[Path],
+    cache: HashCache | None,
+    dependency_dirs: Iterable[Any] = (),
 ) -> list[dict[str, Any]]:
-    """Tudo que o script vê somente leitura: ``input_snapshot/``, ``/prior/*`` e o que já existia na pasta da tarefa."""
+    """Tudo que o script vê somente leitura: ``input_snapshot/``, ``/prior/*``, ``/deps_out/*`` (as pastas das
+    dependências montadas, ``DependencyMount``) e o que já existia na pasta da tarefa."""
     session_dir = output_root / session_id
-    roots = [session_dir / "input_snapshot", session_dir / task_name, *[Path(d) for d in prior_dirs]]
+    roots = [
+        session_dir / "input_snapshot", session_dir / task_name, *[Path(d) for d in prior_dirs],
+        *[Path(m.source) for m in dependency_dirs],
+    ]
     rows: dict[str, dict[str, Any]] = {}
     for root in roots:
         for path in _walk_files(root):
@@ -139,9 +149,10 @@ def inicio_body(
     packages: list[str],
     assets: list[dict[str, Any]],
     image: str,
+    dependencies: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Corpo do ``inicio`` (gravado antes de qualquer container)."""
-    return {
+    body = {
         "hash_codigo": sha256_text(code),
         "arquivos_injetados": [
             {"nome": name, "sha256": sha256_text(text)} for name, text in sorted((extra_files or {}).items())
@@ -155,6 +166,9 @@ def inicio_body(
         ],
         "imagem_solicitada": image,
     }
+    if dependencies:  # v18.7-dependency-artifacts: as subtarefas cujas saídas o script vê em /deps_out
+        body["dependencias"] = [dict(d) for d in dependencies]
+    return body
 
 
 @dataclass

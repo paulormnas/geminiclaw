@@ -9,7 +9,7 @@ import pytest
 
 from src.skills.code.sandbox import NETWORK_UNDECLARED_MESSAGE, SandboxResult
 from src.skills.code.skill import CodeSkill
-from src.utils.agent_context import AgentContext, current_context
+from src.utils.agent_context import AgentContext, DependencyMount, current_context
 
 
 class _RecordingSandbox:
@@ -161,3 +161,28 @@ async def test_skill_chama_o_sandbox_via_to_thread(skill) -> None:
 
     assert len(threads) == 2
     assert threading.get_ident() not in threads  # nenhuma execução bloqueou o event loop
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_dependencias_do_contexto_vao_ao_sandbox(skill, tmp_path) -> None:
+    mount = DependencyMount("dividir_dados", tmp_path / "s" / "dividir_dados", "s")
+    ctx = AgentContext(
+        session_id="s", agent_session_id="a", agent_id="developer", mode="auto",
+        output_dir=tmp_path, model="m", project_id="proj1", dependency_dirs=(mount,),
+    )
+    token = current_context.set(ctx)
+    try:
+        await skill.run(code="print(1)", session_id="s", task_name="t")
+    finally:
+        current_context.reset(token)
+
+    assert _RecordingSandbox.last_kwargs["dependency_mounts"] == [mount]
+    assert _RecordingSandbox.last_kwargs["project_id"] == "proj1"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_sem_dependencias_o_sandbox_nao_recebe_os_parametros(skill) -> None:
+    await skill.run(code="print(1)", session_id="s", task_name="t")
+    assert "dependency_mounts" not in _RecordingSandbox.last_kwargs

@@ -60,6 +60,9 @@ class AgentTask:
     prompt_tainted: bool = False
     # v18.7-subtask-contract: contrato da tentativa (``SubtaskContract``), montado a cada tentativa do Developer.
     contract: Any = None
+    # v18.7-dependency-artifacts: saídas das dependências concluídas (``DependencyMount``) que o sandbox monta somente
+    # leitura; preenchido pelo laço a cada tentativa.
+    dependency_mounts: tuple[Any, ...] = ()
 
 
 @dataclass

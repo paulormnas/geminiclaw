@@ -103,11 +103,17 @@ Aprovado com ressalvas. As mitigações 1 a 6 são exigidas como escritas, mais:
 
 Todas em `src/config.py` e `.env.example`; valor inválido falha na inicialização.
 
-## 9. Questões em aberto (decisão do pesquisador)
+## 9. Questões decididas (pesquisador, 2026-10-18)
+
+O pesquisador concordou com as três propostas abaixo (mensagem de 2026-10-18); a spec foi mergeada em #212 e a implementação segue estas decisões.
 
 1. **Escopo padrão.** Proposta: `transitivas`, porque a falha da `haiku-dev-sol-juiz` envolveu um arquivo de preparação lido duas etapas adiante (`y_train.csv`), e o Researcher nem sempre repete a dependência indireta em `depends_on`. Alternativa: `diretas`, que obriga o plano a declarar tudo e deixa o contrato menor.
 2. **Retomada.** Proposta: montar a dependência concluída na sessão anterior em `/deps_out/<projeto>/<task_name>/`, a partir da pasta daquela sessão; `/prior/<sessão>` continua montado como hoje. Alternativa: só `/prior`, com o caminho exato no item 10.
 3. **Prompt do Developer.** Proposta: corrigir aqui só a regra 2 (hoje errada) e deixar a revisão do prompt para `v18.7-agent-system-prompts`. Alternativa: esperar aquela mudança, aceitando o erro até lá.
+
+## 9.1 Desvios da implementação (2026-10-18)
+
+(a) O teto `DEPENDENCY_ARTIFACTS_MAX_MOUNTS` é conferido pelo sandbox (`_check_dependency_mounts`), que recusa a execução antes do container; o resolvedor (`resolve_dependency_mounts`) nunca trunca. (b) Dependência sem pasta no host (concluída sem gravar nada) não é montada e não aparece no item 10; o item mostra "sem arquivos" só para pasta montada e vazia. (c) `AgentTask.dependency_mounts` leva as montagens do laço ao `_execute_agent`, que as põe em `AgentContext.dependency_dirs`. (d) Na retomada, o laço guarda as dependências concluídas na sessão anterior (`resumed_deps`) antes de podá-las de `depends_on`, e o fecho transitivo continua pelo `depends_on` do checkpoint. (e) O prefixo de contexto continua só com as dependências diretas; as transitivas aparecem no item 10 e em `/deps_out`. (f) O `CONTRACT_VERSION` é 2 com `DEPENDENCY_ARTIFACTS_ENABLED=true` e 1 sem ele (`contract_version()`); a listagem do item 10 entra no hash só na versão 2. (g) A listagem do item 10 pula `step_*`, `script.py` e `scientific_helpers.py`, lista o que existe na pasta (esperados primeiro, com o nome real do alias) e corta em `DEPENDENCY_ARTIFACTS_LIST_MAX`.
 
 ## 10. Análise de impacto nos 6 eixos
 

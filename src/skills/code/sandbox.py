@@ -31,11 +31,17 @@ from src.skills.code.inputs import (
     InputClassifier,
     MountSourceError,
     NoneShareableClassifier,
+    check_dependency_mount,
     check_mount_source,
     list_input_files,
 )
 
 logger = get_logger(__name__)
+
+
+def dependency_target(project_id: Optional[str], task_name: str) -> str:
+    """Destino no container da saída de uma dependência: ``/deps_out/<projeto>/<subtarefa>``."""
+    return f"{SANDBOX_DEPS_OUT_DIR}/{project_id or NO_PROJECT_DIR}/{task_name}"
 
 
 def _is_docker_connection_error(exc: Exception) -> bool:
@@ -118,6 +124,8 @@ class SandboxResult:
     pacotes: Dict[str, str] = field(default_factory=dict)  # distribuição -> versão, visíveis na execução
     ativos: List[AssetRecord] = field(default_factory=list)
     fases: List[PhaseTiming] = field(default_factory=list)
+    # v18.7-dependency-artifacts: subtarefas cujas saídas foram montadas em /deps_out (nunca o conteúdo).
+    dependencias_montadas: List[str] = field(default_factory=list)
 
 SANDBOX_PROJECT_LABEL = "geminiclaw"
 
@@ -146,6 +154,9 @@ SANDBOX_INPUTS_DIR = "/inputs"
 SANDBOX_ASSETS_DIR = "/assets"
 SANDBOX_STAGING_DIR = "/staging"
 SANDBOX_PRIOR_DIR = "/prior"
+# v18.7-dependency-artifacts: saídas das dependências, somente leitura (``/deps_out/<projeto>/<subtarefa>``).
+SANDBOX_DEPS_OUT_DIR = "/deps_out"
+NO_PROJECT_DIR = "sem_projeto"
 # Diretório de controle da preparação (somente leitura): script e spec do fetch, escritos no host
 # antes de criar o container.
 SANDBOX_CONTROL_DIR = "/control"
@@ -945,6 +956,30 @@ class PythonSandbox:
                     f"SANDBOX_MIN_FREE_BYTES={self.min_free_bytes}; libere espaço (workflow clean) ou ajuste o limite"
                 )
 
+    @staticmethod
+    def _check_dependency_mounts(
+        mounts: list, output_root: pathlib.Path, session_id: str, task_name: str, project_id: Optional[str],
+        chain_sessions: "set[str]",
+    ) -> List[pathlib.Path]:
+        """Confere teto, projeto e origem de cada dependência (nada é montado se uma falhar)."""
+        if not mounts:
+            return []
+        if len(mounts) > config.DEPENDENCY_ARTIFACTS_MAX_MOUNTS:
+            raise MountSourceError(
+                f"a subtarefa depende de {len(mounts)} subtarefas; o teto é "
+                f"DEPENDENCY_ARTIFACTS_MAX_MOUNTS={config.DEPENDENCY_ARTIFACTS_MAX_MOUNTS}"
+            )
+        if project_id is not None and (not _SAFE_NAME_RE.fullmatch(str(project_id)) or ".." in str(project_id)):
+            raise MountSourceError(f"identificador de projeto inválido para /deps_out: {project_id!r}")
+        sources: List[pathlib.Path] = []
+        seen: set[str] = set()
+        for mount in mounts:
+            if mount.task_name in seen:
+                raise MountSourceError(f"dependência repetida: {mount.task_name!r}")
+            seen.add(mount.task_name)
+            sources.append(check_dependency_mount(mount, output_root, session_id, chain_sessions, task_name))
+        return sources
+
     def _network_decision(
         self,
         needs_network: bool,
@@ -952,6 +987,7 @@ class PythonSandbox:
         task_dir: pathlib.Path,
         injected_names: set[str],
         prior_mounts: List[pathlib.Path],
+        dependency_mounts: Optional[List[pathlib.Path]] = None,
     ) -> tuple[bool, Optional[str]]:
         """Decide se a fase ``execute`` roda com rede (design §6).
 
@@ -978,6 +1014,8 @@ class PythonSandbox:
             return False, "há dados produzidos por execuções anteriores em /outputs; a execução roda sem rede"
         if prior_mounts:
             return False, "há saídas de sessões anteriores visíveis em /prior; a execução roda sem rede"
+        if dependency_mounts:
+            return False, "há saídas de dependências visíveis em /deps_out; a execução roda sem rede"
         return True, None
 
     def run(
@@ -992,6 +1030,8 @@ class PythonSandbox:
         assets: Optional[List[dict]] = None,
         needs_network: bool = False,
         prior_dirs: Optional[List[pathlib.Path]] = None,
+        dependency_mounts: Optional[list] = None,
+        project_id: Optional[str] = None,
     ) -> SandboxResult:
         """Executa o código fornecido em containers isolados, em fases (ADR 019 §5).
 
@@ -1010,6 +1050,10 @@ class PythonSandbox:
             needs_network: Pede rede na execução; só vale com todas as entradas compartilháveis e sem
                 dados produzidos por execuções visíveis (design §6).
             prior_dirs: Saídas de sessões anteriores a montar em ``/prior/<sessão>`` (somente leitura).
+            dependency_mounts: ``DependencyMount`` das dependências concluídas, montadas somente leitura em
+                ``/deps_out/<projeto>/<subtarefa>`` (v18.7-dependency-artifacts); acima de
+                ``DEPENDENCY_ARTIFACTS_MAX_MOUNTS`` a execução é recusada.
+            project_id: Projeto da sessão, parte do caminho de ``/deps_out`` (``sem_projeto`` quando ausente).
         """
         to_install, invalid = prepare_packages(packages)
         if invalid:
@@ -1106,8 +1150,13 @@ class PythonSandbox:
                     if prior.name in seen_priors:
                         raise MountSourceError(f"sessão anterior repetida: {prior.name!r}")
                     seen_priors.add(prior.name)
+                dependency_sources = self._check_dependency_mounts(
+                    dependency_mounts or [], output_root, str(session_id), str(task_name), project_id,
+                    {p.name for p in prior_mounts},
+                )
             except MountSourceError as exc:
                 raise _MountRefused(str(exc)) from exc
+            res.dependencias_montadas = [m.task_name for m in (dependency_mounts or [])]
             if res.modo_entrega == "copy":
                 # O tmpfs (inclusive o de /tmp) conta no limite de memória do container: o que não cabe
                 # nele termina em OOM durante a execução. Falha explícita antes de criar o container.
@@ -1140,7 +1189,7 @@ class PythonSandbox:
             abs_output_dir.mkdir(parents=True, exist_ok=True)
             injected_names = {"script.py", *(extra_files or {})}
             network, res.nota_rede = self._network_decision(
-                needs_network, input_files, abs_output_dir, injected_names, prior_mounts
+                needs_network, input_files, abs_output_dir, injected_names, prior_mounts, dependency_sources
             )
 
             logger.info(f"Iniciando sandbox para sessão {session_id}, tarefa {task_name}")
@@ -1175,6 +1224,8 @@ class PythonSandbox:
                 volumes[str(snapshot_dir.resolve())] = {"bind": SANDBOX_INPUTS_DIR, "mode": "ro"}
             for prior in prior_mounts:
                 volumes[str(prior)] = {"bind": f"{SANDBOX_PRIOR_DIR}/{prior.name}", "mode": "ro"}
+            for mount, source in zip(dependency_mounts or [], dependency_sources):
+                volumes[str(source)] = {"bind": dependency_target(project_id, mount.task_name), "mode": "ro"}
             extra_tmpfs: Dict[str, str] = {}
             if input_files and res.modo_entrega == "copy":
                 # tmpfs do usuário do sandbox (uid/gid): ``_deliver_inputs`` grava sem root e depois tira a escrita.

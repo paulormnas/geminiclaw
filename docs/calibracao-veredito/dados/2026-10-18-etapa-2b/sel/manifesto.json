@@ -1,0 +1,30 @@
+{
+  "ferramenta": "scripts.verdict_lab",
+  "commit": "5323325558f84cc3eb5e2264374c4f52a69f1fcf",
+  "data_utc": "2026-10-18T23:54:47Z",
+  "comando": "selecao",
+  "argv": [
+    "selecao",
+    "--grade",
+    "/home/agent/lab4/grade/resultados.csv",
+    "--simulacao",
+    "/home/agent/lab4/sim/resultados.csv",
+    "--saida",
+    "/home/agent/lab4/sel"
+  ],
+  "argumentos": {
+    "fv_max": 0.02
+  },
+  "variantes": [],
+  "sementes": {},
+  "entradas": [
+    {
+      "caminho": "/home/agent/lab4/grade/resultados.csv",
+      "sha256": "fa8e06c59ba329b6a74ddde5c25c4fc541533e37309e4910ba9165b77e81a711"
+    },
+    {
+      "caminho": "/home/agent/lab4/sim/resultados.csv",
+      "sha256": "f58102d7dd389d35d4bfd24c1c6db7d5f14d636c93a80379d6b34acc3034152b"
+    }
+  ]
+}

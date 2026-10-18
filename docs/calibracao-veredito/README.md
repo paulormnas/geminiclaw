@@ -8,3 +8,4 @@ Cada relatório registra a pergunta, os dados de entrada, o método, os resultad
 |---|---|---|
 | 2026-10-18 | 1. Repetição offline sobre os grafos arquivados | [2026-10-18-etapa-1-repeticao-offline.md](2026-10-18-etapa-1-repeticao-offline.md) |
 | 2026-10-18 | 2. Grade sintética, simulação e sensibilidade | [2026-10-18-etapa-2-grade-sintetica.md](2026-10-18-etapa-2-grade-sintetica.md) |
+| 2026-10-18 | 2. Segunda rodada: variantes corrigidas e critério de 2 % de falsa validação | [2026-10-18-etapa-2b-criterio-de-2-por-cento.md](2026-10-18-etapa-2b-criterio-de-2-por-cento.md) |

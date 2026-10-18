@@ -1,0 +1,147 @@
+{
+  "ferramenta": "scripts.verdict_lab",
+  "commit": "5323325558f84cc3eb5e2264374c4f52a69f1fcf",
+  "data_utc": "2026-10-18T23:47:11Z",
+  "comando": "sensibilidade",
+  "argv": [
+    "sensibilidade",
+    "--variante",
+    "atual",
+    "--variante",
+    "por_tipo",
+    "--variante",
+    "completa2",
+    "--saida",
+    "/home/agent/lab4/sens"
+  ],
+  "argumentos": {},
+  "variantes": [
+    {
+      "nome": "atual",
+      "descricao": "ADR 015 §9.8 (VerdictParams.from_config())",
+      "origem_params": "config",
+      "parametros": {
+        "q_validated_complete": 1.0,
+        "q_validated_incomplete": 0.7,
+        "q_divergent": 0.3,
+        "d_new_node_or_dataset": 1.0,
+        "d_new_session": 0.5,
+        "d_new_seed": 0.2,
+        "gamma": 0.5,
+        "lambda_ambiguous": 0.5,
+        "approach_failure_q": 0.3,
+        "approach_failure_min_repeats": 2,
+        "prior": 1.0,
+        "thresholds": [
+          0.1,
+          0.3,
+          0.5
+        ]
+      },
+      "estrutura": {
+        "n_config_conta_falhas": true,
+        "independencia": "atual",
+        "d_variacao": 1.0,
+        "d_replica_no": 0.5,
+        "d_dataset": 1.0,
+        "d_sessao": 0.5,
+        "d_semente": 0.2,
+        "variacao_util": "nenhuma",
+        "variacao_util_epsilon": 0.0,
+        "m_sem_baseline": "fixo",
+        "b_por": "configuracao",
+        "criterio_com_alvo": "baseline_primeiro",
+        "m_folga_piso": 0.0,
+        "d_replica_contraria": null,
+        "d_variacao_sem_ganho": null
+      }
+    },
+    {
+      "nome": "por_tipo",
+      "descricao": "independência por tipo: variação > réplica em outro nó > sessão > semente",
+      "origem_params": "config",
+      "parametros": {
+        "q_validated_complete": 1.0,
+        "q_validated_incomplete": 0.7,
+        "q_divergent": 0.3,
+        "d_new_node_or_dataset": 1.0,
+        "d_new_session": 0.5,
+        "d_new_seed": 0.2,
+        "gamma": 0.5,
+        "lambda_ambiguous": 0.5,
+        "approach_failure_q": 0.3,
+        "approach_failure_min_repeats": 2,
+        "prior": 1.0,
+        "thresholds": [
+          0.1,
+          0.3,
+          0.5
+        ]
+      },
+      "estrutura": {
+        "n_config_conta_falhas": true,
+        "independencia": "por_tipo",
+        "d_variacao": 1.0,
+        "d_replica_no": 0.5,
+        "d_dataset": 1.0,
+        "d_sessao": 0.5,
+        "d_semente": 0.2,
+        "variacao_util": "nenhuma",
+        "variacao_util_epsilon": 0.0,
+        "m_sem_baseline": "fixo",
+        "b_por": "configuracao",
+        "criterio_com_alvo": "baseline_primeiro",
+        "m_folga_piso": 0.0,
+        "d_replica_contraria": null,
+        "d_variacao_sem_ganho": null
+      }
+    },
+    {
+      "nome": "completa2",
+      "descricao": "completa corrigida: penalidade acumulada (monotônica), piso de 0,5 na folga e réplica contrária com peso cheio e positiva sem ganho com peso zero",
+      "origem_params": "config",
+      "parametros": {
+        "q_validated_complete": 1.0,
+        "q_validated_incomplete": 0.7,
+        "q_divergent": 0.3,
+        "d_new_node_or_dataset": 1.0,
+        "d_new_session": 0.5,
+        "d_new_seed": 0.2,
+        "gamma": 0.5,
+        "lambda_ambiguous": 0.5,
+        "approach_failure_q": 0.3,
+        "approach_failure_min_repeats": 2,
+        "prior": 1.0,
+        "thresholds": [
+          0.1,
+          0.3,
+          0.5
+        ]
+      },
+      "estrutura": {
+        "n_config_conta_falhas": true,
+        "independencia": "por_tipo",
+        "d_variacao": 1.0,
+        "d_replica_no": 0.5,
+        "d_dataset": 1.0,
+        "d_sessao": 0.5,
+        "d_semente": 0.2,
+        "variacao_util": "melhora_o_melhor",
+        "variacao_util_epsilon": 0.0,
+        "m_sem_baseline": "folga",
+        "b_por": "variacao_sem_ganho_acumulada",
+        "criterio_com_alvo": "exige_alvo",
+        "m_folga_piso": 0.5,
+        "d_replica_contraria": 1.0,
+        "d_variacao_sem_ganho": 0.0
+      }
+    }
+  ],
+  "sementes": {},
+  "entradas": [
+    {
+      "caminho": "/home/agent/Documentos/Workspace/geminiclaw/scripts/verdict_lab/variantes.json",
+      "sha256": "2dc73c6113538a1a0b9f389f78e8a4a5008b540484bb01e7cc84671fc3cba9db"
+    }
+  ]
+}

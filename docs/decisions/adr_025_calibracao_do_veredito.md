@@ -225,6 +225,6 @@ Revisar depois das etapas 1 e 2: se os cenários explicam o veredito da bateria 
 | Etapa (§3) | Estado (2026-10-18) |
 |---|---|
 | 1. Repetição offline | Concluída com scripts provisórios ([relatório](../calibracao-veredito/2026-10-18-etapa-1-repeticao-offline.md)); refeita pela ferramenta de `v18.8-verdict-lab` |
-| 2. Grade sintética e propriedades | Concluída com `v18.8-verdict-lab` (#222; [relatório](../calibracao-veredito/2026-10-18-etapa-2-grade-sintetica.md)); segunda rodada com as variantes corrigidas e o critério de 2 % |
+| 2. Grade sintética e propriedades | Concluída com `v18.8-verdict-lab` (#222; [relatório](../calibracao-veredito/2026-10-18-etapa-2-grade-sintetica.md)); segunda rodada concluída com as variantes corrigidas e o critério de 2 % ([relatório](../calibracao-veredito/2026-10-18-etapa-2b-criterio-de-2-por-cento.md)): `completa2` no limiar 0,3 tem 1,1 % de falsa validação e 30 % de poder; a regra "três melhoras bastam" conflita com o teto de 2 %, decisão pendente do pesquisador |
 | 3. Sessões controladas | Não iniciada |
 | 4. Bateria no Raspberry Pi | Não iniciada |

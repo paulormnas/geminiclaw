@@ -259,16 +259,19 @@ async def test_compress_messages_preserva_a_fixada_na_posicao():
 @pytest.mark.asyncio
 async def test_evento_da_tentativa_registra_hash_e_limiar_mascarado(tmp_path):
     """Scenario: Researcher com dados brutos, Developer sem (evento da tentativa com ``limiar_mascarado``)."""
-    from unittest.mock import MagicMock
+    from src.observability.telemetry import TelemetryCollector
 
-    fake = MagicMock()
+    seen: list[dict] = []
     h = ContractHarness(tmp_path, plans=[_one_task()])
-    with patch("src.orchestration.autonomous_loop.get_telemetry", return_value=fake), patch(
-        "src.orchestration.autonomous_loop.role_tainted", side_effect=lambda role: role != "developer"
-    ), patch("src.agents.subtask_contract.role_tainted", return_value=True):
-        await h.run()
-    events = [c.kwargs for c in fake.record_agent_event.call_args_list if c.kwargs.get("event_type") == "subtask_contract"]
+    h.extra_patches += [
+        patch.object(TelemetryCollector, "record_agent_event", autospec=True,
+                     side_effect=lambda self, **kw: seen.append(kw)),
+        patch("src.orchestration.autonomous_loop.role_tainted", side_effect=lambda role: role != "developer"),
+        patch("src.agents.subtask_contract.role_tainted", return_value=True),
+    ]
+    await h.run()
+    events = [kw for kw in seen if kw.get("event_type") == "subtask_attempt" and kw.get("agent_id") == "developer"]
     assert len(events) == 1
     payload = events[0]["payload"]
-    assert payload["limiar_mascarado"] is True and payload["tentativa"] == 1
-    assert payload["contrato_sha256"] == h.contracts[0].sha256() and payload["tarefa_original_truncada_de"] is None
+    assert payload["limiar_mascarado"] is True and payload["attempt"] == 1
+    assert payload["contrato_sha256"] == h.contracts[0].sha256() and payload["tarefa_original_truncada"] is False

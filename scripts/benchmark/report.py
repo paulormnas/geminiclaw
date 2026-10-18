@@ -234,6 +234,80 @@ def render_operation(results: list[dict]) -> str:
     return "\n".join(rows)
 
 
+def _exploration(r: dict) -> dict | None:
+    """Grupo ``exploracao`` disponível do resultado, ou ``None`` (resultado antigo ou grupo indisponível)."""
+    group = (r.get("operation_metrics") or {}).get("exploracao")
+    return group if isinstance(group, dict) and group.get("estado") == "disponivel" else None
+
+
+def _mean(values: list[float]) -> str:
+    return "n/d" if not values else f"{statistics.fmean(values):.3g}"
+
+
+def render_exploration(results: list[dict]) -> str:
+    """Exploração por combinação (ADR 021 §8.4 e "Revisão"): papéis, origem dos testes, ligações e hipóteses do sistema.
+
+    Médias por execução; resultado sem o grupo (anterior à versão 2 das métricas) aparece como ``n/d``. Os testes
+    aprovados contam os modelos treinados.
+    """
+    header = (
+        "| Combinação | Execuções | Testes | Preparações | Referências | Modelos treinados (testes aprovados) | "
+        "Proporção de testes do sistema | PREPARA derivadas | Hipóteses do sistema abandonadas | "
+        "Paradas por hipóteses não testadas |\n|---|---|---|---|---|---|---|---|---|---|"
+    )
+    groups: dict[str, list[dict]] = {}
+    for r in results:
+        if r.get("status") != "skipped":
+            groups.setdefault(r["name"], []).append(r)
+    rows = [header]
+    for name, items in groups.items():
+        links = [(_exploration(r) or {}).get("ligacao") for r in items]
+        links = [link for link in links if isinstance(link, dict) and link.get("estado") == "disponivel"]
+
+        def per_run(key: str, sub: str | None = None) -> list[float]:
+            values = []
+            for link in links:
+                value = link[key].get(sub) if sub else link.get(key)
+                if value is not None:
+                    values.append(float(value))
+            return values
+
+        outcomes = [r.get("outcome") or {} for r in items]
+        trained = [o["subtasks_ok"] for o in outcomes if o.get("subtasks_ok") is not None]
+        untested = sum(1 for r in items if r.get("stop_reason") == "hipoteses_nao_testadas")
+        rows.append(
+            f"| {name} | {len(items)} | {_mean(per_run('experimentos_por_papel', 'teste'))} | "
+            f"{_mean(per_run('experimentos_por_papel', 'preparacao'))} | "
+            f"{_mean(per_run('experimentos_por_papel', 'referencia'))} | {_mean([float(x) for x in trained])} | "
+            f"{_mean(per_run('proporcao_testes_sistema'))} | {_mean(per_run('ligacoes_prepara_derivadas'))} | "
+            f"{_mean(per_run('hipoteses_sistema_abandonadas'))} | {untested} |"
+        )
+    return "\n".join(rows)
+
+
+def render_contract(results: list[dict]) -> str:
+    """Tokens estimados do contrato por execução (ADR 022 §6.3): média, desvio, mínimo, máximo e fração da entrada."""
+    header = (
+        "| Combinação | Execuções | Tokens do contrato por execução | Fração da entrada | Tentativas | "
+        "Divergências de hash |\n|---|---|---|---|---|---|"
+    )
+    groups: dict[str, list[dict]] = {}
+    for r in results:
+        if r.get("status") != "skipped":
+            groups.setdefault(r["name"], []).append(r)
+    rows = [header]
+    for name, items in groups.items():
+        blocks = [((_exploration(r) or {}).get("contrato")) for r in items]
+        blocks = [b for b in blocks if isinstance(b, dict) and b.get("estado") == "disponivel"]
+        tokens = [float(b["tokens_estimados_total"]) for b in blocks]
+        fractions = [float(b["fracao_entrada"]) for b in blocks if b.get("fracao_entrada") is not None]
+        rows.append(
+            f"| {name} | {len(items)} | {_stats(tokens)} | {_mean(fractions)} | "
+            f"{_mean([float(b['tentativas']) for b in blocks])} | {sum(int(b['divergencias']) for b in blocks)} |"
+        )
+    return "\n".join(rows)
+
+
 def _pct(value: float | None) -> str:
     return "n/d" if value is None else f"{value * 100:.0f}%"
 
@@ -307,6 +381,13 @@ if __name__ == "__main__":
     if any(r.get("operation_metrics") for r in loaded):
         print()
         print(render_operation(loaded))
+    if any(r.get("operation_metrics") for r in loaded):
+        print()
+        print("### Exploração (ADR 021 §8.4)")
+        print(render_exploration(loaded))
+        print()
+        print("### Contrato da subtarefa (ADR 022 §6.3)")
+        print(render_contract(loaded))
     if any(r.get("comm_eval") for r in loaded):
         print()
         print(render_communication(loaded))

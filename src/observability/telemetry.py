@@ -1143,6 +1143,28 @@ class TelemetryCollector:
         value = row["avg_cpu"] if row else None
         return float(value) if value is not None else None
 
+    def get_usage_by_role(self, execution_id: str) -> list[dict[str, Any]]:
+        """Tokens de entrada, de saída e chamadas por papel (``agent_id``) da execução (v18.7-exploration-metrics).
+
+        Raises:
+            Exception: Falha de leitura do banco (o leitor de métricas a traduz em bloco ``erro``).
+        """
+        with get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT agent_id,
+                       SUM(prompt_tokens)     AS prompt_tokens,
+                       SUM(completion_tokens) AS completion_tokens,
+                       COUNT(*)               AS calls
+                FROM token_usage
+                WHERE execution_id = %s
+                GROUP BY agent_id
+                ORDER BY agent_id
+                """,
+                (execution_id,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
     def get_events(self, execution_id: str, event_type: str) -> list[dict[str, Any]]:
         """Eventos ``agent_events`` de um tipo, em ordem cronológica (``timestamp``, ``agent_id``, ``payload``).
 

@@ -156,6 +156,8 @@ class AutonomousLoop(LoopReportMixin):
         # v18.5-operation-metrics: cadência e contagem dos avisos periódicos do modo sem limite.
         self._notice_schedule: Any = None
         self._unlimited_notices = 0
+        # (sessão, subtarefa, tentativa) -> hash do contrato da tentativa, para conferir a revisão (ADR 022 §7)
+        self._attempt_hashes: Dict[tuple[str, str, int], Optional[str]] = {}
 
 
     @staticmethod
@@ -824,30 +826,69 @@ class AutonomousLoop(LoopReportMixin):
         # v18.7-subtask-contract: preserva todos os campos da tarefa (task_type, hipótese, papel, contrato...).
         return replace(task, agent_id=agent_id)
 
-    @staticmethod
-    def _record_contract_event(
-        task: "AgentTask", contract: "SubtaskContract", attempt_number: int, master_session_id: str
+    def _record_attempt_event(
+        self, task: "AgentTask", contract: "SubtaskContract | None", attempt_number: int, master_session_id: str
     ) -> None:
-        """Evento ``subtask_contract`` da tentativa: hash, corte da tarefa original e ``limiar_mascarado``.
+        """Evento ``subtask_attempt``: uma vez por tentativa, com o hash e o custo estimado do contrato.
 
-        ``v18.7-exploration-metrics`` incorpora estes campos ao seu registro por tentativa (design §11.1).
+        Só hash, tamanhos e marcas (nunca o texto do contrato, que pode ter dado do Researcher contaminado). Sem
+        contrato (subtarefa do Researcher), ``contrato_sha256 = null``. Guarda o hash para conferir a revisão
+        (``contrato_divergente``, ADR 022 §7). ``v18.7-exploration-metrics`` lê estes eventos.
         """
         try:  # observabilidade nunca derruba a execução
+            sha = contract.sha256() if contract is not None else None
+            chars = tokens = None
+            if contract is not None:
+                from src.llm.context_compression import estimate_tokens
+                from src.utils.egress_fragments import plain_text
+
+                text = plain_text(contract.fragments())
+                chars, tokens = len(text), estimate_tokens(text)
+            self._attempt_hashes[(master_session_id, task.task_name or "", attempt_number)] = sha
             get_telemetry().record_agent_event(
                 execution_id=master_session_id,
                 session_id=master_session_id,
                 agent_id=task.agent_id,
-                event_type="subtask_contract",
+                event_type="subtask_attempt",
                 task_name=task.task_name or None,
                 payload={
-                    "tentativa": attempt_number,
-                    "contrato_sha256": contract.sha256(),
-                    "tarefa_original_truncada_de": contract.original_task_truncated_from,
-                    "limiar_mascarado": threshold_masked(contract, role_tainted("developer")),
+                    "task_name": task.task_name,
+                    "attempt": attempt_number,
+                    "contrato_sha256": sha,
+                    "contrato_chars": chars,
+                    "contrato_tokens_estimados": tokens,
+                    "tarefa_original_truncada": bool(contract and contract.original_task_truncated_from),
+                    "recorte_sha256": getattr(task, "recorte_sha256", None),
+                    "limiar_mascarado": (
+                        threshold_masked(contract, role_tainted("developer")) if contract is not None else False
+                    ),
                 },
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Falha ao registrar subtask_contract", extra={"error": str(exc)})
+            logger.warning("Falha ao registrar subtask_attempt", extra={"error": str(exc)})
+
+    def _check_contract_divergence(
+        self, task: "AgentTask", attempt: int, review_sha: str, master_session_id: str
+    ) -> None:
+        """Compara o hash da revisão com o da tentativa; diferentes: evento ``contrato_divergente`` (não reprova)."""
+        attempt_sha = self._attempt_hashes.get((master_session_id, task.task_name or "", attempt))
+        if not review_sha or not attempt_sha or review_sha == attempt_sha:
+            return
+        logger.warning("Contrato divergente entre a execução e a revisão", extra={"task_name": task.task_name})
+        try:
+            get_telemetry().record_agent_event(
+                execution_id=master_session_id,
+                session_id=master_session_id,
+                agent_id="autonomous_loop",
+                event_type="contrato_divergente",
+                task_name=task.task_name or None,
+                payload={
+                    "task_name": task.task_name, "attempt": attempt,
+                    "hash_tentativa": attempt_sha, "hash_revisao": review_sha,
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Falha ao registrar contrato_divergente", extra={"error": str(exc)})
 
     def _dependency_mounts(
         self, task: "AgentTask", plan: List["AgentTask"], resumed_deps: Dict[str, List[str]],
@@ -1644,13 +1685,13 @@ class AutonomousLoop(LoopReportMixin):
                                 dag_state[task.task_name]["future"].set_result(None)
                             return
                         enriched_task = replace(enriched_task, contract=contract)
-                        self._record_contract_event(task, contract, attempt_number, master_session_id)
                         logger.info(
                             "Contrato da subtarefa montado",
                             extra={"task_name": task.task_name, "attempt": attempt_number,
                                    "contract_sha256": contract.sha256()},
                         )
 
+                    self._record_attempt_event(task, enriched_task.contract, attempt_number, master_session_id)
                     result = await self.orchestrator._execute_agent(enriched_task, master_session_id)
                     last_result = result
                     last_review = None
@@ -2635,6 +2676,7 @@ class AutonomousLoop(LoopReportMixin):
         from src.llm.metering import bound_execution_id
         from src.observability.telemetry import get_telemetry
 
+        self._check_contract_divergence(task, attempt, getattr(review, "contract_sha256", "") or "", master_session_id)
         refund_refused = False
         if getattr(review, "outcome", None) == "criterio_ambiguo" and task.task_name:
             # A falha não é do Developer: devolve a tentativa, no máximo uma vez por subtarefa na sessão (design §8.1).

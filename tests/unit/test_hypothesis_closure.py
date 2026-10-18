@@ -472,7 +472,7 @@ def test_contadores_de_operacao():
         out = HypothesisClosureReader().read("s")
     assert out == {
         "resultados_sem_mede": 2, "subtarefas_resultado_negativo": 1, "hipoteses_sem_tentativa_no_fechamento": 2,
-        "fechada_por_hipoteses_nao_testadas": False, "reprovacoes_sem_hipotese": 0,
+        "fechada_por_hipoteses_nao_testadas": False,
     }
 
 

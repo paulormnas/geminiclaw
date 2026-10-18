@@ -572,6 +572,10 @@ def run_combination(
                       tokens=sum_tokens(usage), db=db_metrics(session.name), **board)
         result.update(model_versions.execution_record(model_versions.db_allocation_profile(session.name)))
         result["anomalias_placar"] = [*scoreboard_anomalies(board), *model_versions.version_marks(result["modelos"])]
+        # v18.7-exploration-metrics: hash do contrato diferente entre a execução e a revisão é aviso de placar (registro
+        # de integridade), não anomalia de parada: não interrompe o runner.
+        if int((result["db"].get("interactions") or {}).get("contrato_divergente") or 0) > 0:
+            result["anomalias_placar"].append("contrato_divergente")
         divergences = check_pins(combo["roles"], db_llm_routing(session.name), controle)
         result["routing_check"] = {"ok": not divergences, "divergences": divergences}
         for line in divergences:

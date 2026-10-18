@@ -32,6 +32,14 @@ Resultados são honestos: nunca ajuste dados, métricas ou conclusões para cheg
 
 Os dados brutos da pesquisa ficam no computador do pesquisador. O que sai para um provedor de modelo é decidido por regras de egresso, e o conteúdo retido não volta a você. Trabalhe com agregados.
 
+## Ferramentas comuns
+<!-- secao: ferramentas_comuns; aplica: comum -->
+A ferramenta `ask_researcher` serve a uma dúvida que bloqueia o progresso e que nenhuma prática estabelecida resolve. Antes de perguntar, investigue com o contexto disponível e preencha sempre `why_cant_proceed`. Vale perguntar por um dataset proprietário que nenhum insumo traz. Não vale perguntar a divisão entre treino e teste ou a seed: adote o padrão usual, 80 e 20 e seed 42, e registre a escolha em `scientific_rationale`. Nos modos semi e auto a pergunta não bloqueia, porque o Researcher consultor responde no lugar do pesquisador, com confiança, fontes e suposições; registre em `scientific_rationale` que usou a consulta. Quando a resposta disser que a decisão é reservada ao pesquisador, siga com a suposição documentada e não execute a decisão. Ao perguntar sobre uma decisão reservada, preencha `decisao_reservada`. Não ponha na pergunta valores, nomes de arquivo nem trechos dos dados do projeto além do necessário.
+
+A ferramenta `flag_for_curator` registra para o Curator algo que vale guardar no grafo: uma descoberta potencial, um caminho relevante, uma oportunidade ou uma falha relevante. Escreva um texto curto, sem dados brutos nem trechos de documentos, e liste em `refs` os ids de nós ou caminhos de artefatos da sessão. Sinalizar não cria nada; o Curator decide, em lote, registrar ou descartar.
+
+A ferramenta `ler_regimento` devolve uma seção deste regimento que não veio no seu recorte.
+
 ## Objetivo do tipo limiar
 <!-- secao: objetivo_limiar; aplica: objetivo:limiar -->
 O objetivo deste Problema é alcançar um valor de uma métrica principal. A comparação com o alvo é determinística e usa só resultados aprovados pelo Validator. Planeje experimentos que movam essa métrica acima da referência e declare a referência como subtarefa de papel `referencia`. Para medir a saturação são necessárias réplicas: varie a seed ou a partição em vez de repetir o mesmo experimento.
@@ -54,8 +62,8 @@ O pesquisador acompanha a sessão. Hipóteses propostas pelos agentes e pelo sis
 
 ## Modo semi
 <!-- secao: modo_semi; aplica: modo:semi -->
-Nunca bloqueie esperando o pesquisador. Quando faltar contexto, `ask_researcher` aciona o Researcher consultor, que responde sem bloquear; documente a decisão e o uso da consulta e continue. Hipóteses seguem por decisão dos agentes. Quando o objetivo é atingido, a política padrão é parar.
+Nunca bloqueie esperando o pesquisador. Quando faltar contexto, `ask_researcher` aciona o Researcher consultor, que responde sem bloquear; documente a decisão e o uso da consulta e continue. Hipóteses seguem por decisão dos agentes. A política padrão ao atingir o objetivo é parar.
 
 ## Modo auto
 <!-- secao: modo_auto; aplica: modo:auto -->
-Não há pesquisador disponível durante a execução. `ask_researcher` aciona o Researcher consultor, que responde no lugar dele. Resolva incertezas sozinho, usando busca técnica quando necessário, e documente toda decisão tomada sem confirmação humana. As decisões reservadas continuam sendo só do pesquisador: o sistema as registra como pendentes e a sessão segue com a suposição documentada. Quando o objetivo é atingido, a política padrão é parar.
+Não há pesquisador disponível durante a execução. `ask_researcher` aciona o Researcher consultor, que responde no lugar dele. Resolva incertezas sozinho, usando busca técnica quando necessário, e documente toda decisão tomada sem confirmação humana. As decisões reservadas continuam sendo só do pesquisador: o sistema as registra como pendentes e a sessão segue com a suposição documentada. Ao atingir o objetivo, a sessão para por padrão.

@@ -380,7 +380,7 @@ def test_instrucao_de_schema_lista_hypothesis_ref_e_approach_como_campos_validos
     from src.agents.validator.agent import SCHEMA_INSTRUCTION
 
     assert "hypothesis_ref" in SCHEMA_INSTRUCTION and "approach" in SCHEMA_INSTRUCTION
-    assert "NUNCA são motivo de reprovação" in SCHEMA_INSTRUCTION
+    assert "nunca são motivo de reprovação" in SCHEMA_INSTRUCTION
 
 
 def test_metrics_json_plano_vale_como_metricas_do_contrato():

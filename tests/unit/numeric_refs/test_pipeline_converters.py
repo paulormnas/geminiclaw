@@ -272,8 +272,8 @@ def test_instrucoes_do_developer_e_do_curator():
     from src.agents.curator.agent import AGENT_INSTRUCTION as CURATOR
     from src.agents.developer.agent import AGENT_INSTRUCTION as DEVELOPER
 
-    assert "unidades=" in DEVELOPER and "literal" in DEVELOPER
-    assert "{{res:" in CURATOR and "RECUSAM referências malformadas" in CURATOR
+    assert '"unidades"' in DEVELOPER and "literal" in DEVELOPER
+    assert "{{res:" in CURATOR and "recusam referências malformadas" in CURATOR
 
 
 def test_orquestrador_acrescenta_o_pipeline_a_sintese(tmp_path):

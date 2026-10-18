@@ -185,4 +185,8 @@ def test_bloco_do_prompt_entrega_sugestoes_como_dado_delimitado(tmp_path):
     assert "<dado_nao_confiavel origem=\"sugestoes_pendentes_do_curator\">" in block
     inner = block.split('origem="sugestoes_pendentes_do_curator">')[1].split("\n</dado_nao_confiavel>")[0]
     assert "</dado_nao_confiavel" not in inner  # o texto não consegue fechar o bloco de dado
-    assert "hipoteses" in block and "respostas_sugestoes" in block  # instrução do formato do plano
+    # v18.7-agent-system-prompts: o formato do plano está no prompt do papel; o bloco só leva dado delimitado
+    assert "FORMATO DO PLANO" not in block
+    from src.agents.researcher.agent import AGENT_INSTRUCTION
+
+    assert "hipoteses" in AGENT_INSTRUCTION and "respostas_sugestoes" in AGENT_INSTRUCTION

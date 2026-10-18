@@ -2220,6 +2220,9 @@ class Orchestrator:
         exploration = self._explorations.get(master_session_id)
         self._plan_extras.pop(master_session_id, None)
         exploration_block = await asyncio.to_thread(exploration.prompt_block) if exploration is not None else ""
+        plan_requirements = await asyncio.to_thread(exploration.plan_requirements) if exploration is not None else ""
+        if plan_requirements:
+            exploration_block += f"\n\n{plan_requirements}"
         asked_for_replies = False
         
         _pctx = self._project_blocks.get(master_session_id, "")

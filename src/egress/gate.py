@@ -283,6 +283,10 @@ class EgressGate:
 
         rule = OBSERVED_DATA_RULE + (f"\n{PLANNER_TEXT_RULE}" if has_planner_text else "")
         if system_out is not None:
+            # O laço do agente manda a instrução também como mensagem ``system``; com ``system`` explícito ela seria
+            # enviada duas vezes (a regra de dado observado a faz diferir da cópia, e o provedor não a deduplica).
+            # v18.7-agent-system-prompts: o regimento injetado no ``system`` torna a duplicação cara.
+            rendered = [m for m in rendered if not (m.get("role") == "system" and m.get("content") == system_out)]
             system_out = f"{system_out}\n\n{rule}" if system_out else rule
         else:
             target = next(

@@ -277,7 +277,10 @@ def test_prompt_do_developer_manda_imprimir_agregados():
     from src.agents.developer.agent import AGENT_INSTRUCTION  # noqa: F401  (instrução renderizada do módulo)
 
     texto = AGENT_INSTRUCTION() if callable(AGENT_INSTRUCTION) else AGENT_INSTRUCTION
-    assert "IMPRIMA AGREGADOS, NÃO DADOS" in texto
+    from src.agents.prompts import regras_de_seguranca
+
+    assert regras_de_seguranca("developer").splitlines()[0] in texto  # texto da regra egresso_agregados
+    assert "Imprima só agregados" in texto
     assert "head()" in texto and "print(df)" in texto and "registros" in texto
     assert "df.dtypes" in texto and "df.shape" in texto
 

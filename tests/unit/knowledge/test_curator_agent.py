@@ -150,7 +150,7 @@ def test_instrucao_contem_as_diretrizes_do_adr_015_secao_10():
         "Consolidar em lote",
         "Usar o vocabulário controlado para domínios e métricas",
         "Justificar: todo nó criado registra `justificativa_criacao` e `nos_consultados`",
-        "DADO NÃO CONFIÁVEL",
+        "dado não confiável",
         "Você NÃO decide pelo pesquisador",
     ):
         assert trecho in AGENT_INSTRUCTION, trecho

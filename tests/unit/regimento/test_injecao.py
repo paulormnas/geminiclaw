@@ -94,7 +94,7 @@ async def test_validator_do_plano_recebe_o_recorte(sessao_auto):
     resultado = await ValidatorAgent(provider=provider).validate_plan(plano, prompt="Treinar modelo")
     assert resultado.is_valid is True
     system = provider.calls[0].system
-    assert system.startswith("Você é o ValidatorAgent")
+    assert system.startswith("Papel\nVocê é o ValidatorAgent")
     assert CABECALHO_DISCRIMINACAO_AUTO in system
 
 

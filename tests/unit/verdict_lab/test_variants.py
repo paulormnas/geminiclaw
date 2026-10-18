@@ -129,3 +129,67 @@ def test_manifesto_da_variante_traz_parametros_efetivos() -> None:
     assert m["parametros"]["thresholds"] == [0.1, 0.3, 0.5] and "estrutura" in m
     json.dumps(m)
     assert dataclasses.asdict(V.Structure())["independencia"] == "atual"
+
+
+COMPLETA2 = dict(
+    independencia="por_tipo",
+    variacao_util="melhora_o_melhor",
+    b_por="variacao_sem_ganho_acumulada",
+    m_sem_baseline="folga",
+    m_folga_piso=0.5,
+    criterio_com_alvo="exige_alvo",
+    d_replica_contraria=1.0,
+    d_variacao_sem_ganho=0.0,
+)
+
+
+def test_penalidade_acumulada_nao_reduz_o_peso_das_anteriores() -> None:
+    est = variant(**COMPLETA2)
+    base = list(_Builder().variations([0.96, 0.97, 0.98]).done())
+    before = V.lab_verdict(base, ABSOLUTO, est)
+    extra = list(_Builder().variations([0.96, 0.97, 0.98]).variations([0.955], start=4).done())
+    after = V.lab_verdict(extra, ABSOLUTO, est)
+    assert [d.w for d in after.detalhes[:3]] == [d.w for d in before.detalhes]
+    old = variant(**{**COMPLETA2, "b_por": "variacao_sem_ganho"})
+    assert V.lab_verdict(extra, ABSOLUTO, old).detalhes[0].w < V.lab_verdict(base, ABSOLUTO, old).detalhes[0].w
+
+
+def test_piso_da_folga_mantem_o_peso_de_melhora_pequena() -> None:
+    attempts = list(_Builder().result(0.951, "A").done())
+    sem_piso = V.lab_verdict(attempts, ABSOLUTO, variant(m_sem_baseline="folga")).detalhes[0].m
+    com_piso = V.lab_verdict(attempts, ABSOLUTO, variant(m_sem_baseline="folga", m_folga_piso=0.5)).detalhes[0].m
+    assert sem_piso == pytest.approx(0.05) and com_piso == 0.5
+
+
+def test_replica_contraria_pesa_cheio() -> None:
+    b = _Builder().variations([0.96, 0.97, 0.98]).result(0.93, "c3", node="n2", session="s2")
+    padrao = V.lab_verdict(list(b.done()), ABSOLUTO, variant(independencia="por_tipo"))
+    cheio = V.lab_verdict(list(b.done()), ABSOLUTO, variant(independencia="por_tipo", d_replica_contraria=1.0))
+    assert padrao.detalhes[-1].d == 0.5 and cheio.detalhes[-1].d == 1.0 and cheio.veredito < padrao.veredito
+
+
+def test_completa2_e_monotonica_no_catalogo() -> None:
+    from scripts.verdict_lab.properties import measure_properties
+
+    rows = measure_properties([variant(**COMPLETA2)], catalog())
+    assert {r["propriedade"]: r["violacoes"] for r in rows}["monotonicidade"] == 0
+
+
+def test_completa2_conclui_o_que_o_pesquisador_definiu() -> None:
+    from scripts.verdict_lab.scenarios import by_name
+
+    est = V.Variant(nome="c2", params=VerdictParams(prior=0.5), estrutura=V.Structure(**COMPLETA2))
+    sc = by_name()
+    for nome in ("A8-ruido", "A16-ruido", "V20", "Q-E3-R1-neg", "E2"):
+        s = sc[nome]
+        assert abs(V.lab_verdict(list(s.attempts), s.criterion, est).veredito) < 0.3, nome
+    for nome in ("E3", "C3-acima-do-alvo"):
+        s = sc[nome]
+        assert V.lab_verdict(list(s.attempts), s.criterion, est).veredito >= 0.3, nome
+    assert V.lab_verdict(list(sc["C3-abaixo-do-alvo"].attempts), sc["C3-abaixo-do-alvo"].criterion, est).veredito < -0.3
+
+
+def test_positiva_sem_ganho_nao_soma_volume() -> None:
+    b = _Builder().variations([0.96] + [0.96] * 19)
+    r = V.lab_verdict(list(b.done()), ABSOLUTO, variant(**COMPLETA2))
+    assert [d.d for d in r.detalhes] == [1.0] + [0.0] * 19

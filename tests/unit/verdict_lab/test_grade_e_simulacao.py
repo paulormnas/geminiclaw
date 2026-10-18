@@ -23,7 +23,7 @@ pytestmark = pytest.mark.unit
 def test_catalogo_segue_as_regras_do_pesquisador() -> None:
     s = by_name()
     assert s["E3"].esperado == "funciona" and s["E2"].esperado == "indeciso" and s["V8"].esperado == "indeciso"
-    assert {x.familia for x in catalog()} >= set("EVRSNFMBCDPQG")
+    assert {x.familia for x in catalog()} >= set("EVRSNFMBCDPQGA")
     assert all(x.esperado in ESPERADOS and x.justificativa for x in catalog())
     assert len({x.nome for x in catalog()}) == len(catalog())
 
@@ -290,3 +290,46 @@ def test_nenhum_modulo_de_src_importa_o_laboratorio() -> None:
 
 def test_sim_point_rotulos() -> None:
     assert SimPoint(**POINT).label()["granularidade"] is None
+
+
+def test_criterio_de_aceite_da_simulacao(tmp_path: Path) -> None:
+    out = tmp_path / "ac"
+    assert (
+        cli.main(
+            [
+                "simulacao",
+                "--repeticoes",
+                "6",
+                "--max-tentativas",
+                "10",
+                "--sigma",
+                "0.01",
+                "--tau",
+                "0.01",
+                "--efeito",
+                "0.02",
+                "--p-variacao",
+                "1",
+                "--p-falha",
+                "0",
+                "--nos",
+                "1",
+                "--fv-max",
+                "0.02",
+                "--variante",
+                "atual",
+                "--variante",
+                "completa2",
+                "--expandir",
+                "--saida",
+                str(out),
+            ]
+        )
+        == 0
+    )
+    rows = list(csv.DictReader((out / "resultados.csv").open(encoding="utf-8")))
+    aceite = [r for r in rows if r["tabela"] == "aceite"]
+    assert aceite and {r["fv_teto"] for r in aceite} == {"0.02"}
+    assert all((float(r["fv_max_tipos"]) <= 0.02) == (r["aceita"] == "True") for r in aceite)
+    report = (out / "relatorio.md").read_text(encoding="utf-8")
+    assert "Critério de aceite: falsa validação de no máximo 2%" in report and "Menor limiar aceito" in report

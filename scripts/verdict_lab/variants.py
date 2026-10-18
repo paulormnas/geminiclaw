@@ -34,7 +34,7 @@ _CHOICES: dict[str, tuple[str, ...]] = {
     "independencia": ("atual", "por_tipo"),
     "variacao_util": ("nenhuma", "melhora_o_melhor"),
     "m_sem_baseline": ("fixo", "folga"),
-    "b_por": ("configuracao", "variacao_sem_ganho"),
+    "b_por": ("configuracao", "variacao_sem_ganho", "variacao_sem_ganho_acumulada"),
     "criterio_com_alvo": ("baseline_primeiro", "exige_alvo"),
 }
 
@@ -59,6 +59,9 @@ class Structure:
     m_sem_baseline: str = "fixo"
     b_por: str = "configuracao"
     criterio_com_alvo: str = "baseline_primeiro"
+    m_folga_piso: float = 0.0
+    d_replica_contraria: float | None = None
+    d_variacao_sem_ganho: float | None = None
 
     def is_default(self) -> bool:
         """``True`` quando nenhuma alternativa muda a equação atual (os pesos de ``por_tipo`` não contam)."""
@@ -262,7 +265,7 @@ def _direction_and_magnitude(attempt: Attempt, criterion: Criterion, st: Structu
         margin = _gain(criterion, value, criterion.alvo)
         if st.m_sem_baseline == "folga" and criterion.delta_min:
             if margin >= 0:
-                return 1, min(1.0, margin / (2 * criterion.delta_min))
+                return 1, max(st.m_folga_piso, min(1.0, margin / (2 * criterion.delta_min)))
             return -1, min(1.0, -margin / criterion.delta_min)
         return (1, 0.5) if margin >= 0 else (-1, 0.5)
 
@@ -332,9 +335,17 @@ def _independence_by_kind(records: list[_Record], st: Structure) -> None:
             continue
         a = r.attempt
         nodes = config_nodes.get(a.config_hash)
-        if nodes is None:
+        contraria = st.d_replica_contraria is not None and nodes is not None and r.classificacao == "negativa"
+        if contraria:
+            r.d = st.d_replica_contraria
+        elif nodes is None:
             useful = st.variacao_util == "nenhuma" or r.attempt.value is None or r.melhorou
-            r.d = st.d_variacao if useful else st.d_semente
+            if useful:
+                r.d = st.d_variacao
+            elif st.d_variacao_sem_ganho is not None and r.classificacao == "positiva":
+                r.d = st.d_variacao_sem_ganho
+            else:
+                r.d = st.d_semente
         elif a.node_id not in nodes:
             r.d = st.d_replica_no
         elif any(ds not in seen_datasets for ds in a.dataset_ids):
@@ -349,10 +360,16 @@ def _independence_by_kind(records: list[_Record], st: Structure) -> None:
 
 
 def _n_config(records: list[_Record], st: Structure) -> int:
-    if st.b_por == "variacao_sem_ganho":
+    if st.b_por in ("variacao_sem_ganho", "variacao_sem_ganho_acumulada"):
         return 1 + sum(1 for r in records if r.nova_config and not r.melhorou and r.attempt.value is not None)
     pool = records if st.n_config_conta_falhas else [r for r in records if r.classificacao in ("positiva", "negativa")]
     return max(1, len({r.attempt.config_hash for r in pool}))
+
+
+def _n_config_ate(records: list[_Record], upto: _Record, st: Structure) -> int:
+    """``n_config`` visto até a própria evidência (inclusive): evidência posterior não altera o peso das anteriores."""
+    index = records.index(upto)
+    return _n_config(records[: index + 1], st)
 
 
 def _search_penalty(record: _Record, records: list[_Record], n_config: int, params: VerdictParams) -> float:
@@ -388,7 +405,9 @@ def _reimplemented(attempts: list[Attempt], criterion: Criterion, variant: Varia
     n_config = _n_config(records, st)
     for r in records:
         if r.classificacao == "positiva":
-            r.b = _search_penalty(r, records, n_config, params)
+            r.b = _search_penalty(
+                r, records, _n_config_ate(records, r, st) if st.b_por.endswith("acumulada") else n_config, params
+            )
         elif r.classificacao == "negativa":
             r.b = 1.0
         r.w = r.q * r.m * r.d * r.b

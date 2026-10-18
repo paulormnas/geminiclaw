@@ -86,7 +86,8 @@ Relatório: [`docs/calibracao-veredito/2026-10-18-etapa-1-repeticao-offline.md`]
 3. **Variar a configuração conta como exploração**, desde que a configuração ainda não tenha sido executada em outro nó. **Replicar em outro nó conta como validação, com peso menor que uma variação**: a variação tem mais chance de achar caminhos novos e resultados melhores; a réplica confirma o que já foi descoberto (resposta à pergunta 4 do §2, quanto à ordem; os valores saem da exploração).
 4. **Cautela com volume:** a equação não pode premiar muitas buscas e variações que não melhoram a pesquisa. O ponto será aprofundado com os resultados da grade sintética.
 5. Ordem: grade sintética (etapa 2) antes de qualquer mudança na fórmula; depois, ajuste da fórmula até resultados significativos.
-6. Os resultados de calibração e validação de parâmetros ficam em `docs/calibracao-veredito/`; `docs/benchmarks/` fica só para benchmark. Os relatórios devem servir de base para a dissertação.
+6. **Critério de aceite:** taxa de falsa validação de no máximo 2 % (definição e método no §4.1 a §4.3). O objetivo é minimizar o registro e a validação de hipóteses que não contribuem para a pesquisa.
+7. Os resultados de calibração e validação de parâmetros ficam em `docs/calibracao-veredito/`; `docs/benchmarks/` fica só para benchmark. Os relatórios devem servir de base para a dissertação.
 
 ---
 
@@ -128,7 +129,45 @@ Em ordem de custo crescente; cada etapa só começa depois de revisar a anterior
 - Robustez: variação entre sementes, modelos e repetições.
 - Custo de obter a evidência (tokens e tempo) em relação ao veredito alcançado.
 
-Os critérios de aceite de uma variante (por exemplo, taxa máxima de falsa validação) são propostos pelo Arquiteto com os resultados das etapas 1 e 2 e decididos pelo pesquisador.
+#### 4.1 Definição das medidas
+
+A simulação (etapa 2) gera hipóteses cuja resposta é conhecida e aplica a cada uma o veredito da variante, tentativa a tentativa. A decisão é tomada na primeira vez em que `|veredito|` alcança o limiar de conclusão (`DECISION_EVAL_MIN_VERDICT`). Cada hipótese gerada tem um tipo:
+
+| Tipo | Média real do resultado | Resposta correta |
+|---|---|---|
+| `verdadeira` | acima do alvo por um efeito `e` | validada (`funciona`) |
+| `falsa` | abaixo do alvo por `e` | refutada (`nao_funciona`) ou indecisa; nunca validada |
+| `sem_efeito` | igual ao alvo | nem validada nem refutada de forma confiável |
+
+Para cada variante e limiar, sobre `n` hipóteses de cada tipo e um orçamento de tentativas:
+
+- **Poder** = (hipóteses `verdadeira` validadas) / `n`. Mede o que a fórmula consegue concluir quando há algo a concluir.
+- **Taxa de falsa validação** = (hipóteses `falsa` ou `sem_efeito` validadas) / `n`, calculada por tipo. Uma hipótese assim validada é registrada como conhecimento sem contribuir para a pesquisa; é o erro que o pesquisador quer minimizar. O valor de uma variante é o **maior** dos dois tipos, para que a variante não esconda o erro de um tipo na média do outro.
+- **Taxa de falsa refutação** = (hipóteses `verdadeira` refutadas) / `n`.
+- **Indecisão** = (hipóteses que não cruzaram nenhum dos dois limiares) / `n`.
+- **Tentativas até cruzar** 0,1, 0,3 e 0,5 (mediana e percentis 10 e 90).
+- **Custo por validação útil** = (tentativas gastas em todas as hipóteses) / (hipóteses `verdadeira` validadas).
+
+As taxas são médias sobre os pontos de uma grade de condições (ruído do resultado, efeito por configuração, probabilidade de variar a configuração e de falhar, número de nós), com semente fixa e repetições por ponto. O relatório traz também o **pior ponto da grade**, porque uma média pode esconder um regime (por exemplo, ruído alto) em que a taxa passa do teto.
+
+#### 4.2 Critério de aceite decidido (2026-10-18)
+
+**A taxa de falsa validação, no limiar de conclusão escolhido, não passa de 2 %** (média sobre a grade de condições, nos dois tipos `falsa` e `sem_efeito`). Dentro desse teto, a variante e o limiar de maior poder são os escolhidos; entre empates, vale o menor custo por validação útil. O teto de 2 % expressa o objetivo do pesquisador de minimizar o registro e a validação de hipóteses que não contribuem para a pesquisa. Ele vale para a simulação (condições controladas) e é reconferido nas etapas 3 e 4 (sessões controladas e bateria real), cujos resultados podem exigir ajuste.
+
+Os demais critérios (poder mínimo, falsa refutação, regras de cenário) são propostos pelo Arquiteto com os resultados das etapas 1 e 2 e decididos pelo pesquisador. As regras de cenário já decididas (2026-10-18): três variações positivas com evolução bastam para `funciona`; variações sem evolução ficam `indeciso`.
+
+#### 4.3 Método registrado
+
+O processo de calibração, para ser descrito na dissertação, segue sempre esta ordem:
+
+1. **Repetição offline** (etapa 1): recálculo do veredito sobre os dados reais arquivados para entender por que o veredito não conclui. Relatório em `docs/calibracao-veredito/`.
+2. **Regras do pesquisador:** o pesquisador declara o que o veredito deve concluir em situações concretas (seção "Decisões do pesquisador"), antes de ver os números das variantes.
+3. **Grade sintética** (etapa 2): cenários determinísticos com o desfecho esperado escrito a partir das regras do passo 2, e simulação com resposta conhecida para medir os erros do §4.1.
+4. **Escolha pelo critério de aceite** (§4.2), com o preço de cada decisão (falsa validação contra poder) em tabela.
+5. **Mudança do sistema** só depois: `v18.8-verdict-calibration`, com revisão do ADR 015 §9, aprovada pelo pesquisador.
+6. **Confirmação com dados novos** (etapas 3 e 4), que o ajuste não viu.
+
+Cada rodada tem um relatório com comando, commit, semente e sha256 das entradas, que a reproduz (`manifesto.json`).
 
 ### 5. Variantes candidatas a testar (não são recomendações)
 
@@ -186,6 +225,6 @@ Revisar depois das etapas 1 e 2: se os cenários explicam o veredito da bateria 
 | Etapa (§3) | Estado (2026-10-18) |
 |---|---|
 | 1. Repetição offline | Concluída com scripts provisórios ([relatório](../calibracao-veredito/2026-10-18-etapa-1-repeticao-offline.md)); refeita pela ferramenta de `v18.8-verdict-lab` |
-| 2. Grade sintética e propriedades | Especificada em `v18.8-verdict-lab` (aguarda aprovação) |
+| 2. Grade sintética e propriedades | Concluída com `v18.8-verdict-lab` (#222; [relatório](../calibracao-veredito/2026-10-18-etapa-2-grade-sintetica.md)); segunda rodada com as variantes corrigidas e o critério de 2 % |
 | 3. Sessões controladas | Não iniciada |
 | 4. Bateria no Raspberry Pi | Não iniciada |

@@ -59,8 +59,11 @@ O pacote fica em `scripts/` (como `scripts/benchmark/`) porque é ferramenta de 
 | `independencia` | `atual`, `por_tipo` | `por_tipo` classifica cada evidência pela ordem da tabela abaixo e usa os pesos `d_variacao`, `d_replica_no`, `d_dataset`, `d_sessao` e `d_semente` |
 | `variacao_util` | `nenhuma` (padrão), `melhora_o_melhor` | Com `melhora_o_melhor`, uma variação só recebe `d_variacao` se o valor superar o melhor valor anterior da hipótese, no sentido da métrica, em mais que `variacao_util_epsilon`; senão, recebe `d_semente` (é volume, não exploração). Padrão `variacao_util_epsilon = 0`: qualquer melhora conta (decisão do pesquisador, 2026-10-18) |
 | `m_sem_baseline` | `fixo` (atual, 0,5), `folga` | Com `folga`, sem baseline e com alvo e `δ`, `m = min(1, folga / (2δ))` na positiva e `m = min(1, falta / δ)` na negativa, com `folga` e `falta` = distância ao alvo no sentido favorável e no desfavorável (ficar logo abaixo do alvo vale perto de 0, como o quase empate do ADR 015 §9.4) |
-| `b_por` | `configuracao` (atual), `variacao_sem_ganho` | Com `variacao_sem_ganho`, `n_config` conta só as variações que não melhoraram o melhor valor anterior (mais 1) |
+| `b_por` | `configuracao` (atual), `variacao_sem_ganho`, `variacao_sem_ganho_acumulada` | Com `variacao_sem_ganho`, `n_config` conta só as variações que não melhoraram o melhor valor anterior (mais 1), sobre todas as tentativas. Com `variacao_sem_ganho_acumulada`, a contagem vai só até a própria evidência, em ordem cronológica: uma evidência posterior não reduz o peso das anteriores (a primeira forma perde monotonicidade, achado da etapa 2) |
 | `criterio_com_alvo` | `baseline_primeiro` (atual), `exige_alvo` | Hoje, com baseline, a direção vem só de `Δ ≥ δ` e o alvo é ignorado (`_direction_and_magnitude`, `src/knowledge/verdict.py:292-321`), enquanto o objetivo `limiar` exige alcançar o alvo **e** superar a referência (`src/knowledge/objective.py:228-236`). Com `exige_alvo`, quando o critério tem alvo e baseline, a evidência só é positiva se as duas condições valerem; `m` continua pela conta do baseline, e a evidência que supera o baseline mas não alcança o alvo é negativa com `m = min(1, falta / δ)` |
+| `m_folga_piso` | número (padrão 0) | Com `m_sem_baseline = folga`, piso do `m` das evidências positivas (0,5 reproduz o valor fixo atual para melhoras pequenas e deixa `m` crescer com a folga). Sem piso, uma melhora pequena sobre o alvo pesa quase zero |
+| `d_replica_contraria` | número ou ausente | Com `independencia = por_tipo`, peso `d` de uma evidência **negativa** em configuração já vista (réplica que não confirma). Ausente: o mesmo peso de uma réplica positiva. 1,0: a falha de confirmação pesa cheio |
+| `d_variacao_sem_ganho` | número ou ausente | Com `variacao_util = melhora_o_melhor`, peso `d` de uma evidência **positiva** de variação que não superou o melhor valor anterior. Ausente: `d_semente`. 0,0: variação sem evolução não soma (o volume não produz conclusão) |
 
 Classificação de `independencia: por_tipo`, aplicada em ordem cronológica às tentativas que viram evidência, com os conjuntos de "já visto" da própria hipótese:
 
@@ -75,6 +78,9 @@ Classificação de `independencia: por_tipo`, aplicada em ordem cronológica às
 A ordem segue as decisões do pesquisador de 2026-10-18: variação conta como exploração se a configuração ainda não foi executada (em nenhum nó), e réplica em outro nó conta como validação, com peso menor que a variação. Os pesos de `variantes.json` (§3.3) são pontos de partida para a grade, não recomendações.
 
 ### 3.3 Variantes padrão
+
+Depois da etapa 2 (2026-10-18), `variantes.json` ganhou `base_alvo` (por tipo, variação útil e alvo exigido) e `completa2` (`completa` corrigida: penalidade acumulada, piso 0,5 na folga, réplica contrária com peso cheio e positiva sem ganho com peso zero), mais `completa2` com `prior` 0,75, 0,5 e 0,25. As variantes antigas continuam, para reproduzir o relatório da etapa 2.
+
 
 `variantes.json` traz `atual`, cada alternativa de estrutura isolada, as combinações `por_tipo + sem_falhas_em_nconfig`, `por_tipo + melhora_o_melhor`, `por_tipo + melhora_o_melhor + variacao_sem_ganho + folga`, e `prior` 0,5 e 0,25 sobre `atual` e sobre a combinação mais completa. O pesquisador pode passar outro arquivo com `--variantes`.
 
@@ -96,6 +102,7 @@ Cada cenário é uma lista de tentativas (`Attempt`), um `Criterion` e um `esper
 | D, sentido `menor_melhor` | Os cenários E3, N3 e M21 espelhados para uma métrica de erro | D-E3 |
 | P, exploração seguida de estagnação | E3 seguido de 5 e 15 variações sem ganho | P-E3-V15 |
 | Q, réplica que não confirma | E3 e, depois, a melhor configuração em outro nó, abaixo do alvo | Q-E3-R1-neg |
+| A, recordes por acaso | Resultados em torno do alvo, alternando acima e abaixo, com recordes crescentes pequenos; e só melhoras pequenas acima do alvo | A8-ruido |
 | G, métrica discreta | Melhoras do tamanho de um acerto num conjunto de teste pequeno (1/30 ≈ 0,033), com valores repetidos | G-E3-passo-1/30 |
 
 O `esperado` segue as regras do pesquisador (2026-10-18): **três variações com resultado positivo, cada uma melhor que a anterior, bastam para `funciona`** (E3, E5, E8, D-E3, P-E3-V*); com uma ou duas, `indeciso`; **variações que não indicam evolução ficam `indeciso`** (família V). Os demais seguem a mesma leitura: N3 e N5 `nao_funciona`; R e S, a mesma configuração repetida sem variação, `indeciso` com 2 réplicas e `funciona` a partir de 3 nós; C com todos os resultados abaixo do alvo, `nao_funciona` para um objetivo `limiar`; Q `indeciso`; M21 `indeciso`. Cada `esperado` tem uma justificativa curta no catálogo, e o relatório lista os cenários em que nenhuma variante acerta. Para cada par (cenário, variante), a saída registra o veredito, a leitura, o detalhamento por tentativa e o acerto contra o `esperado`, considerando "conclui" quando `|veredito| ≥ DECISION_EVAL_MIN_VERDICT` (ou o limiar passado em `--limiar`, que pode ser uma lista para comparar limiares).
@@ -196,3 +203,7 @@ Revisão metodológica do desenho, pedida pelo pesquisador antes da aprovação.
 7. **Fora do escopo, registrado para depois:** dependência entre hipóteses do mesmo `Problema` (a mesma configuração testada sob duas hipóteses) e evidência vinda de outro projeto. Os dois casos ficam para `v18.8-verdict-calibration`.
 
 Conclusão da revisão: o desenho responde às perguntas do ADR 025 para a etapa 2, com os seis acréscimos acima. Aprovação condicionada pelo pesquisador ("estando tudo certo pode considerar aprovado") e registrada com esta revisão em 2026-10-18.
+
+## 14. Critério de aceite e saída da simulação (2026-10-18)
+
+O pesquisador fixou **falsa validação de no máximo 2 %** (ADR 025 §4.2). A simulação passa a calcular, por variante e limiar, a falsa validação (maior entre `falsa` e `sem_efeito`), o pior ponto da grade, o poder e a falsa refutação, e imprime no `relatorio.md` a seção "Critério de aceite" (menor limiar da curva que respeita o teto, `--fv-max`, padrão 0,02). A tabela `aceite` também vai ao `resultados.csv`. A simulação não mede o volume sem ganho (a hipótese `sem_efeito` tem média no alvo, e metade dos resultados vira evidência negativa); por isso o critério de escolha da variante usa **os dois instrumentos**: teto de 2 % na simulação **e** acerto dos cenários de volume e de recordes por acaso na grade.

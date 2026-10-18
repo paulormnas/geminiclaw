@@ -1,0 +1,176 @@
+{
+  "ferramenta": "scripts.verdict_lab",
+  "commit": "fa5573b7f8d631112403e827a33b32599e89c6cd",
+  "data_utc": "2026-10-18T22:18:08Z",
+  "comando": "replay",
+  "argv": [
+    "replay",
+    "/home/agent/bench",
+    "--saida",
+    "/home/agent/lab/replay",
+    "--variante",
+    "atual",
+    "--variante",
+    "completa"
+  ],
+  "argumentos": {
+    "entradas": [
+      "/home/agent/bench"
+    ]
+  },
+  "variantes": [
+    {
+      "nome": "atual",
+      "descricao": "ADR 015 §9.8 (VerdictParams.from_config())",
+      "origem_params": "config",
+      "parametros": {
+        "q_validated_complete": 1.0,
+        "q_validated_incomplete": 0.7,
+        "q_divergent": 0.3,
+        "d_new_node_or_dataset": 1.0,
+        "d_new_session": 0.5,
+        "d_new_seed": 0.2,
+        "gamma": 0.5,
+        "lambda_ambiguous": 0.5,
+        "approach_failure_q": 0.3,
+        "approach_failure_min_repeats": 2,
+        "prior": 1.0,
+        "thresholds": [
+          0.1,
+          0.3,
+          0.5
+        ]
+      },
+      "estrutura": {
+        "n_config_conta_falhas": true,
+        "independencia": "atual",
+        "d_variacao": 1.0,
+        "d_replica_no": 0.5,
+        "d_dataset": 1.0,
+        "d_sessao": 0.5,
+        "d_semente": 0.2,
+        "variacao_util": "nenhuma",
+        "variacao_util_epsilon": 0.0,
+        "m_sem_baseline": "fixo",
+        "b_por": "configuracao",
+        "criterio_com_alvo": "baseline_primeiro"
+      }
+    },
+    {
+      "nome": "completa",
+      "descricao": "por_tipo, melhora, penalidade por variação sem ganho, folga e alvo exigido",
+      "origem_params": "config",
+      "parametros": {
+        "q_validated_complete": 1.0,
+        "q_validated_incomplete": 0.7,
+        "q_divergent": 0.3,
+        "d_new_node_or_dataset": 1.0,
+        "d_new_session": 0.5,
+        "d_new_seed": 0.2,
+        "gamma": 0.5,
+        "lambda_ambiguous": 0.5,
+        "approach_failure_q": 0.3,
+        "approach_failure_min_repeats": 2,
+        "prior": 1.0,
+        "thresholds": [
+          0.1,
+          0.3,
+          0.5
+        ]
+      },
+      "estrutura": {
+        "n_config_conta_falhas": true,
+        "independencia": "por_tipo",
+        "d_variacao": 1.0,
+        "d_replica_no": 0.5,
+        "d_dataset": 1.0,
+        "d_sessao": 0.5,
+        "d_semente": 0.2,
+        "variacao_util": "melhora_o_melhor",
+        "variacao_util_epsilon": 0.0,
+        "m_sem_baseline": "folga",
+        "b_por": "variacao_sem_ganho",
+        "criterio_com_alvo": "exige_alvo"
+      }
+    }
+  ],
+  "sementes": {},
+  "entradas": [
+    {
+      "caminho": "/home/agent/Documentos/Workspace/geminiclaw/scripts/verdict_lab/variantes.json",
+      "sha256": "9d03bc465cfed21bd36145e0b2b1d2632dd01ae0843c5ed5b14d45917b20786c"
+    },
+    {
+      "caminho": "/home/agent/bench/bateria_v18_6.json.d/controle-gemini-todos/r2/grafo_projeto.json",
+      "sha256": "b94a21e0e04643431d00147544cef87a2e01c50426558186966d5a642282274d"
+    },
+    {
+      "caminho": "/home/agent/bench/bateria_v18_6.json.d/controle-gemini-todos/r3/grafo_projeto.json",
+      "sha256": "2c37c39f91b778070ffb0898bae7c8eacf698a3e4da9b0446fa3f84c50d10a66"
+    },
+    {
+      "caminho": "/home/agent/bench/bateria_v18_6.json.d/gemini-dev-sonnet-juiz/r1/grafo_projeto.json",
+      "sha256": "d341b9f887ce60b7914639d2235c8d4c01871b6faeacc963697a60c149d4eb41"
+    },
+    {
+      "caminho": "/home/agent/bench/bateria_v18_6.json.d/gemini-dev-sonnet-juiz/r2/grafo_projeto.json",
+      "sha256": "7816ad145ee39de810065f6fc2c5e933b7a71c051372d9e58cfaf53840f4f988"
+    },
+    {
+      "caminho": "/home/agent/bench/bateria_v18_6.json.d/gemini-dev-sonnet-juiz/r3/grafo_projeto.json",
+      "sha256": "cb5f3945c399b9d9db6497f7bf4f940e147872491091b1a1054197b76c6ab736"
+    },
+    {
+      "caminho": "/home/agent/bench/bateria_v18_6.json.d/gemini-dev-sonnet-juiz/r3-falha-cota-google/grafo_projeto.json",
+      "sha256": "e4cd16b3f17fb2190a5a581b3736ec8e5a5b9940d58de6dd9793ca6d96fe2ada"
+    },
+    {
+      "caminho": "/home/agent/bench/bateria_v18_6.json.d/haiku-dev-sol-juiz/r1/grafo_projeto.json",
+      "sha256": "38a50adf45dd2cce91d2de8cf9701a14072f23637b4590d876e11fbe87e14f25"
+    },
+    {
+      "caminho": "/home/agent/bench/bateria_v18_6.json.d/haiku-dev-sol-juiz/r1-falha-reasoning-none/grafo_projeto.json",
+      "sha256": "7930cbd8b05af4f226df51f610288454640ae708a2c740c2cff59a00d20c3385"
+    },
+    {
+      "caminho": "/home/agent/bench/bateria_v18_6.json.d/haiku-dev-sol-juiz/r1-falha-sequence-item/grafo_projeto.json",
+      "sha256": "d0e96e52c439ca9624cbe55b9d7587fce90276480189575930b0c75b8f6bf9ab"
+    },
+    {
+      "caminho": "/home/agent/bench/bateria_v18_6.json.d/haiku-dev-sol-juiz/r2/grafo_projeto.json",
+      "sha256": "0f0936b25bc89f2a29f5fea180a22fe4e1fdb02948094ea93cb3e31e74967869"
+    },
+    {
+      "caminho": "/home/agent/bench/bateria_v18_6.json.d/haiku-dev-sol-juiz/r3/grafo_projeto.json",
+      "sha256": "8c22e530eb499505a9d43a515db0f731044325f8ca57015f75a6b0f05dc9e09a"
+    },
+    {
+      "caminho": "/home/agent/bench/bateria_v18_6.json.d/sonnet-dev-gemini-juiz/r1/grafo_projeto.json",
+      "sha256": "929650a9d21f4f7269079da72d8b60c81e26613dea3695ebe03ff18a75807336"
+    },
+    {
+      "caminho": "/home/agent/bench/bateria_v18_6.json.d/sonnet-dev-gemini-juiz/r2/grafo_projeto.json",
+      "sha256": "2f05be76316594e098f8a4db17550418fd6130d08f1b4629dfeaa6aa4ee03e9b"
+    },
+    {
+      "caminho": "/home/agent/bench/bateria_v18_6.json.d/sonnet-dev-gemini-juiz/r3/grafo_projeto.json",
+      "sha256": "e7903c33733f97156f8c018036b716c276690eac595f0cac132183f70412a833"
+    },
+    {
+      "caminho": "/home/agent/bench/bateria_v18_7.json.d/gemini-dev-sonnet-juiz/r1/grafo_projeto.json",
+      "sha256": "79f2117e4a65083a49c42971177be3486fe6e8877531a7efe846f6e089825490"
+    },
+    {
+      "caminho": "/home/agent/bench/bateria_v18_7b.json.d/haiku-dev-sol-juiz/r1/grafo_projeto.json",
+      "sha256": "bf7fe72ba16648ecc9c740c46e05db1ae8f6fac18beea1a82405f70cd84f374d"
+    },
+    {
+      "caminho": "/home/agent/bench/bateria_v18_7c.json.d/sonnet-dev-sol-juiz/r1/grafo_projeto.json",
+      "sha256": "220d389e5fac88ceb0d702216d61d350fcb37e37f292b91a619fffccdbcc1fde"
+    },
+    {
+      "caminho": "/home/agent/bench/short.json.d/controle-gemini-todos/r1/grafo_projeto.json",
+      "sha256": "d65633626e11cec47cbd925490faf5ef5343bd0f916340237bf628d913221a6e"
+    }
+  ]
+}

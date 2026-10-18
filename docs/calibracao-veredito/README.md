@@ -7,3 +7,4 @@ Cada relatório registra a pergunta, os dados de entrada, o método, os resultad
 | Data | Etapa (ADR 025 §3) | Relatório |
 |---|---|---|
 | 2026-10-18 | 1. Repetição offline sobre os grafos arquivados | [2026-10-18-etapa-1-repeticao-offline.md](2026-10-18-etapa-1-repeticao-offline.md) |
+| 2026-10-18 | 2. Grade sintética, simulação e sensibilidade | [2026-10-18-etapa-2-grade-sintetica.md](2026-10-18-etapa-2-grade-sintetica.md) |

@@ -1,6 +1,6 @@
 # Tarefas: v18.7-subtask-contract
 
-**Estado (2026-10-18):** em andamento. Seções 0 a 5 mergeadas (#203 a #209) e seção 6 neste PR; falta a seção 7 (validação final). Achado das dependências decidido (design §14: mudança própria `v18.7-dependency-artifacts`, caminho `/deps_out/<projeto>/<task_name>`).
+**Estado (2026-10-18):** implementada e mergeada (seções 0 a 6: #203 a #210; seção 7 neste PR). Validação offline feita (reprocessamento da V18.6, `docs/benchmarks/2026-10-18-reprocessamento-v18-6-subtask-contract.md`). Pendências: bateria real no Pi (aguarda confirmação do pesquisador; combinações sem Gemini) e arquivamento da mudança depois dela; achado das dependências em mudança própria (`v18.7-dependency-artifacts`, design §14).
 
 ## 0. Pré-requisitos
 - [x] 0.1 Mudança aprovada pelo pesquisador, com as questões do design §11 decididas.
@@ -48,6 +48,6 @@
 - [x] 6.5 Testes: "Validação do plano com o critério do Problema", "Colisão real", "Atualização intencional", "Critérios longos demais", "Nome de artefato com caminho relativo", "Instrução renderizada".
 
 ## 7. Validação
-- [ ] 7.1 `uv run ruff check .` sem erros novos; `uv run pytest -m "unit or integration" -v` verde.
-- [ ] 7.2 Reprocessar, sem LLM, os planos e os `metrics.json` da bateria V18.6 que ainda existirem e contar quantas reprovações por artefato ausente, chave de métrica e colisão as regras novas teriam evitado ou apontado antes da execução.
-- [ ] 7.3 `tasks.md` com caixas e linha **Estado** atualizadas no PR; confirmação com o Arquiteto para o status do ADR 022.
+- [x] 7.1 `uv run ruff check .` sem erros novos; `uv run pytest -m "unit or integration" -v` verde.
+- [x] 7.2 (feito em 2026-10-18; relatório em `docs/benchmarks/`) Reprocessar, sem LLM, os planos e os `metrics.json` da bateria V18.6 que ainda existirem e contar quantas reprovações por artefato ausente, chave de métrica e colisão as regras novas teriam evitado ou apontado antes da execução.
+- [x] 7.3 (ADR 022 e índice atualizados neste PR: `Parcialmente implementado`) `tasks.md` com caixas e linha **Estado** atualizadas no PR; confirmação com o Arquiteto para o status do ADR 022.

@@ -1,6 +1,6 @@
 # ADR 022 — Contrato de Contexto por Chamada e Regimento da Pesquisa
 
-**Status:** Aprovado (2026-10-15)
+**Status:** Parcialmente implementado (2026-10-18; aprovado em 2026-10-15)
 **Data:** 2026-10-15
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** `roadmaps/roadmap_V18.7.md` (criado junto com as mudanças OpenSpec)
@@ -194,6 +194,20 @@ Evitaria o incentivo a ajustar o modelo no conjunto de teste.
 | `v18.7-subtask-contract` | `agent-prompts`, `pipeline-robustness`, `data-egress` | §1–§3, §6, §8: construtores de contexto por papel, contrato da subtarefa, separação critérios × integridade, chaves de métrica, contaminação e tamanho do contrato, colisão de artefatos |
 | `v18.7-agent-system-prompts` | `agent-prompts`, `agent-runtime` | §4–§5: auditoria de cada prompt contra o código; regimento da pesquisa v1 (prosa e parte estruturada); prompts revisados de todos os papéis; recorte por tipo de objetivo e modo; ferramenta de leitura do regimento; versão por sessão; adendo de projeto; teste de coerência |
 | (dentro de `v18.7-exploration-metrics`, ADR 021) | `operation-metrics` | §6.3, §7: hash do contrato por tentativa, tokens do contrato por execução |
+
+---
+
+### Estado da implementação (2026-10-18)
+
+| Mudança | Estado |
+|---|---|
+| `v18.7-subtask-contract` | Implementada e mergeada (#203 a #210): construtores de contexto por papel e contrato da subtarefa (`src/agents/subtask_contract.py`, §1 e §2), fixado no histórico e reenviado por tentativa; separação aceite × integridade com parecer tipado (§3); chaves de métrica, `criterio_ambiguo` e devolução da tentativa (§2.7); egresso do contrato (§6.1 e §6.2); colisão de artefatos e teto dos campos na validação do plano (§8). Reprocessamento offline da V18.6 em `docs/benchmarks/2026-10-18-reprocessamento-v18-6-subtask-contract.md`. Pendências: bateria real no Pi (aguarda confirmação do pesquisador) e o achado abaixo. |
+| `v18.7-agent-system-prompts` | Não iniciada (§4 e §5: regimento da pesquisa e prompts por papel). |
+| `v18.7-exploration-metrics` | Não iniciada (§6.3 e §7: registro `(tentativa, hash do contrato)`, anomalia de hash e tokens do contrato por execução). O laço já emite o evento `subtask_contract` (hash, `limiar_mascarado`, corte da tarefa original) e o `subtask_review` traz `contrato_sha256`; aquela mudança os incorpora ao registro por tentativa. |
+
+**Achado novo (2026-10-18, bateria parcial).** O contrato (§2, item 8) cobre só o lado produtor dos artefatos entre subtarefas. O `/outputs` do sandbox é a pasta da própria subtarefa e nada entrega a ela as saídas das dependências da mesma sessão; foi o que derrubou a `haiku-dev-sol-juiz`. Decisão do pesquisador (2026-10-18): tratar em mudança própria, `v18.7-dependency-artifacts`, com montagem somente leitura em `/deps_out/<projeto>/<task_name>` (parecer do Analista de Segurança antes de implementar) e um item novo no contrato com os caminhos. Detalhes em `openspec/changes/v18.7-subtask-contract/design.md` §14.
+
+O ADR passa a `Aceito` quando as três mudanças estiverem implementadas e a revisão abaixo (taxa de aprovação, retentativas por subtarefa e tokens de entrada do Developer, comparados à V18.6) for feita com a bateria completa.
 
 ---
 

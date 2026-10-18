@@ -46,7 +46,15 @@ from src.orchestration.exploration_linking import DROP_LONG_FIELD
 from src.orchestration.loop_report import LoopReportMixin
 from src.orchestration.subtask_ingestion import ingest_subtask, link_preparations
 from src.orchestration.triage import TriageClassifier
-from src.orchestration.usage import StopReason, UsageBudget, UsageTracker
+from src.orchestration.usage import (
+    StopReason,
+    UsageBudget,
+    UsageTracker,
+    consume_replan,
+    is_cancelled,
+    mark_task_started,
+)
+from src.session.commands import MOTIVO_CANCELADA
 from src.session.continuity import (
     ESTADO_FECHADO,
     ST_ABANDONADA,
@@ -183,6 +191,10 @@ class AutonomousLoop(LoopReportMixin):
             return StopReason.MODEL_VERSION
         if suspension_requested():  # por último: um limite atingido no mesmo ponto prevalece (design §1.4)
             return StopReason.SUSPENDED
+        from src.orchestration.usage import pause_requested
+
+        if pause_requested():  # ``pausar`` do pesquisador (v18.7-session-events-terminal)
+            return StopReason.PAUSED
         return None
 
     def _usage_fraction(self) -> float:
@@ -1769,6 +1781,24 @@ class AutonomousLoop(LoopReportMixin):
                         dag_state[task.task_name]["future"].set_result(None)
                     return
 
+                # v18.7-session-events-terminal — ``cancelar <apelido> <subtarefa>``: a subtarefa que ainda não começou
+                # é retirada com o motivo ``cancelada_pesquisador`` (as dependentes ficam sem a dependência).
+                if task.task_name and is_cancelled(task.task_name):
+                    logger.info("Subtarefa cancelada pelo pesquisador", extra={"task_name": task.task_name})
+                    dag_state[task.task_name]["status"] = "abandonada"
+                    dag_state[task.task_name]["error"] = MOTIVO_CANCELADA
+                    if recorder is not None:
+                        await asyncio.to_thread(
+                            recorder.subtask_finished,
+                            task.task_name,
+                            status=ST_ABANDONADA,
+                            tentativas=0,
+                            resumo="cancelada pelo pesquisador antes de começar",
+                            causa_falha=MOTIVO_CANCELADA,
+                        )
+                    dag_state[task.task_name]["future"].set_result(None)
+                    return
+
                 # V18/usage-limits — não despacha uma NOVA subtarefa se o orçamento já foi
                 # esgotado (dependências já concluídas antes deste ponto continuam intactas;
                 # apenas o despacho desta subtarefa ainda não iniciada é suspenso).
@@ -1841,6 +1871,8 @@ class AutonomousLoop(LoopReportMixin):
 
                     # V5.8 — Telemetria: subtask_start (apenas na primeira tentativa)
                     if attempt == 0:
+                        if task.task_name:
+                            mark_task_started(task.task_name)
                         telemetry = get_telemetry()
                         telemetry.record_agent_event(
                             execution_id=master_session_id,
@@ -2263,7 +2295,19 @@ class AutonomousLoop(LoopReportMixin):
                     objective_note = exploration.objective_feedback()
                     if objective_note:
                         execution_feedback += "\n" + objective_note
+                    if consume_replan():  # ``replanejar`` já é o que o ciclo de exploração faz; registra o pedido
+                        execution_feedback += "\nO pesquisador pediu um replanejamento neste ponto."
                     explore_next = True
+                    continue
+
+                if consume_replan() and plan_attempt + 1 < max_plan_retries:
+                    # v18.7-session-events-terminal — ``replanejar``: depois das subtarefas em curso o Researcher
+                    # replaneja (MODO: REPLAN) em vez de a pesquisa fechar com este plano.
+                    execution_feedback = (
+                        "O pesquisador pediu um replanejamento. Subtarefas concluídas não são repetidas; revise o "
+                        "plano a partir dos resultados obtidos."
+                    )
+                    explore_next = False
                     continue
 
                 if succeeded > 0:
@@ -2552,7 +2596,7 @@ class AutonomousLoop(LoopReportMixin):
 
         quota = quota_stop_for(master_session_id) if reason == StopReason.PROVIDER_QUOTA else None
         # Sem o pesquisador a pesquisa não terminou: nada é consolidado (a consolidação fica para a retomada).
-        suspending = reason == StopReason.SUSPENDED
+        suspending = reason in (StopReason.SUSPENDED, StopReason.PAUSED)
         tokens_available_for_closing = (
             quota is None and not suspending and not self._usage_tracker.tokens_hard_exhausted()
         )
@@ -2581,10 +2625,13 @@ class AutonomousLoop(LoopReportMixin):
         payload["motivo_parada"] = reason.value
         payload["checkpoint"] = checkpoint
         if suspending:
-            from src.session.states import STATUS_SUSPENDED_NO_RESEARCHER
+            from src.session.states import STATUS_SUSPENDED_LEGACY, STATUS_SUSPENDED_NO_RESEARCHER
 
+            # ``pausar`` grava o estado retomável legado ``suspended`` (decisão do pesquisador, 2026-10-18).
             self.orchestrator.session_manager.update(
-                master_session_id, status=STATUS_SUSPENDED_NO_RESEARCHER, payload=payload
+                master_session_id,
+                status=STATUS_SUSPENDED_LEGACY if reason == StopReason.PAUSED else STATUS_SUSPENDED_NO_RESEARCHER,
+                payload=payload,
             )
         else:
             self.orchestrator.session_manager.update(master_session_id, payload=payload)

@@ -193,6 +193,7 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
                     "aguarda_pesquisador",  # v18.7-background-sessions (semi/auto: só restam pedidos ao pesquisador)
                     "suspensa_sem_pesquisador",  # v18.7-background-sessions (assisted sem o terminal)
                     "encerrada_pesquisador",  # v18.7-background-sessions (encerrada pelo REPL)
+                    "pausada_pesquisador",  # v18.7-session-events-terminal (``pausar``: termina as subtarefas em curso)
                 )
             ),
             "consumo": PropertySchema(),

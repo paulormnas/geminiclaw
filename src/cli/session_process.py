@@ -70,6 +70,53 @@ def project_title(project_id: str | None) -> str | None:
         return None
 
 
+def apply_command(session_id: str, content: str) -> None:
+    """Aplica um comando lido da caixa de entrada na sessão deste processo e registra ``comando_recebido``.
+
+    ``pausar``, ``parar``, ``cancelar`` e ``replanejar`` só acionam sinalizadores do processo
+    (``src.orchestration.usage``); o laço os lê nos pontos de verificação. Nunca levanta.
+    """
+    from src.orchestration.usage import request_cancel, request_interrupt, request_pause, request_replan
+    from src.session.commands import decodifica
+    from src.session.events import emit_event
+
+    try:
+        command = decodifica(content)
+        if command is None:
+            emit_event(session_id, "comando_recebido", {"comando": "ignorado", "aceito": False})
+            return
+        accepted = True
+        if command.comando == "pausar":
+            request_pause()
+        elif command.comando == "parar":
+            request_interrupt()
+        elif command.comando == "replanejar":
+            request_replan()
+        elif command.comando == "cancelar":
+            accepted = request_cancel(command.subtarefa or "")
+        emit_event(session_id, "comando_recebido", {
+            "comando": command.comando, "subtarefa": command.subtarefa, "aceito": accepted,
+        })
+    except Exception as exc:  # noqa: BLE001 - um comando com defeito nunca derruba a sessão
+        logger.warning("Comando do pesquisador não aplicado", extra={"error": type(exc).__name__})
+
+
+async def watch_commands(session_id: str, *, interval: float | None = None, inbox: Any | None = None) -> None:
+    """Lê os comandos da caixa de entrada a cada ``SESSION_INBOX_POLL_SECONDS`` e os aplica (até ser cancelada)."""
+    from src import config
+    from src.session.inbox import SessionInbox
+
+    box = inbox or SessionInbox()
+    wait = config.SESSION_INBOX_POLL_SECONDS if interval is None else interval
+    while True:
+        try:
+            for message in await asyncio.to_thread(box.take_commands, session_id):
+                apply_command(session_id, message.conteudo)
+        except Exception as exc:  # noqa: BLE001 - sem o banco os comandos esperam o próximo ciclo
+            logger.warning("Leitura dos comandos falhou", extra={"error": type(exc).__name__})
+        await asyncio.sleep(wait)
+
+
 def install_session_events(session_id: str, modo: str, papeis: int) -> None:
     """Liga os eventos de progresso à sessão deste processo (v18.7-session-events-terminal): ouvinte da telemetria,
     gancho do gate para ``decisao_pendente`` e o evento ``sessao_iniciada``. Nunca levanta."""
@@ -151,6 +198,7 @@ class SessionRunner:
         self.spec = spec
         self.orchestrator = orchestrator
         self.session_id: str | None = None
+        self._commands_task: Any = None  # leitor dos comandos da caixa (v18.7-session-events-terminal)
         self._task: "asyncio.Task[Any] | None" = None
         self._loop: asyncio.AbstractEventLoop | None = None
 
@@ -181,6 +229,8 @@ class SessionRunner:
         finally:
             import src.session.events as events
 
+            if self._commands_task is not None:
+                self._commands_task.cancel()
             await asyncio.to_thread(events.flush_all)
 
     async def _run(self) -> int:
@@ -233,6 +283,8 @@ class SessionRunner:
             self.session_id = session.id
             register_session_process(manager, session, spec, title=title)
             install_session_events(session.id, spec.modo or "", len(getattr(routing, "papeis", {}) or {}))
+            # Comandos do pesquisador (pausar, parar, cancelar, replanejar): lidos da caixa de entrada enquanto roda.
+            self._commands_task = asyncio.ensure_future(watch_commands(session.id))
 
         kwargs: dict[str, Any] = {
             "budget": budget,

@@ -36,6 +36,7 @@ class StopReason(str, Enum):
     INTERRUPTED = "interrompida_pesquisador"  # v18.5-operation-metrics (1º Ctrl+C: fechamento sem perda de avanço)
     PROVIDER_QUOTA = "limite_cota_provedor"  # v18.7-benchmark-fixes (cota ou teto de gasto esgotado no provedor)
     SUSPENDED = "suspensa_sem_pesquisador"  # v18.7-background-sessions (assisted: o terminal saiu ou caiu)
+    PAUSED = "pausada_pesquisador"  # v18.7-session-events-terminal (``pausar``: termina as subtarefas em curso)
 
 
 # v18.5-operation-metrics §2.6: o 1º Ctrl+C pede o fechamento gracioso da sessão em andamento. O pedido é um sinalizador
@@ -45,6 +46,14 @@ _SESSION_ACTIVE = threading.Event()
 # v18.7-background-sessions §1.6: a sessão ``assisted`` sem o terminal para de despachar subtarefas novas e deixa as em
 # curso terminarem (sem a carência que cancela), grava o checkpoint e sai com ``suspensa_sem_pesquisador``.
 _SUSPENSION_REQUESTED = threading.Event()
+# v18.7-session-events-terminal: comandos do pesquisador pela caixa de entrada. ``pausar`` age como a suspensão (não
+# despacha, deixa o que está em curso terminar, grava o checkpoint) com o motivo próprio; ``cancelar`` retira uma
+# subtarefa que ainda não começou; ``replanejar`` pede um replanejamento ao fim das subtarefas em curso.
+_PAUSE_REQUESTED = threading.Event()
+_REPLAN_REQUESTED = threading.Event()
+_TASKS_LOCK = threading.Lock()
+_STARTED_TASKS: set[str] = set()
+_CANCELLED_TASKS: set[str] = set()
 # O 1º SIGINT que chega depois de a sessão ser registrada e antes de o laço começar também é gracioso: o pedido vale
 # para a sessão que está para começar (``clear_interrupt`` no início do laço não o apaga).
 _INTERRUPT_BEFORE_START = threading.Event()
@@ -74,6 +83,56 @@ def request_suspension() -> None:
 def suspension_requested() -> bool:
     """True se a ausência do terminal já foi detectada neste processo."""
     return _SUSPENSION_REQUESTED.is_set()
+
+
+def request_pause() -> None:
+    """``pausar``: para de despachar, deixa o que está em curso terminar e fecha como ``pausada_pesquisador``."""
+    _PAUSE_REQUESTED.set()
+
+
+def pause_requested() -> bool:
+    return _PAUSE_REQUESTED.is_set()
+
+
+def request_replan() -> None:
+    """``replanejar``: o Researcher replaneja depois das subtarefas em curso."""
+    _REPLAN_REQUESTED.set()
+
+
+def consume_replan() -> bool:
+    """True (uma vez) se o replanejamento foi pedido; limpa o pedido."""
+    was = _REPLAN_REQUESTED.is_set()
+    _REPLAN_REQUESTED.clear()
+    return was
+
+
+def mark_task_started(task_name: str) -> None:
+    """A subtarefa começou: ``cancelar`` passa a recusá-la."""
+    with _TASKS_LOCK:
+        _STARTED_TASKS.add(task_name)
+
+
+def request_cancel(task_name: str) -> bool:
+    """``cancelar``: retira a subtarefa que ainda não começou. Devolve ``False`` (recusado) se já começou."""
+    with _TASKS_LOCK:
+        if task_name in _STARTED_TASKS:
+            return False
+        _CANCELLED_TASKS.add(task_name)
+        return True
+
+
+def is_cancelled(task_name: str) -> bool:
+    with _TASKS_LOCK:
+        return task_name in _CANCELLED_TASKS
+
+
+def clear_commands() -> None:
+    """Limpa pausa, replanejamento e subtarefas iniciadas ou canceladas (início de uma sessão; testes)."""
+    _PAUSE_REQUESTED.clear()
+    _REPLAN_REQUESTED.clear()
+    with _TASKS_LOCK:
+        _STARTED_TASKS.clear()
+        _CANCELLED_TASKS.clear()
 
 
 def clear_suspension() -> None:

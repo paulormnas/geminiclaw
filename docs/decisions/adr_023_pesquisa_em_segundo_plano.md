@@ -1,6 +1,6 @@
 # ADR 023 — Pesquisa em Segundo Plano com Acompanhamento pelo Terminal
 
-**Status:** Aprovado (2026-10-15)
+**Status:** Parcialmente implementado (2026-10-17; aprovado em 2026-10-15)
 **Data:** 2026-10-15
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** `roadmaps/roadmap_V18.7.md`
@@ -233,6 +233,17 @@ Cada caso vira ao menos um cenário na spec da mudança OpenSpec correspondente 
 | `v18.7-background-sessions` | `session-continuity`, `benchmark` | §1, §1.2, §6, §7: processo da sessão, verificação de memória ao iniciar, fim da sessão conforme o modo, presença do terminal, suspensão do `assisted`, pergunta de retomada ao abrir o REPL, PID, batimento com sinal do laço, recusa de reativar sessão continuada, comando direto em primeiro plano |
 | `v18.7-session-events-terminal` | `session-continuity`, `researcher-consult` | §2, §3: tabela de eventos, atualizações no REPL, comandos e ações imediatas, consulta só leitura ao Researcher |
 | `v18.7-persistent-human-gate` | `researcher-consult`, `hypothesis-loop` | §4, §5, §8: gate persistente, papel de banco do terminal, migração de todas as leituras da entrada padrão, caixa de entrada |
+
+### Estado da implementação (2026-10-17)
+
+| Mudança | Estado |
+|---|---|
+| `v18.7-resource-monitor-config` | Implementada e mergeada (#171). |
+| `v18.7-persistent-human-gate` | Implementada e mergeada (#178, #184, #185). |
+| `v18.7-background-sessions` | Implementada e mergeada (#177 a #183). Abertas em `tasks.md`: 0.1 e 0.2 (aprovações), 3.8 (teste de integração do REPL livre, que depende do comando `nova-pesquisa`) e 8.1 a 8.3 (validação final com PostgreSQL real, teste de `StdinForbiddenError` com o laço completo e revisão nos 7 eixos). |
+| `v18.7-session-events-terminal` | Não iniciada (§2 e §3: tabela de eventos, atualizações no REPL, comandos e ações imediatas, consulta só leitura ao Researcher). |
+
+O ADR passa a `Aceito` quando `v18.7-session-events-terminal` for implementada e as tarefas abertas de `v18.7-background-sessions` forem fechadas.
 
 ---
 

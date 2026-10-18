@@ -1,6 +1,6 @@
 # Tarefas: v18.7-source-layout
 
-**Estado (2026-10-15):** implementada na branch `refactor/source-layout`, aguardando revisão e merge; pendente só o 6.2 (depois do merge). `ruff`, `lint-imports` e `pytest -m unit` verdes (3531 testes; linha de base 3518 mais 13 de estrutura); `pytest -m integration`: 36 passaram e 74 foram ignorados por falta de PostgreSQL e Docker no Mac.
+**Estado (2026-10-17):** implementada e mergeada em `dev` (#166 e #168; a tarefa 6.2 foi feita depois do merge). Falta só o arquivamento.
 
 **Desvios e dúvidas de spec registrados na implementação** (nenhuma lógica foi alterada):
 - `src/memory/qdrant.py` já existia (`get_qdrant_client`); `_make_client` foi acrescentado a ele.

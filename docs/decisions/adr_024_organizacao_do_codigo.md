@@ -1,6 +1,6 @@
 # ADR 024 — Organização do Código por Responsabilidade e Regra de Camadas
 
-**Status:** Aprovado (2026-10-15)
+**Status:** Parcialmente implementado (2026-10-17; aprovado em 2026-10-15)
 **Data:** 2026-10-15
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** `roadmaps/roadmap_V18.7.md`
@@ -204,6 +204,16 @@ Seis camadas com todos os pacotes posicionados. **Rejeitada na revisão:** a med
 | `v18.7-source-layout` | `project-structure` (nova) | §1 (Etapa 1), §2, §3, §6–§8: movimentações, tabela de caminhos, regra de camadas e sua verificação, lista inicial de exceções, atualização de `pyproject.toml`, `AGENTS.md`, `README.md`, `.agents/`, `openspec/` e scripts do Pi |
 | `v18.7-layer-cycles` | `project-structure`, `data-egress`, `llm-providers` | §4 (Etapa 2): ciclos que exigem mudança de lógica, a começar pelo gate de egresso e o `llm` |
 | `v18.7-exploration-limits`, `v18.7-subtask-contract`, `v18.7-hypothesis-linking`, `v18.7-background-sessions`, `v18.7-session-events-terminal`, `v18.7-persistent-human-gate` | (as próprias) | §5 (Etapa 3): tarefa de divisão do módulo grande antes do comportamento novo |
+
+### Estado da implementação (2026-10-17)
+
+| Etapa | Estado |
+|---|---|
+| Etapa 1: `v18.7-source-layout` (movimentações, regra de camadas e sua verificação) | Implementada e mergeada (#166, #168). |
+| Etapa 2: `v18.7-layer-cycles` (ciclos que exigem mudança de lógica) | Implementada e mergeada (#169); a lista de exceções do contrato está vazia. |
+| Etapa 3: divisão do módulo grande antes do comportamento novo | Feita em `v18.7-exploration-limits` (0.9), `v18.7-hypothesis-linking`, `v18.7-background-sessions` (0.9) e `v18.7-persistent-human-gate` (0.9). Pendente em `v18.7-subtask-contract` e `v18.7-session-events-terminal`, não iniciadas. |
+
+O ADR passa a `Aceito` quando a Etapa 3 estiver cumprida em todas as mudanças que alteram módulos grandes.
 
 ---
 

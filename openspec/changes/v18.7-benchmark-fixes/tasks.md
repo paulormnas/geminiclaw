@@ -1,6 +1,6 @@
 # Tarefas: v18.7-benchmark-fixes
 
-**Estado (2026-10-16):** implementada em três PRs: #172 (diagnóstico, cadeia de proveniência e egresso no relatório), #173 (cota do provedor) e o PR 3 (esta etapa: política `ON_MODEL_VERSION_CHANGE`, §3.9 e §3.10, `build_env` e a classificação de `versao_modelo`). Pendente só o 6.3: confirmar na próxima bateria (com a confirmação do pesquisador) que nenhuma cadeia sai `divergente` por `metrics.json` reescrito e que a cota esgotada fecha a execução em minutos.
+**Estado (2026-10-16):** implementada em três PRs: #172 (diagnóstico, cadeia de proveniência e egresso no relatório), #173 (cota do provedor) e o PR 3 (esta etapa: política `ON_MODEL_VERSION_CHANGE`, §3.9 e §3.10, `build_env` e a classificação de `versao_modelo`). Pendente só o 6.3: confirmar na próxima bateria (com a confirmação do pesquisador) que nenhuma cadeia sai `divergente` por `metrics.json` reescrito e que a cota esgotada fecha a execução em minutos. **Atualização 2026-10-18:** a tarefa 6.3 foi validada na bateria parcial; falta só o arquivamento.
 
 **Registros do PR 3 (política da versão do modelo):**
 - `ON_MODEL_VERSION_CHANGE` (`retomar` padrão | `parar`; outro valor falha na inicialização) vale só com `LLM_ROUTING=strict`. O `VersionTracker` guarda a política: `parar` marca `parada_pendente` como antes; `retomar` empilha ações (`alterada` ou `desconhecida`) que o laço trata no ponto de verificação de limites (`AutonomousLoop._pending_stop` -> `_apply_model_version_policy`): grava o checkpoint e continua; para versão desconhecida troca o modelo do papel (`src/llm/model_substitution.py`) e grava `modelo_substituido`; sem elegível pede o fechamento por `versao_modelo`.
@@ -60,7 +60,7 @@
 ## 6. Validação
 - [x] 6.1 `uv run ruff check .` sem erros novos; `uv run pytest -m "unit or integration" -v` verde.
 - [x] 6.2 Regenerar o relatório da bateria V18.6 a partir de `bateria_v18_6.json` (sem nova execução) e conferir que as colunas de egresso mostram as saídas novas como `-` (resultado antigo) sem erro.
-- [ ] 6.3 Na próxima bateria (com confirmação do pesquisador): nenhuma cadeia `divergente` causada por `metrics.json` reescrito; se houver cota esgotada, a execução fecha com `limite_cota_provedor` em minutos.
+- [x] 6.3 (feito em 2026-10-18, bateria parcial: sem cadeia `divergente` em `sonnet-dev-sol-juiz` (`integra`, 0 órfãs); a cota do Google esgotada fechou a sessão com `limite_cota_provedor` 1,4 min depois do primeiro 429, com o evento `cota_provedor_esgotada`) Na bateria: nenhuma cadeia `divergente` causada por `metrics.json` reescrito; se houver cota esgotada, a execução fecha com `limite_cota_provedor` em minutos.
 - [x] 6.4 Atualizar `tasks.md` (caixas e **Estado**), a tabela de `openspec/README.md` e o achado 4, 5 e 6 do relatório da bateria no PR.
 
 **Anotações do pesquisador (2026-10-16), fora do escopo desta mudança:**

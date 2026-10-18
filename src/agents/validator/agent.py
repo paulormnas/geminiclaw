@@ -18,12 +18,14 @@ from src import config
 from src.agents.subtask_contract import (
     INTEGRITY_RULES,
     MOTIVO_ISSUE_SEM_TIPO,
+    ProblemObjective,
     SubtaskContract,
     build_plan_validation_context,
     build_review_context,
     guard_review,
     issue_line,
     literal_metric_issues,
+    plan_contract_issues,
     script_fragment,
 )
 from src.artifacts.match import ArtifactResolution, resolve_artifacts
@@ -438,6 +440,14 @@ RESTRICTION_REVIEW_INSTRUCTION = (
 )
 _MAX_DOUBTS = 20
 
+# v18.7-subtask-contract (ADR 022 §2.7): a detecção é do LLM; a revisão da subtarefa é a rede determinística.
+CRITERION_WITHOUT_KEY_INSTRUCTION = (
+    "Se uma subtarefa compara vários modelos (no enunciado ou na abordagem) e um 'validation_criteria' tem limiar "
+    "sobre uma métrica sem indicar a chave qualificada (por exemplo, 'acurácia >= 0.9' sem 'modelo_b.acuracia'), "
+    "liste o problema corrigível 'criterio_sem_chave: <task_name>.c<n>' e peça que o critério cite a chave do "
+    "modelo ou que a subtarefa grave a chave sem qualificador.\n"
+)
+
 # v18.7-subtask-contract (ADR 022 §3, design §6.2): o revisor reprova citando ids; o resto é observação.
 CONTRACT_REVIEW_RULES = (
     "- O contrato da subtarefa acima lista os critérios de aceite (c1, c2…) e as REGRAS DE INTEGRIDADE com seus ids. "
@@ -542,6 +552,7 @@ class ValidatorAgent:
         metric_definition: Optional[Dict[str, Any]] = None,
         objective_definition: Optional[Dict[str, Any]] = None,
         restrictions: Optional[List[Dict[str, Any]]] = None,
+        problem: Optional[ProblemObjective] = None,
     ) -> ValidationResult:
         """Valida o plano contra o schema estrito e critérios de viabilidade.
 
@@ -560,6 +571,8 @@ class ValidatorAgent:
                 ``ValidationResult.objective_approved``.
             restrictions: Restrições de direção ativas (``{id, direcao, categoria, abordagens}``), entregues como dado
                 delimitado; os casos duvidosos voltam em ``ValidationResult.restricoes_duvidosas``.
+            problem: Critério do ``Problema`` (``v18.7-subtask-contract``): vai ao Validator como fragmento
+                ``contrato:objetivo``, para ele conferir os critérios do plano contra a métrica e o alvo.
 
         Returns:
             ValidationResult indicando aprovação ou necessidade de revisão.
@@ -628,6 +641,11 @@ class ValidatorAgent:
                     "confirmatória, troque o 'task_type' para 'eda', 'model_impl' ou 'synthesis'."
                 )
 
+        # v18.7-subtask-contract §7: nome de artefato, colisão e campo do contrato acima do teto (sem LLM).
+        contract_issues, contract_warnings = plan_contract_issues([t for t in plan if isinstance(t, dict)])
+        structural_issues.extend(contract_issues)
+        plan_warnings.extend(w for w in contract_warnings if w not in plan_warnings)
+
         if metric_definition is not None:
             structural_issues.extend(_metric_definition_issues(metric_definition))
         if objective_definition is not None:
@@ -662,7 +680,8 @@ class ValidatorAgent:
             "Nomenclatura, estilo, escolha de 'task_type' entre tipos válidos e detalhes opcionais não são motivo "
             "de reprovação. Liste no máximo 3 problemas, só os que impediriam a execução ou o cumprimento da "
             "solicitação.\n"
-            "Responda EXCLUSIVAMENTE em formato JSON com o seguinte schema:\n"
+            + (CRITERION_WITHOUT_KEY_INSTRUCTION if config.SUBTASK_CONTRACT_ENABLED else "")
+            + "Responda EXCLUSIVAMENTE em formato JSON com o seguinte schema:\n"
             '{\n  "status": "approved" | "revision_needed",\n  "reason": "explicação curta",\n'
             '  "issues": ["problema 1", ...]'
             + (',\n  "metricas_status": "approved" | "revision_needed",\n  "metricas_issues": ["problema 1", ...]'
@@ -685,6 +704,7 @@ class ValidatorAgent:
             prompt,
             plan_str,
             plan_tainted=role_tainted("researcher"),
+            problem=problem,
             metric_definition=metric_definition,
             objective_definition=objective_definition,
             restrictions=restrictions,

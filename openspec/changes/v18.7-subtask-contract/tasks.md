@@ -1,6 +1,6 @@
 # Tarefas: v18.7-subtask-contract
 
-**Estado (2026-10-18):** em andamento. Seções 0 (#203), 1 (#204), 2 (#205), 3 (#206), 4 (#207) e 5 (#208 e este PR) concluídas; faltam as seções 6 (validação do plano) e 7 (validação final). Achado das dependências decidido (design §14: mudança própria `v18.7-dependency-artifacts`, caminho `/deps_out/<projeto>/<task_name>`).
+**Estado (2026-10-18):** em andamento. Seções 0 a 5 mergeadas (#203 a #209) e seção 6 neste PR; falta a seção 7 (validação final). Achado das dependências decidido (design §14: mudança própria `v18.7-dependency-artifacts`, caminho `/deps_out/<projeto>/<task_name>`).
 
 ## 0. Pré-requisitos
 - [x] 0.1 Mudança aprovada pelo pesquisador, com as questões do design §11 decididas.
@@ -41,11 +41,11 @@
 - [x] 5.6 Testes: "Critério fraco vira observação", "Integridade reprova sempre", "Formato antigo do parecer", "Hash do contrato no parecer", "Só critérios de métrica, aprovados", "Integridade desligada", "Métrica literal", "Chave sem qualificador presente", "Ambiguidade", "Ambiguidade repetida", "Critério cita a chave qualificada", "Observação no replanejamento", "Artefato consumido no contrato"; atualizar os testes de `v18.6-review-evidence` do cenário "Grupo não nomeado" e rodar os demais cenários modificados sem mudança de resultado.
 
 ## 6. Validação do plano
-- [ ] 6.1 `validate_plan` com `problem` (fragmento `contrato:objetivo`) e chamada atualizada na chamada de `validate_plan` em `src/orchestration/orchestrator.py`.
-- [ ] 6.2 Colisão de artefatos (fecho de `depends_on`), aviso `artefato_atualizado`.
-- [ ] 6.3 Teto dos campos do contrato na validação; padrão de nome de artefato no normalizador.
-- [ ] 6.4 Regra `criterio_sem_chave` na instrução do Validator do plano.
-- [ ] 6.5 Testes: "Validação do plano com o critério do Problema", "Colisão real", "Atualização intencional", "Critérios longos demais", "Nome de artefato com caminho relativo", "Instrução renderizada".
+- [x] 6.1 `validate_plan` com `problem` (fragmento `contrato:objetivo`) e chamada atualizada na chamada de `validate_plan` em `src/orchestration/orchestrator.py`.
+- [x] 6.2 Colisão de artefatos (fecho de `depends_on`), aviso `artefato_atualizado`.
+- [x] 6.3 Teto dos campos do contrato na validação; padrão de nome de artefato no normalizador.
+- [x] 6.4 Regra `criterio_sem_chave` na instrução do Validator do plano.
+- [x] 6.5 Testes: "Validação do plano com o critério do Problema", "Colisão real", "Atualização intencional", "Critérios longos demais", "Nome de artefato com caminho relativo", "Instrução renderizada".
 
 ## 7. Validação
 - [ ] 7.1 `uv run ruff check .` sem erros novos; `uv run pytest -m "unit or integration" -v` verde.

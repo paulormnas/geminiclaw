@@ -436,3 +436,19 @@ CREATE TABLE IF NOT EXISTS session_inbox (
     consumido_em TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_inbox_pendentes ON session_inbox (session_id, id) WHERE consumido_em IS NULL;
+
+-- v18.7-session-events-terminal: eventos de progresso da sessão (escrita imediata pelo processo da sessão).
+CREATE TABLE IF NOT EXISTS session_events (
+    id          BIGSERIAL PRIMARY KEY,
+    session_id  TEXT NOT NULL,
+    seq         INTEGER NOT NULL,
+    tipo        TEXT NOT NULL CHECK (tipo IN (
+                    'sessao_iniciada','plano_aprovado','subtarefa_iniciada','subtarefa_concluida',
+                    'subtarefa_reprovada','hipotese_criada','hipotese_concluida','objetivo_atingido',
+                    'decisao_pendente','comando_recebido','parada','suspensao','falha')),
+    criado_em   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    resumo      TEXT NOT NULL CHECK (char_length(resumo) <= 300),
+    dados       JSONB NOT NULL DEFAULT '{}',
+    UNIQUE (session_id, seq)
+);
+CREATE INDEX IF NOT EXISTS idx_session_events_sessao ON session_events (session_id, id);

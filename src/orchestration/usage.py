@@ -45,11 +45,20 @@ _SESSION_ACTIVE = threading.Event()
 # v18.7-background-sessions §1.6: a sessão ``assisted`` sem o terminal para de despachar subtarefas novas e deixa as em
 # curso terminarem (sem a carência que cancela), grava o checkpoint e sai com ``suspensa_sem_pesquisador``.
 _SUSPENSION_REQUESTED = threading.Event()
+# O 1º SIGINT que chega depois de a sessão ser registrada e antes de o laço começar também é gracioso: o pedido vale
+# para a sessão que está para começar (``clear_interrupt`` no início do laço não o apaga).
+_INTERRUPT_BEFORE_START = threading.Event()
 
 
-def request_interrupt() -> None:
-    """Registra o pedido do pesquisador para fechar a sessão ativa com checkpoint."""
+def request_interrupt(*, before_start: bool = False) -> None:
+    """Registra o pedido do pesquisador para fechar a sessão ativa com checkpoint.
+
+    Args:
+        before_start: O pedido chegou depois de a sessão ser registrada e antes de o laço começar.
+    """
     _INTERRUPT_REQUESTED.set()
+    if before_start:
+        _INTERRUPT_BEFORE_START.set()
 
 
 def interrupt_requested() -> bool:
@@ -72,8 +81,16 @@ def clear_suspension() -> None:
     _SUSPENSION_REQUESTED.clear()
 
 
-def clear_interrupt() -> None:
-    """Limpa o pedido de interrupção (início de uma nova sessão)."""
+def clear_interrupt(*, force: bool = False) -> None:
+    """Limpa o pedido de interrupção (início de uma nova sessão).
+
+    Um pedido feito durante a partida da sessão (``before_start``) é da própria sessão que começa e sobrevive a esta
+    limpeza; ``force`` o apaga também (testes).
+    """
+    if _INTERRUPT_BEFORE_START.is_set() and not force:
+        _INTERRUPT_BEFORE_START.clear()
+        return
+    _INTERRUPT_BEFORE_START.clear()
     _INTERRUPT_REQUESTED.clear()
 
 

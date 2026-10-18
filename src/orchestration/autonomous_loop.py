@@ -13,6 +13,7 @@ import time
 import uuid
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from src.agents.regimento import encerrar_sessao, iniciar_sessao, sessao_atual
@@ -22,6 +23,7 @@ from src.agents.subtask_contract import (
     oversized_fields,
     threshold_masked,
 )
+from src.artifacts.metrics_file import metrics_of
 from src.artifacts.subtask_output import negative_result_feedback
 from src.config import (
     CIRCUIT_BREAKER_STALL_CYCLES,
@@ -53,6 +55,7 @@ from src.session.continuity import (
     CheckpointRecorder,
     list_task_artifacts,
     plan_entry,
+    safe_task_name,
 )
 from src.skills.code.sandbox import dependency_target
 from src.skills.memory.short_term import ShortTermMemory
@@ -1020,6 +1023,29 @@ class AutonomousLoop(LoopReportMixin):
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("Falha ao registrar subtask_attempt", extra={"error": str(exc)})
+
+    @staticmethod
+    def _validated_metric(task: Any, review: Any, session_out_dir: Any, exploration: Any) -> dict[str, Any]:
+        """Métrica principal do Problema, só quando a revisão a validou (para o resumo do evento da subtarefa).
+
+        Vazio sem exploração, sem métrica no ``metrics.json`` ou sem revisão aprovada e verificada.
+        """
+        try:
+            if exploration is None or review is None or not review.is_approved or not getattr(review, "verified", True):
+                return {}
+            objective = exploration.problem_objective()
+            if objective is None or not safe_task_name(task.task_name or ""):
+                return {}
+            path = Path(session_out_dir) / task.task_name / "metrics.json"
+            if not path.is_file():
+                return {}
+            values = metrics_of(json.loads(path.read_text(encoding="utf-8")))
+            for key, value in values.items():
+                if key == objective.metric or key.endswith(f".{objective.metric}"):
+                    return {"metrica_validada": objective.metric, "valor_validado": float(value)}
+        except Exception:  # noqa: BLE001 - o resumo do evento nunca atrapalha a subtarefa
+            logger.debug("Métrica validada indisponível para o evento", exc_info=True)
+        return {}
 
     @staticmethod
     def _recorte_sha256_vigente() -> str | None:
@@ -2037,7 +2063,10 @@ class AutonomousLoop(LoopReportMixin):
                     agent_id=task.agent_id,
                     event_type="subtask_end",
                     task_name=task.task_name or None,
-                    payload={"success": success, "attempts": attempt + 1},
+                    payload={
+                        "success": success, "attempts": attempt + 1,
+                        **self._validated_metric(task, last_review, session_out_dir, exploration),
+                    },
                 )
 
                 # Fase 3 V5: Hardware snapshot + Monitoramento de Saúde

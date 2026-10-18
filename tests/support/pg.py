@@ -16,7 +16,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 # Tabelas que os testes de v18.7 escrevem; as que ainda não existem no schema são ignoradas.
-MUTABLE_TABLES = ("agent_sessions", "terminal_presence", "gate_requests", "session_inbox")
+MUTABLE_TABLES = ("agent_sessions", "terminal_presence", "gate_requests", "session_inbox", "session_events")
 MIGRATIONS_V187 = sorted((ROOT / "scripts" / "migrations").glob("v18_7_*.sql"))
 
 

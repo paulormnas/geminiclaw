@@ -171,6 +171,8 @@ class SessionManager:
             )
             current_payload = payload if payload is not None else existing_payload
 
+            # v18.7-session-events-terminal: o evento final entra na transação do status final.
+            self._emit_final_event(conn, row, current_status, existing_payload, current_payload, now)
             conn.execute(
                 """
                 UPDATE agent_sessions
@@ -183,6 +185,26 @@ class SessionManager:
         return dataclasses.replace(
             self._row_to_session(row), status=current_status, updated_at=now, payload=current_payload
         )
+
+    @staticmethod
+    def _emit_final_event(
+        conn: Any, row: Any, status: str, before: dict | None, after: dict | None, when: str
+    ) -> None:
+        """Grava ``parada`` ou ``suspensao`` da sessão mestra, na transação da atualização, quando o status final
+        muda (nunca levanta; ``criado_em`` é o próprio ``updated_at``)."""
+        from src.session.events import insert_event
+        from src.session.states import FINISHED_STATUSES, PAUSED_STATUSES
+
+        try:
+            if row["agent_id"] != "orchestrator" or row["status"] == status:
+                return
+            motivo = (after or {}).get("motivo_parada") or (before or {}).get("motivo_parada")
+            if status in FINISHED_STATUSES:
+                insert_event(conn, row["id"], "parada", {"motivo": motivo or "encerrada"}, when)
+            elif status in PAUSED_STATUSES:
+                insert_event(conn, row["id"], "suspensao", {"motivo": motivo or status}, when)
+        except Exception:  # noqa: BLE001 - evento é informativo
+            logger.warning("Evento final da sessão não emitido", exc_info=True)
 
     def close(self, session_id: str) -> None:
         """Fecha uma sessão (marca como closed).
@@ -453,6 +475,10 @@ class SessionManager:
                 "WHERE id = %s AND agent_id = 'orchestrator' AND status = 'active' AND updated_at = %s RETURNING *",
                 (patch, now, session_id, expected_updated_at),
             ).fetchone()
+            if row:  # v18.7-session-events-terminal: o processo não existe mais, quem grava é o terminal
+                from src.session.events import insert_event
+
+                insert_event(conn, session_id, "falha", {"motivo": "interrompida", "apelido": row["alias"] or ""}, now)
         return self._row_to_session(row) if row else None
 
     def close_by_researcher(
@@ -471,6 +497,10 @@ class SessionManager:
                 "WHERE id = %s AND agent_id = 'orchestrator' AND status = ANY(%s) RETURNING id",
                 (patch, now, session_id, list(statuses)),
             ).fetchone()
+            if row is not None:
+                from src.session.events import insert_event
+
+                insert_event(conn, session_id, "parada", {"motivo": motivo}, now)
         return row is not None
 
     def find_by_launch_id(self, launch_id: str) -> Session | None:

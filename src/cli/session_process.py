@@ -70,6 +70,27 @@ def project_title(project_id: str | None) -> str | None:
         return None
 
 
+def install_session_events(session_id: str, modo: str, papeis: int) -> None:
+    """Liga os eventos de progresso à sessão deste processo (v18.7-session-events-terminal): ouvinte da telemetria,
+    gancho do gate para ``decisao_pendente`` e o evento ``sessao_iniciada``. Nunca levanta."""
+    import src.session.events as events
+    from src.gate.persistent_gate import set_created_hook
+
+    try:
+        events.install(session_id)
+
+        def pending(request: Any) -> None:
+            if request.session_id == session_id:
+                events.emit_event(session_id, "decisao_pendente", {
+                    "decisao": request.decisao, "pedido_id": request.id, "referencia": request.referencia,
+                })
+
+        set_created_hook(pending)
+        events.emit_event(session_id, "sessao_iniciada", {"modo": modo, "papeis": papeis})
+    except Exception as exc:  # noqa: BLE001 - os eventos são informativos
+        logger.warning("Eventos da sessão não ligados", extra={"error": type(exc).__name__})
+
+
 def register_session_process(session_manager: Any, session: Any, spec: LaunchSpec, *, title: str | None) -> str:
     """Grava PID, host, início do processo, terminal, apelido e resumo; a retomada herda o apelido da cadeia.
 
@@ -154,6 +175,15 @@ class SessionRunner:
     # -- execução ---------------------------------------------------------------------------------------------------
 
     async def run(self) -> int:
+        """Executa a sessão e devolve o código de saída; as gravações de eventos pendentes terminam antes de sair."""
+        try:
+            return await self._run()
+        finally:
+            import src.session.events as events
+
+            await asyncio.to_thread(events.flush_all)
+
+    async def _run(self) -> int:
         spec = self.spec
         from src.llm.catalog import CatalogError
         from src.llm.routing import RoutingError
@@ -202,6 +232,7 @@ class SessionRunner:
         def on_created(session: Any) -> None:
             self.session_id = session.id
             register_session_process(manager, session, spec, title=title)
+            install_session_events(session.id, spec.modo or "", len(getattr(routing, "papeis", {}) or {}))
 
         kwargs: dict[str, Any] = {
             "budget": budget,
@@ -317,15 +348,16 @@ def _install_sigint_handler(runner_ref: Callable[[], SessionRunner | None]) -> N
         from src.config import LIMIT_GRACE_SECONDS
         from src.orchestration.usage import interrupt_requested, request_interrupt, session_active
 
-        if session_active() and not interrupt_requested():
-            request_interrupt()
+        runner = runner_ref()
+        starting = runner is not None and bool(runner.session_id) and not session_active()
+        if (session_active() or starting) and not interrupt_requested():
+            request_interrupt(before_start=starting)
             print(
                 "\nInterrupção pedida: a sessão fecha com checkpoint assim que as subtarefas em andamento terminarem "
                 f"(até {LIMIT_GRACE_SECONDS}s). Um segundo SIGINT encerra imediatamente.",
                 flush=True,
             )
             return
-        runner = runner_ref()
         removed = 0
         if runner is not None and runner.orchestrator is not None and runner.session_id:
             from src.skills.code.sandbox import cleanup_sandbox_containers

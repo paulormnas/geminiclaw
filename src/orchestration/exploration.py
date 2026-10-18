@@ -222,6 +222,15 @@ class ExplorationSession(StagnationMixin, RestrictionsMixin, ObjectiveRevisionMi
             )
         return self._cycle
 
+    def _emit_created_hypotheses(self, report: Any) -> None:
+        """Um evento de progresso ``hipotese_criada`` por hipótese nova do ciclo (v18.7-session-events-terminal)."""
+        if report is None:
+            return
+        from src.session.events import emit_event
+
+        for hypothesis_id in list(getattr(report, "criadas", []) or [])[:20]:
+            emit_event(self.ctx.session_id, "hipotese_criada", {"hipotese": hypothesis_id})
+
     def _emit(self, event_type: str, payload: dict[str, Any]) -> None:
         if self._telemetry is None:
             return
@@ -620,6 +629,7 @@ class ExplorationSession(StagnationMixin, RestrictionsMixin, ObjectiveRevisionMi
         origins = Counter(
             t.hypothesis_origin or "researcher" for t in live if t.papel_decidido == PAPEL_TESTE and t.hypothesis_id
         )
+        self._emit_created_hypotheses(report)
         self._emit(
             "hypothesis_cycle",
             {

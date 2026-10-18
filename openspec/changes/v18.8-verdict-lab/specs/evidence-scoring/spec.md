@@ -51,6 +51,17 @@ O sistema SHALL ler as variantes de um arquivo JSON (`versao`, `variantes` com `
 - **WHEN** a configuração B (0,96) segue a configuração A (0,97) no mesmo nó, ambas acima do alvo
 - **THEN** B recebe `d_semente`, e não `d_variacao`
 
+#### Scenario: Alvo exigido com baseline
+- **GIVEN** `criterio_com_alvo = exige_alvo`, alvo 0,95, `δ = 0,01` e baseline 0,333
+- **WHEN** o resultado validado é 0,80
+- **THEN** a evidência é negativa
+- **AND** na variante `atual` a mesma tentativa é positiva
+
+#### Scenario: Qualquer melhora conta como variação útil
+- **GIVEN** `variacao_util = melhora_o_melhor` com o padrão `variacao_util_epsilon = 0`
+- **WHEN** a configuração B (0,9601) segue a configuração A (0,96)
+- **THEN** B recebe `d_variacao`
+
 #### Scenario: Magnitude pela folga sem baseline
 - **GIVEN** `m_sem_baseline = folga`, alvo 0,95, `δ = 0,01`, sentido `maior_melhor` e nenhum baseline
 - **WHEN** o resultado é 0,96
@@ -87,6 +98,12 @@ O sistema SHALL aplicar, no comando `grade`, cada variante a um catálogo determ
 - **WHEN** `--limiar 0.2 0.3` é passado
 - **THEN** cada par (cenário, variante) aparece uma vez por limiar
 
+#### Scenario: Esperado pelas regras do pesquisador
+- **WHEN** o catálogo é carregado
+- **THEN** E3 (três variações positivas, cada uma melhor que a anterior) tem `esperado = funciona`
+- **AND** E2 e V8 (oito variações com o mesmo valor) têm `esperado = indeciso`
+- **AND** existem as famílias C, D, G, P e Q do design §4
+
 #### Scenario: Caso da etapa 1 no catálogo
 - **WHEN** o catálogo é carregado
 - **THEN** a família F tem o cenário de sete falhas ambíguas seguidas de uma positiva sem baseline, cujo veredito na variante `atual` é 0,0138 ± 0,0005
@@ -102,6 +119,16 @@ O sistema SHALL simular, no comando `simulacao`, hipóteses `verdadeira`, `falsa
 - **GIVEN** hipóteses `sem_efeito` com `sigma = 0` e `tau = 0`
 - **WHEN** a simulação é executada para qualquer variante
 - **THEN** a taxa de falsa validação é 0
+
+#### Scenario: Recordes por acaso medidos
+- **GIVEN** hipóteses `sem_efeito` com `sigma > 0`, `p_variacao = 1` e 20 tentativas
+- **WHEN** a simulação é executada com a variante `por_tipo + melhora_o_melhor`
+- **THEN** a saída traz, por `variacao_util_epsilon` (0, `δ` e `sigma`), a taxa de falsa validação e o poder
+
+#### Scenario: Curva de compromisso
+- **WHEN** a simulação termina
+- **THEN** o relatório traz, por variante, falsa validação e poder para cada limiar de 0,1 a 0,6 em passos de 0,1
+- **AND** o custo por validação útil
 
 #### Scenario: Estimativa antes de começar
 - **WHEN** a simulação começa

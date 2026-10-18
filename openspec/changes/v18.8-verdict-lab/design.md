@@ -20,6 +20,7 @@ scripts/verdict_lab/
 ├── scenarios.py     # catálogo determinístico (famílias E, V, R, S, N, F, M, B)
 ├── simulation.py    # gerador estocástico com semente fixa
 ├── properties.py    # medidas de propriedade por variante
+├── sensitivity.py   # variação isolada e em pares dos parâmetros
 ├── replay.py        # grafo_projeto.json -> InMemoryGraphStore -> KnowledgeService
 ├── output.py        # resultados.csv, relatorio.md, manifesto.json
 └── variantes.json   # variantes padrão (design §3.3)
@@ -56,9 +57,10 @@ O pacote fica em `scripts/` (como `scripts/benchmark/`) porque é ferramenta de 
 |---|---|---|
 | `n_config_conta_falhas` | `true` (atual), `false` | Com `false`, `n_config` da penalidade de busca conta só as configurações das tentativas que viraram evidência |
 | `independencia` | `atual`, `por_tipo` | `por_tipo` classifica cada evidência pela ordem da tabela abaixo e usa os pesos `d_variacao`, `d_replica_no`, `d_dataset`, `d_sessao` e `d_semente` |
-| `variacao_util` | `nenhuma` (padrão), `melhora_o_melhor` | Com `melhora_o_melhor`, uma variação só recebe `d_variacao` se o valor superar em pelo menos `variacao_util_epsilon` o melhor valor anterior da hipótese no sentido da métrica; senão, recebe `d_semente` (é volume, não exploração) |
-| `m_sem_baseline` | `fixo` (atual, 0,5), `folga` | Com `folga`, sem baseline e com alvo, `m = min(1, folga / (2δ))` na positiva e `m = min(1, (δ − folga) / δ)` na negativa, com `folga` = distância ao alvo no sentido favorável |
+| `variacao_util` | `nenhuma` (padrão), `melhora_o_melhor` | Com `melhora_o_melhor`, uma variação só recebe `d_variacao` se o valor superar o melhor valor anterior da hipótese, no sentido da métrica, em mais que `variacao_util_epsilon`; senão, recebe `d_semente` (é volume, não exploração). Padrão `variacao_util_epsilon = 0`: qualquer melhora conta (decisão do pesquisador, 2026-10-18) |
+| `m_sem_baseline` | `fixo` (atual, 0,5), `folga` | Com `folga`, sem baseline e com alvo e `δ`, `m = min(1, folga / (2δ))` na positiva e `m = min(1, falta / δ)` na negativa, com `folga` e `falta` = distância ao alvo no sentido favorável e no desfavorável (ficar logo abaixo do alvo vale perto de 0, como o quase empate do ADR 015 §9.4) |
 | `b_por` | `configuracao` (atual), `variacao_sem_ganho` | Com `variacao_sem_ganho`, `n_config` conta só as variações que não melhoraram o melhor valor anterior (mais 1) |
+| `criterio_com_alvo` | `baseline_primeiro` (atual), `exige_alvo` | Hoje, com baseline, a direção vem só de `Δ ≥ δ` e o alvo é ignorado (`_direction_and_magnitude`, `src/knowledge/verdict.py:292-321`), enquanto o objetivo `limiar` exige alcançar o alvo **e** superar a referência (`src/knowledge/objective.py:228-236`). Com `exige_alvo`, quando o critério tem alvo e baseline, a evidência só é positiva se as duas condições valerem; `m` continua pela conta do baseline, e a evidência que supera o baseline mas não alcança o alvo é negativa com `m = min(1, falta / δ)` |
 
 Classificação de `independencia: por_tipo`, aplicada em ordem cronológica às tentativas que viram evidência, com os conjuntos de "já visto" da própria hipótese:
 
@@ -90,18 +92,32 @@ Cada cenário é uma lista de tentativas (`Attempt`), um `Criterion` e um `esper
 | F, falhas | Positivas com 1, 3 e 7 falhas ambíguas; falhas de infraestrutura | F7: o caso `…459203` da etapa 1 |
 | M, mistos | 2 positivas e 1 negativa; 1 e 1; 3 e 3 | M21 |
 | B, sem baseline | Folga de 0,001, 0,02 e 0,05 sobre o alvo | B-folga-0,001 |
+| C, critério com baseline e alvo | Resultados acima do baseline + `δ` e abaixo do alvo; acima dos dois | C3-abaixo-do-alvo: três variações em 0,80, 0,85 e 0,90 com baseline 0,333 e alvo 0,95 |
+| D, sentido `menor_melhor` | Os cenários E3, N3 e M21 espelhados para uma métrica de erro | D-E3 |
+| P, exploração seguida de estagnação | E3 seguido de 5 e 15 variações sem ganho | P-E3-V15 |
+| Q, réplica que não confirma | E3 e, depois, a melhor configuração em outro nó, abaixo do alvo | Q-E3-R1-neg |
+| G, métrica discreta | Melhoras do tamanho de um acerto num conjunto de teste pequeno (1/30 ≈ 0,033), com valores repetidos | G-E3-passo-1/30 |
 
-O `esperado` de cada cenário é proposto pelo Arquiteto no catálogo e revisado pelo pesquisador antes de os resultados serem usados para escolher uma variante (questão em aberto 1). Para cada par (cenário, variante), a saída registra o veredito, a leitura, o detalhamento por tentativa e o acerto contra o `esperado`, considerando "conclui" quando `|veredito| ≥ DECISION_EVAL_MIN_VERDICT` (ou o limiar passado em `--limiar`, que pode ser uma lista para comparar limiares).
+O `esperado` segue as regras do pesquisador (2026-10-18): **três variações com resultado positivo, cada uma melhor que a anterior, bastam para `funciona`** (E3, E5, E8, D-E3, P-E3-V*); com uma ou duas, `indeciso`; **variações que não indicam evolução ficam `indeciso`** (família V). Os demais seguem a mesma leitura: N3 e N5 `nao_funciona`; R e S, a mesma configuração repetida sem variação, `indeciso` com 2 réplicas e `funciona` a partir de 3 nós; C com todos os resultados abaixo do alvo, `nao_funciona` para um objetivo `limiar`; Q `indeciso`; M21 `indeciso`. Cada `esperado` tem uma justificativa curta no catálogo, e o relatório lista os cenários em que nenhuma variante acerta. Para cada par (cenário, variante), a saída registra o veredito, a leitura, o detalhamento por tentativa e o acerto contra o `esperado`, considerando "conclui" quando `|veredito| ≥ DECISION_EVAL_MIN_VERDICT` (ou o limiar passado em `--limiar`, que pode ser uma lista para comparar limiares).
 
 ## 5. Simulação (`simulacao`)
 
 Mede erros de classificação com resposta conhecida, que nem os grafos arquivados nem a grade determinística dão.
 
-- **Hipóteses:** `verdadeira` (média real acima do alvo por `efeito`), `falsa` (abaixo do alvo por `efeito`) e `sem_efeito` (média real igual ao alvo).
+- **Hipóteses:** `verdadeira` (média real acima do alvo por `efeito`), `falsa` (abaixo do alvo por `efeito`) e `sem_efeito` (média real igual ao alvo). Com `--granularidade 1/n`, os valores observados são arredondados ao múltiplo de `1/n` (métrica de acurácia num conjunto de teste de `n` amostras).
 - **Tentativas:** a cada passo, o agente simulado escolhe uma nova configuração com probabilidade `p_variacao` ou repete uma existente com outra semente. Cada configuração tem efeito próprio `~ N(0, tau)` sobre a média da hipótese. O valor observado é `média + efeito_config + N(0, sigma)`. Uma fração `p_falha` das tentativas falha (ambígua ou de infraestrutura, na proporção `p_infra`). Com `nos > 1`, as réplicas podem ir para outros nós.
-- **Medidas por variante e por número de tentativas (1 a `max_tentativas`):** falsa validação (hipótese falsa ou sem efeito com veredito ≥ limiar), falsa refutação (verdadeira com veredito ≤ −limiar), indecisão (nem um nem outro), e tentativas até cruzar 0,1, 0,3 e 0,5 (mediana e percentis 10 e 90).
+- **Medidas por variante e por número de tentativas (1 a `max_tentativas`):**
+  - **taxa de falsa validação:** fração das hipóteses `falsa` ou `sem_efeito` que terminam com veredito ≥ limiar (validadas sem contribuir);
+  - **taxa de falsa refutação:** fração das `verdadeira` com veredito ≤ −limiar;
+  - **poder:** fração das `verdadeira` validadas (o que a fórmula consegue concluir quando há algo a concluir);
+  - **indecisão:** fração que não cruza nenhum dos dois limiares;
+  - **tentativas até cruzar** 0,1, 0,3 e 0,5 (mediana e percentis 10 e 90);
+  - **custo por validação útil:** tentativas gastas em todas as hipóteses dividido pelo número de `verdadeira` validadas.
+- **Curva de compromisso:** para cada variante, falsa validação contra poder variando o limiar (de 0,1 a 0,6). Uma variante domina outra quando tem mais poder com a mesma falsa validação. O relatório traz a curva em tabela.
 - **Grade da simulação:** `sigma`, `tau`, `efeito`, `p_variacao`, `p_falha` e `nos` são listas na linha de comando ou num arquivo JSON. O produto cartesiano é executado com `repeticoes` sorteios por ponto. Os padrões são genéricos (por exemplo, `sigma` em {0,005; 0,01; 0,02}) e cobrem faixas, não um caso.
 - **Determinismo:** um único `--semente` gera, por `random.Random`, a semente de cada ponto e repetição. A mesma semente dá a mesma saída byte a byte.
+
+Os parâmetros da simulação também incluem `d_replica_no` em {0,3; 0,5; 0,7; 0,9} sobre as variantes `por_tipo`, para a questão 3 do §12.
 
 A simulação é o instrumento para a cautela do pesquisador sobre variações sem ganho: com `sem_efeito`, `tau > 0` e muitas variações, alguma configuração passa do alvo por acaso. A taxa de falsa validação mostra quanto cada variante premia esse volume.
 
@@ -160,9 +176,23 @@ Sem toque em sandbox, rede, permissões ou banco; a revisão do Analista de Segu
 | Ajustar a fórmula ao Iris | A grade e a simulação não usam os dados do benchmark; os parâmetros da simulação varrem faixas |
 | Simulação simples demais (efeitos normais, independência entre tentativas) | Limitação declarada no relatório; a etapa 3 (sessões controladas) testa com agentes reais |
 
-## 12. Questões em aberto (decisão do pesquisador)
+## 12. Questões do pesquisador
 
-1. **`esperado` dos cenários:** em especial, a partir de quantas variações que melhoram (família E) o sistema deve concluir `funciona` em um nó, e se o volume sem ganho (família V) deve ficar sempre `indeciso`.
-2. **Critério de "variação útil":** superar o melhor valor anterior por qualquer quantidade, por `δ` ou por um `variacao_util_epsilon` próprio. O laboratório testa os três.
-3. **Peso relativo de réplica em outro nó:** a decisão de 2026-10-18 fixa só a ordem (variação > réplica em outro nó). Os valores saem da grade.
-4. **Critérios de aceite de uma variante** (por exemplo, taxa máxima de falsa validação em `sem_efeito`): propostos pelo Arquiteto com os resultados e decididos pelo pesquisador (ADR 025 §4).
+1. **`esperado` dos cenários:** respondida em 2026-10-18 (§4): três variações positivas com evolução bastam para `funciona`; sem evolução, `indeciso`.
+2. **Critério de "variação útil":** respondida em 2026-10-18: superar o melhor valor anterior por qualquer quantidade (`variacao_util_epsilon = 0`), porque, conforme o problema, 1 % a 3 % já é melhora significativa. A simulação também mede `epsilon` = `δ` e = `sigma` só para comparação (§13, achado 1).
+3. **Peso relativo de réplica em outro nó:** em aberto; a simulação varia `d_replica_no` (§5).
+4. **Critério de aceite de uma variante:** as medidas estão no §5 (falsa validação, poder, custo por validação útil e a curva de compromisso). A proposta de valores vem com os resultados; o objetivo do pesquisador é minimizar o registro e a validação de hipóteses que não contribuem para a pesquisa.
+
+## 13. Revisão com perfil de pesquisador (2026-10-18)
+
+Revisão metodológica do desenho, pedida pelo pesquisador antes da aprovação. Os achados entram no catálogo e na simulação; nenhum muda a decisão do pesquisador sem nova consulta.
+
+1. **Recordes por acaso.** Com ruído e variações sem efeito real, o melhor valor até agora é superado com frequência só por sorte: em `n` sorteios independentes, o número esperado de recordes é `1 + 1/2 + … + 1/n` (cerca de 3,6 em 20 tentativas). Com `variacao_util_epsilon = 0`, uma hipótese sem efeito e com 20 variações tende a acumular três "melhoras" e a ser validada. A simulação com `sem_efeito` mede essa taxa, e as comparações com `epsilon = δ` e `= sigma` mostram quanto ela cai. O pesquisador decide com os números.
+2. **Alvo ignorado com baseline.** O veredito trata como positiva qualquer evidência acima do baseline + `δ`, mesmo abaixo do alvo do critério (no Iris, 0,80 > 0,333 + 0,01 conta a favor de "atinge 0,95"). O objetivo `limiar` exige os dois. Na etapa 1 isso não apareceu porque todos os resultados ficaram em 0,967. A família C e a alternativa `criterio_com_alvo` (§3.2) medem o efeito.
+3. **Reúso do mesmo conjunto de teste.** Variações avaliadas sempre no mesmo conjunto de teste se ajustam a ele (análise adaptativa). A réplica em outro nó ou outro dataset é o que revela o otimismo da melhor variação. A família Q mede se a fórmula reduz o veredito quando a réplica não confirma.
+4. **Métrica discreta.** Num conjunto de teste pequeno, uma melhora de 1 % a 3 % pode ser um único acerto, e valores repetidos são comuns. A família G e `--granularidade` da simulação medem esse caso.
+5. **Exploração seguida de estagnação.** Depois de três melhoras, muitas variações sem ganho não deveriam desfazer o `funciona`, nem reforçá-lo. A família P mede os dois lados.
+6. **Direção da métrica.** A família D confirma que a fórmula se comporta igual para métricas de erro (`menor_melhor`).
+7. **Fora do escopo, registrado para depois:** dependência entre hipóteses do mesmo `Problema` (a mesma configuração testada sob duas hipóteses) e evidência vinda de outro projeto. Os dois casos ficam para `v18.8-verdict-calibration`.
+
+Conclusão da revisão: o desenho responde às perguntas do ADR 025 para a etapa 2, com os seis acréscimos acima. Aprovação condicionada pelo pesquisador ("estando tudo certo pode considerar aprovado") e registrada com esta revisão em 2026-10-18.

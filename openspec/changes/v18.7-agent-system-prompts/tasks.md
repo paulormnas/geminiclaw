@@ -1,6 +1,6 @@
 # Tarefas: v18.7-agent-system-prompts
 
-**Estado (2026-10-18):** seções 0 a 5 implementadas (regimento v1, carga, recorte, injeção no `system` de todas as chamadas de papel, registro por sessão, `ler_regimento` e adendo de projeto com aprovação no gate); faltam os esquemas (6), os prompts (7), a coerência e a redação (8) e a validação (9).
+**Estado (2026-10-18):** seções 0 a 8 implementadas (regimento v1, carga, recorte, injeção, registro por sessão, `ler_regimento`, adendo de projeto, esquemas únicos dos formatos, prompts revisados com as seis seções, testes de coerência e de redação); falta a validação (9): 9.2 medido neste PR, 9.3 (bateria curta) só com a confirmação do pesquisador e 9.4 depois do merge.
 
 ## 0. Pré-requisitos
 - [x] 0.1 Mudança aprovada pelo pesquisador, com as questões do design §10 decididas.
@@ -38,19 +38,21 @@ _Desvios (2026-10-18): o diretório do adendo é o diretório de insumos da sess
 - [x] 5.4 Testes, com `FakeGate` e `FakeRecordingProvider`: "Adendo aprovado", "Adendo alterado depois da aprovação", "Adendo pendente no auto", "Adendo que tenta afrouxar", "Aviso no pedido", "Adendo sem ids sensíveis", "Hash aprovado só no projeto", "Pedido negado", "Adendo trocado depois da verificação", "Adendo como link simbólico", "Consultor perguntado", "Decisões do gate no regimento".
 
 ## 6. Esquemas dos formatos
-- [ ] 6.1 Esquemas únicos do plano (com `papel`), dos pareceres do Validator, do rascunho do Problema (com o tipo de objetivo), da resposta do consultor, da narrativa do Summarizer e de `metrics.json`, usados pelo código que valida e pela renderização dos prompts.
-- [ ] 6.2 `SCHEMA_INSTRUCTION`, `PLAN_FORMAT_INSTRUCTION` e a estrutura do plano no prompt do Researcher gerados do esquema; o bloco de exploração passa a levar só dado delimitado.
-- [ ] 6.3 Fixture gravada `tests/fixtures/plans/plano_regimento_v1.json` (resposta do Researcher com o prompt revisado, gravada uma vez e versionada). Testes, sem LLM real: "Plano", "Formato uma vez", "Plano compatível", "Plano antigo".
+_Desvios (2026-10-18): os esquemas ficam em `src/utils/format_schemas.py` (camada `utils`, lida por `report`, `knowledge` e `agents`); a fixture `plano_regimento_v1.json` foi escrita à mão no formato do esquema, porque gravar uma resposta real do Researcher exige chamada paga (a gravação real fica para a bateria curta, 9.3); o formato do plano, que estava em três lugares, agora existe no prompt do Researcher (`FORMATO DO PLANO`, uma vez) e no do Validator (lista de campos da subtarefa), ambos do mesmo esquema; o bloco de exploração só leva dado delimitado, e as exigências desta chamada (definição de métricas e de objetivo) vêm de `ExplorationSession.plan_requirements()`._
+- [x] 6.1 Esquemas únicos do plano (com `papel`), dos pareceres do Validator, do rascunho do Problema (com o tipo de objetivo), da resposta do consultor, da narrativa do Summarizer e de `metrics.json`, usados pelo código que valida e pela renderização dos prompts.
+- [x] 6.2 `SCHEMA_INSTRUCTION`, `PLAN_FORMAT_INSTRUCTION` e a estrutura do plano no prompt do Researcher gerados do esquema; o bloco de exploração passa a levar só dado delimitado.
+- [x] 6.3 Fixture gravada `tests/fixtures/plans/plano_regimento_v1.json` (resposta do Researcher com o prompt revisado, gravada uma vez e versionada). Testes, sem LLM real: "Plano", "Formato uma vez", "Plano compatível", "Plano antigo".
 
 ## 7. Prompts revisados
-- [ ] 7.1 Researcher (plano, replanejamento, rascunho do Problema, consultor com `APP_NAME`), Developer, Validator (plano, revisão, afirmações, definição de métricas), Curator (execução e edição), Summarizer (narrativa e revisão de conclusões), com as seções do design §7 e sem repetir o regimento.
-- [ ] 7.2 Textos de instrução de `src/orchestrator.py` (planejamento e replanejamento) reduzidos ao que é da chamada; regras movidas para o prompt do papel ou para o regimento.
-- [ ] 7.3 `agents/base/agent.py` conforme a decisão da questão §10.1.
-- [ ] 7.4 Testes: "Seções", "Developer", "Developer reenviado a cada chamada", "Troca de nome", "Regras de segurança preservadas", "Regra de segurança removida", "Regra de segurança sem o texto no destino"; o teste existente "Política de prompts" continua verde.
+- [x] 7.1 Researcher (plano, replanejamento, rascunho do Problema, consultor com `APP_NAME`), Developer, Validator (plano, revisão, afirmações, definição de métricas), Curator (execução e edição), Summarizer (narrativa e revisão de conclusões), com as seções do design §7 e sem repetir o regimento.
+- [x] 7.2 Textos de instrução de `src/orchestrator.py` (planejamento e replanejamento) reduzidos ao que é da chamada; regras movidas para o prompt do papel ou para o regimento.
+- [x] 7.3 `agents/base/agent.py` conforme a decisão da questão §10.1.
+- [x] 7.4 Testes: "Seções", "Developer", "Developer reenviado a cada chamada", "Troca de nome", "Regras de segurança preservadas", "Regra de segurança removida", "Regra de segurança sem o texto no destino"; o teste existente "Política de prompts" continua verde.
 
 ## 8. Coerência e redação
-- [ ] 8.1 `tests/unit/test_regimento_coerencia.py` com as verificações do design §6; `INTEGRITY_RULES` e as constantes de `src/knowledge/objective.py` passam a ler o YAML.
-- [ ] 8.2 Testes: "Motivo de parada não declarado", "Conjuntos iguais", "Código na prosa", "Caractere proibido", "Regra repetida", "Prompts reais".
+_Desvios (2026-10-18): as constantes de `src/knowledge/objective.py` e `ExplorationStop` continuam no código (a camada `knowledge` não pode importar `agents`, onde está o carregador) e o teste de coerência confere os dois lados; `INTEGRITY_RULES` passou a ser lida do YAML. A crase (`) não conta como símbolo na checagem de redação porque delimita código e identificadores. Frases das regras de segurança (duplicadas de propósito, como marcador) e os formatos renderizados do mesmo esquema são isentos da checagem de repetição._
+- [x] 8.1 `tests/unit/test_regimento_coerencia.py` com as verificações do design §6; `INTEGRITY_RULES` e as constantes de `src/knowledge/objective.py` passam a ler o YAML.
+- [x] 8.2 Testes: "Motivo de parada não declarado", "Conjuntos iguais", "Código na prosa", "Caractere proibido", "Regra repetida", "Prompts reais".
 
 ## 9. Validação
 - [ ] 9.1 `uv run ruff check .` sem erros novos; `uv run pytest -m "unit or integration" -v` verde.

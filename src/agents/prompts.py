@@ -32,3 +32,35 @@ def render_instruction(template: str, **extra: str) -> str:
     for key, value in extra.items():
         rendered = rendered.replace("{" + key + "}", value)
     return rendered
+
+
+# v18.7-agent-system-prompts (ADR 022 §4.2): todo prompt de papel tem as mesmas seções, nesta ordem.
+SECOES_DO_PROMPT = (
+    "Papel",
+    "O que você recebe",
+    "O que você produz",
+    "Ferramentas",
+    "Como você é avaliado",
+    "Regras do papel",
+)
+
+
+def montar_prompt(*, papel: str, recebe: str, produz: str, ferramentas: str, avaliado: str, regras: str) -> str:
+    """Monta o prompt de um papel com as seis seções padrão, cada uma com o título em linha própria.
+
+    O que é comum a todos os papéis fica no regimento e não se repete aqui (ADR 022 §4.1).
+    """
+    corpos = (papel, recebe, produz, ferramentas, avaliado, regras)
+    blocos = (f"{titulo}\n{corpo.strip()}" for titulo, corpo in zip(SECOES_DO_PROMPT, corpos, strict=True))
+    return "\n\n".join(blocos) + "\n"
+
+
+def regras_de_seguranca(destino: str) -> str:
+    """Texto, em lista, das regras de segurança do regimento cujo destino inclui ``destino`` (um papel).
+
+    O texto renderizado de cada regra é o marcador que o teste de regras de segurança procura no prompt do papel.
+    """
+    from src.agents.regimento import carregar_regimento, regras_seguranca
+
+    regras = regras_seguranca(carregar_regimento().estrutura, destino)
+    return "\n".join(f"- {r['texto']}" for r in regras)

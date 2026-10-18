@@ -1,0 +1,40 @@
+[
+  {
+    "agent_id": "developer",
+    "task_name": "dividir_dados",
+    "task_type": "eda",
+    "prompt": "Carregar /inputs/dados.csv, separar treino e teste com seed 42 e salvar y_train.csv e y_test.csv em /outputs/.",
+    "hypothesis": "A divisão estratificada preserva a proporção das classes nos dois conjuntos.",
+    "scientific_rationale": "Sem uma partição fixa e registrada os experimentos seguintes não são comparáveis.",
+    "validation_criteria": ["y_train.csv e y_test.csv existem em /outputs/", "a proporção da classe majoritária difere em menos de 2 pontos entre treino e teste"],
+    "expected_artifacts": ["y_train.csv", "y_test.csv"],
+    "depends_on": [],
+    "papel": "preparacao"
+  },
+  {
+    "agent_id": "developer",
+    "task_name": "baseline_majoritario",
+    "task_type": "validation",
+    "prompt": "Medir a acurácia do classificador que sempre prevê a classe majoritária, lendo y_train.csv e y_test.csv de /deps_out/.",
+    "hypothesis": "O baseline da classe majoritária define o ponto de comparação do Problema.",
+    "scientific_rationale": "A referência medida torna o ganho dos modelos interpretável.",
+    "validation_criteria": ["metrics.json contém a chave acuracia"],
+    "expected_artifacts": ["metrics.json", "params.json"],
+    "depends_on": ["dividir_dados"],
+    "papel": "referencia"
+  },
+  {
+    "agent_id": "developer",
+    "task_name": "treinar_random_forest",
+    "task_type": "model_impl",
+    "prompt": "Treinar um RandomForestClassifier com seed 42 e registrar a acurácia no conjunto de teste.",
+    "hypothesis": "Uma floresta aleatória supera o baseline em acurácia por mais de 0.05.",
+    "scientific_rationale": "Árvores combinadas capturam interações que o baseline ignora.",
+    "validation_criteria": ["acuracia > 0.85 em metrics.json"],
+    "expected_artifacts": ["metrics.json", "params.json"],
+    "depends_on": ["dividir_dados"],
+    "hypothesis_ref": "h1",
+    "papel": "teste",
+    "approach": {"nome": "random forest", "tipo": "algoritmo"}
+  }
+]

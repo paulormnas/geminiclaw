@@ -128,7 +128,7 @@ async def test_evidencia_do_revisor_mostra_arquivo_renomeado(tmp_path):
     await _review(agent, tmp_path, expected_artifacts=["eda_hist.png"], validation_criteria=["gráfico gerado"])
     content = provider.generate.call_args.kwargs["messages"][0]["content"]
     assert "iris_hist.png" in content and "resolvido por extension" in content
-    assert "NÃO é motivo" in provider.generate.call_args.kwargs["system"]
+    assert "não é motivo" in provider.generate.call_args.kwargs["system"]
 
 
 @pytest.mark.asyncio

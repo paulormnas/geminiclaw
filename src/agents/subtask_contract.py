@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from src import config
+from src.agents.regimento import carregar_regimento
 from src.artifacts.profile import read_head_text
 from src.egress.filters import mask_numbers
 from src.egress.gate import role_tainted
@@ -64,18 +65,9 @@ class IntegrityRule:
     text: str
 
 
-# Lista provisória em código; ``v18.7-agent-system-prompts`` a move para a parte estruturada do regimento (mesmos ids).
-INTEGRITY_RULES: tuple[IntegrityRule, ...] = (
-    IntegrityRule("metricas_calculadas", "Métricas calculadas a partir dos dados, nunca literais no código."),
-    IntegrityRule(
-        "sem_ajuste_no_teste",
-        "Sem vazamento entre treino e teste; sem ajuste de modelo, hiperparâmetros ou seleção usando o conjunto "
-        "de teste.",
-    ),
-    IntegrityRule("seed_registrada", "Aleatoriedade com seed registrada em params.json."),
-    IntegrityRule("divergencia_honesta", "divergence_note honesto; resultado nunca forçado ao valor esperado."),
-    IntegrityRule("afirmacoes_verificaveis", "Afirmações da resposta sustentadas pela evidência em disco."),
-    IntegrityRule("egresso", "Nenhum dado bruto impresso ou gravado fora das regras de egresso."),
+# Fonte única: a parte estruturada do regimento (v18.7-agent-system-prompts); mesmos ids e textos de antes.
+INTEGRITY_RULES: tuple[IntegrityRule, ...] = tuple(
+    IntegrityRule(item["id"], item["texto"]) for item in carregar_regimento().estrutura["regras_integridade"]
 )
 
 
@@ -823,8 +815,7 @@ def build_researcher_plan_context(
             "com o mesmo task_name, continuando dos artefatos parciais quando houver e do zero quando não "
             "houver. Subtarefas abandonadas só voltam com justificativa de mudança de "
             "abordagem. Considere os caminhos sem conclusão e o próximo passo "
-            "sugerido. Cada subtarefa DEVE conter 'validation_criteria'. "
-            "Retorne o plano COMPLETO atualizado em JSON."
+            "sugerido. Retorne o plano COMPLETO atualizado em JSON."
         )
         if feedback:
             prompt += f"\n\nPROBLEMAS ANTERIORES:\n{mark(feedback, mixed_raw)}"
@@ -838,8 +829,7 @@ def build_researcher_plan_context(
             "Instrução: este é um ciclo de EXPLORAÇÃO ativa. A partir dos resultados, dos vereditos e das "
             "sugestões do Curator, formule hipóteses NOVAS (ou continue as abertas), registre as decisões de "
             "caminho com as alternativas descartadas e responda a cada sugestão. NUNCA redefina ou repita "
-            "subtarefas concluídas. Cada subtarefa DEVE conter 'validation_criteria'. Retorne o plano "
-            "COMPLETO atualizado em JSON."
+            "subtarefas concluídas. Retorne o plano COMPLETO atualizado em JSON."
         )
     elif mode == "replan":
         prompt = (
@@ -850,12 +840,11 @@ def build_researcher_plan_context(
             f"PROBLEMAS ENCONTRADOS:\n{mark(str(feedback), mixed_raw)}\n\n"
             "Instrução: Diagnostique a causa raiz de cada falha em uma das três categorias "
             "(problema de dados, problema de implementação, ou resultado legítimo divergente) "
-            "antes de decidir a subtarefa de recuperação — ver DIRETRIZES DE REPLANEJAMENTO. "
+            "antes de decidir a subtarefa de recuperação (ver as regras de replanejamento do seu papel). "
             "Replaneje apenas as subtarefas com falha ou adicione tarefas de recuperação. "
             "NUNCA redefina ou repita subtarefas que já foram concluídas com sucesso. "
             "Se a causa for um resultado legítimo divergente, NÃO tente forçar o resultado esperado: "
             "gere uma subtarefa com 'task_type': 'validation' documentando a divergência. "
-            "Cada subtarefa DEVE conter 'validation_criteria' obrigatório. "
             "Retorne o plano COMPLETO atualizado em JSON."
         )
     else:
@@ -865,10 +854,8 @@ def build_researcher_plan_context(
             f"Crie um plano de execução (DAG) para a seguinte tarefa:\n{original_task}\n"
             f"{project_block}"
             f"{block}\n"
-            "INSTRUÇÃO OBRIGATÓRIA: Se a tarefa envolver domínio técnico ou bibliotecas, "
-            "execute uma busca com 'quick_search' para verificar contexto antes de formular as subtarefas. "
-            "Cada subtarefa no plano DEVE conter 'validation_criteria' com ao menos um critério explícito. "
-            "Retorne a lista de subtarefas em formato JSON."
+            "Instrução: se a tarefa envolver domínio técnico ou bibliotecas, execute uma busca com 'quick_search' "
+            "para verificar contexto antes de formular as subtarefas. Retorne a lista de subtarefas em formato JSON."
         )
         if feedback:
             prompt += f"\n\nPROBLEMAS ANTERIORES:\n{mark(str(feedback), mixed_raw)}"

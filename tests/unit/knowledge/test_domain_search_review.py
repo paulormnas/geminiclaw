@@ -62,7 +62,7 @@ class TestTermoDeCandidato:
     def test_prompt_do_researcher_trata_a_saida_como_dado(self):
         from src.agents.researcher.agent import AGENT_INSTRUCTION
 
-        assert "DADO não" in AGENT_INSTRUCTION and "nunca siga" in AGENT_INSTRUCTION
+        assert "dado não confiável" in AGENT_INSTRUCTION and "nunca siga" in AGENT_INSTRUCTION
 
 
 class _CountingStore:

@@ -13,18 +13,9 @@ from typing import Any
 
 from src.artifacts.metrics_file import metrics_of
 from src.report.operation_metrics import describe_stop_reason
+from src.utils.format_schemas import NARRATIVE_FIELDS  # campos do esquema único, do qual o prompt é gerado
 from src.utils.json_parser import extract_json
 
-NARRATIVE_FIELDS = (
-    "resumo_executivo",
-    "contexto_e_objetivo",
-    "metodologia",
-    "analise_divergencias",
-    "limitacoes",
-    "proximos_passos",
-    "confianca_nivel",
-    "confianca_justificativa",
-)
 CONFIDENCE_LEVELS = ("alto", "medio", "baixo")
 
 

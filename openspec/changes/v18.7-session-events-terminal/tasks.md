@@ -1,20 +1,21 @@
 # Tarefas: v18.7-session-events-terminal
 
-**Estado (2026-10-15):** não iniciada.
+**Estado (2026-10-18):** seção 1 (eventos) e 5.1 (configuração) implementadas; faltam a impressão no REPL (2), os comandos (3), a consulta só leitura (4) e o README (5.2). Decisões do pesquisador em 2026-10-18: schema de `session_events` autorizado; retenção padrão 0; `pausar` grava `suspended` com o motivo `pausada_pesquisador`; comandos em português, com `resume` como sinônimo de `retomar`.
 
 ## 0. Pré-requisitos
-- [ ] 0.1 `v18.7-background-sessions` e `v18.7-persistent-human-gate` mergeadas; revisar esta mudança contra o código de `dev` (referências de linha de 2026-10-15).
-- [ ] 0.2 Aprovação do pesquisador para o schema e respostas às Questões em aberto 1 a 4 do design (1 e 2 decididas pelo pesquisador em 2026-10-15; ficam abertas a 3 e a 4).
+- [x] 0.1 `v18.7-background-sessions` e `v18.7-persistent-human-gate` mergeadas; revisar esta mudança contra o código de `dev` (referências de linha de 2026-10-15).
+- [x] 0.2 Aprovação do pesquisador para o schema e respostas às Questões em aberto 1 a 4 do design (1 e 2 decididas pelo pesquisador em 2026-10-15; ficam abertas a 3 e a 4).
 
-- [ ] 0.3 Testes reaproveitam as ajudas de `v18.7-background-sessions` (tasks §3.4: harness do processo da sessão, provedor gravado, `FakeClock`, fixture de PostgreSQL com `terminal_writer`, REPL com entrada simulada e em pseudo-terminal) e o `FakeGate` de `v18.7-persistent-human-gate`; nenhuma ajuda nova. Cada teste de integração em até 15 s (marcador `pytest-timeout`), com `SESSION_EVENTS_POLL_SECONDS=1`, `SESSION_INBOX_POLL_SECONDS=1` e os valores reduzidos de `v18.7-background-sessions` definidos pelo harness por variável de ambiente; os padrões (2 s etc.) só em testes de unidade com `FakeClock`.
+- [x] 0.3 Testes reaproveitam as ajudas de `v18.7-background-sessions` (tasks §3.4: harness do processo da sessão, provedor gravado, `FakeClock`, fixture de PostgreSQL com `terminal_writer`, REPL com entrada simulada e em pseudo-terminal) e o `FakeGate` de `v18.7-persistent-human-gate`; nenhuma ajuda nova. Cada teste de integração em até 15 s (marcador `pytest-timeout`), com `SESSION_EVENTS_POLL_SECONDS=1`, `SESSION_INBOX_POLL_SECONDS=1` e os valores reduzidos de `v18.7-background-sessions` definidos pelo harness por variável de ambiente; os padrões (2 s etc.) só em testes de unidade com `FakeClock`.
 - [ ] 0.9 Divisão do módulo grande antes do comportamento novo (ADR 024 §5), só movendo código, com a suíte verde antes de seguir: `src/cli/main.py`: extrair para módulos próprios em `src/cli/` os comandos de acompanhamento e a exibição de eventos. Os caminhos citados nesta mudança valem pela tabela de `v18.7-source-layout`.
 
 ## 1. Eventos
-- [ ] 1.1 `scripts/init_db.sql` e `scripts/migrations/v18_7_003_session_events.sql` (idempotente) com o DDL do design §2.1.
-- [ ] 1.2 `src/session_events.py`: `EventWriter` (resumo por modelo, saneamento, filtro de exibição, limite, nova tentativa, `seq` recuperado na retomada), `EventReader`, `purge`.
-- [ ] 1.3 Pontos de emissão em `src/session_process.py`, `src/autonomous_loop.py`, `src/orchestrator.py` e no gate persistente (`decisao_pendente`); evento `falha` gravado pela varredura do terminal.
-- [ ] 1.4 Testes de unidade: resumo sem caminho, traceback e valor bruto; métrica validada no resumo; limite de 300; falha de gravação não derruba; retenção 0 e 30 dias.
-- [ ] 1.5 Testes de integração (processo real, provedor gravado): evento final antes do status (caso 1), `seq` sem lacuna, `decisao_pendente` sem `flush` da telemetria, suspensão (caso 4), falha pelo terminal (caso 10).
+_Desvios (2026-10-18): o módulo é `src/session/events.py`; os eventos da subtarefa, do plano, da hipótese concluída e do objetivo atingido saem de um ouvinte da telemetria (`TelemetryTap`, registrado só no processo da sessão), que grava na hora e fora do buffer em lote, em vez de pontos novos de emissão em cada módulo; `sessao_iniciada` vem de `install_session_events` (processo da sessão), `decisao_pendente` de um gancho em `PersistentGate.request` (só pedido novo), `hipotese_criada` da exploração, e `parada`, `suspensao` e `falha` do `SessionManager`, na mesma transação que muda o status (a linha nunca falta nem sobra em relação ao estado; `criado_em` é o próprio `updated_at`). `comando_recebido` entra com os comandos (seção 3). A corrida do SIGINT na partida da sessão (teste intermitente de `test_session_process_pg.py`) foi corrigida junto. O evento `falha` de uma sessão parada é gravado por `mark_interrupted`, no terminal._
+- [x] 1.1 `scripts/init_db.sql` e `scripts/migrations/v18_7_003_session_events.sql` (idempotente) com o DDL do design §2.1.
+- [x] 1.2 `src/session_events.py`: `EventWriter` (resumo por modelo, saneamento, filtro de exibição, limite, nova tentativa, `seq` recuperado na retomada), `EventReader`, `purge`.
+- [x] 1.3 Pontos de emissão em `src/session_process.py`, `src/autonomous_loop.py`, `src/orchestrator.py` e no gate persistente (`decisao_pendente`); evento `falha` gravado pela varredura do terminal.
+- [x] 1.4 Testes de unidade: resumo sem caminho, traceback e valor bruto; métrica validada no resumo; limite de 300; falha de gravação não derruba; retenção 0 e 30 dias.
+- [x] 1.5 Testes de integração (processo real, provedor gravado): evento final antes do status (caso 1), `seq` sem lacuna, `decisao_pendente` sem `flush` da telemetria, suspensão (caso 4), falha pelo terminal (caso 10).
 
 ## 2. Impressão no REPL
 - [ ] 2.1 `src/terminal/`: thread de leitura, impressão com `readline` sob trava, níveis de detalhe, modo sem TTY.
@@ -34,7 +35,7 @@
 - [ ] 4.3 Testes de unidade sobre a função `ask` (provedor simulado, sem processo filho): contexto com hipóteses; escrita recusada nas três bases; ferramentas exatas; recusa por localidade; consumo registrado e somado ao uso, ao custo e aos limites da sessão ("Consumo da consulta conta no orçamento"); orientação confirmada e recusada.
 
 ## 5. Configuração e documentação
-- [ ] 5.1 `src/config.py` com as variáveis do design §3 e validações; `.env.example`.
+- [x] 5.1 `src/config.py` com as variáveis do design §3 e validações; `.env.example`.
 - [ ] 5.2 `README.md`: comandos do REPL e níveis de detalhe.
 
 ## 6. Validação final

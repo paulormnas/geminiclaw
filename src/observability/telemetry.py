@@ -41,6 +41,22 @@ logger = get_logger(__name__)
 # Tamanho do buffer antes de um flush automático
 _BUFFER_SIZE = 50
 
+# v18.7-session-events-terminal: ouvintes de eventos de agente (``(event_type, session_id, task_name, payload)``), que
+# gravam eventos de progresso na hora, fora do buffer em lote. Um ouvinte que falha nunca derruba a telemetria.
+_event_taps: list[Any] = []
+
+
+def add_event_tap(tap: Any) -> None:
+    """Registra um ouvinte chamado a cada ``record_agent_event``."""
+    if tap not in _event_taps:
+        _event_taps.append(tap)
+
+
+def remove_event_tap(tap: Any) -> None:
+    """Remove um ouvinte registrado por ``add_event_tap``."""
+    if tap in _event_taps:
+        _event_taps.remove(tap)
+
 # Limite de caracteres para armazenar payload inline no banco.
 # Payloads maiores são "offloaded" para arquivo .json.gz no disco.
 _PAYLOAD_INLINE_LIMIT = 1000
@@ -326,6 +342,11 @@ class TelemetryCollector:
             duration_ms=duration_ms,
         )
         self._buffer.agent_events.append(row)
+        for tap in list(_event_taps):
+            try:
+                tap(event_type, session_id, task_name, payload or {})
+            except Exception:  # noqa: BLE001 - o ouvinte nunca derruba a telemetria
+                logger.warning("Ouvinte de eventos de agente falhou", exc_info=True)
         logger.debug(
             "Evento de agente registrado no buffer",
             extra={"extra": {"agent_id": agent_id, "event_type": event_type}},

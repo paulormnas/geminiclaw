@@ -39,6 +39,16 @@ from src.utils.display_text import sanitize_line
 logger = get_logger(__name__)
 
 _TEXT_KEYS = ("texto", "motivo", "enunciado", "orientacao")
+
+# v18.7-session-events-terminal: o processo da sessão registra aqui o que fazer quando um pedido novo é criado (evento
+# ``decisao_pendente`` gravado na hora, sem esperar o ``flush`` da telemetria). Falha do gancho nunca desfaz o pedido.
+_created_hook: Any = None
+
+
+def set_created_hook(hook: Any | None) -> None:
+    """Registra (ou remove, com ``None``) a função chamada com o ``GateRequest`` de cada pedido novo."""
+    global _created_hook
+    _created_hook = hook
 _HUMAN = [s.value for s in HUMAN_SOURCES]  # "terminal" e "cli"
 
 
@@ -162,7 +172,13 @@ class PersistentGate:
             "Decisão reservada ao pesquisador registrada",
             extra={"extra": {"decisao": decisao, "id": int(row["id"]), "motivo": motivo}},
         )
-        return _row_to_request(row)
+        created = _row_to_request(row)
+        if _created_hook is not None:
+            try:
+                _created_hook(created)
+            except Exception:  # noqa: BLE001 - o gancho é informativo
+                logger.warning("Gancho de pedido novo falhou", exc_info=True)
+        return created
 
     # -- consulta -----------------------------------------------------------------------------------
 

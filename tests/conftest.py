@@ -101,10 +101,10 @@ def _sinalizadores_do_processo():
     """Limpa os sinalizadores de interrupção e de suspensão (globais do processo) entre os testes."""
     from src.orchestration.usage import clear_interrupt, clear_suspension
 
-    clear_interrupt()
+    clear_interrupt(force=True)
     clear_suspension()
     yield
-    clear_interrupt()
+    clear_interrupt(force=True)
     clear_suspension()
 
 
@@ -127,6 +127,7 @@ def mock_db_connection(request):
         or f"{os.sep}tests{os.sep}integration{os.sep}provenance_pg{os.sep}" in path
         or f"{os.sep}tests{os.sep}integration{os.sep}knowledge{os.sep}" in path
         or f"{os.sep}tests{os.sep}integration{os.sep}background_sessions{os.sep}" in path
+        or f"{os.sep}tests{os.sep}integration{os.sep}session_events{os.sep}" in path
     ):
         yield
         return

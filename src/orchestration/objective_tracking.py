@@ -190,7 +190,12 @@ class ObjectiveTracker:
             hipotese_id=d.get("hipotese_id"), resultado_id=d.get("resultado_id"),
             valor=d.get("valor"), politica=policy,
         )
-        self._emit("objetivo_atingido", {k: v for k, v in self.achievement.to_dict().items() if v is not None})
+        alvo = criterion.get("alvo")
+        extras = {"metrica": criterion.get("metrica"), "alvo": alvo if isinstance(alvo, (int, float)) else None}
+        self._emit(
+            "objetivo_atingido",
+            {k: v for k, v in {**self.achievement.to_dict(), **extras}.items() if v is not None},
+        )
         mark = {
             "em": datetime.now(timezone.utc).isoformat(), "sessao_id": self._session_id, "tipo": state.tipo,
             **{k: v for k, v in (

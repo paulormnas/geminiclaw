@@ -295,6 +295,29 @@ if GATE_ASK_WAIT_SECONDS < 0 or (AGENT_TIMEOUT_SECONDS is not None and AGENT_TIM
         "pesquisador não pode esperar mais que o tempo limite do agente)."
     )
 
+# v18.7-session-events-terminal: eventos de progresso da sessão e acompanhamento pelo terminal (design §3).
+SESSION_EVENTS_POLL_SECONDS = float(get_env("SESSION_EVENTS_POLL_SECONDS", default="2"))
+SESSION_EVENT_SUMMARY_MAX_CHARS = int(get_env("SESSION_EVENT_SUMMARY_MAX_CHARS", default="300"))
+SESSION_EVENTS_RETENTION_DAYS = int(get_env("SESSION_EVENTS_RETENTION_DAYS", default="0"))
+TERMINAL_EVENT_DETAIL = get_env("TERMINAL_EVENT_DETAIL", default="resumo").strip().lower()
+TERMINAL_FOLLOW_HISTORY = int(get_env("TERMINAL_FOLLOW_HISTORY", default="20"))
+TERMINAL_CONSULT_ENABLED = get_env_bool("TERMINAL_CONSULT_ENABLED", default=True)
+TERMINAL_CONSULT_CONTEXT_MAX_CHARS = int(get_env("TERMINAL_CONSULT_CONTEXT_MAX_CHARS", default="12000"))
+TERMINAL_CONSULT_MAX_TOKENS = int(get_env("TERMINAL_CONSULT_MAX_TOKENS", default="20000"))
+if SESSION_EVENTS_POLL_SECONDS <= 0:
+    raise ConfigurationError("'SESSION_EVENTS_POLL_SECONDS' deve ser maior que 0.")
+if not 1 <= SESSION_EVENT_SUMMARY_MAX_CHARS <= 300:
+    raise ConfigurationError("'SESSION_EVENT_SUMMARY_MAX_CHARS' deve estar entre 1 e 300 (limite do CHECK da tabela).")
+if SESSION_EVENTS_RETENTION_DAYS < 0:
+    raise ConfigurationError("'SESSION_EVENTS_RETENTION_DAYS' deve ser >= 0 (0 nunca apaga).")
+if TERMINAL_EVENT_DETAIL not in ("silencioso", "resumo", "detalhado"):
+    raise ConfigurationError("'TERMINAL_EVENT_DETAIL' deve ser 'silencioso', 'resumo' ou 'detalhado'.")
+if TERMINAL_FOLLOW_HISTORY < 0 or TERMINAL_CONSULT_CONTEXT_MAX_CHARS < 1 or TERMINAL_CONSULT_MAX_TOKENS < 1:
+    raise ConfigurationError(
+        "'TERMINAL_FOLLOW_HISTORY' deve ser >= 0; 'TERMINAL_CONSULT_CONTEXT_MAX_CHARS' e 'TERMINAL_CONSULT_MAX_TOKENS' "
+        "devem ser >= 1."
+    )
+
 # Limites de planejamento (Roadmap V4)
 MAX_PLANNING_ITERATIONS = int(get_env("MAX_PLANNING_ITERATIONS", default="10"))
 MAX_PLAN_RETRIES = int(get_env("MAX_PLAN_RETRIES", default="5"))

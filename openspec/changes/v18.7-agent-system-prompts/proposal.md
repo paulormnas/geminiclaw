@@ -53,7 +53,7 @@ Decisões do pesquisador (2026-10-15, ADR 022 §4): o regimento é um arquivo co
 - **Contratos:** `AgentContext` ganha `regimento_sha256` e `recorte_sha256`; evento novo `regimento_sessao`; payload da sessão ganha `regimento`; `DECISOES_RESERVADAS` ganha `ativar_adendo_regimento`; o esquema do plano inclui o campo opcional `papel`, criado por `v18.7-hypothesis-linking` (dona do campo e do comportamento); aqui só o texto do formato passa a ser gerado do esquema.
 - **Schema de banco:** nenhum (o valor `ativar_adendo_regimento` do `CHECK` de `gate_requests.decisao` é criado por `v18.7-persistent-human-gate`).
 - **Dependências:** nenhuma nova (`PyYAML` já é usado por `src/llm/catalog.yaml`; conferir na implementação).
-- **Custo:** o recorte soma até `REGIMENTO_EXCERPT_MAX_CHARS` (padrão 8000 caracteres, cerca de 2 mil tokens) ao `system` de cada chamada de agente; a reescrita sem duplicações e sem decoração deve reduzir os prompts de papel (o do Developer tem hoje cerca de 8,3 mil caracteres). Como `system` e recorte são fixos na sessão, os provedores com cache de prompt aproveitam o prefixo. O saldo é medido na bateria curta.
+- **Custo:** o recorte soma até `REGIMENTO_EXCERPT_MAX_CHARS` (padrão 16000 caracteres, cerca de 4 mil tokens; o texto v1 ocupa cerca de 11 mil no pior caso) ao `system` de cada chamada de agente; a reescrita sem duplicações e sem decoração deve reduzir os prompts de papel (o do Developer tem hoje cerca de 8,3 mil caracteres). Como `system` e recorte são fixos na sessão, os provedores com cache de prompt aproveitam o prefixo. O saldo é medido na bateria curta.
 - **Hardware (Pi 5):** carga e hash uma vez por sessão; sem custo relevante.
 
 ## Aprovações necessárias

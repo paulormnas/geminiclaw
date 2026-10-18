@@ -342,6 +342,16 @@ if OPERATION_METRICS_LIST_MAX_ITEMS < 1:
 if DEPENDENCY_ARTIFACTS_MAX_MOUNTS < 1 or DEPENDENCY_ARTIFACTS_LIST_MAX < 1:
     raise ValueError("DEPENDENCY_ARTIFACTS_MAX_MOUNTS e DEPENDENCY_ARTIFACTS_LIST_MAX devem ser inteiros >= 1.")
 
+# v18.7-agent-system-prompts — regimento da pesquisa. Teto do recorte injetado em cada chamada de papel (por combinação
+# de tipo de objetivo e modo) e da saída de ``ler_regimento``; protege o custo de entrada contra crescimento do texto.
+REGIMENTO_EXCERPT_MAX_CHARS = int(get_env("REGIMENTO_EXCERPT_MAX_CHARS", default="16000"))
+if REGIMENTO_EXCERPT_MAX_CHARS < 1:
+    raise ValueError("REGIMENTO_EXCERPT_MAX_CHARS deve ser um inteiro >= 1.")
+# Adendo de projeto: arquivo procurado nos insumos do pesquisador; só vale com a aprovação do hash pelo gate.
+REGIMENTO_ADDENDUM_FILE = get_env("REGIMENTO_ADDENDUM_FILE", default="regimento_adendo.yaml")
+if not REGIMENTO_ADDENDUM_FILE or "/" in REGIMENTO_ADDENDUM_FILE or REGIMENTO_ADDENDUM_FILE.startswith("."):
+    raise ValueError("REGIMENTO_ADDENDUM_FILE deve ser um nome de arquivo simples, sem caminho.")
+
 # v18.6-hypothesis-closure — resultado científico negativo (hipótese refutada por limiar) é progresso, não falha.
 NEGATIVE_RESULT_AS_PROGRESS = get_env_bool("NEGATIVE_RESULT_AS_PROGRESS", default=True)
 

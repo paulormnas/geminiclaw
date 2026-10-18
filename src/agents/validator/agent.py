@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src import config
+from src.agents.regimento import com_regimento
 from src.agents.subtask_contract import (
     INTEGRITY_RULES,
     MOTIVO_ISSUE_SEM_TIPO,
@@ -714,7 +715,7 @@ class ValidatorAgent:
             _t0 = time.monotonic()
             response = await self.provider.generate(
                 messages=[user_message],
-                system=system_prompt,
+                system=com_regimento(system_prompt),
                 temperature=0.1,
                 max_tokens=1000,
             )
@@ -1130,7 +1131,7 @@ class ValidatorAgent:
                 _t0 = time.monotonic()
                 response = await self.provider.generate(
                     messages=[user_message],
-                    system=system_prompt,
+                    system=com_regimento(system_prompt),
                     temperature=0.1,
                     max_tokens=800,
                 )
@@ -1242,7 +1243,7 @@ class ValidatorAgent:
                 )
             )
         message = labeled("user", *fragments)
-        system = CLAIM_VERIFY_INSTRUCTION.format(app=APP_NAME)
+        system = com_regimento(CLAIM_VERIFY_INSTRUCTION.format(app=APP_NAME))
         last_error = "resposta vazia"
         for _ in range(CLAIM_VERIFIER_ATTEMPTS):
             t0 = time.monotonic()

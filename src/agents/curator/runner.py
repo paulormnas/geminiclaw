@@ -30,6 +30,7 @@ from typing import Any, Callable
 
 from src import config
 from src.agents.curator.agent import AGENT_INSTRUCTION
+from src.agents.regimento import com_regimento
 from src.egress.gate import any_role_raw
 from src.knowledge.curator_flags import FlagStore
 from src.knowledge.curator_tools import CuratorLimits, CuratorToolkit, wrap_data
@@ -304,7 +305,7 @@ class Curator:
                 return
             started = time.monotonic()
             response = await provider.generate(
-                messages=messages, tools=tools, system=self._system_prompt, temperature=0.2,
+                messages=messages, tools=tools, system=com_regimento(self._system_prompt), temperature=0.2,
                 max_tokens=min(_MAX_GENERATE_TOKENS, remaining),
             )
             record_llm_call(provider, response, int((time.monotonic() - started) * 1000), agent_id=AGENT_ID)

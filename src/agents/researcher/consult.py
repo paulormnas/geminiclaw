@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
 
+from src.agents.regimento import com_regimento
 from src.egress.gate import external_destination, get_gate, role_tainted, use_caller_role
 from src.llm.base import LLMProvider
 from src.llm.metering import record_llm_call
@@ -425,7 +426,7 @@ async def run_consult(
     for _ in range(max_turns):
         t0 = time.monotonic()
         response = await provider.generate(
-            messages=messages, tools=tools or None, system=CONSULT_SYSTEM_PROMPT, temperature=0.2
+            messages=messages, tools=tools or None, system=com_regimento(CONSULT_SYSTEM_PROMPT), temperature=0.2
         )
         record_llm_call(provider, response, int((time.monotonic() - t0) * 1000), agent_id="researcher")
         usage = response.usage or {}

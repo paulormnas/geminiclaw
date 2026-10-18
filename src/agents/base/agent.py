@@ -30,6 +30,7 @@ class Agent:
 
 from src.agents.base.tools import write_artifact
 from src.agents.prompts import render_instruction
+from src.agents.regimento import com_regimento
 from src.logger import get_logger
 from src.session.manager import SessionManager
 from src.skills import registry
@@ -83,8 +84,7 @@ AGENT_DESCRIPTION = (
 )
 _INSTRUCTION_TEMPLATE = (
     "Você é um assistente de análise de dados e geração de código do {app_name}, "
-    "assistente digital de pesquisa científica (ADR 010) rodando no processo do orquestrador "
-    "em um Raspberry Pi 5.\n\n"
+    "assistente digital de pesquisa científica (ADR 010).\n\n"
     "RESPONSABILIDADES:\n"
     "1. **ANÁLISE DE DADOS**: Processar datasets, calcular estatísticas, identificar padrões e tendências.\n"
     "2. **GERAÇÃO E EXECUÇÃO DE CÓDIGO**: Criar scripts Python para automação, transformação de dados e visualizações.\n"
@@ -266,34 +266,10 @@ def _get_agent_instruction(base_instruction: str) -> str:
     Returns:
         Instrução completa com contexto dinâmico injetado.
     """
-    instruction = base_instruction
+    # v18.7-agent-system-prompts: o prompt do papel vem primeiro, seguido do recorte do regimento (que traz as regras
+    # dos modos); o contexto dinâmico da sessão (skills, documentos, memória) fica depois, para o prefixo ser estável.
+    instruction = com_regimento(base_instruction)
     context_sections: list[str] = []
-
-    # --- Modo de operação da sessão (Roadmap V15.6 / Spec G10) ---
-    session_mode = _task_state()["session_mode"].lower()
-    _MODE_GUIDANCE: dict[str, str] = {
-        "assisted": (
-            "Modo ASSISTIDO (padrão). Quando o contexto necessário estiver genuinamente ausente "
-            "e bloquear o progresso, use a ferramenta `ask_researcher` (quando disponível) para "
-            "consultar o pesquisador. Antes de perguntar, investigue autonomamente: revise o "
-            "contexto disponível, tente abordagens alternativas documentadas, e só pergunte se "
-            "permanecer genuinamente bloqueado."
-        ),
-        "semi": (
-            "Modo SEMI-AUTÔNOMO. NUNCA bloqueie aguardando resposta do pesquisador. Quando "
-            "faltar contexto, `ask_researcher` (quando disponível) aciona o Researcher consultor, "
-            "que responde sem bloquear; documente a decisão e o uso da consulta e continue."
-        ),
-        "auto": (
-            "Modo TOTALMENTE AUTÔNOMO. Não há pesquisador disponível; `ask_researcher` (quando "
-            "disponível) aciona o Researcher consultor, que responde no lugar dele. Resolva "
-            "incertezas autonomamente, usando busca web técnica quando necessário, e documente "
-            "todas as decisões tomadas sem confirmação humana."
-        ),
-    }
-    context_sections.append(
-        f"**MODO DE OPERAÇÃO DA SESSÃO**: `{session_mode}`\n{_MODE_GUIDANCE.get(session_mode, _MODE_GUIDANCE['assisted'])}"
-    )
 
     # --- Catálogo de skills disponíveis ---
     _SKILL_GUIDANCE: dict[str, str] = {

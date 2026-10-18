@@ -261,10 +261,10 @@ Alinhar o texto do Researcher e do Validator com `_is_bound` e informar as retir
 |---|---|
 | `v18.7-graph-exploration-relations` | Implementada e mergeada. |
 | `v18.7-hypothesis-linking` | Implementada e mergeada. |
-| `v18.7-exploration-limits` | Implementada e mergeada (#187 a #199). Pendente a bateria da V18.7 no Raspberry Pi (tarefa 10.4), que exige a confirmação do pesquisador, e as pendências registradas em `tasks.md` (1.2 adiada; concorrente declarada no item de `hipoteses`; `viola_restricao` só no revisor LLM; revisão do objetivo para `discriminacao` não aplicada pela sessão). |
+| `v18.7-exploration-limits` | Implementada, mergeada (#187 a #200) e validada na bateria parcial de 2026-10-18 (`docs/benchmarks/2026-10-18-bateria-v18-7-parcial-resultados.md`): sem paradas por `limite_ciclos`/`limite_execucoes` e `solucao_encontrada` com acurácia validada 0,975. Pendências em `tasks.md`: 1.2 adiada; concorrente declarada no item de `hipoteses`; `viola_restricao` só no revisor LLM; revisão do objetivo para `discriminacao` não aplicada pela sessão. |
 | `v18.7-exploration-metrics` | Não iniciada (§8.4: contadores por papel e origem; ADR 022 §6.3 e §7). |
 
-O ADR passa a `Aceito` quando `v18.7-exploration-metrics` for implementada e a bateria da V18.7 confirmar o §5.1 (nenhuma parada por `limite_ciclos` ou `limite_execucoes`) e o §5.2 (sessões com acurácia validada no alvo fecham por `solucao_encontrada`).
+O §5.1 (nenhuma parada por `limite_ciclos` ou `limite_execucoes`) e o §5.2 (sessões com acurácia validada no alvo fecham por `solucao_encontrada`) foram confirmados na bateria parcial de 2026-10-18, com uma repetição. O ADR passa a `Aceito` quando `v18.7-exploration-metrics` for implementada; a revisão do ADR (comparar modelos treinados, paradas por `hipoteses_nao_testadas` e proporção de hipóteses do sistema) segue pendente da bateria completa.
 
 A mudança `v18.7-hypothesis-linking` também atualiza o cenário "Baseline sem hipótese" de `pipeline-robustness` e o tratamento de resultado negativo (§8.2) em `hypothesis-loop`.
 

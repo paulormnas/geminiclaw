@@ -1,6 +1,6 @@
 # Tarefas: v18.7-graph-exploration-relations
 
-**Estado (2026-10-16):** implementada na branch `feat/v18.7-graph-exploration-relations`, aguardando revisão e merge; pendente só 4.3 (roteiro do Pi) se não constar abaixo. `ruff`, `lint-imports` e `pytest -m unit` verdes (3603). O teste de integração com AGE real (4.2) foi escrito e roda no Pi (resultado no PR).
+**Estado (2026-10-17):** implementada e mergeada em `dev` (#170). A tarefa 4.3 (roteiro do Pi) foi coberta pelas suítes de integração rodadas no Pi nas etapas seguintes (4405 passed na V18.7). Falta só o arquivamento.
 
 **Registros da implementação:**
 - Questão 3 do design §9 (ciclos em `DERIVADA_DE`): adotada a proposta (só se recusa o laço para o próprio nó).

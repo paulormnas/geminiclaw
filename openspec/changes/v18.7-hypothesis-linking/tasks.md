@@ -1,6 +1,6 @@
 # Tarefas: v18.7-hypothesis-linking
 
-**Estado (2026-10-16):** implementada em `feat/v18.7-hypothesis-linking` (PR aberto); o teste com AGE real (10.2) passou no Pi; falta só a confirmação do Arquiteto (ADRs). As propostas das questões §16 do design foram adotadas e estão listadas abaixo, junto com as dúvidas de spec que surgiram.
+**Estado (2026-10-17):** implementada e mergeada em `dev` (#176); o teste com AGE real (10.2) passou no Pi e o Arquiteto confirmou o ADR 021 como `Parcialmente implementado` (#200). As propostas das questões §16 do design foram adotadas e estão listadas abaixo, junto com as dúvidas de spec que surgiram. Falta só o arquivamento.
 
 ## 0. Pré-requisitos
 - [x] 0.1 `v18.7-graph-exploration-relations` mergeada (schema, leitura compatível, migração); os testes usam e estendem os construtores de `tests/support/exploration_graph.py` daquela mudança (design §5.1), sem criar outros para os mesmos nós.

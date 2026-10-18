@@ -1,6 +1,6 @@
 # Tarefas: v18.7-layer-cycles
 
-**Estado (2026-10-15):** implementada na branch `refactor/layer-cycles`, aguardando merge. `ruff`, `lint-imports` e `pytest -m unit` verdes; `pytest -m integration`: 36 passaram e 74 foram ignorados por falta de PostgreSQL e Docker no Mac. A lista de exceções do contrato está vazia. O ciclo `config` ↔ `utils`, achado em `v18.7-source-layout`, foi desfeito por decisão do pesquisador (2026-10-15): o cliente do Qdrant (`utils/qdrant.py`, que lê `config`) passou para o novo pacote `src/memory/qdrant.py` (conexões com as memórias vetoriais), e `utils` ficou abaixo de `config`.
+**Estado (2026-10-17):** implementada e mergeada em `dev` (#169). A lista de exceções do contrato está vazia. O ciclo `config` ↔ `utils`, achado em `v18.7-source-layout`, foi desfeito por decisão do pesquisador (2026-10-15): o cliente do Qdrant (`utils/qdrant.py`, que lê `config`) passou para o novo pacote `src/memory/qdrant.py` (conexões com as memórias vetoriais), e `utils` ficou abaixo de `config`. Falta só o arquivamento.
 
 **Desvios e dúvidas de spec registrados na implementação** (nenhuma regra do filtro mudou):
 - `Destination` depende do alias `Canal` (`Literal` em `src/egress/gate.py`); os dois foram para `src/llm/destination.py`.

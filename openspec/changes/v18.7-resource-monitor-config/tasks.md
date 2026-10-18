@@ -1,6 +1,6 @@
 # Tarefas: v18.7-resource-monitor-config
 
-**Estado (2026-10-16):** implementada na branch `feat/v18.7-resource-monitor-config`, aguardando revisão e merge. `ruff`, `lint-imports` e `pytest -m unit` verdes (3637 + testes de estrutura); integração: 36 passaram, 76 ignorados (sem PostgreSQL/Docker no Mac). `.env` do Mac e do Pi migrados (cópia do `.env` anterior fora do repositório, em `~/.env.geminiclaw.bak_v187`).
+**Estado (2026-10-17):** implementada e mergeada em `dev` (#171). `.env` do Mac e do Pi migrados (cópia do `.env` anterior fora do repositório, em `~/.env.geminiclaw.bak_v187`). Falta só o arquivamento.
 
 **Valores efetivos capturados no Pi antes da migração (tarefa 0.2):** perfil `pi5`; `MAX_SUBTASKS_PER_TASK=10` e `MAX_CONCURRENT_AGENTS=3` (declarados no `.env`, sobrepondo o perfil); `AGENT_TIMEOUT_SECONDS` vazio no ambiente (perfil: sem limite); `PI_TEMPERATURE_LIMIT=75.0`; `PI_MIN_AVAILABLE_MEMORY_MB=512.0`. Declarados no `.env` do Pi: `TEMPERATURE_LIMIT=75.0`, `MIN_AVAILABLE_MEMORY_MB=512.0`, `AGENT_TIMEOUT_SECONDS=0`, `LLM_PROVIDER_PRIORITY=ollama,openai_compatible,google,anthropic,openai`. O design §6.3 (valores divergentes do perfil) não se aplicou: os valores são os do perfil, exceto `MAX_*` (que o `.env` já fixava).
 

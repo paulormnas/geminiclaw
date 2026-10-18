@@ -119,11 +119,11 @@ async def test_nova_tentativa_reconstroi_o_contrato_do_plano_vigente(tmp_path):
     real = AutonomousLoop._attempt_contract
     calls = {"n": 0}
 
-    async def spy(self, task_, plan_, original, sid):
+    async def spy(self, task_, plan_, original, sid, *extra):
         calls["n"] += 1
         if calls["n"] == 2:  # o plano vigente muda entre as tentativas
             task_.validation_criteria = ["acurácia no teste >= 0.85", "matriz de confusão salva"]
-        return await real(self, task_, plan_, original, sid)
+        return await real(self, task_, plan_, original, sid, *extra)
 
     with patch.object(AutonomousLoop, "_attempt_contract", spy):
         await h.run()

@@ -325,6 +325,18 @@ REVIEW_SCRIPT_MAX_CHARS = int(get_env("REVIEW_SCRIPT_MAX_CHARS", default="6000")
 REVIEW_OBSERVATIONS_MAX = int(get_env("REVIEW_OBSERVATIONS_MAX", default="10"))
 PLAN_ARTIFACT_COLLISION_CHECK = get_env_bool("PLAN_ARTIFACT_COLLISION_CHECK", default=True)
 
+# v18.7-dependency-artifacts (ADR 022 §9) — saídas das dependências montadas somente leitura no sandbox.
+DEPENDENCY_ARTIFACTS_ENABLED = get_env_bool("DEPENDENCY_ARTIFACTS_ENABLED", default=True)
+DEPENDENCY_ARTIFACTS_SCOPE = get_env("DEPENDENCY_ARTIFACTS_SCOPE", default="transitivas").strip().lower()
+if DEPENDENCY_ARTIFACTS_SCOPE not in ("transitivas", "diretas"):
+    raise ValueError(
+        f"DEPENDENCY_ARTIFACTS_SCOPE inválido: '{DEPENDENCY_ARTIFACTS_SCOPE}'. Valores aceitos: transitivas, diretas."
+    )
+DEPENDENCY_ARTIFACTS_MAX_MOUNTS = int(get_env("DEPENDENCY_ARTIFACTS_MAX_MOUNTS", default="16"))
+DEPENDENCY_ARTIFACTS_LIST_MAX = int(get_env("DEPENDENCY_ARTIFACTS_LIST_MAX", default="20"))
+if DEPENDENCY_ARTIFACTS_MAX_MOUNTS < 1 or DEPENDENCY_ARTIFACTS_LIST_MAX < 1:
+    raise ValueError("DEPENDENCY_ARTIFACTS_MAX_MOUNTS e DEPENDENCY_ARTIFACTS_LIST_MAX devem ser inteiros >= 1.")
+
 # v18.6-hypothesis-closure — resultado científico negativo (hipótese refutada por limiar) é progresso, não falha.
 NEGATIVE_RESULT_AS_PROGRESS = get_env_bool("NEGATIVE_RESULT_AS_PROGRESS", default=True)
 

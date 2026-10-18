@@ -181,6 +181,14 @@ def test_sandbox_run_emite_evento_sem_o_conteudo_do_script():
     assert kwargs["payload"] == {"task_name": "treinar", "exit_code": 1, "duration_ms": 250, "timed_out": False}
 
 
+def test_sandbox_run_registra_as_dependencias_montadas():
+    result = SandboxResult(stdout="", stderr="", exit_code=0, dependencias_montadas=["dividir_dados"])
+    with patch("src.observability.telemetry.get_telemetry") as tel:
+        CodeSkill._record_sandbox_run("sess", "treinar", result, 10)
+    payload = tel.return_value.record_agent_event.call_args.kwargs["payload"]
+    assert payload["dependencias_montadas"] == ["dividir_dados"]
+
+
 @pytest.mark.parametrize("fmt", ["html", "latex"])
 def test_conversores_seguem_funcionando_sobre_o_markdown_novo(tmp_path, fmt):
     from src.report.base_converter import ReportConverterFactory

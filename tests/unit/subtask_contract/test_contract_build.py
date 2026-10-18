@@ -57,7 +57,7 @@ def test_itens_do_contrato_na_ordem():
     assert "matriz_confusao.png" in text
     assert "acuracia (critério c1)" in text
     assert "metrics.json: comparar_modelos" in text
-    assert text.startswith("CONTRATO DA SUBTAREFA (versão 1)") and text.endswith("FIM DO CONTRATO")
+    assert text.startswith("CONTRATO DA SUBTAREFA (versão 2)") and text.endswith("FIM DO CONTRATO")
     assert "o modelo A melhora a acurácia" in text and "alvo 0.9" in text
 
 

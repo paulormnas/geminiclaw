@@ -276,3 +276,30 @@ def test_instalacao_em_container_proprio_sem_staging(tmp_path: Path) -> None:
     result = _run(_sandbox(tmp_path), tmp_path, code, packages=["tabulate"])
     assert result.exit_code == 0, result.stderr
     assert "False False" in result.stdout
+
+
+def test_script_le_a_saida_da_dependencia_somente_leitura(tmp_path):
+    """v18.7-dependency-artifacts: o script lê /deps_out/<projeto>/<subtarefa>/ e não consegue gravar nela."""
+    from src.utils.agent_context import DependencyMount
+
+    root = tmp_path / "out"
+    dep = root / "s" / "dividir_dados"
+    dep.mkdir(parents=True)
+    (dep / "y_train.csv").write_text("0\n1\n", encoding="utf-8")
+    code = (
+        "import pathlib\n"
+        "base = pathlib.Path('/deps_out/proj1/dividir_dados')\n"
+        "print(sorted(p.name for p in base.iterdir()))\n"
+        "try:\n"
+        "    (base / 'novo.txt').write_text('x')\n"
+        "    print('GRAVOU')\n"
+        "except OSError:\n"
+        "    print('SOMENTE_LEITURA')\n"
+    )
+    result = PythonSandbox().run(
+        code=code, session_id="s", task_name="treinar", output_dir=str(root),
+        dependency_mounts=[DependencyMount("dividir_dados", dep, "s")], project_id="proj1",
+    )
+    assert result.exit_code == 0, result.stderr
+    assert "['y_train.csv']" in result.stdout and "SOMENTE_LEITURA" in result.stdout
+    assert not (dep / "novo.txt").exists() and result.dependencias_montadas == ["dividir_dados"]

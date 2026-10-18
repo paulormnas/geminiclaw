@@ -75,10 +75,13 @@ class ContractMixin:
 
         return resolve
 
-    def build_contract(self, task: Any, plan: list[Any], original_task: str) -> SubtaskContract:
+    def build_contract(
+        self, task: Any, plan: list[Any], original_task: str, *, dependency_artifacts: Any = ()
+    ) -> SubtaskContract:
         """Contrato da tentativa a partir do plano vigente (síncrono: usar ``to_thread``)."""
         return build_developer_contract(
-            task, plan, self.problem_objective(), original_task, metric_resolver=self.metric_resolver()
+            task, plan, self.problem_objective(), original_task, metric_resolver=self.metric_resolver(),
+            dependency_artifacts=dependency_artifacts,
         )
 
     def drop_long_contract_fields(self, live: list[Any], plan: list[Any], dropped: dict[str, str]) -> None:

@@ -211,6 +211,10 @@ class CodeSkill(BaseSkill):
                     "exit_code": result.exit_code,
                     "duration_ms": duration_ms,
                     "timed_out": bool(result.timed_out),
+                    **(
+                        {"dependencias_montadas": list(result.dependencias_montadas)[:32]}
+                        if getattr(result, "dependencias_montadas", None) else {}
+                    ),
                 },
             )
         except Exception as exc:  # observabilidade nunca derruba a execução
@@ -278,6 +282,28 @@ class CodeSkill(BaseSkill):
         return meta
 
     @staticmethod
+    def _dependency_mounts() -> list:
+        """Saídas das dependências concluídas da subtarefa (``AgentContext.dependency_dirs``), se houver."""
+        try:
+            from src.utils.agent_context import get_agent_context_optional
+
+            ctx = get_agent_context_optional()
+            return list(ctx.dependency_dirs) if ctx is not None else []
+        except Exception as exc:  # contexto indisponível: nenhuma dependência é montada
+            logger.warning("Falha ao ler as dependências do contexto", extra={"error": str(exc)})
+            return []
+
+    @staticmethod
+    def _project_id() -> Optional[str]:
+        try:
+            from src.utils.agent_context import get_agent_context_optional
+
+            ctx = get_agent_context_optional()
+            return ctx.project_id if ctx is not None else None
+        except Exception:  # noqa: BLE001
+            return None
+
+    @staticmethod
     def _readable_prior_dirs() -> List[pathlib.Path]:
         """Saídas de sessões anteriores da cadeia de continuidade (``AgentContext.readable_dirs``), se houver."""
         try:
@@ -325,6 +351,7 @@ class CodeSkill(BaseSkill):
                 session_id=session_id,
                 task_name=task_name,
                 prior_dirs=self._readable_prior_dirs(),
+                dependency_dirs=self._dependency_mounts(),
                 cache=_provenance_hash_cache(),
             )
             body = inicio_body(
@@ -334,6 +361,7 @@ class CodeSkill(BaseSkill):
                 packages=packages,
                 assets=list(assets or []),
                 image=str(getattr(self.sandbox, "image", "") or ""),
+                dependencies=[{"task_name": m.task_name, "sessao": m.session_id} for m in self._dependency_mounts()],
             )
             began = await asyncio.to_thread(
                 ledger.begin,
@@ -533,6 +561,8 @@ class CodeSkill(BaseSkill):
             # orquestrador e os demais agentes do processo. Vai para uma thread para manter
             # o event loop livre.
             _started = time.monotonic()
+            mounts = self._dependency_mounts()
+            dependency_kwargs = {"dependency_mounts": mounts, "project_id": self._project_id()} if mounts else {}
             result = await asyncio.to_thread(
                 self.sandbox.run,
                 code=code,
@@ -544,6 +574,7 @@ class CodeSkill(BaseSkill):
                 assets=list(assets or []),
                 needs_network=bool(needs_network),
                 prior_dirs=self._readable_prior_dirs(),
+                **dependency_kwargs,
             )
 
             # v18.5-execution-provenance — término registrado logo após o sandbox, antes de qualquer outro passo.

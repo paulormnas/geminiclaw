@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import os
 import pathlib
+import re
 import stat
-from typing import List, Protocol
+from typing import TYPE_CHECKING, List, Protocol
+
+if TYPE_CHECKING:
+    from src.utils.agent_context import DependencyMount
 
 
 class InputClassifier(Protocol):
@@ -87,4 +91,46 @@ def check_mount_source(path: pathlib.Path, allowed_root: pathlib.Path) -> pathli
     resolved = path.resolve()
     if not resolved.is_relative_to(allowed_root.resolve()):
         raise MountSourceError(f"origem de montagem fora de {allowed_root.name}: {path.name}")
+    return resolved
+
+
+_SAFE_TASK_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def check_dependency_mount(
+    mount: "DependencyMount",
+    output_root: pathlib.Path,
+    current_session: str,
+    chain_sessions: "set[str]",
+    own_task: str,
+) -> pathlib.Path:
+    """Valida a saída de uma dependência a montar em ``/deps_out`` (v18.7-dependency-artifacts, design §4).
+
+    A origem é exatamente ``<saída>/<sessão>/<subtarefa>`` (profundidade 2), da sessão atual ou de uma sessão da cadeia
+    de continuidade; sem link simbólico (nem dentro da pasta) e sem arquivo que não seja regular; nunca a própria
+    subtarefa.
+
+    Raises:
+        MountSourceError: Em qualquer violação (a execução é recusada antes de criar o container).
+    """
+    name = mount.task_name
+    if not name or not _SAFE_TASK_RE.fullmatch(name) or ".." in name:
+        raise MountSourceError(f"nome de dependência inválido: {name!r}")
+    if name == own_task:
+        raise MountSourceError("a subtarefa não pode montar a própria pasta como dependência")
+    resolved = check_mount_source(pathlib.Path(mount.source), output_root)
+    if not resolved.is_dir():
+        raise MountSourceError(f"a saída da dependência não é um diretório: {name}")
+    root = output_root.resolve()
+    if resolved.parent.parent != root or resolved.name != name:
+        raise MountSourceError(f"saída de dependência fora do formato <saída>/<sessão>/<subtarefa>: {name}")
+    session = resolved.parent.name
+    if session != str(mount.session_id) or (session != current_session and session not in chain_sessions):
+        raise MountSourceError(f"saída de dependência de sessão fora da cadeia de continuidade: {name}")
+    for dirpath, dirnames, filenames in os.walk(resolved, followlinks=False):
+        for entry in [*dirnames, *filenames]:
+            path = pathlib.Path(dirpath) / entry
+            mode = os.lstat(path).st_mode
+            if stat.S_ISLNK(mode) or not (stat.S_ISREG(mode) or stat.S_ISDIR(mode)):
+                raise MountSourceError(f"link simbólico ou arquivo especial em dependência recusado: {name}")
     return resolved

@@ -63,8 +63,13 @@ class SubtaskOutput:
         data = json.loads(json_str)
         return cls(**data)
 
-    def to_context_string(self) -> str:
-        """Converte o output em uma string de contexto formatada para outro agente."""
+    def to_context_string(self, mounted_at: str | None = None) -> str:
+        """Converte o output em uma string de contexto formatada para outro agente.
+
+        Args:
+            mounted_at: Caminho no container onde a pasta desta subtarefa está montada somente leitura
+                (``/deps_out/<projeto>/<subtarefa>``, v18.7-dependency-artifacts); os caminhos do host não valem lá.
+        """
         lines = [f"### Resultado de `{self.task_name}` (Agente: {self.agent_id})"]
         
         if self.text_summary:
@@ -85,6 +90,8 @@ class SubtaskOutput:
 
             names = [f"- `{art.get('name', 'arquivo')}` em `{art.get('path', '')}`" for art in self.artifacts]
             lines.append(mark_artifact_names("\n".join(names)))
+            if mounted_at:
+                lines.append(f"**Montados somente leitura em** `{mounted_at}/` (leia de lá; grave em /outputs/)")
 
         if self.artifact_aliases:
             lines.append("**Arquivos produzidos (esperado → real):**")

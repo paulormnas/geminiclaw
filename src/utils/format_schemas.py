@@ -235,6 +235,19 @@ RESPOSTA_CONSULTOR = Esquema(
     ),
 )
 
+# --- Resposta da consulta do terminal (v18.7-session-events-terminal) ---------------------------------------------
+
+RESPOSTA_CONSULTA_TERMINAL = Esquema(
+    "consulta_terminal",
+    (
+        Campo("resposta", "string", "resposta ao pesquisador, com base no contexto fornecido", obrigatorio=True,
+              exemplo='"..."'),
+        Campo("orientacao_sugerida", "string|null",
+              "mensagem para a pesquisa só quando o pesquisador pediu mudança de rumo; senão null",
+              exemplo='"..." | null'),
+    ),
+)
+
 # --- Narrativa do Summarizer ---------------------------------------------------------------------------------------
 
 NARRATIVA = Esquema(
@@ -280,7 +293,7 @@ METRICS_JSON = Esquema(
 )
 
 ESQUEMAS = (SUBTAREFA, PLANO_EXPLORACAO, PARECER_PLANO, PARECER_REVISAO, RASCUNHO_PROBLEMA, RESPOSTA_CONSULTOR,
-            NARRATIVA, METRICS_JSON)
+            RESPOSTA_CONSULTA_TERMINAL, NARRATIVA, METRICS_JSON)
 
 MANDATORY_KEYS = list(SUBTAREFA.obrigatorios())  # agent_id, task_name, prompt, validation_criteria
 NARRATIVE_FIELDS = NARRATIVA.nomes()

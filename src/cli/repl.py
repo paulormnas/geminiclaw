@@ -31,6 +31,7 @@ from src.cli.sessions_view import (
     resolve_target,
     summary_since,
 )
+from src.cli.terminal_consult import ConsultOutcome, run_consult_process
 from src.gate.persistent_gate import terminal_gate
 from src.logger import get_logger
 from src.session.chain import chain_session_ids
@@ -53,9 +54,10 @@ EXIT_COMMANDS = {"exit", "quit", "sair"}
 PROMPT = f"  {MAGENTA}🔮 >{RESET} "
 NEW_RESEARCH_HINT = (
     "Para iniciar uma pesquisa use: nova-pesquisa <tarefa>  "
-    "(comandos: pesquisas, acompanhar, pausar, parar, cancelar, replanejar, pendentes, decidir, mensagem, retomar, "
-    "encerrar, sair)"
+    "(comandos: pesquisas, acompanhar, pausar, parar, cancelar, replanejar, perguntar, pendentes, decidir, mensagem, "
+    "retomar, encerrar, sair)"
 )
+NO_RESEARCH_TO_CONSULT = "Não há pesquisa para consultar; use 'nova-pesquisa <tarefa>' para iniciar uma."
 
 
 class Console:
@@ -194,6 +196,7 @@ class Repl:
         reader: EventReader | None = None,
         events_interval: float | None = None,
         costs_fn: Callable[[Any], dict[str, float]] | None = None,
+        consult_fn: Callable[[str, str], ConsultOutcome] | None = None,
     ) -> None:
         self.mode = mode or config.SESSION_DEFAULT_MODE
         self.explicit_mode = explicit_mode
@@ -219,6 +222,7 @@ class Repl:
         self._events_interval = config.SESSION_EVENTS_POLL_SECONDS if events_interval is None else events_interval
         self._events: EventsThread | None = None
         self._costs_fn = costs_fn
+        self._consult = consult_fn or run_consult_process
 
     # -- abertura e fechamento -------------------------------------------------------------------------------------
 
@@ -387,7 +391,7 @@ class Repl:
                 self.console.write(f"\n  {RED}Use: nova-pesquisa <tarefa>{RESET}\n")
             else:
                 await self.start_research(rest)
-        elif lower in ("sessions", "pesquisas"):
+        elif word in ("sessions", "pesquisas"):
             show_overview(self.manager, self.reader, self.gate, self.console.write, self._now(), self._costs_fn)
         elif word == "acompanhar":
             self._cmd_follow(rest)
@@ -413,7 +417,9 @@ class Repl:
                 self.console.write(f"\n  {RED}Use: mensagem <apelido> <texto>{RESET}\n")
             else:
                 send_message(self.manager, target, message.strip(), self.console.write)
-        elif lower == "sandboxes":
+        elif word == "perguntar" or text.startswith("?"):
+            await self._cmd_ask(rest if word == "perguntar" else text[1:].strip())
+        elif word == "sandboxes":
             show_sandboxes()
         elif word == "parar-sandboxes":
             if rest:
@@ -423,10 +429,10 @@ class Repl:
 
                 stop_sandboxes(session_id=None)
                 cleanup_all_sandbox_containers()
-        elif lower == "clear-context":
+        elif word == "clear-context":
             clear_context()
-        else:
-            self.console.write(f"\n  {YELLOW}{NEW_RESEARCH_HINT}{RESET}\n")
+        else:  # texto livre sem comando é conversa com o Researcher (decisão do pesquisador, 2026-10-15)
+            await self._cmd_ask(text)
         return True
 
     async def _cmd_resume(self, target: str) -> None:
@@ -500,6 +506,70 @@ class Repl:
             self.console.write(f"  Pesquisa {label(session)} encerrada ({reason}). Relatório: {report}")
         return True
 
+    def _pick_research(self, alias: str | None) -> Any | None:
+        """Pesquisa a consultar: a do ``@apelido``; senão a única em execução; com várias, pergunta qual."""
+        if alias:
+            return resolve_target(self.manager, alias)
+        running = self._running_researches()
+        if not running:
+            self.console.write(f"\n  {YELLOW}{NO_RESEARCH_TO_CONSULT}{RESET}\n")
+            return None
+        if len(running) == 1:
+            return running[0]
+        names = ", ".join(label(s) for s in running)
+        try:
+            answer = self._input(f"  Qual pesquisa ({names})? ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return None
+        return resolve_target(self.manager, answer)
+
+    async def _cmd_ask(self, raw: str) -> None:
+        """``perguntar [@apelido] <texto>``, ``? <texto>`` ou texto livre: consulta só leitura ao Researcher."""
+        from src.cli.progress_view import clean_line
+
+        if not raw.strip():
+            self.console.write(f"\n  {RED}Use: perguntar [@apelido] <texto>{RESET}\n")
+            return
+        if not config.TERMINAL_CONSULT_ENABLED:
+            self.console.write(
+                f"\n  {YELLOW}A consulta pelo terminal está desligada (TERMINAL_CONSULT_ENABLED).{RESET}\n"
+            )
+            return
+        alias = None
+        question = raw.strip()
+        if question.startswith("@"):
+            alias, _, question = question[1:].partition(" ")
+            question = question.strip()
+            if not question:
+                self.console.write(f"\n  {RED}Use: perguntar @apelido <texto>{RESET}\n")
+                return
+        session = self._pick_research(alias)
+        if session is None:
+            if alias:
+                self.console.write(f"\n  {RED}Pesquisa '{clean_line(alias, 40)}' não encontrada.{RESET}\n")
+            return
+        self.console.write(f"  {DIM}Consultando o Researcher sobre {label(session)}...{RESET}")
+        outcome = await asyncio.to_thread(self._consult, question, session.id)
+        if not outcome.ok:
+            self.console.write(f"\n  {RED}Consulta recusada: {clean_line(outcome.erro, 300)}{RESET}\n")
+            return
+        self.console.write(f"\n  {clean_line(outcome.resposta, 2400)}\n")
+        if outcome.orientacao_sugerida:
+            self._offer_guidance(session, outcome.orientacao_sugerida)
+
+    def _offer_guidance(self, session: Any, guidance: str) -> None:
+        """A orientação sugerida só vira mensagem à pesquisa se o pesquisador confirmar (nunca resolve um pedido)."""
+        from src.cli.progress_view import clean_line
+
+        text = clean_line(guidance, int(config.SESSION_INBOX_MAX_CHARS))
+        self.console.write(f"  {DIM}Orientação sugerida: {text}{RESET}")
+        try:
+            answer = self._input(f"  Enviar como mensagem a {label(session)}? [s/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            return
+        if answer in ("s", "sim", "y", "yes"):
+            send_message(self.manager, label(session), text, self.console.write)
+
     def _cmd_follow(self, target: str) -> None:
         """``acompanhar <apelido>``: histórico e eventos novos em nível detalhado, até ``voltar`` ou Ctrl+C."""
         session = resolve_target(self.manager, target)
@@ -562,7 +632,8 @@ async def interactive_mode(
         mode=mode, explicit_mode=explicit_mode, budget=budget, args=args or argparse.Namespace(), **kwargs
     )
     print(BANNER)
-    print(f"  {DIM}Modo interativo. 'nova-pesquisa <tarefa>' inicia uma pesquisa em segundo plano.{RESET}")
+    print(f"  {DIM}Modo interativo. 'nova-pesquisa <tarefa>' inicia uma pesquisa em segundo plano; texto livre ou "
+          f"'perguntar <texto>' consulta o Researcher.{RESET}")
     print(f"  {DIM}'sessions' lista as pesquisas; 'sair' encerra o terminal (as pesquisas continuam).{RESET}\n")
     try:
         code = repl.open()

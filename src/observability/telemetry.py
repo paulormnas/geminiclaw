@@ -1186,6 +1186,35 @@ class TelemetryCollector:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    def get_usage_by_origin(self, execution_id: str) -> dict[str, dict[str, Any]]:
+        """Tokens e custo da execução separados em ``pesquisa`` e ``consulta`` (consulta do terminal à pesquisa).
+
+        A consulta do terminal registra ``task_name = 'consulta_terminal'`` com o ``execution_id`` da pesquisa
+        consultada (v18.7-session-events-terminal): ela conta no orçamento, mas as métricas a mostram à parte.
+
+        Raises:
+            Exception: Falha de leitura do banco.
+        """
+        with get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT CASE WHEN task_name = 'consulta_terminal' THEN 'consulta' ELSE 'pesquisa' END AS origem,
+                       COALESCE(SUM(total_tokens), 0) AS total_tokens,
+                       COALESCE(SUM(estimated_cost_usd), 0) AS custo_usd,
+                       COUNT(*) AS calls
+                FROM token_usage
+                WHERE execution_id = %s
+                GROUP BY 1
+                """,
+                (execution_id,),
+            ).fetchall()
+        out = {"pesquisa": {"total_tokens": 0, "custo_usd": 0.0, "calls": 0},
+               "consulta": {"total_tokens": 0, "custo_usd": 0.0, "calls": 0}}
+        for r in rows:
+            out[r["origem"]] = {"total_tokens": int(r["total_tokens"]), "custo_usd": float(r["custo_usd"]),
+                                "calls": int(r["calls"])}
+        return out
+
     def get_events(self, execution_id: str, event_type: str) -> list[dict[str, Any]]:
         """Eventos ``agent_events`` de um tipo, em ordem cronológica (``timestamp``, ``agent_id``, ``payload``).
 

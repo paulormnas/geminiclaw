@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import re
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
@@ -377,6 +377,10 @@ async def run_consult(
     query_max_chars: int = DEFAULT_QUERY_MAX_CHARS,
     allowed_hosts: tuple[str, ...] = (),
     restrict_reads_to_searched_hosts: bool = False,
+    system_prompt: str | None = None,
+    answer_parser: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None,
+    usage_task_name: str | None = None,
+    max_total_tokens: int | None = None,
 ) -> ConsultResult:
     """Executa uma consulta ao Researcher (laço de ferramentas curto + resposta JSON validada).
 
@@ -392,6 +396,12 @@ async def run_consult(
         max_searches, max_reads: Limites de ferramentas por consulta.
         query_max_chars: Tamanho máximo de uma consulta.
         allowed_hosts: Se não vazio, ``web_reader`` só lê esses hosts (sufixos de domínio).
+        system_prompt: Prompt de sistema alternativo (a consulta do terminal tem o próprio); padrão: o do consultor.
+        answer_parser: Valida o JSON do modelo e devolve a resposta normalizada (ou ``None`` se inválido); padrão: o
+            formato do consultor (``resposta``, ``confianca``...).
+        usage_task_name: ``task_name`` do registro em ``token_usage`` (a consulta do terminal usa
+            ``consulta_terminal``, que a identifica como origem).
+        max_total_tokens: Teto de tokens da consulta inteira; ao passar dele o laço para com ``ConsultError``.
         restrict_reads_to_searched_hosts: Se verdadeiro, ``web_reader`` só lê hosts que apareceram
             em resultado de busca desta consulta.
 
@@ -442,11 +452,16 @@ async def run_consult(
     for _ in range(max_turns):
         t0 = time.monotonic()
         response = await provider.generate(
-            messages=messages, tools=tools or None, system=com_regimento(CONSULT_SYSTEM_PROMPT), temperature=0.2
+            messages=messages, tools=tools or None, system=com_regimento(system_prompt or CONSULT_SYSTEM_PROMPT),
+            temperature=0.2,
         )
-        record_llm_call(provider, response, int((time.monotonic() - t0) * 1000), agent_id="researcher")
+        record_llm_call(
+            provider, response, int((time.monotonic() - t0) * 1000), agent_id="researcher", task_name=usage_task_name
+        )
         usage = response.usage or {}
         tokens += (usage.get("prompt_tokens", 0) or 0) + (usage.get("completion_tokens", 0) or 0)
+        if max_total_tokens is not None and tokens >= max_total_tokens and (response.tool_calls or not response.text):
+            raise ConsultError(f"a consulta passou do teto de {max_total_tokens} tokens")
         messages.append(response.to_message())
 
         if response.tool_calls:
@@ -468,7 +483,12 @@ async def run_consult(
         if isinstance(parsed, dict) and parsed.get("reservada") is True:
             result.reservada = True
             break
-        if isinstance(parsed, dict) and isinstance(parsed.get("resposta"), str) and parsed["resposta"].strip():
+        if answer_parser is not None:
+            normalized = answer_parser(parsed) if isinstance(parsed, dict) else None
+            if normalized is not None:
+                result.resposta = normalized
+                break
+        elif isinstance(parsed, dict) and isinstance(parsed.get("resposta"), str) and parsed["resposta"].strip():
             result.resposta = {
                 "resposta": parsed["resposta"],
                 "confianca": (

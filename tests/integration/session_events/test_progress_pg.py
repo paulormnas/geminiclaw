@@ -107,3 +107,51 @@ def test_sessao_sem_processo_e_recusada(pg_db):  # noqa: F811
     assert send_command(manager, "b-01", "pausar", None, saidas.write) is False
     assert "aguarda_pesquisador" in "\n".join(saidas.lines) and "retomar b-01" in "\n".join(saidas.lines)
     assert SessionInbox().pending_count(session.id) == 0
+
+
+def test_consumo_da_consulta_conta_no_orcamento_e_aparece_como_consulta(pg_db):  # noqa: F811
+    """Scenario: Consumo da consulta conta no orçamento — o leitor soma ``token_usage`` pelo ``execution_id``."""
+    from src.observability.telemetry import get_telemetry
+    from src.orchestration.usage import UsageBudget, UsageTracker, _default_token_reader
+
+    def linha(i, task, total):
+        with psycopg.connect(pg_db, autocommit=True) as conn:
+            conn.execute(
+                "INSERT INTO token_usage (id, execution_id, session_id, agent_id, task_name, llm_provider, llm_model, "
+                "prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd, latency_ms, timestamp) "
+                "VALUES (%s, 's1', 's1', 'researcher', %s, 'p', 'm', %s, 0, %s, 0.01, 10, now())",
+                (f"t{i}", task, total, total),
+            )
+
+    linha(1, "treinar_rf", 9000)
+    tracker = UsageTracker(UsageBudget.from_config(max_tokens=10000), execution_id="s1")
+    assert _default_token_reader("s1") == 9000 and tracker.check().tokens_exhausted is False
+    linha(2, "consulta_terminal", 1500)  # a consulta registra com o execution_id da pesquisa consultada
+    assert _default_token_reader("s1") == 10500
+    assert tracker.check().tokens_pct is not None and tracker.check().tokens_pct > 1.0
+    por_origem = get_telemetry().get_usage_by_origin("s1")
+    assert por_origem["consulta"]["total_tokens"] == 1500 and por_origem["pesquisa"]["total_tokens"] == 9000
+
+
+def test_filho_da_consulta_nao_consegue_escrever_no_banco_relacional(pg_db, monkeypatch):  # noqa: F811
+    """Scenario: Nenhuma escrita possível — o ``PGOPTIONS`` do filho torna a transação somente leitura."""
+    import subprocess
+    import sys
+
+    from src.cli.terminal_consult import consult_env
+
+    codigo = (
+        "import os, psycopg\n"
+        "c = psycopg.connect(os.environ['DATABASE_URL'], autocommit=True)\n"
+        "c.execute('SELECT 1')\n"
+        "try:\n"
+        "    c.execute(\"INSERT INTO session_events (session_id, seq, tipo, resumo) VALUES ('x', 1, 'parada', 'r')\")\n"
+        "    print('ESCREVEU')\n"
+        "except psycopg.errors.ReadOnlySqlTransaction:\n"
+        "    print('SOMENTE_LEITURA')\n"
+    )
+    env = consult_env({**os.environ, "DATABASE_URL": pg_db})
+    saida = subprocess.run([sys.executable, "-c", codigo], env=env, capture_output=True, text=True, timeout=30)
+    assert saida.stdout.strip() == "SOMENTE_LEITURA", saida.stderr
+    with psycopg.connect(pg_db, autocommit=True) as conn:  # nada foi gravado
+        assert conn.execute("SELECT count(*) FROM session_events WHERE session_id = 'x'").fetchone()[0] == 0

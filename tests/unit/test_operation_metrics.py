@@ -335,3 +335,21 @@ class SimpleNamespace_:  # noqa: N801 - sessão mínima (payload) para o gerenci
     def __init__(self, payload) -> None:
         self.payload = payload
         self.status = "closed"
+
+
+def test_consulta_do_terminal_aparece_a_parte_no_grupo_de_custo(monkeypatch) -> None:
+    """v18.7-session-events-terminal: o consumo da consulta já está no total e é mostrado como ``consulta``."""
+    telemetry = FakeTelemetry([_row("treinar_rf", "developer", 9000, 0.5), _row("consulta_terminal", "researcher", 1500, 0.1)])
+    telemetry.get_usage_by_origin = lambda execution_id: {
+        "pesquisa": {"total_tokens": 9000, "custo_usd": 0.5, "calls": 2},
+        "consulta": {"total_tokens": 1500, "custo_usd": 0.1, "calls": 1},
+    }
+    monkeypatch.setattr("src.observability.telemetry.get_telemetry", lambda: telemetry)
+    out = CostResourcesReader().read("s")
+    assert out["tokens_total"] == 10500
+    assert out["consulta"] == {"tokens": 1500, "custo_usd": 0.1, "chamadas": 1}
+
+
+def test_consulta_indisponivel_nao_invalida_o_grupo(monkeypatch) -> None:
+    monkeypatch.setattr("src.observability.telemetry.get_telemetry", lambda: FakeTelemetry([_row("a", "researcher", 7, 0.1)]))
+    assert CostResourcesReader().read("s")["consulta"] is None

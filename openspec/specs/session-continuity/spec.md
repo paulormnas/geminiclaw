@@ -3,7 +3,7 @@
 Verdade atual consolidada a partir das mudanças arquivadas (2026-10-13). Cada requisito indica a
 mudança que o definiu por último; os cenários vêm do delta original, em GIVEN/WHEN/THEN.
 
-**Mudanças de origem:** [`v18-research-continuity`](../../changes/archive/v18-research-continuity/proposal.md)
+**Mudanças de origem:** [`v18-research-continuity`](../../changes/archive/v18-research-continuity/proposal.md), [`v18.7-benchmark-fixes`](../../changes/archive/v18.7-benchmark-fixes/proposal.md), [`v18.7-exploration-limits`](../../changes/archive/v18.7-exploration-limits/proposal.md)
 
 ## Requirements
 
@@ -111,3 +111,44 @@ O sistema SHALL manter o batimento da sessão em thread própria e reafirmar a s
 #### Scenario: Laço parado
 - **WHEN** o laço de eventos fica parado por mais que `SESSION_STALE_SECONDS`
 - **THEN** o batimento continua e a sessão não é marcada `interrompida`
+
+### Requirement: Retomada após cota ou gasto esgotado
+_Origem: [`v18.7-benchmark-fixes`](../../changes/archive/v18.7-benchmark-fixes/proposal.md)_
+Uma sessão fechada com `motivo_parada="limite_cota_provedor"` SHALL ser retomável sem confirmação, como os demais `limite_*`, e o valor SHALL constar da enumeração `Sessao.motivo_parada` do grafo. A retomada SHALL NOT conferir saldo no provedor; se a cota continuar esgotada, a nova sessão SHALL fechar de novo com o mesmo motivo.
+
+#### Scenario: Retomada aceita
+- **GIVEN** um checkpoint e o banco de sessões com `motivo_parada="limite_cota_provedor"`
+- **WHEN** a retomabilidade é avaliada
+- **THEN** o resultado é `RESUME_OK`
+
+#### Scenario: Nó Sessao com o motivo novo
+- **WHEN** um nó `Sessao` é gravado com `motivo_parada="limite_cota_provedor"`
+- **THEN** a validação do schema aceita o valor
+
+### Requirement: Retomada conforme os motivos de parada da exploração longa
+_Origem: [`v18.7-exploration-limits`](../../changes/archive/v18.7-exploration-limits/proposal.md)_
+`evaluate_resumability` SHALL tratar `limite_custo` como os demais `limite_*` (retomável sem perguntar), SHALL pedir confirmação para `saturacao`, com a mensagem que cita `saturacao` e explica que a melhora possível ficou abaixo do erro da medida, e SHALL continuar aceitando sem perguntar `limite_ciclos` e `limite_execucoes` de sessões anteriores a esta mudança. `limite_cota_provedor` (`v18.7-benchmark-fixes`) SHALL continuar retomável sem perguntar (ADR 021 §5, "Mudanças OpenSpec exigidas"; `src/continuity.py:64-70`).
+
+#### Scenario: Limite de custo
+- **GIVEN** uma sessão fechada com `motivo_parada = "limite_custo"` no banco e no checkpoint
+- **WHEN** o pesquisador executa `geminiclaw resume --session <id>`
+- **THEN** a avaliação devolve `RESUME_OK` e a nova sessão recebe orçamento novo
+
+#### Scenario: Saturação pede confirmação
+- **GIVEN** uma sessão fechada com `motivo_parada = "saturacao"`
+- **WHEN** o pesquisador tenta retomá-la
+- **THEN** a avaliação devolve `RESUME_CONFIRM` com mensagem que contém `saturacao`
+
+#### Scenario: Sessão antiga com teto de ciclos
+- **GIVEN** uma sessão fechada antes desta mudança com `motivo_parada = "limite_ciclos"`
+- **WHEN** o pesquisador tenta retomá-la
+- **THEN** a avaliação devolve `RESUME_OK`
+
+### Requirement: Estado da exploração restaurado na retomada
+_Origem: [`v18.7-exploration-limits`](../../changes/archive/v18.7-exploration-limits/proposal.md)_
+O checkpoint SHALL levar `exploracao_estado` (ciclos sem avanço, intervenções feitas, melhor valor e EP, desfecho, janela de novidade, objetivo atingido na sessão e política efetiva), validado como dado não confiável (tipos, faixas e tamanho), e a retomada SHALL restaurá-lo na `ExplorationSession`; valor inválido SHALL ser descartado com aviso, começando do zero, sem recusar a retomada.
+
+#### Scenario: Estado inválido
+- **GIVEN** um checkpoint com `exploracao_estado.intervencoes = -4`
+- **WHEN** a sessão é retomada
+- **THEN** a retomada segue com `intervencoes = 0` e o evento `exploracao_estado_descartado` é registrado

@@ -1,7 +1,7 @@
 # Proposta: organização do código por responsabilidade (Etapa 1)
 
 **ID:** `v18.7-source-layout` · **Versão:** V18.7 · **Capacidade:** `project-structure` (nova)
-**ADRs de origem:** [ADR 024](../../../docs/decisions/adr_024_organizacao_do_codigo.md) §1 (Etapa 1), §2 (estrutura alvo), §3 (regra de camadas), §6 (sem caminhos antigos), §7 (o que é atualizado junto), §8 (aprovações)
+**ADRs de origem:** [ADR 024](../../../../docs/decisions/adr_024_organizacao_do_codigo.md) §1 (Etapa 1), §2 (estrutura alvo), §3 (regra de camadas), §6 (sem caminhos antigos), §7 (o que é atualizado junto), §8 (aprovações)
 **Depende de:** nenhuma mudança em aberto. É a primeira da V18.7: todas as outras mudanças `v18.7-*` são implementadas depois do merge desta, e os caminhos citados nelas valem pela tabela do `design.md` §2.
 
 ## Por quê

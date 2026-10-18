@@ -30,32 +30,32 @@ ADRs de origem: [021](../docs/decisions/adr_021_exploracao_rastreavel_por_hipote
 ## Tarefas
 
 ### Tarefa 0: Organização do código (ADR 024)
-- **Specs:** [`v18.7-source-layout`](../openspec/changes/v18.7-source-layout/proposal.md) e, logo depois, [`v18.7-layer-cycles`](../openspec/changes/v18.7-layer-cycles/proposal.md)
+- **Specs:** [`v18.7-source-layout`](../openspec/changes/archive/v18.7-source-layout/proposal.md) e, logo depois, [`v18.7-layer-cycles`](../openspec/changes/archive/v18.7-layer-cycles/proposal.md)
 - **Critérios de aceite:** [ ] raiz de `src/` só com `__init__.py`, `config.py`, `logger.py`, `db.py` · [ ] suíte inteira verde sem alterar asserções · [ ] regra de camadas verificada a cada commit · [ ] lista de exceções vazia ao fim de `v18.7-layer-cycles`
 - **Complexidade estimada:** Alta (volume), baixa em lógica
 
 ### Tarefa 1: Correções da bateria V18.6
-- **Spec:** [`v18.7-benchmark-fixes`](../openspec/changes/v18.7-benchmark-fixes/proposal.md)
+- **Spec:** [`v18.7-benchmark-fixes`](../openspec/changes/archive/v18.7-benchmark-fixes/proposal.md)
 - **Critérios de aceite:** [ ] erro de cota ou de teto de gasto encerra a sessão com `limite_cota_provedor` e checkpoint, sem replanejar · [ ] retentativas não tornam a cadeia de proveniência divergente · [ ] relatório compara o limite de egresso com a categoria que ele limita
 - **Complexidade estimada:** Média
 
 ### Tarefa 2: Monitor de recursos e configuração sem designação de máquina
-- **Spec:** [`v18.7-resource-monitor-config`](../openspec/changes/v18.7-resource-monitor-config/proposal.md)
+- **Spec:** [`v18.7-resource-monitor-config`](../openspec/changes/archive/v18.7-resource-monitor-config/proposal.md)
 - **Critérios de aceite:** [ ] leituras em Linux e macOS, desconhecido quando não exposto · [ ] `PI_*` e `DEPLOYMENT_PROFILE` removidos com falha explícita na inicialização · [ ] `AGENT_TIMEOUT_SECONDS=0` sem limite · [ ] `.env` do Pi migrado preservando os valores efetivos
 - **Complexidade estimada:** Média
 
 ### Tarefa 3: Relações de exploração no grafo
-- **Spec:** [`v18.7-graph-exploration-relations`](../openspec/changes/v18.7-graph-exploration-relations/proposal.md)
+- **Spec:** [`v18.7-graph-exploration-relations`](../openspec/changes/archive/v18.7-graph-exploration-relations/proposal.md)
 - **Critérios de aceite:** [ ] `papel` do experimento · [ ] hipótese do sistema com chave estruturada e referência fixada · [ ] `PREPARA`, `REFERENCIA_DE`, `DERIVADA_DE -> Hipotese` · [ ] leitura compatível de nós antigos
 - **Complexidade estimada:** Média
 
 ### Tarefa 4: Ligação de toda exploração a hipóteses
-- **Spec:** [`v18.7-hypothesis-linking`](../openspec/changes/v18.7-hypothesis-linking/proposal.md)
+- **Spec:** [`v18.7-hypothesis-linking`](../openspec/changes/archive/v18.7-hypothesis-linking/proposal.md)
 - **Critérios de aceite:** [ ] preparação e referência não são retiradas por falta de hipótese · [ ] hipótese do sistema criada e aprovada conforme o modo · [ ] Researcher recebe as retiradas · [ ] hipótese rejeitada pelo pesquisador nunca executa
 - **Complexidade estimada:** Alta
 
 ### Tarefa 5: Sessão em processo próprio e gate persistente (entregar juntas)
-- **Specs:** [`v18.7-background-sessions`](../openspec/changes/v18.7-background-sessions/proposal.md) e [`v18.7-persistent-human-gate`](../openspec/changes/v18.7-persistent-human-gate/proposal.md)
+- **Specs:** [`v18.7-background-sessions`](../openspec/changes/v18.7-background-sessions/proposal.md) e [`v18.7-persistent-human-gate`](../openspec/changes/archive/v18.7-persistent-human-gate/proposal.md)
 - **Critérios de aceite:** [ ] `semi`/`auto` rodam até o fim e encerram o processo · [ ] `assisted` suspende sem terminal e pergunta pela retomada · [ ] nenhum caminho da sessão lê a entrada padrão · [ ] só o terminal responde ao gate · [ ] caixa de entrada entregue no replanejamento
 - **Complexidade estimada:** Alta
 
@@ -65,7 +65,7 @@ ADRs de origem: [021](../docs/decisions/adr_021_exploracao_rastreavel_por_hipote
 - **Complexidade estimada:** Média
 
 ### Tarefa 7: Limites da exploração e parada pelo objetivo
-- **Spec:** [`v18.7-exploration-limits`](../openspec/changes/v18.7-exploration-limits/proposal.md)
+- **Spec:** [`v18.7-exploration-limits`](../openspec/changes/archive/v18.7-exploration-limits/proposal.md)
 - **Critérios de aceite:** [ ] sem teto de hipóteses e ciclos como parada · [ ] limite de custo por sessão (`limite_custo`, padrão US$ 20) · [ ] objetivo tipado e política ao atingir o objetivo · [ ] estagnação como intervenção do Curator e saturação · [ ] restrições por direção
 - **Complexidade estimada:** Alta
 

@@ -1,7 +1,7 @@
 -- scripts/migrations/v18_7_002_gate_inbox.sql
 --
 -- Migração v18.7: gate persistente de decisões reservadas e caixa de entrada da sessão
--- (openspec/changes/v18.7-persistent-human-gate, tarefa 1.1; alteração de schema aprovada explicitamente pelo
+-- (openspec/changes/archive/v18.7-persistent-human-gate, tarefa 1.1; alteração de schema aprovada explicitamente pelo
 -- pesquisador em 2026-10-16).
 --
 -- Decisão do pesquisador (2026-10-16): ambiente de desenvolvimento, sem endurecimento agora. Esta versão NÃO cria o

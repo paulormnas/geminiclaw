@@ -1,4 +1,4 @@
-# Pendências das Mudanças Arquivadas (V16–V18.6)
+# Pendências das Mudanças Arquivadas (V16–V18.7)
 
 As 32 mudanças das versões V16 a V18.5 e as 8 da V18.6 (`v18.6-review-evidence`,
 `v18.6-benchmark-harness`, `v18.6-validator-independence`, `v18.6-hypothesis-closure`,
@@ -117,3 +117,13 @@ se perderem no arquivo. Cada item cita a mudança de origem.
 - [ ] [`v18.6-hypothesis-closure`](v18.6-hypothesis-closure/tasks.md): 0.1 Respostas do pesquisador às questões do design §8 (adotadas as propostas conservadoras, design §8.1).
 - [ ] [`v18.6-benchmark-harness`](v18.6-benchmark-harness/tasks.md): 0.1 Respostas do pesquisador às questões do design §8 (adotado: mesmas coleções do Qdrant; sem reexecução do modelo; 3 repetições na próxima rodada; arquivo de segurança retido).
 - [ ] [`v18.6-benchmark-harness`](v18.6-benchmark-harness/tasks.md): 6b.4 Composição da matriz `scripts/benchmark/matrix_modelos_v18_6.json` (três combinações com juiz de outra família e `controle-gemini-todos`) a confirmar com o pesquisador antes da rodada com 3 repetições.
+
+## V18.7 (arquivadas em 2026-10-18)
+
+As 8 mudanças da V18.7 arquivadas não deixaram caixa aberta em `tasks.md`; as pendências abaixo estão registradas nas tarefas e no ADR 021.
+
+- [ ] [`v18.7-exploration-limits`](v18.7-exploration-limits/tasks.md): 5.2 hipótese concorrente declarada no item de `hipoteses` do plano não foi implementada.
+- [ ] [`v18.7-exploration-limits`](v18.7-exploration-limits/tasks.md): 7.3 `viola_restricao` só é conferida pelo revisor LLM; subtarefa com critérios só de métrica é decidida de forma determinística e não passa por essa checagem.
+- [ ] [`v18.7-exploration-limits`](v18.7-exploration-limits/tasks.md): 9.4 a revisão do objetivo para `discriminacao` não é aplicada pela sessão (exige as concorrentes); a proposta fica só na memória da sessão.
+- [ ] [`v18.7-exploration-limits`](v18.7-exploration-limits/tasks.md): `SESSION_MAX_COST_USD=10` da matriz do benchmark é provisório, a validar na bateria completa.
+- [ ] Bateria completa da V18.7 com repetições e as combinações com Gemini, pendente de cota do Google (a bateria parcial de 2026-10-18 está em `docs/benchmarks/2026-10-18-bateria-v18-7-parcial-resultados.md`).

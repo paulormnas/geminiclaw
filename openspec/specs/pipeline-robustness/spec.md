@@ -3,7 +3,7 @@
 Verdade atual consolidada a partir das mudanças arquivadas (2026-10-13). Cada requisito indica a
 mudança que o definiu por último; os cenários vêm do delta original, em GIVEN/WHEN/THEN.
 
-**Mudanças de origem:** [`v16-pipeline-robustness`](../../changes/archive/v16-pipeline-robustness/proposal.md), [`v18.6-review-evidence`](../../changes/archive/v18.6-review-evidence/proposal.md), [`v18.6-profile-hardening`](../../changes/archive/v18.6-profile-hardening/proposal.md)
+**Mudanças de origem:** [`v16-pipeline-robustness`](../../changes/archive/v16-pipeline-robustness/proposal.md), [`v18.6-review-evidence`](../../changes/archive/v18.6-review-evidence/proposal.md), [`v18.6-profile-hardening`](../../changes/archive/v18.6-profile-hardening/proposal.md), [`v18.7-hypothesis-linking`](../../changes/archive/v18.7-hypothesis-linking/proposal.md), [`v18.7-exploration-limits`](../../changes/archive/v18.7-exploration-limits/proposal.md)
 
 ## Requirements
 
@@ -162,60 +162,23 @@ subtarefa e, depois, de suas dependências, e SHALL avaliar todos os critérios 
 - **THEN** a revisão reprova citando que a métrica `auc` não está no arquivo
 
 ### Requirement: Disjuntor de progresso por mudança de erro
-_Origem: [`v16-pipeline-robustness`](../../changes/archive/v16-pipeline-robustness/proposal.md)_
-O sistema SHALL considerar progresso qualquer aumento no conjunto de subtarefas bem-sucedidas
-ou mudança na assinatura dos erros das subtarefas falhas entre ciclos, e SHALL encerrar a
-sessão por falta de progresso somente após `CIRCUIT_BREAKER_STALL_CYCLES` ciclos consecutivos
-sem progresso.
+_Origem: [`v18.7-exploration-limits`](../../changes/archive/v18.7-exploration-limits/proposal.md)_
+O sistema SHALL considerar progresso, na exploração com projeto, qualquer aumento no número de `Experimento` executados na sessão ou de `Resultado` desses experimentos no grafo, ou mudança na assinatura dos erros das subtarefas falhas entre ciclos; sem projeto (laço de ciclo único), SHALL continuar valendo o aumento no conjunto de subtarefas bem-sucedidas. O sistema SHALL encerrar a sessão por falta de progresso somente após `CIRCUIT_BREAKER_STALL_CYCLES` ciclos consecutivos sem progresso; ciclos de espera por pedido pendente ao pesquisador MUST NOT contar (ADR 021 §5.6).
 
 #### Scenario: Erro diferente é progresso
-- **GIVEN** nenhum sucesso nos ciclos 1 e 2, com erros de revisão sobre critérios distintos
+- **GIVEN** nenhum `Experimento` novo nos ciclos 1 e 2, com erros de revisão sobre critérios distintos
 - **WHEN** o ciclo 2 termina
 - **THEN** o disjuntor não dispara
 
 #### Scenario: Dois ciclos idênticos
-- **GIVEN** `CIRCUIT_BREAKER_STALL_CYCLES=2` e três ciclos com o mesmo conjunto de sucessos e a
-  mesma assinatura de erros
+- **GIVEN** `CIRCUIT_BREAKER_STALL_CYCLES=2` e três ciclos sem `Experimento` nem `Resultado` novos e com a mesma assinatura de erros
 - **WHEN** o ciclo 3 termina
 - **THEN** a sessão encerra com o evento `circuit_breaker` contendo `stalled_cycles=2`
-
-#### Scenario: Primeiro ciclo
-- **WHEN** o primeiro ciclo termina com falhas
-- **THEN** o disjuntor não dispara
 
 #### Scenario: Assinatura ignora números e caminhos
 - **GIVEN** duas falhas com o mesmo critério e valores numéricos diferentes no texto
 - **WHEN** as assinaturas são calculadas
 - **THEN** as assinaturas são iguais
-
-### Requirement: Limites de execução separados e com fechamento
-_Origem: [`v16-pipeline-robustness`](../../changes/archive/v16-pipeline-robustness/proposal.md)_
-O sistema SHALL contar execuções de planejamento e de subtarefa em contadores distintos, com
-limite de execuções de subtarefa não menor que `n * (1 + SESSION_MAX_TASK_RETRIES) + 2` para um
-plano de `n` subtarefas, e SHALL fechar a sessão com consolidação e `motivo_parada`
-`limite_execucoes` ao atingir qualquer limite, sem lançar exceção não tratada.
-
-#### Scenario: Planejamento não consome o limite de subtarefas
-- **GIVEN** `MAX_AGENT_RUNS_PER_SESSION=30` e 12 execuções de planejamento
-- **WHEN** as subtarefas começam a executar
-- **THEN** o contador de execução está em 0
-
-#### Scenario: Limite acompanha o plano
-- **GIVEN** `MAX_AGENT_RUNS_PER_SESSION=30`, `SESSION_MAX_TASK_RETRIES=3` e um plano de 10
-  subtarefas
-- **WHEN** o limite efetivo é calculado
-- **THEN** o limite é 42
-
-#### Scenario: Limite de planejamento atingido
-- **GIVEN** `MAX_PLANNING_RUNS_PER_SESSION=20` e 20 execuções de planejamento feitas
-- **WHEN** um novo ciclo de planejamento tenta executar o planejador
-- **THEN** a sessão fecha com `motivo_parada="limite_execucoes"` e o evento `limit_reached`
-  traz `limit="agent_runs"` e `kind="planning"`
-
-#### Scenario: Limite de execução atingido
-- **GIVEN** o contador de execução igual ao limite efetivo
-- **WHEN** uma subtarefa tenta executar
-- **THEN** a sessão fecha com checkpoint e consolidação, e nenhuma exceção chega ao chamador
 
 ### Requirement: Relatório a partir de dados estruturados
 _Origem: [`v16-pipeline-robustness`](../../changes/archive/v16-pipeline-robustness/proposal.md)_
@@ -266,18 +229,6 @@ O sistema SHALL emitir o evento `sandbox_run` a cada execução de código no sa
 #### Scenario: Execução com falha
 - **WHEN** o script de uma subtarefa termina com código 1
 - **THEN** o evento `sandbox_run` traz `exit_code=1` e não contém o texto do script
-
-### Requirement: Limite de execuções de agente por sessão
-_Origem: [`v16-pipeline-robustness`](../../changes/archive/v16-pipeline-robustness/proposal.md)_
-(Origem: `v16-in-process-agents` e `src/orchestration/orchestrator.py`, V12.5.2.) O sistema SHALL aplicar o
-limite de execuções de agente com os contadores e o fechamento descritos em "Limites de execução
-separados e com fechamento"; o comportamento anterior (exceção `RuntimeError` descritiva na
-chamada que ultrapassa o limite) é substituído.
-
-#### Scenario: Mensagem do limite
-- **WHEN** o limite de execução é atingido
-- **THEN** o evento e o `motivo_parada` identificam o contador (`planning` ou `execution`), o
-  valor atingido e o limite efetivo
 
 ### Requirement: Qualificador de conjunto no nome de métrica
 _Origem: [`v18.6-review-evidence`](../../changes/archive/v18.6-review-evidence/proposal.md)_
@@ -442,17 +393,19 @@ O comparador SHALL incluir `.joblib` e `.pkl` na camada `extension`.
 - **THEN** o esperado resolve com camada `extension`
 
 ### Requirement: Limiar numérico obrigatório em subtarefa confirmatória
-_Origem: [`v18.6-review-evidence`](../../changes/archive/v18.6-review-evidence/proposal.md)_
-O Validator SHALL reprovar de forma determinística um plano com subtarefa `reproduction`, ou
-`validation` com `hypothesis_ref` preenchido, sem critério quantitativo. Subtarefa `validation`
-sem `hypothesis_ref` SHALL passar pela checagem estrutural, com aviso `validation_sem_hipotese`
-no evento `plan_validation`.
-(Antes: toda subtarefa `validation` exigia limiar numérico. Alteração sujeita à questão 8.1 do
-design.)
+_Origem: [`v18.7-hypothesis-linking`](../../changes/archive/v18.7-hypothesis-linking/proposal.md)_
+O Validator SHALL reprovar de forma determinística um plano com subtarefa `reproduction`, ou `validation` com `hypothesis_ref` preenchido, sem critério quantitativo. Subtarefa `validation` declarada com `papel = "referencia"` SHALL passar pela checagem estrutural sem limiar numérico e sem aviso, e o evento `plan_validation` SHALL registrar o papel declarado. Subtarefa `validation` sem `hypothesis_ref` e sem `papel` SHALL passar pela checagem estrutural, com aviso `validation_sem_hipotese` no evento `plan_validation`. A ausência ou o valor inválido de `papel` MUST NOT reprovar o plano.
+(Antes: o baseline era reconhecido só por não ter `hypothesis_ref` e sempre gerava o aviso `validation_sem_hipotese`.)
 
-#### Scenario: Baseline sem hipótese
-- **GIVEN** um plano com a subtarefa `baseline_majoritario` do tipo `validation`, sem
-  `hypothesis_ref` e sem limiar numérico
+#### Scenario: Baseline declarado como referência
+- **GIVEN** um plano com a subtarefa `baseline_majoritario` do tipo `validation`, `papel = "referencia"`, sem `hypothesis_ref` e sem limiar numérico
+- **WHEN** o Validator checa a estrutura
+- **THEN** o plano não é reprovado por essa subtarefa
+- **AND** o evento `plan_validation` não contém o aviso `validation_sem_hipotese` para `baseline_majoritario`
+- **AND** o evento `plan_validation` registra `papeis_declarados = {"baseline_majoritario": "referencia"}`
+
+#### Scenario: Validation sem hipótese e sem papel
+- **GIVEN** um plano com a subtarefa `diagnostico_classes` do tipo `validation`, sem `hypothesis_ref`, sem `papel` e sem limiar numérico
 - **WHEN** o Validator checa a estrutura
 - **THEN** o plano não é reprovado por essa subtarefa
 - **AND** o evento `plan_validation` contém o aviso `validation_sem_hipotese`
@@ -461,6 +414,11 @@ design.)
 - **GIVEN** uma subtarefa `validation` com `hypothesis_ref` `h1` e sem limiar numérico
 - **WHEN** o Validator checa a estrutura
 - **THEN** o plano é reprovado de forma determinística, com a correção sugerida
+
+#### Scenario: Papel inválido não reprova
+- **GIVEN** uma subtarefa `model_impl` com `papel = "exploratoria"` e critérios válidos
+- **WHEN** o Validator checa a estrutura
+- **THEN** o plano não é reprovado por causa de `papel`
 
 ### Requirement: Cabeçalho verificado antes de rotular colunas
 _Origem: [`v18.6-profile-hardening`](../../changes/archive/v18.6-profile-hardening/proposal.md)_
@@ -581,3 +539,8 @@ Um objeto JSON com mais de 50 chaves SHALL aparecer como "objeto com N chaves", 
 - **GIVEN** um JSON `{"id_1": 1, ..., "id_500": 500}`
 - **WHEN** o perfil é calculado
 - **THEN** o perfil mostra "objeto com 500 chaves" e nenhuma chave `id_`
+
+## Requisitos removidos
+
+- Limites de execução separados e com fechamento (removido por [`v18.7-exploration-limits`](../../changes/archive/v18.7-exploration-limits/proposal.md)): Removido pelo ADR 021 §5.1: execuções de agente são contadas e relatadas (spec `agent-runtime`), sem limite nem fechamento com `limite_execucoes`.
+- Limite de execuções de agente por sessão (removido por [`v18.7-exploration-limits`](../../changes/archive/v18.7-exploration-limits/proposal.md)): Removido pelo ADR 021 §5.1, junto com o requisito anterior.

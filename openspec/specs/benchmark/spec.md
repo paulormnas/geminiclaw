@@ -3,7 +3,7 @@
 Verdade atual consolidada a partir das mudanças arquivadas (2026-10-13). Cada requisito indica a
 mudança que o definiu por último; os cenários vêm do delta original, em GIVEN/WHEN/THEN.
 
-**Mudanças de origem:** [`v18.6-benchmark-harness`](../../changes/archive/v18.6-benchmark-harness/proposal.md), [`v18.6-auto-metrics-and-stop-reasons`](../../changes/archive/v18.6-auto-metrics-and-stop-reasons/proposal.md)
+**Mudanças de origem:** [`v18.6-benchmark-harness`](../../changes/archive/v18.6-benchmark-harness/proposal.md), [`v18.6-auto-metrics-and-stop-reasons`](../../changes/archive/v18.6-auto-metrics-and-stop-reasons/proposal.md), [`v18.7-benchmark-fixes`](../../changes/archive/v18.7-benchmark-fixes/proposal.md), [`v18.7-exploration-limits`](../../changes/archive/v18.7-exploration-limits/proposal.md)
 
 ## Requirements
 
@@ -200,30 +200,47 @@ tabela de preços SHALL ter `cached_input` para os modelos OpenAI da matriz.
 - **THEN** 800 tokens são cobrados pelo preço `cached_input` e 200 pelo preço de entrada
 
 ### Requirement: Classificação dos motivos de parada
-_Origem: [`v18.6-auto-metrics-and-stop-reasons`](../../changes/archive/v18.6-auto-metrics-and-stop-reasons/proposal.md)_
-O benchmark SHALL classificar o `motivo_parada` de cada execução em `limite`, `erro`, `interrupcao`, `criterio_pesquisa` ou
-`hipoteses_nao_testadas`. Somente `limite`, `erro` e `interrupcao` SHALL ser anomalia. `hipoteses_nao_testadas` SHALL ser
-tratado como parada de pesquisa, listado no relatório e nunca contado como erro. O resumo de interações SHALL contar os
-motivos de reprovação de subtarefa (`sem_hipotese`).
+_Origem: [`v18.7-exploration-limits`](../../changes/archive/v18.7-exploration-limits/proposal.md)_
+O benchmark SHALL classificar o `motivo_parada` de cada execução em `limite`, `erro`, `interrupcao`, `criterio_pesquisa`, `hipoteses_nao_testadas` ou `planos_rejeitados`. Somente `limite`, `erro` e `interrupcao` SHALL ser anomalia. `versao_modelo` SHALL ser `limite` (anomalia: a comparação exige sessões completas com a versão declarada; `v18.7-benchmark-fixes`). `planos_rejeitados` SHALL ter classe própria `planos_rejeitados`, identificável nos relatórios e não anomalia, como `hipoteses_nao_testadas`; os dois motivos só ocorrem na bateria com `ON_PLAN_REJECTIONS=parar` e `ON_MODEL_VERSION_CHANGE=parar`. `limite_custo` SHALL ser `limite`; `limite_cota_provedor` SHALL ser `limite` e listado no relatório com o provedor e o modelo do evento `cota_provedor_esgotada`; `saturacao` SHALL ser `criterio_pesquisa`; `limite_ciclos` e `limite_execucoes`, presentes só em resultados antigos, SHALL continuar `limite`. `hipoteses_nao_testadas` SHALL ser tratado como parada de pesquisa, listado no relatório e nunca contado como erro. O resumo de interações SHALL contar os motivos de reprovação de subtarefa registrados (ADR 021 §5, "Mudanças OpenSpec exigidas").
+
+#### Scenario: Classificação
+- **WHEN** `stop_class` recebe `limite_tokens`, `limite_custo`, `limite_cota_provedor`, `limite_ciclos`, `erro`, `interrompida_pesquisador`, `solucao_encontrada`, `saturacao`, `hipoteses_nao_testadas`, `versao_modelo` e `planos_rejeitados`
+- **THEN** devolve `limite`, `limite`, `limite`, `limite`, `erro`, `interrupcao`, `criterio_pesquisa`, `criterio_pesquisa`, `hipoteses_nao_testadas`, `limite` e `planos_rejeitados`
+
+#### Scenario: Bateria usa a política parar para planos rejeitados
+- **GIVEN** um ambiente base com `ON_PLAN_REJECTIONS=explorar`
+- **WHEN** `build_env` monta o ambiente do subprocesso de uma combinação
+- **THEN** o ambiente devolvido tem `ON_PLAN_REJECTIONS == "parar"` e o ambiente base não é alterado
+
+#### Scenario: Saturação não é anomalia
+- **GIVEN** uma execução com `stop_reason = "saturacao"` e `exit 0`
+- **WHEN** `anomalies()` avalia a execução
+- **THEN** nenhum problema de parada é reportado
+
+#### Scenario: Planos rejeitados não é anomalia
+- **GIVEN** uma execução com `stop_reason = "planos_rejeitados"` e `status="exit 3"`
+- **WHEN** `anomalies()` avalia a execução
+- **THEN** nenhum problema de parada é reportado e o relatório a lista como `planos_rejeitados`
+
+#### Scenario: Limite de custo é anomalia
+- **GIVEN** uma execução com `stop_reason = "limite_custo"`
+- **WHEN** `anomalies()` avalia a execução
+- **THEN** a lista contém o problema de sessão fechada por `limite_custo` antes de concluir
 
 #### Scenario: Parada por hipótese não testada não é anomalia
 - **GIVEN** uma execução com `stop_reason = "hipoteses_nao_testadas"` e `exit 0`
 - **WHEN** `anomalies()` avalia a execução
 - **THEN** nenhum problema de parada é reportado
 
-#### Scenario: Classificação
-- **WHEN** `stop_class` recebe `limite_tokens`, `erro`, `interrompida_pesquisador`, `solucao_encontrada` e `hipoteses_nao_testadas`
-- **THEN** devolve `limite`, `erro`, `interrupcao`, `criterio_pesquisa` e `hipoteses_nao_testadas`
+#### Scenario: Parada por cota é anomalia identificada
+- **GIVEN** uma execução com `stop_reason = "limite_cota_provedor"` e um evento `cota_provedor_esgotada` com `provedor="google"` e `modelo="gemini-4-argon"`
+- **WHEN** o relatório é gerado
+- **THEN** a execução aparece como anomalia de parada e o texto cita `google/gemini-4-argon`
 
 #### Scenario: Relatório lista a parada
 - **GIVEN** duas execuções da combinação `c1`, uma fechada por `hipoteses_nao_testadas`
 - **WHEN** o relatório é gerado
 - **THEN** há uma seção que cita `c1` e a repetição afetada
-
-#### Scenario: Reprovação sem hipótese no resumo
-- **GIVEN** um evento `subtask_review` com `motivos = ["sem_hipotese"]`
-- **WHEN** `summarize_events` resume os eventos
-- **THEN** `subtask_reviews.motivos` é `{"sem_hipotese": 1}`
 
 ### Requirement: Versão dos modelos registrada por execução
 O runner SHALL gravar em cada resultado, por papel da sessão, o modelo pedido (`provedor/modelo`), a `familia_modelo` e a
@@ -294,3 +311,41 @@ a `QDRANT_URL`).
 - **GIVEN** um Qdrant sem `geminiclaw_documents`
 - **WHEN** o indexador de documentos é criado
 - **THEN** a coleção é criada
+
+### Requirement: Tabela de egresso com a grandeza limitada
+_Origem: [`v18.7-benchmark-fixes`](../../changes/archive/v18.7-benchmark-fixes/proposal.md)_
+A tabela de métricas de operação do relatório (`render_operation`) SHALL trazer as colunas "Egresso total (bytes)", "Saídas novas (bytes)" e "Limite de saídas (bytes)", nessa ordem, preenchidas com `egresso.bytes_total`, `egresso.bytes_limitados` e `egresso.limite_bytes` (`sem limite` quando nulo). Resultado sem `bytes_limitados` (execução anterior a esta mudança) SHALL mostrar `-` na coluna de saídas novas. A coluna "Cadeia de execuções" SHALL mostrar a primeira causa não nula de `cadeia.motivos` entre parênteses quando o resultado for `divergente`.
+
+#### Scenario: Colunas de egresso
+- **GIVEN** um resultado com `bytes_total=3942301`, `bytes_limitados=412000` e `limite_bytes=2000000`
+- **WHEN** `render_operation` gera a tabela
+- **THEN** a linha da combinação contém `| 3942301 | 412000 | 2000000 |` nas três colunas de egresso
+
+#### Scenario: Resultado antigo
+- **GIVEN** um resultado gravado antes desta mudança, sem `bytes_limitados`
+- **WHEN** `render_operation` gera a tabela
+- **THEN** a coluna "Saídas novas (bytes)" mostra `-` e a tabela é gerada sem erro
+
+#### Scenario: Modo sem limite
+- **GIVEN** um resultado com `limite_bytes` nulo
+- **WHEN** `render_operation` gera a tabela
+- **THEN** a coluna "Limite de saídas (bytes)" mostra `sem limite`
+
+#### Scenario: Causa da cadeia divergente
+- **GIVEN** um resultado com `cadeia.resultado="divergente"` e `cadeia.motivos.arquivos_alterados=2`
+- **WHEN** `render_operation` gera a tabela
+- **THEN** a coluna "Cadeia de execuções" mostra `divergente (arquivos_alterados)`
+
+### Requirement: Teto de custo da sessão declarado na matriz
+_Origem: [`v18.7-exploration-limits`](../../changes/archive/v18.7-exploration-limits/proposal.md)_
+A matriz do benchmark SHALL declarar `SESSION_MAX_COST_USD` em `env` (o teto por sessão, distinto do `budget_usd` por provedor e por rodada do runner), e o runner SHALL recusar, antes de qualquer execução e sem apagar nada, a matriz sem esse valor ou com valor não positivo (ADR 021 §5.4).
+
+#### Scenario: Matriz sem teto de custo
+- **GIVEN** uma matriz cujo `env` não tem `SESSION_MAX_COST_USD`
+- **WHEN** o runner valida a matriz
+- **THEN** o runner termina com erro que cita `SESSION_MAX_COST_USD` e nenhuma execução começa
+
+#### Scenario: Matriz com teto
+- **GIVEN** `env.SESSION_MAX_COST_USD = "5"`
+- **WHEN** uma combinação roda
+- **THEN** o subprocesso recebe `SESSION_MAX_COST_USD=5`

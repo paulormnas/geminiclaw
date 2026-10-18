@@ -1,7 +1,7 @@
 # Proposta: Monitor de Recursos Multiplataforma e Configuração sem Designação de Máquina
 
 **ID:** `v18.7-resource-monitor-config` · **Versão:** V18.7 · **Capacidade:** `agent-runtime`, `llm-providers`, `operation-metrics`
-**ADRs de origem:** [ADR 023](../../../docs/decisions/adr_023_pesquisa_em_segundo_plano.md) §1.1 (monitor multiplataforma, limites, variáveis sem designação de máquina); casos de aceite 16 e 17
+**ADRs de origem:** [ADR 023](../../../../docs/decisions/adr_023_pesquisa_em_segundo_plano.md) §1.1 (monitor multiplataforma, limites, variáveis sem designação de máquina); casos de aceite 16 e 17
 **Depende de:** nenhuma mudança da V18.7 (pode ser implementada primeiro) Implementada depois de `v18.7-source-layout` e `v18.7-layer-cycles` (onda 0, ADR 024), cujos caminhos novos valem para os citados aqui.
 **É pré-requisito de:** `v18.7-background-sessions` (verificação de memória antes de iniciar e conferência de PID) e `v18.7-exploration-limits` (acrescenta os nomes dela ao mecanismo `_REMOVED_VARIABLES` / `check_removed_variables` criado aqui)
 

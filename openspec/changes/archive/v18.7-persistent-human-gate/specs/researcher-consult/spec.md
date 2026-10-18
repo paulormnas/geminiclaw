@@ -189,7 +189,7 @@ O pesquisador SHALL poder mandar uma mensagem a uma sessão em execução pelo t
 ## MODIFIED Requirements
 
 ### Requirement: Researcher responde nos modos autônomos
-_Origem: [`v18-researcher-consult`](../../../archive/v18-researcher-consult/proposal.md); modificado por `v18.7-persistent-human-gate` (ADR 023 §4.1)_
+_Origem: [`v18-researcher-consult`](../../../v18-researcher-consult/proposal.md); modificado por `v18.7-persistent-human-gate` (ADR 023 §4.1)_
 O sistema SHALL, nos modos `semi` e `auto`, encaminhar cada chamada de `ask_researcher` ao Researcher consultor e devolver ao agente a resposta dele, e SHALL, no modo `assisted`, registrar a pergunta no gate persistente como `responder_pergunta_agente`, esperar a resposta do pesquisador por até `GATE_ASK_WAIT_SECONDS` (padrão 120) e, sem resposta, devolver ao agente a mensagem de pendência; a resposta posterior SHALL ir ao Researcher no replanejamento (ADR 012 §8).
 
 #### Scenario: Modo auto
@@ -214,7 +214,7 @@ O sistema SHALL, nos modos `semi` e `auto`, encaminhar cada chamada de `ask_rese
 - **THEN** o agente recebe a suposição documentada atual e a interação tem `respondido_por="suposicao"` e `motivo_fallback="desligado"`
 
 ### Requirement: Decisões reservadas ao pesquisador
-_Origem: [`v18-researcher-consult`](../../../archive/v18-researcher-consult/proposal.md); modificado por `v18.7-persistent-human-gate` (ADR 023 §4.1)_
+_Origem: [`v18-researcher-consult`](../../../v18-researcher-consult/proposal.md); modificado por `v18.7-persistent-human-gate` (ADR 023 §4.1)_
 O consultor MUST NOT responder perguntas que peçam aprovar `Oportunidade`, confirmar `Problema`, aprovar termo de vocabulário, autorizar escrita em instrumento, ativar o modo sem limite, aprovar hipótese, decidir o que fazer ao atingir o objetivo, responder pergunta de agente no `assisted`, decidir a continuidade da exploração ou restringir uma direção (`DECISOES_RESERVADAS`: `aprovar_oportunidade`, `confirmar_problema`, `aprovar_termo_vocabulario`, `autorizar_escrita_instrumento`, `ativar_modo_sem_limite`, `aprovar_hipotese`, `decidir_objetivo_atingido`, `responder_pergunta_agente`, `decidir_continuidade`, `restringir_direcao`). O sistema SHALL registrar essas perguntas como `pendente_pesquisador`, criar o pedido no gate persistente e informar ao agente que a decisão é do pesquisador. Esta lista é a fonte única do catálogo do gate; o efeito de `restringir_direcao` (nó `Restricao`) é de `v18.7-exploration-limits`, e `ativar_adendo_regimento` é acrescentada por `v18.7-agent-system-prompts`.
 
 #### Scenario: Aprovação de oportunidade em modo auto

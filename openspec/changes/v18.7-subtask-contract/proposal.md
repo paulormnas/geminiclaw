@@ -41,8 +41,8 @@ O código confirma a lacuna:
 - **Fora do escopo:**
   - Regimento da pesquisa, recorte por tipo de objetivo e modo, ferramenta de leitura e revisão dos prompts de sistema de cada papel: [`v18.7-agent-system-prompts`](../v18.7-agent-system-prompts/proposal.md). Esta mudança deixa nos construtores o espaço do recorte, vazio até lá, e uma lista provisória de regras de integridade em código, que aquela mudança move para a parte estruturada do regimento.
   - Registro de `(tentativa, hash do contrato)`, anomalia de hash divergente e tokens do contrato por execução: [`v18.7-exploration-metrics`](../v18.7-exploration-metrics/proposal.md). Esta mudança só calcula o hash e o expõe.
-  - Papel do experimento, hipótese do sistema e retorno de retiradas ao Researcher: [`v18.7-hypothesis-linking`](../v18.7-hypothesis-linking/proposal.md).
-  - O bloco de contexto do workspace, que hoje é acrescentado a cada volta do laço (`src/llm/agent_loop.py:218-247`) e cresce com o número de voltas, não muda aqui; o achado vai para [`v18.7-benchmark-fixes`](../v18.7-benchmark-fixes/proposal.md).
+  - Papel do experimento, hipótese do sistema e retorno de retiradas ao Researcher: [`v18.7-hypothesis-linking`](../archive/v18.7-hypothesis-linking/proposal.md).
+  - O bloco de contexto do workspace, que hoje é acrescentado a cada volta do laço (`src/llm/agent_loop.py:218-247`) e cresce com o número de voltas, não muda aqui; o achado vai para [`v18.7-benchmark-fixes`](../archive/v18.7-benchmark-fixes/proposal.md).
   - Qualquer chamada a provedor pago nos testes.
 
 ## Impacto

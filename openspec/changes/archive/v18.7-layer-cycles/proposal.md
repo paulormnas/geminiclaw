@@ -1,7 +1,7 @@
 # Proposta: ciclo entre o filtro de egresso e a camada de LLM (Etapa 2)
 
 **ID:** `v18.7-layer-cycles` · **Versão:** V18.7 · **Capacidade:** `project-structure`, `data-egress`, `llm-providers`
-**ADRs de origem:** [ADR 024](../../../docs/decisions/adr_024_organizacao_do_codigo.md) §3.5 (exceções com dono) e §4 (Etapa 2); [ADR 019](../../../docs/decisions/adr_019_localidade_dados_proveniencia_resultados.md) (todo envio a provedor passa pelo filtro de egresso); [ADR 017](../../../docs/decisions/adr_017_catalogo_modelos_roteador.md) (roteador por papel)
+**ADRs de origem:** [ADR 024](../../../../docs/decisions/adr_024_organizacao_do_codigo.md) §3.5 (exceções com dono) e §4 (Etapa 2); [ADR 019](../../../../docs/decisions/adr_019_localidade_dados_proveniencia_resultados.md) (todo envio a provedor passa pelo filtro de egresso); [ADR 017](../../../../docs/decisions/adr_017_catalogo_modelos_roteador.md) (roteador por papel)
 **Depende de:** `v18.7-source-layout` (caminhos novos e contrato de camadas com a exceção que esta mudança remove). Implementada logo depois dela e antes das demais mudanças da V18.7.
 
 ## Por quê

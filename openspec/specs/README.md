@@ -14,7 +14,7 @@ aplicados aos requisitos existentes (catálogo versionado, rótulo da revisão d
 Reviewer). A quarta consolidação (2026-10-14) acrescentou
 `v18.6-auto-metrics-and-stop-reasons` (`hypothesis-loop`, `vocabulary`, `operation-metrics`, `benchmark`); os
 `MODIFIED` foram aplicados aos requisitos de conferência do veredito, fechamento por falta de caminhos e resultado negativo.
-A quinta consolidação (2026-10-14) acrescentou `v18.6-models-gemini4-gpt6` (`llm-providers`, `benchmark`): catálogo versão 5, preço com vigência, versão dos modelos por execução, orçamento por provedor e coleções do Qdrant recriadas sob demanda.
+A quinta consolidação (2026-10-14) acrescentou `v18.6-models-gemini4-gpt6` (`llm-providers`, `benchmark`): catálogo versão 5, preço com vigência, versão dos modelos por execução, orçamento por provedor e coleções do Qdrant recriadas sob demanda. A sexta consolidação (2026-10-18) acrescentou 8 mudanças da V18.7 (`source-layout`, `layer-cycles`, `graph-exploration-relations`, `resource-monitor-config`, `benchmark-fixes`, `hypothesis-linking`, `persistent-human-gate` e `exploration-limits`) em ordem de PR (o último vence): criou `project-structure` e atualizou `agent-runtime`, `benchmark`, `data-egress`, `execution-provenance`, `hypothesis-loop`, `knowledge-graph`, `llm-providers`, `operation-metrics`, `pipeline-robustness`, `research-project`, `researcher-consult`, `session-continuity` e `usage-limits`; os `REMOVED` foram retirados dos requisitos e listados em "Requisitos removidos".
 
 | Capacidade | Arquivo |
 |---|---|
@@ -41,6 +41,7 @@ A quinta consolidação (2026-10-14) acrescentou `v18.6-models-gemini4-gpt6` (`l
 | `operation-metrics` | [`operation-metrics/spec.md`](operation-metrics/spec.md) |
 | `pipeline-robustness` | [`pipeline-robustness/spec.md`](pipeline-robustness/spec.md) |
 | `platform-images` | [`platform-images/spec.md`](platform-images/spec.md) |
+| `project-structure` | [`project-structure/spec.md`](project-structure/spec.md) |
 | `research-data` | [`research-data/spec.md`](research-data/spec.md) |
 | `research-project` | [`research-project/spec.md`](research-project/spec.md) |
 | `researcher-consult` | [`researcher-consult/spec.md`](researcher-consult/spec.md) |

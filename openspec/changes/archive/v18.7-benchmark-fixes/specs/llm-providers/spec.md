@@ -3,7 +3,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Recusa e falhas explícitas
-_Origem: [`v16-anthropic-provider`](../../../archive/v16-anthropic-provider/proposal.md); modificado por `v18.7-benchmark-fixes` (achado 4 da bateria V18.6)._
+_Origem: [`v16-anthropic-provider`](../../../v16-anthropic-provider/proposal.md); modificado por `v18.7-benchmark-fixes` (achado 4 da bateria V18.6)._
 O provedor SHALL levantar `ProviderRefusalError` com a categoria quando a resposta for uma recusa, SHALL levantar `ProviderQuotaExhausted` sem retentativa quando o erro for classificado como esgotamento de cota ou gasto, e SHALL retentar apenas erros de conexão, 429 não classificado como cota e 5xx, emitindo `connection_retry` a cada retentativa.
 
 #### Scenario: Recusa por classificador de segurança
@@ -21,7 +21,7 @@ O provedor SHALL levantar `ProviderRefusalError` com a categoria quando a respos
 - **AND** o cliente foi chamado uma única vez e nenhum `connection_retry` foi emitido
 
 ### Requirement: Mudança de versão dentro da sessão
-_Origem: [`v18.5-model-catalog-locality`](../../../archive/v18.5-model-catalog-locality/proposal.md); modificado por `v18.7-benchmark-fixes` (decisão do pesquisador de 2026-10-15)._
+_Origem: [`v18.5-model-catalog-locality`](../../../v18.5-model-catalog-locality/proposal.md); modificado por `v18.7-benchmark-fixes` (decisão do pesquisador de 2026-10-15)._
 O sistema SHALL, quando a versão efetiva de um `provedor/modelo` mudar dentro da sessão, gravar o evento `versao_modelo_alterada` (provedor, modelo, versão anterior e nova), acrescentá-lo a `payload["eventos_versao_modelo"]` e emitir `WARNING`. A política `ON_MODEL_VERSION_CHANGE` (`src/config.py`; variável de ambiente de mesmo nome; `retomar` padrão | `parar`; outro valor falha na inicialização) SHALL valer somente com `LLM_ROUTING=strict`; no modo flexível a sessão apenas registra, avisa e continua.
 
 Com `LLM_ROUTING=strict` e `ON_MODEL_VERSION_CHANGE=retomar`, versão alterada ou `desconhecida`, ou modelo indisponível, após a primeira chamada do papel SHALL, no próximo ponto de verificação de limites, gravar um checkpoint e continuar a sessão:

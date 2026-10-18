@@ -30,6 +30,9 @@ class ContentOrigin(str, Enum):
     SAIDA_EXECUCAO = "saida_execucao"
     GRAFO = "grafo"
     DADO_DE_PESQUISA = "dado_de_pesquisa"
+    # v18.7-subtask-contract: texto escrito pelo Researcher no plano (critérios, artefatos, hipótese); é especificação a
+    # cumprir, nunca instrução do sistema (ADR 022 §6.1). O EgressGate o delimita como dado (seção 4 da mudança).
+    PLANEJADOR = "planejador"
 
 
 # Origens cujo conteúdo é material observado: sempre vai delimitado como dado (design §5).
@@ -44,6 +47,8 @@ OBSERVED_ORIGINS: frozenset[ContentOrigin] = frozenset(
 
 # Fonte dos trechos com nomes de artefatos: o EgressGate aplica a regra de nomes (design §3.5) a eles.
 ARTIFACT_NAMES_SOURCE = "artefatos"
+# Prefixo da fonte dos itens do contrato da subtarefa escritos pelo Researcher (``contrato:criterios``...).
+CONTRACT_SOURCE_PREFIX = "contrato:"
 # Fonte do perfil estrutural de artefato (v18.6-profile-hardening): conteúdo derivado de arquivo não confiável, sempre
 # delimitado como dado pelo EgressGate.
 ARTIFACT_PROFILE_SOURCE = "perfil_artefato"

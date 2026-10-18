@@ -1,6 +1,6 @@
 # Tarefas: v18.7-subtask-contract
 
-**Estado (2026-10-18):** em andamento. Seções 0 (#203) e 1 concluídas; achado das dependências decidido (design §14: mudança própria `v18.7-dependency-artifacts`, caminho `/deps_out/<projeto>/<task_name>`). Seções 2 a 7 não iniciadas.
+**Estado (2026-10-18):** em andamento. Seções 0 (#203), 1 (#204) e 2 concluídas; achado das dependências decidido (design §14: mudança própria `v18.7-dependency-artifacts`, caminho `/deps_out/<projeto>/<task_name>`). Seções 3 a 7 não iniciadas.
 
 ## 0. Pré-requisitos
 - [x] 0.1 Mudança aprovada pelo pesquisador, com as questões do design §11 decididas.
@@ -13,11 +13,11 @@
 - [x] 1.1 `SUBTASK_CONTRACT_ENABLED`, `CONTRACT_TASK_MAX_CHARS`, `CONTRACT_FIELD_MAX_CHARS`, `REVIEW_INTEGRITY_ALWAYS`, `REVIEW_SCRIPT_MAX_CHARS`, `REVIEW_OBSERVATIONS_MAX` e `PLAN_ARTIFACT_COLLISION_CHECK` em `src/config.py` e `.env.example` (design §9).
 
 ## 2. Contrato e construtores
-- [ ] 2.0 Mover para `src/agents/subtask_contract.py`, sem mudar comportamento e com a suíte verde, os construtores de contexto do Researcher (`_run_planning_loop`) e do Validator do plano (ADR 024 §5).
-- [ ] 2.1 `src/agents/subtask_contract.py`: `MetricKey`, `ProblemObjective`, `SubtaskContract` (com `sha256()` e `fragments()`), `INTEGRITY_RULES` e os quatro construtores (design §2).
-- [ ] 2.2 Layout do bloco do design §3, com "não se aplica" para itens vazios e corte literal do item 5.
-- [ ] 2.3 Derivação das chaves de métrica (split, vocabulário, termo novo) e dos consumidores pelo `depends_on` inverso.
-- [ ] 2.4 Testes: cenários "Itens do contrato", "Preparação sem hipótese própria", "Métrica fora do vocabulário", "Tarefa original longa", "Ponto único de montagem"; teste de estabilidade do hash (mesmos campos, mesmo hash; ordem de chaves irrelevante).
+- [x] 2.0 Mover para `src/agents/subtask_contract.py`, sem mudar comportamento e com a suíte verde, os construtores de contexto do Researcher (`_run_planning_loop`) e do Validator do plano (ADR 024 §5).
+- [x] 2.1 `src/agents/subtask_contract.py`: `MetricKey`, `ProblemObjective`, `SubtaskContract` (com `sha256()` e `fragments()`), `INTEGRITY_RULES` e os quatro construtores (design §2).
+- [x] 2.2 Layout do bloco do design §3, com "não se aplica" para itens vazios e corte literal do item 5.
+- [x] 2.3 Derivação das chaves de métrica (split, vocabulário, termo novo) e dos consumidores pelo `depends_on` inverso.
+- [x] 2.4 Testes: cenários "Itens do contrato", "Preparação sem hipótese própria", "Métrica fora do vocabulário", "Tarefa original longa", "Ponto único de montagem"; teste de estabilidade do hash (mesmos campos, mesmo hash; ordem de chaves irrelevante).
 
 ## 3. Despacho, runtime e fixação
 - [ ] 3.1 `AgentTask.contract`; `_dispatch_subtask` com `dataclasses.replace`.

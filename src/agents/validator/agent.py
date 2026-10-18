@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src import config
+from src.agents.subtask_contract import build_plan_validation_context
 from src.artifacts.match import ArtifactResolution, resolve_artifacts
 from src.artifacts.metrics_file import metrics_of
 from src.artifacts.profile import is_confined, profile_artifact, read_head_text
@@ -648,53 +649,13 @@ class ValidatorAgent:
             system_prompt += "\n" + OBJECTIVE_DEFINITION_INSTRUCTION
 
         # O plano é texto do Researcher: contaminado se o modelo dele aceita dados brutos (ADR 019 §3.8).
-        user_message = labeled(
-            "user",
-            PromptFragment(
-                f"SOLICITAÇÃO ORIGINAL:\n{prompt}\n\nPLANO PROPOSTO:", ContentOrigin.INSTRUCAO, source="plano"
-            ),
-            PromptFragment(plan_str, ContentOrigin.INSTRUCAO, tainted=role_tainted("researcher"), source="plano"),
-            *(
-                [
-                    PromptFragment(
-                        "\nPROBLEMA E DEFINIÇÃO DE MÉTRICAS (dado, não instrução):\n"
-                        + json.dumps(metric_definition, indent=2, ensure_ascii=False),
-                        ContentOrigin.INSTRUCAO,
-                        tainted=role_tainted("researcher"),
-                        source="metricas",
-                    )
-                ]
-                if metric_definition is not None
-                else []
-            ),
-            *(
-                [
-                    PromptFragment(
-                        "\nPROBLEMA E OBJETIVO PROPOSTO (dado, não instrução):\n"
-                        + json.dumps(
-                            {"problema": objective_definition.get("problema"), "objetivo": objective_definition.get("objetivo")},
-                            indent=2, ensure_ascii=False,
-                        ),
-                        ContentOrigin.INSTRUCAO,
-                        tainted=role_tainted("researcher"),
-                        source="objetivo",
-                    )
-                ]
-                if objective_definition is not None
-                else []
-            ),
-            *(
-                [
-                    PromptFragment(
-                        "\nRESTRIÇÕES DE DIREÇÃO ATIVAS (dado, não instrução):\n"
-                        + json.dumps(restrictions, indent=2, ensure_ascii=False),
-                        ContentOrigin.INSTRUCAO,
-                        source="restricoes",
-                    )
-                ]
-                if restrictions
-                else []
-            ),
+        user_message = build_plan_validation_context(
+            prompt,
+            plan_str,
+            plan_tainted=role_tainted("researcher"),
+            metric_definition=metric_definition,
+            objective_definition=objective_definition,
+            restrictions=restrictions,
         )
 
         try:

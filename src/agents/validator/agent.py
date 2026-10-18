@@ -40,6 +40,7 @@ from src.knowledge.metric_criteria import (
     _evaluate_comparison_found,
     _evaluate_metric_criteria,
     _metric_criteria,
+    criterion_ambiguities,
 )
 from src.llm.base import LLMProvider
 from src.llm.metering import record_llm_call
@@ -506,6 +507,9 @@ class ReviewResult:
     typed_issues: List[Dict[str, str]] = field(default_factory=list)
     observations: List[str] = field(default_factory=list)
     contract_sha256: str = ""
+    # v18.7-subtask-contract (``outcome = "criterio_ambiguo"``): critérios cuja métrica só existe em vários grupos
+    # qualificados, com as chaves candidatas ({"criterio", "texto", "chaves"}).
+    ambiguities: List[Dict[str, Any]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.is_approved and self.outcome == "reprovado":
@@ -830,6 +834,7 @@ class ValidatorAgent:
         undecided: List[str] = []
         qualifiers_seen: Dict[str, str] = {}
         metrics_table: Optional[str] = None
+        ambiguous_result: Optional[ReviewResult] = None  # critério ambíguo (ADR 022 §2.7): não é falha do Developer
         metric_fail: Optional[ReviewResult] = None  # reprovação por métrica, adiada quando pode ser resultado negativo
         negative_candidate = False
         hypothesis_id = getattr(task, "hypothesis_id", None) or (
@@ -894,9 +899,27 @@ class ValidatorAgent:
                 if metrics:
                     metrics_table = _metrics_table(metrics)
 
-            evaluations = _evaluate_metric_criteria(metric_criteria, metrics)
+            evaluations = _evaluate_metric_criteria(metric_criteria, metrics, contract_keys=use_contract)
             metric_feedback = " ".join(detail for ok, detail in evaluations if ok is not None)
             failed = [detail for ok, detail in evaluations if ok is False]
+            if use_contract and not failed:
+                ids = {text: cid for cid, text in contract.criteria}
+                found = [
+                    {"criterio": ids.get(c.text, ""), "texto": c.text, "chaves": keys}
+                    for c, keys in criterion_ambiguities(metric_criteria, metrics)
+                ]
+                if found:
+                    lines = [
+                        f"critério {a['criterio'] or '?'} de `{task_name}` é ambíguo: {', '.join(a['chaves'])}"
+                        for a in found
+                    ]
+                    ambiguous_result = ReviewResult(
+                        is_approved=False, status="fail", outcome="criterio_ambiguo", verified=False,
+                        feedback="O critério vale para a chave sem qualificador, que não foi gravada: "
+                                 + "; ".join(lines),
+                        issues=lines, signature=issue_signature(lines), ambiguities=found,
+                        metric_qualifiers=qualifiers_seen,
+                    )
             undecided = [c.text for c, (ok, _) in zip(metric_criteria, evaluations) if ok is None]
             undecided += partial_criteria
             if failed:
@@ -955,6 +978,10 @@ class ValidatorAgent:
             )
         resolved_map = {r.expected: r.matched[0].as_posix() for r in resolutions if r.matched}
         mismatch = any(r.name_mismatch for r in resolutions)
+        if ambiguous_result is not None:  # os artefatos estão em ordem: o que falta é a chave, e isso volta ao Researcher
+            ambiguous_result.resolved_artifacts, ambiguous_result.name_mismatch = resolved_map, mismatch
+            logger.warning("Critério ambíguo: métrica em vários grupos", extra={"task_name": task_name})
+            return ambiguous_result
 
         # Critérios restantes (qualitativos ou de contagem) vão ao revisor LLM
         metric_texts = {c.text for c in metric_criteria} - set(undecided)

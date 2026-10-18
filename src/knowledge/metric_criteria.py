@@ -57,6 +57,10 @@ def _metric_key(raw_name: str) -> Optional[str]:
         key = _normalize_metric_name(word)
         if key in _METRIC_ALIASES:
             return _METRIC_ALIASES[key]
+        if "." in word:  # chave qualificada citada (``modelo_b.acuracia``): vale a métrica depois do ponto
+            tail = _normalize_metric_name(word.rsplit(".", 1)[-1])
+            if tail in _METRIC_ALIASES:
+                return _METRIC_ALIASES[tail]
     return None
 
 
@@ -144,15 +148,69 @@ def _group_named(group: str, criterion_text: str) -> bool:
 
 
 def _evaluate_comparison(
-    crit: MetricCriterion, cmp: Comparison, metrics: Dict[str, Any]
+    crit: MetricCriterion, cmp: Comparison, metrics: Dict[str, Any], *, contract_keys: bool = False
 ) -> Tuple[Optional[bool], str]:
     """Avalia uma comparação: ``True``/``False`` ou ``None`` (indecidida: vai ao revisor LLM)."""
-    ok, detail, _ = _evaluate_comparison_found(crit, cmp, metrics)
+    ok, detail, _ = _evaluate_comparison_found(crit, cmp, metrics, contract_keys=contract_keys)
     return ok, detail
 
 
+def _key_norm(key: str) -> str:
+    return ".".join(_normalize_metric_name(part) for part in str(key).split("."))
+
+
+def _select_candidates(
+    crit: MetricCriterion, cmp: Comparison, metrics: Dict[str, Any], contract_keys: bool
+) -> Tuple[str, List[Tuple[str, float]]]:
+    """Chave de ``metrics.json`` que o critério avalia: ``(estado, candidatas)``.
+
+    Estados: ``missing`` (nenhuma chave), ``cited_missing`` (o critério cita a chave qualificada e ela não existe),
+    ``found`` (uma chave decidida em ``candidatas[0]``) e ``ambiguous`` (várias chaves qualificadas, sem chave sem
+    qualificador, sem chave citada e sem grupo nomeado). Com ``contract_keys`` vale a tabela do ADR 022 §2.7: a
+    chave sem qualificador, a citada pelo critério ou a única qualificada; o revisor nunca escolhe entre grupos.
+    """
+    qualifier = criterion_qualifier(cmp.raw_name)
+    allowed = {qualifier} if qualifier not in ("", "teste") else {"teste", ""}
+    candidates = metric_candidates(metrics, str(cmp.metric), allowed, _METRIC_ALIASES)
+    cited = cmp.raw_name.strip() if contract_keys and "." in cmp.raw_name.strip() else ""
+    if cited:
+        match = [c for c in candidates if _key_norm(c[0]) == _key_norm(cited)]
+        return ("found", match[:1]) if match else ("cited_missing", [])
+    if not candidates:
+        return "missing", []
+    if contract_keys:
+        plain = [c for c in candidates if "." not in c[0]]
+        if plain:
+            return "found", plain[:1]
+    if len(candidates) > 1:
+        named = [c for c in candidates if "." in c[0] and _group_named(c[0].rsplit(".", 1)[0], crit.text)]
+        if len(named) != 1:
+            return "ambiguous", candidates
+        candidates = named
+    return "found", candidates[:1]
+
+
+def criterion_ambiguities(
+    criteria: List[MetricCriterion], metrics: Dict[str, Any]
+) -> List[Tuple[MetricCriterion, List[str]]]:
+    """Critérios cuja métrica só existe em dois ou mais grupos qualificados (``criterio_ambiguo``, ADR 022 §2.7).
+
+    Cada item traz o critério e as chaves candidatas. O Validator nunca escolhe entre elas.
+    """
+    found: List[Tuple[MetricCriterion, List[str]]] = []
+    for crit in criteria:
+        keys: List[str] = []
+        for cmp in crit.comparisons:
+            state, candidates = _select_candidates(crit, cmp, metrics, True)
+            if state == "ambiguous":
+                keys += [k for k, _ in candidates if k not in keys]
+        if keys:
+            found.append((crit, keys))
+    return found
+
+
 def _evaluate_comparison_found(
-    crit: MetricCriterion, cmp: Comparison, metrics: Dict[str, Any]
+    crit: MetricCriterion, cmp: Comparison, metrics: Dict[str, Any], *, contract_keys: bool = False
 ) -> Tuple[Optional[bool], str, Optional[Tuple[str, float]]]:
     """Como ``_evaluate_comparison``, com ``(chave, valor)`` quando houve comparação numérica de fato.
 
@@ -178,26 +236,28 @@ def _evaluate_comparison_found(
             return False, f"Critério '{crit.text}': valor de '{cmp.metric}' em metrics.json não é numérico.", None
         passed, detail = _compare(crit.text, cmp, str(cmp.metric), actual_norm)
         return passed, detail, (str(cmp.metric), actual_norm)
-    qualifier = criterion_qualifier(cmp.raw_name)
-    allowed = {qualifier} if qualifier not in ("", "teste") else {"teste", ""}
-    candidates = metric_candidates(metrics, str(cmp.metric), allowed, _METRIC_ALIASES)
-    if not candidates:
+    state, candidates = _select_candidates(crit, cmp, metrics, contract_keys)
+    if state == "missing":
         return missing
-    if len(candidates) > 1:
-        named = [c for c in candidates if "." in c[0] and _group_named(c[0].rsplit(".", 1)[0], crit.text)]
-        if len(named) != 1:
-            return None, (
-                f"Critério '{crit.text}': a métrica '{cmp.metric}' aparece em mais de um grupo "
-                f"({[k for k, _ in candidates]}) e o critério não nomeia o grupo."
-            ), None
-        candidates = named
+    if state == "cited_missing":
+        return (
+            False,
+            f"Critério '{crit.text}': a chave '{cmp.raw_name.strip()}' citada pelo critério não está em "
+            f"metrics.json (chaves existentes: {existing}).",
+            None,
+        )
+    if state == "ambiguous":
+        return None, (
+            f"Critério '{crit.text}': a métrica '{cmp.metric}' aparece em mais de um grupo "
+            f"({[k for k, _ in candidates]}) e o critério não nomeia o grupo."
+        ), None
     key, actual = candidates[0]
     passed, detail = _compare(crit.text, cmp, key, actual)
     return passed, detail, (key, float(actual))
 
 
 def _evaluate_metric_criteria(
-    criteria: List[MetricCriterion], metrics: Dict[str, Any]
+    criteria: List[MetricCriterion], metrics: Dict[str, Any], *, contract_keys: bool = False
 ) -> List[Tuple[Optional[bool], str]]:
     """Avalia cada critério (todas as comparações) contra os valores reais de ``metrics.json``.
 
@@ -206,7 +266,7 @@ def _evaluate_metric_criteria(
     """
     results: List[Tuple[Optional[bool], str]] = []
     for crit in criteria:
-        outcomes = [_evaluate_comparison(crit, cmp, metrics) for cmp in crit.comparisons]
+        outcomes = [_evaluate_comparison(crit, cmp, metrics, contract_keys=contract_keys) for cmp in crit.comparisons]
         failed = [d for ok, d in outcomes if ok is False]
         if failed:
             results.append((False, " ".join(failed)))

@@ -8,10 +8,12 @@ uma frase curta (``texto``). Retiradas vêm primeiro; o total é limitado por ``
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 from src import config
+from src.knowledge.curator_tools import wrap_data
 
 ACAO_RETIRADA = "retirada"
 ACAO_PREPARACAO = "preparacao_ligada"
@@ -99,3 +101,27 @@ class LinkageFeedback:
     def items(self) -> list[dict[str, Any]]:
         """Retiradas primeiro, limitado a ``LINKAGE_FEEDBACK_MAX_ITEMS``."""
         return [*self.withdrawals, *self.others][: int(config.LINKAGE_FEEDBACK_MAX_ITEMS)]
+
+
+_OBSERVATIONS_LIMIT_CHARS = 4000
+
+
+def review_observations_feedback(items: Sequence[tuple[str, str]]) -> str:
+    """Observações do revisor e casos ``criterio_ambiguo`` do ciclo para o replanejamento (subtask-contract §6.4).
+
+    O texto vem do revisor (LLM) e dos nomes do plano: vai como **dado delimitado**, sem repetir texto igual e com no
+    máximo ``REVIEW_OBSERVATIONS_MAX`` itens. Vazio sem observações.
+    """
+    lines: list[str] = []
+    for name, text in items:
+        line = f"{str(name)[:_MAX_NAME]}: {str(text).strip()}"
+        if str(text).strip() and line not in lines:
+            lines.append(line)
+        if len(lines) >= config.REVIEW_OBSERVATIONS_MAX:
+            break
+    if not lines:
+        return ""
+    return (
+        "Observações do revisor no ciclo anterior (não reprovaram a subtarefa; considere-as ao replanejar):\n"
+        + wrap_data("observacoes_da_revisao", lines, _OBSERVATIONS_LIMIT_CHARS)
+    )

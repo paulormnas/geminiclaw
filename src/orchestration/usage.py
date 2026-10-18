@@ -471,6 +471,7 @@ class UsageTracker:
         self._pending_stop = pending_stop
         self._task_retry_counts: dict[str, int] = {}
         self._abandoned_tasks: set[str] = set()
+        self._refunded_tasks: set[str] = set()
 
     def elapsed_minutes(self) -> float:
         """Minutos de relógio decorridos desde a criação do tracker.
@@ -497,6 +498,22 @@ class UsageTracker:
         count = self._task_retry_counts.get(task_name, 0) + 1
         self._task_retry_counts[task_name] = count
         return count
+
+    def refund_task_attempt(self, task_name: str) -> bool:
+        """Devolve uma tentativa de `task_name` (``criterio_ambiguo``: a falha não é do Developer).
+
+        No máximo uma devolução por `task_name` em cada sessão (v18.7-subtask-contract, design §8.1 item 10): um plano
+        repetidamente ambíguo, inclusive por injeção, não gera um laço que não consome tentativas.
+
+        Returns:
+            ``True`` se devolveu; ``False`` se já houve devolução para a tarefa (a tentativa é consumida) ou se não
+            há tentativa registrada.
+        """
+        if task_name in self._refunded_tasks or self._task_retry_counts.get(task_name, 0) <= 0:
+            return False
+        self._refunded_tasks.add(task_name)
+        self._task_retry_counts[task_name] -= 1
+        return True
 
     def task_attempts(self, task_name: str) -> int:
         """Número de tentativas já registradas para `task_name`."""

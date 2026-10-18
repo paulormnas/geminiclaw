@@ -199,3 +199,16 @@ O sistema SHALL calcular na simulação, por variante e limiar, a falsa validaç
 - **GIVEN** uma variante cuja falsa validação passa de 2 % em todos os limiares da curva
 - **WHEN** a seção de aceite é gerada
 - **THEN** a variante aparece com "nenhum"
+
+### Requirement: Seleção de variante pelos dois instrumentos
+O sistema SHALL oferecer o comando `selecao`, que combina o `resultados.csv` da simulação (linhas `aceite`) com o da grade e aceita um par (variante, limiar) somente quando a falsa validação média da simulação é ≤ `--fv-max` (padrão 0,02) e a variante não conclui `funciona` em nenhum cenário do catálogo cujo esperado não é `funciona` (design §14).
+
+#### Scenario: Volume sem evolução rejeita a variante
+- **GIVEN** uma variante dentro do teto de 2 % na simulação que conclui `funciona` no cenário V20
+- **WHEN** `selecao` é executado
+- **THEN** o par aparece em "Rejeitados pelo catálogo" com `V20` entre os cenários falsamente validados
+- **AND** `aceita` é falso no `resultados.csv`
+
+#### Scenario: Entrada de outro comando
+- **WHEN** o arquivo passado em `--grade` não tem linhas de cenário
+- **THEN** o comando termina com erro que cita o arquivo e não escreve resultado

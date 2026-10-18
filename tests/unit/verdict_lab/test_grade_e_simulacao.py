@@ -333,3 +333,96 @@ def test_criterio_de_aceite_da_simulacao(tmp_path: Path) -> None:
     assert all((float(r["fv_max_tipos"]) <= 0.02) == (r["aceita"] == "True") for r in aceite)
     report = (out / "relatorio.md").read_text(encoding="utf-8")
     assert "Critério de aceite: falsa validação de no máximo 2%" in report and "Menor limiar aceito" in report
+
+
+def test_selecao_combina_simulacao_e_catalogo(tmp_path: Path) -> None:
+    grade, sim, sel = tmp_path / "g", tmp_path / "s", tmp_path / "sel"
+    limiares = ["0.2", "0.3"]
+    assert (
+        cli.main(
+            [
+                "grade",
+                "--saida",
+                str(grade),
+                "--limiar",
+                *limiares,
+                "--variante",
+                "atual",
+                "--variante",
+                "por_tipo",
+                "--variante",
+                "completa2",
+            ]
+        )
+        == 0
+    )
+    assert (
+        cli.main(
+            [
+                "simulacao",
+                "--repeticoes",
+                "5",
+                "--max-tentativas",
+                "8",
+                "--sigma",
+                "0.01",
+                "--tau",
+                "0.01",
+                "--efeito",
+                "0.02",
+                "--p-variacao",
+                "1",
+                "--p-falha",
+                "0",
+                "--nos",
+                "1",
+                "--limiar",
+                *limiares,
+                "--variante",
+                "atual",
+                "--variante",
+                "por_tipo",
+                "--variante",
+                "completa2",
+                "--expandir",
+                "--saida",
+                str(sim),
+            ]
+        )
+        == 0
+    )
+    assert (
+        cli.main(
+            [
+                "selecao",
+                "--grade",
+                str(grade / "resultados.csv"),
+                "--simulacao",
+                str(sim / "resultados.csv"),
+                "--saida",
+                str(sel),
+            ]
+        )
+        == 0
+    )
+    rows = list(csv.DictReader((sel / "resultados.csv").open(encoding="utf-8")))
+    by = {(r["variante"], r["limiar"]): r for r in rows}
+    # por_tipo valida volume sem evolução (V8, V20) e é rejeitado pelo catálogo mesmo se estiver no teto da simulação
+    rejeitado = by[("por_tipo", "0.2")]
+    assert "V20" in rejeitado["cenarios_falsamente_validados"] and rejeitado["aceita"] == "False"
+    assert by[("completa2", "0.3")]["falsas_validacoes_no_catalogo"] == "0"
+    assert "Rejeitados pelo catálogo" in (sel / "relatorio.md").read_text(encoding="utf-8")
+    assert (
+        cli.main(
+            [
+                "selecao",
+                "--grade",
+                str(sim / "resultados.csv"),
+                "--simulacao",
+                str(sim / "resultados.csv"),
+                "--saida",
+                str(tmp_path / "x"),
+            ]
+        )
+        == 2
+    )

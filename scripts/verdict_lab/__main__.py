@@ -12,6 +12,7 @@ from scripts.verdict_lab import output, reports
 from scripts.verdict_lab.properties import measure_properties
 from scripts.verdict_lab.replay import ReplayError, replay
 from scripts.verdict_lab.scenarios import DELTA, catalog
+from scripts.verdict_lab.selection import SelectionError, select, selection_report
 from scripts.verdict_lab.sensitivity import run_sensitivity
 from scripts.verdict_lab.simulation import (
     DEFAULT_GRID,
@@ -70,6 +71,13 @@ def _parser() -> argparse.ArgumentParser:
     for key in DEFAULT_GRID:
         s.add_argument(f"--{key.replace('_', '-')}", type=_grid_value, nargs="+", default=None)
     common(s)
+
+    c = sub.add_parser("selecao", help="combina o critério de aceite da simulação com o catálogo da grade")
+    c.add_argument("--grade", type=Path, required=True, help="resultados.csv de `grade` (com os mesmos limiares)")
+    c.add_argument("--simulacao", type=Path, required=True, help="resultados.csv de `simulacao`")
+    c.add_argument("--fv-max", type=float, default=0.02)
+    c.add_argument("--saida", type=Path, required=True, help="diretório de saída (criado)")
+    c.add_argument("--sobrescrever", action="store_true", help="substitui um resultado anterior no diretório")
 
     e = sub.add_parser("sensibilidade", help="variação isolada e em pares dos parâmetros")
     common(e)
@@ -208,7 +216,18 @@ def _cmd_sensibilidade(args: argparse.Namespace, out: Path) -> None:
     print(f"{len(variants)} variantes -> {out}")
 
 
+def _cmd_selecao(args: argparse.Namespace, out: Path) -> None:
+    rows = select(args.grade, args.simulacao, args.fv_max)
+    manifest = output.write_manifest(
+        out, comando="selecao", argumentos={"fv_max": args.fv_max}, variantes=[], entradas=[args.grade, args.simulacao]
+    )
+    output.write_csv(out / output.RESULTS, rows)
+    (out / output.REPORT).write_text(selection_report(rows, args.fv_max, manifest), encoding="utf-8")
+    print(f"{sum(1 for r in rows if r['aceita'])} de {len(rows)} (variante, limiar) aceitos -> {out}")
+
+
 _COMMANDS = {
+    "selecao": _cmd_selecao,
     "replay": _cmd_replay,
     "grade": _cmd_grade,
     "simulacao": _cmd_simulacao,
@@ -221,7 +240,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         out = output.prepare_output_dir(args.saida, overwrite=args.sobrescrever)
         _COMMANDS[args.comando](args, out)
-    except (VariantError, ReplayError, output.OutputError, ValueError) as exc:
+    except (VariantError, ReplayError, SelectionError, output.OutputError, ValueError) as exc:
         print(f"erro: {exc}", file=sys.stderr)
         return 2
     return 0

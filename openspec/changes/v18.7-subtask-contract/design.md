@@ -289,8 +289,10 @@ As referências de caminho e linha deste design, da proposta e das specs são de
 
 **Decisão pendente do pesquisador (não implementada nesta mudança até a resposta).** Ampliar o escopo exigiria, no mínimo, (a) uma regra de montagem no sandbox (montar as saídas das dependências diretas e transitivas em um caminho somente leitura, por exemplo `/deps_out/<task_name>`, ou copiá-las para `/inputs`-like), com parecer do Analista de Segurança (nova superfície de leitura entre pastas de subtarefas, ADR 014 e ADR 019), e (b) um item novo do contrato com o caminho de cada artefato de dependência. Opções:
 
-1. **Montagem somente leitura das saídas das dependências** em `/deps_out/<task_name>` (diretas e transitivas do `depends_on`). Preserva a proveniência (o arquivo lido é o gravado pelo produtor, com o mesmo hash) e não duplica dados; exige mudança em `sandbox.py` e parecer de segurança, porque abre leitura entre pastas de subtarefas.
+1. **Montagem somente leitura das saídas das dependências** em `/deps_out/<projeto>/<task_name>` (diretas e transitivas do `depends_on`). Preserva a proveniência (o arquivo lido é o gravado pelo produtor, com o mesmo hash) e não duplica dados; exige mudança em `sandbox.py` e parecer de segurança, porque abre leitura entre pastas de subtarefas.
 2. **Cópia para o `/outputs` da consumidora** antes da execução. Simples para o Developer (o caminho é o do prompt atual), mas duplica dados, mistura insumo com produto no `/outputs` (o Validator e a proveniência passariam a ver artefatos que a subtarefa não produziu) e precisa de lista de exclusão.
 3. **Só instruir** (item 10 do contrato com o caminho real, sem entrega). Barato, mas não resolve: o arquivo continua ausente.
 
 Recomendação: opção 1, em mudança OpenSpec própria (`v18.7-dependency-artifacts`), depois desta; o contrato ganharia o item 10 apontando para os caminhos montados. Enquanto não houver decisão, as seções 1 a 7 seguem sem esse item.
+
+**Decisão do pesquisador (2026-10-18):** seguir a opção 1 com um identificador de projeto no caminho, `/deps_out/<projeto>/<task_name>`, para diferenciar projetos. A mudança `v18.7-dependency-artifacts` será especificada à parte (o `project_id` já existe em `AgentContext`).

@@ -312,7 +312,8 @@ async def test_subtarefa_sem_contrato_registra_hash_nulo(tmp_path):
     await h.run()
     attempt = next(e["payload"] for e in seen if e.get("event_type") == "subtask_attempt" and e["agent_id"] == "developer")
     assert attempt["contrato_sha256"] is None and attempt["contrato_chars"] is None
-    assert attempt["recorte_sha256"] is None
+    # v18.7-agent-system-prompts: com o regimento vinculado à sessão o recorte vigente é registrado.
+    assert isinstance(attempt["recorte_sha256"], str) and len(attempt["recorte_sha256"]) == 64
 
 
 def test_hash_do_recorte_vem_da_tarefa():
@@ -328,4 +329,5 @@ def test_hash_do_recorte_vem_da_tarefa():
         loop._record_attempt_event(AgentTask(agent_id="developer", prompt="x", task_name="t", recorte_sha256="c" * 64),
                                    None, 1, "s")
         loop._record_attempt_event(AgentTask(agent_id="developer", prompt="x", task_name="t"), None, 2, "s")
+    # Sem recorte na tarefa e sem regimento vinculado à sessão, o campo fica nulo (v18.7-agent-system-prompts).
     assert seen[0]["payload"]["recorte_sha256"] == "c" * 64 and seen[1]["payload"]["recorte_sha256"] is None

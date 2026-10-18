@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from src.agent_runtime.runtime import AgentRuntime
 from src.agent_runtime.types import AgentResult, AgentTask
+from src.agents.regimento import sessao_atual
 from src.agents.subtask_contract import build_researcher_plan_context
 from src.agents.validator.agent import ValidatorAgent
 from src.artifacts.output_manager import OutputManager, generate_session_slug
@@ -1212,6 +1213,7 @@ class Orchestrator:
                     master_session.id, status="closed", payload={**master_session.payload, "motivo_parada": "erro"}
                 )
                 raise
+        self._current_context_dir = getattr(bundle, "context_dir", None)  # onde procurar o adendo do regimento
         if bundle is not None:
             egress_gate.add_known_identifiers(_context_identifiers(bundle))
             # Trechos rotulados (esquema agregado, documento, dado de pesquisa): o EgressGate decide o que cada
@@ -2015,6 +2017,9 @@ class Orchestrator:
                 master_session_id=master_session_id,
             )
 
+        regimento_sessao = sessao_atual()
+        regimento_sha256 = regimento_sessao.regimento.sha256 if regimento_sessao is not None else ""
+        recorte_sha256 = regimento_sessao.recorte_atual().sha256 if regimento_sessao is not None else ""
         ctx = AgentContext(
             session_id=effective_session_id,
             agent_session_id=session.id,
@@ -2031,6 +2036,8 @@ class Orchestrator:
             dependency_dirs=tuple(getattr(task, "dependency_mounts", ()) or ()),
             project_id=self._session_project_id(effective_session_id),
             subtask_id=task.subtask_id,
+            regimento_sha256=regimento_sha256,
+            recorte_sha256=recorte_sha256,
             extra={"project_meta": self._project_metas[effective_session_id]}
             if effective_session_id in self._project_metas
             else {},

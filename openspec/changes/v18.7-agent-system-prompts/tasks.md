@@ -1,6 +1,6 @@
 # Tarefas: v18.7-agent-system-prompts
 
-**Estado (2026-10-18):** seções 0 a 2 e 3.1 e 3.2 implementadas (regimento v1, carga, recorte, configuração); faltam a injeção e o registro por sessão (3.3 a 3.6), a ferramenta, o adendo, os esquemas, os prompts e a coerência.
+**Estado (2026-10-18):** seções 0 a 5 implementadas (regimento v1, carga, recorte, injeção no `system` de todas as chamadas de papel, registro por sessão, `ler_regimento` e adendo de projeto com aprovação no gate); faltam os esquemas (6), os prompts (7), a coerência e a redação (8) e a validação (9).
 
 ## 0. Pré-requisitos
 - [x] 0.1 Mudança aprovada pelo pesquisador, com as questões do design §10 decididas.
@@ -19,22 +19,23 @@
 ## 3. Carga, recorte e registro
 - [x] 3.1 `src/agents/regimento/carga.py` (pacote `src/agents/regimento`, sem módulo `src/regimento.py` por causa das camadas do ADR 024): `carregar_regimento`, `recorte`, `secao`, tabelas geradas, hashes (design §3.1-§3.2).
 - [x] 3.2 `REGIMENTO_EXCERPT_MAX_CHARS` e `REGIMENTO_ADDENDUM_FILE` em `src/config.py` e `.env.example`.
-- [ ] 3.3 Carga por sessão no orquestrador; evento `regimento_sessao`; payload `regimento`; `AgentContext.regimento_sha256` e `recorte_sha256`; `regimento_alterado` na retomada (design §4).
-- [ ] 3.4 Injeção do recorte no `system` de todas as chamadas de papel listadas no design §3.3 (runtime em processo e chamadas diretas do Validator, Summarizer, consultor e revisão de conclusões); recorte passado aos construtores de `v18.7-subtask-contract`.
-- [ ] 3.5 `_MODE_GUIDANCE` removido de `agents/base/agent.py` (conteúdo na seção de modos).
-- [ ] 3.6 Testes: "Carga do regimento", "Metadados inválidos", "Discriminação no auto", "Sem projeto", "Recorte grande demais", "Início da sessão", "Arquivo alterado no meio da sessão", "Retomada com regimento novo".
+- [x] 3.3 Carga por sessão no orquestrador; evento `regimento_sessao`; payload `regimento`; `AgentContext.regimento_sha256` e `recorte_sha256`; `regimento_alterado` na retomada (design §4).
+- [x] 3.4 Injeção do recorte no `system` de todas as chamadas de papel listadas no design §3.3 (runtime em processo e chamadas diretas do Validator, Summarizer, consultor e revisão de conclusões); o parâmetro `regimento_excerpt` dos construtores de `v18.7-subtask-contract` não existe no código mergeado e o recorte vai no `system`, não na mensagem, então nada é passado a eles. Pontos de injeção: `_get_agent_instruction` (`agents/base/agent.py`, que cobre Developer, Researcher no plano, replanejamento e rascunho, e Summarizer), Validator (plano, revisão, afirmações), consultor, `CuratorRunner` (execução e edição) e a revisão de conclusões (o chamador passa `system_wrapper`, porque `claims` não importa `agents`). Sem regimento vinculado (fora de uma sessão) o `system` fica como estava.
+- [x] 3.5 `_MODE_GUIDANCE` removido de `agents/base/agent.py` (conteúdo na seção de modos).
+- [x] 3.6 Testes: "Carga do regimento", "Metadados inválidos", "Discriminação no auto", "Sem projeto", "Recorte grande demais", "Início da sessão", "Arquivo alterado no meio da sessão", "Retomada com regimento novo".
 
 ## 4. Ferramenta de leitura
-- [ ] 4.1 `ler_regimento` em `agents/base/tools.py`, registrada para Researcher, Developer e Curator.
-- [ ] 4.2 Testes: "Seção fora do recorte", "Caminho no argumento".
+- [x] 4.1 `ler_regimento` em `agents/base/tools.py`, registrada para Researcher, Developer e Curator.
+- [x] 4.2 Testes: "Seção fora do recorte", "Caminho no argumento".
 
 ## 5. Adendo de projeto
-- [ ] 5.1 Leitura e validação do formato fechado; exclusão da indexação e da ingestão de insumos.
-- [ ] 5.2 `ativar_adendo_regimento` em `DECISOES_RESERVADAS`; pedido ao gate com `referencia` igual ao sha256, texto, hash, linha fixa sobre egresso e linhas fixas de aviso de ids sensíveis (design §5.4); cópia informativa do hash no projeto.
-- [ ] 5.2a Decisão de injeção só pela consulta a `gate_requests` (design §5.5); a cópia do projeto nunca é lida para decidir.
-- [ ] 5.2b Leitura única do arquivo sem seguir link simbólico, hash e injeção dos mesmos bytes; recusa de link simbólico ou caminho fora dos insumos (design §5.6).
-- [ ] 5.3 Comportamento por modo com adendo pendente ou inválido (design §5.7), com código de saída 1 no `auto` e no adendo inválido (tabela única de `v18.7-background-sessions/design.md` §1.4).
-- [ ] 5.4 Testes, com `FakeGate` e `FakeRecordingProvider`: "Adendo aprovado", "Adendo alterado depois da aprovação", "Adendo pendente no auto", "Adendo que tenta afrouxar", "Aviso no pedido", "Adendo sem ids sensíveis", "Hash aprovado só no projeto", "Pedido negado", "Adendo trocado depois da verificação", "Adendo como link simbólico", "Consultor perguntado", "Decisões do gate no regimento".
+_Desvios (2026-10-18): o diretório do adendo é o diretório de insumos da sessão (`ContextBundle.context_dir`, o `INPUT_CONTEXT_DIR` por padrão), porque o código só conhece um diretório de insumos; o texto do pedido comporta até `GATE_QUESTION_MAX_CHARS` (1000) caracteres, sem truncar, e o adendo que não cabe é recusado com erro explícito; o cenário "Consultor perguntado" já é coberto por `tests/unit/test_human_gate.py`, parametrizado sobre `DECISOES_RESERVADAS`._
+- [x] 5.1 Leitura e validação do formato fechado; exclusão da indexação e da ingestão de insumos.
+- [x] 5.2 `ativar_adendo_regimento` em `DECISOES_RESERVADAS` (já existia, criado por `v18.7-persistent-human-gate`); pedido ao gate com `referencia` igual ao sha256, texto, hash, linha fixa sobre egresso e linhas fixas de aviso de ids sensíveis (design §5.4). A cópia informativa do hash no projeto **não foi implementada**: nada a lê para decidir e não há onde gravá-la sem schema novo; o hash aprovado fica no pedido de `gate_requests` e no evento `regimento_sessao`.
+- [x] 5.2a Decisão de injeção só pela consulta a `gate_requests` (design §5.5); a cópia do projeto nunca é lida para decidir.
+- [x] 5.2b Leitura única do arquivo sem seguir link simbólico, hash e injeção dos mesmos bytes; recusa de link simbólico ou caminho fora dos insumos (design §5.6).
+- [x] 5.3 Comportamento por modo com adendo pendente ou inválido (design §5.7), com código de saída 1 no `auto` e no adendo inválido (tabela única de `v18.7-background-sessions/design.md` §1.4).
+- [x] 5.4 Testes, com `FakeGate` e `FakeRecordingProvider`: "Adendo aprovado", "Adendo alterado depois da aprovação", "Adendo pendente no auto", "Adendo que tenta afrouxar", "Aviso no pedido", "Adendo sem ids sensíveis", "Hash aprovado só no projeto", "Pedido negado", "Adendo trocado depois da verificação", "Adendo como link simbólico", "Consultor perguntado", "Decisões do gate no regimento".
 
 ## 6. Esquemas dos formatos
 - [ ] 6.1 Esquemas únicos do plano (com `papel`), dos pareceres do Validator, do rascunho do Problema (com o tipo de objetivo), da resposta do consultor, da narrativa do Summarizer e de `metrics.json`, usados pelo código que valida e pela renderização dos prompts.

@@ -15,6 +15,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
+from src.agents.regimento import encerrar_sessao, iniciar_sessao, sessao_atual
 from src.agents.subtask_contract import (
     build_developer_contract,
     dependency_files,
@@ -325,10 +326,163 @@ class AutonomousLoop(LoopReportMixin):
         clear_interrupt()
         clear_quota_stop(master_session_id)  # v18.7: a parada por cota de uma sessão anterior não vale para esta
         set_session_active(True)
+        regimento_token = None
         try:
+            regimento_token, adendo_pendente = self._iniciar_regimento(master_session_id, mode)
+            if adendo_pendente is not None:
+                return await self._suspend_session(
+                    master_session_id, [], [],
+                    f"Sessão aguarda o pesquisador: ativação do adendo do regimento (`ativar_adendo_regimento`, "
+                    f"sha256 {adendo_pendente}).",
+                )
             return await self._run_session(prompt, master_session_id, mode, budget)
         finally:
+            if regimento_token is not None:
+                encerrar_sessao(regimento_token)
             set_session_active(False)
+
+    def _iniciar_regimento(self, master_session_id: str, mode: str) -> tuple[Any, str | None]:
+        """Carrega o regimento da pesquisa uma vez, registra a versão e o vincula à sessão (ADR 022 §4.4).
+
+        Grava o evento ``regimento_sessao`` (início e cada recorte novo), o payload ``regimento`` da sessão e, na
+        retomada com hash diferente do registrado, o evento ``regimento_alterado``. Regimento ou adendo inválido,
+        e adendo não aprovado no ``auto``, falham a sessão antes de qualquer chamada de modelo.
+
+        Returns:
+            O token do vínculo e, no ``assisted`` e no ``semi``, o sha256 do adendo que aguarda o pesquisador
+            (``None`` sem adendo pendente); nesse caso a sessão não executa subtarefas.
+        """
+        from src.config import SESSION_DEFAULT_MODE
+
+        modo = mode or SESSION_DEFAULT_MODE
+        registro: dict[str, Any] = {"recortes": []}
+
+        def registrar_recorte(rec: Any) -> None:
+            registro["recortes"].append(
+                {"tipo_objetivo": rec.tipo_objetivo, "modo": rec.modo, "recorte_sha256": rec.sha256}
+            )
+            self._emit_regimento(master_session_id, "regimento_sessao", {
+                "versao": sessao.regimento.versao, "regimento_sha256": sessao.regimento.sha256, "adendo_sha256": "",
+                "recorte_sha256": rec.sha256, "tipo_objetivo": rec.tipo_objetivo, "modo": rec.modo,
+            })
+            self._gravar_regimento_no_payload(master_session_id, registro)
+
+        sessao, token = iniciar_sessao(modo, on_recorte=registrar_recorte)
+        try:
+            adendo, pendente = self._conferir_adendo(master_session_id, modo, sessao)
+        except Exception:
+            encerrar_sessao(token)
+            self._fechar_por_erro(master_session_id)
+            raise
+        sessao.adendo = adendo
+        adendo_sha = adendo.sha256 if adendo is not None else ""
+        registro.update({"versao": sessao.regimento.versao, "regimento_sha256": sessao.regimento.sha256,
+                         "adendo_sha256": adendo_sha})
+        inicio = {"versao": sessao.regimento.versao, "regimento_sha256": sessao.regimento.sha256,
+                  "adendo_sha256": adendo_sha}
+        if pendente is not None:
+            inicio["adendo_pendente_sha256"] = pendente
+        self._emit_regimento(master_session_id, "regimento_sessao", inicio)
+        self._gravar_regimento_no_payload(master_session_id, registro)
+        self._conferir_regimento_retomado(master_session_id, sessao.regimento.sha256)
+        return token, pendente
+
+    def _fechar_por_erro(self, master_session_id: str) -> None:
+        """Marca a sessão como fechada com ``motivo_parada = erro`` (a recusa antes de começar sai com o código 1)."""
+        try:
+            manager = self.orchestrator.session_manager
+            session = manager.get(master_session_id)
+            if session is not None:
+                manager.update(
+                    master_session_id, status="closed", payload={**session.payload, "motivo_parada": "erro"}
+                )
+        except Exception:  # noqa: BLE001
+            logger.warning("Falha ao fechar a sessão recusada", exc_info=True)
+
+    def _conferir_adendo(self, master_session_id: str, modo: str, sessao: Any) -> tuple[Any, str | None]:
+        """Lê o adendo uma vez e confere a aprovação no gate persistente (design §5.5 a §5.7).
+
+        Returns:
+            ``(adendo aprovado ou None, sha256 do adendo pendente ou None)``.
+
+        Raises:
+            AdendoError: adendo inválido ou como link simbólico, ou pendente no ``auto`` (a sessão não começa).
+        """
+        from src import config
+        from src.agents.regimento.adendo import AdendoError, aprovado, ler_adendo, registrar_pedido
+        from src.gate.persistent_gate import session_gate
+
+        diretorio = getattr(self.orchestrator, "_current_context_dir", None) or config.INPUT_CONTEXT_DIR
+        adendo = ler_adendo(diretorio)
+        if adendo is None:
+            return None, None
+        gate = session_gate()
+        try:
+            if aprovado(gate, adendo):
+                return adendo, None
+            project_id = None
+            getter = getattr(self.orchestrator, "_session_project_id", None)
+            if callable(getter):
+                project_id = getter(master_session_id)
+            registrar_pedido(
+                gate, adendo, sessao.regimento.estrutura, session_id=master_session_id, project_id=project_id
+            )
+        except AdendoError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - sem o gate não há como conferir a aprovação: falha fechada
+            raise AdendoError(f"aprovação do adendo não conferida ({type(exc).__name__}).") from exc
+        if modo == "auto":
+            raise AdendoError(
+                f"sessão recusada antes de começar: o adendo do regimento (sha256 {adendo.sha256}) não foi aprovado "
+                "pelo pesquisador. Aprove o pedido `ativar_adendo_regimento` no terminal e inicie a sessão de novo."
+            )
+        return None, adendo.sha256
+
+    def _emit_regimento(self, master_session_id: str, event_type: str, payload: dict[str, Any]) -> None:
+        try:
+            get_telemetry().record_agent_event(
+                execution_id=master_session_id, session_id=master_session_id, agent_id="autonomous_loop",
+                event_type=event_type, payload=payload,
+            )
+        except Exception:  # noqa: BLE001 - o registro nunca interrompe a sessão
+            logger.warning("Falha ao registrar %s", event_type, exc_info=True)
+
+    def _gravar_regimento_no_payload(self, master_session_id: str, registro: dict[str, Any]) -> None:
+        try:
+            manager = self.orchestrator.session_manager
+            session = manager.get(master_session_id)
+            if session is None:
+                return
+            payload = dict(session.payload)
+            payload["regimento"] = {**registro, "recortes": list(registro["recortes"])}
+            manager.update(master_session_id, payload=payload)
+        except Exception:  # noqa: BLE001
+            logger.warning("Falha ao gravar o regimento no payload da sessão", exc_info=True)
+
+    def _conferir_regimento_retomado(self, master_session_id: str, atual: str) -> None:
+        """Na retomada, registra ``regimento_alterado`` se o hash do disco difere do da sessão de origem."""
+        resume = self._resume(master_session_id)
+        if resume is None:
+            return
+        try:
+            origem = self.orchestrator.session_manager.get(resume.source_session_id)
+            anterior = ((origem.payload if origem is not None else {}) or {}).get("regimento") or {}
+            anterior_sha = anterior.get("regimento_sha256") if isinstance(anterior, dict) else None
+        except Exception:  # noqa: BLE001
+            return
+        if anterior_sha and anterior_sha != atual:
+            self._emit_regimento(master_session_id, "regimento_alterado", {
+                "regimento_sha256_registrado": anterior_sha, "regimento_sha256_atual": atual,
+                "sessao_origem": resume.source_session_id,
+            })
+
+    async def _sincronizar_objetivo_do_regimento(self, exploration: "ExplorationSession | None") -> None:
+        """Atualiza o tipo de objetivo do recorte vigente a partir do ``Problema`` ativo (a cada ciclo)."""
+        sessao = sessao_atual()
+        if sessao is None:
+            return
+        tipo = await asyncio.to_thread(exploration.objective_type) if exploration is not None else None
+        sessao.definir_objetivo(tipo)
 
     async def _run_session(
         self,
@@ -858,7 +1012,7 @@ class AutonomousLoop(LoopReportMixin):
                     "contrato_chars": chars,
                     "contrato_tokens_estimados": tokens,
                     "tarefa_original_truncada": bool(contract and contract.original_task_truncated_from),
-                    "recorte_sha256": getattr(task, "recorte_sha256", None),
+                    "recorte_sha256": getattr(task, "recorte_sha256", None) or self._recorte_sha256_vigente(),
                     "limiar_mascarado": (
                         threshold_masked(contract, role_tainted("developer")) if contract is not None else False
                     ),
@@ -866,6 +1020,12 @@ class AutonomousLoop(LoopReportMixin):
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("Falha ao registrar subtask_attempt", extra={"error": str(exc)})
+
+    @staticmethod
+    def _recorte_sha256_vigente() -> str | None:
+        """Hash do recorte do regimento vigente na sessão; ``None`` sem regimento vinculado."""
+        sessao = sessao_atual()
+        return sessao.recorte_atual().sha256 if sessao is not None else None
 
     def _check_contract_divergence(
         self, task: "AgentTask", attempt: int, review_sha: str, master_session_id: str
@@ -1260,6 +1420,7 @@ class AutonomousLoop(LoopReportMixin):
             # novas chamadas de exploração) se o orçamento já foi esgotado por um ciclo
             # anterior (ex: retentativas de conexão atingidas durante o último gather).
             await self._refresh_model_versions()  # v18.5: digest do Ollama a cada ciclo (checkpoint)
+            await self._sincronizar_objetivo_do_regimento(exploration)
             pre_cycle_status = self._usage_tracker.check()
             if pre_cycle_status.should_close:
                 return await self._close_session(

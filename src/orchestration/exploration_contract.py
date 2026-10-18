@@ -57,6 +57,19 @@ class ContractMixin:
             objective_type=effective_type(raw) or "limiar",
         )
 
+    def objective_type(self) -> str | None:
+        """Tipo do objetivo do ``Problema`` ativo para o regimento: ``limiar`` quando o critério não declara tipo;
+        ``None`` sem projeto, sem ``Problema`` ou sem leitura do grafo."""
+        try:
+            problem = get_active_problem(self.store, self.ctx.project_id)  # type: ignore[attr-defined]
+        except Exception as exc:  # noqa: BLE001 - o regimento segue só com as seções comuns
+            logger.warning("Tipo de objetivo indisponível", extra={"extra": {"erro": type(exc).__name__}})
+            return None
+        if problem is None:
+            return None
+        raw = problem.properties.get("criterio_sucesso")
+        return effective_type(raw if isinstance(raw, dict) else None) or "limiar"
+
     def metric_resolver(self) -> Any:
         """Resolvedor de nomes pelo vocabulário: canônico e se o termo é novo (candidato criado)."""
 

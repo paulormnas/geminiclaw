@@ -29,7 +29,9 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src import config
+from src.agents.base.tools import ler_regimento
 from src.agents.curator.agent import AGENT_INSTRUCTION
+from src.agents.regimento import com_regimento
 from src.egress.gate import any_role_raw
 from src.knowledge.curator_flags import FlagStore
 from src.knowledge.curator_tools import CuratorLimits, CuratorToolkit, wrap_data
@@ -50,6 +52,7 @@ KIND_CONSOLIDATE = "consolidate"
 KIND_CLOSE = "close_session"
 EVENT_TYPE = "curator_run"
 _DOMAIN_TOOL = "buscar_dominio"
+_REGIMENTO_TOOL = "ler_regimento"
 _MAX_DIGEST_ITEMS = 30
 _MAX_GENERATE_TOKENS = 2048
 
@@ -280,6 +283,7 @@ class Curator:
 
     async def _loop(self, provider: LLMProvider, toolkit: CuratorToolkit, prompt: str, report: CuratorReport) -> None:
         domain = {getattr(t, "__name__", ""): t for t in (self._domain_tools_list())}
+        domain[_REGIMENTO_TOOL] = ler_regimento  # v18.7-agent-system-prompts: somente leitura, em memória
         tools = toolkit.openai_tools() + [
             {
                 "type": "function",
@@ -304,7 +308,7 @@ class Curator:
                 return
             started = time.monotonic()
             response = await provider.generate(
-                messages=messages, tools=tools, system=self._system_prompt, temperature=0.2,
+                messages=messages, tools=tools, system=com_regimento(self._system_prompt), temperature=0.2,
                 max_tokens=min(_MAX_GENERATE_TOKENS, remaining),
             )
             record_llm_call(provider, response, int((time.monotonic() - started) * 1000), agent_id=AGENT_ID)
@@ -326,7 +330,10 @@ class Curator:
                     labeled(
                         "tool",
                         PromptFragment(
-                            content, ContentOrigin.GRAFO, tainted=graph_tainted, source=f"ferramenta:{call.name}"
+                            content,
+                            ContentOrigin.INSTRUCAO if call.name == _REGIMENTO_TOOL else ContentOrigin.GRAFO,
+                            tainted=False if call.name == _REGIMENTO_TOOL else graph_tainted,
+                            source=f"ferramenta:{call.name}",
                         ),
                         tool_call_id=call.id,
                         name=call.name,
@@ -345,6 +352,11 @@ class Curator:
     ) -> str:
         """Despacha uma chamada de ferramenta (lista fechada). Nunca levanta; saída externa vem como dado."""
         args = arguments if isinstance(arguments, dict) else {}
+        if name == _REGIMENTO_TOOL:
+            try:
+                return str(await ler_regimento(**args))
+            except TypeError:
+                return await ler_regimento()  # argumento inesperado: devolve a lista de seções
         if name == _DOMAIN_TOOL and name in domain:
             try:
                 out = await domain[name](**args)

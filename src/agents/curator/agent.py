@@ -14,6 +14,7 @@ orçamento. O papel **não** está em ``AGENT_IDS``: um plano gerado por LLM nã
 from __future__ import annotations
 
 from src.agents.base.agent import Agent
+from src.agents.base.tools import ler_regimento
 from src.agents.prompts import render_instruction
 from src.skills.vocabulary import domain_search_tools
 
@@ -163,7 +164,7 @@ def create_agent() -> Agent:
         description=AGENT_DESCRIPTION,
         _instruction=AGENT_INSTRUCTION,
         model="router:curator",
-        tools=unbound_agent_tools() + domain_search_tools(AGENT_NAME),
+        tools=unbound_agent_tools() + domain_search_tools(AGENT_NAME) + [ler_regimento],
         before_agent_callback=_load_session_context,
         after_agent_callback=_persist_session_context,
     )

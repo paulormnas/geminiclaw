@@ -125,25 +125,34 @@ class TestAutonomousLoopModeStamping:
 
 @pytest.mark.unit
 class TestAgentInstructionByMode:
-    """O prompt dinâmico compartilhado deve refletir o SESSION_MODE ativo."""
+    """O prompt dinâmico compartilhado reflete o modo da sessão pelo recorte do regimento (v18.7-agent-system-prompts)."""
 
-    def test_instrucao_assisted_menciona_ask_researcher(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("SESSION_MODE", "assisted")
+    @staticmethod
+    def _instruction(mode: str) -> str:
         from src.agents.base.agent import _get_agent_instruction
-        instruction = _get_agent_instruction("Instrução base.")
-        assert "ask_researcher" in instruction
+        from src.agents.regimento import encerrar_sessao, iniciar_sessao
 
-    def test_instrucao_semi_nunca_bloqueia(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("SESSION_MODE", "semi")
-        from src.agents.base.agent import _get_agent_instruction
-        instruction = _get_agent_instruction("Instrução base.")
-        assert "NUNCA bloqueie" in instruction
+        _, token = iniciar_sessao(mode)
+        try:
+            return _get_agent_instruction("Instrução base.")
+        finally:
+            encerrar_sessao(token)
 
-    def test_instrucao_auto_menciona_autonomia_total(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("SESSION_MODE", "auto")
-        from src.agents.base.agent import _get_agent_instruction
-        instruction = _get_agent_instruction("Instrução base.")
-        assert "TOTALMENTE AUTÔNOMO" in instruction
+    def test_instrucao_assisted_menciona_ask_researcher(self) -> None:
+        instruction = self._instruction("assisted")
+        assert "ask_researcher" in instruction and "modo assisted" in instruction
+
+    def test_instrucao_semi_nunca_bloqueia(self) -> None:
+        instruction = self._instruction("semi")
+        assert "Nunca bloqueie" in instruction and "modo semi" in instruction
+
+    def test_instrucao_auto_menciona_autonomia_total(self) -> None:
+        instruction = self._instruction("auto")
+        assert "Não há pesquisador disponível" in instruction and "modo auto" in instruction
+
+    def test_instrucao_so_traz_o_modo_da_sessao(self) -> None:
+        instruction = self._instruction("auto")
+        assert "## Modo semi" not in instruction and "## Modo assisted" not in instruction
 
 
 @pytest.mark.unit

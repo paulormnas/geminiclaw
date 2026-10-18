@@ -102,8 +102,12 @@ def apply_revisions(source_text: str, revisions: dict[str, str], sections: tuple
     return source_text
 
 
-async def request_revisions(provider: Any, items: list[RevisionItem], tainted: bool) -> dict[str, str]:
-    """Uma chamada ao Summarizer com todas as conclusões do ciclo; devolve os parágrafos substitutos válidos."""
+async def request_revisions(
+    provider: Any, items: list[RevisionItem], tainted: bool, system_wrapper: Callable[[str], str] | None = None
+) -> dict[str, str]:
+    """Uma chamada ao Summarizer com todas as conclusões do ciclo; devolve os parágrafos substitutos válidos.
+
+    ``system_wrapper`` acrescenta ao prompt o recorte do regimento (a camada ``claims`` não importa ``agents``)."""
     from src.llm.metering import record_llm_call
     from src.utils.egress_fragments import ContentOrigin, PromptFragment, labeled, taint_if
 
@@ -118,7 +122,8 @@ async def request_revisions(provider: Any, items: list[RevisionItem], tainted: b
     )
     started = time.monotonic()
     response = await provider.generate(
-        messages=[message], system=REVISION_INSTRUCTION, temperature=0.1, max_tokens=2500
+        messages=[message], system=system_wrapper(REVISION_INSTRUCTION) if system_wrapper else REVISION_INSTRUCTION,
+        temperature=0.1, max_tokens=2500
     )
     record_llm_call(provider, response, int((time.monotonic() - started) * 1000), "summarizer",
                     task_name="claim_revision")

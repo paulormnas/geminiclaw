@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from src import config
+from src.agents.regimento import encerrar_sessao, iniciar_sessao
 from src.cli.banner import print_session_banner
 from src.cli.context_commands import load_context_with_confirmation
 from src.cli.unlimited import _project_marked_unlimited, resolve_unlimited_budget
@@ -312,6 +313,8 @@ class SessionStarter:
         from src.cli.project_session import ProjectFlowError
         from src.llm.session import bind_session_routing
 
+        # v18.7-agent-system-prompts: o rascunho do Problema leva o recorte do regimento do modo (sem objetivo ainda).
+        _, regimento_token = iniciar_sessao(mode)
         try:
             bind_session_routing(routing)  # o rascunho do Problema usa o modelo do papel researcher
             if self._binder is None:
@@ -319,6 +322,8 @@ class SessionStarter:
             binding = await self._binder.bind(prompt, bundle)
         except ProjectFlowError as exc:
             raise LaunchRefused(str(exc), EXIT_ERROR) from exc
+        finally:
+            encerrar_sessao(regimento_token)
         launch_id = str(uuid.uuid4())
         budget = self._confirm_unlimited(args, budget, launch_id)
         self._memory_gate(memory_policy)

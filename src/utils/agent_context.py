@@ -80,6 +80,9 @@ class AgentContext:
             lista de documentos. ``None`` fora de sessões de projeto.
         subtask_id: ID da subtarefa em execução (``AgentTask.subtask_id``); liga cada execução do sandbox ao
             ``Experimento`` no registro de proveniência (v18.5-execution-provenance).
+        regimento_sha256: Hash do regimento da pesquisa carregado na sessão (v18.7-agent-system-prompts); vazio fora
+            de uma sessão com regimento.
+        recorte_sha256: Hash do recorte do regimento vigente na criação do contexto; vazio sem regimento.
         extra: Metadados adicionais não cobertos pelos campos acima (``project_meta``: ``ProjectMeta`` do projeto,
             usado no cabeçalho enriquecido da ingestão de artefatos).
     """
@@ -99,6 +102,8 @@ class AgentContext:
     consult_researcher: Optional[ConsultResearcherCallback] = None
     project_id: Optional[str] = None
     subtask_id: Optional[str] = None
+    regimento_sha256: str = ""
+    recorte_sha256: str = ""
     extra: dict[str, Any] = field(default_factory=dict)
 
 

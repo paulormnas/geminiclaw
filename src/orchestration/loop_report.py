@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from src import config
+from src.agents.regimento import com_regimento
 from src.egress.gate import role_tainted
 from src.egress.routing import ModelRouter
 from src.logger import get_logger
@@ -285,7 +286,9 @@ class LoopReportMixin:
             return None
         try:
             provider = ModelRouter.get_provider("summarizer")
-            replacements = await request_revisions(provider, items, role_tainted("summarizer"))
+            replacements = await request_revisions(
+                provider, items, role_tainted("summarizer"), system_wrapper=com_regimento
+            )
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - o relatório segue com as marcas, sem a correção

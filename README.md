@@ -236,8 +236,13 @@ Cada pesquisa roda em um **processo próprio** (ADR 023), separado do terminal: 
 
 ```bash
 geminiclaw                         # REPL
-  nova-pesquisa <tarefa>           # lança a pesquisa em segundo plano (texto livre sem comando é recusado com a dica)
-  sessions                         # pesquisas em execução e por terminar (apelido, modo, estado, PID, resumo)
+  nova-pesquisa <tarefa>           # lança a pesquisa em segundo plano (com outra em execução, pergunta antes)
+  pesquisas                        # pesquisas em execução, por terminar e terminadas nas últimas 24 h (estado, tempo,
+                                   # custo, último evento e pedidos pendentes); `sessions` é sinônimo
+  acompanhar <apelido>             # últimos eventos e os novos, em detalhe, até `voltar`
+  pausar|parar|replanejar <apelido>  # ações imediatas sobre a pesquisa em execução (veja abaixo)
+  cancelar <apelido> <subtarefa>   # retira uma subtarefa que ainda não começou
+  perguntar [@apelido] <texto>     # consulta só leitura ao Researcher; `? <texto>` e texto livre fazem o mesmo
   retomar <apelido|id>             # nova sessão a partir do checkpoint (mesma retomada de `geminiclaw resume`)
   encerrar <apelido|id>            # fecha a pesquisa parada e grava relatorio_encerramento.md (sem LLM)
   sandboxes / parar-sandboxes [id] # containers de sandbox de código (sem id, pede confirmação)
@@ -246,6 +251,12 @@ geminiclaw                         # REPL
 geminiclaw "tarefa"                # primeiro plano: o comando é o terminal; espera o fim e sai com o código abaixo
 geminiclaw --background "tarefa"   # cria o processo, imprime apelido e PID e sai com 0 (não combina com --mode assisted)
 ```
+
+**Acompanhamento e conversa.** A sessão grava cada evento de progresso na hora (tabela `session_events`: plano aprovado, subtarefa iniciada, concluída ou reprovada, hipótese criada ou concluída, objetivo atingido, decisão pendente, comando recebido, parada, suspensão, falha), com um resumo curto montado de campos estruturados (nunca saída de execução, trecho de dado, caminho nem exceção; valor de métrica só quando validado). O REPL lê os eventos novos a cada `SESSION_EVENTS_POLL_SECONDS` (2 s) e imprime `[apelido] resumo` **sem apagar o que você digita**; `TERMINAL_EVENT_DETAIL` escolhe o nível: `silencioso` (decisão pendente, parada, suspensão e falha), `resumo` (padrão: mais plano aprovado, hipótese concluída, objetivo atingido e comando recebido) ou `detalhado`. O terminal saneia de novo tudo o que imprime. `SESSION_EVENTS_RETENTION_DAYS` (0 = nunca apaga) apaga, ao abrir o REPL, eventos de sessões terminadas há mais de N dias.
+
+`pausar` termina as subtarefas em curso, grava o checkpoint e deixa a pesquisa `suspended` com `pausada_pesquisador` (`retomar` continua, sem pergunta); `parar` fecha com checkpoint como o 1º Ctrl+C; `cancelar` recusa a subtarefa que já começou; `replanejar` pede ao Researcher um novo plano depois das subtarefas em curso. Os comandos vão à sessão pela caixa de entrada, só valem para pesquisa com processo vivo (senão o terminal mostra o estado e sugere `retomar`) e não passam pelo gate de decisões reservadas.
+
+**Texto livre é conversa.** O que não for comando equivale a `perguntar`: o Researcher responde sobre o projeto, as hipóteses e os resultados da pesquisa, em **modo só leitura** e num processo filho sem as credenciais do terminal (banco relacional `default_transaction_read_only`, grafo pelo invólucro de leitura, Qdrant sem escrita; só `quick_search` e `web_reader`). O consumo (até `TERMINAL_CONSULT_MAX_TOKENS` por pergunta) conta no orçamento da pesquisa consultada e aparece como `consulta` nas métricas de operação. Se a resposta trouxer uma orientação, o terminal pergunta "Enviar como mensagem a <apelido>? [s/N]" e só grava na caixa de entrada com a sua confirmação. Sem pesquisa em execução, o texto livre é recusado com a dica de `nova-pesquisa`. `TERMINAL_CONSULT_ENABLED=false` desliga a consulta.
 
 Ao abrir, o REPL marca como `interrompida` as pesquisas cujo processo não existe mais, mostra o que mudou desde a última vez e pergunta, para cada pesquisa não finalizada (`aguarda_pesquisador`, `suspensa_sem_pesquisador`, `interrompida`), se quer **retomar**, **manter** ou **encerrar**. Só um REPL pode estar aberto. Uma sessão `assisted` precisa do terminal presente: se ele sai ou cai, ela termina o que está em curso, grava o checkpoint e se suspende (`suspensa_sem_pesquisador`). `semi` e `auto` ignoram o terminal; quando só restam pedidos ao pesquisador, a sessão sai com `aguarda_pesquisador`.
 
@@ -259,7 +270,7 @@ Antes de iniciar ou retomar, o terminal confere a memória disponível (`MIN_AVA
 | 1 | erro ou recusa |
 | 2 | modo sem limite não confirmado |
 | 3 | limite (`limite_*`, `versao_modelo`, `planos_rejeitados`) |
-| 4 | aguarda o pesquisador (`aguarda_pesquisador`, `suspensa_sem_pesquisador`) |
+| 4 | aguarda o pesquisador (`aguarda_pesquisador`, `suspensa_sem_pesquisador`, `pausada_pesquisador`) |
 | 5 | memória insuficiente |
 | 6 | sessão perdida (continuada por outra) |
 | 130 | interrupção pelo pesquisador (Ctrl+C: o 1º pede o fechamento com checkpoint; o 2º é imediato) |

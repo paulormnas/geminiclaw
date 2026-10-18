@@ -499,6 +499,17 @@ class ContractReader:
         return total
 
 
+def _consult_usage_of(telemetry: Any, session_id: str) -> dict[str, Any] | None:
+    """Tokens e custo da consulta do terminal; ``None`` se a leitura não existir (telemetria simulada, banco fora)."""
+    try:
+        usage = telemetry.get_usage_by_origin(session_id)["consulta"]
+    except Exception:  # noqa: BLE001 - métrica aditiva: a falta dela não invalida o grupo
+        return None
+    return {
+        "tokens": int(usage["total_tokens"]), "custo_usd": float(usage["custo_usd"]), "chamadas": int(usage["calls"]),
+    }
+
+
 class CostResourcesReader:
     """Grupo ``custo_recursos``: tokens e custo por tarefa e papel, hardware do nó (telemetria existente)."""
 
@@ -512,6 +523,10 @@ class CostResourcesReader:
     ) -> None:
         self._runs_loader = runs_loader
         self._budget_loader = budget_loader
+
+    @staticmethod
+    def _consult_usage(telemetry: Any, session_id: str) -> dict[str, Any] | None:
+        return _consult_usage_of(telemetry, session_id)
 
     def read(self, session_id: str) -> dict[str, Any]:
         from src.observability.telemetry import get_telemetry
@@ -551,6 +566,8 @@ class CostResourcesReader:
                 {"agent_id": role, "tokens": entry["tokens"], "custo_usd": cost(entry["custos"])}
                 for role, entry in sorted(per_role.items())
             ],
+            # v18.7-session-events-terminal: o que as perguntas do terminal à pesquisa gastaram (já está no total).
+            "consulta": self._consult_usage(telemetry, session_id),
             "no": {
                 "cpu_pct_medio": round(avg_cpu, 1) if avg_cpu is not None else None,
                 "cpu_pct_pico": peaks.get("max_cpu_pct"),
@@ -967,6 +984,12 @@ def render_operation_metrics_section(metrics: dict[str, Any], *, stop_reason: st
             lines.append(
                 f"  - {role['agent_id']}: {_fmt(role['tokens'])} tokens, "
                 f"{_fmt(role['custo_usd'], ' USD') if role['custo_usd'] is not None else 'custo não informado'}"
+            )
+        consult = cost.get("consulta")
+        if consult and consult.get("tokens"):
+            lines.append(
+                f"  - consulta (perguntas do terminal, já somadas acima): {_fmt(consult['tokens'])} tokens, "
+                f"{_fmt(consult['custo_usd'], ' USD')}"
             )
 
     human = metrics["intervencoes_humanas"]

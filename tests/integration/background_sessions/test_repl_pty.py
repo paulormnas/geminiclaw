@@ -22,11 +22,12 @@ def spawn(**env: str) -> pexpect.spawn:
     )
 
 
-def test_prompt_comando_desconhecido_e_sair():
+def test_prompt_texto_livre_e_conversa_e_sair():
+    """Texto livre sem comando é conversa com o Researcher (a consulta é simulada no harness)."""
     child = spawn()
     child.expect(PROMPT)
     child.sendline("estude a base iris")
-    child.expect("nova-pesquisa <tarefa>")
+    child.expect(r"RESPOSTA-SIMULADA \[estude a base iris\]")
     child.expect(PROMPT)
     child.sendline("sair")
     child.expect("Até logo")

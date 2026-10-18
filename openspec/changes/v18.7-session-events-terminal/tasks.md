@@ -1,6 +1,6 @@
 # Tarefas: v18.7-session-events-terminal
 
-**Estado (2026-10-18):** seções 1 (eventos), 2 (impressão no REPL), 3 (comandos) e 5.1 (configuração) implementadas; faltam a consulta só leitura (4: `perguntar`, texto livre como conversa e a orientação sugerida) e o README (5.2). Decisões do pesquisador em 2026-10-18: schema de `session_events` autorizado; retenção padrão 0; `pausar` grava `suspended` com o motivo `pausada_pesquisador`; comandos em português, com `resume` como sinônimo de `retomar`.
+**Estado (2026-10-18):** seções 1 a 5 implementadas (eventos, impressão no REPL, comandos, consulta só leitura com texto livre como conversa e orientação sugerida, configuração e README); falta a validação final (6): a revisão nos 7 eixos acontece no merge dos PRs e o Arquiteto confirma o status do ADR 023 depois. Decisões do pesquisador em 2026-10-18: schema de `session_events` autorizado; retenção padrão 0; `pausar` grava `suspended` com o motivo `pausada_pesquisador`; comandos em português, com `resume` como sinônimo de `retomar`.
 
 ## 0. Pré-requisitos
 - [x] 0.1 `v18.7-background-sessions` e `v18.7-persistent-human-gate` mergeadas; revisar esta mudança contra o código de `dev` (referências de linha de 2026-10-15).
@@ -31,15 +31,16 @@ _Desvios (2026-10-18): `sessions` continua e passou a ser sinônimo de `pesquisa
 - [x] 3.4 Testes de integração: pausar e retomar; parar; cancelar pendente e recusa para subtarefa em curso; replanejar com nova versão de plano.
 
 ## 4. Consulta só leitura
-- [ ] 4.0 Processo filho da consulta: criado pelo terminal com `stdin` fechado e `filtered_env` (lista fixa de credenciais do terminal e `SESSION_ENV_DENYLIST`), retorno só do JSON da resposta validado como dado; gravação da orientação no terminal. Teste de integração "Consulta em processo filho sem a credencial".
-- [ ] 4.1 `src/terminal_consult.py`: contexto delimitado, escolha da sessão, conexão somente leitura, invólucro do Qdrant, ferramentas restritas, `EgressGate` da sessão, registro em `token_usage` com o `execution_id` da sessão consultada (conta no orçamento dela), carga sob demanda.
-- [ ] 4.2 Proposta de orientação com confirmação, gravada pela caixa de entrada.
-- [ ] 4.3 Testes de unidade sobre a função `ask` (provedor simulado, sem processo filho): contexto com hipóteses; escrita recusada nas três bases; ferramentas exatas; recusa por localidade; consumo registrado e somado ao uso, ao custo e aos limites da sessão ("Consumo da consulta conta no orçamento"); orientação confirmada e recusada.
+_Desvios (2026-10-18): o filho usa `filtered_env` mais a lista `TERMINAL_CREDENTIAL_NAMES` (a lista fixa de credenciais do gate persistente ainda está vazia no ambiente de desenvolvimento, `FIXED_ENV_DENYLIST = ()`), e o banco relacional somente leitura vem de `PGOPTIONS=-c default_transaction_read_only=on` no ambiente do filho, que vale para todas as conexões dele (inclusive AGE); o grafo é lido pelo invólucro `ReadOnlyGraphStore` (allowlist de métodos de leitura) e o Qdrant por `ReadOnlyQdrant`; o contexto da consulta não traz as "métricas de operação parciais" (o consumo da própria pesquisa aparece em `consulta` nas métricas finais); o consumo é registrado com `task_name = 'consulta_terminal'` no `execution_id` da pesquisa (`token_usage` não tem coluna de origem; sem schema novo) e as métricas de operação mostram o campo `consulta` no grupo de custo e recursos; o processo filho resolve o provedor do Researcher pelo roteador e pelo `EgressGate` do próprio processo (a localidade é a da configuração do ambiente), e a recusa por política volta como motivo; o teste do processo filho usa um módulo de teste no lugar de `terminal_consult` para provar PID diferente e ambiente filtrado, e o caminho completo do filho é testado com dependências simuladas._
+- [x] 4.0 Processo filho da consulta: criado pelo terminal com `stdin` fechado e `filtered_env` (lista fixa de credenciais do terminal e `SESSION_ENV_DENYLIST`), retorno só do JSON da resposta validado como dado; gravação da orientação no terminal. Teste de integração "Consulta em processo filho sem a credencial".
+- [x] 4.1 `src/cli/terminal_consult.py` (terminal e processo filho), `src/agents/researcher/terminal_consult.py` (`ask`, prompt) e `src/knowledge/read_only.py` (invólucros): contexto delimitado, escolha da sessão, conexão somente leitura, invólucro do Qdrant, ferramentas restritas, `EgressGate` da sessão, registro em `token_usage` com o `execution_id` da sessão consultada (conta no orçamento dela), carga sob demanda.
+- [x] 4.2 Proposta de orientação com confirmação, gravada pela caixa de entrada.
+- [x] 4.3 Testes de unidade sobre a função `ask` (provedor simulado, sem processo filho): contexto com hipóteses; escrita recusada nas três bases; ferramentas exatas; recusa por localidade; consumo registrado e somado ao uso, ao custo e aos limites da sessão ("Consumo da consulta conta no orçamento"); orientação confirmada e recusada.
 
 ## 5. Configuração e documentação
 - [x] 5.1 `src/config.py` com as variáveis do design §3 e validações; `.env.example`.
-- [ ] 5.2 `README.md`: comandos do REPL e níveis de detalhe.
+- [x] 5.2 `README.md`: comandos do REPL e níveis de detalhe.
 
 ## 6. Validação final
-- [ ] 6.1 `uv run ruff check .`; `uv run pytest -m "unit or integration" -v` verde com PostgreSQL real.
-- [ ] 6.2 Revisão nos 7 eixos; PR para `dev` citando esta mudança; atualizar a linha **Estado** deste arquivo.
+- [x] 6.1 `uv run ruff check .`; `uv run pytest -m "unit or integration" -v` verde com PostgreSQL real.
+- [x] 6.2 Revisão nos 7 eixos; PR para `dev` citando esta mudança; atualizar a linha **Estado** deste arquivo.

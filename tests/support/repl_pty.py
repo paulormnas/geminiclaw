@@ -12,6 +12,7 @@ import threading
 import time
 
 from src.cli.repl import Console, Repl, run_with_prompt_interrupt
+from src.cli.terminal_consult import ConsultOutcome
 from src.session.events import Event
 from src.session.presence import TerminalPresence
 from tests.support.fake_gate import FakeGate
@@ -57,6 +58,9 @@ async def main() -> int:
         console=console, sweep_interval=3600, recover=lambda s: None, gate=FakeGate(), reminder_interval=3600,
         reader=ScriptedReader(float(os.environ["GC_EVENT_AFTER"])) if "GC_EVENT_AFTER" in os.environ else ScriptedReader(1e9),
         events_interval=0.2, costs_fn=lambda ids: {},
+        consult_fn=lambda pergunta, session_id: ConsultOutcome(
+            resposta=os.environ.get("GC_CONSULT_ANSWER", "RESPOSTA-SIMULADA") + f" [{pergunta}]"
+        ),
     )
     if repl.open() is not None:
         return 1

@@ -1,6 +1,6 @@
 # Roadmap V18.7 — Exploração Rastreável, Contrato de Contexto e Pesquisa em Segundo Plano
 
-> **Estado (2026-10-15):** mudanças OpenSpec escritas e em revisão; nenhuma implementada. ADRs 021, 022, 023 e 024 aprovados.
+> **Estado (2026-10-18):** Tarefas 0 a 5, 7 e 8 implementadas e mergeadas (as 8 primeiras mudanças arquivadas em #202; `v18.7-subtask-contract` em #203 a #211; `v18.7-background-sessions` com a confirmação na bateria pendente). Pendentes: Tarefa 6 (`session-events-terminal`), 9 (`agent-system-prompts`), 10 (`exploration-metrics`) e 11 (`dependency-artifacts`, especificada em 2026-10-18 a partir da bateria parcial). ADRs 021, 022, 023 e 024 parcialmente implementados.
 
 ## Objetivo
 
@@ -84,6 +84,11 @@ ADRs de origem: [021](../docs/decisions/adr_021_exploracao_rastreavel_por_hipote
 - **Critérios de aceite:** [ ] contadores por papel e origem da hipótese · [ ] substituição de `reprovacoes_sem_hipotese` · [ ] hash do contrato por tentativa e tokens do contrato por execução
 - **Complexidade estimada:** Baixa
 
+### Tarefa 11: Artefatos das dependências no sandbox
+- **Spec:** [`v18.7-dependency-artifacts`](../openspec/changes/v18.7-dependency-artifacts/proposal.md)
+- **Critérios de aceite:** [ ] saídas das dependências concluídas montadas somente leitura em `/deps_out/<projeto>/<task_name>` · [ ] escopo transitivo ou direto, com teto e recusa explícita · [ ] dependência da sessão anterior montada da pasta de origem · [ ] execução sem rede com dependência montada · [ ] item 10 do contrato e regra 2 do Developer · [ ] arquivos das dependências nas entradas da proveniência
+- **Complexidade estimada:** Média
+
 ## Ordem de implementação
 
 | Onda | Tarefas | Por quê |
@@ -92,7 +97,7 @@ ADRs de origem: [021](../docs/decisions/adr_021_exploracao_rastreavel_por_hipote
 | 1 | Tarefas 1, 2 e 3, em paralelo | Sem dependências entre si |
 | 2 | Tarefa 5 (as duas mudanças mergeadas juntas); Tarefa 4 | 5 depende de 2; 4 depende de 3 |
 | 3 | Tarefa 7; depois Tarefa 8; Tarefa 6 em paralelo | 7 depende de 1, 2, 3, 4 e 5; 8 depende de 4 e é mergeada depois de 7; 6 depende de 5 |
-| 4 | Tarefa 10; por último, Tarefa 9 | 10 depende de 4 e 8; 9 depende de 4, 5, 7 e 8 |
+| 4 | Tarefa 11; Tarefa 10; por último, Tarefa 9 | 11 depende de 8 (mergeada) e vem antes da bateria, porque sem ela a falha de artefatos ausentes da `haiku-dev-sol-juiz` continua; 10 depende de 4 e 8; 9 depende de 4, 5, 7, 8 e 11 (a regra 2 do Developer muda em 11) |
 
 Os motivos de parada e os códigos de saída têm uma tabela única em `v18.7-background-sessions/design.md` §1.4, com cada valor novo atribuído a uma só mudança. O catálogo de pedidos ao gate pertence a `v18.7-persistent-human-gate`. O mecanismo de variáveis removidas (`_REMOVED_VARIABLES`) pertence a `v18.7-resource-monitor-config`.
 

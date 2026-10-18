@@ -8,7 +8,7 @@
 
 **Depende de:** `v18.7-hypothesis-linking` (produz os campos novos do evento `hypothesis_cycle` e os eventos `hipotese_sistema_abandonada` e `hipotese_derivada`); `v18.7-subtask-contract` (produz o contrato, `SubtaskContract.sha256()` e `ReviewResult.contract_sha256`). Lê, quando existirem, os eventos de `v18.7-exploration-limits` (estagnação, objetivo, saturação, restrições); sem eles, o bloco correspondente fica `indisponivel`, sem bloquear esta mudança. Compatível com `v18.7-benchmark-fixes`, que também acrescenta chaves a `operation-metrics` e colunas ao relatório do benchmark (sem requisito em comum). Implementada depois de `v18.7-source-layout` e `v18.7-layer-cycles` (onda 0, ADR 024), cujos caminhos novos valem para os citados aqui.
 
-**Nota de data:** escrita em 2026-10-15, a partir dos ADRs 021 e 022 aprovados nessa data.
+**Nota de data:** escrita em 2026-10-15, a partir dos ADRs 021 e 022 aprovados nessa data. **Atualização 2026-10-18:** `v18.7-subtask-contract` já emite, por tentativa do Developer, o evento `subtask_contract` (`tentativa`, `contrato_sha256`, `tarefa_original_truncada_de`, `limiar_mascarado`) e já grava `contrato_sha256` no `subtask_review`. Esta mudança cria o `subtask_attempt` a partir desses campos (acrescenta `contrato_chars`, `contrato_tokens_estimados` e `recorte_sha256`, e passa a ser o único evento por tentativa, removendo `subtask_contract`) e só acrescenta ao `subtask_review` o que ainda falta; o evento `contrato_divergente` continua desta mudança. Com `v18.7-dependency-artifacts`, o contrato passa à versão 2 (item 10).
 
 ## Por quê
 

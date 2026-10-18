@@ -65,6 +65,7 @@ motivos_parada:
   - {id: aguarda_pesquisador, modos: [semi, auto], texto: "só restam pedidos ao pesquisador"}
   - {id: suspensa_sem_pesquisador, modos: [assisted], texto: "sessão assistida sem o terminal"}
   - {id: encerrada_pesquisador, texto: "o pesquisador encerrou a sessão"}
+  - {id: pausada_pesquisador, texto: "o pesquisador pausou a sessão; retomar continua de onde parou"}
 
 motivos_retirada:
   - {id: hipotese_rejeitada_pelo_pesquisador, texto: "a hipótese foi rejeitada pelo pesquisador"}

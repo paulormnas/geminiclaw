@@ -778,6 +778,7 @@ _STOP_DESCRIPTIONS = {
     "aguarda_pesquisador": "só restam pedidos ao pesquisador; responda e retome a sessão",
     "suspensa_sem_pesquisador": "o terminal saiu durante uma sessão assisted; retome a sessão",
     "encerrada_pesquisador": "encerrada pelo pesquisador no terminal",
+    "pausada_pesquisador": "pausada pelo pesquisador no terminal; retome a sessão para continuar",
 }
 
 

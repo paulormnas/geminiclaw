@@ -20,6 +20,7 @@ from typing import Any
 from src import config
 from src.cli.context_commands import clear_context
 from src.cli.gate_commands import decide, send_message, show_pending
+from src.cli.progress_view import EventsThread, send_command, show_history, show_overview
 from src.cli.sandboxes import show_sandboxes, stop_sandboxes
 from src.cli.session_start import LaunchRefused, SessionStarter, Started
 from src.cli.sessions_view import (
@@ -28,12 +29,12 @@ from src.cli.sessions_view import (
     ask_unfinished,
     label,
     resolve_target,
-    show_researches,
     summary_since,
 )
 from src.gate.persistent_gate import terminal_gate
 from src.logger import get_logger
 from src.session.chain import chain_session_ids
+from src.session.events import EventReader, purge
 from src.session.exit_codes import EXIT_ERROR
 from src.session.manager import SessionManager
 from src.session.presence import PgPresenceStore, TerminalAlreadyOpenError, TerminalPresence
@@ -52,7 +53,8 @@ EXIT_COMMANDS = {"exit", "quit", "sair"}
 PROMPT = f"  {MAGENTA}🔮 >{RESET} "
 NEW_RESEARCH_HINT = (
     "Para iniciar uma pesquisa use: nova-pesquisa <tarefa>  "
-    "(comandos: sessions, pendentes, decidir, mensagem, retomar, encerrar, sair)"
+    "(comandos: pesquisas, acompanhar, pausar, parar, cancelar, replanejar, pendentes, decidir, mensagem, retomar, "
+    "encerrar, sair)"
 )
 
 
@@ -189,6 +191,9 @@ class Repl:
         recover: Callable[[Any], None] | None = None,
         gate: Any | None = None,
         reminder_interval: float | None = None,
+        reader: EventReader | None = None,
+        events_interval: float | None = None,
+        costs_fn: Callable[[Any], dict[str, float]] | None = None,
     ) -> None:
         self.mode = mode or config.SESSION_DEFAULT_MODE
         self.explicit_mode = explicit_mode
@@ -210,6 +215,10 @@ class Repl:
             config.GATE_REMINDER_SECONDS if reminder_interval is None else reminder_interval
         )
         self._reminder: ReminderThread | None = None
+        self.reader = reader if reader is not None else EventReader()
+        self._events_interval = config.SESSION_EVENTS_POLL_SECONDS if events_interval is None else events_interval
+        self._events: EventsThread | None = None
+        self._costs_fn = costs_fn
 
     # -- abertura e fechamento -------------------------------------------------------------------------------------
 
@@ -223,9 +232,15 @@ class Repl:
             return EXIT_ERROR
         self.presence.start_heartbeat()
         self._last_end = last_end
+        try:  # retenção dos eventos (0, o padrão, nunca apaga); falha nunca impede a abertura
+            purge(int(config.SESSION_EVENTS_RETENTION_DAYS))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Retenção dos eventos falhou", extra={"error": type(exc).__name__})
         return None
 
     def close(self) -> None:
+        if self._events is not None:
+            self._events.stop()
         if self._sweep is not None:
             self._sweep.stop()
         if self._reminder is not None:
@@ -261,6 +276,18 @@ class Repl:
         self._reminder = ReminderThread(self.gate, self.manager, self.console, self._reminder_interval)
         self._reminder.remind()  # ao abrir
         self._reminder.start()
+        self._start_events()
+
+    def _start_events(self) -> None:
+        """Liga a leitura periódica dos eventos de progresso; o REPL só mostra o que acontece depois de abrir."""
+        try:
+            start_id = self.reader.last_id()
+        except Exception as exc:  # noqa: BLE001 - sem a tabela de eventos o REPL abre sem o acompanhamento
+            logger.warning("Eventos de progresso indisponíveis", extra={"error": type(exc).__name__})
+            return
+        self._events = EventsThread(
+            self.reader, self.manager, self.console, self._events_interval, start_id=start_id
+        ).start()
 
     def close_research(self, session: Any) -> None:
         from src.session.closing import close_by_researcher
@@ -273,9 +300,30 @@ class Repl:
 
     # -- comandos --------------------------------------------------------------------------------------------------
 
+    def _running_researches(self) -> list[Any]:
+        """Pesquisas com processo em execução (para a confirmação de ``nova-pesquisa``)."""
+        try:
+            return [s for s in self.manager.list_orchestrator(["active"]) if s.pid]
+        except Exception as exc:  # noqa: BLE001 - sem a lista o comando segue sem a pergunta
+            logger.warning("Pesquisas em execução indisponíveis", extra={"error": type(exc).__name__})
+            return []
+
+    def confirm_another_research(self, running: list[Any]) -> bool:
+        """Com outra pesquisa em execução, pergunta antes da verificação de memória (decisão de 2026-10-15)."""
+        names = ", ".join(label(s) for s in running)
+        try:
+            answer = self._input(f"  Já há pesquisa em execução ({names}). Iniciar outra? [s/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            return False
+        return answer in ("s", "sim", "y", "yes")
+
     async def start_research(self, task: str) -> None:
         from src.cli.session_start import MEMORY_POLICY_ASK
 
+        running = self._running_researches()
+        if running and not self.confirm_another_research(running):
+            self.console.write(f"  {DIM}Nenhuma pesquisa foi iniciada.{RESET}\n")
+            return
         try:
             started = await self.starter.start_new(
                 task,
@@ -339,8 +387,18 @@ class Repl:
                 self.console.write(f"\n  {RED}Use: nova-pesquisa <tarefa>{RESET}\n")
             else:
                 await self.start_research(rest)
-        elif lower == "sessions":
-            show_researches(self.manager, self.console.write, self._now())
+        elif lower in ("sessions", "pesquisas"):
+            show_overview(self.manager, self.reader, self.gate, self.console.write, self._now(), self._costs_fn)
+        elif word == "acompanhar":
+            self._cmd_follow(rest)
+        elif word in ("pausar", "parar", "replanejar"):
+            send_command(self.manager, rest.split()[0] if rest else "", word, None, self.console.write)
+        elif word == "cancelar":
+            target, _, subtask = rest.partition(" ")
+            if not target or not subtask.strip():
+                self.console.write(f"\n  {RED}Use: cancelar <apelido> <subtarefa>{RESET}\n")
+            else:
+                send_command(self.manager, target, "cancelar", subtask.strip().split()[0], self.console.write)
         elif word in ("retomar", "resume"):
             await self._cmd_resume(rest)
         elif word == "encerrar":
@@ -441,6 +499,31 @@ class Repl:
         if report is not None:
             self.console.write(f"  Pesquisa {label(session)} encerrada ({reason}). Relatório: {report}")
         return True
+
+    def _cmd_follow(self, target: str) -> None:
+        """``acompanhar <apelido>``: histórico e eventos novos em nível detalhado, até ``voltar`` ou Ctrl+C."""
+        session = resolve_target(self.manager, target)
+        if session is None:
+            self.console.write(f"\n  {RED}Use: acompanhar <apelido|id> (pesquisa não encontrada: '{target}'){RESET}\n")
+            return
+        show_history(self.reader, session, self.console.write)
+        if self._events is not None:
+            self._events.follow(session.id)
+        try:
+            while True:
+                self.console.waiting_for_input = True
+                try:
+                    answer = self._input(f"  {DIM}acompanhando {label(session)} >{RESET} ").strip().lower()
+                except (EOFError, KeyboardInterrupt):
+                    break
+                finally:
+                    self.console.waiting_for_input = False
+                if answer in ("voltar", "sair", "exit"):
+                    break
+        finally:
+            if self._events is not None:
+                self._events.follow(None)
+        self.console.write(f"  {DIM}Fim do acompanhamento de {label(session)}; a pesquisa continua.{RESET}\n")
 
     def _cmd_close(self, target: str) -> None:
         session = resolve_target(self.manager, target)

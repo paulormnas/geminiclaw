@@ -99,13 +99,58 @@ def gates_em_memoria(request):
 @pytest.fixture(autouse=True)
 def _sinalizadores_do_processo():
     """Limpa os sinalizadores de interrupção e de suspensão (globais do processo) entre os testes."""
-    from src.orchestration.usage import clear_interrupt, clear_suspension
+    from src.orchestration.usage import clear_commands, clear_interrupt, clear_suspension
 
     clear_interrupt(force=True)
     clear_suspension()
+    clear_commands()
     yield
     clear_interrupt(force=True)
     clear_suspension()
+    clear_commands()
+
+
+class NullEventReader:
+    """Leitor de eventos vazio: os testes do REPL não consultam ``session_events`` (nem esperam o pool do banco)."""
+
+    def since(self, last_id, *, session_ids=None, limit=200):
+        return []
+
+    def tail(self, session_id, n):
+        return []
+
+    def last_id(self):
+        return 0
+
+
+@pytest.fixture(autouse=True)
+def null_event_reader(monkeypatch):
+    """O ``Repl`` sem ``reader`` explícito usa um leitor vazio (v18.7-session-events-terminal)."""
+    monkeypatch.setattr("src.cli.repl.EventReader", NullEventReader)
+    yield
+
+
+class NullEventWriter:
+    """Escritor de eventos que não grava: os testes sem banco real não abrem pool nem esperam retentativas."""
+
+    def emit(self, tipo, campos=None, *, wait=False):
+        return None
+
+    def flush(self):
+        return None
+
+    def close(self):
+        return None
+
+
+@pytest.fixture(autouse=True)
+def null_event_writers(request, monkeypatch):
+    """Fora dos testes com PostgreSQL real, ``emit_event`` não grava (v18.7-session-events-terminal)."""
+    if f"{os.sep}integration{os.sep}session_events{os.sep}" in request.node.fspath.strpath:
+        yield
+        return
+    monkeypatch.setattr("src.session.events.writer_for", lambda session_id: NullEventWriter())
+    yield
 
 
 @pytest.fixture(autouse=True)

@@ -51,7 +51,7 @@ ESTADOS = (ESTADO_EM_EXECUCAO, ESTADO_FECHADO, ESTADO_INTERROMPIDO)
 
 STATUS_SUBTAREFA = (ST_CONCLUIDA, ST_EM_ANDAMENTO, ST_PENDENTE, ST_ABANDONADA, ST_FALHOU)
 
-CAUSAS_FALHA = ("infraestrutura", "abordagem", "ambigua")
+CAUSAS_FALHA = ("infraestrutura", "abordagem", "ambigua", "cancelada_pesquisador")
 # Categoria estruturada (``AgentResult.error_category``) de uma subtarefa que estava em andamento quando o processo
 # parou sem aviso (``classify_failure`` a classifica como causa ``infraestrutura``). O nome é neutro de propósito: a
 # única evidência é a falta de batimento (pode ter sido queda de energia, OOM-kill, ``kill -9`` ou erro fatal).
@@ -64,6 +64,7 @@ MOTIVOS_RETOMAVEIS = frozenset(
         "limite_egresso", "limite_custo", "limite_cota_provedor", "versao_modelo", "interrompida",
         "interrompida_pesquisador",
         "aguarda_pesquisador", "suspensa_sem_pesquisador",  # v18.7-background-sessions
+        "pausada_pesquisador",  # v18.7-session-events-terminal: ``pausar``; ``retomar`` não pergunta
     }
 )
 MOTIVO_RESOLVIDA = "solucao_encontrada"

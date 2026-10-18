@@ -144,7 +144,8 @@ async def test_repl_abaixo_do_minimo_mostra_o_aviso_e_desiste_com_n(tmp_path):
     manager = FakeSessionManager()
     running = manager.add("iris-01", "active", {"mode": "auto"})
     running.alias, running.pid = "iris-01", 77
-    repl, launched, out, *_ = make_repl(tmp_path, inputs=["n"], available_mb=300, manager=manager)
+    # "s" responde "Já há pesquisa em execução (iris-01). Iniciar outra?"; "n" recusa a pergunta de memória.
+    repl, launched, out, *_ = make_repl(tmp_path, inputs=["s", "n"], available_mb=300, manager=manager)
     with patched_terminal(), patch("src.config.MIN_AVAILABLE_MEMORY_MB", 512):
         await repl.handle("nova-pesquisa tarefa")
     assert launched == []

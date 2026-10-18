@@ -20,7 +20,7 @@ from src.logger import get_logger
 logger = get_logger(__name__)
 
 TIPO_ORIENTACAO = "orientacao"
-TIPO_COMANDO = "comando"  # usado pelas ações imediatas de v18.7-session-events-terminal; esta mudança só cria o valor
+TIPO_COMANDO = "comando"  # ações imediatas do terminal (v18.7-session-events-terminal): ``src.session.commands``
 _REMOVED = frozenset({"Cc", "Cf", "Cs", "Co", "Cn", "Zl", "Zp"})
 
 
@@ -109,6 +109,18 @@ class SessionInbox:
                 "UPDATE session_inbox SET entregue_em = COALESCE(entregue_em, now()) "
                 "WHERE session_id = ANY(%s) AND tipo = %s AND consumido_em IS NULL RETURNING *",
                 (list(session_ids), TIPO_ORIENTACAO),
+            ).fetchall()
+        return sorted((_message(r) for r in rows or []), key=lambda m: m.id)
+
+    def take_commands(self, session_id: str) -> list[InboxMessage]:
+        """Comandos do pesquisador ainda não consumidos da sessão, do mais antigo ao mais novo (marcados consumidos)."""
+        from src.db import get_connection
+
+        with get_connection() as conn:
+            rows = conn.execute(
+                "UPDATE session_inbox SET entregue_em = COALESCE(entregue_em, now()), consumido_em = now() "
+                "WHERE session_id = %s AND tipo = %s AND consumido_em IS NULL RETURNING *",
+                (session_id, TIPO_COMANDO),
             ).fetchall()
         return sorted((_message(r) for r in rows or []), key=lambda m: m.id)
 

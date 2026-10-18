@@ -32,6 +32,7 @@ from src.logger import get_logger
 from src.observability.telemetry import get_telemetry
 from src.orchestration.errors import PlanningStalled
 from src.orchestration.exploration_contract import contract_applies
+from src.orchestration.exploration_feedback import review_observations_feedback
 from src.orchestration.exploration_linking import DROP_LONG_FIELD
 from src.orchestration.loop_report import LoopReportMixin
 from src.orchestration.subtask_ingestion import ingest_subtask, link_preparations
@@ -1402,6 +1403,7 @@ class AutonomousLoop(LoopReportMixin):
             final_results = []
             cycle_results: Dict[str, AgentResult] = {}  # resultado final de cada subtarefa executada NESTE ciclo
             cycle_negatives: Dict[str, Dict[str, Any]] = {}  # resultados negativos NESTE ciclo
+            cycle_observations: List[Tuple[str, str]] = []  # (subtarefa, observação do revisor) NESTE ciclo
             
             # Futures para cada tarefa (para sincronização do DAG)
             dag_state = {}
@@ -1529,6 +1531,7 @@ class AutonomousLoop(LoopReportMixin):
                 success = False
                 last_result = None
                 last_review: Dict[str, Any] | None = None  # parecer do Validator da última tentativa
+                ambiguous = False  # revisão terminou em ``criterio_ambiguo`` (a falha não é do Developer)
                 attempt_errors: List[str] = []  # V15.3/G5 — insumo do DivergenceReport
                 # retry_key já calculada no início da coroutine (usada também pelo guard
                 # de tarefa abandonada, acima).
@@ -1598,6 +1601,8 @@ class AutonomousLoop(LoopReportMixin):
                                 **({"contract": enriched_task.contract} if enriched_task.contract is not None else {}),
                             )
                             last_review = review
+                            for note in review.get("observacoes") or []:
+                                cycle_observations.append((task.task_name or "", str(note)))
                             if review.get("status") == "fail" and review.get("outcome") == "resultado_negativo":
                                 # v18.6-hypothesis-closure: hipótese refutada por limiar é conclusão, não falha.
                                 result.response["outcome"] = "resultado_negativo"
@@ -1606,6 +1611,16 @@ class AutonomousLoop(LoopReportMixin):
                                     "findings": review.get("negative_findings") or [],
                                 }
                                 logger.info(f"Subtarefa {task.task_name} concluída com resultado negativo")
+                            elif review.get("outcome") == "criterio_ambiguo":
+                                # v18.7-subtask-contract (ADR 022 §2.7): sem a chave sem qualificador o critério não
+                                # decide; o resultado fica não validado e o caso volta ao Researcher.
+                                success, ambiguous = False, True
+                                result.status = "error"
+                                result.error = f"Critério ambíguo: {', '.join(review.get('issues', []))}"
+                                for line in review.get("issues") or []:
+                                    cycle_observations.append((task.task_name or "", f"{line}; indique a chave ou "
+                                                               "grave a chave sem qualificador"))
+                                logger.warning(f"Subtarefa {task.task_name} com critério ambíguo")
                             elif review.get("status") == "fail":
                                 success = False
                                 result.status = "error"
@@ -1735,9 +1750,9 @@ class AutonomousLoop(LoopReportMixin):
                         resumo=cp_text,
                         marca=resumo_marca(role_tainted(task.agent_id), task.agent_id),
                         artefatos=list_task_artifacts(session_out_dir, task.task_name),
-                        causa_falha="infraestrutura"
-                        if (not success and getattr(last_result, "error_category", None))
-                        else None,
+                        causa_falha="ambigua" if ambiguous else (
+                            "infraestrutura" if (not success and getattr(last_result, "error_category", None)) else None
+                        ),
                     )
 
                 # Roadmap V15.3 / Spec G5 — DivergenceReport quando a subtarefa esgota
@@ -1944,6 +1959,9 @@ class AutonomousLoop(LoopReportMixin):
                     execution_feedback = self._exploration_feedback(cycle_no, cycle_results, abandoned_tasks)
                     if cycle_negatives:
                         execution_feedback += "\n" + negative_result_feedback(cycle_negatives)
+                    observed = review_observations_feedback(cycle_observations)
+                    if observed:
+                        execution_feedback += "\n" + observed
                     objective_note = exploration.objective_feedback()
                     if objective_note:
                         execution_feedback += "\n" + objective_note
@@ -2080,6 +2098,9 @@ class AutonomousLoop(LoopReportMixin):
             )
             if cycle_negatives:
                 execution_feedback += "\n\n" + negative_result_feedback(cycle_negatives)
+            observed = review_observations_feedback(cycle_observations)
+            if observed:
+                execution_feedback += "\n\n" + observed
 
 
             # V5.8 — Telemetria: replan_triggered
@@ -2547,6 +2568,11 @@ class AutonomousLoop(LoopReportMixin):
         from src.llm.metering import bound_execution_id
         from src.observability.telemetry import get_telemetry
 
+        refund_refused = False
+        if getattr(review, "outcome", None) == "criterio_ambiguo" and task.task_name:
+            # A falha não é do Developer: devolve a tentativa, no máximo uma vez por subtarefa na sessão (design §8.1).
+            refund_refused = not self._usage_tracker.refund_task_attempt(task.task_name)
+
         try:  # observabilidade nunca derruba a revisão
             get_telemetry().record_agent_event(
                 execution_id=bound_execution_id() or master_session_id,
@@ -2573,6 +2599,12 @@ class AutonomousLoop(LoopReportMixin):
                     "motivos": [str(m)[:64] for m in (getattr(review, "motivos", None) or [])][:8],
                     "contrato_sha256": getattr(review, "contract_sha256", "") or None,
                     "observacoes": [str(o)[:200] for o in (getattr(review, "observations", None) or [])][:10],
+                    "criterio_ambiguo": [
+                        {"criterio": str(a.get("criterio", ""))[:16],
+                         "chaves": [str(k)[:128] for k in a.get("chaves", [])]}
+                        for a in (getattr(review, "ambiguities", None) or [])
+                    ][:8],
+                    "devolucao_recusada": refund_refused,
                 },
             )
         except Exception as exc:
@@ -2591,6 +2623,8 @@ class AutonomousLoop(LoopReportMixin):
             "typed_issues": list(getattr(review, "typed_issues", None) or []),
             "observacoes": list(getattr(review, "observations", None) or []),
             "contrato_sha256": getattr(review, "contract_sha256", "") or "",
+            "ambiguidades": list(getattr(review, "ambiguities", None) or []),
+            "devolucao_recusada": refund_refused,
         }
 
     async def _synthesize_results(

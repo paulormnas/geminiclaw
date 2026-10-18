@@ -1,0 +1,9 @@
+# Calibração do veredito: relatórios
+
+Este diretório guarda os relatórios das etapas de calibração do veredito e de validação de parâmetros ([ADR 025](../decisions/adr_025_calibracao_do_veredito.md)). Os resultados de benchmark (baterias de sessões reais por combinação de modelos) ficam em [`docs/benchmarks/`](../benchmarks/).
+
+Cada relatório registra a pergunta, os dados de entrada, o método, os resultados, a leitura e as limitações, com os comandos e o commit para reproduzir. Os textos servem de base para a descrição do método na dissertação.
+
+| Data | Etapa (ADR 025 §3) | Relatório |
+|---|---|---|
+| 2026-10-18 | 1. Repetição offline sobre os grafos arquivados | [2026-10-18-etapa-1-repeticao-offline.md](2026-10-18-etapa-1-repeticao-offline.md) |

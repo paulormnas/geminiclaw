@@ -1,9 +1,9 @@
 # ADR 025 — Calibração do Veredito: Exploração e Teste dos Parâmetros
 
-**Status:** Proposto (rascunho para exploração; nenhum valor ou fórmula é decidido neste ADR)
-**Data:** 2026-10-15
+**Status:** Aprovado (2026-10-18: plano de exploração aprovado pelo pesquisador; nenhum valor ou fórmula é decidido neste ADR)
+**Data:** 2026-10-15 · **Atualizado:** 2026-10-18 (etapa 1 concluída; decisões do pesquisador)
 **Autores:** Arquiteto de Soluções (GeminiClaw)
-**Roadmaps relacionados:** a definir (`roadmaps/roadmap_V18.8.md`, depois da V18.7)
+**Roadmaps relacionados:** [`roadmaps/roadmap_V18.8.md`](../../roadmaps/roadmap_V18.8.md)
 **ADRs relacionados:** ADR 015 §9 (equação de confiança e parâmetros calibráveis), ADR 021 §4 e §5 (hipóteses concluídas, parada pelo objetivo), ADR 012 (Curator)
 
 **O que este ADR muda em outros ADRs:** nada ainda. Se a exploração propuser mudar a fórmula ou as tabelas do ADR 015 §9, a mudança entra em revisão do ADR 015, aprovada pelo pesquisador, depois dos resultados.
@@ -74,6 +74,19 @@ Observações a verificar (hipóteses de trabalho, não conclusões):
 4. **A fórmula não distingue o tipo de evidência por hipótese**: o que é uma réplica (mesma configuração) e o que é uma variação (outra configuração) é decidido só por `config_hash` e pelo contexto (nó, dataset, sessão, semente).
 5. **A escala foi desenhada para múltiplos nós e datasets** (ADR 015 §9.5: evidência forte exige cerca de cinco réplicas independentes); o uso atual é de um nó, e a federação (V20) ainda não existe.
 6. A direção `o` da evidência pela **predição** da hipótese (ADR 015 §9) não tem mudança OpenSpec dona; hoje a direção vem de `Δ` contra `δ` ou contra o alvo.
+
+### Resultado da etapa 1 (2026-10-18)
+
+Relatório: [`docs/calibracao-veredito/2026-10-18-etapa-1-repeticao-offline.md`](../calibracao-veredito/2026-10-18-etapa-1-repeticao-offline.md). Recálculo sobre os 18 grafos arquivados, sem LLM: 30 hipóteses com tentativas, 29 reproduzidas exatamente; nenhuma passa de 0,111. Cada hipótese tem no máximo duas evidências positivas, num nó e numa sessão, e nenhuma negativa; 39 das 63 tentativas são ambíguas. Variar `d` e `γ` não muda o resultado; só o `prior` muda, por baratear a evidência. Sem evidência negativa, o veredito é `(W/(2+W))²`, com `W` a soma dos pesos: 0,3 exige `W ≈ 2,4` (três evidências perfeitas e independentes). As observações 1 a 3 acima se confirmam; acrescentam-se duas: `n_config` conta as configurações das falhas (penaliza a evidência boa) e as falhas não produzem evidência negativa num nó.
+
+### Decisões do pesquisador (2026-10-18)
+
+1. A equação deve permitir que uma exploração em **um único nó** chegue a um veredito, de solução ou de falha.
+2. Hipóteses validadas em **outros nós continuam contribuindo** para uma solução melhor.
+3. **Variar a configuração conta como exploração**, desde que a configuração ainda não tenha sido executada em outro nó. **Replicar em outro nó conta como validação, com peso menor que uma variação**: a variação tem mais chance de achar caminhos novos e resultados melhores; a réplica confirma o que já foi descoberto (resposta à pergunta 4 do §2, quanto à ordem; os valores saem da exploração).
+4. **Cautela com volume:** a equação não pode premiar muitas buscas e variações que não melhoram a pesquisa. O ponto será aprofundado com os resultados da grade sintética.
+5. Ordem: grade sintética (etapa 2) antes de qualquer mudança na fórmula; depois, ajuste da fórmula até resultados significativos.
+6. Os resultados de calibração e validação de parâmetros ficam em `docs/calibracao-veredito/`; `docs/benchmarks/` fica só para benchmark. Os relatórios devem servir de base para a dissertação.
 
 ---
 
@@ -158,7 +171,7 @@ Simples e reversível. **Mantida como variante a testar:** pode mascarar o probl
 
 | Mudança | Capacidade | O que cobre |
 |---|---|---|
-| `v18.8-verdict-lab` | `evidence-scoring`, `benchmark` | Ferramenta de repetição offline e de grade sintética sobre grafos arquivados e cenários gerados, sem alterar o comportamento do sistema |
+| [`v18.8-verdict-lab`](../../openspec/changes/v18.8-verdict-lab/proposal.md) (especificada em 2026-10-18) | `evidence-scoring`, `benchmark` | Ferramenta de repetição offline, grade sintética, simulação com resposta conhecida e sensibilidade, sem alterar o comportamento do sistema |
 | `v18.8-verdict-calibration` | `evidence-scoring`, `hypothesis-loop` | Valores ou fórmula escolhidos depois dos resultados, com revisão do ADR 015 §9 |
 | `v18.8-verdict-direction` | `evidence-scoring` | Direção `o` da evidência pela predição da hipótese (ADR 015 §9), se a etapa 1 confirmar a lacuna |
 
@@ -167,3 +180,12 @@ Simples e reversível. **Mantida como variante a testar:** pode mascarar o probl
 ## Revisão
 
 Revisar depois das etapas 1 e 2: se os cenários explicam o veredito da bateria V18.6, e qual das variantes do §5 vale levar às etapas 3 e 4.
+
+## Estado da implementação
+
+| Etapa (§3) | Estado (2026-10-18) |
+|---|---|
+| 1. Repetição offline | Concluída com scripts provisórios ([relatório](../calibracao-veredito/2026-10-18-etapa-1-repeticao-offline.md)); refeita pela ferramenta de `v18.8-verdict-lab` |
+| 2. Grade sintética e propriedades | Especificada em `v18.8-verdict-lab` (aguarda aprovação) |
+| 3. Sessões controladas | Não iniciada |
+| 4. Bateria no Raspberry Pi | Não iniciada |

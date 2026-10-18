@@ -56,10 +56,14 @@ def _parser() -> argparse.ArgumentParser:
     s.add_argument("--repeticoes", type=int, default=40)
     s.add_argument("--max-tentativas", type=int, default=20)
     s.add_argument("--limiar", type=float, nargs="+", default=[0.3])
+    s.add_argument("--fv-max", type=float, default=0.02, help="teto de falsa validação do critério de aceite")
     s.add_argument("--orcamento", type=int, nargs="+", default=[3, 5, 10])
     s.add_argument("--grade", type=Path, default=None, help="JSON com listas por parâmetro da simulação")
     s.add_argument(
-        "--expandir", nargs="*", default=["completa"], help="variantes que ganham as versões por epsilon e d_replica_no"
+        "--expandir",
+        nargs="*",
+        default=["completa2"],
+        help="variantes que ganham as versões por epsilon e d_replica_no",
     )
     s.add_argument("--epsilons", nargs="*", default=["0", "delta", "sigma"])
     s.add_argument("--d-replica", type=float, nargs="*", default=[0.3, 0.5, 0.7, 0.9])
@@ -181,6 +185,7 @@ def _cmd_simulacao(args: argparse.Namespace, out: Path) -> None:
         entradas=inputs,
         sementes={"semente": args.semente},
     )
+    rows = rows + reports.acceptance_rows(rows, names, args.fv_max)
     output.write_csv(out / output.RESULTS, rows)
     (out / output.REPORT).write_text(
         reports.simulation_report(

@@ -158,3 +158,44 @@ O sistema SHALL escrever em `--saida` os arquivos `resultados.csv`, `relatorio.m
 - **GIVEN** `--saida` com um `manifesto.json`
 - **WHEN** o comando é executado sem `--sobrescrever`
 - **THEN** termina com erro e não altera nenhum arquivo do diretório
+
+### Requirement: Alternativas de ajuste depois da etapa 2
+O sistema SHALL oferecer, no laboratório, as alternativas `b_por = variacao_sem_ganho_acumulada`, `m_folga_piso`, `d_replica_contraria` e `d_variacao_sem_ganho` (design §3.2), todas com o comportamento anterior quando ausentes, e a família de cenários A (recordes por acaso).
+
+#### Scenario: Penalidade acumulada preserva os pesos anteriores
+- **GIVEN** `b_por = variacao_sem_ganho_acumulada` e três variações positivas que melhoram
+- **WHEN** uma quarta variação sem ganho é acrescentada
+- **THEN** os pesos das três primeiras evidências não mudam
+- **AND** com `b_por = variacao_sem_ganho` o peso da primeira diminui
+
+#### Scenario: Piso da folga
+- **GIVEN** `m_sem_baseline = folga`, `m_folga_piso = 0,5`, alvo 0,95 e `δ = 0,01`
+- **WHEN** o resultado é 0,951
+- **THEN** `m = 0,5` (sem o piso, `m = 0,05`)
+
+#### Scenario: Réplica que não confirma pesa cheio
+- **GIVEN** `independencia = por_tipo` e `d_replica_contraria = 1,0`
+- **WHEN** uma configuração já vista é repetida em outro nó com resultado abaixo do alvo
+- **THEN** o `d` da evidência negativa é 1,0 (e 0,5 sem a alternativa)
+
+#### Scenario: Positiva sem ganho não soma volume
+- **GIVEN** `variacao_util = melhora_o_melhor` e `d_variacao_sem_ganho = 0`
+- **WHEN** vinte variações têm o mesmo valor acima do alvo
+- **THEN** só a primeira tem `d` = 1,0 e as outras 19 têm `d` = 0
+
+#### Scenario: Monotonicidade da variante corrigida
+- **WHEN** as propriedades de `completa2` são medidas sobre o catálogo
+- **THEN** a monotonicidade tem 0 violações
+
+### Requirement: Critério de aceite na simulação
+O sistema SHALL calcular na simulação, por variante e limiar, a falsa validação (maior entre os tipos `falsa` e `sem_efeito`), o pior ponto da grade, o poder e a falsa refutação, e informar o menor limiar cuja falsa validação média não passa de `--fv-max` (padrão 0,02), conforme o ADR 025 §4.2.
+
+#### Scenario: Seção de aceite
+- **WHEN** a simulação termina com `--fv-max 0.02`
+- **THEN** o `relatorio.md` traz a seção "Critério de aceite" com o menor limiar aceito por variante, ordenadas por poder
+- **AND** o `resultados.csv` traz as linhas `aceite` com `aceita` verdadeiro exatamente quando a falsa validação média é ≤ 0,02
+
+#### Scenario: Variante sem limiar aceito
+- **GIVEN** uma variante cuja falsa validação passa de 2 % em todos os limiares da curva
+- **WHEN** a seção de aceite é gerada
+- **THEN** a variante aparece com "nenhum"

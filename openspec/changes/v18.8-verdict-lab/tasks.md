@@ -32,3 +32,10 @@
 - [x] 5.3 Regras do `esperado` decididas pelo pesquisador (design §4 e §12, questão 1).
 - [ ] 5.4 `grade`, `simulacao` e `sensibilidade` executadas no Raspberry Pi; relatório da etapa 2 em `docs/calibracao-veredito/`, com leitura e limitações, em PR próprio.
 - [ ] 5.5 `tasks.md` com caixas e linha **Estado** atualizadas no PR; ADR 025 (etapas 1 e 2) confirmado pelo Arquiteto depois do merge.
+
+## 6. Ajustes depois da etapa 2 (2026-10-18)
+- [x] 6.1 Correções da `completa`: `b_por = variacao_sem_ganho_acumulada` (monotonicidade), `m_folga_piso`, `d_replica_contraria` e `d_variacao_sem_ganho`; variantes `base_alvo` e `completa2` (com `prior` 0,75, 0,5 e 0,25).
+- [x] 6.2 Família A (recordes por acaso) no catálogo.
+- [x] 6.3 Critério de aceite na simulação (`--fv-max`, tabela `aceite`).
+- [x] 6.4 Testes dos requisitos "Alternativas de ajuste depois da etapa 2" e "Critério de aceite na simulação".
+- [ ] 6.5 Segunda rodada da grade, da simulação e da sensibilidade no Raspberry Pi, com o relatório em `docs/calibracao-veredito/`, em PR próprio.

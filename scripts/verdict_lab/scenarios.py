@@ -489,6 +489,38 @@ def catalog() -> list[Scenario]:
             _b().variations([round(29 * passo, 4)] * 5),
         )
     )
+    # A: recordes por acaso (resultados em torno do alvo; metade fica abaixo dele)
+    alternado = [0.951, 0.947, 0.952, 0.946, 0.953, 0.945, 0.954, 0.944]
+    out.append(
+        _s(
+            "A8-ruido",
+            "A",
+            "8 variações em torno do alvo, positivas com recordes crescentes alternadas com negativas",
+            INDECISO,
+            "metade dos resultados não alcança o alvo; os recordes são pequenos e podem ser acaso",
+            _b().variations(alternado),
+        )
+    )
+    out.append(
+        _s(
+            "A16-ruido",
+            "A",
+            "16 variações em torno do alvo, com recordes crescentes lentos",
+            INDECISO,
+            "metade dos resultados não alcança o alvo",
+            _b().variations([v + (0.0005 * (i // 2)) * (1 if v > ALVO else 0) for i, v in enumerate(alternado * 2)]),
+        )
+    )
+    out.append(
+        _s(
+            "A8-so-recordes",
+            "A",
+            "8 variações acima do alvo, cada uma melhor que a anterior por 0,0005",
+            FUNCIONA,
+            "toda melhora conta (decisão do pesquisador, 2026-10-18) e nenhuma variação fica abaixo do alvo",
+            _b().variations([0.951 + 0.0005 * i for i in range(8)]),
+        )
+    )
     return out
 
 

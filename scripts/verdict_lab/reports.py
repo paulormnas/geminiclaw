@@ -228,6 +228,7 @@ def simulation_report(
     n_points: int,
     repeticoes: int,
     manifest: dict[str, Any],
+    fv_max: float = 0.02,
 ) -> str:
     lines = _header("Simulação do veredito com resposta conhecida", manifest)
     lines += [
@@ -292,6 +293,7 @@ def simulation_report(
         rows_md.append(row)
     lines += [md_table(["Variante"] + [f"{x:g}" for x in lims], rows_md), ""]
 
+    lines += acceptance_section(rows, variant_names, fv_max)
     main = limiares[0]
     sigmas = sorted({r["sigma"] for r in curve})
     lines += [
@@ -334,6 +336,100 @@ def simulation_report(
         rows_md.append(row)
     lines += [md_table(["Variante", "0,1", "0,3", "0,5"], rows_md), ""]
     return "\n".join(lines)
+
+
+def acceptance_rows(rows: list[dict[str, Any]], variant_names: list[str], fv_max: float) -> list[dict[str, Any]]:
+    """Por variante e limiar: falsa validação (maior entre ``falsa`` e ``sem_efeito``), pior ponto e poder.
+
+    ``aceita`` quando a média da falsa validação sobre a grade não passa de ``fv_max`` (ADR 025 §4.2).
+    """
+    curve = [r for r in rows if r["tabela"] == "curva"]
+    out: list[dict[str, Any]] = []
+    for nome in variant_names:
+        by_limiar: dict[float, list[dict[str, Any]]] = defaultdict(list)
+        for r in curve:
+            if r["variante"] == nome:
+                by_limiar[r["limiar"]].append(r)
+        for limiar in sorted(by_limiar):
+            sel = by_limiar[limiar]
+
+            def mean(tipo: str, key: str) -> float:
+                return _mean([r[key] for r in sel if r["tipo"] == tipo]) or 0.0
+
+            fv_tipo = {t: mean(t, "validadas") for t in ("falsa", "sem_efeito")}
+            worst = max(
+                (r["validadas"] for r in sel if r["tipo"] in ("falsa", "sem_efeito")),
+                default=0.0,
+            )
+            fv = max(fv_tipo.values())
+            out.append(
+                {
+                    "tabela": "aceite",
+                    "variante": nome,
+                    "limiar": limiar,
+                    "fv_max_tipos": fv,
+                    "fv_sem_efeito": fv_tipo["sem_efeito"],
+                    "fv_falsa": fv_tipo["falsa"],
+                    "fv_pior_ponto": worst,
+                    "poder": mean("verdadeira", "validadas"),
+                    "falsa_refutacao": mean("verdadeira", "refutadas"),
+                    "custo_por_validacao_util": _mean(
+                        [r["custo_por_validacao_util"] for r in sel if r["tipo"] == "verdadeira"]
+                    ),
+                    "fv_teto": fv_max,
+                    "aceita": fv <= fv_max,
+                }
+            )
+    return out
+
+
+def acceptance_section(rows: list[dict[str, Any]], variant_names: list[str], fv_max: float) -> list[str]:
+    """Seção do critério de aceite: por variante, o menor limiar com falsa validação dentro do teto e o poder."""
+    acc = acceptance_rows(rows, variant_names, fv_max)
+    lines = [
+        f"## Critério de aceite: falsa validação de no máximo {fv_max:.0%} (ADR 025 §4.2)",
+        "",
+        "Falsa validação = maior, entre os tipos `falsa` e `sem_efeito`, da fração de hipóteses validadas (média sobre "
+        "a "
+        "grade). Para cada variante, o menor limiar da curva que respeita o teto, com o poder nesse limiar; o pior "
+        "ponto da grade mostra o regime mais difícil. As variantes estão ordenadas por poder.",
+        "",
+    ]
+    best: list[list[Any]] = []
+    for nome in variant_names:
+        ok = [r for r in acc if r["variante"] == nome and r["aceita"]]
+        if not ok:
+            best.append([nome, "nenhum", None, None, None, None, None])
+            continue
+        r = min(ok, key=lambda x: x["limiar"])
+        best.append(
+            [
+                nome,
+                f"{r['limiar']:g}",
+                r["fv_max_tipos"],
+                r["fv_pior_ponto"],
+                r["poder"],
+                r["falsa_refutacao"],
+                r["custo_por_validacao_util"],
+            ]
+        )
+    best.sort(key=lambda row: -(row[4] if row[4] is not None else -1.0))
+    lines.append(
+        md_table(
+            [
+                "Variante",
+                "Menor limiar aceito",
+                "Falsa validação (média)",
+                "Falsa validação (pior ponto)",
+                "Poder",
+                "Falsa refutação",
+                "Custo por validação útil",
+            ],
+            best,
+        )
+    )
+    lines.append("")
+    return lines
 
 
 # ---------------------------------------------------------------------------

@@ -2309,9 +2309,17 @@ class Orchestrator:
             restrictions = (
                 await asyncio.to_thread(exploration.restrictions_for_validation) if exploration is not None else []
             )
+            # v18.7-subtask-contract §7.1: o critério do Problema acompanha o plano ao Validator.
+            from src import config as _config
+
+            problem = (
+                await asyncio.to_thread(exploration.problem_objective)
+                if exploration is not None and _config.SUBTASK_CONTRACT_ENABLED else None
+            )
             val_result = await self.validator.validate_plan(
                 plan=current_plan_data,
                 prompt=prompt,
+                **({"problem": problem} if problem is not None else {}),
                 **({"restrictions": restrictions} if restrictions else {}),
                 **({"metric_definition": metric_definition} if metric_definition is not None else {}),
                 **({"objective_definition": objective_definition} if objective_definition is not None else {}),

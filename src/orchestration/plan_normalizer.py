@@ -13,6 +13,9 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
 
+from src import config
+from src.agents.subtask_contract import invalid_artifact_name
+
 _ENVELOPE_KEYS = ("tasks", "plan", "subtasks", "steps")
 _LIST_FIELDS = ("depends_on", "validation_criteria", "expected_artifacts")
 _SPLIT_FIELDS = ("depends_on", "expected_artifacts")  # strings separadas por vírgula ou linha
@@ -256,6 +259,15 @@ def normalize_plan(raw: Any) -> NormalizedPlan:
             if target not in fixed:
                 fixed.append(target)
         task["depends_on"] = fixed
+
+    for task in tasks:
+        artifacts = task.get("expected_artifacts") if isinstance(task, dict) else None
+        if config.SUBTASK_CONTRACT_ENABLED and isinstance(artifacts, list):
+            for artifact in artifacts:
+                if invalid_artifact_name(artifact):
+                    unrecoverable.append(
+                        f"nome_de_artefato_invalido: {str(artifact)[:80]} (subtarefa '{task.get('task_name')}')"
+                    )
 
     cycle = _find_cycle(tasks)
     if cycle:

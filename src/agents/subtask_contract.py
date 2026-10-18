@@ -455,6 +455,93 @@ def _render(c: SubtaskContract) -> list[PromptFragment]:
 
 
 # ---------------------------------------------------------------------------
+# Validação do plano (design §7)
+# ---------------------------------------------------------------------------
+
+ARTIFACT_NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.\-/]{0,127}$")
+WARNING_ARTIFACT_UPDATED = "artefato_atualizado"
+# Cada subtarefa grava os seus na própria pasta: nome igual não é colisão (design §7.2).
+_PER_TASK_ARTIFACTS = frozenset({"metrics.json", "params.json"})
+_FIELD_NAMES = {
+    "criterios": "validation_criteria", "artefatos": "expected_artifacts",
+    "hipotese": "hypothesis", "consumidores": "consumidores",
+}
+
+
+def invalid_artifact_name(name: Any) -> bool:
+    """Nome de artefato fora do padrão (``..``, barra inicial, caracteres ou tamanho inválidos)."""
+    text = str(name)
+    return not ARTIFACT_NAME_RE.match(text) or ".." in text or text.startswith("/")
+
+
+def _task_name(task: Any) -> str:
+    return str(_get(task, "task_name", "") or "")
+
+
+def _related(plan: Sequence[Any]) -> dict[str, set[str]]:
+    """Fecho de ``depends_on``: para cada subtarefa, as que ela alcança (diretas e transitivas)."""
+    direct = {_task_name(t): set(_get(t, "depends_on") or []) for t in plan if _task_name(t)}
+    closure: dict[str, set[str]] = {}
+    for name in direct:
+        seen: set[str] = set()
+        stack = list(direct[name])
+        while stack:
+            dep = stack.pop()
+            if dep in seen:
+                continue
+            seen.add(dep)
+            stack.extend(direct.get(dep, ()))
+        closure[name] = seen
+    return closure
+
+
+def plan_contract_issues(plan: Sequence[Any]) -> tuple[list[str], list[str]]:
+    """Problemas corrigíveis e avisos do plano ligados ao contrato (design §7; ADR 022 §6.2 e §8).
+
+    Devolve ``(problemas, avisos)``: ``nome_de_artefato_invalido``, ``colisao_artefato`` (mesmo arquivo em duas
+    subtarefas sem dependência entre elas), aviso ``artefato_atualizado`` (com dependência) e
+    ``campo_do_contrato_longo: <subtarefa>.<campo>`` (itens 2, 3, 4 ou 8 acima de ``CONTRACT_FIELD_MAX_CHARS``).
+    Vazio com ``SUBTASK_CONTRACT_ENABLED=false``.
+    """
+    if not config.SUBTASK_CONTRACT_ENABLED:
+        return [], []
+    tasks = [t for t in plan if isinstance(t, Mapping)]
+    issues: list[str] = []
+    warnings: list[str] = []
+    for task in tasks:
+        for name in _get(task, "expected_artifacts") or []:
+            if invalid_artifact_name(name):
+                shown = clean_plan_text(name)[:80]
+                issues.append(f"nome_de_artefato_invalido: {shown} (subtarefa '{_task_name(task)}')")
+    owners: dict[str, list[str]] = {}
+    for task in tasks:
+        for name in _get(task, "expected_artifacts") or []:
+            key = str(name).replace("\\", "/").rsplit("/", 1)[-1].lower()
+            if key and key not in _PER_TASK_ARTIFACTS and _task_name(task) not in owners.setdefault(key, []):
+                owners[key].append(_task_name(task))
+    if config.PLAN_ARTIFACT_COLLISION_CHECK:
+        reach = _related(tasks)
+        for key, names in owners.items():
+            if len(names) < 2:
+                continue
+            unrelated = sorted({
+                n for i, a in enumerate(names) for b in names[i + 1:]
+                if b not in reach.get(a, set()) and a not in reach.get(b, set()) for n in (a, b)
+            })
+            if unrelated:
+                issues.append(f"colisao_artefato: {key} em {', '.join(unrelated)}")
+            elif WARNING_ARTIFACT_UPDATED not in warnings:
+                warnings.append(WARNING_ARTIFACT_UPDATED)
+    for task in tasks:
+        if _get(task, "agent_id", "") != "developer":
+            continue
+        contract = build_developer_contract(task, tasks, None, "", researcher_tainted=False)
+        for field_name in oversized_fields(contract):
+            issues.append(f"campo_do_contrato_longo: {_task_name(task)}.{_FIELD_NAMES.get(field_name, field_name)}")
+    return issues, warnings
+
+
+# ---------------------------------------------------------------------------
 # Revisão de subtarefa e validação do plano
 # ---------------------------------------------------------------------------
 

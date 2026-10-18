@@ -1,6 +1,6 @@
 # Tarefas: v18.7-subtask-contract
 
-**Estado (2026-10-18):** em andamento. Seção 0 em revisão (PR da especificação): spec confrontada com o código (design §13) e achado novo registrado (design §14, aguarda decisão do pesquisador). Seções 1 a 7 não iniciadas.
+**Estado (2026-10-18):** em andamento. Seções 0 (#203) e 1 concluídas; achado das dependências decidido (design §14: mudança própria `v18.7-dependency-artifacts`, caminho `/deps_out/<projeto>/<task_name>`). Seções 2 a 7 não iniciadas.
 
 ## 0. Pré-requisitos
 - [x] 0.1 Mudança aprovada pelo pesquisador, com as questões do design §11 decididas.
@@ -10,7 +10,7 @@
 - [x] 0.9 Substituída pela 2.0: o módulo do contrato mora em `src/agents/subtask_contract.py` (camadas, design §13), então a extração dos construtores existentes é feita ao criá-lo. Os caminhos citados nesta mudança valem pela tabela do design §13.
 
 ## 1. Configuração
-- [ ] 1.1 `SUBTASK_CONTRACT_ENABLED`, `CONTRACT_TASK_MAX_CHARS`, `CONTRACT_FIELD_MAX_CHARS`, `REVIEW_INTEGRITY_ALWAYS`, `REVIEW_SCRIPT_MAX_CHARS`, `REVIEW_OBSERVATIONS_MAX` e `PLAN_ARTIFACT_COLLISION_CHECK` em `src/config.py` e `.env.example` (design §9).
+- [x] 1.1 `SUBTASK_CONTRACT_ENABLED`, `CONTRACT_TASK_MAX_CHARS`, `CONTRACT_FIELD_MAX_CHARS`, `REVIEW_INTEGRITY_ALWAYS`, `REVIEW_SCRIPT_MAX_CHARS`, `REVIEW_OBSERVATIONS_MAX` e `PLAN_ARTIFACT_COLLISION_CHECK` em `src/config.py` e `.env.example` (design §9).
 
 ## 2. Contrato e construtores
 - [ ] 2.0 Mover para `src/agents/subtask_contract.py`, sem mudar comportamento e com a suíte verde, os construtores de contexto do Researcher (`_run_planning_loop`) e do Validator do plano (ADR 024 §5).

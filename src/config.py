@@ -316,6 +316,15 @@ REVIEW_PROFILE_MAX_ROWS = int(get_env("REVIEW_PROFILE_MAX_ROWS", default="100000
 REVIEW_PROFILE_MAX_SECONDS = float(get_env("REVIEW_PROFILE_MAX_SECONDS", default="5"))
 REVIEW_PROFILE_MAX_JSON_LINES = int(get_env("REVIEW_PROFILE_MAX_JSON_LINES", default="200"))
 
+# v18.7-subtask-contract (ADR 022) — contrato da subtarefa, revisão tipada e colisão de artefatos.
+SUBTASK_CONTRACT_ENABLED = get_env_bool("SUBTASK_CONTRACT_ENABLED", default=True)
+CONTRACT_TASK_MAX_CHARS = int(get_env("CONTRACT_TASK_MAX_CHARS", default="4000"))
+CONTRACT_FIELD_MAX_CHARS = int(get_env("CONTRACT_FIELD_MAX_CHARS", default="1500"))
+REVIEW_INTEGRITY_ALWAYS = get_env_bool("REVIEW_INTEGRITY_ALWAYS", default=True)
+REVIEW_SCRIPT_MAX_CHARS = int(get_env("REVIEW_SCRIPT_MAX_CHARS", default="6000"))
+REVIEW_OBSERVATIONS_MAX = int(get_env("REVIEW_OBSERVATIONS_MAX", default="10"))
+PLAN_ARTIFACT_COLLISION_CHECK = get_env_bool("PLAN_ARTIFACT_COLLISION_CHECK", default=True)
+
 # v18.6-hypothesis-closure — resultado científico negativo (hipótese refutada por limiar) é progresso, não falha.
 NEGATIVE_RESULT_AS_PROGRESS = get_env_bool("NEGATIVE_RESULT_AS_PROGRESS", default=True)
 

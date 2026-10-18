@@ -15,6 +15,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
+from src.agents.subtask_contract import build_developer_contract, oversized_fields
 from src.artifacts.subtask_output import negative_result_feedback
 from src.config import (
     CIRCUIT_BREAKER_STALL_CYCLES,
@@ -30,6 +31,8 @@ from src.knowledge.suggestions import SuggestionError
 from src.logger import get_logger
 from src.observability.telemetry import get_telemetry
 from src.orchestration.errors import PlanningStalled
+from src.orchestration.exploration_contract import contract_applies
+from src.orchestration.exploration_linking import DROP_LONG_FIELD
 from src.orchestration.loop_report import LoopReportMixin
 from src.orchestration.subtask_ingestion import ingest_subtask, link_preparations
 from src.orchestration.triage import TriageClassifier
@@ -48,6 +51,7 @@ from src.utils.egress_fragments import mark_artifact_names, mark_execution_outpu
 from src.utils.terminal import print_status
 
 if TYPE_CHECKING:
+    from src.agents.subtask_contract import SubtaskContract
     from src.orchestration.exploration import ExplorationSession, ExplorationStop
     from src.orchestration.orchestrator import AgentResult, AgentTask, Orchestrator, OrchestratorResult
 
@@ -794,7 +798,7 @@ class AutonomousLoop(LoopReportMixin):
         - outros papéis conhecidos (AGENT_IDS) são preservados
         - papel desconhecido -> palavras-chave do prompt (subtarefas criadas fora do normalizador)
         """
-        from src.orchestration.orchestrator import AGENT_IDS, AgentTask
+        from src.orchestration.orchestrator import AGENT_IDS
         raw_agent = (task.agent_id or "developer").lower()
         if raw_agent in AGENT_IDS:
             agent_id = raw_agent
@@ -805,18 +809,17 @@ class AutonomousLoop(LoopReportMixin):
             else:
                 agent_id = "developer"
 
-        return AgentTask(
-            agent_id=agent_id,
-            prompt=task.prompt,
-            task_name=task.task_name,
-            depends_on=task.depends_on,
-            expected_artifacts=task.expected_artifacts,
-            validation_criteria=task.validation_criteria,
-            preferred_model=task.preferred_model,
-            subtask_id=task.subtask_id,
-            created_at=task.created_at,
-            retry_attempt=task.retry_attempt,
-        )
+        # v18.7-subtask-contract: preserva todos os campos da tarefa (task_type, hipótese, papel, contrato...).
+        return replace(task, agent_id=agent_id)
+
+    async def _attempt_contract(
+        self, task: "AgentTask", plan: List["AgentTask"], original_task: str, master_session_id: str
+    ) -> "SubtaskContract":
+        """Contrato da tentativa do Developer, a partir do plano vigente (ADR 022 §2)."""
+        exploration = self._exploration(master_session_id)
+        if exploration is not None:
+            return await asyncio.to_thread(exploration.build_contract, task, plan, original_task)
+        return build_developer_contract(task, plan, None, original_task)
 
     def _exploration(self, master_session_id: str) -> "ExplorationSession | None":
         """Exploração ativa da sessão (v18-hypothesis-loop); ``None`` mantém o laço de ciclo único da V17."""
@@ -1492,19 +1495,9 @@ class AutonomousLoop(LoopReportMixin):
                         },
                     )
 
-                enriched_task = AgentTask(
-                    agent_id=task.agent_id,
-                    prompt=task_prompt,
-                    task_name=task.task_name,
-                    depends_on=task.depends_on,
-                    expected_artifacts=task.expected_artifacts,
-                    validation_criteria=task.validation_criteria,
-                    preferred_model=task.preferred_model,
-                    subtask_id=task.subtask_id,
-                    created_at=task.created_at,
-                    mode=self._session_mode,
-                )
-                
+                # ``prompt_tainted`` já foi aplicado em ``own_prompt``; os demais campos da tarefa seguem até o runtime.
+                enriched_task = replace(task, prompt=task_prompt, mode=self._session_mode, prompt_tainted=False)
+
                 enriched_task = self._enrich_task_prompt(enriched_task)
                 enriched_task = self._dispatch_subtask(enriched_task)
 
@@ -1538,6 +1531,29 @@ class AutonomousLoop(LoopReportMixin):
                             event_type="subtask_start",
                             task_name=task.task_name or None,
                             payload={"depends_on": task.depends_on},
+                        )
+
+                    if contract_applies(enriched_task):
+                        # v18.7-subtask-contract: reconstruído do plano vigente a cada tentativa (design §4).
+                        contract = await self._attempt_contract(task, tasks, prompt, master_session_id)
+                        long_fields = oversized_fields(contract)
+                        if long_fields:
+                            # Plano aprovado com avisos não despacha campo acima do teto (design §8.1 item 9).
+                            logger.warning(
+                                "Subtarefa retirada: campo do contrato acima do teto",
+                                extra={"task_name": task.task_name, "campos": long_fields,
+                                       "motivo": DROP_LONG_FIELD},
+                            )
+                            if task.task_name:
+                                dag_state[task.task_name]["status"] = "cancelled"
+                                dag_state[task.task_name]["error"] = f"{DROP_LONG_FIELD}: {', '.join(long_fields)}"
+                                dag_state[task.task_name]["future"].set_result(None)
+                            return
+                        enriched_task = replace(enriched_task, contract=contract)
+                        logger.info(
+                            "Contrato da subtarefa montado",
+                            extra={"task_name": task.task_name, "attempt": attempt_number,
+                                   "contract_sha256": contract.sha256()},
                         )
 
                     result = await self.orchestrator._execute_agent(enriched_task, master_session_id)
@@ -1653,18 +1669,11 @@ class AutonomousLoop(LoopReportMixin):
                             f"Erro: {mark_execution_output(str(result.error or 'Erro desconhecido'), 'tentativa')}\n"
                             f"Instrução: Tente uma abordagem diferente para resolver o problema.\n"
                         )
-                        enriched_task = AgentTask(
-                            agent_id=enriched_task.agent_id,
+                        enriched_task = replace(
+                            enriched_task,
                             prompt=enriched_task.prompt + artifact_context + error_context,
-                            task_name=enriched_task.task_name,
-                            depends_on=enriched_task.depends_on,
-                            expected_artifacts=enriched_task.expected_artifacts,
-                            validation_criteria=enriched_task.validation_criteria,
-                            preferred_model=enriched_task.preferred_model,
-                            subtask_id=enriched_task.subtask_id,
-                            created_at=enriched_task.created_at,
                             retry_attempt=attempt + 1,  # V12.3.3: próxima tentativa
-                            mode=enriched_task.mode,
+                            contract=None,  # reconstruído do plano vigente na próxima tentativa
                         )
                         await asyncio.sleep(1)
 

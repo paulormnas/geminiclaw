@@ -162,4 +162,6 @@ class AgentRuntime:
             before_callback=definition.before_callback,
             after_callback=definition.after_callback,
             provider=provider,
+            # v18.7-subtask-contract: o contrato da tentativa entra uma vez, fixado no início da conversa.
+            pinned_prefix=contract.fragments() if (contract := getattr(task, "contract", None)) is not None else None,
         )

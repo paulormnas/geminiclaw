@@ -54,6 +54,7 @@ from src.knowledge.schema import PAPEIS_EXPERIMENTO
 from src.knowledge.suggestions import Suggestion, SuggestionError, SuggestionStore
 from src.knowledge.system_hypotheses import MetricRef, metric_ref
 from src.logger import get_logger
+from src.orchestration.exploration_contract import ContractMixin
 from src.orchestration.exploration_feedback import LinkageFeedback, looks_like_baseline
 from src.orchestration.exploration_linking import (
     DROP_PHYSICAL,
@@ -133,7 +134,7 @@ class CycleOutcome:
         return bool(self.selection.pending_approval)
 
 
-class ExplorationSession(StagnationMixin, RestrictionsMixin, ObjectiveRevisionMixin):
+class ExplorationSession(StagnationMixin, RestrictionsMixin, ObjectiveRevisionMixin, ContractMixin):
     """Estado e operações de exploração de uma sessão mestra."""
 
     def __init__(
@@ -383,6 +384,7 @@ class ExplorationSession(StagnationMixin, RestrictionsMixin, ObjectiveRevisionMi
         links = self._incremental_links(tasks, live, done, done_tasks or {})
 
         self.apply_restrictions(live, dropped)  # v18.7-exploration-limits §8.2
+        self.drop_long_contract_fields(live, tasks, dropped)  # v18.7-subtask-contract §8.1 item 9
         candidates = [t.hypothesis_id for t in live if t.papel_decidido == PAPEL_TESTE and t.hypothesis_id
                       and t.task_name not in dropped]
         selection = self.cycle.select(candidates, mode=self.mode, approver=self._approver, custos=costs)

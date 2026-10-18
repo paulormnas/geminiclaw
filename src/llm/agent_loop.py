@@ -4,10 +4,10 @@ import os
 import pathlib
 import traceback
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from src.llm.base import LLMProvider, LLMResponse
-from src.llm.context_compression import compress_messages
+from src.llm.context_compression import PINNED_KEY, compress_messages
 from src.llm.context_injection import build_workspace_context_fragments
 from src.llm.factory import get_provider
 from src.llm.metering import provider_name, record_llm_call
@@ -167,6 +167,7 @@ async def run_agent_loop(
     after_callback: Optional[Callable] = None,
     max_iterations: int = 10,
     provider: Optional[LLMProvider] = None,
+    pinned_prefix: Optional[Sequence[PromptFragment]] = None,
 ) -> str:
     """Executa o loop de pensamento do agente (ReAct).
 
@@ -181,6 +182,9 @@ async def run_agent_loop(
         provider: Provedor LLM a usar (Roadmap V16: resolvido por papel via
             ``ModelRouter`` no runtime em processo). Se omitido, usa o provedor
             do papel ``researcher`` (``get_provider()``, via ``ModelRouter``).
+        pinned_prefix: Trechos do contrato da subtarefa (v18.7-subtask-contract): entram uma única vez, como a
+            primeira mensagem ``user`` da conversa (antes do histórico, do enunciado e do contexto do workspace), e a
+            compressão de contexto nunca os descarta.
 
     Returns:
         Resposta final do agente como string.
@@ -205,6 +209,9 @@ async def run_agent_loop(
     messages = []
     if instruction:
         messages.append(labeled("system", PromptFragment(instruction, ContentOrigin.INSTRUCAO, source="system")))
+
+    if pinned_prefix:
+        messages.append(labeled("user", *pinned_prefix, **{PINNED_KEY: True}))
 
     # Adiciona histórico se houver (mensagem sem rótulo é rotulada aqui: assistente = produto deste modelo)
     messages.extend(_label_history_message(m, produced_tainted) for m in history)

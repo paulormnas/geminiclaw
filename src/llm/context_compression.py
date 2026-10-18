@@ -17,6 +17,9 @@ from src.utils.egress_fragments import (
 
 logger = get_logger(__name__)
 
+# Marca da mensagem que a compressão preserva integralmente.
+PINNED_KEY = "_pinned"
+
 # Prioridades de retenção (V6.5)
 # Maior valor = maior prioridade (mantém mais tempo)
 PRIORITY = {
@@ -125,9 +128,30 @@ async def compress_messages(
     system: Optional[str] = None,
     provider: Any = None,
 ) -> List[Dict[str, Any]]:
-    """Trunca ou sumariza o histórico preservando informação crítica e os pares chamada/resposta de ferramenta."""
-    result = await _compress_messages(messages, max_tokens, system, provider)
-    return result if result is messages else drop_orphan_tool_messages(result)
+    """Trunca ou sumariza o histórico preservando informação crítica e os pares chamada/resposta de ferramenta.
+
+    Mensagens fixadas (``_pinned``, o contrato da subtarefa; v18.7-subtask-contract) nunca são descartadas, truncadas
+    nem resumidas: o orçamento do resto é calculado descontando-as, como já se faz com o ``system``.
+    """
+    pinned = [m for m in messages if m.get(PINNED_KEY)]
+    if not pinned:
+        result = await _compress_messages(messages, max_tokens, system, provider)
+        return result if result is messages else drop_orphan_tool_messages(result)
+    rest = [m for m in messages if not m.get(PINNED_KEY)]
+    pinned_tokens = sum(estimate_tokens(m) for m in pinned)
+    if pinned_tokens * 4 > max_tokens * 3:
+        logger.warning(
+            "Contexto fixado ocupa mais de 75% do orçamento",
+            extra={"pinned_tokens": pinned_tokens, "max_tokens": max_tokens},
+        )
+    compressed = await _compress_messages(rest, max(max_tokens - pinned_tokens, 0), system, provider)
+    if compressed is rest:
+        return messages
+    compressed = drop_orphan_tool_messages(compressed)
+    head = 0
+    while head < len(compressed) and compressed[head].get("role") == "system":
+        head += 1
+    return compressed[:head] + pinned + compressed[head:]
 
 
 def _truncate_by_priority(messages: List[Dict[str, Any]], budget: int) -> List[Dict[str, Any]]:

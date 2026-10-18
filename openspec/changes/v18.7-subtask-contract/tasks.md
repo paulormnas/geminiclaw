@@ -1,6 +1,6 @@
 # Tarefas: v18.7-subtask-contract
 
-**Estado (2026-10-18):** em andamento. Seções 0 (#203), 1 (#204), 2 (#205) e 3 concluídas; achado das dependências decidido (design §14: mudança própria `v18.7-dependency-artifacts`, caminho `/deps_out/<projeto>/<task_name>`). Seções 4 a 7 não iniciadas.
+**Estado (2026-10-18):** em andamento. Seções 0 (#203), 1 (#204), 2 (#205), 3 (#206) e 4 concluídas; achado das dependências decidido (design §14: mudança própria `v18.7-dependency-artifacts`, caminho `/deps_out/<projeto>/<task_name>`). Seções 5 a 7 não iniciadas.
 
 ## 0. Pré-requisitos
 - [x] 0.1 Mudança aprovada pelo pesquisador, com as questões do design §11 decididas.
@@ -27,10 +27,10 @@
 - [x] 3.4 Testes, com o `FakeRecordingProvider` de `v18.7-benchmark-fixes` (grava `messages` e `system`): "Despacho", "Laço com várias voltas", "Compressão não remove o contrato", "Nova tentativa depois de replanejamento", "Contrato desligado", "Plano aceito com avisos e campo longo".
 
 ## 4. Egresso
-- [ ] 4.1 Fonte `contrato:` delimitada no `EgressGate` com origem própria `planejador` (constantes em `src/egress/fragments.py`; nunca `instrucao` para texto do Researcher) e `PLANNER_TEXT_RULE` no `system` quando houver fragmento `planejador` (design §8.1 item 1); itens 3 e 8 com `ARTIFACT_NAMES_SOURCE`; limpeza de marcas e caracteres de controle nos campos do plano.
-- [ ] 4.2 Registro de `limiar_mascarado` no evento `subtask_attempt` (regra provisória do design §11.1; reescrever o cenário antes de implementar se a decisão for a alternativa).
-- [ ] 4.2a Script executado enviado ao revisor pelo `EgressGate` (origem e fonte `codigo`, `tainted = role_tainted("developer")`, política do destino do Validator) e registrado em `egress_log` (design §8.1 item 8).
-- [ ] 4.3 Testes: "Critério com instrução embutida", "Rótulo de origem do texto do Researcher", "Researcher com dados brutos, Developer sem", "Researcher sem dados brutos", "Nome com dado", "Developer local, Validator de nuvem", "Developer e Validator sem restrição".
+- [x] 4.1 Fonte `contrato:` delimitada no `EgressGate` com origem própria `planejador` (constantes em `src/egress/fragments.py`; nunca `instrucao` para texto do Researcher) e `PLANNER_TEXT_RULE` no `system` quando houver fragmento `planejador` (design §8.1 item 1); itens 3 e 8 com `ARTIFACT_NAMES_SOURCE`; limpeza de marcas e caracteres de controle nos campos do plano.
+- [x] 4.2 Registro de `limiar_mascarado` no evento `subtask_contract` (o `subtask_attempt` é de `v18.7-exploration-metrics`, que o incorpora) (regra provisória do design §11.1; reescrever o cenário antes de implementar se a decisão for a alternativa).
+- [x] 4.2a Script executado enviado ao revisor pelo `EgressGate` (origem e fonte `codigo`, `tainted = role_tainted("developer")`, política do destino do Validator) e registrado em `egress_log` (design §8.1 item 8).
+- [x] 4.3 Testes: "Critério com instrução embutida", "Rótulo de origem do texto do Researcher", "Researcher com dados brutos, Developer sem", "Researcher sem dados brutos", "Nome com dado", "Developer local, Validator de nuvem", "Developer e Validator sem restrição".
 
 ## 5. Revisão de subtarefa
 - [ ] 5.1 `review_result` recebe o contrato; mensagem com contrato, regras de integridade, evidência, script executado e resposta (design §6.2).

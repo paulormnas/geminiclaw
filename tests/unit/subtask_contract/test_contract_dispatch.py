@@ -254,3 +254,21 @@ async def test_compress_messages_preserva_a_fixada_na_posicao():
     assert len(pinned) == 1 and pinned[0]["content"] == messages[1]["content"]
     assert out.index(pinned[0]) <= 1 and all(m["role"] != "user" for m in out[: out.index(pinned[0])])
     assert len(out) < len(messages)
+
+
+@pytest.mark.asyncio
+async def test_evento_da_tentativa_registra_hash_e_limiar_mascarado(tmp_path):
+    """Scenario: Researcher com dados brutos, Developer sem (evento da tentativa com ``limiar_mascarado``)."""
+    from unittest.mock import MagicMock
+
+    fake = MagicMock()
+    h = ContractHarness(tmp_path, plans=[_one_task()])
+    with patch("src.orchestration.autonomous_loop.get_telemetry", return_value=fake), patch(
+        "src.orchestration.autonomous_loop.role_tainted", side_effect=lambda role: role != "developer"
+    ), patch("src.agents.subtask_contract.role_tainted", return_value=True):
+        await h.run()
+    events = [c.kwargs for c in fake.record_agent_event.call_args_list if c.kwargs.get("event_type") == "subtask_contract"]
+    assert len(events) == 1
+    payload = events[0]["payload"]
+    assert payload["limiar_mascarado"] is True and payload["tentativa"] == 1
+    assert payload["contrato_sha256"] == h.contracts[0].sha256() and payload["tarefa_original_truncada_de"] is None

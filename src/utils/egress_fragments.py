@@ -42,6 +42,8 @@ OBSERVED_ORIGINS: frozenset[ContentOrigin] = frozenset(
         ContentOrigin.SAIDA_EXECUCAO,
         ContentOrigin.GRAFO,
         ContentOrigin.DADO_DE_PESQUISA,
+        # v18.7-subtask-contract: texto do Researcher no contrato vai delimitado como dado (design §8.1 item 1).
+        ContentOrigin.PLANEJADOR,
     }
 )
 

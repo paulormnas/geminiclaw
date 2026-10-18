@@ -15,7 +15,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
-from src.agents.subtask_contract import build_developer_contract, oversized_fields
+from src.agents.subtask_contract import build_developer_contract, oversized_fields, threshold_masked
 from src.artifacts.subtask_output import negative_result_feedback
 from src.config import (
     CIRCUIT_BREAKER_STALL_CYCLES,
@@ -812,6 +812,31 @@ class AutonomousLoop(LoopReportMixin):
         # v18.7-subtask-contract: preserva todos os campos da tarefa (task_type, hipótese, papel, contrato...).
         return replace(task, agent_id=agent_id)
 
+    @staticmethod
+    def _record_contract_event(
+        task: "AgentTask", contract: "SubtaskContract", attempt_number: int, master_session_id: str
+    ) -> None:
+        """Evento ``subtask_contract`` da tentativa: hash, corte da tarefa original e ``limiar_mascarado``.
+
+        ``v18.7-exploration-metrics`` incorpora estes campos ao seu registro por tentativa (design §11.1).
+        """
+        try:  # observabilidade nunca derruba a execução
+            get_telemetry().record_agent_event(
+                execution_id=master_session_id,
+                session_id=master_session_id,
+                agent_id=task.agent_id,
+                event_type="subtask_contract",
+                task_name=task.task_name or None,
+                payload={
+                    "tentativa": attempt_number,
+                    "contrato_sha256": contract.sha256(),
+                    "tarefa_original_truncada_de": contract.original_task_truncated_from,
+                    "limiar_mascarado": threshold_masked(contract, role_tainted("developer")),
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Falha ao registrar subtask_contract", extra={"error": str(exc)})
+
     async def _attempt_contract(
         self, task: "AgentTask", plan: List["AgentTask"], original_task: str, master_session_id: str
     ) -> "SubtaskContract":
@@ -1550,6 +1575,7 @@ class AutonomousLoop(LoopReportMixin):
                                 dag_state[task.task_name]["future"].set_result(None)
                             return
                         enriched_task = replace(enriched_task, contract=contract)
+                        self._record_contract_event(task, contract, attempt_number, master_session_id)
                         logger.info(
                             "Contrato da subtarefa montado",
                             extra={"task_name": task.task_name, "attempt": attempt_number,

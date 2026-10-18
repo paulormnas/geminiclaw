@@ -24,7 +24,7 @@ O código confirma a lacuna:
 
 ## O que muda
 
-- **Novo:** construtores de contexto por papel (ADR 022 §1) num módulo único, `src/subtask_contract.py`: Researcher (plano), Developer (contrato da subtarefa), Validator (plano) e Validator (revisão de subtarefa). Cada um devolve fragmentos rotulados por origem e contaminação; nenhum outro ponto do código monta esses contextos.
+- **Novo:** construtores de contexto por papel (ADR 022 §1) num módulo único, `src/agents/subtask_contract.py`: Researcher (plano), Developer (contrato da subtarefa), Validator (plano) e Validator (revisão de subtarefa). Cada um devolve fragmentos rotulados por origem e contaminação; nenhum outro ponto do código monta esses contextos.
 - **Novo:** contrato da subtarefa do Developer com os itens 1 a 9 do ADR 022 §2, renderizado num bloco de layout fixo (design §3), entregue uma vez por tentativa no início da conversa, antes do contexto do workspace, e reconstruído a partir do plano vigente em cada nova tentativa.
 - **Novo:** mensagens fixadas no laço do agente: a compressão de contexto nunca descarta, trunca ou resume o bloco do contrato.
 - **Novo:** chaves de métrica exigidas (item 7): nome canônico do vocabulário para cada métrica citada pelos critérios, com a regra da chave sem qualificador para o modelo escolhido na validação e chaves qualificadas `<modelo>.<metrica>` como informação.
@@ -47,13 +47,17 @@ O código confirma a lacuna:
 
 ## Impacto
 
-- **Código:** `src/subtask_contract.py` (novo: dados do contrato, construtores, renderização, hash); `src/orchestrator.py` (`AgentTask.contract`, construtor do contexto do plano e da validação do plano); `src/autonomous_loop.py` (montagem do contrato por tentativa, `_dispatch_subtask`, desfecho `criterio_ambiguo`, observações ao Researcher); `src/agent_runtime/runtime.py` e `src/llm/agent_loop.py` (prefixo fixado); `src/llm/context_compression.py` (mensagens fixadas); `src/agents/validator_agent.py` (revisão com contrato, parecer tipado, integridade, chaves de métrica, colisão de artefatos, critério do Problema na validação do plano); `src/egress/fragments.py` e `src/egress/gate.py` (fonte `contrato:`); `src/usage.py` (devolução de tentativa); `src/plan_normalizer.py` (teto de campos e padrão de nome de artefato); `src/config.py`; `.env.example`.
+- **Código:** `src/agents/subtask_contract.py` (novo, caminho corrigido no design §13: dados do contrato, construtores, renderização, hash); `src/orchestrator.py` (`AgentTask.contract`, construtor do contexto do plano e da validação do plano); `src/autonomous_loop.py` (montagem do contrato por tentativa, `_dispatch_subtask`, desfecho `criterio_ambiguo`, observações ao Researcher); `src/agent_runtime/runtime.py` e `src/llm/agent_loop.py` (prefixo fixado); `src/llm/context_compression.py` (mensagens fixadas); `src/agents/validator_agent.py` (revisão com contrato, parecer tipado, integridade, chaves de métrica, colisão de artefatos, critério do Problema na validação do plano); `src/egress/fragments.py` e `src/egress/gate.py` (fonte `contrato:`); `src/usage.py` (devolução de tentativa); `src/plan_normalizer.py` (teto de campos e padrão de nome de artefato); `src/config.py`; `.env.example`.
 - **Contratos:** `AgentTask` ganha `contract: SubtaskContract | None`. `ReviewResult` ganha `typed_issues`, `observations`, `contract_sha256` e o valor `criterio_ambiguo` em `outcome`. O evento `subtask_review` ganha `contrato_sha256`, `observacoes` e `criterio_ambiguo`. `ValidationResult.warnings` ganha `artefato_atualizado`; os problemas do plano ganham o código `colisao_artefato`. O JSON do parecer de revisão muda de `issues: [str]` para `issues: [{tipo, item|regra, texto}]` mais `observacoes: [str]`, com leitura tolerante do formato antigo (design §6.3).
 - **Schema de banco:** nenhuma tabela, coluna ou propriedade de nó nova.
 - **Localidade (ADR 019):** os itens 1 a 4 e 8 seguem como texto do Researcher (contaminado se o modelo dele aceita dados brutos) e delimitados como dado; nomes de artefato seguem a regra de nomes. Nenhum dado de pesquisa novo sai do nó.
 - **Custo:** de 1 a 3 mil tokens de entrada por tentativa de subtarefa do Developer (não por chamada, porque o contrato entra uma vez e o histórico o reenvia); cerca de 1 mil tokens a mais por revisão LLM; uma revisão LLM a mais por subtarefa cujos critérios eram todos métricas aprovadas, com `REVIEW_INTEGRITY_ALWAYS=true`. Em troca, menos reprovações por nome de artefato, chave de métrica e colisão, cada uma custando uma tentativa inteira.
 - **Hardware (Pi 5):** só montagem de texto e hash; sem dependência nova.
 - **Compatibilidade:** `SUBTASK_CONTRACT_ENABLED=false` volta ao prompt atual do Developer e à revisão atual, para comparação na bateria.
+
+## Achado novo (2026-10-18)
+
+O contrato não entrega ao consumidor os artefatos das dependências (design §14). Fora do escopo até decisão do pesquisador.
 
 ## Aprovações necessárias
 

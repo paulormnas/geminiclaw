@@ -14,7 +14,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from src.agents.regimento.carga import REGIMENTO_DIR, Recorte, Regimento, cabecalho, carregar_regimento, recorte
+from src import config
+from src.agents.regimento.carga import (
+    REGIMENTO_DIR,
+    Recorte,
+    Regimento,
+    RegimentoError,
+    cabecalho,
+    carregar_regimento,
+    recorte,
+)
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -37,6 +46,7 @@ class RegimentoSessao:
     modo: str
     tipo_objetivo: str | None = None
     on_recorte: Callable[[Recorte], None] | None = None
+    adendo: Any = None  # ``Adendo`` aprovado (None sem adendo ou sem aprovação)
     _recortes: dict[tuple[str | None, str], Recorte] = field(default_factory=dict)
 
     def definir_objetivo(self, tipo: str | None) -> None:
@@ -48,7 +58,12 @@ class RegimentoSessao:
         chave = (self.tipo_objetivo, self.modo)
         achado = self._recortes.get(chave)
         if achado is None:
-            achado = recorte(self.regimento, self.tipo_objetivo, self.modo)
+            achado = recorte(self.regimento, self.tipo_objetivo, self.modo, self.adendo)
+            if self.adendo is not None and len(achado.texto) > config.REGIMENTO_EXCERPT_MAX_CHARS:
+                raise RegimentoError(
+                    f"recorte com o adendo tem {len(achado.texto)} caracteres, acima do teto "
+                    f"REGIMENTO_EXCERPT_MAX_CHARS={config.REGIMENTO_EXCERPT_MAX_CHARS}"
+                )
             self._recortes[chave] = achado
             if self.on_recorte is not None:
                 try:
@@ -72,9 +87,10 @@ def iniciar_sessao(
     *,
     base: Path = REGIMENTO_DIR,
     on_recorte: Callable[[Recorte], None] | None = None,
+    adendo: Any = None,
 ) -> tuple[RegimentoSessao, contextvars.Token[Any]]:
     """Carrega o regimento e o vincula ao contexto atual; devolve a sessão e o token para ``encerrar_sessao``."""
-    sessao = RegimentoSessao(carregar_regimento(base), modo, tipo_objetivo, on_recorte)
+    sessao = RegimentoSessao(carregar_regimento(base), modo, tipo_objetivo, on_recorte, adendo)
     return sessao, _atual.set(sessao)
 
 

@@ -121,6 +121,7 @@ class ContextBundle:
     manifest: ResearchDataManifest | None = None
     manifest_warnings: list[str] = field(default_factory=list)
     min_group_size: int | None = None
+    context_dir: Path | None = None  # diretório de onde o contexto foi lido (v18.7-agent-system-prompts: adendo)
 
     @property
     def total_files(self) -> int:
@@ -408,11 +409,11 @@ class ContextLoader:
         """Escaneia recursivamente `input_context/` e retorna o `ContextBundle` processado."""
         self._ensure_dir()
 
-        bundle = ContextBundle(min_group_size=self._effective_k())
+        bundle = ContextBundle(min_group_size=self._effective_k(), context_dir=self.context_dir)
         files = sorted(
             p
             for p in self.context_dir.rglob("*")
-            if p.is_file() and p.name != "README.md" and not self._is_manifest(p)
+            if p.is_file() and p.name != "README.md" and not self._is_manifest(p) and not self._is_addendum(p)
         )
 
         # Manifesto e marcações antes de processar qualquer arquivo: manifesto inválido ou conflito impede a sessão.
@@ -476,6 +477,12 @@ class ContextLoader:
         return bundle
 
     # --- Manifesto, k e visão ---
+
+    def _is_addendum(self, path: Path) -> bool:
+        """O adendo do regimento (v18.7-agent-system-prompts) não é insumo: não é indexado nem ingerido."""
+        from src import config
+
+        return path.name == config.REGIMENTO_ADDENDUM_FILE and path.parent == self.context_dir
 
     def _is_manifest(self, path: Path) -> bool:
         return path.name == MANIFEST_NAME and path.parent == self.context_dir

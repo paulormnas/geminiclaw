@@ -146,7 +146,7 @@ def eventos(monkeypatch):
 def test_inicio_da_sessao_registra_versao_e_hash(eventos):
     loop, sessoes = _loop()
     sessoes["s1"] = SimpleNamespace(payload={})
-    token = loop._iniciar_regimento("s1", "auto")
+    token, _ = loop._iniciar_regimento("s1", "auto")
     try:
         reg = carregar_regimento()
         inicio = [e for e in eventos if e["event_type"] == "regimento_sessao"][0]["payload"]
@@ -166,7 +166,7 @@ def test_retomada_com_regimento_novo_registra_regimento_alterado(eventos):
     sessoes["s1"] = SimpleNamespace(payload={})
     loop.orchestrator.get_resume = lambda sid: None
     loop._resume = lambda sid: SimpleNamespace(source_session_id="s0")
-    token = loop._iniciar_regimento("s1", "semi")
+    token, _ = loop._iniciar_regimento("s1", "semi")
     try:
         alterado = [e["payload"] for e in eventos if e["event_type"] == "regimento_alterado"]
         assert len(alterado) == 1
@@ -181,7 +181,7 @@ def test_retomada_com_o_mesmo_regimento_nao_registra_alteracao(eventos):
     sessoes["s0"] = SimpleNamespace(payload={"regimento": {"regimento_sha256": carregar_regimento().sha256}})
     sessoes["s1"] = SimpleNamespace(payload={})
     loop._resume = lambda sid: SimpleNamespace(source_session_id="s0")
-    token = loop._iniciar_regimento("s1", "semi")
+    token, _ = loop._iniciar_regimento("s1", "semi")
     try:
         assert not [e for e in eventos if e["event_type"] == "regimento_alterado"]
     finally:

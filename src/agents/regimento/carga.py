@@ -238,11 +238,12 @@ def _secao_texto(secao: Secao) -> str:
     return f"## {secao.titulo}\n{secao.texto}"
 
 
-def recorte(reg: Regimento, tipo_objetivo: str | None, modo: str) -> Recorte:
+def recorte(reg: Regimento, tipo_objetivo: str | None, modo: str, adendo: Any = None) -> Recorte:
     """Recorte do regimento para um tipo de objetivo (``None`` sem projeto ou sem ``Problema``) e um modo.
 
     As seções comuns, a do tipo e a do modo, na ordem do arquivo; cada seção comum vem seguida das listas geradas
-    que ela cita, filtradas pelo tipo e pelo modo.
+    que ela cita, filtradas pelo tipo e pelo modo. O adendo de projeto aprovado (``Adendo``), quando houver, vem no
+    fim, sob o título "Regras adicionais do projeto".
     """
     if modo not in _ids(reg.estrutura, "modos"):
         raise RegimentoError(f"modo desconhecido: {modo!r}")
@@ -257,6 +258,8 @@ def recorte(reg: Regimento, tipo_objetivo: str | None, modo: str) -> Recorte:
             if nome == "objetivo" and tipo_objetivo is None:
                 continue
             blocos.append(_TABELAS[nome](reg.estrutura, tipo_objetivo, modo))
+    if adendo is not None:
+        blocos.append(adendo.renderizar())
     texto = "\n\n".join(blocos)
     return Recorte(texto=texto, sha256=_hash(texto.encode("utf-8")), tipo_objetivo=tipo_objetivo or "", modo=modo)
 

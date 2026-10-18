@@ -326,19 +326,31 @@ class AutonomousLoop(LoopReportMixin):
         clear_interrupt()
         clear_quota_stop(master_session_id)  # v18.7: a parada por cota de uma sessão anterior não vale para esta
         set_session_active(True)
-        regimento_token = self._iniciar_regimento(master_session_id, mode)
+        regimento_token = None
         try:
+            regimento_token, adendo_pendente = self._iniciar_regimento(master_session_id, mode)
+            if adendo_pendente is not None:
+                return await self._suspend_session(
+                    master_session_id, [], [],
+                    f"Sessão aguarda o pesquisador: ativação do adendo do regimento (`ativar_adendo_regimento`, "
+                    f"sha256 {adendo_pendente}).",
+                )
             return await self._run_session(prompt, master_session_id, mode, budget)
         finally:
-            encerrar_sessao(regimento_token)
+            if regimento_token is not None:
+                encerrar_sessao(regimento_token)
             set_session_active(False)
 
-    def _iniciar_regimento(self, master_session_id: str, mode: str) -> Any:
+    def _iniciar_regimento(self, master_session_id: str, mode: str) -> tuple[Any, str | None]:
         """Carrega o regimento da pesquisa uma vez, registra a versão e o vincula à sessão (ADR 022 §4.4).
 
         Grava o evento ``regimento_sessao`` (início e cada recorte novo), o payload ``regimento`` da sessão e, na
-        retomada com hash diferente do registrado, o evento ``regimento_alterado``. Regimento inválido falha a sessão
-        antes de qualquer chamada de modelo.
+        retomada com hash diferente do registrado, o evento ``regimento_alterado``. Regimento ou adendo inválido,
+        e adendo não aprovado no ``auto``, falham a sessão antes de qualquer chamada de modelo.
+
+        Returns:
+            O token do vínculo e, no ``assisted`` e no ``semi``, o sha256 do adendo que aguarda o pesquisador
+            (``None`` sem adendo pendente); nesse caso a sessão não executa subtarefas.
         """
         from src.config import SESSION_DEFAULT_MODE
 
@@ -356,14 +368,75 @@ class AutonomousLoop(LoopReportMixin):
             self._gravar_regimento_no_payload(master_session_id, registro)
 
         sessao, token = iniciar_sessao(modo, on_recorte=registrar_recorte)
+        try:
+            adendo, pendente = self._conferir_adendo(master_session_id, modo, sessao)
+        except Exception:
+            encerrar_sessao(token)
+            self._fechar_por_erro(master_session_id)
+            raise
+        sessao.adendo = adendo
+        adendo_sha = adendo.sha256 if adendo is not None else ""
         registro.update({"versao": sessao.regimento.versao, "regimento_sha256": sessao.regimento.sha256,
-                         "adendo_sha256": ""})
-        self._emit_regimento(master_session_id, "regimento_sessao", {
-            "versao": sessao.regimento.versao, "regimento_sha256": sessao.regimento.sha256, "adendo_sha256": "",
-        })
+                         "adendo_sha256": adendo_sha})
+        inicio = {"versao": sessao.regimento.versao, "regimento_sha256": sessao.regimento.sha256,
+                  "adendo_sha256": adendo_sha}
+        if pendente is not None:
+            inicio["adendo_pendente_sha256"] = pendente
+        self._emit_regimento(master_session_id, "regimento_sessao", inicio)
         self._gravar_regimento_no_payload(master_session_id, registro)
         self._conferir_regimento_retomado(master_session_id, sessao.regimento.sha256)
-        return token
+        return token, pendente
+
+    def _fechar_por_erro(self, master_session_id: str) -> None:
+        """Marca a sessão como fechada com ``motivo_parada = erro`` (a recusa antes de começar sai com o código 1)."""
+        try:
+            manager = self.orchestrator.session_manager
+            session = manager.get(master_session_id)
+            if session is not None:
+                manager.update(
+                    master_session_id, status="closed", payload={**session.payload, "motivo_parada": "erro"}
+                )
+        except Exception:  # noqa: BLE001
+            logger.warning("Falha ao fechar a sessão recusada", exc_info=True)
+
+    def _conferir_adendo(self, master_session_id: str, modo: str, sessao: Any) -> tuple[Any, str | None]:
+        """Lê o adendo uma vez e confere a aprovação no gate persistente (design §5.5 a §5.7).
+
+        Returns:
+            ``(adendo aprovado ou None, sha256 do adendo pendente ou None)``.
+
+        Raises:
+            AdendoError: adendo inválido ou como link simbólico, ou pendente no ``auto`` (a sessão não começa).
+        """
+        from src import config
+        from src.agents.regimento.adendo import AdendoError, aprovado, ler_adendo, registrar_pedido
+        from src.gate.persistent_gate import session_gate
+
+        diretorio = getattr(self.orchestrator, "_current_context_dir", None) or config.INPUT_CONTEXT_DIR
+        adendo = ler_adendo(diretorio)
+        if adendo is None:
+            return None, None
+        gate = session_gate()
+        try:
+            if aprovado(gate, adendo):
+                return adendo, None
+            project_id = None
+            getter = getattr(self.orchestrator, "_session_project_id", None)
+            if callable(getter):
+                project_id = getter(master_session_id)
+            registrar_pedido(
+                gate, adendo, sessao.regimento.estrutura, session_id=master_session_id, project_id=project_id
+            )
+        except AdendoError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - sem o gate não há como conferir a aprovação: falha fechada
+            raise AdendoError(f"aprovação do adendo não conferida ({type(exc).__name__}).") from exc
+        if modo == "auto":
+            raise AdendoError(
+                f"sessão recusada antes de começar: o adendo do regimento (sha256 {adendo.sha256}) não foi aprovado "
+                "pelo pesquisador. Aprove o pedido `ativar_adendo_regimento` no terminal e inicie a sessão de novo."
+            )
+        return None, adendo.sha256
 
     def _emit_regimento(self, master_session_id: str, event_type: str, payload: dict[str, Any]) -> None:
         try:

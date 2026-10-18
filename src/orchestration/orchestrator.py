@@ -1213,6 +1213,7 @@ class Orchestrator:
                     master_session.id, status="closed", payload={**master_session.payload, "motivo_parada": "erro"}
                 )
                 raise
+        self._current_context_dir = getattr(bundle, "context_dir", None)  # onde procurar o adendo do regimento
         if bundle is not None:
             egress_gate.add_known_identifiers(_context_identifiers(bundle))
             # Trechos rotulados (esquema agregado, documento, dado de pesquisa): o EgressGate decide o que cada

@@ -323,3 +323,44 @@ flag_for_curator.parameters_schema = {
     },
     "required": ["tipo", "texto"],
 }
+
+
+async def ler_regimento(secao: str = "") -> str:
+    """Lê uma seção do regimento da pesquisa da sessão (somente leitura).
+
+    Sem argumento, devolve a lista de seções com id e título. Com um id, devolve o texto da seção e as listas que ela
+    cita (inclusive de tipos de objetivo e modos que não estão no regimento injetado no seu prompt). Lê só o
+    regimento carregado no início da sessão: não aceita caminho de arquivo e não lê o adendo do projeto.
+
+    Args:
+        secao: Id da seção (ex.: ``paradas``); vazio para listar os ids.
+
+    Returns:
+        O texto da seção, ou a lista de ids válidos quando o id for vazio ou desconhecido.
+    """
+    from src import config
+    from src.agents.regimento import secao as secao_do_regimento
+    from src.agents.regimento import sessao_atual
+    from src.utils.egress_fragments import ContentOrigin, ToolOutput
+
+    sessao = sessao_atual()
+    if sessao is None:
+        return "Erro: ler_regimento só funciona dentro de uma sessão com regimento carregado."
+    texto = secao_do_regimento(sessao.regimento, secao.strip() if isinstance(secao, str) else "")
+    teto = int(config.REGIMENTO_EXCERPT_MAX_CHARS)
+    if len(texto) > teto:
+        texto = texto[:teto]
+    # Arquivo do repositório: instrução sem contaminação (design §3.4).
+    return ToolOutput(texto, origin=ContentOrigin.INSTRUCAO, source="regimento")
+
+
+ler_regimento.parameters_schema = {
+    "type": "object",
+    "properties": {
+        "secao": {
+            "type": "string",
+            "description": "Id da seção do regimento (vazio para listar os ids válidos).",
+        },
+    },
+    "required": [],
+}

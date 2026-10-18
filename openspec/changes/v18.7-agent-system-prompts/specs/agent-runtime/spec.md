@@ -5,7 +5,7 @@ Os cenários usam o `FakeRecordingProvider` (ajuda compartilhada de `v18.7-bench
 ## ADDED Requirements
 
 ### Requirement: Recorte do regimento em toda chamada de papel
-O sistema SHALL montar o `system` de toda chamada de papel com o prompt do papel seguido do recorte do regimento: as seções comuns e só as do tipo de objetivo do `Problema` e do modo da sessão, mais as tabelas geradas da parte estruturada filtradas pelo mesmo tipo e modo (ADR 022 §4.3). Sem `Problema`, o recorte SHALL ter só as seções comuns e a do modo; `Problema` sem tipo SHALL usar `limiar`. O recorte de qualquer combinação MUST caber em `REGIMENTO_EXCERPT_MAX_CHARS` (padrão 8000, `src/config.py`); acima disso, a carga falha com erro que cita a combinação.
+O sistema SHALL montar o `system` de toda chamada de papel com o prompt do papel seguido do recorte do regimento: as seções comuns e só as do tipo de objetivo do `Problema` e do modo da sessão, mais as tabelas geradas da parte estruturada filtradas pelo mesmo tipo e modo (ADR 022 §4.3). Sem `Problema`, o recorte SHALL ter só as seções comuns e a do modo; `Problema` sem tipo SHALL usar `limiar`. O recorte de qualquer combinação MUST caber em `REGIMENTO_EXCERPT_MAX_CHARS` (padrão 16000, `src/config.py`); acima disso, a carga falha com erro que cita a combinação.
 
 #### Scenario: Discriminação no auto
 - **GIVEN** uma sessão `auto` cujo `Problema` tem objetivo do tipo `discriminacao`

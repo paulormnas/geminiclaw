@@ -71,6 +71,23 @@ Sem divergência com o código; a narrativa não cita o motivo de parada nem o o
 
 O prompt do `base` afirma rodar "em um Raspberry Pi 5" e manda usar `quick_search`/`web_reader`; o normalizador troca `base` por `developer` no plano (spec `agent-runtime`, "Papéis de subtarefa do plano"), e nenhum fluxo atual o aciona (questão §10.1). `_MODE_GUIDANCE` é regra comum fora de fonte versionada. Destino: modos para R; `base` conforme a questão.
 
+### 1.10 Confirmação contra o código mergeado (2026-10-18)
+
+A auditoria acima foi refeita contra `dev` (668e5ad). Mudanças em relação ao texto preliminar:
+
+| Item | Estado em 2026-10-18 |
+|---|---|
+| `_is_bound` e `hypothesis_ref` obrigatório | Removidos por `v18.7-hypothesis-linking`; o papel sai de `src/orchestration/exploration_roles.py` pela ordem do ADR 021 §2 |
+| Caminhos | `src/exploration.py` é `src/orchestration/exploration.py`; `validator_agent.py` é `src/agents/validator/agent.py`; formato do plano em `src/orchestration/exploration_prompts.py` (`PLAN_FORMAT_INSTRUCTION`), `src/agents/validator/agent.py:106` (`SCHEMA_INSTRUCTION`) e no prompt do Researcher |
+| Contrato e regras de integridade | `src/agents/subtask_contract.py` (`INTEGRITY_RULES`, seis ids, copiados no YAML) |
+| Caminho das dependências | `/deps_out/<projeto>/<subtarefa>` (regra 2 do Developer já corrigida por `v18.7-dependency-artifacts`) |
+| Decisões reservadas | `DECISOES_RESERVADAS` já tem os onze valores, inclusive `ativar_adendo_regimento` |
+| Gate | `PersistentGate.authorized_reference` existe (`src/gate/persistent_gate.py:299`) e o `FakeGate` também |
+| Motivos de retirada | `DROP_*` em `src/orchestration/exploration_linking.py:44-52` (oito, o último é `campo_do_contrato_longo`) |
+| Motivos de parada | Enum de `Sessao.motivo_parada` em `src/knowledge/schema.py` (vinte e um ids) |
+
+Os trechos de prompt (Researcher, Developer, Validator, Curator, Summarizer, base) seguem como na tabela preliminar; as linhas exatas mudam na seção 7, quando cada prompt é reescrito.
+
 ## 2. Estrutura do regimento (ADR 022 §4.1, §5)
 
 ```
@@ -185,7 +202,7 @@ def secao(reg: Regimento, secao_id: str) -> str: ...
 2. Tabelas geradas do YAML, filtradas: tipo de objetivo da sessão, motivos de parada que valem para o modo, decisões reservadas, regras de integridade, papéis de experimento e ordem de decisão.
 3. Sem projeto ou sem `Problema`: só as seções comuns e a do modo. `Problema` sem tipo (dados antigos): `limiar`, como o comportamento atual.
 4. O adendo aprovado (§5), quando houver, vem no fim, sob o título "Regras adicionais do projeto".
-5. O recorte de qualquer combinação de tipo e modo tem no máximo `REGIMENTO_EXCERPT_MAX_CHARS` (padrão 8000); acima disso, `carregar_regimento` falha com erro que cita a combinação, e o teste de coerência o pega antes do merge.
+5. O recorte de qualquer combinação de tipo e modo tem no máximo `REGIMENTO_EXCERPT_MAX_CHARS` (padrão 16000); acima disso, `carregar_regimento` falha com erro que cita a combinação, e o teste de coerência o pega antes do merge.
 
 ### 3.3 Injeção
 
@@ -265,7 +282,7 @@ O Developer recebe a regra de seed: a do enunciado da subtarefa quando houver (r
 
 | Variável | Padrão | Uso |
 |---|---|---|
-| `REGIMENTO_EXCERPT_MAX_CHARS` | `8000` | Teto do recorte de cada combinação de tipo e modo e da saída de `ler_regimento` |
+| `REGIMENTO_EXCERPT_MAX_CHARS` | `16000` | Teto do recorte de cada combinação de tipo e modo e da saída de `ler_regimento` |
 | `REGIMENTO_ADDENDUM_FILE` | `regimento_adendo.yaml` | Nome do adendo de projeto, procurado nos insumos do pesquisador |
 
 O diretório do regimento é fixo (`src/agents/regimento/`), não configurável, para que a versão registrada seja sempre a do repositório. Ambas as variáveis em `src/config.py` e `.env.example`.
@@ -283,11 +300,14 @@ O diretório do regimento é fixo (`src/agents/regimento/`), não configurável,
 
 ## 10. Questões em aberto
 
+**Decisões do pesquisador (2026-10-18):** 1 (papel `base`: concordo, com a ressalva "se já não é mais utilizado"; ele ainda é usado, ver abaixo, então aqui só sai o texto de hardware e as regras repetidas), 2 (impedir a sessão no `auto`), 3 (diretório de insumos do projeto), 5 (teto mantido, padrão 16000), 6 (leitura sem consumo por `referencia`); `ativar_adendo_regimento` aprovada como decisão reservada; regimento v1 aprovado para seguir (revisão do texto no PR). O `base` segue em uso: o laço usa `agent_id="base"` para o planejador com a skill de memória (`src/orchestration/autonomous_loop.py:2491` e `:2610`) e `REQUIRED_ROLES` do catálogo o lista (`src/llm/catalog.py:36`); removê-lo é mudança própria.
+
+
 1. **Papel `base`.** O prompt é obsoleto e o papel não recebe subtarefas do plano. Proposta: remover o papel e `agents/base/agent.py` numa mudança própria (exige revisar a spec `agent-runtime`, que o lista como executável); aqui, só tirar o texto específico de hardware e as regras repetidas.
 2. **Adendo pendente no `auto`.** A proposta (§5.5) impede a sessão de começar. Alternativa: começar sem o adendo e registrar o aviso. Proposta: impedir, porque o adendo existe para restringir.
 3. **Local do adendo.** `INPUT_CONTEXT_DIR` é um diretório só; se houver insumos por projeto, o adendo deveria ficar no diretório do projeto. Proposta: usar o diretório de insumos do projeto quando a sessão tem projeto.
 4. **Registro por sessão e por tentativa (resolvida na revisão de consistência de 2026-10-15).** O ADR 022 §4.4 pede o hash do regimento e do recorte "junto com o contrato de cada subtarefa (§7)". Esta mudança registra por sessão (`regimento_sessao`) e põe `regimento_sha256` e `recorte_sha256` no `AgentContext`; `v18.7-exploration-metrics` grava por tentativa, no evento `subtask_attempt`, o `contrato_sha256` e o `recorte_sha256` lido do `AgentContext` (nulo enquanto esta mudança não existir).
-5. **Teto do recorte.** 8000 caracteres por padrão, a confirmar depois de escrito o texto v1.
+5. **Teto do recorte (decidida em 2026-10-18).** O teto continua, como proteção do custo de entrada de toda chamada contra o crescimento do texto, mas o padrão sobe para 16000 caracteres (cerca de 4 mil tokens): o pesquisador achou 8000 pouco, e o texto v1 ocupa entre 9,6 mil e 11,1 mil caracteres conforme a combinação. Quem quiser mais ajusta `REGIMENTO_EXCERPT_MAX_CHARS`.
 6. **Aprovação do adendo entre sessões (alinhar com `v18.7-persistent-human-gate`).** O gate exige que todo consumidor chame `consume_authorized`, de uso único e ligado à cadeia da sessão. Para o adendo isso obrigaria nova aprovação a cada sessão nova do projeto e, no `auto`, deixaria a sessão sem saída: a sessão recusada registra o pedido, e a sessão seguinte, fora da cadeia, não pode consumi-lo. Adotado (requisito em `v18.7-persistent-human-gate`): o adendo é a exceção documentada, com leitura sem consumo por `referencia` (o sha256 liga a aprovação ao conteúdo exato), por um método novo `PersistentGate.authorized_reference(decisao, referencia)` que aquela mudança acrescenta, também no `FakeGate`. Alternativa: manter o uso único e aprovar o adendo a cada sessão. Os cenários desta mudança usam a proposta.
 
 ## 11. Riscos e mitigações

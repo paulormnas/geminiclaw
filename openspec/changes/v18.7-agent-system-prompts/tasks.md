@@ -1,24 +1,24 @@
 # Tarefas: v18.7-agent-system-prompts
 
-**Estado (2026-10-15):** não iniciada.
+**Estado (2026-10-18):** seções 0 a 2 e 3.1 e 3.2 implementadas (regimento v1, carga, recorte, configuração); faltam a injeção e o registro por sessão (3.3 a 3.6), a ferramenta, o adendo, os esquemas, os prompts e a coerência.
 
 ## 0. Pré-requisitos
-- [ ] 0.1 Mudança aprovada pelo pesquisador, com as questões do design §10 decididas.
-- [ ] 0.2 Parecer do Analista de Segurança registrado no design §8.
-- [ ] 0.3 `v18.7-subtask-contract`, `v18.7-hypothesis-linking`, `v18.7-exploration-limits` e `v18.7-persistent-human-gate` mergeadas (a prova da aprovação do adendo é um pedido em `gate_requests`, design §5.5 e §8 parecer item 1; o valor `ativar_adendo_regimento` já está no `CHECK` daquela mudança). Questão §10.6 alinhada com `v18.7-persistent-human-gate` (leitura por `referencia` sem consumo, com `authorized_reference` também no `FakeGate`). Ajudas reaproveitadas, sem cópia local: `FakeRecordingProvider` (`v18.7-benchmark-fixes`) e `FakeGate` (`tests/support/fake_gate.py`).
-- [ ] 0.4 Worktree `.worktrees/feat-v18.7-agent-system-prompts`.
+- [x] 0.1 Mudança aprovada pelo pesquisador, com as questões do design §10 decididas.
+- [x] 0.2 Parecer do Analista de Segurança registrado no design §8.
+- [x] 0.3 `v18.7-subtask-contract`, `v18.7-hypothesis-linking`, `v18.7-exploration-limits` e `v18.7-persistent-human-gate` mergeadas (a prova da aprovação do adendo é um pedido em `gate_requests`, design §5.5 e §8 parecer item 1; o valor `ativar_adendo_regimento` já está no `CHECK` daquela mudança). Questão §10.6 alinhada com `v18.7-persistent-human-gate` (leitura por `referencia` sem consumo, com `authorized_reference` também no `FakeGate`). Ajudas reaproveitadas, sem cópia local: `FakeRecordingProvider` (`v18.7-benchmark-fixes`) e `FakeGate` (`tests/support/fake_gate.py`).
+- [x] 0.4 Worktree `.worktrees/feat-v18.7-agent-system-prompts`.
 
 ## 1. Auditoria
-- [ ] 1.1 Refazer a auditoria do design §1 contra o código mergeado (prompts, `_is_bound` ou o que o substituiu, ids de parada e retirada, construtores de contexto) e registrar a versão final no design §1, com as referências de linha atualizadas.
+- [x] 1.1 Refazer a auditoria do design §1 contra o código mergeado (prompts, `_is_bound` ou o que o substituiu, ids de parada e retirada, construtores de contexto) e registrar a versão final no design §1, com as referências de linha atualizadas.
 
 ## 2. Regimento v1
-- [ ] 2.1 `src/agents/regimento/regimento.md` com as seções do design §2.1, escrito de forma direta, sem tabelas nem listas de códigos.
-- [ ] 2.2 `src/agents/regimento/regimento.yaml` com a estrutura do design §2.2 e os textos tirados dos ADRs 021 e 022, inclusive `regras_seguranca` com ids estáveis e destino, e `decisoes_reservadas` com os tipos do gate persistente.
-- [ ] 2.3 Texto do regimento apresentado ao pesquisador no PR para aprovação (ADR 022 §4.4).
+- [x] 2.1 `src/agents/regimento/regimento.md` com as seções do design §2.1, escrito de forma direta, sem tabelas nem listas de códigos.
+- [x] 2.2 `src/agents/regimento/regimento.yaml` com a estrutura do design §2.2 e os textos tirados dos ADRs 021 e 022, inclusive `regras_seguranca` com ids estáveis e destino, e `decisoes_reservadas` com os tipos do gate persistente.
+- [x] 2.3 Texto do regimento apresentado ao pesquisador no PR para aprovação (ADR 022 §4.4).
 
 ## 3. Carga, recorte e registro
-- [ ] 3.1 `src/regimento.py`: `carregar_regimento`, `recorte`, `secao`, tabelas geradas, hashes (design §3.1-§3.2).
-- [ ] 3.2 `REGIMENTO_EXCERPT_MAX_CHARS` e `REGIMENTO_ADDENDUM_FILE` em `src/config.py` e `.env.example`.
+- [x] 3.1 `src/agents/regimento/carga.py` (pacote `src/agents/regimento`, sem módulo `src/regimento.py` por causa das camadas do ADR 024): `carregar_regimento`, `recorte`, `secao`, tabelas geradas, hashes (design §3.1-§3.2).
+- [x] 3.2 `REGIMENTO_EXCERPT_MAX_CHARS` e `REGIMENTO_ADDENDUM_FILE` em `src/config.py` e `.env.example`.
 - [ ] 3.3 Carga por sessão no orquestrador; evento `regimento_sessao`; payload `regimento`; `AgentContext.regimento_sha256` e `recorte_sha256`; `regimento_alterado` na retomada (design §4).
 - [ ] 3.4 Injeção do recorte no `system` de todas as chamadas de papel listadas no design §3.3 (runtime em processo e chamadas diretas do Validator, Summarizer, consultor e revisão de conclusões); recorte passado aos construtores de `v18.7-subtask-contract`.
 - [ ] 3.5 `_MODE_GUIDANCE` removido de `agents/base/agent.py` (conteúdo na seção de modos).

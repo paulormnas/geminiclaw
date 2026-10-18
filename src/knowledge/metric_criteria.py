@@ -99,6 +99,11 @@ def _comparisons(criterion: str) -> List[Comparison]:
     ]
 
 
+def criterion_comparisons(criterion: str) -> List[Comparison]:
+    """Comparações ``<nome> <operador> <valor>`` de um critério (públicas para o contrato da subtarefa)."""
+    return _comparisons(criterion)
+
+
 def _metric_criteria(criteria: List[Any]) -> List[MetricCriterion]:
     """Seleciona os critérios cujas comparações citam todas uma métrica conhecida.
 

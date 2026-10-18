@@ -1,6 +1,6 @@
 # Tarefas: v18.7-subtask-contract
 
-**Estado (2026-10-18):** em andamento. Seções 0 (#203), 1 (#204) e 2 concluídas; achado das dependências decidido (design §14: mudança própria `v18.7-dependency-artifacts`, caminho `/deps_out/<projeto>/<task_name>`). Seções 3 a 7 não iniciadas.
+**Estado (2026-10-18):** em andamento. Seções 0 (#203), 1 (#204), 2 (#205) e 3 concluídas; achado das dependências decidido (design §14: mudança própria `v18.7-dependency-artifacts`, caminho `/deps_out/<projeto>/<task_name>`). Seções 4 a 7 não iniciadas.
 
 ## 0. Pré-requisitos
 - [x] 0.1 Mudança aprovada pelo pesquisador, com as questões do design §11 decididas.
@@ -20,11 +20,11 @@
 - [x] 2.4 Testes: cenários "Itens do contrato", "Preparação sem hipótese própria", "Métrica fora do vocabulário", "Tarefa original longa", "Ponto único de montagem"; teste de estabilidade do hash (mesmos campos, mesmo hash; ordem de chaves irrelevante).
 
 ## 3. Despacho, runtime e fixação
-- [ ] 3.1 `AgentTask.contract`; `_dispatch_subtask` com `dataclasses.replace`.
-- [ ] 3.2 Montagem do contrato no início de cada tentativa em `_execute_task_in_dag`, a partir do plano vigente.
-- [ ] 3.3 `run_agent_loop(..., pinned_prefix=...)` e passagem pelo `AgentRuntime`; marca `_pinned` respeitada por `compress_messages`.
-- [ ] 3.3a Conferência do teto `CONTRACT_FIELD_MAX_CHARS` antes de montar o contrato de cada tentativa; retirada com `campo_do_contrato_longo` em `retiradas_por_motivo` (design §8.1 item 9).
-- [ ] 3.4 Testes, com o `FakeRecordingProvider` de `v18.7-benchmark-fixes` (grava `messages` e `system`): "Despacho", "Laço com várias voltas", "Compressão não remove o contrato", "Nova tentativa depois de replanejamento", "Contrato desligado", "Plano aceito com avisos e campo longo".
+- [x] 3.1 `AgentTask.contract`; `_dispatch_subtask` com `dataclasses.replace`.
+- [x] 3.2 Montagem do contrato no início de cada tentativa em `_execute_task_in_dag`, a partir do plano vigente.
+- [x] 3.3 `run_agent_loop(..., pinned_prefix=...)` e passagem pelo `AgentRuntime`; marca `_pinned` respeitada por `compress_messages`.
+- [x] 3.3a Conferência do teto `CONTRACT_FIELD_MAX_CHARS` antes de montar o contrato de cada tentativa; retirada com `campo_do_contrato_longo` em `retiradas_por_motivo` (design §8.1 item 9).
+- [x] 3.4 Testes, com o `FakeRecordingProvider` de `v18.7-benchmark-fixes` (grava `messages` e `system`): "Despacho", "Laço com várias voltas", "Compressão não remove o contrato", "Nova tentativa depois de replanejamento", "Contrato desligado", "Plano aceito com avisos e campo longo".
 
 ## 4. Egresso
 - [ ] 4.1 Fonte `contrato:` delimitada no `EgressGate` com origem própria `planejador` (constantes em `src/egress/fragments.py`; nunca `instrucao` para texto do Researcher) e `PLANNER_TEXT_RULE` no `system` quando houver fragmento `planejador` (design §8.1 item 1); itens 3 e 8 com `ARTIFACT_NAMES_SOURCE`; limpeza de marcas e caracteres de controle nos campos do plano.

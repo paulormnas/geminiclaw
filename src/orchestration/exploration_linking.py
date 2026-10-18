@@ -49,6 +49,7 @@ DROP_DEPENDS = "depende_de_subtarefa_retirada"
 DROP_PHYSICAL = "experimento_fisico"  # v18.7-exploration-limits: bancada ou equipamento fora do sandbox
 DROP_RESTRICTED = "hipotese_direcao_restrita"  # v18.7-exploration-limits: a hipótese caiu numa restrição de direção
 DROP_DOUBT = "hipotese_aguarda_decisao_restricao"  # caso duvidoso à espera do pesquisador (a hipótese segue viva)
+DROP_LONG_FIELD = "campo_do_contrato_longo"  # v18.7-subtask-contract: campo do contrato acima do teto (integridade)
 KEEPS_HYPOTHESIS_ALIVE = frozenset({DROP_PENDING, DROP_PHYSICAL, DROP_DOUBT})
 _FORMAT_REJECTIONS = ("id_inexistente", "sem_enunciado")  # falha de formato: vira hipótese do sistema
 

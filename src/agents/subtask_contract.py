@@ -120,8 +120,10 @@ class SubtaskContract:
         return labeled("user", *self.fragments())
 
 
-MetricResolver = Callable[[str], tuple[str, bool]]
-"""``nome -> (nome canônico, termo novo)``: injeta o vocabulário (``resolve_metric``) sem acoplar ao grafo."""
+MetricResolver = Callable[[str, "str | None"], tuple[str, bool]]
+"""``(nome, sentido) -> (nome canônico, termo novo)``: injeta o vocabulário (``resolve_metric``) sem acoplar.
+
+``sentido`` (``maior_melhor``/``menor_melhor``/``None``) vem do operador do critério; só cria o candidato."""
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +166,11 @@ def _alias_word(raw_name: str, known_metric: str | None) -> str:
     return _snake(raw_name)
 
 
+def _direction(operator: str) -> str | None:
+    """Sentido sugerido pelo operador do critério (``>=`` maior é melhor); ``==`` não indica."""
+    return {">": "maior_melhor", ">=": "maior_melhor", "<": "menor_melhor", "<=": "menor_melhor"}.get(operator)
+
+
 def _metric_keys(
     criteria: Sequence[tuple[str, str]], objective: ProblemObjective | None, resolver: MetricResolver | None
 ) -> tuple[MetricKey, ...]:
@@ -185,10 +192,11 @@ def _metric_keys(
                 canonical = objective.metric  # o nome do Problema é o canônico da métrica principal
             elif metric is not None:
                 word = _alias_word(base_raw, metric)
-                canonical, new_term = resolver(word) if resolver else (word, False)
+                canonical, new_term = resolver(word, _direction(cmp.operator)) if resolver else (word, False)
             else:
                 canonical, new_term = (
-                    resolver(base_raw if qualified_match else cmp.raw_name) if resolver else (_snake(base_raw), True)
+                    resolver(base_raw if qualified_match else cmp.raw_name, _direction(cmp.operator))
+                    if resolver else (_snake(base_raw), True)
                 )
                 canonical = _snake(canonical) if not _SAFE_METRIC_RE.match(canonical) else canonical
             if not _SAFE_METRIC_RE.match(canonical) or (qualified and not _SAFE_METRIC_RE.match(qualified)):
@@ -302,6 +310,18 @@ def build_developer_contract(
         consumed_by=_consumers(task, plan),
         researcher_tainted=role_tainted("researcher") if researcher_tainted is None else researcher_tainted,
     )
+
+
+def oversized_fields(contract: SubtaskContract) -> list[str]:
+    """Itens 2, 3, 4 e 8 do contrato acima de ``CONTRACT_FIELD_MAX_CHARS`` (nunca são cortados; design §7.3 e §8.1)."""
+    limit = config.CONTRACT_FIELD_MAX_CHARS
+    sizes = {
+        "criterios": sum(len(c) for _, c in contract.criteria),
+        "artefatos": sum(len(a) for a in contract.expected_artifacts),
+        "hipotese": len(contract.hypothesis_line),
+        "consumidores": sum(len(a) + sum(len(w) for w in who) for a, who in contract.consumed_by),
+    }
+    return [name for name, size in sizes.items() if size > limit]
 
 
 # ---------------------------------------------------------------------------

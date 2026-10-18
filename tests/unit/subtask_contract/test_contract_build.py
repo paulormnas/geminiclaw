@@ -144,8 +144,8 @@ def test_metrica_fora_do_vocabulario_segue_fluxo_de_termo_novo():
     store = InMemoryGraphStore()
     actor = Actor(kind="orquestrador")
 
-    def resolver(name):
-        res = resolve_metric(store, name, actor=actor, sessao_id="s1", sentido="maior_melhor")
+    def resolver(name, sentido):
+        res = resolve_metric(store, name, actor=actor, sessao_id="s1", sentido=sentido)
         node = store.get_node(res.node_id)
         return node.properties["nome"], res.status == "candidato_criado"
 

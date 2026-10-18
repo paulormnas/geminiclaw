@@ -58,6 +58,8 @@ class AgentTask:
     # v18.5-egress-gate: o ``prompt`` foi escrito por um modelo que aceita dados brutos (contaminado, ADR 019 §3.8);
     # o despacho o envolve na marca de contaminação ao montar o prompt da execução.
     prompt_tainted: bool = False
+    # v18.7-subtask-contract: contrato da tentativa (``SubtaskContract``), montado a cada tentativa do Developer.
+    contract: Any = None
 
 
 @dataclass

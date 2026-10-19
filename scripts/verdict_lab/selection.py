@@ -44,7 +44,13 @@ def select(grade_csv: Path, sim_csv: Path, fv_max: float) -> list[dict[str, Any]
         if scenarios is None:
             continue
         fv = float(r["fv_max_tipos"])
-        spurious = sorted(s["cenario"] for s in scenarios if s["conclui"] == "funciona" and s["esperado"] != "funciona")
+        spurious = sorted(
+            s["cenario"]
+            for s in scenarios
+            if s["conclui"] == "funciona"
+            and s["esperado"] != "funciona"
+            and "funciona" not in s.get("aceitaveis", "").split(";")
+        )
         hits = sum(s["acerto"] == "True" for s in scenarios)
         rows.append(
             {

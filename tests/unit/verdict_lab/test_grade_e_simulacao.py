@@ -22,7 +22,8 @@ pytestmark = pytest.mark.unit
 
 def test_catalogo_segue_as_regras_do_pesquisador() -> None:
     s = by_name()
-    assert s["E3"].esperado == "funciona" and s["E2"].esperado == "indeciso" and s["V8"].esperado == "indeciso"
+    assert s["E5"].esperado == "funciona" and s["E3"].esperado == "indeciso" and s["V8"].esperado == "indeciso"
+    assert s["R3"].esperado == "indeciso" and s["R5"].esperado == "indeciso"
     assert {x.familia for x in catalog()} >= set("EVRSNFMBCDPQGA")
     assert all(x.esperado in ESPERADOS and x.justificativa for x in catalog())
     assert len({x.nome for x in catalog()}) == len(catalog())
@@ -43,9 +44,9 @@ def test_acerto_contra_o_esperado_e_varios_limiares(tmp_path: Path) -> None:
     )
     rows = list(csv.DictReader((out / "resultados.csv").open(encoding="utf-8")))
     assert {r["limiar"] for r in rows} == {"0.2", "0.3"}
-    e3 = [r for r in rows if r["cenario"] == "E3" and r["variante"] == "atual" and r["limiar"] == "0.3"][0]
+    e3 = [r for r in rows if r["cenario"] == "E5" and r["variante"] == "atual" and r["limiar"] == "0.3"][0]
     assert e3["conclui"] == "indeciso" and e3["acerto"] == "False"
-    assert len([r for r in rows if r["cenario"] == "E3" and r["variante"] == "atual"]) == 2
+    assert len([r for r in rows if r["cenario"] == "E5" and r["variante"] == "atual"]) == 2
 
 
 def test_propriedades_relatadas_sem_reprovar(tmp_path: Path) -> None:

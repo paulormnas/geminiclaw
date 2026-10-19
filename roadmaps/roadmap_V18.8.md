@@ -1,6 +1,6 @@
 # Roadmap V18.8 — Calibração do Veredito
 
-> **Estado (2026-10-18):** etapa 1 do ADR 025 concluída ([relatório](../docs/calibracao-veredito/2026-10-18-etapa-1-repeticao-offline.md)); Tarefa 1 especificada, aguardando aprovação. Tarefas 2 e 3 sem spec (dependem dos resultados da Tarefa 1).
+> **Estado (2026-10-19):** Tarefa 1 (`v18.8-verdict-lab`) implementada e mergeada (#222, #224, #225); relatórios da etapa 1 e da etapa 2 em `docs/calibracao-veredito/`. Tarefa 2 (`v18.8-verdict-calibration`) especificada, aguardando aprovação do pesquisador. Tarefa 3 sem spec.
 
 ## Objetivo
 
@@ -20,11 +20,11 @@ Calibrar o veredito das hipóteses com dados e erros medidos, para que uma explo
 
 ### Tarefa 1: Laboratório do veredito
 - **Spec:** [`v18.8-verdict-lab`](../openspec/changes/v18.8-verdict-lab/proposal.md)
-- **Critérios de aceite:** [ ] variante `atual` idêntica a `compute_verdict` · [ ] `replay` reproduz o relatório da etapa 1 · [ ] grade, simulação e sensibilidade reprodutíveis pela semente, sem LLM · [ ] relatório da etapa 2 em `docs/calibracao-veredito/`
+- **Critérios de aceite:** [x] variante `atual` idêntica a `compute_verdict` · [x] `replay` reproduz o relatório da etapa 1 · [x] grade, simulação e sensibilidade reprodutíveis pela semente, sem LLM · [x] relatório da etapa 2 em `docs/calibracao-veredito/`
 - **Complexidade estimada:** Média
 
 ### Tarefa 2: Calibração da fórmula e dos valores
-- **Spec:** `v18.8-verdict-calibration` (a especificar com os resultados da Tarefa 1 e revisão do ADR 015 §9 aprovada pelo pesquisador)
+- **Spec:** [`v18.8-verdict-calibration`](../openspec/changes/v18.8-verdict-calibration/proposal.md) (modelo v2 da equação, variante `completa2`; revisão do ADR 015 §9 aprovada pelo pesquisador antes de implementar)
 - **Complexidade estimada:** a definir
 
 ### Tarefa 3: Direção da evidência pela predição

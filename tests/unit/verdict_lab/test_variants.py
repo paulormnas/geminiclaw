@@ -178,12 +178,12 @@ def test_completa2_e_monotonica_no_catalogo() -> None:
 def test_completa2_conclui_o_que_o_pesquisador_definiu() -> None:
     from scripts.verdict_lab.scenarios import by_name
 
-    est = V.Variant(nome="c2", params=VerdictParams(prior=0.5), estrutura=V.Structure(**COMPLETA2))
+    est = V.Variant(nome="c2", params=VerdictParams(), estrutura=V.Structure(**COMPLETA2))
     sc = by_name()
-    for nome in ("A8-ruido", "A16-ruido", "V20", "Q-E3-R1-neg", "E2"):
+    for nome in ("A8-ruido", "A16-ruido", "V20", "Q-E5-R3-neg", "E2", "R5"):
         s = sc[nome]
         assert abs(V.lab_verdict(list(s.attempts), s.criterion, est).veredito) < 0.3, nome
-    for nome in ("E3", "C3-acima-do-alvo"):
+    for nome in ("E5", "C5-acima-do-alvo"):
         s = sc[nome]
         assert V.lab_verdict(list(s.attempts), s.criterion, est).veredito >= 0.3, nome
     assert V.lab_verdict(list(sc["C3-abaixo-do-alvo"].attempts), sc["C3-abaixo-do-alvo"].criterion, est).veredito < -0.3

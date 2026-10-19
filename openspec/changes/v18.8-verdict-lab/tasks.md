@@ -40,3 +40,4 @@
 - [x] 6.4 Testes dos requisitos "Alternativas de ajuste depois da etapa 2" e "Critério de aceite na simulação".
 - [x] 6.5 Comando `selecao` (design §14): combina o critério de aceite da simulação com o catálogo da grade.
 - [ ] 6.6 Segunda rodada da grade, da simulação e da sensibilidade no Raspberry Pi, com o relatório em `docs/calibracao-veredito/`, em PR próprio.
+- [x] 6.7 Catálogo revisado em 2026-10-19 (cinco variações bastam; réplica em outros nós não conclui; campo `aceitaveis`; cenários Q-E5-R3-neg e E4), com os testes ajustados.

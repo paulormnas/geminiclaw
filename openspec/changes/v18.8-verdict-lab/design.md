@@ -90,7 +90,7 @@ Cada cenário é uma lista de tentativas (`Attempt`), um `Criterion` e um `esper
 
 | Família | O que varia | Exemplo |
 |---|---|---|
-| E, exploração em um nó | 1, 2, 3, 5 e 8 variações, todas acima do alvo, com valores crescentes | E3: três configurações, 0,96, 0,97, 0,98 |
+| E, exploração em um nó | 1 a 5 e 8 variações, todas acima do alvo, com valores crescentes | E5: cinco configurações, 0,955 a 0,971 |
 | V, volume sem ganho | 3, 8 e 20 variações com o mesmo valor, ou só uma acima do alvo | V8: oito configurações, todas 0,951 |
 | R, réplica entre nós | A mesma configuração em 2, 3 e 5 nós | R3 |
 | S, sementes e sessões | A mesma configuração com 3 e 10 sementes; 3 sessões | S10 |
@@ -99,13 +99,13 @@ Cada cenário é uma lista de tentativas (`Attempt`), um `Criterion` e um `esper
 | M, mistos | 2 positivas e 1 negativa; 1 e 1; 3 e 3 | M21 |
 | B, sem baseline | Folga de 0,001, 0,02 e 0,05 sobre o alvo | B-folga-0,001 |
 | C, critério com baseline e alvo | Resultados acima do baseline + `δ` e abaixo do alvo; acima dos dois | C3-abaixo-do-alvo: três variações em 0,80, 0,85 e 0,90 com baseline 0,333 e alvo 0,95 |
-| D, sentido `menor_melhor` | Os cenários E3, N3 e M21 espelhados para uma métrica de erro | D-E3 |
-| P, exploração seguida de estagnação | E3 seguido de 5 e 15 variações sem ganho | P-E3-V15 |
-| Q, réplica que não confirma | E3 e, depois, a melhor configuração em outro nó, abaixo do alvo | Q-E3-R1-neg |
+| D, sentido `menor_melhor` | Os cenários E5, N3 e M21 espelhados para uma métrica de erro | D-E5 |
+| P, exploração seguida de estagnação | E5 seguido de 5 e 15 variações sem ganho | P-E5-V15 |
+| Q, réplica que não confirma | E5 e, depois, a melhor configuração em um ou três outros nós, abaixo do alvo | Q-E5-R1-neg, Q-E5-R3-neg |
 | A, recordes por acaso | Resultados em torno do alvo, alternando acima e abaixo, com recordes crescentes pequenos; e só melhoras pequenas acima do alvo | A8-ruido |
-| G, métrica discreta | Melhoras do tamanho de um acerto num conjunto de teste pequeno (1/30 ≈ 0,033), com valores repetidos | G-E3-passo-1/30 |
+| G, métrica discreta | Melhoras do tamanho de um acerto num conjunto de teste pequeno (1/30 ≈ 0,033), com valores repetidos | G-E2-passo |
 
-O `esperado` segue as regras do pesquisador (2026-10-18): **três variações com resultado positivo, cada uma melhor que a anterior, bastam para `funciona`** (E3, E5, E8, D-E3, P-E3-V*); com uma ou duas, `indeciso`; **variações que não indicam evolução ficam `indeciso`** (família V). Os demais seguem a mesma leitura: N3 e N5 `nao_funciona`; R e S, a mesma configuração repetida sem variação, `indeciso` com 2 réplicas e `funciona` a partir de 3 nós; C com todos os resultados abaixo do alvo, `nao_funciona` para um objetivo `limiar`; Q `indeciso`; M21 `indeciso`. Cada `esperado` tem uma justificativa curta no catálogo, e o relatório lista os cenários em que nenhuma variante acerta. Para cada par (cenário, variante), a saída registra o veredito, a leitura, o detalhamento por tentativa e o acerto contra o `esperado`, considerando "conclui" quando `|veredito| ≥ DECISION_EVAL_MIN_VERDICT` (ou o limiar passado em `--limiar`, que pode ser uma lista para comparar limiares).
+O `esperado` segue as regras do pesquisador (2026-10-18; **revisado em 2026-10-19 de três para cinco variações**, porque o teto de 2 % de falsa validação não comporta três): **cinco variações com resultado positivo, cada uma melhor que a anterior, bastam para `funciona`** (E5, E8, E5-b, D-E5, P-E5-V*); com menos de cinco, `indeciso`, e concluir `funciona` com três ou quatro é *aceitável* quando a evidência é forte (campo `aceitaveis`), mas nunca exigido; **variações que não indicam evolução ficam `indeciso`** (família V). Os demais seguem a mesma leitura: N3 e N5 `nao_funciona`; R e S, a mesma configuração repetida sem variação ou em outros nós, `indeciso` (a réplica pesa menos que a variação, decisão de 2026-10-19); C com todos os resultados abaixo do alvo, `nao_funciona` para um objetivo `limiar`; Q `indeciso`; M21 `indeciso`. Cada `esperado` tem uma justificativa curta no catálogo, e o relatório lista os cenários em que nenhuma variante acerta. Para cada par (cenário, variante), a saída registra o veredito, a leitura, o detalhamento por tentativa e o acerto contra o `esperado`, considerando "conclui" quando `|veredito| ≥ DECISION_EVAL_MIN_VERDICT` (ou o limiar passado em `--limiar`, que pode ser uma lista para comparar limiares).
 
 ## 5. Simulação (`simulacao`)
 

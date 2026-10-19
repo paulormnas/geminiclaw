@@ -89,6 +89,13 @@ Relatório: [`docs/calibracao-veredito/2026-10-18-etapa-1-repeticao-offline.md`]
 6. **Critério de aceite:** taxa de falsa validação de no máximo 2 % (definição e método no §4.1 a §4.3). O objetivo é minimizar o registro e a validação de hipóteses que não contribuem para a pesquisa.
 7. Os resultados de calibração e validação de parâmetros ficam em `docs/calibracao-veredito/`; `docs/benchmarks/` fica só para benchmark. Os relatórios devem servir de base para a dissertação.
 
+#### Decisões depois da segunda rodada da etapa 2 (2026-10-19)
+
+8. **Concluir `funciona` exige cerca de cinco variações com evolução** (e não três): com três, o teto de 2 % de falsa validação não é cumprido por nenhuma variante testada.
+9. **Variante `completa2` no limiar atual 0,3** (`DECISION_EVAL_MIN_VERDICT`): 1,1 % de falsa validação, 30 % de poder, 45 de 46 cenários do catálogo ([relatório](../calibracao-veredito/2026-10-18-etapa-2b-criterio-de-2-por-cento.md)).
+10. **A variação pesa mais que a réplica em outro nó:** a mesma configuração confirmada em três ou cinco nós não conclui sozinha.
+11. **O teto de 2 % vale como média sobre a grade**, não para o pior ponto (o pior ponto é relatado).
+
 ---
 
 ## Decisão

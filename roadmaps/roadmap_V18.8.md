@@ -1,6 +1,6 @@
 # Roadmap V18.8 — Calibração do Veredito
 
-> **Estado (2026-10-19):** Tarefa 1 (`v18.8-verdict-lab`) implementada e mergeada (#222, #224, #225); relatórios da etapa 1 e da etapa 2 em `docs/calibracao-veredito/`. Tarefa 2 (`v18.8-verdict-calibration`) implementada. Tarefa 3 sem spec.
+> **Estado (2026-10-19):** Tarefa 1 (`v18.8-verdict-lab`) implementada e mergeada (#222, #224, #225); relatórios da etapa 1 e da etapa 2 em `docs/calibracao-veredito/`. Tarefa 2 (`v18.8-verdict-calibration`) implementada. Tarefa 2b (etapa 3) especificada e aprovada em 2026-10-19. Tarefa 3 sem spec.
 
 ## Objetivo
 
@@ -27,13 +27,18 @@ Calibrar o veredito das hipóteses com dados e erros medidos, para que uma explo
 - **Spec:** [`v18.8-verdict-calibration`](../openspec/changes/v18.8-verdict-calibration/proposal.md) (modelo v2 da equação, variante `completa2`; revisão do ADR 015 §9 aprovada pelo pesquisador antes de implementar)
 - **Complexidade estimada:** Média
 
+### Tarefa 2b: Explorações controladas com efeito conhecido (etapa 3 do ADR 025)
+- **Spec:** [`v18.8-verdict-controlled-sessions`](../openspec/changes/v18.8-verdict-controlled-sessions/proposal.md) (especificada e aprovada em 2026-10-19)
+- **Critérios de aceite:** [ ] regimes P, T, N e F reprodutíveis pela semente · [ ] orquestrador leva a exploração a um fim natural ou ao teto de gasto · [ ] `orcamento` aprovado antes de qualquer execução com LLM · [ ] piloto e bateria só com confirmação explícita · [ ] poder, falsa validação, falsa refutação, indecisão e custo por validação útil medidos e comparados com a previsão do laboratório · [ ] N-abordagem-4 avaliado offline e decidido pelo pesquisador · [ ] relatórios em `docs/calibracao-veredito/`
+- **Complexidade estimada:** Alta
+
 ### Tarefa 3: Direção da evidência pela predição
 - **Spec:** `v18.8-verdict-direction` (a especificar se os resultados confirmarem a lacuna; ADR 025 §2, pergunta 6)
 - **Complexidade estimada:** a definir
 
 ## Ordem de implementação
 
-Tarefa 1 → revisão dos resultados com o pesquisador → Tarefa 2 (e 3, se confirmada) → sessões controladas (ADR 025 §3, etapa 3) → bateria no Raspberry Pi (etapa 4, com confirmação).
+Tarefa 1 → revisão dos resultados com o pesquisador → Tarefa 2 (e 3, se confirmada) → Tarefa 2b: sessões controladas (ADR 025 §3, etapa 3; piloto, depois bateria) → bateria no Raspberry Pi (etapa 4, com confirmação).
 
 ## Validação da Etapa
 - [ ] Todos os testes unitários e de integração passam.

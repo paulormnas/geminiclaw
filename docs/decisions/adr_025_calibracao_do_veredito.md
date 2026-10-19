@@ -1,6 +1,6 @@
 # ADR 025 — Calibração do Veredito: Exploração e Teste dos Parâmetros
 
-**Status:** Parcialmente implementado (2026-10-19: etapas 1 e 2 concluídas e modelo v2 do veredito implementado; etapas 3 e 4 pendentes)
+**Status:** Parcialmente implementado (2026-10-19: etapas 1 e 2 concluídas e modelo v2 do veredito implementado; etapa 3 especificada; etapa 4 pendente)
 **Data:** 2026-10-15 · **Atualizado:** 2026-10-18 (etapa 1 concluída; decisões do pesquisador)
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** [`roadmaps/roadmap_V18.8.md`](../../roadmaps/roadmap_V18.8.md)
@@ -95,6 +95,14 @@ Relatório: [`docs/calibracao-veredito/2026-10-18-etapa-1-repeticao-offline.md`]
 9. **Variante `completa2` no limiar atual 0,3** (`DECISION_EVAL_MIN_VERDICT`): 1,1 % de falsa validação, 30 % de poder, 45 de 46 cenários do catálogo ([relatório](../calibracao-veredito/2026-10-18-etapa-2b-criterio-de-2-por-cento.md)).
 10. **A variação pesa mais que a réplica em outro nó:** a mesma configuração confirmada em três ou cinco nós não conclui sozinha.
 11. **O teto de 2 % vale como média sobre a grade**, não para o pior ponto (o pior ponto é relatado).
+
+#### Decisões para a etapa 3 (2026-10-19)
+
+12. **A unidade de medida é a exploração**, e não a sessão: a sessão não é o terminal, e a exploração termina por solução ou por falta de hipóteses, não por limite. Uma exploração é a cadeia de sessões retomadas até um fim natural; o teto de gasto do experimento a interrompe e ela conta como censurada.
+13. **Rótulo de verdade no nível do problema** (regimes P efeito plantado, T teto abaixo do alvo, N ruído puro, F falha de abordagem plantada); a refutação em P é relatada como discordante, não como erro certo.
+14. **Tarefa neutra**, sem instrução para variar configurações; o objetivo dos problemas sintéticos usa `ao_atingir_objetivo = continuar`, diferença declarada em relação ao uso real.
+15. **Piloto primeiro** (uma exploração por regime e combinação) para medir chamadas, tokens e custo; a bateria só depois, com a tabela de orçamento aprovada. Nenhum parâmetro do veredito é ajustado com os dados da etapa 3 (passo 6 do §4.3); o resultado vai ao pesquisador.
+16. **N-abordagem-4:** avaliado offline antes das sessões (`VERDICT_APPROACH_FAILURE_Q` de 0,3 para 0,5, 0,7 ou 1,0; com 0,7 o caso dá −0,34 e conclui); o valor só muda com aprovação do pesquisador.
 
 ---
 
@@ -218,6 +226,7 @@ Simples e reversível. **Mantida como variante a testar:** pode mascarar o probl
 | Mudança | Capacidade | O que cobre |
 |---|---|---|
 | [`v18.8-verdict-lab`](../../openspec/changes/v18.8-verdict-lab/proposal.md) (especificada em 2026-10-18) | `evidence-scoring`, `benchmark` | Ferramenta de repetição offline, grade sintética, simulação com resposta conhecida e sensibilidade, sem alterar o comportamento do sistema |
+| [`v18.8-verdict-controlled-sessions`](../../openspec/changes/v18.8-verdict-controlled-sessions/proposal.md) (especificada em 2026-10-19) | `benchmark`, `evidence-scoring` | Etapa 3: regimes sintéticos com resposta conhecida, orquestrador de exploração, orçamento, medição e comparação com o laboratório, avaliação offline da falha de abordagem |
 | `v18.8-verdict-calibration` | `evidence-scoring`, `hypothesis-loop` | Valores ou fórmula escolhidos depois dos resultados, com revisão do ADR 015 §9 |
 | `v18.8-verdict-direction` | `evidence-scoring` | Direção `o` da evidência pela predição da hipótese (ADR 015 §9), se a etapa 1 confirmar a lacuna |
 
@@ -234,5 +243,5 @@ Revisar depois das etapas 1 e 2: se os cenários explicam o veredito da bateria 
 | 1. Repetição offline | Concluída com scripts provisórios ([relatório](../calibracao-veredito/2026-10-18-etapa-1-repeticao-offline.md)); refeita pela ferramenta de `v18.8-verdict-lab` |
 | 2. Grade sintética e propriedades | Concluída com `v18.8-verdict-lab` (#222; [relatório](../calibracao-veredito/2026-10-18-etapa-2-grade-sintetica.md)); segunda rodada concluída com as variantes corrigidas e o critério de 2 % ([relatório](../calibracao-veredito/2026-10-18-etapa-2b-criterio-de-2-por-cento.md)): `completa2` no limiar 0,3 tem 1,1 % de falsa validação e 30 % de poder; a regra "três melhoras bastam" conflita com o teto de 2 %, decisão pendente do pesquisador |
 | Mudança `v18.8-verdict-calibration` | Modelo v2 implementado e `KNOWLEDGE_SHORTCUT_MIN_VERDICT` em 0,3 (aprovados em 2026-10-19) |
-| 3. Sessões controladas | Em especificação (`v18.8-verdict-controlled-sessions`) |
+| 3. Sessões controladas | Especificada e aprovada em 2026-10-19 (`v18.8-verdict-controlled-sessions`: explorações com efeito conhecido nos regimes P, T, N e F, piloto antes da bateria, orçamento aprovado antes da execução, medição com o veredito real e comparação com o laboratório); nenhuma execução com LLM feita |
 | 4. Bateria no Raspberry Pi | Não iniciada |

@@ -19,13 +19,13 @@ EPS = 1e-12
 
 
 def variant(**estrutura) -> V.Variant:
-    return V.Variant(nome="t", params=VerdictParams(), estrutura=V.Structure(**estrutura))
+    return V.Variant(nome="t", params=VerdictParams(modelo="adr015"), estrutura=V.Structure(**estrutura))
 
 
 def test_equivalencia_da_reimplementacao_no_catalogo() -> None:
-    atual = V.Variant(nome="atual", params=VerdictParams())
+    atual = V.Variant(nome="atual", params=VerdictParams(modelo="adr015"))
     for s in catalog():
-        ref = compute_verdict(list(s.attempts), s.criterion, VerdictParams())
+        ref = compute_verdict(list(s.attempts), s.criterion, VerdictParams(modelo="adr015"))
         got = V.lab_verdict(list(s.attempts), s.criterion, atual, reimplementar=True)
         assert abs(got.veredito - ref.veredito) <= EPS, s.nome
         assert abs(got.alpha - ref.alpha) <= EPS and abs(got.beta - ref.beta) <= EPS and abs(got.f - ref.f) <= EPS
@@ -37,12 +37,12 @@ def test_equivalencia_da_reimplementacao_no_catalogo() -> None:
 def test_equivalencia_em_amostra_da_simulacao() -> None:
     import random
 
-    atual = V.Variant(nome="atual", params=VerdictParams())
+    atual = V.Variant(nome="atual", params=VerdictParams(modelo="adr015"))
     point = SimPoint(sigma=0.01, tau=0.01, efeito=0.01, p_variacao=0.5, p_falha=0.3, nos=2)
     for i in range(30):
         for tipo in ("verdadeira", "falsa", "sem_efeito"):
             seq = generate_sequence(random.Random(f"{i}:{tipo}"), tipo, point, 12)
-            ref = compute_verdict(seq, ABSOLUTO, VerdictParams()).veredito
+            ref = compute_verdict(seq, ABSOLUTO, VerdictParams(modelo="adr015")).veredito
             assert abs(V.lab_verdict(seq, ABSOLUTO, atual, reimplementar=True).veredito - ref) <= EPS
 
 
@@ -178,7 +178,7 @@ def test_completa2_e_monotonica_no_catalogo() -> None:
 def test_completa2_conclui_o_que_o_pesquisador_definiu() -> None:
     from scripts.verdict_lab.scenarios import by_name
 
-    est = V.Variant(nome="c2", params=VerdictParams(), estrutura=V.Structure(**COMPLETA2))
+    est = V.Variant(nome="c2", params=VerdictParams(modelo="adr015"), estrutura=V.Structure(**COMPLETA2))
     sc = by_name()
     for nome in ("A8-ruido", "A16-ruido", "V20", "Q-E5-R3-neg", "E2", "R5"):
         s = sc[nome]

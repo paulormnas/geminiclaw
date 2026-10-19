@@ -143,9 +143,10 @@ def test_descoberta_sem_evidencia_e_recusada(world):
     assert env.raw.find_nodes("Descoberta", {}) == []
 
 
-def test_funciona_exige_veredito_calculado_compativel(world):
-    """ADR 015 §9.5: 'funciona' só com veredito calculado >= 0,1 (1 positivo = +0,11) e escopo calculável."""
+def test_funciona_exige_veredito_calculado_compativel(world, monkeypatch):
+    """ADR 015 §9.5: 'funciona' só com veredito calculado >= piso (aqui 0,1; 1 positivo = +0,11) e escopo calculável."""
     env, graph, tk, ids = world
+    monkeypatch.setattr("src.config.KNOWLEDGE_SHORTCUT_MIN_VERDICT", 0.1)
     env.provider.vectors["par9b"] = pair_vectors(DIM, 9, 1.0)[0]
 
     sem_escopo = _create(tk, ids, tipo="funciona", enunciado="par9b")  # só Abordagem: sem Problema/Hipótese
@@ -601,3 +602,13 @@ def test_fila_so_serve_pares_do_projeto_e_oculta_propriedades_de_outro_projeto(w
     assert "propriedades" in visto[ids["abordagem"]]
     assert "propriedades" not in visto[x] and "Privada X" not in json.dumps(servidos)
     assert env.queue.pending_count() == 2
+
+
+def test_piso_padrao_dos_atalhos_e_0_3(world):
+    """v18.8-verdict-calibration: com o piso padrão (0,3), um positivo isolado não sustenta 'funciona'."""
+    env, graph, tk, ids = world
+    env.provider.vectors["par9c"] = pair_vectors(DIM, 9, 1.0)[0]
+
+    out = _create(tk, ids, tipo="funciona", enunciado="par9c", sobre_ids=[ids["abordagem"], graph.problema])
+
+    assert out["ok"] is False and "insuficiente" in out["motivo"] and "0.3" in out["motivo"]

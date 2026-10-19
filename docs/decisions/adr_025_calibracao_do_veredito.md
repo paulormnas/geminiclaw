@@ -1,6 +1,6 @@
 # ADR 025 — Calibração do Veredito: Exploração e Teste dos Parâmetros
 
-**Status:** Aprovado (2026-10-18: plano de exploração aprovado pelo pesquisador; nenhum valor ou fórmula é decidido neste ADR)
+**Status:** Parcialmente implementado (2026-10-19: etapas 1 e 2 concluídas e modelo v2 do veredito implementado; etapas 3 e 4 pendentes)
 **Data:** 2026-10-15 · **Atualizado:** 2026-10-18 (etapa 1 concluída; decisões do pesquisador)
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** [`roadmaps/roadmap_V18.8.md`](../../roadmaps/roadmap_V18.8.md)
@@ -233,5 +233,6 @@ Revisar depois das etapas 1 e 2: se os cenários explicam o veredito da bateria 
 |---|---|
 | 1. Repetição offline | Concluída com scripts provisórios ([relatório](../calibracao-veredito/2026-10-18-etapa-1-repeticao-offline.md)); refeita pela ferramenta de `v18.8-verdict-lab` |
 | 2. Grade sintética e propriedades | Concluída com `v18.8-verdict-lab` (#222; [relatório](../calibracao-veredito/2026-10-18-etapa-2-grade-sintetica.md)); segunda rodada concluída com as variantes corrigidas e o critério de 2 % ([relatório](../calibracao-veredito/2026-10-18-etapa-2b-criterio-de-2-por-cento.md)): `completa2` no limiar 0,3 tem 1,1 % de falsa validação e 30 % de poder; a regra "três melhoras bastam" conflita com o teto de 2 %, decisão pendente do pesquisador |
-| 3. Sessões controladas | Não iniciada |
+| Mudança `v18.8-verdict-calibration` | Modelo v2 implementado e `KNOWLEDGE_SHORTCUT_MIN_VERDICT` em 0,3 (aprovados em 2026-10-19) |
+| 3. Sessões controladas | Em especificação (`v18.8-verdict-controlled-sessions`) |
 | 4. Bateria no Raspberry Pi | Não iniciada |

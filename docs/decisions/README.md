@@ -34,7 +34,7 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 | [022](adr_022_contrato_contexto_por_chamada.md) | Contrato de Contexto por Chamada e Regimento da Pesquisa | 🟠 Parcialmente implementado (V18.7: `v18.7-subtask-contract` mergeada; `v18.7-dependency-artifacts`, `v18.7-agent-system-prompts` e `v18.7-exploration-metrics` pendentes) | 2026-10-15 |
 | [023](adr_023_pesquisa_em_segundo_plano.md) | Pesquisa em Segundo Plano com Acompanhamento pelo Terminal | 🟠 Parcialmente implementado (V18.7: 3 das 4 mudanças mergeadas; `v18.7-session-events-terminal` pendente) | 2026-10-15 |
 | [024](adr_024_organizacao_do_codigo.md) | Organização do Código por Responsabilidade e Regra de Camadas | 🟠 Parcialmente implementado (Etapas 1 e 2 mergeadas; Etapa 3 pendente em duas mudanças) | 2026-10-15 |
-| [025](adr_025_calibracao_do_veredito.md) | Calibração do Veredito: Exploração e Teste dos Parâmetros | 🟢 Aprovado (2026-10-18: plano de exploração; etapa 1 concluída; `v18.8-verdict-lab` especificada; sem valores decididos) | 2026-10-15 |
+| [025](adr_025_calibracao_do_veredito.md) | Calibração do Veredito: Exploração e Teste dos Parâmetros | 🟠 Parcialmente implementado (2026-10-19: etapas 1 e 2 e modelo v2 do veredito concluídos; sessões controladas e bateria no Pi pendentes) | 2026-10-15 |
 
 
 ---
@@ -114,6 +114,8 @@ ADR 010 (Propósito: Assistente de Pesquisa) ← define o escopo de tudo (substi
 ---
 
 ## Lacunas de especificação (2026-10-01)
+
+**Atualização 2026-10-19 (V18.8):** `v18.8-verdict-calibration` implementada (modelo v2 da equação do veredito e `KNOWLEDGE_SHORTCUT_MIN_VERDICT` em 0,3); o ADR 015 §9 foi revisado (§9.9) e o ADR 025 passa a `Parcialmente implementado`. Pendentes: etapas 3 e 4 do ADR 025.
 
 **Atualização 2026-10-18 (V18.8):** o ADR 025 passa a `Aprovado` (plano de exploração). Etapa 1 concluída ([`docs/calibracao-veredito/2026-10-18-etapa-1-repeticao-offline.md`](../calibracao-veredito/2026-10-18-etapa-1-repeticao-offline.md)); a etapa 2 está especificada em `v18.8-verdict-lab` (aguarda aprovação), com o roadmap `roadmaps/roadmap_V18.8.md`. `v18.8-verdict-calibration` e `v18.8-verdict-direction` seguem sem spec (dependem dos resultados).
 

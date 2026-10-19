@@ -123,6 +123,18 @@ class VerdictParams:
         prior: Ponto de partida neutro de `α` e `β` (`α0 = β0`).
         thresholds: Limiares `(fraco, moderado, forte)` que definem as faixas de
             leitura do veredito, em ordem crescente.
+        modelo: `"v2"` (v18.8-verdict-calibration; independência por tipo de evidência, variação
+            útil, alvo exigido, penalidade acumulada) ou `"adr015"` (equação anterior). Os campos
+            seguintes só valem no modelo v2.
+        d_variation: `d` da variação útil (configuração nunca executada em nenhum nó).
+        d_replica_node: `d` da réplica em outro nó.
+        d_new_dataset: `d` do dataset novo (configuração e nó já vistos).
+        d_variation_no_gain: `d` da variação positiva que não superou o melhor valor anterior.
+        d_replica_against: `d` da evidência negativa em configuração já vista.
+        useful_variation_epsilon: Melhora mínima sobre o melhor valor anterior para a variação ser
+            útil (0 = qualquer melhora).
+        m_floor_no_baseline: Piso do `m` positivo sem baseline, com alvo e `delta_min`.
+        require_target: Com baseline e alvo, a evidência positiva também precisa alcançar o alvo.
     """
 
     q_validated_complete: float = 1.0
@@ -137,6 +149,15 @@ class VerdictParams:
     approach_failure_min_repeats: int = 2
     prior: float = 1.0
     thresholds: tuple[float, float, float] = (0.1, 0.3, 0.5)
+    modelo: str = "v2"
+    d_variation: float = 1.0
+    d_replica_node: float = 0.5
+    d_new_dataset: float = 1.0
+    d_variation_no_gain: float = 0.0
+    d_replica_against: float = 1.0
+    useful_variation_epsilon: float = 0.0
+    m_floor_no_baseline: float = 0.5
+    require_target: bool = True
 
     @classmethod
     def from_config(cls) -> "VerdictParams":
@@ -166,6 +187,15 @@ class VerdictParams:
             approach_failure_min_repeats=app_config.VERDICT_APPROACH_FAILURE_MIN_REPEATS,
             prior=app_config.VERDICT_PRIOR,
             thresholds=app_config.VERDICT_THRESHOLDS,
+            modelo=app_config.VERDICT_MODEL,
+            d_variation=app_config.VERDICT_D_VARIATION,
+            d_replica_node=app_config.VERDICT_D_REPLICA_NODE,
+            d_new_dataset=app_config.VERDICT_D_NEW_DATASET,
+            d_variation_no_gain=app_config.VERDICT_D_VARIATION_NO_GAIN,
+            d_replica_against=app_config.VERDICT_D_REPLICA_AGAINST,
+            useful_variation_epsilon=app_config.VERDICT_USEFUL_VARIATION_EPSILON,
+            m_floor_no_baseline=app_config.VERDICT_M_FLOOR_NO_BASELINE,
+            require_target=app_config.VERDICT_REQUIRE_TARGET,
         )
 
 
@@ -183,6 +213,9 @@ class EvidenceBreakdown:
         b: Penalidade de busca (0 quando a tentativa não é evidência; 1,0 para
             evidências negativas, que não sofrem essa penalidade).
         w: Peso final `q · m · d · b` (0 quando a tentativa não é evidência).
+        tipo: Modelo v2: `"variacao"`, `"replica_no"`, `"dataset"`, `"sessao"` ou `"semente"` (`None` fora
+            das evidências e no modelo `adr015`).
+        util: Modelo v2: se a variação superou o melhor valor anterior (`None` fora das variações).
     """
 
     attempt_id: str
@@ -192,6 +225,8 @@ class EvidenceBreakdown:
     d: float
     b: float
     w: float
+    tipo: str | None = None
+    util: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -456,6 +491,194 @@ def _search_penalty(
     return 1.0 / (1.0 + params.gamma * math.log(n_config))
 
 
+@dataclass
+class _V2Record:
+    """Estado mutável de uma tentativa no modelo v2 (uso interno)."""
+
+    attempt: Attempt
+    classificacao: Classificacao
+    q: float
+    m: float
+    d: float = 0.0
+    b: float = 0.0
+    w: float = 0.0
+    tipo: str | None = None
+    util: bool | None = None
+    nova_config: bool = False
+
+
+def _gain(criterion: Criterion, value: float, reference: float) -> float:
+    """Diferença no sentido favorável da métrica (positiva = melhor)."""
+    return value - reference if criterion.sentido == "maior_melhor" else reference - value
+
+
+def _direction_and_magnitude_v2(
+    attempt: Attempt, criterion: Criterion, params: VerdictParams
+) -> tuple[int, float] | None:
+    """Direção (`o`) e magnitude (`m`) no modelo v2 (ADR 015 §9.2/§9.4 revisado).
+
+    Com `delta_min` e baseline, a conta é a do ADR 015; com `require_target` e alvo, a evidência que supera o
+    baseline mas não alcança o alvo é negativa. Sem baseline e com alvo e `delta_min`, a magnitude vem da folga
+    (positiva, com piso) ou da falta (negativa).
+    """
+    value = attempt.value
+    assert value is not None
+    if criterion.delta_min is not None and attempt.baseline is not None:
+        delta = _gain(criterion, value, attempt.baseline)
+        if delta >= criterion.delta_min:
+            o, m = 1, min(1.0, delta / (2 * criterion.delta_min))
+        else:
+            o, m = -1, min(1.0, (criterion.delta_min - delta) / criterion.delta_min)
+        if o == 1 and params.require_target and criterion.alvo is not None:
+            falta = -_gain(criterion, value, criterion.alvo)
+            if falta > 0:
+                return -1, min(1.0, falta / criterion.delta_min)
+        return o, m
+
+    if criterion.alvo is not None:
+        margem = _gain(criterion, value, criterion.alvo)
+        if criterion.delta_min:
+            if margem >= 0:
+                return 1, max(params.m_floor_no_baseline, min(1.0, margem / (2 * criterion.delta_min)))
+            return -1, min(1.0, -margem / criterion.delta_min)
+        return (1, 0.5) if margem >= 0 else (-1, 0.5)
+
+    return None
+
+
+def _classify_v2(
+    attempt: Attempt, criterion: Criterion, params: VerdictParams, reproduced: set[str]
+) -> tuple[Classificacao, float, float]:
+    if attempt.outcome_kind == "resultado":
+        if attempt.validation == "nao_validado":
+            return "nao_evidencia", 0.0, 0.0
+        direction = _direction_and_magnitude_v2(attempt, criterion, params)
+        if direction is None:
+            return "ambigua", 0.0, 0.0
+        o, m = direction
+        return ("positiva" if o == 1 else "negativa"), _quality(attempt, params), m
+    if attempt.failure_cause == "infraestrutura":
+        return "infraestrutura", 0.0, 0.0
+    if attempt.failure_cause == "abordagem" and attempt.failure_signature in reproduced:
+        return "negativa", params.approach_failure_q, 1.0
+    return "ambigua", 0.0, 0.0
+
+
+def _assign_independence_v2(records: list[_V2Record], criterion: Criterion, params: VerdictParams) -> None:
+    """Tipo, utilidade e `d` de cada evidência, em ordem cronológica (ADR 015 §9.4 revisado)."""
+    config_nodes: dict[str, set[str]] = {}
+    seen_datasets: set[str] = set()
+    seen_sessions: set[str] = set()
+    best: float | None = None
+    for r in records:
+        if r.classificacao not in ("positiva", "negativa"):
+            continue
+        a = r.attempt
+        nodes = config_nodes.get(a.config_hash)
+        if nodes is None:
+            r.tipo = "variacao"
+            r.nova_config = True
+            if a.value is None:
+                r.util = True
+            else:
+                r.util = best is None or _gain(criterion, a.value, best) > params.useful_variation_epsilon
+            if r.util:
+                r.d = params.d_variation
+            elif r.classificacao == "positiva":
+                r.d = params.d_variation_no_gain
+            else:
+                r.d = params.d_new_seed
+        elif a.node_id not in nodes:
+            r.tipo = "replica_no"
+            r.d = params.d_replica_node
+        elif any(ds not in seen_datasets for ds in a.dataset_ids):
+            r.tipo = "dataset"
+            r.d = params.d_new_dataset
+        elif a.session_id not in seen_sessions:
+            r.tipo = "sessao"
+            r.d = params.d_new_session
+        else:
+            r.tipo = "semente"
+            r.d = params.d_new_seed
+        if nodes is not None and r.classificacao == "negativa":
+            r.d = params.d_replica_against  # a evidência contrária em configuração já vista pesa cheio
+        if a.value is not None and (best is None or _gain(criterion, a.value, best) > 0):
+            best = a.value
+        config_nodes.setdefault(a.config_hash, set()).add(a.node_id)
+        seen_datasets.update(a.dataset_ids)
+        seen_sessions.add(a.session_id)
+
+
+def _compute_v2(attempts: list[Attempt], criterion: Criterion, params: VerdictParams) -> VerdictResult:
+    """Veredito pelo modelo v2 (v18.8-verdict-calibration; ADR 025 §4.2 e ADR 015 §9 revisado)."""
+    ordered = sorted(attempts, key=lambda a: a.timestamp)
+    reproduced = _reproduced_failure_signatures(ordered, params)
+    records: list[_V2Record] = []
+    for attempt in ordered:
+        classificacao, q, m = _classify_v2(attempt, criterion, params, reproduced)
+        records.append(_V2Record(attempt=attempt, classificacao=classificacao, q=q, m=m))
+    _assign_independence_v2(records, criterion, params)
+
+    wasted = 0  # variações com valor que não foram úteis, até a evidência corrente
+    for r in records:
+        if r.nova_config and r.util is False and r.attempt.value is not None:
+            wasted += 1
+        if r.classificacao == "positiva":
+            replicated = any(
+                o.classificacao == "positiva"
+                and o.attempt.attempt_id != r.attempt.attempt_id
+                and o.attempt.config_hash == r.attempt.config_hash
+                and (o.attempt.node_id != r.attempt.node_id or o.attempt.session_id != r.attempt.session_id)
+                for o in records
+            )
+            r.b = 1.0 if replicated else 1.0 / (1.0 + params.gamma * math.log(1 + wasted))
+        elif r.classificacao == "negativa":
+            r.b = 1.0
+        r.w = r.q * r.m * r.d * r.b
+
+    alpha = params.prior + sum(r.w for r in records if r.classificacao == "positiva")
+    beta = params.prior + sum(r.w for r in records if r.classificacao == "negativa")
+    n_tentativas = len(ordered)
+    n_infraestrutura = sum(1 for r in records if r.classificacao == "infraestrutura")
+    n_evidencias = sum(1 for r in records if r.classificacao in ("positiva", "negativa"))
+    n_ambiguas = sum(1 for r in records if r.classificacao == "ambigua")
+    n_validas = n_tentativas - n_infraestrutura
+    fator = 1.0 if n_validas == 0 else 1.0 - params.lambda_ambiguous * n_ambiguas / n_validas
+    suporte = alpha / (alpha + beta)
+    certeza = (alpha + beta - 2 * params.prior) / (alpha + beta)
+    veredito = fator * certeza * (2 * suporte - 1)
+    leitura, tipo_descoberta = _read_verdict(veredito, params.thresholds)
+    return VerdictResult(
+        alpha=alpha,
+        beta=beta,
+        suporte=suporte,
+        certeza=certeza,
+        f=fator,
+        veredito=veredito,
+        confianca=abs(veredito),
+        leitura=leitura,
+        tipo_descoberta=tipo_descoberta,
+        n_tentativas=n_tentativas,
+        n_evidencias=n_evidencias,
+        n_ambiguas=n_ambiguas,
+        n_infraestrutura=n_infraestrutura,
+        detalhes=tuple(
+            EvidenceBreakdown(
+                attempt_id=r.attempt.attempt_id,
+                classificacao=r.classificacao,
+                q=r.q,
+                m=r.m,
+                d=r.d,
+                b=r.b,
+                w=r.w,
+                tipo=r.tipo,
+                util=r.util if r.tipo == "variacao" else None,
+            )
+            for r in records
+        ),
+    )
+
+
 def _read_verdict(veredito: float, thresholds: tuple[float, float, float]) -> tuple[str, str | None]:
     """Traduz o veredito numérico em leitura textual e tipo de descoberta sugerido.
 
@@ -521,6 +744,10 @@ def compute_verdict(
     params = params or VerdictParams()
     for attempt in attempts:
         _validate_attempt(attempt)
+    if params.modelo == "v2":
+        return _compute_v2(attempts, criterion, params)
+    if params.modelo != "adr015":
+        raise ValueError(f"modelo do veredito inválido: {params.modelo!r} (esperado 'v2' ou 'adr015').")
 
     sorted_attempts = sorted(attempts, key=lambda a: a.timestamp)
     n_config = len({a.config_hash for a in sorted_attempts})

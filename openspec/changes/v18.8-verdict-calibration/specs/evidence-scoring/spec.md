@@ -49,7 +49,7 @@ O sistema SHALL, no modelo v2, considerar útil a variação que é a primeira e
 #### Scenario: Cinco melhoras concluem e três não
 - **GIVEN** variações positivas crescentes acima do alvo, sem baseline
 - **WHEN** o veredito é calculado com os valores padrão
-- **THEN** com cinco variações (0,955 a 0,971, em passos de 0,004) é 0,405 ± 0,005 (≥ 0,3) e com três (0,955 a 0,963) é 0,218 ± 0,005 (< 0,3)
+- **THEN** com cinco variações (0,955 a 0,971, em passos de 0,004) é 0,405 ± 0,005 (≥ 0,3) e com três (0,955 a 0,963) é 0,204 ± 0,005 (< 0,3)
 
 ### Requirement: Penalidade de busca acumulada
 O sistema SHALL, no modelo v2, calcular `b` das evidências positivas com `n_config` igual a 1 mais o número de variações, até a própria evidência e em ordem cronológica, que não foram úteis, sem contar as falhas, de modo que uma evidência posterior não altera o peso das anteriores.

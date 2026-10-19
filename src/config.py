@@ -780,6 +780,18 @@ VERDICT_LAMBDA_AMBIGUOUS = float(get_env("VERDICT_LAMBDA_AMBIGUOUS", default="0.
 VERDICT_APPROACH_FAILURE_Q = float(get_env("VERDICT_APPROACH_FAILURE_Q", default="0.3"))
 VERDICT_APPROACH_FAILURE_MIN_REPEATS = int(get_env("VERDICT_APPROACH_FAILURE_MIN_REPEATS", default="2"))
 VERDICT_PRIOR = float(get_env("VERDICT_PRIOR", default="1.0"))
+# v18.8-verdict-calibration (ADR 025; ADR 015 §9 revisado): modelo da equação ("v2" ou "adr015") e valores do modelo v2.
+VERDICT_MODEL = get_env("VERDICT_MODEL", default="v2")
+if VERDICT_MODEL not in ("v2", "adr015"):
+    raise ValueError(f"VERDICT_MODEL deve ser 'v2' ou 'adr015', não {VERDICT_MODEL!r}.")
+VERDICT_D_VARIATION = float(get_env("VERDICT_D_VARIATION", default="1.0"))
+VERDICT_D_REPLICA_NODE = float(get_env("VERDICT_D_REPLICA_NODE", default="0.5"))
+VERDICT_D_NEW_DATASET = float(get_env("VERDICT_D_NEW_DATASET", default="1.0"))
+VERDICT_D_VARIATION_NO_GAIN = float(get_env("VERDICT_D_VARIATION_NO_GAIN", default="0.0"))
+VERDICT_D_REPLICA_AGAINST = float(get_env("VERDICT_D_REPLICA_AGAINST", default="1.0"))
+VERDICT_USEFUL_VARIATION_EPSILON = float(get_env("VERDICT_USEFUL_VARIATION_EPSILON", default="0.0"))
+VERDICT_M_FLOOR_NO_BASELINE = float(get_env("VERDICT_M_FLOOR_NO_BASELINE", default="0.5"))
+VERDICT_REQUIRE_TARGET = get_env_bool("VERDICT_REQUIRE_TARGET", default=True)
 _verdict_thresholds_raw = get_env("VERDICT_THRESHOLDS", default="0.1,0.3,0.5")
 VERDICT_THRESHOLDS: tuple[float, float, float] = tuple(
     float(x) for x in _verdict_thresholds_raw.split(",")
@@ -806,7 +818,7 @@ CURATOR_TIMEOUT_SECONDS = int(get_env("CURATOR_TIMEOUT_SECONDS", default="300"))
 CURATOR_MAX_FLAGS_PER_SESSION = int(get_env("CURATOR_MAX_FLAGS_PER_SESSION", default="100"))
 CURATOR_FLAG_MAX_CHARS = int(get_env("CURATOR_FLAG_MAX_CHARS", default="1000"))
 # Menor |veredito| que mantém os atalhos FUNCIONOU_PARA/FALHOU_PARA (a faixa "insuficiente" começa abaixo dele).
-KNOWLEDGE_SHORTCUT_MIN_VERDICT = float(get_env("KNOWLEDGE_SHORTCUT_MIN_VERDICT", default="0.1"))
+KNOWLEDGE_SHORTCUT_MIN_VERDICT = float(get_env("KNOWLEDGE_SHORTCUT_MIN_VERDICT", default="0.3"))
 # Promoção de configuração a Abordagem(tipo="configuracao"): positivos validados e projetos distintos.
 PROMOTION_MIN_POSITIVES = int(get_env("PROMOTION_MIN_POSITIVES", default="3"))
 PROMOTION_MIN_PROJECTS = int(get_env("PROMOTION_MIN_PROJECTS", default="2"))

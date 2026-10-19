@@ -23,6 +23,11 @@ def _header(title: str, manifest: dict[str, Any]) -> list[str]:
     ]
 
 
+def _hit(scenario: Scenario, conclui: str) -> bool:
+    """Acerto: o desfecho esperado ou um dos aceitáveis do cenário."""
+    return conclui == scenario.esperado or conclui in scenario.aceitaveis
+
+
 def conclusion(veredito: float, limiar: float) -> str:
     if veredito >= limiar:
         return "funciona"
@@ -133,7 +138,8 @@ def grid_rows(
                         "veredito": r.veredito,
                         "leitura": r.leitura,
                         "conclui": conclui,
-                        "acerto": conclui == s.esperado,
+                        "aceitaveis": ";".join(s.aceitaveis),
+                        "acerto": _hit(s, conclui),
                         "n_evidencias": r.n_evidencias,
                         "f": r.f,
                         "pesos": [round(d.w, 4) for d in r.detalhes],
@@ -157,7 +163,7 @@ def grid_report(
     for nome in variant_names:
         row: list[Any] = [nome]
         for lim in limiares:
-            ok = sum(conclusion(results[(s.nome, nome)].veredito, lim) == s.esperado for s in scenarios)
+            ok = sum(_hit(s, conclusion(results[(s.nome, nome)].veredito, lim)) for s in scenarios)
             row.append(f"{ok}/{len(scenarios)}")
         rows.append(row)
     lines += [md_table(header, rows), ""]
@@ -170,7 +176,7 @@ def grid_report(
         row = [nome]
         for fam in familias:
             sc = [s for s in scenarios if s.familia == fam]
-            row.append(f"{sum(conclusion(results[(s.nome, nome)].veredito, main) == s.esperado for s in sc)}/{len(sc)}")
+            row.append(f"{sum(_hit(s, conclusion(results[(s.nome, nome)].veredito, main)) for s in sc)}/{len(sc)}")
         rows.append(row)
     lines += [md_table(["Variante"] + familias, rows), ""]
 
@@ -181,9 +187,7 @@ def grid_report(
     lines += [md_table(["Cenário", "Esperado"] + variant_names, rows), ""]
 
     missed = [
-        s
-        for s in scenarios
-        if not any(conclusion(results[(s.nome, n)].veredito, main) == s.esperado for n in variant_names)
+        s for s in scenarios if not any(_hit(s, conclusion(results[(s.nome, n)].veredito, main)) for n in variant_names)
     ]
     lines += [f"## Cenários em que nenhuma variante acerta (limiar {main:g})", ""]
     lines += [f"- `{s.nome}` ({s.descricao}): esperado `{s.esperado}`, porque {s.justificativa}." for s in missed]
@@ -192,8 +196,11 @@ def grid_report(
     lines += ["## Catálogo", ""]
     lines.append(
         md_table(
-            ["Cenário", "Família", "Descrição", "Esperado", "Justificativa"],
-            [[s.nome, s.familia, s.descricao, s.esperado, s.justificativa] for s in scenarios],
+            ["Cenário", "Família", "Descrição", "Esperado", "Aceitável também", "Justificativa"],
+            [
+                [s.nome, s.familia, s.descricao, s.esperado, ", ".join(s.aceitaveis) or "—", s.justificativa]
+                for s in scenarios
+            ],
         )
     )
     lines.append("")

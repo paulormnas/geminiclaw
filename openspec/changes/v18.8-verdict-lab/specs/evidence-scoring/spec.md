@@ -100,8 +100,8 @@ O sistema SHALL aplicar, no comando `grade`, cada variante a um catálogo determ
 
 #### Scenario: Esperado pelas regras do pesquisador
 - **WHEN** o catálogo é carregado
-- **THEN** E3 (três variações positivas, cada uma melhor que a anterior) tem `esperado = funciona`
-- **AND** E2 e V8 (oito variações com o mesmo valor) têm `esperado = indeciso`
+- **THEN** E5 (cinco variações positivas, cada uma melhor que a anterior) tem `esperado = funciona`
+- **AND** E3 (três variações) e V8 (oito variações com o mesmo valor) têm `esperado = indeciso`, e R3 e R5 (a mesma configuração em três e cinco nós) também
 - **AND** existem as famílias C, D, G, P e Q do design §4
 
 #### Scenario: Caso da etapa 1 no catálogo

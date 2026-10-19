@@ -1,7 +1,7 @@
 """Catálogo determinístico de cenários de evidência (design §4 de ``v18.8-verdict-lab``).
 
 Cada cenário declara o desfecho esperado (``funciona``, ``nao_funciona`` ou ``indeciso``) pelas regras do
-pesquisador de 2026-10-18: três variações com resultado positivo, cada uma melhor que a anterior, bastam para
+pesquisador de 2026-10-18: cinco variações com resultado positivo, cada uma melhor que a anterior, bastam para
 ``funciona``; variações que não indicam evolução ficam ``indeciso``. Os valores são do catálogo, não do caso de
 pesquisa da dissertação.
 """
@@ -24,7 +24,11 @@ ERRO = Criterion(sentido="menor_melhor", delta_min=DELTA, alvo=0.10)
 
 @dataclass(frozen=True)
 class Scenario:
-    """Um cenário: tentativas, critério e desfecho esperado com justificativa."""
+    """Um cenário: tentativas, critério e desfecho esperado com justificativa.
+
+    ``aceitaveis`` lista desfechos além do esperado que não contam como erro (por exemplo, concluir ``funciona`` com
+    quatro variações é aceitável, embora cinco sejam o mínimo exigido).
+    """
 
     nome: str
     familia: str
@@ -34,6 +38,7 @@ class Scenario:
     criterion: Criterion
     attempts: tuple[Attempt, ...]
     sem_baseline: bool = True
+    aceitaveis: tuple[str, ...] = ()
 
 
 @dataclass
@@ -108,8 +113,12 @@ class _Builder:
         return tuple(self.attempts)
 
 
-def _s(nome, familia, descricao, esperado, justificativa, builder, criterion=ABSOLUTO, sem_baseline=True):
-    return Scenario(nome, familia, descricao, esperado, justificativa, criterion, builder.done(), sem_baseline)
+def _s(
+    nome, familia, descricao, esperado, justificativa, builder, criterion=ABSOLUTO, sem_baseline=True, aceitaveis=()
+):
+    return Scenario(
+        nome, familia, descricao, esperado, justificativa, criterion, builder.done(), sem_baseline, tuple(aceitaveis)
+    )
 
 
 def _b() -> _Builder:
@@ -124,27 +133,30 @@ def catalog() -> list[Scenario]:
     """Os cenários do catálogo, em ordem de família."""
     out: list[Scenario] = []
     evolucao = "variações positivas com evolução"
+    minimo = f"menos de cinco {evolucao}"
+    cinco = f"cinco ou mais {evolucao}"
 
     # E: exploração em um nó
-    for n in (1, 2):
+    for n in (1, 2, 3, 4):
         out.append(
             _s(
                 f"E{n}",
                 "E",
                 f"{n} variação(ões) acima do alvo, crescentes",
                 INDECISO,
-                f"menos de três {evolucao}",
+                minimo,
                 _b().variations(_increasing(n)),
+                aceitaveis=(FUNCIONA,) if n >= 3 else (),
             )
         )
-    for n in (3, 5, 8):
+    for n in (5, 8):
         out.append(
             _s(
                 f"E{n}",
                 "E",
                 f"{n} variações acima do alvo, crescentes",
                 FUNCIONA,
-                f"pelo menos três {evolucao}",
+                cinco,
                 _b().variations(_increasing(n, step=0.004)),
             )
         )
@@ -153,9 +165,21 @@ def catalog() -> list[Scenario]:
             "E3-b",
             "E",
             "E3 com baseline 0,333",
-            FUNCIONA,
-            f"três {evolucao}",
+            INDECISO,
+            minimo,
             _b().variations([0.96, 0.97, 0.98], baseline=BASELINE),
+            sem_baseline=False,
+            aceitaveis=(FUNCIONA,),
+        )
+    )
+    out.append(
+        _s(
+            "E5-b",
+            "E",
+            "E5 com baseline 0,333",
+            FUNCIONA,
+            cinco,
+            _b().variations(_increasing(5, step=0.004), baseline=BASELINE),
             sem_baseline=False,
         )
     )
@@ -184,7 +208,7 @@ def catalog() -> list[Scenario]:
     )
 
     # R: réplica da mesma configuração entre nós
-    for n, esperado in ((2, INDECISO), (3, FUNCIONA), (5, FUNCIONA)):
+    for n, esperado in ((2, INDECISO), (3, INDECISO), (5, INDECISO)):
         b = _b()
         for k in range(n):
             b.result(0.96, "c1", node=f"n{k + 1}", session=f"s{k + 1}")
@@ -194,7 +218,7 @@ def catalog() -> list[Scenario]:
                 "R",
                 f"a mesma configuração (0,96) em {n} nós",
                 esperado,
-                "replicação independente em três ou mais nós confirma" if n >= 3 else "uma réplica só",
+                "a réplica em outro nó pesa menos que a variação e só confirma o que já foi descoberto",
                 b,
             )
         )
@@ -283,22 +307,22 @@ def catalog() -> list[Scenario]:
     # F: falhas
     out.append(
         _s(
-            "F1-E3",
+            "F1-E5",
             "F",
-            "1 falha ambígua e E3",
+            "1 falha ambígua e E5",
             FUNCIONA,
-            f"três {evolucao}",
-            _b().failure("ambigua").variations([0.96, 0.97, 0.98]),
+            cinco,
+            _b().failure("ambigua").variations(_increasing(5, step=0.004)),
         )
     )
     out.append(
         _s(
-            "F3-E3",
+            "F3-E5",
             "F",
-            "3 falhas ambíguas e E3",
+            "3 falhas ambíguas e E5",
             FUNCIONA,
-            f"três {evolucao}",
-            _b().failure("ambigua").failure("ambigua").failure("ambigua").variations([0.96, 0.97, 0.98]),
+            cinco,
+            _b().failure("ambigua").failure("ambigua").failure("ambigua").variations(_increasing(5, step=0.004)),
         )
     )
     b = _b()
@@ -320,12 +344,12 @@ def catalog() -> list[Scenario]:
         b.failure("infraestrutura")
     out.append(
         _s(
-            "F-infra-E3",
+            "F-infra-E5",
             "F",
-            "5 falhas de infraestrutura e E3",
+            "5 falhas de infraestrutura e E5",
             FUNCIONA,
             "infraestrutura não informa sobre a hipótese",
-            b.variations([0.96, 0.97, 0.98]),
+            b.variations(_increasing(5, step=0.004)),
         )
     )
 
@@ -366,20 +390,20 @@ def catalog() -> list[Scenario]:
         _s(
             "B-folga-0,001",
             "B",
-            "E3 com folga de 0,001 a 0,003 sobre o alvo",
+            "E5 com folga de 0,001 a 0,005 sobre o alvo",
             FUNCIONA,
-            f"três {evolucao} (qualquer melhora conta)",
-            _b().variations([0.951, 0.952, 0.953]),
+            f"{cinco} (qualquer melhora conta)",
+            _b().variations([0.951, 0.952, 0.953, 0.954, 0.955]),
         )
     )
     out.append(
         _s(
             "B-folga-0,05",
             "B",
-            "E3 com folga de 0,03 a 0,05 sobre o alvo",
+            "E5 com folga de 0,03 a 0,05 sobre o alvo",
             FUNCIONA,
-            f"três {evolucao}",
-            _b().variations([0.98, 0.99, 1.0]),
+            cinco,
+            _b().variations([0.98, 0.985, 0.99, 0.995, 1.0]),
         )
     )
 
@@ -397,12 +421,12 @@ def catalog() -> list[Scenario]:
     )
     out.append(
         _s(
-            "C3-acima-do-alvo",
+            "C5-acima-do-alvo",
             "C",
-            "3 variações crescentes acima do baseline e do alvo",
+            "5 variações crescentes acima do baseline e do alvo",
             FUNCIONA,
-            f"três {evolucao}",
-            _b().variations([0.96, 0.97, 0.98], baseline=BASELINE),
+            cinco,
+            _b().variations(_increasing(5, step=0.004), baseline=BASELINE),
             sem_baseline=False,
         )
     )
@@ -410,12 +434,12 @@ def catalog() -> list[Scenario]:
     # D: métrica de erro (menor_melhor, alvo 0,10)
     out.append(
         _s(
-            "D-E3",
+            "D-E5",
             "D",
-            "3 variações abaixo do alvo de erro, decrescentes",
+            "5 variações abaixo do alvo de erro, decrescentes",
             FUNCIONA,
-            f"três {evolucao}",
-            _b().variations([0.09, 0.08, 0.07]),
+            cinco,
+            _b().variations([0.09, 0.08, 0.07, 0.06, 0.05]),
             criterion=ERRO,
         )
     )
@@ -446,24 +470,39 @@ def catalog() -> list[Scenario]:
     for n in (5, 15):
         out.append(
             _s(
-                f"P-E3-V{n}",
+                f"P-E5-V{n}",
                 "P",
-                f"E3 seguido de {n} variações sem ganho (0,955)",
+                f"E5 seguido de {n} variações sem ganho (0,955)",
                 FUNCIONA,
-                "as três melhoras continuam valendo; o volume não deve desfazê-las",
-                _b().variations([0.96, 0.97, 0.98]).variations([0.955] * n, start=4),
+                "as cinco melhoras continuam valendo; o volume não deve desfazê-las",
+                _b().variations(_increasing(5, step=0.004)).variations([0.955] * n, start=6),
             )
         )
 
     # Q: réplica que não confirma
     out.append(
         _s(
-            "Q-E3-R1-neg",
+            "Q-E5-R1-neg",
             "Q",
-            "E3 e a melhor configuração replicada em outro nó abaixo do alvo (0,93)",
+            "E5 e a melhor configuração replicada em outro nó abaixo do alvo (0,93)",
             INDECISO,
-            "a réplica não confirma a melhor variação",
-            _b().variations([0.96, 0.97, 0.98]).result(0.93, "c3", node="n2", session="s2"),
+            "uma réplica contrária enfraquece a conclusão; concluir com cinco melhoras continua aceitável",
+            _b().variations(_increasing(5, step=0.004)).result(0.93, "c5", node="n2", session="s2"),
+            aceitaveis=(FUNCIONA,),
+        )
+    )
+    out.append(
+        _s(
+            "Q-E5-R3-neg",
+            "Q",
+            "E5 e a melhor configuração replicada em três outros nós abaixo do alvo (0,93)",
+            INDECISO,
+            "três réplicas contrárias desfazem a conclusão das cinco melhoras",
+            _b()
+            .variations(_increasing(5, step=0.004))
+            .result(0.93, "c5", node="n2", session="s2")
+            .result(0.93, "c5", node="n3", session="s3")
+            .result(0.93, "c5", node="n4", session="s4"),
         )
     )
 
@@ -475,7 +514,7 @@ def catalog() -> list[Scenario]:
             "G",
             "2 variações com um acerto de diferença (0,967 e 1,0)",
             INDECISO,
-            "menos de três melhoras possíveis",
+            "menos de cinco melhoras possíveis",
             _b().variations([round(29 * passo, 4), 1.0]),
         )
     )

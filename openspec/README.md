@@ -120,6 +120,7 @@ abertos em [`changes/archive/PENDENCIAS.md`](changes/archive/PENDENCIAS.md). **A
 | V18.7 | [v18.7-dependency-artifacts](changes/v18.7-dependency-artifacts/proposal.md) | `code-sandbox`, `agent-prompts`, `execution-provenance` | 022 (§9), 014, 018, 019 | v18.7-subtask-contract |
 | V18.8 | [v18.8-verdict-lab](changes/v18.8-verdict-lab/proposal.md) | `evidence-scoring`, `benchmark` | 025, 015 | — (especificada em 2026-10-18; aguarda aprovação) |
 | V18.8 | [v18.8-verdict-calibration](changes/v18.8-verdict-calibration/proposal.md) | `evidence-scoring`, `hypothesis-loop` | 025, 015, 021 | v18.8-verdict-lab (mergeada); implementada em 2026-10-19 |
+| V18.8 | [v18.8-verdict-controlled-sessions](changes/v18.8-verdict-controlled-sessions/proposal.md) | `benchmark`, `evidence-scoring` | 025, 015, 021, 023 | v18.8-verdict-lab, v18.8-verdict-calibration (mergeadas); especificada e aprovada em 2026-10-19 |
 | V18.7 | [v18.7-exploration-metrics](changes/v18.7-exploration-metrics/proposal.md) | `operation-metrics`, `benchmark` | 021, 022 | v18.7-hypothesis-linking, v18.7-subtask-contract |
 | V18.7 | [v18.7-agent-system-prompts](changes/v18.7-agent-system-prompts/proposal.md) | `agent-prompts`, `agent-runtime` | 022 | v18.7-subtask-contract, v18.7-hypothesis-linking, v18.7-exploration-limits, v18.7-persistent-human-gate |
 | V19 | [v19-equipment-control](changes/v19-equipment-control/proposal.md) | `equipment-control` | 019, 014, 015, 010 | V18.5, v18-researcher-consult |

@@ -89,11 +89,11 @@ arquivar (grafo do projeto, eventos, sessões, custos) em <saida>/<combinação>
 
 ### 4.3 Estados registrados (`exploracao.json`)
 
-`fim`: `natural` | `falha` | `interrompida_pelo_orcamento` | `sem_progresso`; `motivo_final`; sessões da cadeia (id, apelido, motivo, custo, tokens, chamadas por papel, minutos); custo total e por provedor; número de experimentos, resultados e hipóteses; nome, versão e fonte dos modelos dos papéis (`model_versions`). Uma exploração interrompida pelo orçamento é **censurada**: entra nas taxas como "sem conclusão pelo orçamento" e nunca como validada nem refutada por inferência; o relatório conta quantas foram.
+`fim`: `natural` | `falha` | `interrompida_pelo_orcamento` | `sem_progresso`; `motivo_final`; `censurada` (verdadeiro em todos os fins que não são `natural`); sessões da cadeia (id, apelido, motivo, custo, tokens, chamadas por papel, minutos); custo total e por provedor; número de experimentos, resultados e hipóteses; nome, versão e fonte dos modelos dos papéis (`model_versions`). Uma exploração que não termina em fim natural (orçamento, `sem_progresso` ou falha) é **censurada**: entra nas taxas como "sem conclusão" e nunca como validada nem refutada por inferência; o relatório conta quantas foram.
 
 ### 4.4 Reuso do runner
 
-`run_combination` ganha parâmetros opcionais (`seeder`, `input_dir`, `extra_env`) com os valores atuais como padrão; o Iris continua idêntico (teste de regressão). O orquestrador é um módulo novo (`scripts/verdict_lab/controlled/explorer.py`) que usa as mesmas funções de guarda, reset, arquivamento e contagem de custo, e o ensaio do runner (`command` substituível) para simular o processo nos testes, sem LLM.
+`run_combination` ganha os parâmetros opcionais `seeder` e `input_dir` (o `extra_env` já existia), com os valores atuais como padrão, e `seed_project` ganha `draft`; o Iris continua idêntico (teste de regressão). Como a exploração precisa de **um** reset, **uma** semeadura e **um** arquivamento para uma cadeia de sessões, o laço não chama `run_combination` por segmento: `explorer.py` guarda só a política de parada (testável sem processo), `runner.py` cria os processos (`main.py --mode auto --project P <tarefa>` e `main.py --mode auto --session <id> resume`) e reaproveita as guardas do reset, `build_env`, o encerramento do grupo de processos, `sum_tokens`/`db_token_usage`, `fetch_events` e `archive_repetition`. Os testes substituem o executor de processos, o leitor de custo e as contagens do grafo.
 
 ### 4.5 Segurança de execução
 
@@ -171,7 +171,7 @@ Intervalos de 95 %: Wilson para taxas, Clopper-Pearson para 0 ou `n` sucessos (`
 
 ## 8. Saídas
 
-`<saida>/` por rodada: `plano.json`, `orcamento.json`, `<combinação>/<regime>/r<r>/{exploracao.json, verdade.json, grafo_projeto.json, eventos.jsonl, sessoes.json, dados.csv.sha256}`, `resultados.csv` (uma linha por hipótese e uma por exploração), `relatorio.md` (tabelas em português) e `manifesto.json` (commit, data UTC, comando, sementes, modelos e versões, variáveis `VERDICT_*` efetivas, sha256 de cada entrada). O diretório não pode já conter `manifesto.json` (`--sobrescrever` libera), como no laboratório. O `dados.csv` completo de cada exploração é regenerável pela semente e não é versionado.
+`<saida>/` por rodada: `manifesto.json`, `orcamento.json`, `<combinação>/<regime>/r<r>/{exploracao.json, verdade/verdade.json, input_context/{dados.csv,dados.yaml}, grafo_projeto.json, eventos.json, sessao.tar.gz, run.log, pre_reset/}` (as sessões da cadeia estão em `exploracao.json`; `eventos.json` reúne os eventos de todas), `resultados.csv` (uma linha por hipótese e uma por exploração), `relatorio.md` (tabelas em português) e `manifesto.json` (commit, data UTC, comando, sementes, modelos e versões, variáveis `VERDICT_*` efetivas, sha256 de cada entrada). O diretório não pode já conter `manifesto.json` (`--sobrescrever` libera, como no laboratório); `--retomar` continua uma rodada interrompida (queda de luz, por exemplo) pulando as explorações que já têm `exploracao.json`. O `dados.csv` completo de cada exploração é regenerável pela semente e não é versionado.
 
 Os relatórios do piloto e da bateria vão para `docs/calibracao-veredito/` (**nunca** para `docs/benchmarks/`), com pergunta, entradas, método, resultados, leitura, limitações, comandos e commit, escritos para a dissertação.
 

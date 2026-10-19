@@ -1,0 +1,10 @@
+{
+  "versao": 1,
+  "semente": 12345,
+  "matriz": "scripts/verdict_lab/controlled/matriz_controlada.json",
+  "combinacoes": [
+    {"nome": "haiku-dev-sol-juiz", "teto_usd": 4.0, "teto_sessoes": 6, "teto_minutos": 720},
+    {"nome": "sonnet-dev-sol-juiz", "teto_usd": 10.0, "teto_sessoes": 6, "teto_minutos": 720}
+  ],
+  "repeticoes": {"P": 1, "T": 1, "N": 1, "F": 1}
+}

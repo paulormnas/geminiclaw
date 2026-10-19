@@ -32,7 +32,7 @@ import signal
 import subprocess
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from dotenv import dotenv_values
@@ -477,6 +477,7 @@ def run_combination(
     *, repeticao: int = 1, results_path: Path | None = None, target: BenchmarkTarget | None = None,
     reset: bool = False, dump: bool = True, store_sample_seconds: float = footprint.DEFAULT_STORE_SAMPLE_SECONDS,
     kill_grace_seconds: float = KILL_GRACE_SECONDS, command: Sequence[str] | None = None,
+    seeder: Callable[[str], str] | None = None, input_dir: Path | None = None,
 ) -> dict:
     """Uma execução (combinação x repetição): reset, semeadura, medição, placar e arquivamento (design §1).
 
@@ -487,6 +488,9 @@ def run_combination(
     Args:
         kill_grace_seconds: Carência entre ``SIGTERM`` e ``SIGKILL`` no tempo limite.
         command: Substitui o comando (``main.py --mode auto ... <tarefa>``); usado para ensaiar o runner.
+        seeder: Semeia o projeto da combinação e devolve o ``projeto_id`` (padrão: ``seed_project``, o ``Problema`` do
+            Iris); as explorações controladas passam o do regime (``v18.8-verdict-controlled-sessions``).
+        input_dir: Diretório de ``INPUT_CONTEXT_DIR`` do subprocesso (padrão: o do ambiente).
 
     Raises:
         ResetError: O reset ou a conferência pós-reset falhou (o runner termina com código 4).
@@ -494,6 +498,8 @@ def run_combination(
     controle = is_control(combo)
     judge_env = {"LLM_JUDGE_INDEPENDENCE": "off"} if controle else {}
     env = build_env(env_base, combo["roles"], {**(extra_env or {}), **combo.get("env", {}), **judge_env})
+    if input_dir is not None:
+        env["INPUT_CONTEXT_DIR"] = str(input_dir)
     archive_dir = archive_dir_for(results_path, combo["name"], repeticao) if results_path else None
     reset_report = None
     if reset and target is not None and archive_dir is not None:
@@ -506,7 +512,7 @@ def run_combination(
         try:  # um projeto com Problema confirmado por combinação (a sessão em modo auto exige)
             from scripts.benchmark.seed_project import seed_project
 
-            project_id = seed_project(combo["name"])
+            project_id = (seeder or seed_project)(combo["name"])
             project_args = ["--project", project_id]
         except Exception as exc:  # noqa: BLE001 - registrado; a combinação não roda sem projeto
             seed_error = f"{type(exc).__name__}: {exc}"

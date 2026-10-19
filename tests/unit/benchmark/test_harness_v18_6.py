@@ -216,7 +216,8 @@ class FakeResourceSampler:
 
 def _run_fake_combination(monkeypatch, tmp_path, *, reset=False, work=lambda: None, nodes=None, interval=5.0,
                           session: Path | None = None, combo: dict | None = None, popen_env: dict | None = None,
-                          command: list[str] | None = None, timeout: int = 60, kill_grace_seconds: float = 10.0):
+                          command: list[str] | None = None, timeout: int = 60, kill_grace_seconds: float = 10.0,
+                          **extra):
     """Roda ``run_combination`` sem banco ou Qdrant reais; sem ``command`` o subprocesso também é simulado."""
     nodes = nodes if nodes is not None else {"n": 0}
     def fake_popen(*a, **k):
@@ -245,7 +246,7 @@ def _run_fake_combination(monkeypatch, tmp_path, *, reset=False, work=lambda: No
         combo or {"name": "combo", "roles": {"*": "anthropic/claude-haiku-5-5"}, "sem_projeto": True}, "tarefa",
         {"DATABASE_URL": BENCH_URL}, timeout, tmp_path / "outputs", None,
         repeticao=1, results_path=tmp_path / "results.json", target=make_target(), reset=reset,
-        store_sample_seconds=interval, kill_grace_seconds=kill_grace_seconds, command=command,
+        store_sample_seconds=interval, kill_grace_seconds=kill_grace_seconds, command=command, **extra,
     )
 
 
@@ -560,3 +561,30 @@ def test_matriz_v18_6_valida() -> None:
     for combo in matrix["combinations"]:
         run_benchmark.validate_combination(combo)
     assert any(run_benchmark.is_control(c) for c in matrix["combinations"])
+
+
+def test_semeadura_e_entrada_por_exploracao(monkeypatch, tmp_path) -> None:
+    """v18.8-verdict-controlled-sessions: ``seeder`` e ``input_dir`` chegam ao projeto e ao ambiente do subprocesso."""
+    seen: list[str] = []
+    env: dict = {}
+
+    def seeder(name: str) -> str:
+        seen.append(name)
+        return "proj-regime"
+
+    combo = {"name": "combo", "roles": {"*": "anthropic/claude-haiku-5-5"}}
+    result = _run_fake_combination(
+        monkeypatch, tmp_path, combo=combo, popen_env=env, seeder=seeder, input_dir=tmp_path / "entrada"
+    )
+    assert seen == ["combo"] and result["project_id"] == "proj-regime"
+    assert env["INPUT_CONTEXT_DIR"] == str(tmp_path / "entrada")
+
+
+def test_iris_inalterado_sem_os_parametros_novos(monkeypatch, tmp_path) -> None:
+    env: dict = {}
+    nomes: list[str] = []
+    monkeypatch.setattr("scripts.benchmark.seed_project.seed_project", lambda name, *a, **k: nomes.append(name) or "iris")
+    combo = {"name": "combo", "roles": {"*": "anthropic/claude-haiku-5-5"}}
+    result = _run_fake_combination(monkeypatch, tmp_path, combo=combo, popen_env=env)
+    assert nomes == ["combo"] and result["project_id"] == "iris"
+    assert "INPUT_CONTEXT_DIR" not in env

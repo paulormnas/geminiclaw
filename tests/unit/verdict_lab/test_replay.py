@@ -12,7 +12,7 @@ from scripts.verdict_lab import __main__ as cli
 from scripts.verdict_lab.replay import ReplayError, matches_stored, replay
 from scripts.verdict_lab.variants import current_variant
 from src.knowledge.graph_store import InMemoryGraphStore
-from src.knowledge.verdict import Attempt, Criterion, compute_verdict
+from src.knowledge.verdict import Attempt, Criterion, VerdictParams, compute_verdict
 
 pytestmark = pytest.mark.unit
 
@@ -98,7 +98,7 @@ def expected(n: int = 2) -> float:
         )
         for i in range(n)
     ]
-    return compute_verdict(attempts, Criterion("maior_melhor", 0.01, 0.95)).veredito
+    return compute_verdict(attempts, Criterion("maior_melhor", 0.01, 0.95), VerdictParams(modelo="adr015")).veredito
 
 
 def write(tmp_path: Path, data: dict, name: str = "g/grafo_projeto.json") -> Path:

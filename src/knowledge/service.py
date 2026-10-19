@@ -390,6 +390,7 @@ class KnowledgeService:
             "certeza": round(result.certeza, 6),
             "veredito": round(result.veredito, 6),
             "n_tentativas": result.n_tentativas,
+            "modelo_veredito": self._params.modelo,
         }
         if any(hipotese.properties.get(k) != v for k, v in values.items()):
             self._store.update_node(hipotese_id, values, actor=self._actor)
@@ -547,6 +548,7 @@ class KnowledgeService:
         values = {
             "veredito": round(result.veredito, 6),
             "confianca": round(result.confianca, 6),
+            "modelo_veredito": self._params.modelo,
             "n_evidencias": max(int(node.properties.get("n_evidencias") or 0), linked),
         }
         if any(node.properties.get(k) != v for k, v in values.items()):

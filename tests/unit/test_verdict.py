@@ -11,7 +11,16 @@ import random
 
 import pytest
 
-from src.knowledge.verdict import Attempt, Criterion, VerdictParams, compute_verdict
+from src.knowledge.verdict import Attempt, Criterion, VerdictParams
+from src.knowledge.verdict import compute_verdict as _compute_verdict
+
+# Este arquivo protege a equação do ADR 015 §9 (modelo `adr015`); o modelo v2 tem `tests/unit/knowledge/test_verdict_v2.py`.
+_ADR015 = VerdictParams(modelo="adr015")
+
+
+def compute_verdict(attempts, criterion, params=None):
+    return _compute_verdict(attempts, criterion, params or _ADR015)
+
 
 pytestmark = pytest.mark.unit
 
@@ -533,7 +542,7 @@ def test_detalhamento_contem_todas_as_tentativas():
 def test_parametro_divergente_configuravel():
     """Requirement 'Parâmetros configuráveis': VERDICT_Q_DIVERGENT ajustável."""
     divergente = _attempt("div", "2026-01-01T00:00:00", value=0.82, baseline=0.70, validation="divergente_documentado")
-    params = VerdictParams(q_divergent=0.5)
+    params = VerdictParams(q_divergent=0.5, modelo="adr015")
     result = compute_verdict([divergente], R2_CRITERION, params=params)
     assert result.detalhes[0].q == pytest.approx(0.5)
 

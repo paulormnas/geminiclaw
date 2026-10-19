@@ -1,6 +1,6 @@
 # ADR 015 — Modelo de Dados do Grafo de Conhecimento e Ligação com Embeddings
 
-**Status:** Parcialmente implementado — modelo de V17, V18, V18.5 e V18.6 (`Experimento` em `sucesso` com a tentativa e veredito calculado) concluído e arquivado (2026-10-13); entidades de V19 e V20 pendentes; valores iniciais a calibrar com dados reais (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-13)
+**Status:** Parcialmente implementado — §9 revisado em 2026-10-19 (modelo v2 do veredito, ADR 025); modelo de V17, V18, V18.5 e V18.6 (`Experimento` em `sucesso` com a tentativa e veredito calculado) concluído e arquivado (2026-10-13); entidades de V19 e V20 pendentes; valores iniciais a calibrar com dados reais (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-13)
 **Data:** 2026-09-28
 **Autores:** Arquiteto de Soluções (GeminiClaw), com revisão do pesquisador responsável
 **ADRs relacionados:** ADR 009 (camada de conhecimento), ADR 010 (propósito), ADR 011 (embeddings locais), ADR 012 (Curator), ADR 013 (federação), ADR 014 (execução no host)
@@ -532,6 +532,19 @@ Todos os valores ficam em configuração, num só lugar:
 | Faixas de leitura do veredito | 0,1 / 0,3 / 0,5 |
 
 A discussão desta seção está na questão 4 abaixo.
+
+#### 9.9 Revisão de 2026-10-19: modelo v2 (ADR 025, `v18.8-verdict-calibration`)
+
+Os §9.2 a §9.8 descrevem o modelo `adr015`, mantido em `VERDICT_MODEL=adr015`. Depois da calibração do ADR 025 (relatórios em `docs/calibracao-veredito/`), o padrão passa a ser o **modelo v2**, aprovado pelo pesquisador. A equação de acúmulo e o veredito (§9.5), as classificações por causa (§9.3), o `q` (§9.4), o fator de conclusão `f` e o `prior` não mudam. Mudam estes pontos:
+
+- **`d` por tipo de evidência** (no lugar da tabela de `d` do §9.4), em ordem cronológica: *variação* (configuração nunca executada em nenhum nó) 1,0; *réplica em outro nó* 0,5; *dataset novo* 1,0; *sessão nova* 0,5; *semente nova* 0,2. A variação pesa mais que a réplica em outro nó, porque tem mais chance de achar caminhos novos; a réplica só confirma o que já foi descoberto.
+- **Variação útil.** A variação só vale como exploração se superar o melhor valor anterior da hipótese, por qualquer quantidade; a variação positiva sem ganho pesa zero (o volume não produz conclusão).
+- **Penalidade de busca `b` acumulada:** `n_config` conta, até a própria evidência, as variações sem ganho, e não conta as falhas. Evidência posterior não reduz o peso das anteriores.
+- **Alvo exigido com baseline** (§9.2): a evidência só é positiva se supera o baseline por `δ` e alcança o alvo; caso contrário é negativa.
+- **Magnitude pela folga sem baseline** (§9.4): `m = max(0,5; min(1, folga/(2δ)))` na positiva e `m = min(1, falta/δ)` na negativa.
+- **Evidência negativa em configuração já vista** pesa 1,0 (a falha de confirmação pesa cheio).
+
+Resultado medido (simulação com resposta conhecida, limiar de conclusão 0,3): poder de 30 % e **falsa validação de 1,1 %** (teto de 2 %, ADR 025 §4.2), contra 1 % de poder da equação anterior. Concluir `funciona` exige cerca de cinco variações com evolução; vinte variações sem evolução e resultados em torno do alvo não concluem. O `KNOWLEDGE_SHORTCUT_MIN_VERDICT` passa a 0,3. Cada `Hipotese` e `Descoberta` registra `modelo_veredito`.
 
 ### 10. Diretrizes do Curator para criação de nós
 

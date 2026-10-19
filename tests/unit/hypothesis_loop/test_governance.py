@@ -259,7 +259,7 @@ def test_avaliacao_posterior_da_decisao_nao_acertada():
 
 def test_avaliacao_posterior_acertada_e_abaixo_do_limiar_nao_avalia():
     w = HypothesisWorld()
-    hid = _hypothesis_with_attempts(w, [0.85, 0.86, 0.9])
+    hid = _hypothesis_with_attempts(w, [0.85, 0.86, 0.87, 0.88, 0.9])
     weak = _hypothesis_with_attempts(w, [0.85])
     decisions = {}
     for target in (hid, weak):
@@ -274,7 +274,7 @@ def test_avaliacao_posterior_acertada_e_abaixo_do_limiar_nao_avalia():
 
 def test_status_validada_e_refutada_so_pelo_veredito_calculado():
     w = HypothesisWorld()
-    good = _hypothesis_with_attempts(w, [0.85, 0.86, 0.9])
+    good = _hypothesis_with_attempts(w, [0.85, 0.86, 0.87, 0.88, 0.9])
     bad = _hypothesis_with_attempts(w, [0.55, 0.52, 0.5, 0.45])
     weak = _hypothesis_with_attempts(w, [0.85])
     rejected = w.hypothesis("rejeitada pelo pesquisador", status="abandonada", abandonada_por="pesquisador")
@@ -287,7 +287,7 @@ def test_status_validada_e_refutada_so_pelo_veredito_calculado():
 def test_hipotese_concluida_conclui_a_oportunidade_em_investigacao():
     w = HypothesisWorld()
     opp = w.opportunity(status="aprovada")
-    hid = _hypothesis_with_attempts(w, [0.85, 0.86, 0.9])
+    hid = _hypothesis_with_attempts(w, [0.85, 0.86, 0.87, 0.88, 0.9])
     w.store.create_edge(opp, "GEROU", hid, {}, actor=ORQ)
     w.store.update_node(opp, {"status": "em_investigacao"}, actor=ORQ)
     _cycle(w).sync_statuses([hid])

@@ -244,6 +244,8 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             "certeza": PropertySchema(),
             "veredito": PropertySchema(),
             "n_tentativas": PropertySchema(),
+            # v18.8-verdict-calibration: modelo da equação que produziu o veredito ("v2" ou "adr015").
+            "modelo_veredito": PropertySchema(),
             # v18.7-exploration-limits: hipótese concorrente do objetivo de discriminação e sua predição.
             "concorrente": PropertySchema(),
             "predicao": PropertySchema(),
@@ -339,6 +341,7 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             # (``{"dataset_ids": [...], "no_execucao": [...]}``); ``condicoes`` segue sendo o texto legível.
             "filtro_condicoes": PropertySchema(),
             "veredito": PropertySchema(),
+            "modelo_veredito": PropertySchema(),
             "confianca": PropertySchema(),
             "n_evidencias": PropertySchema(required=True),
             "status": PropertySchema(required=True, enum=("ativa", "contestada", "substituida")),

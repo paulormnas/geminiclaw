@@ -22,10 +22,12 @@ Entrada e saída iguais às do `compute_verdict` atual. Os passos, em ordem cron
    | Ordem | Tipo | Definição | `d` |
    |---|---|---|---|
    | 1 | variação | `config_hash` ainda não visto em nenhuma evidência da hipótese, em qualquer nó | `VERDICT_D_VARIATION` (1,0) se **útil**; senão, a positiva recebe `VERDICT_D_VARIATION_NO_GAIN` (0,0) e a negativa `VERDICT_D_NEW_SEED` (0,2) |
-   | 2 | réplica em outro nó | `config_hash` já visto, mas não neste nó | `VERDICT_D_REPLICA_NODE` (0,5); se a evidência é negativa, `VERDICT_D_REPLICA_AGAINST` (1,0) |
+   | 2 | réplica em outro nó | `config_hash` já visto, mas não neste nó | `VERDICT_D_REPLICA_NODE` (0,5) |
    | 3 | dataset novo | configuração e nó já vistos, dataset ainda não usado | `VERDICT_D_NEW_DATASET` (1,0) |
    | 4 | sessão nova | configuração, nó e datasets já vistos, sessão nova | `VERDICT_D_NEW_SESSION` (0,5) |
    | 5 | semente nova | demais casos | `VERDICT_D_NEW_SEED` (0,2) |
+
+   **Evidência negativa em configuração já vista** (qualquer dos tipos 2 a 5) recebe `VERDICT_D_REPLICA_AGAINST` (1,0), no lugar do `d` da tabela: uma falha de confirmação pesa cheio. O `tipo` registrado continua o da tabela.
 
    Uma variação é **útil** quando é a primeira evidência com valor da hipótese ou supera o melhor valor anterior, no sentido da métrica, em mais que `VERDICT_USEFUL_VARIATION_EPSILON` (0). O "melhor valor anterior" só avança em melhora estrita; evidência sem valor numérico (falha de abordagem) conta como útil.
 5. **Penalidade de busca (`b`)** só nas positivas: `b = 1` se a configuração já foi replicada por outra evidência positiva de outro nó ou sessão; senão `b = 1 / (1 + γ · ln n_config)`, com `n_config` = 1 + número de variações **até a própria evidência** (inclusive) que não foram úteis. As falhas e as tentativas sem valor não entram.
@@ -51,7 +53,7 @@ Entrada e saída iguais às do `compute_verdict` atual. Os passos, em ordem cron
 
 ## 4. Resultado esperado (medido pelo laboratório, ainda não no sistema)
 
-Limiar 0,3, `prior` 1,0, simulação com 96 condições × 40 repetições × 20 tentativas: poder 29,9 %, falsa validação 1,1 % (pior ponto 7,5 %), falsa refutação 1,0 %. Catálogo: 45 de 46 (erro conhecido: N-abordagem-4, uma falha de abordagem reproduzida em quatro configurações, que dá −0,14 e fica indecisa). Cinco variações com evolução dão 0,405 (funciona); três dão 0,218 (indecisa); vinte variações iguais dão 0,040; resultados em torno do alvo, 0,14 a 0,15; a mesma configuração em cinco nós, 0,184.
+Limiar 0,3, `prior` 1,0, simulação com 96 condições × 40 repetições × 20 tentativas: poder 29,9 %, falsa validação 1,1 % (pior ponto 7,5 %), falsa refutação 1,0 %. Catálogo: 45 de 46 (erro conhecido: N-abordagem-4, uma falha de abordagem reproduzida em quatro configurações, que dá −0,14 e fica indecisa). Cinco variações com evolução dão 0,405 (funciona); três dão 0,204 (indecisa); vinte variações iguais dão 0,040; resultados em torno do alvo, 0,14 a 0,15; a mesma configuração em cinco nós, 0,184.
 
 ## 5. Análise de impacto (6 eixos)
 
@@ -73,7 +75,7 @@ Limiar 0,3, `prior` 1,0, simulação com 96 condições × 40 repetições × 20
 
 ## 7. Questões em aberto (decisão do pesquisador)
 
-1. **Limiar dos atalhos de conhecimento.** `KNOWLEDGE_SHORTCUT_MIN_VERDICT` (0,1) e o tipo da `Descoberta` (`|veredito| > 0,1`) usam o veredito como evidência suficiente para registrar `FUNCIONOU_PARA`/`FALHOU_PARA`. No modelo v2, a falsa validação no limiar 0,1 é de 33 % (simulação), contra o objetivo de minimizar registros que não contribuem. **Proposta:** subir para 0,3, o mesmo da conclusão da hipótese. Requer decisão: manter 0,1, ou subir para 0,3 (ou outro valor, como 0,2, com 8 % de falsa validação).
+1. **(Decidida em 2026-10-19: 0,3.)** **Limiar dos atalhos de conhecimento.** `KNOWLEDGE_SHORTCUT_MIN_VERDICT` (0,1) e o tipo da `Descoberta` (`|veredito| > 0,1`) usam o veredito como evidência suficiente para registrar `FUNCIONOU_PARA`/`FALHOU_PARA`. No modelo v2, a falsa validação no limiar 0,1 é de 33 % (simulação), contra o objetivo de minimizar registros que não contribuem. **Proposta:** subir para 0,3, o mesmo da conclusão da hipótese. Requer decisão: manter 0,1, ou subir para 0,3 (ou outro valor, como 0,2, com 8 % de falsa validação).
 2. **Falha de abordagem reproduzida (N-abordagem-4).** O veredito de −0,14 deixa indecisa uma abordagem que falhou da mesma forma em quatro configurações. Aumentar `VERDICT_APPROACH_FAILURE_Q` (0,3) é uma opção para a etapa 3.
-3. **Recálculo dos vereditos já gravados.** Os nós antigos mantêm o valor até o Curator recalcular. Registrar a versão do modelo na hipótese (`modelo_veredito`) exigiria nova propriedade (aprovação de schema).
+3. **(Decidida em 2026-10-19: sim.)** **Versão do modelo no nó.** `Hipotese` e `Descoberta` ganham `modelo_veredito` (`v2` ou `adr015`), gravado a cada recálculo; é propriedade nova do grafo, sem migração (o grafo não tem esquema físico para propriedades). Os nós antigos mantêm o valor até o Curator recalcular.
 4. **Simetria.** A penalidade de busca age só nas positivas, por decisão do ADR 015; o modelo v2 mantém isso e a violação de simetria continua registrada no relatório do laboratório.

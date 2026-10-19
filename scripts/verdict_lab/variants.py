@@ -101,9 +101,11 @@ class Variant:
 def base_params() -> tuple[VerdictParams, str]:
     """``VerdictParams`` do projeto (variáveis ``VERDICT_*``) ou, se ``src.config`` não carregar, os padrões."""
     try:
-        return VerdictParams.from_config(), "config"
+        params, origem = VerdictParams.from_config(), "config"
     except Exception:  # noqa: BLE001 - sem configuração do projeto, os padrões do ADR 015 §9.8 valem
-        return VerdictParams(), "padrao"
+        params, origem = VerdictParams(), "padrao"
+    # O laboratório mede variantes da equação do ADR 015; o modelo v2 do sistema é comparado pela variante completa2.
+    return dataclasses.replace(params, modelo="adr015"), origem
 
 
 def _coerce_params(base: VerdictParams, raw: Any, where: str) -> VerdictParams:
@@ -459,5 +461,5 @@ def lab_verdict(
         reimplementar: Força a reimplementação mesmo sem alternativa (teste de equivalência).
     """
     if variant.estrutura.is_default() and not reimplementar:
-        return compute_verdict(attempts, criterion, variant.params)
+        return compute_verdict(attempts, criterion, dataclasses.replace(variant.params, modelo="adr015"))
     return _reimplemented(attempts, criterion, variant)

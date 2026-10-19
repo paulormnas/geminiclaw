@@ -1,6 +1,6 @@
 # Roadmap V18.8 — Calibração do Veredito
 
-> **Estado (2026-10-19):** Tarefa 1 (`v18.8-verdict-lab`) implementada e mergeada (#222, #224, #225); relatórios da etapa 1 e da etapa 2 em `docs/calibracao-veredito/`. Tarefa 2 (`v18.8-verdict-calibration`) especificada, aguardando aprovação do pesquisador. Tarefa 3 sem spec.
+> **Estado (2026-10-19):** Tarefa 1 (`v18.8-verdict-lab`) implementada e mergeada (#222, #224, #225); relatórios da etapa 1 e da etapa 2 em `docs/calibracao-veredito/`. Tarefa 2 (`v18.8-verdict-calibration`) implementada. Tarefa 3 sem spec.
 
 ## Objetivo
 
@@ -25,7 +25,7 @@ Calibrar o veredito das hipóteses com dados e erros medidos, para que uma explo
 
 ### Tarefa 2: Calibração da fórmula e dos valores
 - **Spec:** [`v18.8-verdict-calibration`](../openspec/changes/v18.8-verdict-calibration/proposal.md) (modelo v2 da equação, variante `completa2`; revisão do ADR 015 §9 aprovada pelo pesquisador antes de implementar)
-- **Complexidade estimada:** a definir
+- **Complexidade estimada:** Média
 
 ### Tarefa 3: Direção da evidência pela predição
 - **Spec:** `v18.8-verdict-direction` (a especificar se os resultados confirmarem a lacuna; ADR 025 §2, pergunta 6)

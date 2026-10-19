@@ -19,7 +19,7 @@ pytestmark = pytest.mark.unit
 def world():
     store = InMemoryGraphStore()
     graph = CuratorGraph(store).setup_project()
-    service = KnowledgeService(store, VerdictParams())
+    service = KnowledgeService(store, VerdictParams(modelo="adr015"))
     return store, graph, service
 
 
@@ -124,9 +124,12 @@ def test_evidencia_que_deixa_de_contar_e_contestada(world):
     assert _edges(store, "SUSTENTA", src=res)[0].properties["status"] == "contestada"
 
 
-def test_atalho_funcionou_para_e_contestado_quando_o_veredito_cai(world):
+def test_atalho_funcionou_para_e_contestado_quando_o_veredito_cai(world, monkeypatch):
     """Scenario: Atalho contestado — veredito 0,2 mantém FUNCIONOU_PARA; ao cair para 0,05 a aresta é contestada."""
     store, graph, service = world
+    # Este teste protege o mecanismo do atalho com a equação do ADR 015 e o piso histórico de 0,1; o padrão novo (0,3)
+    # tem teste próprio em test_curator_tools.
+    monkeypatch.setattr("src.config.KNOWLEDGE_SHORTCUT_MIN_VERDICT", 0.1)
     hip, abordagem = graph.hipotese(), graph.abordagem()
     # 5 sementes positivas na mesma sessão: veredito ~ +0,22 (tabela de referência do ADR 015 §9.7).
     for seed in range(1, 6):
@@ -248,7 +251,7 @@ def test_sem_criterio_o_veredito_e_indisponivel_com_erro_acionavel(world):
     hip = graph.hipotese(com_problema=False)
 
     with pytest.raises(KnowledgeServiceError):
-        KnowledgeService(store, VerdictParams()).recompute_hypothesis(hip)
+        KnowledgeService(store, VerdictParams(modelo="adr015")).recompute_hypothesis(hip)
 
 
 def test_apos_subtarefa_recalcula_hipotese_descoberta_e_promocao(world):

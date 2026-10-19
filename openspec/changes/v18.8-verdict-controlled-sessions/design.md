@@ -25,19 +25,20 @@
 
 | Termo | Forma | Papel |
 |---|---|---|
-| `t0` | combinação linear de `x7` e `x8` | o que um modelo linear nos atributos brutos já acerta (patamar ≈ 0,62) |
+| `t0` | `0,6·x7 + 0,8·x8` | o que um modelo linear nos atributos brutos já acerta (patamar ≈ 0,62) |
 | `t1` | `x1·x2` | interação dominante |
-| `t2` | `x3² − 1` | termo quadrático |
+| `t2` | `(x3² − 1)/√2` | termo quadrático |
 | `t3` | `x4·x5` | segunda interação |
-| `t4` | `sin(2·x6)` | termo não polinomial |
+| `t4` | `sin(2·x6)` normalizado | termo não polinomial |
+| `t5` | `x7·x8` | interação entre os atributos do termo linear |
 
-`y = 1[s > 0]`. As forças `a_k` e o desvio do ruído são calibrados **por bisseção no oráculo** (amostra de 200 000 linhas, semente própria) até o **teto de Bayes** do regime e os **patamares** `p_k` = acurácia do preditor `sinal(Σ_{j≤k} a_j t_j)` (quem descobre os `k` primeiros termos) ficarem nos valores abaixo, com tolerância de ±0,005. Os valores calibrados entram no `verdade.json` e em um teste do gerador. O ruído e as amostras mudam a cada semente; os termos e as forças não.
+Todos têm variância 1. `y = 1` com probabilidade `Φ(s)`, `s = Σ a_k·t_k` (o ruído de desvio 1 está embutido nas forças `a_k`). As forças `a_k` foram calibradas **por mínimos quadrados no oráculo** (400 000 linhas, semente 12345) até o **teto de Bayes** `p_5` do regime e os **patamares** `p_k` = acurácia do preditor `sinal(Σ_{j≤k} a_j t_j)` (quem descobre os `k` primeiros termos, `k` de 0 a 5) ficarem nos valores abaixo; o oráculo da implementação (200 000 linhas, esperança sobre o rótulo) confere cada valor com tolerância de ±0,005 em um teste do gerador. O ruído e as amostras mudam a cada semente; os termos e as forças não. (Correção de 2026-10-19: a primeira versão listava cinco termos e cinco patamares, sem o termo `t5` que dá o teto de 0,96 depois do patamar de 0,93.)
 
 **Regime N.** `y ~ Bernoulli(0,5)` independente dos atributos (teto = acaso = 0,50).
 
 ### 2.2 Regime F
 
-Mesma construção de P, com 12 000 linhas. Um método que guarda uma matriz `n × n` de ponto flutuante (núcleo denso, processo gaussiano, agrupamento espectral) precisa de cerca de 1,1 GB com `n = 12 000`, acima do limite de 256 MB do sandbox, e falha com `MemoryError` (causa `abordagem`, assinatura repetida em configurações distintas). Os demais métodos (árvores, regressão, vizinhos, redes pequenas) seguem como em P. **O tamanho exato é calibrado no piloto**: se a falha de abordagem não for reproduzível (o Developer contorna com amostragem, por exemplo, ou a falha vira `infraestrutura`/`ambigua`), o regime F sai e o N-abordagem-4 fica só com a avaliação offline (§7). Isso é registrado no relatório do piloto.
+Mesma construção de P (mesmas forças e patamares), com 12 000 linhas. Um método que guarda uma matriz `n × n` de ponto flutuante (núcleo denso, processo gaussiano, agrupamento espectral) precisa de cerca de 1,1 GB com `n = 12 000`, acima do limite de 256 MB do sandbox, e falha com `MemoryError` (causa `abordagem`, assinatura repetida em configurações distintas). Os demais métodos (árvores, regressão, vizinhos, redes pequenas) seguem como em P. **O tamanho exato é calibrado no piloto**: se a falha de abordagem não for reproduzível (o Developer contorna com amostragem, por exemplo, ou a falha vira `infraestrutura`/`ambigua`), o regime F sai e o N-abordagem-4 fica só com a avaliação offline (§7). Isso é registrado no relatório do piloto.
 
 ### 2.3 Valores propostos e aprovados (2026-10-19)
 
@@ -45,8 +46,8 @@ Classificação binária tabular, métrica acurácia (maior é melhor), `δ` = 0
 
 | Regime | Teto | Alvo | Patamares `p_0 … p_4` | Verdade (resposta correta) |
 |---|---|---|---|---|
-| **P** efeito plantado | 0,96 | 0,93 | 0,62 · 0,74 · 0,82 · 0,88 · 0,93 | `funciona`: o alvo é alcançável por variações com evolução |
-| **T** teto abaixo do alvo | 0,90 | 0,93 | 0,62 · 0,72 · 0,79 · 0,85 · 0,90 | nunca `funciona`: o alvo não é alcançável |
+| **P** efeito plantado | 0,96 | 0,93 | 0,62 · 0,74 · 0,82 · 0,88 · 0,93 · **0,96** (teto) | `funciona`: o alvo é alcançável por variações com evolução |
+| **T** teto abaixo do alvo | 0,90 | 0,93 | 0,62 · 0,72 · 0,79 · 0,84 · 0,87 · **0,90** (teto) | nunca `funciona`: o alvo não é alcançável |
 | **N** ruído puro | 0,50 | 0,55 | — | nunca `funciona`: só alcança o alvo por acaso |
 | **F** falha plantada | 0,96 | 0,93 | como P | a abordagem de núcleo denso nunca `funciona`; as demais, como P |
 

@@ -13,7 +13,7 @@ O sistema SHALL gerar, por semente, conjuntos de dados de classificação binár
 #### Scenario: Teto e patamares do regime P
 - **GIVEN** o regime P calibrado
 - **WHEN** o oráculo avalia o preditor ideal e os preditores dos `k` primeiros termos em 200 000 linhas
-- **THEN** o teto é 0,96 ± 0,005 e os patamares são 0,62, 0,74, 0,82, 0,88 e 0,93, cada um ± 0,005
+- **THEN** o teto é 0,96 ± 0,005 e os patamares `p_0 … p_5` são 0,62, 0,74, 0,82, 0,88, 0,93 e 0,96, cada um ± 0,005
 
 #### Scenario: Ruído puro
 - **GIVEN** o regime N e 2 000 linhas

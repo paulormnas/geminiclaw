@@ -1,16 +1,16 @@
 # Tarefas: v18.8-verdict-controlled-sessions
 
-**Estado (2026-10-19):** especificada e aprovada pelo pesquisador (valores dos regimes, piloto primeiro, regime F incluído, unidade = exploração). Seção 0 em andamento (PR das specs). Nenhuma execução com LLM foi feita; piloto e bateria só com confirmação explícita e orçamento aprovado.
+**Estado (2026-10-19):** especificada e aprovada pelo pesquisador (valores dos regimes, piloto primeiro, regime F incluído, unidade = exploração). Seção 0 mergeada (#229); seção 1 (gerador, regimes e verdade) implementada no PR `feat/v18.8-controlled-generator`: oráculo P teto 0,9602, T 0,9003, patamares dentro de ±0,005. Nenhuma execução com LLM foi feita; piloto e bateria só com confirmação explícita e orçamento aprovado.
 
 ## 0. Pré-requisitos
 - [x] 0.1 Mudança aprovada pelo pesquisador (decisões em `proposal.md`).
 - [x] 0.2 Spec confrontada com o código (design §1) e `N-abordagem-4` medido (design §7).
-- [ ] 0.3 PR das specs (ADR 025, roadmap V18.8, `openspec/README.md`, `docs/decisions/README.md`) mergeado; parecer de segurança no PR.
+- [x] 0.3 PR das specs (ADR 025, roadmap V18.8, `openspec/README.md`, `docs/decisions/README.md`) mergeado; parecer de segurança no PR.
 
 ## 1. Gerador, regimes e verdade (PR próprio)
-- [ ] 1.1 `scripts/verdict_lab/controlled/generator.py`: dados P, T, N e F determinísticos por semente (biblioteca padrão), `dados.csv` e `dados.yaml` (`compartilhavel` com motivo).
-- [ ] 1.2 `regimes.py`: `ProblemDraft` por regime, tarefa neutra, calibração por bisseção no oráculo, `verdade.json`.
-- [ ] 1.3 Testes: determinismo byte a byte; teto e patamares dentro de ±0,005; N sem associação com os atributos; tamanho do F; `verdade.json` fora de `input_context/`; `dados.yaml` aceito pelo carregador de contexto.
+- [x] 1.1 `scripts/verdict_lab/controlled/generator.py`: dados P, T, N e F determinísticos por semente (biblioteca padrão), `dados.csv` e `dados.yaml` (`compartilhavel` com motivo).
+- [x] 1.2 `regimes.py`: `ProblemDraft` por regime, tarefa neutra, forças calibradas no oráculo, `verdade.json`.
+- [x] 1.3 Testes: determinismo byte a byte; teto e patamares dentro de ±0,005; N sem associação com os atributos; tamanho do F; `verdade.json` fora de `input_context/`; `dados.yaml` aceito pelo carregador de contexto.
 
 ## 2. Orquestrador, orçamento e runner (PR próprio)
 - [ ] 2.1 `scripts/benchmark/run_benchmark.py` e `seed_project.py`: parâmetros opcionais `seeder`, `input_dir` e `extra_env`; teste de regressão do Iris.

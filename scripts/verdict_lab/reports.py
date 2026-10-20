@@ -480,3 +480,95 @@ def sensitivity_report(rows: list[dict[str, Any]], manifest: dict[str, Any], n_s
                 "",
             ]
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# abordagem (falha de abordagem reproduzida; v18.8-verdict-controlled-sessions, seção 4)
+# ---------------------------------------------------------------------------
+
+CENARIOS_ABORDAGEM = ("N-abordagem-2", "N-abordagem-3", "N-abordagem-4", "N-abordagem-ruido")
+
+
+def abordagem_catalog_rows(scenarios: list[Scenario], variants: list[Any], limiar: float) -> list[dict[str, Any]]:
+    """Veredito dos cenários de falha de abordagem em cada variante (``tabela = catalogo``)."""
+    from scripts.verdict_lab.variants import lab_verdict
+
+    rows = []
+    for sc in scenarios:
+        if sc.nome not in CENARIOS_ABORDAGEM:
+            continue
+        for v in variants:
+            veredito = lab_verdict(list(sc.attempts), sc.criterion, v).veredito
+            conclui = conclusion(veredito, limiar)
+            rows.append(
+                {
+                    "tabela": "catalogo",
+                    "cenario": sc.nome,
+                    "variante": v.nome,
+                    "approach_failure_q": v.params.approach_failure_q,
+                    "esperado": sc.esperado,
+                    "veredito": veredito,
+                    "conclui": conclui,
+                    "acerto": _hit(sc, conclui),
+                }
+            )
+    return rows
+
+
+def abordagem_report(
+    catalog_rows: list[dict[str, Any]], sim_rows: list[dict[str, Any]], variant_names: list[str], limiar: float,
+    repeticoes: int, max_tentativas: int, manifest: dict[str, Any],
+) -> str:
+    """Relatório da avaliação offline de ``VERDICT_APPROACH_FAILURE_Q`` (ADR 025 §4; design §7)."""
+    out = _header("Falha de abordagem reproduzida: avaliação offline do peso `q`", manifest)
+    out += [
+        f"Limiar de conclusão {limiar}. Simulação: {repeticoes} hipóteses por tipo e ponto, até {max_tentativas} "
+        "tentativas, conclusão pela primeira travessia do limiar. As sequências são as mesmas em todas as variantes.",
+        "",
+        "## Cenários do catálogo",
+        "",
+    ]
+    cenarios = sorted({r["cenario"] for r in catalog_rows})
+    header = ["Cenário", "Esperado"] + [f"{n} (veredito; conclusão)" for n in variant_names]
+    table = []
+    for nome in cenarios:
+        por_variante = {r["variante"]: r for r in catalog_rows if r["cenario"] == nome}
+        esperado = next(iter(por_variante.values()))["esperado"]
+        table.append([nome, esperado] + [
+            f"{por_variante[n]['veredito']:+.3f}; {por_variante[n]['conclui']}" for n in variant_names
+        ])
+    out += [md_table(header, table), ""]
+    pontos = sorted({r["ponto"] for r in sim_rows})
+    out += ["## Simulação", ""]
+    for ponto in pontos:
+        linhas = [r for r in sim_rows if r["ponto"] == ponto]
+        p = linhas[0]
+        out += [
+            f"### Ponto {ponto}: Developer incapaz em {p['p_falha_abordagem']:.0%} das tentativas "
+            f"(sigma {p['sigma']}, tau {p['tau']}, efeito {p['efeito']}, p_variacao {p['p_variacao']})",
+            "",
+        ]
+        table = []
+        for nome in variant_names:
+            por_tipo = {r["tipo"]: r for r in linhas if r["variante"] == nome}
+            if not por_tipo:
+                continue
+            table.append([
+                nome, por_tipo[next(iter(por_tipo))]["approach_failure_q"],
+                por_tipo["abordagem_falha"]["refutadas"], por_tipo["abordagem_falha"]["tentativas_ate_refutar_mediana"],
+                por_tipo["verdadeira"]["refutadas"], por_tipo["verdadeira"]["validadas"],
+                por_tipo["falsa"]["validadas"], por_tipo["sem_efeito"]["validadas"],
+            ])
+        out += [md_table(
+            ["Variante", "q", "Abordagem plantada refutada", "Tentativas até refutar (mediana)",
+             "Falsa refutação (verdadeira refutada)", "Poder (verdadeira validada)", "Falsa validação (falsa)",
+             "Falsa validação (sem efeito)"], table), ""]
+    out += [
+        "## Leitura",
+        "",
+        "- Subir `q` aumenta a conclusão correta da abordagem plantada, mas também a falsa refutação das hipóteses "
+        "verdadeiras quando o Developer falha por incapacidade; a coluna de falsa validação não deve mudar.",
+        "- O valor só muda em `src/config.py` com aprovação do pesquisador, em PR próprio com revisão do ADR 015 §9.9.",
+        "",
+    ]
+    return "\n".join(out)

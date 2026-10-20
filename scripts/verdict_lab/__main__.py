@@ -19,6 +19,7 @@ from scripts.verdict_lab.simulation import (
     estimate_calls,
     expand_variants,
     grid_points,
+    run_abordagem,
     run_simulation,
 )
 from scripts.verdict_lab.variants import (
@@ -79,9 +80,27 @@ def _parser() -> argparse.ArgumentParser:
     c.add_argument("--saida", type=Path, required=True, help="diretório de saída (criado)")
     c.add_argument("--sobrescrever", action="store_true", help="substitui um resultado anterior no diretório")
 
+    a = sub.add_parser("abordagem", help="falha de abordagem reproduzida: conclusão e falsa refutação por `q`")
+    a.add_argument("--semente", type=int, default=20261019)
+    a.add_argument("--repeticoes", type=int, default=400)
+    a.add_argument("--max-tentativas", type=int, default=10)
+    a.add_argument("--limiar", type=float, default=0.3)
+    for key in ABORDAGEM_GRADE:
+        a.add_argument(f"--{key.replace('_', '-')}", type=_grid_value, nargs="+", default=None)
+    common(a)
+
     e = sub.add_parser("sensibilidade", help="variação isolada e em pares dos parâmetros")
     common(e)
     return p
+
+
+ABORDAGEM_GRADE: dict[str, list[Any]] = {
+    "sigma": [0.01], "tau": [0.01], "efeito": [0.02], "p_variacao": [0.5], "p_falha": [0.0], "nos": [1],
+    "p_falha_abordagem": [0.0, 0.2, 0.5],
+}
+ABORDAGEM_VARIANTES = [
+    "completa2", "completa2+q_abordagem_0_5", "completa2+q_abordagem_0_7", "completa2+q_abordagem_1_0",
+]
 
 
 def _grid_value(text: str) -> Any:
@@ -204,6 +223,35 @@ def _cmd_simulacao(args: argparse.Namespace, out: Path) -> None:
     print(f"{len(rows)} linhas -> {out}")
 
 
+def _cmd_abordagem(args: argparse.Namespace, out: Path) -> None:
+    grid = {k: getattr(args, k) if getattr(args, k) is not None else v for k, v in ABORDAGEM_GRADE.items()}
+    variants = select_variants(load_variants(args.variantes), args.variante or ABORDAGEM_VARIANTES)
+    points = grid_points(grid)
+    sim_rows = run_abordagem(
+        points, variants, semente=args.semente, repeticoes=args.repeticoes, max_tentativas=args.max_tentativas,
+        limiar=args.limiar,
+    )
+    catalog_rows = reports.abordagem_catalog_rows(catalog(), variants, args.limiar)
+    names = [v.nome for v in variants]
+    manifest = output.write_manifest(
+        out,
+        comando="abordagem",
+        argumentos={"repeticoes": args.repeticoes, "max_tentativas": args.max_tentativas, "limiar": args.limiar,
+                    "grade": grid},
+        variantes=[v.manifest() for v in variants],
+        entradas=_inputs(args),
+        sementes={"semente": args.semente},
+    )
+    output.write_csv(out / output.RESULTS, [{"tabela": "simulacao", **r} for r in sim_rows] + catalog_rows)
+    (out / output.REPORT).write_text(
+        reports.abordagem_report(
+            catalog_rows, sim_rows, names, args.limiar, args.repeticoes, args.max_tentativas, manifest
+        ),
+        encoding="utf-8",
+    )
+    print(f"{len(points)} pontos x {len(variants)} variantes -> {out}")
+
+
 def _cmd_sensibilidade(args: argparse.Namespace, out: Path) -> None:
     variants = _variants(args)
     scenarios = catalog()
@@ -232,6 +280,7 @@ _COMMANDS = {
     "grade": _cmd_grade,
     "simulacao": _cmd_simulacao,
     "sensibilidade": _cmd_sensibilidade,
+    "abordagem": _cmd_abordagem,
 }
 
 

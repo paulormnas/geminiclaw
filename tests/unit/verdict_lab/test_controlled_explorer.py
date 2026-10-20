@@ -375,12 +375,12 @@ def test_gerar_grava_dados_e_verdade_separados(capsys, tmp_path: Path) -> None:
 
 
 def test_matriz_usa_gpt_6_luna_como_validator_com_esforco_maximo() -> None:
-    """Decisão de 2026-10-20: Validator Luna em esforço máximo (o Sol custa vinte vezes mais); outra família que o Developer."""
+    """Decisão de 2026-10-20: Validator Luna em xhigh (o Sol custa vinte vezes mais); outra família que o Developer."""
     from src.llm.catalog import load_catalog
     from src.llm.pricing import PRICES
 
     matriz = json.loads(Path("scripts/verdict_lab/controlled/matriz_controlada.json").read_text(encoding="utf-8"))
-    assert matriz["env"]["OPENAI_REASONING_EFFORT"] == "max"
+    assert matriz["env"]["OPENAI_REASONING_EFFORT"] == "xhigh"
     catalogo = load_catalog(local_path=Path("/nao/existe.yaml"), base_urls={})
     for combo in matriz["combinations"]:
         assert combo["name"].endswith("luna-juiz") and combo["roles"]["VALIDATOR"] == "openai/gpt-6-luna"

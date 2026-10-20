@@ -1,6 +1,6 @@
 # Tarefas: v18.8-verdict-controlled-sessions
 
-**Estado (2026-10-20):** especificada e aprovada pelo pesquisador (valores dos regimes, piloto primeiro, regime F incluído, unidade = exploração). Seções 0 a 3 mergeadas (#229, #230, #232, #233); seção 4 (N-abordagem-4 offline) implementada no PR `feat/v18.8-approach-failure`: cenários N-abordagem-3 e N-abordagem-ruido, variantes de `q`, `p_falha_abordagem` e tipo `abordagem_falha` na simulação, comando `abordagem` e relatório com a proposta (rodada idêntica no Pi e no Mac). **Decisão pendente do pesquisador:** valor de `VERDICT_APPROACH_FAILURE_Q` (o relatório propõe manter 0,3 até o piloto e, se necessário, 0,5); `src/config.py` não foi alterado. Nenhuma execução com LLM foi feita; piloto e bateria só com confirmação explícita e orçamento aprovado.
+**Estado (2026-10-20):** especificada e aprovada pelo pesquisador. Seções 0 a 4 mergeadas (#229, #230, #232, #233, #234); `VERDICT_APPROACH_FAILURE_Q` mantido em 0,3 por decisão do pesquisador. Validator do piloto: `gpt-6-luna` em `xhigh` (#235; o Sol é a alternativa). **Tabela `orcamento` do piloto aprovada (2026-10-20): 8 explorações, máximo US$ 56** (haiku-dev-luna-juiz US$ 4 por exploração, sonnet-dev-luna-juiz US$ 10). Nenhuma execução com LLM foi feita; o piloto (5.2) só roda com a confirmação explícita do pesquisador para executar.
 
 ## 0. Pré-requisitos
 - [x] 0.1 Mudança aprovada pelo pesquisador (decisões em `proposal.md`).
@@ -30,7 +30,7 @@
 - [x] 4.3 Rodada no Raspberry Pi e relatório curto em `docs/calibracao-veredito/` com a proposta; **decisão do pesquisador** sobre `VERDICT_APPROACH_FAILURE_Q` (mudança de valor só em PR próprio, com ADR 015 §9.9).
 
 ## 5. Piloto (somente com confirmação explícita)
-- [ ] 5.1 Plano do piloto e tabela `orcamento` (teto US$ 56) aprovados pelo pesquisador.
+- [x] 5.1 Plano do piloto e tabela `orcamento` (teto US$ 56) aprovados pelo pesquisador.
 - [ ] 5.2 Piloto: P, T, N e F × `haiku-dev-luna-juiz` e `sonnet-dev-luna-juiz`, uma exploração cada, `--reset-stores --confirm-target geminiclaw_bench@localhost`.
 - [ ] 5.3 Relatório do piloto em `docs/calibracao-veredito/`: chamadas, tokens e US$ por papel, variações por hipótese, fim natural alcançado, calibração do regime F.
 - [ ] 5.4 Tabela `orcamento` da bateria com os dados do piloto, aprovada pelo pesquisador.

@@ -8,7 +8,7 @@
     "SESSION_MAX_COST_USD": "3",
     "SESSION_MAX_MINUTES": "180",
     "GOOGLE_FALLBACK_MODEL": "",
-    "OPENAI_REASONING_EFFORT": "max"
+    "OPENAI_REASONING_EFFORT": "xhigh"
   },
   "combinations": [
     {

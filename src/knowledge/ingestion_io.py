@@ -128,6 +128,21 @@ def list_regular_files(directory: Path, root: Path, *, limit: int = MAX_INPUT_FI
     return files
 
 
+def _find_metrics_variant(task_dir: Path, root: Path) -> Path | None:
+    """O único ``metrics_<tarefa>.json`` da pasta da subtarefa, quando falta o ``metrics.json`` do contrato.
+
+    O piloto da etapa 3 (2026-10-20) mostrou o Developer gravando as métricas nesse nome por ele constar nos
+    artefatos esperados do plano; sem a leitura, o experimento ficava ``sem_metricas`` e o veredito, em zero.
+    Mais de um candidato é ambíguo e continua ausente.
+    """
+    try:
+        base = _confined(task_dir, root)
+    except IngestionFileError:
+        return None
+    found = sorted(p for p in base.glob("metrics_*.json") if p.is_file() and not p.is_symlink())
+    return found[0] if len(found) == 1 else None
+
+
 def find_artifact(task_dir: Path, root: Path, filename: str) -> Path | None:
     """Localiza ``filename`` na pasta da subtarefa (direto ou em subpasta rasa), sem seguir links.
 
@@ -210,6 +225,10 @@ def collect_evidence(session_dir: Path, task_name: str) -> SubtaskEvidence:
         return ev
     task_dir = root / task_name
     metrics_file = find_artifact(task_dir, root, "metrics.json")
+    if metrics_file is None:
+        metrics_file = _find_metrics_variant(task_dir, root)
+        if metrics_file is not None:
+            ev.warnings.append(f"metrics.json ausente: lido {metrics_file.name}")
     if metrics_file is not None:
         try:
             ev.metrics = read_json_object(metrics_file, root)

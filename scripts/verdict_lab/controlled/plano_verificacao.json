@@ -1,0 +1,9 @@
+{
+  "versao": 1,
+  "semente": 12345,
+  "matriz": "scripts/verdict_lab/controlled/matriz_controlada.json",
+  "combinacoes": [
+    {"nome": "haiku-dev-luna-juiz", "teto_usd": 2.0, "teto_sessoes": 3, "teto_minutos": 240}
+  ],
+  "repeticoes": {"P": 1, "T": 1, "N": 0, "F": 0}
+}

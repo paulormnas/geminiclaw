@@ -4,11 +4,13 @@ Uso (na raiz do repositório)::
 
     uv run python -m scripts.verdict_lab.controlled orcamento --plano PLANO [--piloto exploracoes.json] [--saida DIR]
     uv run python -m scripts.verdict_lab.controlled gerar --regime P --semente 7 --saida DIR
+    uv run python -m scripts.verdict_lab.controlled medir --rodada DIR [--repeticoes-simulacao 400] [--sobrescrever]
     uv run python -m scripts.verdict_lab.controlled explorar --plano PLANO --saida DIR            # ensaio (padrão)
     uv run python -m scripts.verdict_lab.controlled explorar --plano PLANO --saida DIR --executar \\
         --reset-stores --confirm-target BANCO@HOST [--no-pre-reset-dump] [--retomar]
 
-``orcamento``, ``gerar`` e o ensaio de ``explorar`` não chamam LLM nem tocam em banco. ``--executar`` roda sessões com
+``orcamento``, ``gerar``, ``medir`` (grava em ``DIR/medicao``) e o ensaio de ``explorar`` não chamam LLM nem tocam
+em banco. ``--executar`` roda sessões com
 LLM e **só deve ser usado com a confirmação do pesquisador** e a tabela de orçamento aprovada. Códigos de saída:
 2 recusa
 (guarda do reset, plano, combinação ou saída ocupada), 3 exceção numa exploração, 4 reset ou conferência falhou.
@@ -197,6 +199,24 @@ def cmd_explorar(args: argparse.Namespace, argv: list[str]) -> int:
     return 0
 
 
+def cmd_medir(args: argparse.Namespace) -> int:
+    from scripts.verdict_lab import output
+    from scripts.verdict_lab.controlled import measure
+
+    try:
+        resultado = measure.medir(
+            args.rodada, semente=args.semente, repeticoes=args.repeticoes_simulacao, sobrescrever=args.sobrescrever
+        )
+    except output.OutputError as exc:
+        print(f"[controlled] recusado: {exc}", file=sys.stderr)
+        return EXIT_REFUSED
+    except measure.MeasureError as exc:
+        print(f"[controlled] medição interrompida: {exc}", file=sys.stderr)
+        return EXIT_EXCEPTION
+    print(f"{len(resultado['exploracoes'])} explorações medidas -> {resultado['saida']}")
+    return 0
+
+
 def _dotenv() -> dict[str, str | None]:
     from dotenv import dotenv_values
 
@@ -225,7 +245,14 @@ def main(argv: list[str] | None = None) -> int:
     p_exp.add_argument("--no-pre-reset-dump", action="store_true")
     p_exp.add_argument("--retomar", action="store_true", help="continua uma rodada interrompida (pula as já feitas)")
     p_exp.add_argument("--sobrescrever", action="store_true")
+    p_med = sub.add_parser("medir", help="medidas, equivalência e comparação com a previsão (sem LLM nem banco)")
+    p_med.add_argument("--rodada", type=Path, required=True, help="diretório da rodada (<combinação>/<regime>/r<r>/)")
+    p_med.add_argument("--semente", type=int, default=20261019, help="semente da simulação de previsão")
+    p_med.add_argument("--repeticoes-simulacao", type=int, default=400)
+    p_med.add_argument("--sobrescrever", action="store_true")
     args = parser.parse_args(argv)
+    if args.comando == "medir":
+        return cmd_medir(args)
     if args.comando == "orcamento":
         return cmd_orcamento(args)
     if args.comando == "gerar":

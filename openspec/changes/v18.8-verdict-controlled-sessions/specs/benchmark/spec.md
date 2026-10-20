@@ -116,12 +116,12 @@ O comando `medir` SHALL calcular, por combinação e regime, sobre as exploraç�
 - **THEN** o custo por validação útil é US$ 10
 
 ### Requirement: Comparação com a previsão do laboratório
-O comando `medir` SHALL (1) conferir que o veredito gravado coincide com o da variante `completa2` aplicada às mesmas tentativas (diferença ≤ 1e-12) e calcular a variante `atual` ao lado; (2) estimar da exploração os parâmetros da simulação (`sigma`, `tau`, probabilidades de variar e de falhar, tentativas por hipótese), rodar a simulação com a semente fixa e comparar, por regime, a taxa prevista com a observada; (3) classificar cada regime como compatível (taxa observada dentro do intervalo previsto) ou não, sem ajustar nenhum parâmetro com esses dados.
+O comando `medir` SHALL (1) conferir que o veredito calculado pelo sistema coincide com o da variante `completa2` aplicada às mesmas tentativas (diferença ≤ 1e-12) e com o gravado no grafo (≤ 1e-6, arredondamento do sistema) e calcular a variante `atual` ao lado; (2) estimar da exploração os parâmetros da simulação (`sigma`, `tau`, probabilidades de variar e de falhar, tentativas por hipótese), rodar a simulação com a semente fixa e comparar, por regime, a taxa prevista com a observada; (3) classificar cada regime como compatível (taxa observada dentro do intervalo previsto) ou não, sem ajustar nenhum parâmetro com esses dados.
 
 #### Scenario: Equivalência
 - **GIVEN** um grafo arquivado cujas hipóteses têm veredito gravado pelo modelo v2
 - **WHEN** `medir` reaplica `completa2`
-- **THEN** a diferença é ≤ 1e-12 em todas as hipóteses; qualquer divergência encerra o comando com erro que cita a hipótese
+- **THEN** a diferença entre o veredito do sistema e `completa2` é ≤ 1e-12 em todas as hipóteses e a diferença contra o valor gravado é ≤ 1e-6 (o sistema grava com seis casas); qualquer divergência encerra o comando com erro que cita a hipótese
 
 #### Scenario: Taxa incompatível
 - **GIVEN** falsa validação observada de 4/15 em N e previsão de 0,02 com intervalo [0, 0,06]
@@ -129,7 +129,7 @@ O comando `medir` SHALL (1) conferir que o veredito gravado coincide com o da va
 - **THEN** o relatório registra "incompatível" e nenhum valor de `VERDICT_*` é alterado
 
 ### Requirement: Rodada reprodutível
-Cada rodada do orquestrador e da medição SHALL gravar `manifesto.json` com `commit`, data UTC, comando e argumentos, sementes, modelos e versões, variáveis `VERDICT_*` efetivas e `sha256` de cada entrada lida, e SHALL recusar um `--saida` que já contenha `manifesto.json` (salvo `--sobrescrever`). Os relatórios SHALL ficar em `docs/calibracao-veredito/` e nunca em `docs/benchmarks/`.
+Cada rodada do orquestrador e da medição SHALL gravar `manifesto.json` com `commit`, data UTC, comando e argumentos, sementes, modelos e versões, variáveis `VERDICT_*` efetivas e `sha256` de cada entrada lida, e SHALL recusar um `--saida` que já contenha `manifesto.json` (salvo `--sobrescrever`); a medição grava em `<rodada>/medicao/`. Os relatórios SHALL ficar em `docs/calibracao-veredito/` e nunca em `docs/benchmarks/`.
 
 #### Scenario: Saída ocupada
 - **GIVEN** um `--saida` que já tem `manifesto.json`

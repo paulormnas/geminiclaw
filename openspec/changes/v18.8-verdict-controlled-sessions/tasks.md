@@ -1,6 +1,6 @@
 # Tarefas: v18.8-verdict-controlled-sessions
 
-**Estado (2026-10-19):** especificada e aprovada pelo pesquisador (valores dos regimes, piloto primeiro, regime F incluído, unidade = exploração). Seções 0 e 1 mergeadas (#229, #230: oráculo P teto 0,9602, T 0,9003); seção 2 (orquestrador, orçamento, runner) implementada no PR `feat/v18.8-controlled-explorer`. Nenhuma execução com LLM foi feita; piloto e bateria só com confirmação explícita e orçamento aprovado.
+**Estado (2026-10-20):** especificada e aprovada pelo pesquisador (valores dos regimes, piloto primeiro, regime F incluído, unidade = exploração). Seções 0, 1 e 2 mergeadas (#229, #230, #232); seção 3 (medição e comparação com o laboratório) implementada no PR `feat/v18.8-controlled-measure`: `medir` com Wilson/Clopper-Pearson, equivalência com `completa2`, variante `atual` ao lado e previsão pela simulação. Nenhuma execução com LLM foi feita; piloto e bateria só com confirmação explícita e orçamento aprovado.
 
 ## 0. Pré-requisitos
 - [x] 0.1 Mudança aprovada pelo pesquisador (decisões em `proposal.md`).
@@ -19,10 +19,10 @@
 - [x] 2.4 Testes com processo simulado (`command` substituível): fim natural, retomada após `limite_*`, teto de custo, `limite_cota_provedor` repetido, falha, recusa sem `--confirm-target`.
 
 ## 3. Medição e comparação com o laboratório (PR próprio)
-- [ ] 3.1 `measure.py`: medidas do design §6.2 com intervalos de Wilson e Clopper-Pearson; `resultados.csv`, `relatorio.md`, `manifesto.json`.
-- [ ] 3.2 Equivalência com `completa2` e variante `atual` ao lado (design §6.3, item 1).
-- [ ] 3.3 Estimativa dos parâmetros e previsão pela simulação (item 2) e leitura (item 3).
-- [ ] 3.4 Testes com grafos arquivados sintéticos: um por medida e por regime, censura e o cenário "compatível/incompatível".
+- [x] 3.1 `measure.py`: medidas do design §6.2 com intervalos de Wilson e Clopper-Pearson; `resultados.csv`, `relatorio.md`, `manifesto.json`.
+- [x] 3.2 Equivalência com `completa2` e variante `atual` ao lado (design §6.3, item 1).
+- [x] 3.3 Estimativa dos parâmetros e previsão pela simulação (item 2) e leitura (item 3).
+- [x] 3.4 Testes com grafos arquivados sintéticos: um por medida e por regime, censura e o cenário "compatível/incompatível".
 
 ## 4. N-abordagem-4 offline (PR próprio)
 - [ ] 4.1 Catálogo: N-abordagem-3 e N-abordagem-ruido; `variantes.json`: `approach_failure_q` 0,5, 0,7 e 1,0.

@@ -226,3 +226,14 @@ Parecer do Analista de Segurança: a revisar no PR das specs (a mudança toca ba
 3. **`VERDICT_APPROACH_FAILURE_Q`**: decisão do pesquisador depois da avaliação offline (§7).
 4. **Repetições finais por regime**: dependem do custo medido no piloto.
 5. **Direção da evidência pela predição** (`v18.8-verdict-direction`): não entra aqui; se a falsa refutação em P ou a refutação discordante indicarem a lacuna, abre-se a spec própria.
+
+## 13. Correção depois da verificação (2026-10-20)
+
+A verificação do #238 (Haiku, P e T; US$ 1,89) mostrou o laço de plano resolvido (85% para ~27% do tempo; 7 e 12 planos) e `sem_metricas` em 23% (era 86%), mas nenhuma hipótese passou de ±0,06: 31 de 56 experimentos eram `falha`/`criterio_nao_atendido` e viram `ambigua` (peso zero). Não é o `lambda_ambiguous`.
+
+Causa medida no código: `_metric_key` (`src/knowledge/metric_criteria.py`) só divide o nome por espaço e só reconhece o nome inteiro ou uma palavra igual ao alias. Os critérios do Haiku citam chaves em snake_case (`acuracia_teste_media`, `holdout_acuracia`, `acuracia_media_teste`): 0 de 14 comparações dos planos da verificação foram reconhecidas. O critério sai do caminho determinístico (`_metric_criteria` vazio), o revisor LLM reprova por limiar e nunca há `negative_candidate`; a reprovação vale `reprovado`, não `resultado_negativo` (v18.6-hypothesis-closure). A refutação real (acurácia 0,615 contra 0,93) é descartada.
+
+Mudança: `_metric_key` passa a testar também as palavras do nome divididas por `_`, `-` e `.` (`normalized_words`), sem alterar a escolha da chave em `metrics.json` (qualificadores, §`pipeline-robustness`). A condição de um critério condicional ("se X = false:") não casa com o padrão de comparação por não ter operador numérico; o teste cobre o caso. Fora do escopo, a medir depois: reprovação do Luna por critério qualitativo "não verificável" (evidência sem o código, afirmação sobre dependência) que ainda impede `resultado_negativo`; só vira mudança se a nova verificação mostrar que continua dominante.
+
+Riscos: um alias dentro de nome longo pode tornar quantitativo um critério antes qualitativo (cenário "Nome sem alias" cobre só o caso sem alias); a revisão LLM do restante não muda. Impacto: Validator e ingestão (mesma função); sem schema, sem configuração nova, sem custo de LLM.
+

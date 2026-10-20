@@ -20,6 +20,8 @@ from scripts.verdict_lab.variants import Variant, lab_verdict
 from src.knowledge.verdict import Attempt, Criterion
 
 TIPOS = ("verdadeira", "falsa", "sem_efeito")
+TIPO_ABORDAGEM = "abordagem_falha"
+ASSINATURA_ABORDAGEM = "MemoryError"
 CURVA_LIMIARES = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6)
 CRUZAMENTOS = (0.1, 0.3, 0.5)
 
@@ -33,6 +35,7 @@ DEFAULT_GRID: dict[str, list[Any]] = {
     "p_infra": [0.2],
     "p_outro_no": [0.5],
     "granularidade": [None],
+    "p_falha_abordagem": [0.0],
 }
 
 
@@ -49,6 +52,7 @@ class SimPoint:
     p_infra: float = 0.2
     p_outro_no: float = 0.5
     granularidade: float | None = None
+    p_falha_abordagem: float = 0.0
 
     def label(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
@@ -75,7 +79,7 @@ def generate_sequence(
     rng: random.Random, tipo: str, point: SimPoint, max_tentativas: int, criterion: Criterion = ABSOLUTO
 ) -> list[Attempt]:
     """Uma sequência de tentativas de um agente simulado para uma hipótese do tipo pedido."""
-    mu = _mean(tipo, point, criterion)
+    mu = None if tipo == TIPO_ABORDAGEM else _mean(tipo, point, criterion)
     configs: list[tuple[str, float]] = []
     attempts: list[Attempt] = []
     for step in range(max_tentativas):
@@ -85,6 +89,26 @@ def generate_sequence(
             "seed": step + 1,
             "dataset_ids": ("d1",),
         }
+        if tipo == TIPO_ABORDAGEM or (point.p_falha_abordagem and rng.random() < point.p_falha_abordagem):
+            # Falha de abordagem com a mesma assinatura: a abordagem não funciona (tipo ``abordagem_falha``) ou o
+            # Developer é incapaz de executá-la (``p_falha_abordagem`` nas demais hipóteses).
+            if not configs or rng.random() < point.p_variacao:
+                configs.append((f"c{len(configs) + 1}", 0.0))
+                config_hash = configs[-1][0]
+            else:
+                config_hash = configs[rng.randrange(len(configs))][0]
+            attempts.append(
+                Attempt(
+                    outcome_kind="falha",
+                    failure_cause="abordagem",
+                    failure_signature=ASSINATURA_ABORDAGEM,
+                    node_id="n1",
+                    session_id="s-n1",
+                    config_hash=config_hash,
+                    **base,
+                )
+            )
+            continue
         if point.p_falha and rng.random() < point.p_falha:
             cause = "infraestrutura" if rng.random() < point.p_infra else "ambigua"
             attempts.append(
@@ -106,7 +130,7 @@ def generate_sequence(
             config = configs[rng.randrange(len(configs))]
             if point.nos > 1 and rng.random() < point.p_outro_no:
                 node = f"n{rng.randrange(2, point.nos + 1)}"
-        value = mu + config[1] + (rng.gauss(0.0, point.sigma) if point.sigma else 0.0)
+        value = mu + config[1]  # type: ignore[operator] + (rng.gauss(0.0, point.sigma) if point.sigma else 0.0)
         if point.granularidade:
             value = min(1.0, max(0.0, round(value / point.granularidade) * point.granularidade))
         attempts.append(
@@ -256,4 +280,54 @@ def run_simulation(
                             "p90": _percentile(ns, 0.9),
                         }
                     )
+    return rows
+
+
+def run_abordagem(
+    points: list[SimPoint],
+    variants: list[Variant],
+    *,
+    semente: int,
+    repeticoes: int,
+    max_tentativas: int,
+    limiar: float,
+    criterion: Criterion = ABSOLUTO,
+) -> list[dict[str, Any]]:
+    """Falha de abordagem por variante (``approach_failure_q``): conclusão de cada tipo de hipótese.
+
+    Para cada ponto e variante, gera as hipóteses ``verdadeira``, ``falsa``, ``sem_efeito`` (com Developer incapaz
+    quando ``p_falha_abordagem`` > 0) e ``abordagem_falha`` (toda tentativa falha com a mesma assinatura) e conta,
+    pela primeira travessia de ``±limiar``, quantas terminam validadas, refutadas ou indecisas. As sequências são as
+    mesmas para todas as variantes, de modo que a diferença entre linhas vem só do veredito.
+    """
+    rows: list[dict[str, Any]] = []
+    for pi, point in enumerate(points):
+        sequences = {
+            tipo: [
+                generate_sequence(random.Random(f"{semente}:{pi}:{rep}:{tipo}"), tipo, point, max_tentativas, criterion)
+                for rep in range(repeticoes)
+            ]
+            for tipo in (*TIPOS, TIPO_ABORDAGEM)
+        }
+        for variant in variants:
+            for tipo, seqs in sequences.items():
+                found = [first_crossing(verdict_path(seq, criterion, variant), limiar) for seq in seqs]
+                crossings = [sign for _, sign in found]
+                refutacao = [n for n, sign in found if sign == -1 and n is not None]
+                total = len(crossings)
+                rows.append(
+                    {
+                        "ponto": pi,
+                        **point.label(),
+                        "variante": variant.nome,
+                        "approach_failure_q": variant.params.approach_failure_q,
+                        "tipo": tipo,
+                        "limiar": limiar,
+                        "n": total,
+                        "validadas": sum(1 for s in crossings if s == 1) / total,
+                        "refutadas": sum(1 for s in crossings if s == -1) / total,
+                        "indecisas": sum(1 for s in crossings if s == 0) / total,
+                        "tentativas_ate_refutar_mediana": statistics.median(refutacao) if refutacao else None,
+                    }
+                )
     return rows

@@ -291,6 +291,20 @@ def catalog() -> list[Scenario]:
         )
     )
     b = _b()
+    for k in range(3):
+        b.failure("abordagem", f"c{k + 1}", signature="MemoryError", seed=100 + k)
+    out.append(
+        _s(
+            "N-abordagem-3",
+            "N",
+            "a mesma falha de abordagem em 3 configurações",
+            INDECISO,
+            "três reproduções ainda não bastam para dizer que a abordagem não funciona",
+            b,
+            aceitaveis=(NAO_FUNCIONA,),
+        )
+    )
+    b = _b()
     for k in range(4):
         b.failure("abordagem", f"c{k + 1}", signature="MemoryError", seed=100 + k)
     out.append(
@@ -323,6 +337,22 @@ def catalog() -> list[Scenario]:
             FUNCIONA,
             cinco,
             _b().failure("ambigua").failure("ambigua").failure("ambigua").variations(_increasing(5, step=0.004)),
+        )
+    )
+    b = _b()
+    for k in range(3):
+        b.failure("abordagem", f"c{k + 1}", signature="MemoryError", seed=100 + k)
+    b.variations(_increasing(6, step=0.004), start=4)
+    out.append(
+        _s(
+            "N-abordagem-ruido",
+            "F",
+            "3 falhas de abordagem reproduzidas e depois 6 variações crescentes",
+            FUNCIONA,
+            "o Developer falhou por incapacidade e depois acertou: a hipótese funciona; indeciso é aceitável, "
+            "concluir nao_funciona é falsa refutação",
+            b,
+            aceitaveis=(INDECISO,),
         )
     )
     b = _b()

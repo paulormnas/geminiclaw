@@ -182,6 +182,57 @@
         "d_replica_contraria": 1.0,
         "d_variacao_sem_ganho": 0.0
       }
+    },
+    {
+      "nome": "completa2+q_abordagem_0_5",
+      "descricao": "completa2 com peso 0,5 da falha de abordagem reproduzida (VERDICT_APPROACH_FAILURE_Q)",
+      "parametros": {
+        "approach_failure_q": 0.5
+      },
+      "estrutura": {
+        "independencia": "por_tipo",
+        "variacao_util": "melhora_o_melhor",
+        "b_por": "variacao_sem_ganho_acumulada",
+        "m_sem_baseline": "folga",
+        "m_folga_piso": 0.5,
+        "criterio_com_alvo": "exige_alvo",
+        "d_replica_contraria": 1.0,
+        "d_variacao_sem_ganho": 0.0
+      }
+    },
+    {
+      "nome": "completa2+q_abordagem_0_7",
+      "descricao": "completa2 com peso 0,7 da falha de abordagem reproduzida (VERDICT_APPROACH_FAILURE_Q)",
+      "parametros": {
+        "approach_failure_q": 0.7
+      },
+      "estrutura": {
+        "independencia": "por_tipo",
+        "variacao_util": "melhora_o_melhor",
+        "b_por": "variacao_sem_ganho_acumulada",
+        "m_sem_baseline": "folga",
+        "m_folga_piso": 0.5,
+        "criterio_com_alvo": "exige_alvo",
+        "d_replica_contraria": 1.0,
+        "d_variacao_sem_ganho": 0.0
+      }
+    },
+    {
+      "nome": "completa2+q_abordagem_1_0",
+      "descricao": "completa2 com peso 1,0 da falha de abordagem reproduzida (VERDICT_APPROACH_FAILURE_Q)",
+      "parametros": {
+        "approach_failure_q": 1.0
+      },
+      "estrutura": {
+        "independencia": "por_tipo",
+        "variacao_util": "melhora_o_melhor",
+        "b_por": "variacao_sem_ganho_acumulada",
+        "m_sem_baseline": "folga",
+        "m_folga_piso": 0.5,
+        "criterio_com_alvo": "exige_alvo",
+        "d_replica_contraria": 1.0,
+        "d_variacao_sem_ganho": 0.0
+      }
     }
   ]
 }

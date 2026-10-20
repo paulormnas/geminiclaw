@@ -1,0 +1,260 @@
+{
+  "ferramenta": "scripts.verdict_lab",
+  "commit": "9ba47d9dc27fbe52fe489c1ee6060b36bddcc430",
+  "data_utc": "2026-10-20T02:05:33Z",
+  "comando": "abordagem",
+  "argv": [
+    "abordagem",
+    "--saida",
+    "docs/calibracao-veredito/dados/2026-10-20-etapa-3-abordagem/t6",
+    "--repeticoes",
+    "1000",
+    "--max-tentativas",
+    "6",
+    "--p-falha-abordagem",
+    "0",
+    "0.1",
+    "0.2",
+    "0.3",
+    "0.5"
+  ],
+  "argumentos": {
+    "repeticoes": 1000,
+    "max_tentativas": 6,
+    "limiar": 0.3,
+    "grade": {
+      "sigma": [
+        0.01
+      ],
+      "tau": [
+        0.01
+      ],
+      "efeito": [
+        0.02
+      ],
+      "p_variacao": [
+        0.5
+      ],
+      "p_falha": [
+        0.0
+      ],
+      "nos": [
+        1
+      ],
+      "p_falha_abordagem": [
+        0,
+        0.1,
+        0.2,
+        0.3,
+        0.5
+      ]
+    }
+  },
+  "variantes": [
+    {
+      "nome": "completa2",
+      "descricao": "completa corrigida: penalidade acumulada (monotônica), piso de 0,5 na folga e réplica contrária com peso cheio e positiva sem ganho com peso zero",
+      "origem_params": "config",
+      "parametros": {
+        "q_validated_complete": 1.0,
+        "q_validated_incomplete": 0.7,
+        "q_divergent": 0.3,
+        "d_new_node_or_dataset": 1.0,
+        "d_new_session": 0.5,
+        "d_new_seed": 0.2,
+        "gamma": 0.5,
+        "lambda_ambiguous": 0.5,
+        "approach_failure_q": 0.3,
+        "approach_failure_min_repeats": 2,
+        "prior": 1.0,
+        "thresholds": [
+          0.1,
+          0.3,
+          0.5
+        ],
+        "modelo": "adr015",
+        "d_variation": 1.0,
+        "d_replica_node": 0.5,
+        "d_new_dataset": 1.0,
+        "d_variation_no_gain": 0.0,
+        "d_replica_against": 1.0,
+        "useful_variation_epsilon": 0.0,
+        "m_floor_no_baseline": 0.5,
+        "require_target": true
+      },
+      "estrutura": {
+        "n_config_conta_falhas": true,
+        "independencia": "por_tipo",
+        "d_variacao": 1.0,
+        "d_replica_no": 0.5,
+        "d_dataset": 1.0,
+        "d_sessao": 0.5,
+        "d_semente": 0.2,
+        "variacao_util": "melhora_o_melhor",
+        "variacao_util_epsilon": 0.0,
+        "m_sem_baseline": "folga",
+        "b_por": "variacao_sem_ganho_acumulada",
+        "criterio_com_alvo": "exige_alvo",
+        "m_folga_piso": 0.5,
+        "d_replica_contraria": 1.0,
+        "d_variacao_sem_ganho": 0.0
+      }
+    },
+    {
+      "nome": "completa2+q_abordagem_0_5",
+      "descricao": "completa2 com peso 0,5 da falha de abordagem reproduzida (VERDICT_APPROACH_FAILURE_Q)",
+      "origem_params": "config",
+      "parametros": {
+        "q_validated_complete": 1.0,
+        "q_validated_incomplete": 0.7,
+        "q_divergent": 0.3,
+        "d_new_node_or_dataset": 1.0,
+        "d_new_session": 0.5,
+        "d_new_seed": 0.2,
+        "gamma": 0.5,
+        "lambda_ambiguous": 0.5,
+        "approach_failure_q": 0.5,
+        "approach_failure_min_repeats": 2,
+        "prior": 1.0,
+        "thresholds": [
+          0.1,
+          0.3,
+          0.5
+        ],
+        "modelo": "adr015",
+        "d_variation": 1.0,
+        "d_replica_node": 0.5,
+        "d_new_dataset": 1.0,
+        "d_variation_no_gain": 0.0,
+        "d_replica_against": 1.0,
+        "useful_variation_epsilon": 0.0,
+        "m_floor_no_baseline": 0.5,
+        "require_target": true
+      },
+      "estrutura": {
+        "n_config_conta_falhas": true,
+        "independencia": "por_tipo",
+        "d_variacao": 1.0,
+        "d_replica_no": 0.5,
+        "d_dataset": 1.0,
+        "d_sessao": 0.5,
+        "d_semente": 0.2,
+        "variacao_util": "melhora_o_melhor",
+        "variacao_util_epsilon": 0.0,
+        "m_sem_baseline": "folga",
+        "b_por": "variacao_sem_ganho_acumulada",
+        "criterio_com_alvo": "exige_alvo",
+        "m_folga_piso": 0.5,
+        "d_replica_contraria": 1.0,
+        "d_variacao_sem_ganho": 0.0
+      }
+    },
+    {
+      "nome": "completa2+q_abordagem_0_7",
+      "descricao": "completa2 com peso 0,7 da falha de abordagem reproduzida (VERDICT_APPROACH_FAILURE_Q)",
+      "origem_params": "config",
+      "parametros": {
+        "q_validated_complete": 1.0,
+        "q_validated_incomplete": 0.7,
+        "q_divergent": 0.3,
+        "d_new_node_or_dataset": 1.0,
+        "d_new_session": 0.5,
+        "d_new_seed": 0.2,
+        "gamma": 0.5,
+        "lambda_ambiguous": 0.5,
+        "approach_failure_q": 0.7,
+        "approach_failure_min_repeats": 2,
+        "prior": 1.0,
+        "thresholds": [
+          0.1,
+          0.3,
+          0.5
+        ],
+        "modelo": "adr015",
+        "d_variation": 1.0,
+        "d_replica_node": 0.5,
+        "d_new_dataset": 1.0,
+        "d_variation_no_gain": 0.0,
+        "d_replica_against": 1.0,
+        "useful_variation_epsilon": 0.0,
+        "m_floor_no_baseline": 0.5,
+        "require_target": true
+      },
+      "estrutura": {
+        "n_config_conta_falhas": true,
+        "independencia": "por_tipo",
+        "d_variacao": 1.0,
+        "d_replica_no": 0.5,
+        "d_dataset": 1.0,
+        "d_sessao": 0.5,
+        "d_semente": 0.2,
+        "variacao_util": "melhora_o_melhor",
+        "variacao_util_epsilon": 0.0,
+        "m_sem_baseline": "folga",
+        "b_por": "variacao_sem_ganho_acumulada",
+        "criterio_com_alvo": "exige_alvo",
+        "m_folga_piso": 0.5,
+        "d_replica_contraria": 1.0,
+        "d_variacao_sem_ganho": 0.0
+      }
+    },
+    {
+      "nome": "completa2+q_abordagem_1_0",
+      "descricao": "completa2 com peso 1,0 da falha de abordagem reproduzida (VERDICT_APPROACH_FAILURE_Q)",
+      "origem_params": "config",
+      "parametros": {
+        "q_validated_complete": 1.0,
+        "q_validated_incomplete": 0.7,
+        "q_divergent": 0.3,
+        "d_new_node_or_dataset": 1.0,
+        "d_new_session": 0.5,
+        "d_new_seed": 0.2,
+        "gamma": 0.5,
+        "lambda_ambiguous": 0.5,
+        "approach_failure_q": 1.0,
+        "approach_failure_min_repeats": 2,
+        "prior": 1.0,
+        "thresholds": [
+          0.1,
+          0.3,
+          0.5
+        ],
+        "modelo": "adr015",
+        "d_variation": 1.0,
+        "d_replica_node": 0.5,
+        "d_new_dataset": 1.0,
+        "d_variation_no_gain": 0.0,
+        "d_replica_against": 1.0,
+        "useful_variation_epsilon": 0.0,
+        "m_floor_no_baseline": 0.5,
+        "require_target": true
+      },
+      "estrutura": {
+        "n_config_conta_falhas": true,
+        "independencia": "por_tipo",
+        "d_variacao": 1.0,
+        "d_replica_no": 0.5,
+        "d_dataset": 1.0,
+        "d_sessao": 0.5,
+        "d_semente": 0.2,
+        "variacao_util": "melhora_o_melhor",
+        "variacao_util_epsilon": 0.0,
+        "m_sem_baseline": "folga",
+        "b_por": "variacao_sem_ganho_acumulada",
+        "criterio_com_alvo": "exige_alvo",
+        "m_folga_piso": 0.5,
+        "d_replica_contraria": 1.0,
+        "d_variacao_sem_ganho": 0.0
+      }
+    }
+  ],
+  "sementes": {
+    "semente": 20261019
+  },
+  "entradas": [
+    {
+      "caminho": "/Users/paulo/Workspace/geminiclaw/.worktrees/feat-v18.8-approach-failure/scripts/verdict_lab/variantes.json",
+      "sha256": "1c6187c1c2974e49f8f92a83a3ce1c8fe8547997dd114aa3fb7572b014988651"
+    }
+  ]
+}

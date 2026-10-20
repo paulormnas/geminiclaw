@@ -14,8 +14,10 @@ from tests.support.catalog_fixtures import model, write_yaml
 
 
 @pytest.fixture(autouse=True)
-def clean_router_cache():
-    """Garante cache limpo antes e após cada teste."""
+def clean_router_cache(monkeypatch):
+    """Garante cache limpo antes e após cada teste e isola os pins `{PAPEL}_MODEL` do `.env`."""
+    for papel in ("RESEARCHER", "VALIDATOR", "DEVELOPER", "BASE", "SUMMARIZER", "REVIEWER", "CURATOR"):
+        monkeypatch.delenv(f"{papel}_MODEL", raising=False)
     ModelRouter.clear_cache()
     yield
     ModelRouter.clear_cache()
@@ -27,6 +29,7 @@ def nuvem_liberada(monkeypatch):
     monkeypatch.setattr("src.config.LLM_DATA_POLICY", "third_party_allowed")
     monkeypatch.setattr("src.config.GEMINI_API_KEY", "dummy_key")
     monkeypatch.setattr("src.config.ANTHROPIC_API_KEY", None)
+    monkeypatch.setattr("src.config.OPENAI_API_KEY", None)
 
 
 @pytest.mark.unit

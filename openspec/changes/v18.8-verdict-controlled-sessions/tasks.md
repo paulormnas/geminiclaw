@@ -1,6 +1,6 @@
 # Tarefas: v18.8-verdict-controlled-sessions
 
-**Estado (2026-10-19):** especificada e aprovada pelo pesquisador (valores dos regimes, piloto primeiro, regime F incluído, unidade = exploração). Seção 0 mergeada (#229); seção 1 (gerador, regimes e verdade) implementada no PR `feat/v18.8-controlled-generator`: oráculo P teto 0,9602, T 0,9003, patamares dentro de ±0,005. Nenhuma execução com LLM foi feita; piloto e bateria só com confirmação explícita e orçamento aprovado.
+**Estado (2026-10-19):** especificada e aprovada pelo pesquisador (valores dos regimes, piloto primeiro, regime F incluído, unidade = exploração). Seções 0 e 1 mergeadas (#229, #230: oráculo P teto 0,9602, T 0,9003); seção 2 (orquestrador, orçamento, runner) implementada no PR `feat/v18.8-controlled-explorer`. Nenhuma execução com LLM foi feita; piloto e bateria só com confirmação explícita e orçamento aprovado.
 
 ## 0. Pré-requisitos
 - [x] 0.1 Mudança aprovada pelo pesquisador (decisões em `proposal.md`).
@@ -13,10 +13,10 @@
 - [x] 1.3 Testes: determinismo byte a byte; teto e patamares dentro de ±0,005; N sem associação com os atributos; tamanho do F; `verdade.json` fora de `input_context/`; `dados.yaml` aceito pelo carregador de contexto.
 
 ## 2. Orquestrador, orçamento e runner (PR próprio)
-- [ ] 2.1 `scripts/benchmark/run_benchmark.py` e `seed_project.py`: parâmetros opcionais `seeder`, `input_dir` e `extra_env`; teste de regressão do Iris.
-- [ ] 2.2 `explorer.py`: laço da exploração (design §4.2), `exploracao.json`, censura, `sem_progresso`, teto de gasto, sessões e minutos; modo `--ensaio` padrão.
-- [ ] 2.3 `budget.py` e comando `orcamento` (design §5.1), sem LLM nem banco.
-- [ ] 2.4 Testes com processo simulado (`command` substituível): fim natural, retomada após `limite_*`, teto de custo, `limite_cota_provedor` repetido, falha, recusa sem `--confirm-target`.
+- [x] 2.1 `scripts/benchmark/run_benchmark.py` e `seed_project.py`: parâmetros opcionais `seeder`, `input_dir` (e `draft` no `seed_project`); teste de regressão do Iris.
+- [x] 2.2 `explorer.py`: laço da exploração (design §4.2), `exploracao.json`, censura, `sem_progresso`, teto de gasto, sessões e minutos; modo `--ensaio` padrão.
+- [x] 2.3 `budget.py` e comando `orcamento` (design §5.1), sem LLM nem banco.
+- [x] 2.4 Testes com processo simulado (`command` substituível): fim natural, retomada após `limite_*`, teto de custo, `limite_cota_provedor` repetido, falha, recusa sem `--confirm-target`.
 
 ## 3. Medição e comparação com o laboratório (PR próprio)
 - [ ] 3.1 `measure.py`: medidas do design §6.2 com intervalos de Wilson e Clopper-Pearson; `resultados.csv`, `relatorio.md`, `manifesto.json`.

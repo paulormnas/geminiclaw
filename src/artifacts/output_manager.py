@@ -6,6 +6,7 @@ além de permitir a listagem de artefatos produzidos pelos agentes.
 
 import datetime
 import re
+import secrets
 import shutil
 import unicodedata
 from pathlib import Path
@@ -23,7 +24,8 @@ def generate_session_slug(prompt: str) -> str:
         prompt: O prompt original do usuário.
 
     Returns:
-        String no formato YYYYMMDD_HHMMSS_slug_do_prompt.
+        String no formato YYYYMMDD_HHMMSS_xxxx_slug_do_prompt, em que xxxx (4 hex aleatórios)
+        evita colisão entre duas sessões do mesmo prompt iniciadas no mesmo segundo.
     """
     # Timestamp
     now = datetime.datetime.now()
@@ -42,7 +44,7 @@ def generate_session_slug(prompt: str) -> str:
     # 3. Limita o tamanho do slug do prompt
     prompt_slug = slug[:40]
     
-    return f"{ts}_{prompt_slug}"
+    return f"{ts}_{secrets.token_hex(2)}_{prompt_slug}"
 
 class OutputManager:
     """Gerencia a estrutura de diretórios de outputs no host."""

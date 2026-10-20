@@ -33,7 +33,7 @@ O sistema SHALL gravar o `verdade.json` de cada exploração (regime, semente, t
 - **AND** nenhuma variável do ambiente do subprocesso contém o caminho ou o conteúdo do `verdade.json`
 
 ### Requirement: Exploração até o fim natural com teto de gasto
-O orquestrador de exploração SHALL iniciar a pesquisa em modo `auto`, retomar automaticamente depois de `limite_tokens`, `limite_tempo`, `limite_custo` e `limite_cota_provedor` enquanto o custo acumulado da cadeia for menor que o teto da exploração e a sessão tiver produzido ao menos um experimento novo, e SHALL parar em `solucao_encontrada`, `sem_caminhos_promissores` ou `saturacao` (fim natural), em outro motivo (fim por falha), ao atingir o teto de custo ou de sessões (`interrompida_pelo_orcamento`) ou depois de duas sessões seguidas sem experimento novo (`sem_progresso`). O orquestrador MUST NOT retomar depois de um fim natural.
+O orquestrador de exploração SHALL iniciar a pesquisa em modo `auto`, retomar automaticamente depois de `limite_tokens`, `limite_tempo`, `limite_custo` e `limite_cota_provedor` enquanto o custo, o número de sessões e os minutos acumulados da cadeia forem menores que o teto da exploração, e SHALL parar em `solucao_encontrada`, `sem_caminhos_promissores` ou `saturacao` (fim natural), em outro motivo (fim por falha), ao atingir o teto de custo ou de sessões (`interrompida_pelo_orcamento`) ou depois de duas sessões seguidas sem experimento novo (`sem_progresso`). O orquestrador MUST NOT retomar depois de um fim natural. O comando SHALL aceitar `--retomar` para continuar uma rodada interrompida, pulando as explorações que já têm `exploracao.json`.
 
 #### Scenario: Retomada depois do limite de custo
 - **GIVEN** um teto de exploração de US$ 10, uma sessão fechada com `limite_custo` e custo acumulado de US$ 3 com 4 experimentos novos
@@ -85,7 +85,7 @@ O comando `orcamento` SHALL calcular, sem chamar LLM nem abrir banco, por combin
 - **THEN** o gasto esperado de P na combinação sonnet é US$ 25,00 e o máximo é 10 × o teto
 
 ### Requirement: Estado da exploração registrado
-O sistema SHALL gravar em `exploracao.json` o `fim`, o `motivo_final`, as sessões da cadeia (id, apelido, motivo de parada, custo, tokens, chamadas por papel e minutos), o custo total e por provedor, os totais de experimentos, resultados e hipóteses, e o nome, a versão e a fonte dos modelos de cada papel. Uma exploração interrompida pelo orçamento SHALL ser marcada censurada.
+O sistema SHALL gravar em `exploracao.json` o `fim`, o `motivo_final`, as sessões da cadeia (id, apelido, motivo de parada, custo, tokens, chamadas por papel e minutos), o custo total e por provedor, os totais de experimentos, resultados e hipóteses, e o nome, a versão e a fonte dos modelos de cada papel. Uma exploração que não termina em fim natural (orçamento, `sem_progresso` ou falha) SHALL ser marcada censurada.
 
 #### Scenario: Cadeia de duas sessões
 - **GIVEN** uma exploração com duas sessões ligadas por `continues_session_id`

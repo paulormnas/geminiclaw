@@ -1,0 +1,25 @@
+{
+  "timeout_seconds": 12000,
+  "env": {
+    "ANTHROPIC_EFFORT": "medium",
+    "LOCALITY_MIN_GROUP_SIZE": "10",
+    "LLM_REQUESTS_PER_MINUTE": "60",
+    "SESSION_MAX_TOKENS": "3000000",
+    "SESSION_MAX_COST_USD": "3",
+    "SESSION_MAX_MINUTES": "180",
+    "GOOGLE_FALLBACK_MODEL": "",
+    "OPENAI_REASONING_EFFORT": "low"
+  },
+  "combinations": [
+    {
+      "name": "haiku-dev-sol-juiz",
+      "roles": {"*": "anthropic/claude-haiku-5-5", "VALIDATOR": "openai/gpt-6.1-sol"},
+      "requires": "OPENAI_API_KEY"
+    },
+    {
+      "name": "sonnet-dev-sol-juiz",
+      "roles": {"*": "anthropic/claude-sonnet-5-5", "VALIDATOR": "openai/gpt-6.1-sol"},
+      "requires": "OPENAI_API_KEY"
+    }
+  ]
+}

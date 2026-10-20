@@ -37,33 +37,36 @@ BENCHMARK_DRAFT = ProblemDraft(
 )
 
 
-def seed_project(name: str, store: Any | None = None) -> str:
+def seed_project(name: str, store: Any | None = None, draft: ProblemDraft | None = None) -> str:
     """Cria o projeto ``Benchmark <name>`` com o ``Problema`` confirmado e devolve o ``projeto_id``.
 
     Args:
         name: Nome da combinação (entra no título).
         store: ``GraphStore`` (padrão: o de produção, com índice semântico, que vetoriza título, objetivo e domínios).
+        draft: ``Problema`` a confirmar (padrão: o do Iris, ``BENCHMARK_DRAFT``); as explorações controladas passam o do
+            regime (``v18.8-verdict-controlled-sessions``).
 
     Raises:
         ProjectError: Falha ao criar o projeto ou confirmar o ``Problema``.
         VocabularyNotSeededError: A ``Metrica`` do ``Problema`` não existe aprovada no vocabulário.
     """
+    draft = draft or BENCHMARK_DRAFT
     if store is None:
         from src.knowledge.factory import open_graph_store
 
         store = open_graph_store()
     # Sem a métrica canônica o Problema ganharia um candidato sem sinônimos e nenhum Resultado ganharia ``MEDE``
     # (veredito das hipóteses preso em 0): falha antes de criar qualquer nó.
-    if find_approved_metric(store, BENCHMARK_DRAFT.metrica) is None:
+    if find_approved_metric(store, draft.metrica) is None:
         raise VocabularyNotSeededError(
-            f"A métrica '{BENCHMARK_DRAFT.metrica}' não está aprovada no vocabulário do grafo; "
+            f"A métrica '{draft.metrica}' não está aprovada no vocabulário do grafo; "
             "rode scripts/seed_vocabulary.py (ou use --reset-stores, que semeia o banco de benchmark)."
         )
     project_id = projects.create_project(
         store,
         f"Benchmark {name}",
         "Pipeline de classificação supervisionada para o dataset Iris (tarefa do run.sh).",
-        list(BENCHMARK_DRAFT.dominios),
+        list(draft.dominios),
     )
-    projects.confirm_problem(store, project_id, BENCHMARK_DRAFT, sentido_metrica="maior_melhor")
+    projects.confirm_problem(store, project_id, draft, sentido_metrica="maior_melhor")
     return project_id

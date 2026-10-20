@@ -1,6 +1,6 @@
 # Tarefas: v18.8-verdict-controlled-sessions
 
-**Estado (2026-10-20):** especificada e aprovada pelo pesquisador (valores dos regimes, piloto primeiro, regime F incluído, unidade = exploração). Seções 0, 1 e 2 mergeadas (#229, #230, #232); seção 3 (medição e comparação com o laboratório) implementada no PR `feat/v18.8-controlled-measure`: `medir` com Wilson/Clopper-Pearson, equivalência com `completa2`, variante `atual` ao lado e previsão pela simulação. Nenhuma execução com LLM foi feita; piloto e bateria só com confirmação explícita e orçamento aprovado.
+**Estado (2026-10-20):** especificada e aprovada pelo pesquisador (valores dos regimes, piloto primeiro, regime F incluído, unidade = exploração). Seções 0 a 3 mergeadas (#229, #230, #232, #233); seção 4 (N-abordagem-4 offline) implementada no PR `feat/v18.8-approach-failure`: cenários N-abordagem-3 e N-abordagem-ruido, variantes de `q`, `p_falha_abordagem` e tipo `abordagem_falha` na simulação, comando `abordagem` e relatório com a proposta (rodada idêntica no Pi e no Mac). **Decisão pendente do pesquisador:** valor de `VERDICT_APPROACH_FAILURE_Q` (o relatório propõe manter 0,3 até o piloto e, se necessário, 0,5); `src/config.py` não foi alterado. Nenhuma execução com LLM foi feita; piloto e bateria só com confirmação explícita e orçamento aprovado.
 
 ## 0. Pré-requisitos
 - [x] 0.1 Mudança aprovada pelo pesquisador (decisões em `proposal.md`).
@@ -25,9 +25,9 @@
 - [x] 3.4 Testes com grafos arquivados sintéticos: um por medida e por regime, censura e o cenário "compatível/incompatível".
 
 ## 4. N-abordagem-4 offline (PR próprio)
-- [ ] 4.1 Catálogo: N-abordagem-3 e N-abordagem-ruido; `variantes.json`: `approach_failure_q` 0,5, 0,7 e 1,0.
-- [ ] 4.2 Simulação: `p_falha_abordagem` e tipo `abordagem_falha`; medidas por `q` (design §7).
-- [ ] 4.3 Rodada no Raspberry Pi e relatório curto em `docs/calibracao-veredito/` com a proposta; **decisão do pesquisador** sobre `VERDICT_APPROACH_FAILURE_Q` (mudança de valor só em PR próprio, com ADR 015 §9.9).
+- [x] 4.1 Catálogo: N-abordagem-3 e N-abordagem-ruido; `variantes.json`: `approach_failure_q` 0,5, 0,7 e 1,0.
+- [x] 4.2 Simulação: `p_falha_abordagem` e tipo `abordagem_falha`; medidas por `q` (design §7).
+- [x] 4.3 Rodada no Raspberry Pi e relatório curto em `docs/calibracao-veredito/` com a proposta; **decisão do pesquisador** sobre `VERDICT_APPROACH_FAILURE_Q` (mudança de valor só em PR próprio, com ADR 015 §9.9).
 
 ## 5. Piloto (somente com confirmação explícita)
 - [ ] 5.1 Plano do piloto e tabela `orcamento` (teto US$ 56) aprovados pelo pesquisador.

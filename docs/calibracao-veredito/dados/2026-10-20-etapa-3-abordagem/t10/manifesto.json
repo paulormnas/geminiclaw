@@ -1,12 +1,12 @@
 {
   "ferramenta": "scripts.verdict_lab",
-  "commit": "9ba47d9dc27fbe52fe489c1ee6060b36bddcc430",
-  "data_utc": "2026-10-20T02:05:43Z",
+  "commit": "99660fe06feb70d1594e9eb15359741b7f7dae7f",
+  "data_utc": "2026-10-20T02:07:14Z",
   "comando": "abordagem",
   "argv": [
     "abordagem",
     "--saida",
-    "docs/calibracao-veredito/dados/2026-10-20-etapa-3-abordagem/t10",
+    "/home/agent/abord_pi/t10",
     "--repeticoes",
     "1000",
     "--max-tentativas",
@@ -253,7 +253,7 @@
   },
   "entradas": [
     {
-      "caminho": "/Users/paulo/Workspace/geminiclaw/.worktrees/feat-v18.8-approach-failure/scripts/verdict_lab/variantes.json",
+      "caminho": "/home/agent/wt-abord/scripts/verdict_lab/variantes.json",
       "sha256": "1c6187c1c2974e49f8f92a83a3ce1c8fe8547997dd114aa3fb7572b014988651"
     }
   ]

@@ -1,6 +1,6 @@
 # Falha de abordagem reproduzida: avaliação offline do peso `q`
 
-Gerado por `scripts.verdict_lab` em 2026-10-20T02:05:43Z, commit `9ba47d9dc27f`, comando `abordagem`. Sem chamada de LLM. Parâmetros e entradas em `manifesto.json`.
+Gerado por `scripts.verdict_lab` em 2026-10-20T02:07:14Z, commit `99660fe06feb`, comando `abordagem`. Sem chamada de LLM. Parâmetros e entradas em `manifesto.json`.
 
 Limiar de conclusão 0.3. Simulação: 1000 hipóteses por tipo e ponto, até 10 tentativas, conclusão pela primeira travessia do limiar. As sequências são as mesmas em todas as variantes.
 

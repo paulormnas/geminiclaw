@@ -4,7 +4,7 @@
 
     {"versao": 1, "semente": 12345, "matriz": "scripts/verdict_lab/controlled/matriz_controlada.json",
      "timeout_segundos": 12000,
-     "combinacoes": [{"nome": "haiku-dev-sol-juiz", "teto_usd": 4.0, "teto_sessoes": 6, "teto_minutos": 720}],
+     "combinacoes": [{"nome": "haiku-dev-luna-juiz", "teto_usd": 4.0, "teto_sessoes": 6, "teto_minutos": 720}],
      "repeticoes": {"P": 1, "T": 1, "N": 1, "F": 1}}
 
 O piloto entra como lista de ``exploracao.json`` (o que o orquestrador grava); o gasto esperado é a média do que o

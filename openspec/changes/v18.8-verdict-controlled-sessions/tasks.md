@@ -31,7 +31,7 @@
 
 ## 5. Piloto (somente com confirmação explícita)
 - [ ] 5.1 Plano do piloto e tabela `orcamento` (teto US$ 56) aprovados pelo pesquisador.
-- [ ] 5.2 Piloto: P, T, N e F × `haiku-dev-sol-juiz` e `sonnet-dev-sol-juiz`, uma exploração cada, `--reset-stores --confirm-target geminiclaw_bench@localhost`.
+- [ ] 5.2 Piloto: P, T, N e F × `haiku-dev-luna-juiz` e `sonnet-dev-luna-juiz`, uma exploração cada, `--reset-stores --confirm-target geminiclaw_bench@localhost`.
 - [ ] 5.3 Relatório do piloto em `docs/calibracao-veredito/`: chamadas, tokens e US$ por papel, variações por hipótese, fim natural alcançado, calibração do regime F.
 - [ ] 5.4 Tabela `orcamento` da bateria com os dados do piloto, aprovada pelo pesquisador.
 

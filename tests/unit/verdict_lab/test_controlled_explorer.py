@@ -123,20 +123,20 @@ def test_orcamento_sem_piloto() -> None:
 def test_orcamento_com_piloto() -> None:
     plano = budget.carregar_plano(PLANO)
     plano["repeticoes"] = {"P": 10}
-    piloto = [{"combinacao": "sonnet-dev-sol-juiz", "regime": "P", "custo_total_usd": 2.5, "tokens_total": 900,
+    piloto = [{"combinacao": "sonnet-dev-luna-juiz", "regime": "P", "custo_total_usd": 2.5, "tokens_total": 900,
                "chamadas_total": 40, "sessoes": [{"uso_por_agente": {"developer": {"chamadas": 30}}}]}]
     o = budget.calcular(plano, piloto)
-    linha = next(ln for ln in o["linhas"] if ln["combinacao"] == "sonnet-dev-sol-juiz")
+    linha = next(ln for ln in o["linhas"] if ln["combinacao"] == "sonnet-dev-luna-juiz")
     assert linha["gasto_esperado_usd"] == 25.0 and linha["gasto_maximo_usd"] == 100.0
     assert linha["usd"] == {"media": 2.5, "p90": 2.5} and linha["chamadas_por_agente_media"] == {"developer": 30.0}
-    haiku = next(ln for ln in o["linhas"] if ln["combinacao"] == "haiku-dev-sol-juiz")
+    haiku = next(ln for ln in o["linhas"] if ln["combinacao"] == "haiku-dev-luna-juiz")
     assert haiku["gasto_esperado_usd"] is None and o["total_geral"]["esperado"] is None
 
 
 def test_p90_por_posto() -> None:
     plano = budget.carregar_plano(PLANO)
     plano["repeticoes"] = {"P": 1}
-    piloto = [{"combinacao": "haiku-dev-sol-juiz", "regime": "P", "custo_total_usd": float(v), "tokens_total": v,
+    piloto = [{"combinacao": "haiku-dev-luna-juiz", "regime": "P", "custo_total_usd": float(v), "tokens_total": v,
                "chamadas_total": v} for v in range(1, 11)]
     linha = budget.calcular(plano, piloto)["linhas"][0]
     assert linha["usd"]["p90"] == 9.0 and linha["usd"]["media"] == 5.5
@@ -223,7 +223,7 @@ def test_backend_sem_pasta_de_sessao_e_falha(tmp_path: Path) -> None:
 
 
 def combo_item(regime: str = "N") -> runner.Item:
-    combo = {"name": "c1", "roles": {"*": "anthropic/claude-haiku-5-5", "VALIDATOR": "openai/gpt-6.1-sol"}}
+    combo = {"name": "c1", "roles": {"*": "anthropic/claude-haiku-5-5", "VALIDATOR": "openai/gpt-6-luna"}}
     return runner.Item(1, regime, combo, Teto(4.0, 3, 60), 99)
 
 
@@ -283,7 +283,7 @@ def test_ambiente_do_subprocesso_nao_leva_a_verdade(monkeypatch, tmp_path: Path)
     env = FakeBackend.instancias[0].kw["env"]
     pasta = tmp_path / "saida" / "c1" / "N" / "r1"
     assert env["INPUT_CONTEXT_DIR"] == str(pasta / "input_context")
-    assert env["VALIDATOR_MODEL"] == "openai/gpt-6.1-sol"
+    assert env["VALIDATOR_MODEL"] == "openai/gpt-6-luna"
     assert not any("verdade" in str(v) for v in env.values()) and "verdade" not in " ".join(env)
 
 
@@ -306,7 +306,7 @@ def test_ensaio_por_padrao_nao_cria_nada(monkeypatch, capsys, tmp_path: Path) ->
     saida = tmp_path / "saida"
     assert cli.main(["explorar", "--plano", str(PLANO), "--saida", str(saida)]) == 0
     out = capsys.readouterr().out
-    assert "ENSAIO" in out and "haiku-dev-sol-juiz/P/r1" in out and "máximo US$ 56.00" in out
+    assert "ENSAIO" in out and "haiku-dev-luna-juiz/P/r1" in out and "máximo US$ 56.00" in out
     assert not saida.exists()
 
 
@@ -344,7 +344,7 @@ def test_executar_com_alvo_confirmado_roda_e_grava_o_manifesto(monkeypatch, caps
     argv = ["explorar", "--plano", str(PLANO), "--saida", str(saida), "--executar", "--reset-stores",
             "--confirm-target", "geminiclaw_bench@db.local"]
     assert cli.main(argv) == 0
-    assert len(vistos) == 8 and vistos[0] == "haiku-dev-sol-juiz/P/r1"
+    assert len(vistos) == 8 and vistos[0] == "haiku-dev-luna-juiz/P/r1"
     manifesto = json.loads((saida / "manifesto.json").read_text(encoding="utf-8"))
     assert manifesto["entradas"]["plano"]["sha256"] and manifesto["sementes_dos_dados"] and "commit" in manifesto
     assert manifesto["verdict"]["VERDICT_MODEL"] == "v2"
@@ -358,17 +358,32 @@ def test_saida_ocupada_e_recusada_e_retomar_pula_as_feitas(monkeypatch, capsys, 
     argv = ["explorar", "--plano", str(PLANO), "--saida", str(saida), "--executar", "--reset-stores",
             "--confirm-target", "geminiclaw_bench@db.local"]
     assert cli.main(argv) == 2 and "manifesto.json" in capsys.readouterr().err
-    feitas = runner.diretorio_da(saida, runner.Item(1, "P", {"name": "haiku-dev-sol-juiz"}, TETO, 1))
+    feitas = runner.diretorio_da(saida, runner.Item(1, "P", {"name": "haiku-dev-luna-juiz"}, TETO, 1))
     feitas.mkdir(parents=True)
     (feitas / "exploracao.json").write_text("{}", encoding="utf-8")
     vistos: list[str] = []
     monkeypatch.setattr(runner, "executar_item", lambda item, **kw: vistos.append(item.nome) or {
         "fim": "natural", "motivo_final": "x", "custo_total_usd": 0.0, "n_sessoes": 1})
     assert cli.main([*argv, "--retomar"]) == 0
-    assert len(vistos) == 7 and "haiku-dev-sol-juiz/P/r1" not in vistos
+    assert len(vistos) == 7 and "haiku-dev-luna-juiz/P/r1" not in vistos
 
 
 def test_gerar_grava_dados_e_verdade_separados(capsys, tmp_path: Path) -> None:
     assert cli.main(["gerar", "--regime", "N", "--semente", "3", "--saida", str(tmp_path)]) == 0
     assert "sha256" in capsys.readouterr().out
     assert (tmp_path / "input_context" / "dados.csv").is_file() and (tmp_path / "verdade" / "verdade.json").is_file()
+
+
+def test_matriz_usa_gpt_6_luna_como_validator_com_esforco_maximo() -> None:
+    """Decisão de 2026-10-20: Validator Luna em esforço máximo (o Sol custa vinte vezes mais); outra família que o Developer."""
+    from src.llm.catalog import load_catalog
+    from src.llm.pricing import PRICES
+
+    matriz = json.loads(Path("scripts/verdict_lab/controlled/matriz_controlada.json").read_text(encoding="utf-8"))
+    assert matriz["env"]["OPENAI_REASONING_EFFORT"] == "max"
+    catalogo = load_catalog(local_path=Path("/nao/existe.yaml"), base_urls={})
+    for combo in matriz["combinations"]:
+        assert combo["name"].endswith("luna-juiz") and combo["roles"]["VALIDATOR"] == "openai/gpt-6-luna"
+        assert combo["roles"]["VALIDATOR"] in PRICES
+        familia = catalogo.modelos[combo["roles"]["VALIDATOR"]].familia_modelo
+        assert familia != catalogo.modelos[combo["roles"]["*"]].familia_modelo

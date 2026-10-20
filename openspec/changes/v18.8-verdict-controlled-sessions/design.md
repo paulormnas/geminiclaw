@@ -119,7 +119,9 @@ Mais a linha de total por combinação e geral. O gasto máximo é garantido pel
 
 ### 5.2 Plano do piloto (proposta, a aprovar antes de rodar)
 
-Oito explorações: regimes P, T, N, F × combinações `haiku-dev-sol-juiz` e `sonnet-dev-sol-juiz`, uma repetição cada. Propostas: `SESSION_MAX_COST_USD` = 3,0 por sessão, no máximo 6 sessões por exploração, **teto por exploração** US$ 4 (haiku) e US$ 10 (sonnet), 12 horas de relógio por exploração. Gasto máximo do piloto: 4 × (4 + 10) = **US$ 56**. Referência de custo por sessão: a bateria V18.7 parcial (14 min; haiku US$ 0,27 com falha precoce; sonnet US$ 2,10 chegando ao alvo). Uma sessão que acumula cinco variações com evolução custa mais que isso, e o piloto existe para medir quanto.
+Oito explorações: regimes P, T, N, F × combinações `haiku-dev-luna-juiz` e `sonnet-dev-luna-juiz`, uma repetição cada. Propostas: `SESSION_MAX_COST_USD` = 3,0 por sessão, no máximo 6 sessões por exploração, **teto por exploração** US$ 4 (haiku) e US$ 10 (sonnet), 12 horas de relógio por exploração. Gasto máximo do piloto: 4 × (4 + 10) = **US$ 56**. Referência de custo por sessão: a bateria V18.7 parcial (14 min; haiku US$ 0,27 com falha precoce; sonnet US$ 2,10 chegando ao alvo). Uma sessão que acumula cinco variações com evolução custa mais que isso, e o piloto existe para medir quanto.
+
+**Validator (decisão do pesquisador, 2026-10-20):** o piloto usa `openai/gpt-6-luna` com `OPENAI_REASONING_EFFORT=max` (o nível mais alto da página de modelos da OpenAI em 2026-10-20, acima de `xhigh`), em vez do `gpt-6.1-sol`, de custo bem maior (US$ 0,10 / 0,50 contra US$ 2 / 10 por 1M de tokens). Não existe GPT-6.1 Luna: a família 6.1 tem só o Sol, então o Luna mais recente é o `gpt-6-luna`. Com raciocínio ligado o provedor usa a API Responses, que aceita ferramentas. Se os resultados do piloto não forem adequados (por exemplo, o Validator reprovando ou aprovando em excesso, ou o esforço máximo esgotando tokens sem convergir), a troca para o `gpt-6.1-sol` é a alternativa registrada, e o relatório do piloto diz qual foi o efeito.
 
 ### 5.3 Plano da bateria (proposta; números finais saem do piloto)
 
@@ -185,7 +187,7 @@ Os relatórios do piloto e da bateria vão para `docs/calibracao-veredito/` (**n
 2. **`ao_atingir_objetivo = continuar`.** No uso real do modo `auto` o padrão é `parar`, e a pesquisa fecha na primeira variação que atinge o alvo, antes de o veredito concluir. O relatório mede o veredito sob exploração longa, que é a condição em que ele decide o ciclo de vida das hipóteses (ADR 021 §4).
 3. **Rótulo no nível do problema.** Em P não se sabe se uma abordagem específica era boa; a refutação discordante é relatada como tal. Em T, N e F (abordagem plantada) toda validação é falsa com certeza.
 4. **Dados sintéticos de uma família** (classificação binária tabular, métrica discreta); a generalização para outros domínios fica para a etapa 4 e para a V20.
-5. **Dois modelos de agente** (Claude Haiku 5.5 e Sonnet 5.5, com GPT-6.1 Sol como Validator); variância entre repetições é medida, não eliminada.
+5. **Dois modelos de agente** (Claude Haiku 5.5 e Sonnet 5.5, com GPT-6 Luna em esforço máximo como Validator); variância entre repetições é medida, não eliminada.
 
 | Risco | Mitigação |
 |---|---|

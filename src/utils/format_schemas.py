@@ -100,7 +100,11 @@ SUBTAREFA = Esquema(
             "como um baseline, dispensa o limiar)",
             obrigatorio=True,
         ),
-        Campo("expected_artifacts", "list[str]", "nomes dos arquivos que a subtarefa deve gerar em /outputs/"),
+        Campo(
+            "expected_artifacts", "list[str]",
+            "nomes dos arquivos que a subtarefa deve gerar em /outputs/; as métricas e os parâmetros são sempre "
+            "metrics.json e params.json, sem sufixo (cada subtarefa tem a própria pasta)",
+        ),
         Campo("depends_on", "list[str]", "task_name das subtarefas das quais esta depende"),
         Campo("hypothesis_ref", "string", "referência (h1, h2...) ou id da hipótese que a subtarefa testa",
               nao_reprova=True),

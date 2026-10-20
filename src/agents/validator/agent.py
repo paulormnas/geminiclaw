@@ -519,13 +519,15 @@ class ValidatorAgent:
             # Roadmap V15.1 / Spec G1 — hypothesis/scientific_rationale, quando presentes,
             # não podem ser strings vazias. Ausência é aceita (retrocompatibilidade com
             # planos gerados antes desta spec).
+            # Preparação e referência não testam hipótese: o campo vazio é o certo (piloto da etapa 3, 2026-10-20).
+            sem_hipotese = str(task.get("papel") or "").strip().lower() in ("preparacao", "referencia")
             hypothesis = task.get("hypothesis")
-            if hypothesis is not None and not str(hypothesis).strip():
+            if hypothesis is not None and not str(hypothesis).strip() and not sem_hipotese:
                 structural_issues.append(
                     f"Subtarefa '{task.get('task_name', idx+1)}' possui 'hypothesis' vazia."
                 )
             rationale = task.get("scientific_rationale")
-            if rationale is not None and not str(rationale).strip():
+            if rationale is not None and not str(rationale).strip() and not sem_hipotese:
                 structural_issues.append(
                     f"Subtarefa '{task.get('task_name', idx+1)}' possui 'scientific_rationale' vazia."
                 )

@@ -22,6 +22,7 @@ from src.config import (
     GEMINI_RATE_LIMIT_COOLDOWN_SECONDS,
     GEMINI_REQUESTS_PER_MINUTE,
     MAX_PLANNING_ITERATIONS,
+    PLAN_LLM_REJECTION_LIMIT,
     OLLAMA_ENABLE_THINKING,
     PLAN_NORMALIZER_ENABLED,
     PLAN_REJECTION_STALL_LIMIT,
@@ -2233,6 +2234,7 @@ class Orchestrator:
         # se algum papel da sessão aceita dados brutos; o plano é produto do Researcher (ADR 019 §3.8).
         mixed_raw = any_role_raw()
         plan_text_tainted = role_tainted("researcher")
+        llm_rejections = 0
         for iteration in range(MAX_PLANNING_ITERATIONS):
             # 1. Executa o Researcher (que absorve o Planner na V14.3)
             if resume_state is not None and master_session_id in self._resume_planning and not current_plan_data:
@@ -2352,6 +2354,23 @@ class Orchestrator:
                     repeats >= PLAN_REJECTION_STALL_LIMIT and not val_result.deterministic
                     and metrics_gate_open and objective_gate_open
                 ):
+                    val_result.is_valid = True
+                    val_result.status = "approved"
+                    val_result.approved_with_warnings = True
+
+            # Piloto da etapa 3 (2026-10-20): objeções novas do Validator LLM a cada plano não repetem a assinatura e
+            # mantinham o laço por até 14 rodadas (85% do tempo da sessão). Passado o limite, viram consultivas.
+            if not val_result.is_valid and not val_result.deterministic:
+                llm_rejections += 1
+                if (
+                    llm_rejections > PLAN_LLM_REJECTION_LIMIT
+                    and (metric_definition is None or bool(getattr(val_result, "metrics_approved", False)))
+                    and (objective_definition is None or bool(getattr(val_result, "objective_approved", False)))
+                ):
+                    logger.warning(
+                        "Plano aprovado com avisos: limite de reprovações do Validator LLM atingido",
+                        extra={"reprovacoes": llm_rejections, "limite": PLAN_LLM_REJECTION_LIMIT},
+                    )
                     val_result.is_valid = True
                     val_result.status = "approved"
                     val_result.approved_with_warnings = True

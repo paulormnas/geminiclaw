@@ -325,6 +325,7 @@ MAX_PLAN_RETRIES = int(get_env("MAX_PLAN_RETRIES", default="5"))
 # v16-pipeline-robustness — robustez do planejamento, da revisão e do disjuntor.
 PLAN_NORMALIZER_ENABLED = get_env_bool("PLAN_NORMALIZER_ENABLED", default=True)
 PLAN_REJECTION_STALL_LIMIT = int(get_env("PLAN_REJECTION_STALL_LIMIT", default="2"))
+PLAN_LLM_REJECTION_LIMIT = int(get_env("PLAN_LLM_REJECTION_LIMIT", default="3"))
 ARTIFACT_MATCH_MODE = get_env("ARTIFACT_MATCH_MODE", default="tolerant").lower()  # tolerant | strict
 CIRCUIT_BREAKER_STALL_CYCLES = int(get_env("CIRCUIT_BREAKER_STALL_CYCLES", default="2"))
 

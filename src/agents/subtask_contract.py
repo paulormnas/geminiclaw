@@ -532,6 +532,8 @@ ARTIFACT_NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.\-/]{0,127}$")
 WARNING_ARTIFACT_UPDATED = "artefato_atualizado"
 # Cada subtarefa grava os seus na própria pasta: nome igual não é colisão (design §7.2).
 _PER_TASK_ARTIFACTS = frozenset({"metrics.json", "params.json"})
+# metrics_<tarefa>.json: o orquestrador só lê metrics.json, e a variante deixava o experimento sem métricas.
+_METRICS_PARAMS_VARIANT_RE = re.compile(r"^(metrics|params)[_\-].+\.json$")
 _FIELD_NAMES = {
     "criterios": "validation_criteria", "artefatos": "expected_artifacts",
     "hipotese": "hypothesis", "consumidores": "consumidores",
@@ -583,6 +585,15 @@ def plan_contract_issues(plan: Sequence[Any]) -> tuple[list[str], list[str]]:
             if invalid_artifact_name(name):
                 shown = clean_plan_text(name)[:80]
                 issues.append(f"nome_de_artefato_invalido: {shown} (subtarefa '{_task_name(task)}')")
+    for task in tasks:
+        for name in _get(task, "expected_artifacts") or []:
+            base = str(name).replace("\\", "/").rsplit("/", 1)[-1].lower()
+            if base not in _PER_TASK_ARTIFACTS and _METRICS_PARAMS_VARIANT_RE.match(base):
+                issues.append(
+                    f"artefato_de_metrica_fora_do_contrato: {clean_plan_text(name)[:80]} (subtarefa "
+                    f"'{_task_name(task)}'); use exatamente metrics.json e params.json: cada subtarefa grava na própria "
+                    "pasta, então o mesmo nome não colide"
+                )
     owners: dict[str, list[str]] = {}
     for task in tasks:
         for name in _get(task, "expected_artifacts") or []:

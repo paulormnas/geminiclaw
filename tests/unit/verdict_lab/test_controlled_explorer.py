@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -248,12 +249,13 @@ def executar(monkeypatch, tmp_path: Path, **over: Any) -> tuple[dict[str, Any], 
     FakeBackend.instancias.clear()
     chamadas: dict[str, Any] = {"reset": [], "semear": []}
     monkeypatch.setattr(runner.rb, "_close_local_pools", lambda: None)
+    monkeypatch.setattr("src.config.DATABASE_URL", over.pop("config_url", BENCH_URL))
     monkeypatch.setattr(bench_archive, "fetch_events", lambda sid: [{"event_type": "x", "sid": sid}])
     monkeypatch.setattr(footprint, "project_graph_full", lambda pid, store=None: {"nos": [], "arestas": []})
     monkeypatch.setattr(model_versions, "db_allocation_profile", lambda sid: None)
     args = dict(
         saida=tmp_path / "saida", env_base={"PATH": "/bin", "SEGREDO": "x"}, matriz={"env": {"SESSION_MAX_COST_USD": "3"},
-        "timeout_seconds": 100}, output_dir=tmp_path / "outputs", target=object(), reset=True, dump=False,
+        "timeout_seconds": 100}, output_dir=tmp_path / "outputs", target=SimpleNamespace(database="geminiclaw_bench"), reset=True, dump=False,
         semear=lambda nome, draft: chamadas["semear"].append((nome, draft)) or "proj-1",
         reiniciar=lambda target, **kw: chamadas["reset"].append(kw),
         backend_factory=FakeBackend,
@@ -387,3 +389,24 @@ def test_matriz_usa_gpt_6_luna_como_validator_com_esforco_maximo() -> None:
         assert combo["roles"]["VALIDATOR"] in PRICES
         familia = catalogo.modelos[combo["roles"]["VALIDATOR"]].familia_modelo
         assert familia != catalogo.modelos[combo["roles"]["*"]].familia_modelo
+
+
+def test_aplicar_alvo_aponta_o_processo_e_o_src_config_para_o_benchmark(monkeypatch) -> None:
+    """Defeito do primeiro piloto: ``src.config`` guardava o ``DATABASE_URL`` de desenvolvimento."""
+    import os
+
+    import src.config as config
+
+    for chave in runner.CHAVES_DO_ALVO:
+        monkeypatch.setattr(config, chave, DEV_URL)
+        monkeypatch.setenv(chave, DEV_URL)
+    runner.aplicar_alvo_ao_processo({"DATABASE_URL": BENCH_URL, "QDRANT_URL": "http://qdrant.local:6333"})
+    assert config.DATABASE_URL == BENCH_URL and os.environ["DATABASE_URL"] == BENCH_URL
+    assert config.QDRANT_URL == "http://qdrant.local:6333"
+    assert config.KNOWLEDGE_READER_DATABASE_URL == DEV_URL  # sem valor no alvo, não é tocado
+    runner.conferir_alvo_do_processo(SimpleNamespace(database="geminiclaw_bench"))
+
+
+def test_recusa_semear_quando_o_processo_ainda_aponta_para_desenvolvimento(monkeypatch, tmp_path: Path) -> None:
+    with pytest.raises(runner.AlvoNaoAplicado, match="geminiclaw_bench"):
+        executar(monkeypatch, tmp_path, config_url=DEV_URL)

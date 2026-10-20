@@ -1,6 +1,6 @@
 # Tarefas: v18.8-verdict-controlled-sessions
 
-**Estado (2026-10-20):** especificada e aprovada pelo pesquisador. Seções 0 a 4 mergeadas (#229, #230, #232, #233, #234); `VERDICT_APPROACH_FAILURE_Q` mantido em 0,3 por decisão do pesquisador. Validator do piloto: `gpt-6-luna` em `xhigh` (#235; o Sol é a alternativa). **Tabela `orcamento` do piloto aprovada (2026-10-20): 8 explorações, máximo US$ 56** (haiku-dev-luna-juiz US$ 4 por exploração, sonnet-dev-luna-juiz US$ 10). Nenhuma execução com LLM foi feita; o piloto (5.2) só roda com a confirmação explícita do pesquisador para executar.
+**Estado (2026-10-20):** especificada e aprovada pelo pesquisador. Seções 0 a 4 mergeadas (#229, #230, #232, #233, #234); `VERDICT_APPROACH_FAILURE_Q` mantido em 0,3 por decisão do pesquisador. Validator do piloto: `gpt-6-luna` em `xhigh` (#235; o Sol é a alternativa). **Tabela `orcamento` do piloto aprovada (2026-10-20): 8 explorações, máximo US$ 56** (haiku-dev-luna-juiz US$ 4 por exploração, sonnet-dev-luna-juiz US$ 10). Piloto (5.2) autorizado pelo pesquisador para rodar no Mac; a primeira tentativa (2026-10-20) abortou antes de qualquer chamada de LLM por defeito de configuração (`src.config` mantinha o `DATABASE_URL` de desenvolvimento e a semeadura procurava o vocabulário no banco errado); corrigido no PR `fix/v18.8-controlled-target`, com guarda que recusa semear fora do alvo. Nenhuma chamada de LLM e nenhum custo até aqui.
 
 ## 0. Pré-requisitos
 - [x] 0.1 Mudança aprovada pelo pesquisador (decisões em `proposal.md`).

@@ -166,9 +166,7 @@ def cmd_explorar(args: argparse.Namespace, argv: list[str]) -> int:
         return EXIT_REFUSED
 
     env_base = rs.target_env(target, env_base)
-    for chave in ("DATABASE_URL", "QDRANT_URL", "KNOWLEDGE_READER_DATABASE_URL"):
-        if env_base.get(chave):
-            os.environ[chave] = env_base[chave]
+    runner.aplicar_alvo_ao_processo(env_base)
     print(f"[controlled] alvo: {target.label} ({target.safe_url})", flush=True)
     if not retomada:
         escrever_manifesto(args.saida, argv, args.plano, plano, matriz_path, sementes)

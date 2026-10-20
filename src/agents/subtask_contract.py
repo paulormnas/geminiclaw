@@ -591,8 +591,8 @@ def plan_contract_issues(plan: Sequence[Any]) -> tuple[list[str], list[str]]:
             if base not in _PER_TASK_ARTIFACTS and _METRICS_PARAMS_VARIANT_RE.match(base):
                 issues.append(
                     f"artefato_de_metrica_fora_do_contrato: {clean_plan_text(name)[:80]} (subtarefa "
-                    f"'{_task_name(task)}'); use exatamente metrics.json e params.json: cada subtarefa grava na própria "
-                    "pasta, então o mesmo nome não colide"
+                    f"'{_task_name(task)}'); use exatamente metrics.json e params.json: cada subtarefa grava na "
+                    "própria pasta, então o mesmo nome não colide"
                 )
     owners: dict[str, list[str]] = {}
     for task in tasks:

@@ -48,7 +48,9 @@ _normalize_metric_name = normalize_metric_name
 def _metric_key(raw_name: str) -> Optional[str]:
     """Mapeia o nome citado em um critério a uma métrica conhecida, ou ``None``.
 
-    Tenta o nome inteiro e depois cada palavra ("acurácia no teste" -> ``accuracy``).
+    Tenta o nome inteiro e depois cada palavra, separada por espaço ("acurácia no teste" -> ``accuracy``) ou por
+    ``_``, ``-`` e ``.`` (``acuracia_teste_media`` -> ``accuracy``). O nome só diz de qual métrica se trata; a chave
+    de ``metrics.json`` e o conjunto de avaliação seguem as regras de qualificador.
     """
     whole = _normalize_metric_name(raw_name)
     if whole in _METRIC_ALIASES:
@@ -61,6 +63,9 @@ def _metric_key(raw_name: str) -> Optional[str]:
             tail = _normalize_metric_name(word.rsplit(".", 1)[-1])
             if tail in _METRIC_ALIASES:
                 return _METRIC_ALIASES[tail]
+    for word in normalized_words(raw_name):
+        if word in _METRIC_ALIASES:
+            return _METRIC_ALIASES[word]
     return None
 
 
@@ -159,6 +164,21 @@ def _key_norm(key: str) -> str:
     return ".".join(_normalize_metric_name(part) for part in str(key).split("."))
 
 
+def _cited_plain_key(cmp: Comparison, metrics: Dict[str, Any]) -> List[Tuple[str, float]]:
+    """Chave sem grupo que o critério cita pelo nome completo (``acuracia_teste_media``), com valor numérico.
+
+    Vale só a igualdade do nome normalizado: o critério que cita uma chave composta não é avaliado contra outra.
+    """
+    cited = {_normalize_metric_name(word) for word in cmp.raw_name.split()}
+    found: List[Tuple[str, float]] = []
+    for key, value in (metrics or {}).items():
+        if "." in str(key) or isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        if _normalize_metric_name(str(key)) in cited:
+            found.append((str(key), float(value)))
+    return found
+
+
 def _select_candidates(
     crit: MetricCriterion, cmp: Comparison, metrics: Dict[str, Any], contract_keys: bool
 ) -> Tuple[str, List[Tuple[str, float]]]:
@@ -171,7 +191,7 @@ def _select_candidates(
     """
     qualifier = criterion_qualifier(cmp.raw_name)
     allowed = {qualifier} if qualifier not in ("", "teste") else {"teste", ""}
-    candidates = metric_candidates(metrics, str(cmp.metric), allowed, _METRIC_ALIASES)
+    candidates = _cited_plain_key(cmp, metrics) or metric_candidates(metrics, str(cmp.metric), allowed, _METRIC_ALIASES)
     cited = cmp.raw_name.strip() if contract_keys and "." in cmp.raw_name.strip() else ""
     if cited:
         match = [c for c in candidates if _key_norm(c[0]) == _key_norm(cited)]

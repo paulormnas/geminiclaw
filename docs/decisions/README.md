@@ -34,7 +34,8 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 | [022](adr_022_contrato_contexto_por_chamada.md) | Contrato de Contexto por Chamada e Regimento da Pesquisa | 🟠 Parcialmente implementado (V18.7: `v18.7-subtask-contract` mergeada; `v18.7-dependency-artifacts`, `v18.7-agent-system-prompts` e `v18.7-exploration-metrics` pendentes) | 2026-10-15 |
 | [023](adr_023_pesquisa_em_segundo_plano.md) | Pesquisa em Segundo Plano com Acompanhamento pelo Terminal | 🟠 Parcialmente implementado (V18.7: 3 das 4 mudanças mergeadas; `v18.7-session-events-terminal` pendente) | 2026-10-15 |
 | [024](adr_024_organizacao_do_codigo.md) | Organização do Código por Responsabilidade e Regra de Camadas | 🟠 Parcialmente implementado (Etapas 1 e 2 mergeadas; Etapa 3 pendente em duas mudanças) | 2026-10-15 |
-| [025](adr_025_calibracao_do_veredito.md) | Calibração do Veredito: Exploração e Teste dos Parâmetros | 🟠 Parcialmente implementado (2026-10-19: etapas 1 e 2 e modelo v2 do veredito concluídos; sessões controladas especificadas em `v18.8-verdict-controlled-sessions`; bateria no Pi pendente) | 2026-10-15 |
+| [025](adr_025_calibracao_do_veredito.md) | Calibração do Veredito: Exploração e Teste dos Parâmetros | ⚠️ Deprecado (substituído pelo 026 em 2026-10-21; etapas 1 e 2 e modelo v2 implementados, etapa 3 encerrada sem a bateria) | 2026-10-15 |
+| [026](adr_026_memoria_por_registros_de_resultado.md) | Memória por Registros de Resultado e Correlação entre Pesquisas (substitui o veredito) | 🟢 Aprovado (direção; mudanças `v18.9-*` especificadas, aguardam aprovação) | 2026-10-21 |
 
 
 ---
@@ -114,6 +115,8 @@ ADR 010 (Propósito: Assistente de Pesquisa) ← define o escopo de tudo (substi
 ---
 
 ## Lacunas de especificação (2026-10-01)
+
+**Atualização 2026-10-21 (V18.9):** o ADR 026 substitui o ADR 015 §9 e o ADR 025 (Deprecado): o veredito dá lugar a registros de resultado com estado da hipótese por regra de réplicas, memória de falhas e experiência de problemas semelhantes no planejamento. As quatro mudanças `v18.9-*` estão especificadas e aguardam aprovação ([`roadmap_V18.9.md`](../../roadmaps/roadmap_V18.9.md)). `v18.8-verdict-controlled-sessions` foi encerrada sem 5.3, 5.4 e 6.
 
 **Atualização 2026-10-19 (V18.8, etapa 3):** `v18.8-verdict-controlled-sessions` (explorações controladas com efeito conhecido, tratamento do N-abordagem-4, orçamento e relatório em `docs/calibracao-veredito/`) está especificada e aprovada pelo pesquisador; nada implementado. O ADR 025 segue `Parcialmente implementado`.
 

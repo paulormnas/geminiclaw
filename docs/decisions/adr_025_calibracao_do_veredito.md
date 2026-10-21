@@ -1,6 +1,6 @@
 # ADR 025 — Calibração do Veredito: Exploração e Teste dos Parâmetros
 
-**Status:** Parcialmente implementado (2026-10-19: etapas 1 e 2 concluídas e modelo v2 do veredito implementado; etapa 3 especificada; etapa 4 pendente)
+**Status:** Deprecado (2026-10-21: substituído pelo [ADR 026](adr_026_memoria_por_registros_de_resultado.md); etapas 1 e 2 e modelo v2 implementados; etapa 3 encerrada sem a bateria; etapa 4 cancelada)
 **Data:** 2026-10-15 · **Atualizado:** 2026-10-18 (etapa 1 concluída; decisões do pesquisador)
 **Autores:** Arquiteto de Soluções (GeminiClaw)
 **Roadmaps relacionados:** [`roadmaps/roadmap_V18.8.md`](../../roadmaps/roadmap_V18.8.md)

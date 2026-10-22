@@ -19,8 +19,8 @@ recusada, 3 anomalia com
 
 Cada combinação vira um subprocesso ``main.py --mode auto`` com as variáveis de papel
 sobrescritas. Mede tempo de parede, tokens (de ``session_metadata.json``), checklist de acurácia
-e picos de CPU/memória/temperatura via :class:`ResourceSampler`. Combinações cuja chave de API
-(campo ``requires``) não está no ambiente são registradas como ``skipped``.
+e picos de CPU/memória/temperatura via :func:`scripts.benchmark.resources.make_sampler` (Linux e macOS).
+Combinações cuja chave de API (campo ``requires``) não está no ambiente são registradas como ``skipped``.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ from scripts.benchmark.reset_stores import (
     reset_stores,
     target_env,
 )
-from scripts.benchmark.resources import ResourceSampler
+from scripts.benchmark.resources import make_sampler
 from scripts.benchmark.scoring import (
     score_session,
     scoreboard_anomalies,
@@ -540,7 +540,7 @@ def run_combination(
     if proc is None:
         return {**base_result, "status": "seed_error", "seed_error": seed_error,
                 "wall_seconds": 0.0, "resources": {}, "log_tail": ""}
-    sampler = ResourceSampler(root_pid=proc.pid, interval=1.0)
+    sampler = make_sampler(root_pid=proc.pid, interval=1.0)
     sampler.start()
     store_sampler = footprint.StoreSampler(
         lambda: footprint.collect_store_sample(

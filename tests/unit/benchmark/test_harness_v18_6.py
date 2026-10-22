@@ -227,7 +227,7 @@ def _run_fake_combination(monkeypatch, tmp_path, *, reset=False, work=lambda: No
 
     if command is None:
         monkeypatch.setattr(run_benchmark.subprocess, "Popen", fake_popen)
-    monkeypatch.setattr(run_benchmark, "ResourceSampler", FakeResourceSampler)
+    monkeypatch.setattr(run_benchmark, "make_sampler", FakeResourceSampler)
     monkeypatch.setattr(footprint, "snapshot", lambda: {})
     monkeypatch.setattr(footprint, "session_operation_metrics", lambda s: None)
     monkeypatch.setattr(footprint, "embedding_events", lambda s: {})

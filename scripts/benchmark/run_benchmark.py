@@ -156,9 +156,20 @@ def validate_matrix(matrix: dict) -> None:
 
     O teto por sessão é distinto de ``budget_usd`` (por provedor e por rodada, do runner).
 
+    Também recusa ``problem`` fora de ``seed_project.PROBLEMS`` (a combinação pode escolher o ``Problema`` e o
+    ``task_file`` próprios; sem eles vale o Iris e o ``task_file`` da matriz).
+
     Raises:
-        ValueError: Teto ausente, não numérico ou não positivo.
+        ValueError: Teto ausente, não numérico ou não positivo, ou problema desconhecido.
     """
+    from scripts.benchmark.seed_project import PROBLEMS
+
+    chosen = {c["problem"] for c in matrix.get("combinations", []) if c.get("problem")}
+    unknown = sorted(chosen - set(PROBLEMS))
+    if unknown:
+        raise ValueError(
+            f"Problema desconhecido na matriz: {', '.join(unknown)}; registrados: {', '.join(sorted(PROBLEMS))}."
+        )
     raw = (matrix.get("env") or {}).get("SESSION_MAX_COST_USD")
     try:
         value = float(raw)
@@ -510,9 +521,10 @@ def run_combination(
     seed_error = None
     if not combo.get("sem_projeto"):
         try:  # um projeto com Problema confirmado por combinação (a sessão em modo auto exige)
-            from scripts.benchmark.seed_project import seed_project
+            from scripts.benchmark.seed_project import seed_project, seeder_for
 
-            project_id = (seeder or seed_project)(combo["name"])
+            chosen = seeder or (seeder_for(combo["problem"]) if combo.get("problem") else seed_project)
+            project_id = chosen(combo["name"])
             project_args = ["--project", project_id]
         except Exception as exc:  # noqa: BLE001 - registrado; a combinação não roda sem projeto
             seed_error = f"{type(exc).__name__}: {exc}"
@@ -737,8 +749,10 @@ def main() -> None:
         else:
             print(f"[benchmark] {label} ...", flush=True)
             try:
+                combo_task = (Path(combo["task_file"]).expanduser().read_text(encoding="utf-8")
+                              if combo.get("task_file") else task)
                 results.append(run_combination(
-                    combo, task, env_base, matrix["timeout_seconds"], output_dir, matrix.get("env"),
+                    combo, combo_task, env_base, matrix["timeout_seconds"], output_dir, matrix.get("env"),
                     repeticao=repeticao, results_path=args.results, target=target, reset=args.reset_stores,
                     dump=not args.no_pre_reset_dump, store_sample_seconds=sample_seconds,
                 ))

@@ -1,15 +1,14 @@
-"""Linha de comando das explorações controladas (``v18.8-verdict-controlled-sessions``).
+"""Linha de comando das explorações controladas (``v18.8-verdict-controlled-sessions``; ADR 026: sem veredito).
 
 Uso (na raiz do repositório)::
 
     uv run python -m scripts.verdict_lab.controlled orcamento --plano PLANO [--piloto exploracoes.json] [--saida DIR]
     uv run python -m scripts.verdict_lab.controlled gerar --regime P --semente 7 --saida DIR
-    uv run python -m scripts.verdict_lab.controlled medir --rodada DIR [--repeticoes-simulacao 400] [--sobrescrever]
     uv run python -m scripts.verdict_lab.controlled explorar --plano PLANO --saida DIR            # ensaio (padrão)
     uv run python -m scripts.verdict_lab.controlled explorar --plano PLANO --saida DIR --executar \\
         --reset-stores --confirm-target BANCO@HOST [--no-pre-reset-dump] [--retomar]
 
-``orcamento``, ``gerar``, ``medir`` (grava em ``DIR/medicao``) e o ensaio de ``explorar`` não chamam LLM nem tocam
+``orcamento``, ``gerar`` e o ensaio de ``explorar`` não chamam LLM nem tocam
 em banco. ``--executar`` roda sessões com
 LLM e **só deve ser usado com a confirmação do pesquisador** e a tabela de orçamento aprovada. Códigos de saída:
 2 recusa
@@ -51,15 +50,6 @@ def commit_atual() -> str:
         return "desconhecido"
 
 
-def verdict_efetivo() -> dict[str, Any]:
-    """Variáveis ``VERDICT_*`` efetivas (valores do sistema; o veredito da rodada usa estes)."""
-    from src import config
-
-    return {
-        k: v for k, v in sorted(vars(config).items()) if k.startswith("VERDICT_") or k == "DECISION_EVAL_MIN_VERDICT"
-    }
-
-
 def preparar_saida(saida: Path, *, sobrescrever: bool, retomar: bool) -> bool:
     """``True`` se é uma retomada (manifesto existente aceito).
 
@@ -90,7 +80,6 @@ def escrever_manifesto(saida: Path, argv: list[str], plano_path: Path, plano: di
         "semente": plano["semente"],
         "sementes_dos_dados": sementes,
         "regimes": {nome: plano["repeticoes"][nome] for nome in plano["repeticoes"]},
-        "verdict": verdict_efetivo(),
     }
     (saida / "manifesto.json").write_text(json.dumps(manifesto, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
@@ -197,24 +186,6 @@ def cmd_explorar(args: argparse.Namespace, argv: list[str]) -> int:
     return 0
 
 
-def cmd_medir(args: argparse.Namespace) -> int:
-    from scripts.verdict_lab import output
-    from scripts.verdict_lab.controlled import measure
-
-    try:
-        resultado = measure.medir(
-            args.rodada, semente=args.semente, repeticoes=args.repeticoes_simulacao, sobrescrever=args.sobrescrever
-        )
-    except output.OutputError as exc:
-        print(f"[controlled] recusado: {exc}", file=sys.stderr)
-        return EXIT_REFUSED
-    except measure.MeasureError as exc:
-        print(f"[controlled] medição interrompida: {exc}", file=sys.stderr)
-        return EXIT_EXCEPTION
-    print(f"{len(resultado['exploracoes'])} explorações medidas -> {resultado['saida']}")
-    return 0
-
-
 def _dotenv() -> dict[str, str | None]:
     from dotenv import dotenv_values
 
@@ -243,14 +214,7 @@ def main(argv: list[str] | None = None) -> int:
     p_exp.add_argument("--no-pre-reset-dump", action="store_true")
     p_exp.add_argument("--retomar", action="store_true", help="continua uma rodada interrompida (pula as já feitas)")
     p_exp.add_argument("--sobrescrever", action="store_true")
-    p_med = sub.add_parser("medir", help="medidas, equivalência e comparação com a previsão (sem LLM nem banco)")
-    p_med.add_argument("--rodada", type=Path, required=True, help="diretório da rodada (<combinação>/<regime>/r<r>/)")
-    p_med.add_argument("--semente", type=int, default=20261019, help="semente da simulação de previsão")
-    p_med.add_argument("--repeticoes-simulacao", type=int, default=400)
-    p_med.add_argument("--sobrescrever", action="store_true")
     args = parser.parse_args(argv)
-    if args.comando == "medir":
-        return cmd_medir(args)
     if args.comando == "orcamento":
         return cmd_orcamento(args)
     if args.comando == "gerar":

@@ -6,8 +6,8 @@ Após consolidar, o Curator indica novos caminhos ao Researcher. As fontes são 
 1. oportunidade com ``status="aprovada"`` — **nunca** ``documentada`` (só o pesquisador decide sobre oportunidades);
 2. ``caminho_sem_conclusao`` ativo com ``proximo_passo_sugerido``;
 3. alternativas a hipóteses ``refutada``, a partir de uma ``licao_de_caminho`` sobre elas;
-4. abordagens com veredito positivo (``FUNCIONOU_PARA``) em problemas similares (``related_experience``) que o
-   projeto ainda não propôs.
+4. abordagens com registro de resultado que atingiu o alvo (``FUNCIONOU_PARA``) em problemas similares
+   (``related_experience``) que o projeto ainda não propôs.
 
 Cada sugestão é ``{id, texto, fundamento_ids, tipo}``. O texto vem de nós escritos por agentes: é **dado não
 confiável**, saneado aqui e entregue ao Researcher dentro de ``<dado_nao_confiavel>``. O arquivo da sessão é
@@ -201,17 +201,16 @@ def _variation_candidates(
                 continue
             if edge.properties.get("status") == "contestada":
                 continue
-            discovery_id = edge.properties.get("descoberta_id")
-            discovery = store.get_node(discovery_id) if isinstance(discovery_id, str) else None
-            verdict = discovery.properties.get("veredito") if discovery is not None else None
-            visible = discovery is not None and (
-                discovery.properties.get("projeto_id") == project_id
-                or discovery.properties.get("visibilidade") == "compartilhavel"
+            record_id = edge.properties.get("registro_id")
+            record = store.get_node(record_id) if isinstance(record_id, str) else None
+            visible = record is not None and (
+                record.properties.get("projeto_id") == project_id
+                or record.properties.get("visibilidade") == "compartilhavel"
             )
-            if not visible or not isinstance(verdict, (int, float)) or isinstance(verdict, bool) or verdict <= 0:
+            if not visible or not record.properties.get("atingiu_alvo"):
                 continue
             texto = f"Testar a abordagem '{_clean(node.properties.get('nome'))}', que funcionou em problema similar."
-            out.append(Suggestion(suggestion_id(TIPO_VARIACAO, [discovery.id]), texto, (discovery.id,), TIPO_VARIACAO))
+            out.append(Suggestion(suggestion_id(TIPO_VARIACAO, [record.id]), texto, (record.id,), TIPO_VARIACAO))
             break
     return out
 

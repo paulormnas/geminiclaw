@@ -91,7 +91,7 @@ _INSTRUCTION_TEMPLATE = montar_prompt(
         "1. Toda hipótese que você formula vem com um `scientific_rationale` explícito, que justifica por que ela é "
         "metodologicamente razoável a partir do que já se sabe. Formular hipóteses não dispensa a busca por "
         "evidência: elas são validadas contra dados reais em `metrics.json`, nunca contra texto otimista gerado por "
-        "LLM. Hipótese refutada não é fato; só o veredito calculado, sobre resultados validados, sustenta uma "
+        "LLM. Hipótese refutada não é fato; só a contagem de réplicas sobre resultados medidos e validados sustenta uma "
         "conclusão.\n"
         "2. Cada subtarefa que testa algo referencia a hipótese por `hypothesis_ref`. A hipótese tem enunciado "
         "testável, justificativa e custo estimado, e repetir uma hipótese quase idêntica a uma existente reaproveita "

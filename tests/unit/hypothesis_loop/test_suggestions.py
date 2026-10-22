@@ -103,14 +103,14 @@ def test_fonte_abordagem_que_funcionou_em_problema_similar():
         actor=AGENTE,
     )
     disc = w.store.create_node(
-        "Descoberta",
-        {"projeto_id": "irmao", "sessao_id": "x", "tipo": "funciona", "enunciado": "RF funciona", "n_evidencias": 2,
-         "status": "ativa", "veredito": 0.6, "confianca": 0.6, "visibilidade": "compartilhavel",
-         "justificativa_criacao": "t", "nos_consultados": []},
-        actor=AGENTE,
+        "RegistroResultado",
+        {"projeto_id": "irmao", "sessao_id": "x", "chave": "k1", "metrica": "r2", "melhor_valor": 0.9,
+         "n_tentativas_validas": 3, "n_replicas_independentes": 3, "n_atingiu_alvo": 3, "n_abaixo_alvo": 0,
+         "atingiu_alvo": True, "qualificacao": "pendente", "visibilidade": "compartilhavel"},
+        actor=ORQ,
     )
     w.store.create_edge(approach, "FUNCIONOU_PARA", other_problem,
-                        {"metrica": "r2", "melhor_valor": 0.9, "n_exp": 3, "descoberta_id": disc}, actor=ORQ)
+                        {"metrica": "r2", "melhor_valor": 0.9, "n_exp": 3, "registro_id": disc}, actor=ORQ)
     cands = build_candidates(w.store, w.pid, w.index)
     var = [c for c in cands if c.tipo == "abordagem_em_problema_similar"]
     assert len(var) == 1 and "Floresta aleatória" in var[0].texto and var[0].fundamento_ids == (disc,)

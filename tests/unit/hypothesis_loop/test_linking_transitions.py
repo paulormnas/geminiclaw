@@ -1,4 +1,4 @@
-"""``v18.7-hypothesis-linking``: transições de status nos dois sentidos e revisão dos efeitos (spec ``hypothesis-loop``)."""
+"""Transições de status pela regra de réplicas e revisão dos efeitos (spec ``hypothesis-loop``; ADR 026 §3)."""
 
 from __future__ import annotations
 
@@ -19,6 +19,10 @@ def _set(c: LinkingCycle, hid: str, **props) -> None:
     c.w.store.update_node(hid, props, actor=ORQ)
 
 
+def _counts(c: LinkingCycle, hid: str, acima: int, abaixo: int, tentativas: int = 1) -> None:
+    _set(c, hid, n_atingiu_alvo=acima, n_abaixo_alvo=abaixo, n_tentativas=tentativas)
+
+
 def _decision(c: LinkingCycle, hid: str, result: str | None) -> str:
     did = c.w.store.create_node(
         "Decisao", c.w.base(contexto="c", justificativa="j", justificativa_criacao="t", nos_consultados=[]), actor=AGENTE
@@ -30,8 +34,8 @@ def _decision(c: LinkingCycle, hid: str, result: str | None) -> str:
 
 
 @pytest.fixture(autouse=True)
-def _floor():
-    with patch("src.config.DECISION_EVAL_MIN_VERDICT", 0.3):
+def _rule():
+    with patch("src.config.HYPOTHESIS_MIN_REPLICAS", 2), patch("src.config.HYPOTHESIS_MIN_REFUTATIONS", 2):
         yield
 
 
@@ -39,12 +43,13 @@ def test_replicacao_que_contesta_a_validacao(tmp_path):
     """Scenario: Replicação que contesta a validação."""
     c = LinkingCycle(tmp_path)
     h1 = c.w.hypothesis("H1", status="validada")
-    _set(c, h1, veredito=0.12)
+    _counts(c, h1, 1, 0)
     c.session.after_cycle()
     assert c.status(h1) == "em_teste"
     (event,) = c.events_of("hipotese_transicao")
     assert event["status_anterior"] == "validada" and event["status_novo"] == "em_teste"
-    assert event["veredito_novo"] == 0.12 and event["hipotese_id"] == h1
+    assert event["regra"] == "reabertura" and event["hipotese_id"] == h1
+    assert (event["n_atingiu_alvo"], event["n_abaixo_alvo"]) == (1, 0)
 
 
 def test_mudanca_de_lado(tmp_path):
@@ -52,7 +57,7 @@ def test_mudanca_de_lado(tmp_path):
     c = LinkingCycle(tmp_path)
     h1 = c.w.hypothesis("H1", status="validada")
     decision = _decision(c, h1, "acertada")
-    _set(c, h1, veredito=-0.35)
+    _counts(c, h1, 0, 2)
     c.session.after_cycle()
     assert c.status(h1) == "refutada"
     assert c.w.store.get_node(decision).properties["resultado_posterior"] == "nao_acertada"
@@ -66,7 +71,7 @@ def test_oportunidade_reaberta_e_decisao_reavaliada(tmp_path):
     opp = c.w.opportunity(status="concluida")
     c.w.store.create_edge(opp, "GEROU", h1, {}, actor=ORQ)
     decision = _decision(c, h1, "acertada")
-    _set(c, h1, veredito=0.1)
+    _counts(c, h1, 1, 0)
     c.session.after_cycle()
     assert c.w.store.get_node(opp).properties["status"] == "em_investigacao"
     assert not c.w.store.get_node(decision).properties.get("resultado_posterior")
@@ -77,65 +82,59 @@ def test_mudanca_de_lado_mantem_a_oportunidade_concluida(tmp_path):
     h1 = c.w.hypothesis("H1", status="validada")
     opp = c.w.opportunity(status="concluida")
     c.w.store.create_edge(opp, "GEROU", h1, {}, actor=ORQ)
-    _set(c, h1, veredito=-0.5)
+    _counts(c, h1, 0, 3)
     c.session.after_cycle()
     assert c.w.store.get_node(opp).properties["status"] == "concluida"
-
-
-def test_atalho_contestado_pela_reabertura(tmp_path):
-    """Scenario: Atalho contestado pela reabertura."""
-    c = LinkingCycle(tmp_path)
-    h1 = c.w.hypothesis("H1", status="validada")
-    approach = c.w.graph.abordagem("GB")
-    d1 = c.w.discovery("funciona", veredito=0.6)
-    c.w.store.create_edge(d1, "SOBRE", h1, {}, actor=CURATOR)
-    c.w.store.create_edge(approach, "FUNCIONOU_PARA", c.w.problem.id,
-                          {"metrica": "r2", "melhor_valor": 0.9, "n_exp": 3, "descoberta_id": d1}, actor=ORQ)
-    _set(c, h1, veredito=0.1)
-    c.session.after_cycle()
-    graph = c.w.store.neighbors(approach, ["FUNCIONOU_PARA"], direction="out", depth=1)
-    (edge,) = [e for e in graph.edges if e.rel_type == "FUNCIONOU_PARA"]
-    assert edge.properties["status"] == "contestada"
 
 
 def test_nada_muda_no_meio_do_ciclo(tmp_path):
     """Scenario: Nada muda no meio do ciclo (``prepare_cycle`` e a governança não transitam)."""
     c = LinkingCycle(tmp_path)
     h1 = c.w.hypothesis("H1", status="validada")
-    _set(c, h1, veredito=0.1)
+    _counts(c, h1, 1, 0)
     outcome = c.run([sub("segunda", hypothesis_ref=h1)])
     assert "segunda" in {t.task_name for t in outcome.tasks} and c.status(h1) == "validada"
 
 
 @pytest.mark.parametrize(
-    ("status", "verdict", "tries", "expected"),
+    ("status", "acima", "abaixo", "tries", "expected"),
     [
-        ("em_teste", 0.5, 1, "validada"), ("em_teste", -0.5, 1, "refutada"), ("em_teste", 0.1, 1, "em_teste"),
-        ("inconclusiva", 0.4, 1, "validada"), ("proposta", 0.9, 1, "validada"), ("proposta", 0.9, 0, "proposta"),
-        ("validada", -0.3, 1, "refutada"), ("validada", 0.29, 1, "em_teste"), ("validada", 0.8, 1, "validada"),
-        ("refutada", 0.3, 1, "validada"), ("refutada", -0.29, 1, "em_teste"), ("refutada", -0.9, 1, "refutada"),
-        ("abandonada", 0.9, 1, "abandonada"),
+        ("em_teste", 2, 0, 1, "validada"), ("em_teste", 0, 2, 1, "refutada"), ("em_teste", 1, 0, 1, "em_teste"),
+        ("em_teste", 1, 2, 1, "em_teste"), ("inconclusiva", 3, 0, 1, "validada"), ("proposta", 2, 0, 1, "validada"),
+        ("proposta", 2, 0, 0, "proposta"), ("validada", 0, 2, 1, "refutada"), ("validada", 1, 0, 1, "em_teste"),
+        ("validada", 2, 0, 1, "validada"), ("refutada", 2, 0, 1, "validada"), ("refutada", 1, 1, 1, "em_teste"),
+        ("refutada", 0, 3, 1, "refutada"), ("abandonada", 2, 0, 1, "abandonada"),
     ],
 )
-def test_tabela_de_transicoes(tmp_path, status, verdict, tries, expected):
+def test_tabela_de_transicoes(tmp_path, status, acima, abaixo, tries, expected):
     c = LinkingCycle(tmp_path)
     h = c.w.hypothesis("H", status=status, abandonada_por="agente" if status == "abandonada" else None)
-    _set(c, h, veredito=verdict, n_tentativas=tries)
+    _counts(c, h, acima, abaixo, tries)
     HypothesisCycle(c.w.store, project_id=c.w.pid, session_id=c.w.sid).sync_statuses([h])
     assert c.status(h) == expected
 
 
-def test_a_transicao_grava_o_veredito_anterior(tmp_path):
+def test_a_transicao_grava_a_regra_e_as_contagens(tmp_path):
     c = LinkingCycle(tmp_path)
     h = c.w.hypothesis("H", status="em_teste")
     cycle = HypothesisCycle(c.w.store, project_id=c.w.pid, session_id=c.w.sid)
-    _set(c, h, veredito=0.5, n_tentativas=2)
+    _counts(c, h, 2, 0, 2)
     cycle.sync_statuses([h])
-    _set(c, h, veredito=0.1)
+    _counts(c, h, 1, 0, 3)
     cycle.sync_statuses([h])
-    assert [(t.status_anterior, t.status_novo, t.veredito_novo, t.veredito_anterior) for t in cycle.transitions] == [
-        ("validada", "em_teste", 0.1, 0.5)
+    assert [(t.status_anterior, t.status_novo, t.regra, t.n_atingiu_alvo, t.n_abaixo_alvo) for t in cycle.transitions] == [
+        ("validada", "em_teste", "reabertura", 1, 0)
     ]
+    notas = [e["changes"] for e in c.w.store.audit_log if e["node_id"] == h and "regra" in e["changes"]]
+    assert [n["regra"] for n in notas] == ["replicas_atingiram_alvo", "reabertura"]
+
+
+def test_estado_depende_so_das_contagens_gravadas_pelo_orquestrador(tmp_path):
+    """Sem contagens gravadas (hipótese ainda sem recálculo) o estado não muda."""
+    c = LinkingCycle(tmp_path)
+    h = c.w.hypothesis("H", status="em_teste")
+    HypothesisCycle(c.w.store, project_id=c.w.pid, session_id=c.w.sid).sync_statuses([h])
+    assert c.status(h) == "em_teste"
 
 
 # -- reversão de Oportunidade fora do alcance dos agentes (parecer de segurança, item 3) ------------------------

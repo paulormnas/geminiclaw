@@ -31,6 +31,10 @@ _REQUIRED = {
     "Resultado": {
         "nome_original": "acc", "valor": 0.9, "status_validacao": "validado", "caminho_metrics": "/m",
     },
+    "RegistroResultado": {
+        "chave": "k", "metrica": "f1", "n_tentativas_validas": 3, "n_replicas_independentes": 3,
+        "n_atingiu_alvo": 3, "n_abaixo_alvo": 0, "atingiu_alvo": True, "qualificacao": "pendente",
+    },
 }
 
 
@@ -45,7 +49,7 @@ class Env:
         self.queue = InMemorySimilarityQueue()
         self.generator = CandidateGenerator(self.raw, self.index, self.queue, thresholds=SimilarityThresholds(
             duplicate_min=0.90, related_same_domain=0.70, related_cross=0.60,
-            cross_project_min_confidence=0.30, cross_domain_boost=1.5,
+            cross_domain_boost=1.5,
         ))
         self.generator.attach()
         self.store = IndexedGraphStore(self.raw, self.index)

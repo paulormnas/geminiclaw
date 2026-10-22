@@ -1,4 +1,4 @@
-"""``v18.6-hypothesis-closure``: resultado negativo como progresso, veredito, fechamento e evidência das afirmações.
+"""``v18.6-hypothesis-closure``: resultado negativo como progresso, contagem de réplicas, fechamento e evidência das afirmações.
 
 Um teste por ``#### Scenario`` da spec ``hypothesis-loop`` (nome do cenário no docstring). Sem rede, LLM real, Docker
 ou banco: grafo em memória, provedor LLM e orquestrador simulados.
@@ -25,7 +25,6 @@ from src.knowledge.ingestion import SessionContext, SubtaskInput, ingest_session
 from src.knowledge.projects import ProblemDraft, confirm_problem, create_project
 from src.knowledge.provenance import Actor
 from src.knowledge.service import KnowledgeService
-from src.knowledge.verdict import VerdictParams
 from src.knowledge.vocabulary import seed_vocabulary
 from src.llm.base import LLMResponse
 from src.orchestration.autonomous_loop import AutonomousLoop, CycleProgress, succeeded_task_names
@@ -300,8 +299,8 @@ def _negative_sub(**over) -> SubtaskInput:
     return SubtaskInput(**base)
 
 
-def test_veredito_recebe_a_tentativa_do_resultado_negativo(tmp_path_factory, tmp_path):
-    """Scenario: Veredito recebe a tentativa."""
+def test_contagem_recebe_a_tentativa_do_resultado_negativo(tmp_path_factory, tmp_path):
+    """Scenario: a tentativa do resultado negativo entra na contagem (abaixo do alvo)."""
     store = _seeded_store(tmp_path_factory)
     ctx, hid = _world(store, "accuracy")
     session_dir = tmp_path / SESSION
@@ -313,8 +312,10 @@ def test_veredito_recebe_a_tentativa_do_resultado_negativo(tmp_path_factory, tmp
     (resultado,) = store.find_nodes("Resultado", {"nome_original": "test_accuracy"}, limit=2)
     assert resultado.properties["status_validacao"] == "validado"
 
-    verdict = KnowledgeService(store, VerdictParams()).recompute_hypothesis(hid)
-    assert store.get_node(hid).properties["n_tentativas"] == 1 and verdict.n_tentativas == 1
+    facts = KnowledgeService(store).recompute_hypothesis(hid)
+    props = store.get_node(hid).properties
+    assert props["n_tentativas"] == 1 and facts.n_tentativas_validas == 1
+    assert props["n_abaixo_alvo"] == 1 and props["n_atingiu_alvo"] == 0
     refuta = [e for e in store._edges if e.rel_type == "REFUTA" and e.dst_id == hid]  # noqa: SLF001
     assert [e.src_id for e in refuta] == [resultado.id]
 
@@ -347,7 +348,7 @@ def test_metrica_candidata_registra_resultado_sem_mede(tmp_path, tmp_path_factor
     assert not [e for e in store._edges if e.rel_type == "MEDE"]  # noqa: SLF001
 
 
-# --- Conferência do veredito no início da sessão -----------------------------------------------------------------
+# --- Conferência da métrica no início da sessão -----------------------------------------------------------------
 
 
 @pytest.fixture(autouse=False)
@@ -364,7 +365,7 @@ async def test_modo_assistido_sem_metrica_aprovada_avisa_e_segue(tmp_path, capsy
                     approver=lambda items: {i.id: __import__("src.knowledge.hypothesis_cycle", fromlist=["x"])
                                             .ApprovalDecision("aprovar") for i in items})
     await h.run()
-    assert "Veredito indisponível" in capsys.readouterr().out
+    assert "Métrica indisponível" in capsys.readouterr().out
     assert h.plan_calls >= 1 and h.ran == ["t1"]
     assert "DEFINIÇÃO DE MÉTRICAS" not in h.planner_prompts[0]  # v18.6-auto-metrics-and-stop-reasons: só no auto
 
@@ -482,7 +483,7 @@ def test_review_result_default_outcome():
     assert Actor  # import usado por fixtures de grafo
 
 
-def test_sessao_simulada_fecha_hipoteses_pelo_veredito_calculado(tmp_path):
+def test_sessao_simulada_fecha_hipoteses_pela_regra_de_replicas(tmp_path):
     """Cenário de integração (8.2) sobre o grafo em memória: uma hipótese refutada e outra validada."""
     from tests.support.hypothesis_closure_scenario import run_closure_scenario
 
@@ -490,4 +491,6 @@ def test_sessao_simulada_fecha_hipoteses_pelo_veredito_calculado(tmp_path):
     out = run_closure_scenario(store, tmp_path, "mem")
     assert store.get_node(out["experiment"]).properties["status"] == "sucesso"
     assert out["changed"][out["refuted"]] == "refutada" and out["changed"][out["validated"]] == "validada"
-    assert out["verdicts"][out["refuted"]].veredito < 0 < out["verdicts"][out["validated"]].veredito
+    refuted, validated = out["facts"][out["refuted"]], out["facts"][out["validated"]]
+    assert refuted.n_atingiu_alvo == 0 and refuted.n_abaixo_alvo >= 2
+    assert validated.n_atingiu_alvo >= 2 and validated.n_abaixo_alvo == 0

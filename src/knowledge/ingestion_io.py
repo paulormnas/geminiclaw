@@ -132,7 +132,7 @@ def _find_metrics_variant(task_dir: Path, root: Path) -> Path | None:
     """O único ``metrics_<tarefa>.json`` da pasta da subtarefa, quando falta o ``metrics.json`` do contrato.
 
     O piloto da etapa 3 (2026-10-20) mostrou o Developer gravando as métricas nesse nome por ele constar nos
-    artefatos esperados do plano; sem a leitura, o experimento ficava ``sem_metricas`` e o veredito, em zero.
+    artefatos esperados do plano; sem a leitura, o experimento ficava ``sem_metricas`` e sem registro de resultado.
     Mais de um candidato é ambíguo e continua ausente.
     """
     try:

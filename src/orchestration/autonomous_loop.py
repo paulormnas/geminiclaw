@@ -1231,22 +1231,22 @@ class AutonomousLoop(LoopReportMixin):
             ExplorationStop.ERROR, master_session_id, prompt, tasks, dag_state, final_results
         )
 
-    async def _check_verdict_available(self, exploration: Any, master_session_id: str) -> Optional[Tuple[str, str]]:
+    async def _check_metric_available(self, exploration: Any, master_session_id: str) -> Optional[Tuple[str, str]]:
         """Confere a ``Metrica`` do ``Problema`` antes do primeiro planejamento (``v18.6-hypothesis-closure`` §4).
 
         Returns:
-            ``(mensagem de aviso, motivo)`` se o veredito não pode ser calculado; senão ``None``.
+            ``(mensagem de aviso, motivo)`` se a métrica do critério não pode ser medida; senão ``None``.
         """
         try:
-            found = await asyncio.to_thread(exploration.verdict_availability)
+            found = await asyncio.to_thread(exploration.metric_availability)
         except asyncio.CancelledError:
             raise
-        except Exception as exc:  # noqa: BLE001 - sem leitura do grafo não há como afirmar que o veredito existe
+        except Exception as exc:  # noqa: BLE001 - sem leitura do grafo não há como afirmar que a métrica existe
             found = (f"falha ao conferir a métrica do Problema ({type(exc).__name__})", "verifique o grafo")
         if found is None:
             return None
         reason, fix = found
-        message = f"Veredito indisponível: {reason}. Correção: {fix}."
+        message = f"Métrica indisponível: {reason}. Correção: {fix}."
         if self._session_mode == "auto":
             message += " No modo auto, o Researcher definirá a métrica no plano e o Validator a validará."
         logger.warning(message, extra={"master_session_id": master_session_id})
@@ -1255,7 +1255,7 @@ class AutonomousLoop(LoopReportMixin):
             execution_id=master_session_id,
             session_id=master_session_id,
             agent_id="autonomous_loop",
-            event_type="veredito_indisponivel",
+            event_type="metrica_indisponivel",
             payload={"motivo": reason[:300], "correcao": fix, "modo": self._session_mode},
         )
         return message, reason
@@ -1378,10 +1378,10 @@ class AutonomousLoop(LoopReportMixin):
         exploration = self._exploration(master_session_id)
         exploring = exploration is not None
         if exploration is not None:
-            unavailable = await self._check_verdict_available(exploration, master_session_id)
+            unavailable = await self._check_metric_available(exploration, master_session_id)
             if unavailable is not None and self._session_mode == "auto":
                 # v18.6-auto-metrics-and-stop-reasons: no modo auto o Researcher define a métrica no plano e o
-                # Validator a valida; só depois ela vale para o veredito. A sessão não deixa de iniciar.
+                # Validator a valida; só depois ela vale para o registro de resultado. A sessão não deixa de iniciar.
                 exploration.require_metric_definition(unavailable[1])
             exploration.set_usage_fraction(self._usage_fraction)
             if resume is not None:  # design §4.4: origem das hipóteses do sistema vinda do checkpoint
@@ -2157,7 +2157,7 @@ class AutonomousLoop(LoopReportMixin):
 
             if exploration is not None:
                 # Acumula o que o ciclo produziu (a sessão agora tem vários ciclos) e fecha o ciclo no grafo: status
-                # das hipóteses e avaliação das decisões, só a partir do veredito calculado.
+                # das hipóteses e avaliação das decisões, só pela regra de réplicas.
                 for t in tasks:
                     if t.task_name:
                         cumulative_tasks[t.task_name] = t
@@ -2201,8 +2201,8 @@ class AutonomousLoop(LoopReportMixin):
 
             if exploration is not None:
                 # v18.7-exploration-limits §5 e §6: avalia o objetivo tipado do Problema e aplica a política
-                # ao atingi-lo (parar, perguntar ou continuar). O veredito da hipótese não decide; a resposta do
-                # pesquisador vem do gate persistente, nunca do terminal da sessão.
+                # ao atingi-lo (parar, perguntar ou continuar). A contagem de réplicas da hipótese não decide; a
+                # resposta do pesquisador vem do gate persistente, nunca do terminal da sessão.
                 objective_state = None
                 try:
                     objective_state = await asyncio.to_thread(exploration.evaluate_objective)
@@ -2496,7 +2496,8 @@ class AutonomousLoop(LoopReportMixin):
         if abandoned:
             lines.append(f"- Subtarefas abandonadas por retentativas: {', '.join(sorted(abandoned))}")
         lines.append(
-            "- Os vereditos e o estado das hipóteses estão no contexto de exploração; decida os próximos caminhos "
+            "- As contagens de réplicas e o estado das hipóteses estão no contexto de exploração; decida os próximos "
+            "caminhos "
             "a partir deles e das sugestões do Curator."
         )
         return "\n".join(lines)

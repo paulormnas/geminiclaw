@@ -38,22 +38,23 @@ def test_schema_ganha_abordagem_status_filtro_condicoes_e_fundida_em():
 
 
 def test_update_edge_so_altera_propriedades_da_relacao():
-    """``update_edge`` atualiza ``peso`` e recusa propriedades de proveniência ou desconhecidas."""
+    """``update_edge`` atualiza ``melhor_valor`` e recusa propriedades de proveniência ou desconhecidas."""
     store = InMemoryGraphStore()
     g = CuratorGraph(store).setup_project()
-    hip = g.hipotese()
-    _, res = g.tentativa(hip, g.abordagem())
-    store.create_edge(res, "SUSTENTA", hip, {"peso": 0.5}, actor=ORQ)
+    abordagem = g.abordagem()
+    store.create_edge(
+        abordagem, "FUNCIONOU_PARA", g.problema, {"metrica": "r2", "melhor_valor": 0.5, "n_exp": 2}, actor=ORQ
+    )
 
-    store.update_edge(res, "SUSTENTA", hip, {"peso": 0.9}, actor=ORQ)
+    store.update_edge(abordagem, "FUNCIONOU_PARA", g.problema, {"melhor_valor": 0.9}, actor=ORQ)
 
-    edge = next(e for e in store._edges if e.rel_type == "SUSTENTA")  # noqa: SLF001
-    assert edge.properties["peso"] == 0.9 and edge.properties["criado_por"] == "orquestrador"
+    edge = next(e for e in store._edges if e.rel_type == "FUNCIONOU_PARA")  # noqa: SLF001
+    assert edge.properties["melhor_valor"] == 0.9 and edge.properties["criado_por"] == "orquestrador"
     for proibido in ({"criado_por": "x"}, {"status": "contestada"}, {"inexistente": 1}):
         with pytest.raises(UnknownPropertyError):
-            store.update_edge(res, "SUSTENTA", hip, proibido, actor=ORQ)
+            store.update_edge(abordagem, "FUNCIONOU_PARA", g.problema, proibido, actor=ORQ)
     with pytest.raises(GraphStoreError):
-        store.update_edge(res, "REFUTA", hip, {"peso": 1}, actor=ORQ)
+        store.update_edge(abordagem, "FALHOU_PARA", g.problema, {"n_exp": 1}, actor=ORQ)
 
 
 def test_ingestao_segue_fundida_em_para_a_canonica():

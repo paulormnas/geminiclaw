@@ -25,7 +25,7 @@ DATA_TAG = "dado_nao_confiavel"
 AUDIT_FILENAME = "curator_audit.jsonl"
 
 DISCOVERY_TYPES = ("funciona", "nao_funciona", "condicional", "licao_de_caminho")
-EVIDENCE_LABELS = ("Resultado", "Experimento", "Decisao")
+EVIDENCE_LABELS = ("Resultado", "Experimento", "Decisao", "RegistroResultado")
 SOBRE_LABELS = ("Abordagem", "Problema", "Hipotese")
 FLAG_DECISIONS = (ESTADO_REGISTRADA, ESTADO_DESCARTADA)
 

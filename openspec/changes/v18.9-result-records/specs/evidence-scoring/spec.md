@@ -27,17 +27,22 @@ O sistema SHALL manter um `RegistroResultado` por par (Problema, Abordagem, `con
 - **WHEN** o segundo `Resultado` é ingerido
 - **THEN** o registro do par tem `melhor_valor = 0.95`, `n_replicas_independentes = 2`, `n_atingiu_alvo = 2` e `atingiu_alvo = true`
 
-#### Scenario: Diferença para o pai
-- **GIVEN** um experimento `DERIVADA_DE` outro cujo registro tem `melhor_valor = 0.88`
-- **WHEN** o experimento derivado produz 0.91
-- **THEN** o registro do derivado tem `delta_pai = 0.03` (com tolerância de 1e-9)
+#### Scenario: Variação de configuração é réplica independente
+- **GIVEN** duas tentativas com a mesma semente e os mesmos dados, em configurações diferentes, ambas acima do alvo
+- **WHEN** a hipótese é recalculada
+- **THEN** `n_atingiu_alvo = 2`; com a mesma configuração, a mesma semente e os mesmos dados, `n_replicas_independentes = 1`
+
+#### Scenario: Diferença para a configuração anterior
+- **GIVEN** uma abordagem com um registro de `melhor_valor = 0.88` e, depois, uma nova configuração que produz 0.91
+- **WHEN** os registros são recalculados
+- **THEN** o registro da nova configuração tem `delta_pai = 0.03` (com tolerância de 1e-9) e o primeiro não tem `delta_pai`
 
 #### Scenario: Agente não escreve fatos do registro
 - **WHEN** o Curator tenta alterar `melhor_valor` de um registro
 - **THEN** a porta do grafo recusa a escrita com `KnowledgeServiceError`
 
 ### Requirement: Tentativa válida
-Uma tentativa SHALL ser válida quando o experimento de papel `teste` produziu `Resultado` da métrica do critério com qualificador `teste` ou `cv`, inclusive com `status = falha` e `assinatura_falha = criterio_nao_atendido` e com `status = divergente_documentado`. Tentativas sem esse `Resultado` SHALL NOT mudar contagens do registro.
+Uma tentativa SHALL ser válida quando o experimento produziu `Resultado` da métrica do critério, sem qualificador ou com `teste` ou `cv`, e com `status_validacao` diferente de `nao_validado`, inclusive com `status = falha` e `assinatura_falha = criterio_nao_atendido` e com `status = divergente_documentado`. Tentativas sem esse `Resultado` SHALL NOT mudar as contagens de réplicas.
 
 #### Scenario: Falha com valor abaixo do alvo
 - **GIVEN** um experimento `falha` com `criterio_nao_atendido` e `acuracia` de teste 0.62, para o alvo 0.93
@@ -48,6 +53,11 @@ Uma tentativa SHALL ser válida quando o experimento de papel `teste` produziu `
 - **GIVEN** um experimento `falha` com `sem_metricas`
 - **WHEN** é ingerido
 - **THEN** nenhum registro muda e a falha continua registrada no `Experimento`
+
+#### Scenario: Resultado não verificado ignorado
+- **GIVEN** um `Resultado` com `status_validacao = nao_validado`
+- **WHEN** a hipótese é recalculada
+- **THEN** a tentativa conta em `n_tentativas`, mas não em `n_atingiu_alvo` nem em `n_abaixo_alvo`
 
 #### Scenario: Métrica de treino ignorada
 - **GIVEN** um `Resultado` com qualificador `treino` igual a 0.99

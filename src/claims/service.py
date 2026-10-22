@@ -6,7 +6,7 @@ aqui, nunca pelo modelo → cobertura (toda frase sem afirmação vira ``nao_ver
 verificador, orçamento esgotado e ausência de modelo geram ``pendente`` com motivo, sem bloquear a sessão.
 
 Este módulo não altera ``Resultado.status_validacao``, ``Attempt.validation`` nem ``Descoberta.status`` e não é
-consultado por ``compute_verdict`` (invariantes 1–3 do design §7).
+consultado por ``compute_record`` (invariantes 1–3 do design §7).
 """
 
 from __future__ import annotations
@@ -157,7 +157,7 @@ class ClaimService:
         """Reverifica afirmações ``pendente`` de sessões anteriores (retomada, design §11).
 
         Cada afirmação pendente é reconferida isoladamente; o novo status entra no histórico (por acréscimo) e nada
-        muda no veredito nem nas hipóteses.
+        muda nos registros de resultado nem nas hipóteses.
         """
         done: list[Afirmacao] = []
         for claim in pending:

@@ -1,7 +1,8 @@
 """Testes das faixas de similaridade, da fila e da geração de candidatos.
 
 Cobrem "Faixas de similaridade", "Sem limite de conexões", "Fila de revisão fora do
-grafo" e "Oportunidades entre projetos exigem evidência" (knowledge-semantics).
+grafo" e "Oportunidades entre projetos exigem evidência" (knowledge-semantics; ADR 026: só descobertas de
+funcionamento, que existem com registro de resultado, cruzam projetos).
 """
 
 import pytest
@@ -201,15 +202,15 @@ class TestFila:
         assert segundo.candidate.entre_dominios is False
         assert primeiro.candidate.prioridade == pytest.approx(segundo.candidate.prioridade * 1.5, rel=1e-3)
 
-    def test_prioridade_usa_maior_confianca_ou_peso_padrao(self, env):
+    def test_prioridade_usa_o_maior_peso_das_evidencias_ou_o_peso_padrao(self, env):
         _pair(env, 0, 0.8, "enunciado: par0a", "enunciado: par0b")
         _pair(env, 1, 0.8, "enunciado: par1a", "enunciado: par1b")
-        env.make("Descoberta", enunciado="par0a")  # sem veredito
-        env.make("Descoberta", enunciado="par0b")
-        env.make("Descoberta", enunciado="par1a", confianca=0.9, veredito=0.9)
-        env.make("Descoberta", enunciado="par1b", confianca=0.4, veredito=0.4)
+        env.make("Descoberta", enunciado="par0a", tipo="licao_de_caminho")  # sem registro de resultado
+        env.make("Descoberta", enunciado="par0b", tipo="licao_de_caminho")
+        env.make("Descoberta", enunciado="par1a", tipo="funciona", n_evidencias=5)
+        env.make("Descoberta", enunciado="par1b", tipo="funciona", n_evidencias=2)
         com_evidencia, sem_evidencia = env.queue.next_batch(10)
-        assert com_evidencia.candidate.prioridade == pytest.approx(0.8 * 0.9, rel=1e-3)
+        assert com_evidencia.candidate.prioridade == pytest.approx(0.8 * 1.0, rel=1e-3)
         assert sem_evidencia.candidate.prioridade == pytest.approx(0.8 * 0.5, rel=1e-3)
 
     def test_par_ja_avaliado(self, env):
@@ -246,28 +247,28 @@ class TestFila:
 
 @pytest.mark.unit
 class TestOportunidadeEntreProjetos:
-    def _par(self, env, veredito: float, cosine: float = 0.75):
+    def _par(self, env, tipo: str, cosine: float = 0.75):
         va, vb = pair_vectors(DIM, 0, cosine)
         env.provider.vectors["enunciado: descob"] = va
         env.provider.vectors["titulo: probl"] = vb
         env.make("Problema", projeto_id="projB", titulo="probl")
-        env.make("Descoberta", projeto_id="projA", enunciado="descob", veredito=veredito, confianca=abs(veredito))
+        env.make("Descoberta", projeto_id="projA", enunciado="descob", tipo=tipo)
 
-    def test_descoberta_fraca(self, env):
-        """Scenario: Descoberta fraca"""
-        self._par(env, 0.2)
+    def test_licao_de_caminho_nao_cruza_projetos(self, env):
+        """Scenario: descoberta sem registro de resultado por trás não vira oportunidade entre projetos."""
+        self._par(env, "licao_de_caminho")
         assert env.queue.pending_count() == 0
 
-    def test_descoberta_com_evidencia_moderada_entra(self, env):
-        self._par(env, 0.35)
+    def test_descoberta_de_funcionamento_entra(self, env):
+        self._par(env, "funciona")
         (item,) = env.queue.next_batch(10)
         c = item.candidate
         assert c.tipo == "relacionado"
         assert c.entre_projetos is True
         assert {c.label_a, c.label_b} == {"Descoberta", "Problema"}
 
-    def test_veredito_negativo_forte_tambem_entra(self, env):
-        self._par(env, -0.5)
+    def test_descoberta_de_nao_funcionamento_tambem_entra(self, env):
+        self._par(env, "nao_funciona")
         assert env.queue.pending_count() == 1
 
     def test_mesmo_projeto_nao_entra(self, env):
@@ -275,5 +276,5 @@ class TestOportunidadeEntreProjetos:
         env.provider.vectors["enunciado: descob"] = va
         env.provider.vectors["titulo: probl"] = vb
         env.make("Problema", projeto_id="projA", titulo="probl")
-        env.make("Descoberta", projeto_id="projA", enunciado="descob", veredito=0.9, confianca=0.9)
+        env.make("Descoberta", projeto_id="projA", enunciado="descob", tipo="funciona")
         assert env.queue.pending_count() == 0

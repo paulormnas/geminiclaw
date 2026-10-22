@@ -55,7 +55,7 @@ Para cada par (Problema, Abordagem com configuração), o orquestrador mantém u
 
 - **Melhor valor:** o melhor valor medido da métrica do critério de sucesso, só em conjunto de teste ou validação cruzada;
 - **Diferenças:** `delta_base` (para a linha de base do Problema) e `delta_pai` (para o experimento de origem, quando houver `DERIVADA_DE`);
-- **Réplicas:** `n_replicas_independentes` (sementes ou conjuntos de dados distintos);
+- **Réplicas:** `n_replicas_independentes` (configurações, sementes ou conjuntos de dados distintos; uma variação de configuração é evidência nova, e repetir a mesma configuração com a mesma semente e os mesmos dados não acrescenta nada);
 - **Alvo:** `atingiu_alvo`;
 - **Condições:** conjunto de dados, métrica, qualificador e configuração;
 - **Experimentos:** os identificadores dos experimentos que o sustentam.

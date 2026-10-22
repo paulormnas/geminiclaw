@@ -28,8 +28,8 @@ _MAX_COLLECTION_ITEMS = 30
 _HIDDEN_PROPERTIES = frozenset({"estado_vetorizacao", "versao_schema", "origem_no"})
 # Texto principal de um nó, por ordem de preferência.
 _TEXT_KEYS = ("enunciado", "titulo", "nome", "termo", "contexto", "subtarefa_id", "nome_original")
-_TABLE_KEYS = ("status", "tipo", "veredito", "criado_por")
-_VERDICT_LABELS = frozenset({"Hipotese", "Descoberta"})
+_TABLE_KEYS = ("status", "tipo", "n_atingiu_alvo", "n_abaixo_alvo", "criado_por")
+_COUNT_LABELS = frozenset({"Hipotese", "Descoberta"})
 _STATUS_RE_MAX = 40
 
 
@@ -111,19 +111,27 @@ def sanitize_value(value: Any, limit: int | None = None, _depth: int = 0) -> Any
     return sanitize_text(value, limit)
 
 
-def format_verdict(veredito: Any) -> str | None:
-    """``+0,36 funciona (moderada)`` a partir do veredito numérico (leitura determinística, sem LLM)."""
-    if isinstance(veredito, bool) or not isinstance(veredito, (int, float)):
+def format_counts(properties: dict[str, Any]) -> str | None:
+    """``2 acima e 1 abaixo do alvo`` a partir das contagens da hipótese (leitura determinística, sem LLM)."""
+    above, below = properties.get("n_atingiu_alvo"), properties.get("n_abaixo_alvo")
+    if any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in (above, below)):
         return None
-    from src.knowledge.verdict import VerdictParams, read_verdict
+    return f"{int(above)} acima e {int(below)} abaixo do alvo"  # type: ignore[arg-type]
 
-    leitura, tipo = read_verdict(float(veredito), VerdictParams.from_config().thresholds)
-    number = f"{float(veredito):+.2f}".replace(".", ",")
-    if tipo is None:
-        return f"{number} {leitura}"
-    faixa = leitura.removeprefix(f"{tipo}_")
-    nome = "não funciona" if tipo == "nao_funciona" else tipo
-    return f"{number} {nome} ({faixa})"
+
+def format_record(properties: dict[str, Any]) -> str | None:
+    """``melhor 0,93; Δbase +0,05; 2 réplicas`` do ``RegistroResultado`` (leitura determinística, sem LLM)."""
+    best = properties.get("melhor_valor")
+    if isinstance(best, bool) or not isinstance(best, (int, float)):
+        return None
+    parts = [f"melhor {float(best):.4g}".replace(".", ",")]
+    delta = properties.get("delta_base")
+    if not isinstance(delta, bool) and isinstance(delta, (int, float)):
+        parts.append(f"Δbase {float(delta):+.4g}".replace(".", ","))
+    replicas = properties.get("n_replicas_independentes")
+    if not isinstance(replicas, bool) and isinstance(replicas, (int, float)):
+        parts.append(f"{int(replicas)} réplica(s)")
+    return "; ".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -278,6 +286,15 @@ def node_text(node: Node, limit: int = 120) -> str:
     return ""
 
 
+def _reading(node: Node) -> str | None:
+    """Leitura curta dos fatos do nó (contagens da hipótese ou fatos do registro de resultado)."""
+    if node.label == "Hipotese":
+        return format_counts(node.properties)
+    if node.label == "RegistroResultado":
+        return format_record(node.properties)
+    return None
+
+
 def _node_summary(node: Node) -> str:
     parts = [f"{sanitize_text(node.id, 64)}"]
     status = node.properties.get("status")
@@ -286,9 +303,9 @@ def _node_summary(node: Node) -> str:
     text = node_text(node)
     if text:
         parts.append(text)
-    verdict = format_verdict(node.properties.get("veredito")) if node.label in _VERDICT_LABELS else None
-    if verdict:
-        parts.append(f"| veredito {verdict}")
+    reading = _reading(node)
+    if reading:
+        parts.append(f"| {reading}")
     return " ".join(parts)
 
 
@@ -354,7 +371,7 @@ def render_table(view: GraphView) -> str:
             row = [_cell(node.id, 64), node_text(node, 40)]
             for key in columns[2:]:
                 value = node.properties.get(key)
-                row.append(format_verdict(value) or _cell(value) if key == "veredito" else _cell(value))
+                row.append(_cell(value))
             rows.append(row)
         widths = [max(len(columns[i]), *(len(r[i]) for r in rows)) for i in range(len(columns))]
         header = " | ".join(c.ljust(widths[i]) for i, c in enumerate(columns))
@@ -455,54 +472,56 @@ def render_view(view: GraphView, fmt: str) -> str:
 
 @dataclass
 class NodeDetail:
-    """Detalhe de um nó: propriedades, relações, histórico e, se houver, o detalhamento do veredito."""
+    """Detalhe de um nó: propriedades, relações, histórico e, se houver, o detalhamento das tentativas."""
 
     node: Node
     relations: list[dict[str, Any]]
     hidden_relations: int
     history: list[dict[str, Any]]
-    verdict: dict[str, Any] | None = None
-    verdict_note: str | None = None
+    counts: dict[str, Any] | None = None
+    counts_note: str | None = None
 
 
 def _visible(node: Node, projeto_id: str) -> bool:
     return node.properties.get("projeto_id") == projeto_id or node.properties.get("visibilidade") == "compartilhavel"
 
 
-def _verdict_detail(store: GraphReader, node: Node) -> tuple[dict[str, Any] | None, str | None]:
-    """Detalhamento ``q, m, d, b, w`` por tentativa (cálculo determinístico do ``KnowledgeService``; sem LLM)."""
+def _counts_detail(store: GraphReader, node: Node) -> tuple[dict[str, Any] | None, str | None]:
+    """Contagem por tentativa (cálculo determinístico do ``KnowledgeService``; sem LLM)."""
     from src.knowledge.service import KnowledgeService, KnowledgeServiceError
 
     service = KnowledgeService(store)  # type: ignore[arg-type]  # só chama métodos de leitura
     try:
+        problema: Any = None
         if node.label == "Hipotese":
-            result, _, _ = service.verdict_for_hypothesis(node.id)
+            facts, collected, metric, criterion = service.hypothesis_facts(node.id)
+            problema = service.problem_for(node)
         else:
             sub = store.neighbors(node.id, ["SOBRE"], "out", 1)
             filtro = node.properties.get("filtro_condicoes")
-            scope = service.verdict_for_scope(
+            scope = service.scope_facts(
                 [n for n in sub.nodes if _visible(n, str(node.properties.get("projeto_id")))],
                 filtro if isinstance(filtro, dict) else None,
             )
             if scope is None:
                 return None, "sem escopo calculável (SOBRE sem Hipótese ou Abordagem+Problema)."
-            result = scope[0]
+            facts, collected, metric, _, problema = scope
+            criterion = service.criterion_for(problema)[0] if problema is not None else None
+        classes = (
+            service.attempt_classes(collected, criterion, problema, metric)
+            if criterion is not None else ["invalida"] * len(collected)
+        )
     except KnowledgeServiceError as exc:
         return None, f"detalhamento indisponível: {sanitize_text(exc, 160)}"
     return {
-        "veredito": round(result.veredito, 4),
-        "leitura": format_verdict(result.veredito),
-        "suporte": round(result.suporte, 4),
-        "certeza": round(result.certeza, 4),
-        "n_tentativas": result.n_tentativas,
+        "n_tentativas_validas": facts.n_tentativas_validas,
+        "n_replicas_independentes": facts.n_replicas_independentes,
+        "n_atingiu_alvo": facts.n_atingiu_alvo,
+        "n_abaixo_alvo": facts.n_abaixo_alvo,
         "tentativas": [
-            {
-                "tentativa": sanitize_text(d.attempt_id, 64),
-                "classificacao": sanitize_text(d.classificacao, 30),
-                "q": round(d.q, 4), "m": round(d.m, 4), "d": round(d.d, 4), "b": round(d.b, 4), "w": round(d.w, 4),
-            }
-            for d in result.detalhes[:_MAX_COLLECTION_ITEMS * 3]
-        ],
+            {"tentativa": sanitize_text(c.attempt.attempt_id, 64), "classificacao": kind, "valor": c.attempt.value}
+            for c, kind in zip(collected, classes)
+        ][:_MAX_COLLECTION_ITEMS * 3],
     }, None
 
 
@@ -544,10 +563,10 @@ def load_node_detail(store: GraphReader, node_id: str, projeto_id: str) -> NodeD
         }
         for h in store.audit_history(node.id, AUDIT_LIMIT)
     ]
-    verdict, note = (None, None)
-    if node.label in _VERDICT_LABELS:
-        verdict, note = _verdict_detail(store, node)
-    return NodeDetail(node, relations[:100], hidden, history, verdict, note)
+    counts, note = (None, None)
+    if node.label in _COUNT_LABELS:
+        counts, note = _counts_detail(store, node)
+    return NodeDetail(node, relations[:100], hidden, history, counts, note)
 
 
 def render_node_detail(detail: NodeDetail, fmt: str = "text") -> str:
@@ -561,8 +580,8 @@ def render_node_detail(detail: NodeDetail, fmt: str = "text") -> str:
                 "properties": node_properties(node, 1000),
                 "relations": detail.relations,
                 "history": detail.history,
-                "verdict_breakdown": detail.verdict,
-                "verdict_note": detail.verdict_note,
+                "contagem": detail.counts,
+                "contagem_nota": detail.counts_note,
             },
             ensure_ascii=False,
             indent=2,
@@ -573,9 +592,9 @@ def render_node_detail(detail: NodeDetail, fmt: str = "text") -> str:
     for key, value in node_properties(node, 1000).items():
         shown = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
         lines.append(f"  {key}: {shown}")
-    verdict = format_verdict(node.properties.get("veredito")) if node.label in _VERDICT_LABELS else None
-    if verdict:
-        lines.append(f"  leitura do veredito: {verdict}")
+    reading = _reading(node)
+    if reading:
+        lines.append(f"  leitura: {reading}")
     lines += ["", f"Relações ({len(detail.relations)}):"]
     for rel in detail.relations or []:
         arrow = f"-{rel['rel']}->" if rel["direcao"] == "saida" else f"<-{rel['rel']}-"
@@ -588,16 +607,16 @@ def render_node_detail(detail: NodeDetail, fmt: str = "text") -> str:
         lines.append(f"  {item['timestamp']}  {item['actor']}  {sanitize_text(changes, 300)}")
     if not detail.history:
         lines.append("  (nenhum registro)")
-    if node.label in _VERDICT_LABELS:
-        lines += ["", "Veredito por tentativa:"]
-        if detail.verdict is None:
-            lines.append(f"  {detail.verdict_note or 'indisponível.'}")
+    if node.label in _COUNT_LABELS:
+        lines += ["", "Tentativas válidas por réplica:"]
+        if detail.counts is None:
+            lines.append(f"  {detail.counts_note or 'indisponível.'}")
         else:
-            v = detail.verdict
-            lines.append(f"  veredito {v['leitura']}; suporte {v['suporte']}; certeza {v['certeza']}; "
-                         f"tentativas {v['n_tentativas']}")
-            for t in v["tentativas"]:
-                lines.append(
-                    f"  - {t['tentativa']} {t['classificacao']}: q={t['q']} m={t['m']} d={t['d']} b={t['b']} w={t['w']}"
-                )
+            c = detail.counts
+            lines.append(
+                f"  {c['n_tentativas_validas']} tentativa(s) válida(s), {c['n_replicas_independentes']} "
+                f"réplica(s) independente(s): {c['n_atingiu_alvo']} acima e {c['n_abaixo_alvo']} abaixo do alvo"
+            )
+            for t in c["tentativas"]:
+                lines.append(f"  - {t['tentativa']} {t['classificacao']}: valor {t['valor']}")
     return "\n".join(lines)

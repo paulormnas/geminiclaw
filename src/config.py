@@ -105,11 +105,35 @@ _REMOVED_VARIABLES: dict[str, str | Callable[[str], str]] = {
         "'SOLUTION_MIN_VERDICT' foi removida pelo ADR 021 §5.2; a parada usa o objetivo do Problema; "
         "remova a linha."
     ),
+    "KNOWLEDGE_SHORTCUT_MIN_VERDICT": (
+        "'KNOWLEDGE_SHORTCUT_MIN_VERDICT' foi removida pelo ADR 026 (o veredito deixou de existir; os atalhos "
+        "FUNCIONOU_PARA/FALHOU_PARA vêm dos registros de resultado e de HYPOTHESIS_MIN_REPLICAS); remova a linha."
+    ),
+    "DECISION_EVAL_MIN_VERDICT": (
+        "'DECISION_EVAL_MIN_VERDICT' foi removida pelo ADR 026 (o estado da hipótese vem da regra de réplicas: "
+        "HYPOTHESIS_MIN_REPLICAS e HYPOTHESIS_MIN_REFUTATIONS); remova a linha."
+    ),
+    "SIM_CROSS_PROJECT_MIN_CONFIDENCE": (
+        "'SIM_CROSS_PROJECT_MIN_CONFIDENCE' foi removida pelo ADR 026 (pares Descoberta->Problema de outro projeto "
+        "exigem uma Descoberta baseada em registro de resultado, e não um |veredito| mínimo); remova a linha."
+    ),
     "OPERATIONAL_THRESHOLD_COST_USD": (
         "'OPERATIONAL_THRESHOLD_COST_USD' foi substituída por OPERATIONAL_THRESHOLD_COST_USAGE_PCT "
         "(percentual do limite de custo); remova a linha."
     ),
 }
+
+
+# As 21 variáveis ``VERDICT_*`` do modelo v2 do veredito (ADR 015 §9; removidas pelo ADR 026). Lista fechada: outras
+# variáveis com o mesmo prefixo, de fora do projeto, não são recusadas.
+_REMOVED_VERDICT_VARIABLES: tuple[str, ...] = (
+    "VERDICT_Q_VALIDATED_COMPLETE", "VERDICT_Q_VALIDATED_INCOMPLETE", "VERDICT_Q_DIVERGENT",
+    "VERDICT_D_NEW_NODE_OR_DATASET", "VERDICT_D_NEW_SESSION", "VERDICT_D_NEW_SEED", "VERDICT_GAMMA",
+    "VERDICT_LAMBDA_AMBIGUOUS", "VERDICT_APPROACH_FAILURE_Q", "VERDICT_APPROACH_FAILURE_MIN_REPEATS", "VERDICT_PRIOR",
+    "VERDICT_MODEL", "VERDICT_D_VARIATION", "VERDICT_D_REPLICA_NODE", "VERDICT_D_NEW_DATASET",
+    "VERDICT_D_VARIATION_NO_GAIN", "VERDICT_D_REPLICA_AGAINST", "VERDICT_USEFUL_VARIATION_EPSILON",
+    "VERDICT_M_FLOOR_NO_BASELINE", "VERDICT_REQUIRE_TARGET", "VERDICT_THRESHOLDS",
+)
 
 
 def check_removed_variables(environ: Mapping[str, str]) -> None:
@@ -122,6 +146,12 @@ def check_removed_variables(environ: Mapping[str, str]) -> None:
     for name, message in _REMOVED_VARIABLES.items():
         if name in environ:
             lines.append(message(environ[name]) if callable(message) else message)
+    lines.extend(
+        f"'{name}' foi removida pelo ADR 026 (o veredito deixou de existir; ver HYPOTHESIS_MIN_REPLICAS e "
+        "HYPOTHESIS_MIN_REFUTATIONS); remova a linha."
+        for name in _REMOVED_VERDICT_VARIABLES
+        if name in environ
+    )
     if lines:
         raise ConfigurationError("Configuração com nomes removidos:\n- " + "\n- ".join(lines))
 
@@ -519,7 +549,6 @@ KNOWLEDGE_COLLECTION = get_env("KNOWLEDGE_COLLECTION", default="knowledge_nodes"
 SIM_DUPLICATE_MIN = float(get_env("SIM_DUPLICATE_MIN", default="0.90"))
 SIM_RELATED_MIN_SAME_DOMAIN = float(get_env("SIM_RELATED_MIN_SAME_DOMAIN", default="0.70"))
 SIM_RELATED_MIN_CROSS = float(get_env("SIM_RELATED_MIN_CROSS", default="0.60"))
-SIM_CROSS_PROJECT_MIN_CONFIDENCE = float(get_env("SIM_CROSS_PROJECT_MIN_CONFIDENCE", default="0.30"))
 SIM_CROSS_DOMAIN_BOOST = float(get_env("SIM_CROSS_DOMAIN_BOOST", default="1.5"))
 SIM_CANDIDATE_SCAN_LIMIT = int(get_env("SIM_CANDIDATE_SCAN_LIMIT", default="200"))
 SIM_CALIBRATION_WINDOW_DAYS = int(get_env("SIM_CALIBRATION_WINDOW_DAYS", default="30"))
@@ -767,36 +796,16 @@ MAX_LOCAL_LLM_CONCURRENT = int(get_env("MAX_LOCAL_LLM_CONCURRENT", default="2"))
 TRIAGE_MODE = get_env("TRIAGE_MODE", default="hybrid")
 TRIAGE_CONFIDENCE_THRESHOLD = float(get_env("TRIAGE_CONFIDENCE_THRESHOLD", default="0.7"))
 
-# --- Veredito de Evidência (Roadmap V17 / ADR 015 §9) ---
-# Parâmetros calibráveis da equação de confiança usada por src/knowledge/verdict.py.
-# Ver ADR 015 §9.8 para a tabela de referência e o significado de cada peso.
-VERDICT_Q_VALIDATED_COMPLETE = float(get_env("VERDICT_Q_VALIDATED_COMPLETE", default="1.0"))
-VERDICT_Q_VALIDATED_INCOMPLETE = float(get_env("VERDICT_Q_VALIDATED_INCOMPLETE", default="0.7"))
-VERDICT_Q_DIVERGENT = float(get_env("VERDICT_Q_DIVERGENT", default="0.3"))
-VERDICT_D_NEW_NODE_OR_DATASET = float(get_env("VERDICT_D_NEW_NODE_OR_DATASET", default="1.0"))
-VERDICT_D_NEW_SESSION = float(get_env("VERDICT_D_NEW_SESSION", default="0.5"))
-VERDICT_D_NEW_SEED = float(get_env("VERDICT_D_NEW_SEED", default="0.2"))
-VERDICT_GAMMA = float(get_env("VERDICT_GAMMA", default="0.5"))
-VERDICT_LAMBDA_AMBIGUOUS = float(get_env("VERDICT_LAMBDA_AMBIGUOUS", default="0.5"))
-VERDICT_APPROACH_FAILURE_Q = float(get_env("VERDICT_APPROACH_FAILURE_Q", default="0.3"))
-VERDICT_APPROACH_FAILURE_MIN_REPEATS = int(get_env("VERDICT_APPROACH_FAILURE_MIN_REPEATS", default="2"))
-VERDICT_PRIOR = float(get_env("VERDICT_PRIOR", default="1.0"))
-# v18.8-verdict-calibration (ADR 025; ADR 015 §9 revisado): modelo da equação ("v2" ou "adr015") e valores do modelo v2.
-VERDICT_MODEL = get_env("VERDICT_MODEL", default="v2")
-if VERDICT_MODEL not in ("v2", "adr015"):
-    raise ValueError(f"VERDICT_MODEL deve ser 'v2' ou 'adr015', não {VERDICT_MODEL!r}.")
-VERDICT_D_VARIATION = float(get_env("VERDICT_D_VARIATION", default="1.0"))
-VERDICT_D_REPLICA_NODE = float(get_env("VERDICT_D_REPLICA_NODE", default="0.5"))
-VERDICT_D_NEW_DATASET = float(get_env("VERDICT_D_NEW_DATASET", default="1.0"))
-VERDICT_D_VARIATION_NO_GAIN = float(get_env("VERDICT_D_VARIATION_NO_GAIN", default="0.0"))
-VERDICT_D_REPLICA_AGAINST = float(get_env("VERDICT_D_REPLICA_AGAINST", default="1.0"))
-VERDICT_USEFUL_VARIATION_EPSILON = float(get_env("VERDICT_USEFUL_VARIATION_EPSILON", default="0.0"))
-VERDICT_M_FLOOR_NO_BASELINE = float(get_env("VERDICT_M_FLOOR_NO_BASELINE", default="0.5"))
-VERDICT_REQUIRE_TARGET = get_env_bool("VERDICT_REQUIRE_TARGET", default=True)
-_verdict_thresholds_raw = get_env("VERDICT_THRESHOLDS", default="0.1,0.3,0.5")
-VERDICT_THRESHOLDS: tuple[float, float, float] = tuple(
-    float(x) for x in _verdict_thresholds_raw.split(",")
-)  # type: ignore[assignment]
+# --- Regra de estado da hipótese (ADR 026 §3; substitui o veredito do ADR 015 §9) ---
+# Tentativas válidas e independentes (configuração, semente ou conjunto de dados distintos) que atingem o alvo e
+# validam a hipótese.
+HYPOTHESIS_MIN_REPLICAS = int(
+    _bounded_number("HYPOTHESIS_MIN_REPLICAS", "2", int, "um inteiro >= 1", lambda v: v >= 1)
+)
+# Tentativas válidas e independentes abaixo do alvo, sem nenhuma que o atinja, que refutam a hipótese.
+HYPOTHESIS_MIN_REFUTATIONS = int(
+    _bounded_number("HYPOTHESIS_MIN_REFUTATIONS", "2", int, "um inteiro >= 1", lambda v: v >= 1)
+)
 
 # --- Agente Curator (Roadmap V17 / ADR 012 §1-§2, ADR 015 §10; mudança v17-curator-agent) ---
 # O modelo do papel `curator` vem do catálogo (src/llm/catalog.yaml, ADR 017); para fixar um modelo use
@@ -818,8 +827,6 @@ CURATOR_TIMEOUT_SECONDS = int(get_env("CURATOR_TIMEOUT_SECONDS", default="300"))
 # Sinalizações (flag_for_curator): máximo por sessão e tamanho do texto.
 CURATOR_MAX_FLAGS_PER_SESSION = int(get_env("CURATOR_MAX_FLAGS_PER_SESSION", default="100"))
 CURATOR_FLAG_MAX_CHARS = int(get_env("CURATOR_FLAG_MAX_CHARS", default="1000"))
-# Menor |veredito| que mantém os atalhos FUNCIONOU_PARA/FALHOU_PARA (a faixa "insuficiente" começa abaixo dele).
-KNOWLEDGE_SHORTCUT_MIN_VERDICT = float(get_env("KNOWLEDGE_SHORTCUT_MIN_VERDICT", default="0.3"))
 # Promoção de configuração a Abordagem(tipo="configuracao"): positivos validados e projetos distintos.
 PROMOTION_MIN_POSITIVES = int(get_env("PROMOTION_MIN_POSITIVES", default="3"))
 PROMOTION_MIN_PROJECTS = int(get_env("PROMOTION_MIN_PROJECTS", default="2"))
@@ -837,9 +844,6 @@ if len(HYPOTHESIS_PRIORITY_WEIGHTS) != 4 or any(w < 0 for w in HYPOTHESIS_PRIORI
     raise ValueError("HYPOTHESIS_PRIORITY_WEIGHTS deve ter 4 pesos não negativos que somam 1 (0.35,0.30,0.20,0.15).")
 # Similaridade semântica a partir da qual uma hipótese nova reutiliza a existente do projeto.
 HYPOTHESIS_DEDUP_SIMILARITY = float(get_env("HYPOTHESIS_DEDUP_SIMILARITY", default="0.90"))
-# |veredito| a partir do qual a hipótese escolhida avalia a `Decisao` ("acertada"/"nao_acertada") e a hipótese
-# passa a `validada`/`refutada`.
-DECISION_EVAL_MIN_VERDICT = float(get_env("DECISION_EVAL_MIN_VERDICT", default="0.3"))
 # Sugestões do Curator ao Researcher por ciclo.
 CURATOR_MAX_SUGGESTIONS = max(int(get_env("CURATOR_MAX_SUGGESTIONS", default="3")), 0)
 # Tamanho máximo (caracteres) dos textos de hipótese, decisão e sugestão aceitos do plano (recusa, não trunca) e

@@ -229,14 +229,15 @@ def test_i2_update_edge_so_para_orquestrador_e_relacoes_derivadas(world):
         env.store.update_edge(ids["exp"], "APLICOU", ids["ab"], {"config": {"modelo": "FORJADO"}}, actor=ORQ)
     with pytest.raises(GraphStoreError):
         env.store.update_edge(ids["exp"], "APLICOU", ids["ab"], {"config": {"modelo": "FORJADO"}}, actor=CUR)
-    hip = ids["hip"]
-    env.store.create_edge(ids["res"], "SUSTENTA", hip, {"peso": 0.5}, actor=ORQ)
+    env.store.create_edge(
+        ids["ab"], "FUNCIONOU_PARA", g.problema, {"metrica": "r2", "melhor_valor": 0.5, "n_exp": 2}, actor=ORQ
+    )
     with pytest.raises(GraphStoreError):
-        env.store.update_edge(ids["res"], "SUSTENTA", hip, {"peso": 0.9}, actor=CUR)
+        env.store.update_edge(ids["ab"], "FUNCIONOU_PARA", g.problema, {"melhor_valor": 0.9}, actor=CUR)
     antes = len(env.raw.audit_log)
-    env.store.update_edge(ids["res"], "SUSTENTA", hip, {"peso": 0.9}, actor=ORQ)
+    env.store.update_edge(ids["ab"], "FUNCIONOU_PARA", g.problema, {"melhor_valor": 0.9}, actor=ORQ)
     assert len(env.raw.audit_log) == antes + 1
-    assert env.raw.audit_log[-1]["changes"]["peso"] == 0.9
+    assert env.raw.audit_log[-1]["changes"]["melhor_valor"] == 0.9
 
 
 def test_i2_agente_nao_cria_aresta_a_partir_de_no_rejeitado(world):

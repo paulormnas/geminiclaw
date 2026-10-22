@@ -234,7 +234,7 @@ class TestI4StatusEVisibilidade:
         from tests.unit.knowledge.test_related_experience import _descoberta, _setup
 
         ids = _setup(env)
-        d = _descoberta(env, "velha", "projB", 0.9, status="substituida")
+        d = _descoberta(env, "velha", "projB", 5, status="substituida")
         env.store.create_edge(d, "SOBRE", ids["P2"], {}, actor=ORQ)
         assert env.index.related_experience(ids["P1"]) == []
 

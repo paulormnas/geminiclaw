@@ -111,7 +111,7 @@ def project_graph_full(project_id: str, store: Any | None = None) -> dict[str, A
     """Nós (com propriedades) e arestas do subgrafo do projeto, para o arquivamento da repetição.
 
     Inclui os nós ``Metrica`` (vocabulário, fora do projeto) ligados por ``MEDE`` aos ``Resultado`` do projeto, para
-    que o veredito possa ser recalculado do arquivo (``v18.8-verdict-lab``).
+    que os registros de resultado possam ser recalculados do arquivo.
     """
     try:
         if store is None:

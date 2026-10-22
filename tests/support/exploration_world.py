@@ -89,7 +89,7 @@ class LoopHarness:
         self.ran.append(task_.task_name)
         if self.record_attempts and task_.agent_id == "developer":
             # v18.6-hypothesis-closure: o Developer deixa metrics.json; a ingestão real grava a tentativa no grafo
-            # (valor neutro no veredito), e a hipótese deixa de estar "sem tentativa".
+            # (valor neutro nas contagens), e a hipótese deixa de estar "sem tentativa".
             folder = self.session_dir / task_.task_name
             folder.mkdir(parents=True, exist_ok=True)
             (folder / "metrics.json").write_text(

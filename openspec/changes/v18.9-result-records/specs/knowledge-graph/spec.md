@@ -9,6 +9,13 @@ O schema SHALL declarar o nó `RegistroResultado` com as propriedades do design 
 - **WHEN** um registro é gravado com `qualificacao = "aprovado"`
 - **THEN** a validação do schema recusa a escrita
 
+### Requirement: Contagens de réplicas na hipótese
+O schema SHALL declarar em `Hipotese` as propriedades `n_tentativas`, `n_atingiu_alvo` e `n_abaixo_alvo`, gravadas só pelo orquestrador, e SHALL remover `suporte`, `certeza`, `veredito` e `modelo_veredito` da `Hipotese` e `veredito`, `modelo_veredito` e `confianca` da `Descoberta`.
+
+#### Scenario: Propriedade do veredito recusada
+- **WHEN** uma escrita informa `veredito` numa `Hipotese`
+- **THEN** a validação do schema recusa a propriedade desconhecida
+
 ### Requirement: Migração dos grafos com veredito
 O script de migração SHALL recalcular os registros de cada projeto a partir dos `Resultado` existentes e remover `suporte`, `certeza`, `veredito`, `modelo_veredito` e `confianca`, além do `peso` das arestas `SUSTENTA`/`REFUTA`. Por padrão, SHALL rodar em modo de simulação e SHALL ser idempotente.
 

@@ -1,7 +1,7 @@
-"""Laboratório do veredito (ADR 025, etapas 1 e 2; mudança ``v18.8-verdict-lab``).
+"""Explorações controladas com efeito conhecido (``scripts.verdict_lab.controlled``).
 
-Calcula o veredito das hipóteses sob variantes da fórmula do ADR 015 §9, sem chamada de LLM, sem banco e
-sem rede, e sem alterar o comportamento do sistema: ``src/knowledge/verdict.py`` é usado como está, e as
-alternativas de estrutura existem só aqui. Comandos: ``replay``, ``grade``, ``simulacao`` e ``sensibilidade``
-(``uv run python -m scripts.verdict_lab --help``).
+O laboratório do veredito (ADR 025, etapas 1 e 2) foi removido pelo ADR 026 junto com o veredito. Fica o gerador de
+dados com resposta conhecida e o orquestrador de explorações, usados pelos experimentos de memória
+(``v18.9-memory-evaluation``). O caminho do pacote não mudou para não quebrar os relatórios em
+``docs/calibracao-veredito/``.
 """

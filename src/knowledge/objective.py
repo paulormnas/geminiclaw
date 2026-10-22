@@ -5,7 +5,7 @@ o ``ObjectiveState`` do ciclo. Os nomes dos tipos, desfechos e conferências sã
 (:mod:`src.knowledge.schema`).
 
 - ``limiar``: resultado **validado** da métrica principal que alcança o ``alvo`` e supera a referência em
-  ``delta_min``; o veredito da hipótese não entra (ADR 021 §5.2).
+  ``delta_min``; a contagem de réplicas da hipótese não entra (ADR 021 §5.2).
 - ``discriminacao``: conferências **validadas** das predições das concorrentes decidem o desfecho.
 - ``cobertura``: atingido só por decisão do pesquisador; novidade de hipóteses vira aviso.
 - ``fronteira``: recusado (V19).

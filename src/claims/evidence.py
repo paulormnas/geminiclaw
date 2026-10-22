@@ -184,7 +184,7 @@ def report_evidence_builder(
 
 
 def discovery_evidence_builder(graph: Any) -> Callable[[Conclusao, list[Sentence]], list[EvidenceItem]]:
-    """Pacotes para ``Descoberta``: ``Resultado``/``Experimento``/``Decisao`` de ``BASEADA_EM`` e o veredito."""
+    """Pacotes para ``Descoberta``: os nós de ``BASEADA_EM`` (resultado, experimento, decisão ou registro)."""
 
     def build(conclusao: Conclusao, _sentences: list[Sentence]) -> list[EvidenceItem]:
         node_id = conclusao.conclusao_id.removeprefix("desc:")
@@ -193,17 +193,20 @@ def discovery_evidence_builder(graph: Any) -> Callable[[Conclusao, list[Sentence
             node = graph.get_node(node_id)
             if node is not None:
                 p = node.properties
-                keys = ("tipo", "veredito", "confianca", "n_evidencias", "condicoes")
-                verdict = {k: p.get(k) for k in keys if p.get(k) is not None}
+                keys = ("tipo", "n_evidencias", "condicoes")
+                summary = {k: p.get(k) for k in keys if p.get(k) is not None}
                 items.append(
-                    EvidenceItem("", f"descoberta:{node_id}", "Descoberta e veredito", _cap(_dump(verdict)),
+                    EvidenceItem("", f"descoberta:{node_id}", "Descoberta", _cap(_dump(summary)),
                                  ContentOrigin.GRAFO)
                 )
             sub = graph.neighbors(node_id, ["BASEADA_EM"], direction="out", depth=1)
             for target in sub.nodes:
                 if target.id == node_id:
                     continue
-                kind = {"Resultado": "resultado", "Experimento": "experimento", "Decisao": "decisao"}.get(target.label)
+                kind = {
+                    "Resultado": "resultado", "Experimento": "experimento", "Decisao": "decisao",
+                    "RegistroResultado": "registro",
+                }.get(target.label)
                 if kind is None:
                     continue
                 keep = {k: v for k, v in target.properties.items() if k in _KEEP.get(target.label, ())}
@@ -222,6 +225,10 @@ _KEEP = {
     "Resultado": ("nome_original", "valor", "unidade", "baseline", "status_validacao", "exec_id"),
     "Experimento": ("status", "causa_falha", "hash_params", "seed", "exec_id", "no_execucao"),
     "Decisao": ("contexto", "justificativa", "criterio", "resultado_posterior"),
+    "RegistroResultado": (
+        "metrica", "melhor_valor", "delta_base", "delta_pai", "n_tentativas_validas", "n_replicas_independentes",
+        "n_atingiu_alvo", "n_abaixo_alvo", "atingiu_alvo",
+    ),
 }
 
 

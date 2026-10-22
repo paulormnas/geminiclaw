@@ -1,6 +1,7 @@
-"""Amostrador de CPU, memória e temperatura para o benchmark (Linux / Raspberry Pi 5).
+"""Amostrador de CPU, memória e temperatura para o benchmark (Linux / Raspberry Pi 5 e macOS).
 
-Lê direto de ``/proc`` e ``/sys``, sem dependências. A telemetria do projeto
+No Linux lê direto de ``/proc`` e ``/sys``, sem dependências; no macOS (e em outros sistemas) usa o ``psutil``.
+A escolha sai da identificação da plataforma (``src.host.platform_info``) em :func:`make_sampler`. A telemetria do projeto
 (``hardware_snapshots``) grava uma amostra por subtarefa e o uso de CPU sai zerado, então não serve
 para medir picos; este amostrador roda em outra thread, a cada ``interval`` segundos, durante a
 execução inteira do benchmark.
@@ -103,6 +104,61 @@ def read_throttled() -> int | None:
     return parse_throttled(out)
 
 
+# ----------------------------------------------------------------------------- leitores em psutil (macOS e outros)
+
+_PSUTIL_TICKS = 100  # ``cpu_times`` do psutil vem em segundos; o amostrador converte em "jiffies" de 10 ms
+_PSUTIL_PAGE = 1  # e o RSS vem em bytes (a "página" de 1 byte mantém a conta do amostrador)
+
+
+def psutil_cpu_times() -> tuple[int, int] | None:
+    """``(total, ocioso)`` em jiffies de 10 ms, somando todos os núcleos (``psutil.cpu_times``)."""
+    try:
+        import psutil
+
+        times = psutil.cpu_times()
+        total = sum(v for v in times if isinstance(v, (int, float)))
+        return int(total * _PSUTIL_TICKS), int(getattr(times, "idle", 0.0) * _PSUTIL_TICKS)
+    except Exception:  # noqa: BLE001 - leitura opcional: falha vira desconhecida
+        return None
+
+
+def psutil_memory() -> tuple[float, float] | None:
+    """``(total_mb, disponivel_mb)`` (``psutil.virtual_memory``)."""
+    try:
+        import psutil
+
+        memory = psutil.virtual_memory()
+        return memory.total / 1048576.0, memory.available / 1048576.0
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def psutil_temperature() -> float | None:
+    """Temperatura da CPU em °C; o macOS não expõe sensor sem privilégio, então vem ``None`` (desconhecida)."""
+    from src.host.health import HealthMonitor
+
+    return HealthMonitor().get_temperature()
+
+
+def psutil_process_tree(root_pid: int) -> dict[int, tuple[int, int]]:
+    """Processos descendentes de ``root_pid`` (inclusive): ``{pid: (jiffies de 10 ms, rss em bytes)}``."""
+    try:
+        import psutil
+
+        root = psutil.Process(root_pid)
+        procs = [root, *root.children(recursive=True)]
+    except Exception:  # noqa: BLE001 - processo já encerrado
+        return {}
+    tree: dict[int, tuple[int, int]] = {}
+    for proc in procs:
+        try:
+            cpu = proc.cpu_times()
+            tree[proc.pid] = (int((cpu.user + cpu.system) * _PSUTIL_TICKS), int(proc.memory_info().rss))
+        except Exception:  # noqa: BLE001 - o processo pode sumir entre a listagem e a leitura
+            continue
+    return tree
+
+
 def process_tree(root_pid: int) -> dict[int, tuple[int, int]]:
     """Processos descendentes de ``root_pid`` (inclusive): ``{pid: (jiffies, rss_paginas)}``."""
     children: dict[int, list[int]] = {}
@@ -145,6 +201,8 @@ class ResourceSampler(threading.Thread):
         read_temp: Callable[[], float | None] = read_temperature_c,
         read_throttle: Callable[[], int | None] = read_throttled,
         read_tree: Callable[[int], dict[int, tuple[int, int]]] = process_tree,
+        cpu_times_fn: Callable[[], tuple[int, int] | None] | None = None,
+        memory_fn: Callable[[], tuple[float, float] | None] | None = None,
         clock: Callable[[], float] = time.monotonic,
         clock_ticks: int | None = None,
         page_size: int | None = None,
@@ -157,6 +215,7 @@ class ResourceSampler(threading.Thread):
         self._stop_event = threading.Event()
         self._read_stat, self._read_mem = read_stat, read_mem
         self._read_temp, self._read_throttle, self._read_tree = read_temp, read_throttle, read_tree
+        self._cpu_times_fn, self._memory_fn = cpu_times_fn, memory_fn
         self._clock = clock
         self._ticks = clock_ticks or os.sysconf("SC_CLK_TCK")
         self._page = page_size or os.sysconf("SC_PAGE_SIZE")
@@ -210,10 +269,14 @@ class ResourceSampler(threading.Thread):
             prev_t = now
 
     def _cpu_times(self) -> tuple[int, int] | None:
+        if self._cpu_times_fn is not None:
+            return self._cpu_times_fn()
         text = self._read_stat()
         return parse_cpu_times(text) if text else None
 
     def _memory(self) -> tuple[float, float] | None:
+        if self._memory_fn is not None:
+            return self._memory_fn()
         text = self._read_mem()
         return parse_meminfo(text) if text else None
 
@@ -240,3 +303,24 @@ class ResourceSampler(threading.Thread):
             "throttled_flags": self._flags_seen,
             "throttled": describe_throttled(self._flags_seen),
         }
+
+
+def make_sampler(root_pid: int | None = None, interval: float = 1.0, *, host_os: str | None = None) -> ResourceSampler:
+    """Amostrador do sistema atual: ``/proc`` no Linux, ``psutil`` no macOS e nos demais.
+
+    A identificação vem de :func:`src.host.platform_info.detect_platform` (``host_os`` em minúsculas: ``linux``,
+    ``darwin``...); ``host_os`` explícito serve aos testes. No Linux nada muda (inclusive temperatura e *throttling* do
+    Raspberry Pi); fora dele a temperatura vem de ``HealthMonitor`` (``None`` quando o sistema não a expõe) e o
+    *throttling* não se aplica.
+    """
+    if host_os is None:
+        from src.host.platform_info import detect_current
+
+        host_os = detect_current().host_os
+    if host_os == "linux":
+        return ResourceSampler(root_pid=root_pid, interval=interval)
+    return ResourceSampler(
+        root_pid=root_pid, interval=interval, read_temp=psutil_temperature, read_throttle=lambda: None,
+        read_tree=psutil_process_tree, cpu_times_fn=psutil_cpu_times, memory_fn=psutil_memory,
+        clock_ticks=_PSUTIL_TICKS, page_size=_PSUTIL_PAGE,
+    )

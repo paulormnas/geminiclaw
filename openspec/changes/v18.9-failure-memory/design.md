@@ -18,7 +18,7 @@ Cada item tem:
 
 `ultima_correcao` vem do experimento seguinte, do mesmo escopo, que terminou com métrica válida. Dele se registra apenas o identificador e a diferença de `config_normalizada` e dos pacotes declarados. Não entra texto de LLM.
 
-O escopo `ambiente` reúne `instalacao_pacotes`, `oom`, `timeout_execucao` e `sem_metricas`. As demais assinaturas ficam no escopo da abordagem.
+O escopo `ambiente` reúne `instalacao_pacotes`, `oom`, `timeout_execucao` e `sem_metricas` (a primeira e a última têm causa `ambigua` no grafo, e as duas entram mesmo assim). O escopo da abordagem reúne as falhas de causa `abordagem` com assinatura própria (o tipo da exceção). Falhas de infraestrutura, `validacao_indeterminada` e `falha_execucao_sem_excecao` não entram: não dão ao Developer o que corrigir.
 
 `criterio_nao_atendido` não entra: não é erro, é resultado. Ele já está no `RegistroResultado`.
 

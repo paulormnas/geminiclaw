@@ -1,7 +1,8 @@
 """Amostrador de CPU, memória e temperatura para o benchmark (Linux / Raspberry Pi 5 e macOS).
 
 No Linux lê direto de ``/proc`` e ``/sys``, sem dependências; no macOS (e em outros sistemas) usa o ``psutil``.
-A escolha sai da identificação da plataforma (``src.host.platform_info``) em :func:`make_sampler`. A telemetria do projeto
+A escolha sai da identificação da plataforma (``src.host.platform_info``) em :func:`make_sampler`.
+A telemetria do projeto
 (``hardware_snapshots``) grava uma amostra por subtarefa e o uso de CPU sai zerado, então não serve
 para medir picos; este amostrador roda em outra thread, a cada ``interval`` segundos, durante a
 execução inteira do benchmark.

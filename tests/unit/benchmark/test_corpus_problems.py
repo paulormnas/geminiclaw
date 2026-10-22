@@ -73,3 +73,10 @@ def test_tarefa_e_script_do_wine() -> None:
     task = (ROOT / "scripts" / "benchmark" / "task_wine.txt").read_text(encoding="utf-8").strip()
     script = (ROOT / "run_wine.sh").read_text(encoding="utf-8")
     assert "Wine" in task and "task_wine.txt" in script
+
+
+def test_run_benchmark_aponta_src_config_para_o_banco_de_benchmark_antes_de_semear() -> None:
+    """Regressão: sem o ajuste, ``src.config`` mantinha o banco de desenvolvimento e a semeadura falhava."""
+    source = (ROOT / "scripts" / "benchmark" / "run_benchmark.py").read_text(encoding="utf-8")
+    assert "target_process.aplicar_alvo_ao_processo(env_base)" in source
+    assert source.index("aplicar_alvo_ao_processo") < source.index("pending_runs(matrix")

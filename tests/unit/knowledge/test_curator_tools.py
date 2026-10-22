@@ -682,3 +682,20 @@ def test_fila_so_serve_pares_do_projeto_e_oculta_propriedades_de_outro_projeto(w
     assert "propriedades" in visto[ids["abordagem"]]
     assert "propriedades" not in visto[x] and "Privada X" not in json.dumps(servidos)
     assert env.queue.pending_count() == 2
+
+
+def test_condicional_com_filtro_liga_os_registros_do_escopo_mesmo_sem_atingir_o_alvo(world):
+    """Uma descoberta condicional pode descrever a condição em que a abordagem não atinge o alvo."""
+    env, graph, tk, ids = world
+    env.provider.vectors["par9e"] = pair_vectors(DIM, 9, 1.0)[0]
+    graph.tentativa(ids["hip"], ids["abordagem"], valor=0.60, seed=2, datasets=["ds2"], config={"modelo": "gb", "p": 9})
+    (*_, registro_ds2) = _recompute(env, graph, ids)
+
+    out = _create(
+        tk, ids, tipo="condicional", enunciado="par9e", condicoes="ds2",
+        sobre_ids=[ids["abordagem"], graph.problema], filtro_condicoes={"dataset_ids": ["ds2"]},
+    )
+
+    assert out["ok"] is True
+    baseadas = {e.dst_id for e in env.raw._edges if e.src_id == out["id"] and e.rel_type == "BASEADA_EM"}  # noqa: SLF001
+    assert registro_ds2 in baseadas

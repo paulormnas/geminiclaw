@@ -147,6 +147,8 @@ class CuratorWrites:
         records = self.service.records_in_scope(sobre_nodes)
         if tipo == "nao_funciona":
             chosen = [r for r in records if (r.properties.get("n_abaixo_alvo") or 0) >= 1]
+        elif tipo == "condicional":
+            chosen = [r for r in records if (r.properties.get("n_tentativas_validas") or 0) >= 1]
         else:
             chosen = [r for r in records if (r.properties.get("n_atingiu_alvo") or 0) >= 1]
         if not chosen:

@@ -80,3 +80,19 @@ def test_run_benchmark_aponta_src_config_para_o_banco_de_benchmark_antes_de_seme
     source = (ROOT / "scripts" / "benchmark" / "run_benchmark.py").read_text(encoding="utf-8")
     assert "target_process.aplicar_alvo_ao_processo(env_base)" in source
     assert source.index("aplicar_alvo_ao_processo") < source.index("pending_runs(matrix")
+
+
+def test_glass_e_cancer_registrados_com_matriz_valida_e_tarefas():
+    from scripts.benchmark.seed_project import CANCER_DRAFT, GLASS_DRAFT
+
+    assert set(GLASS_DRAFT.caracteristicas_dados) == set(CANCER_DRAFT.caracteristicas_dados) == set(
+        WINE_DRAFT.caracteristicas_dados
+    )
+    matrix = json.loads((ROOT / "scripts" / "benchmark" / "matrix_corpus_dificil.json").read_text(encoding="utf-8"))
+    validate_matrix(matrix)
+    assert {c["problem"] for c in matrix["combinations"]} == {"glass", "cancer"}
+    for combo in matrix["combinations"]:
+        validate_combination(combo)
+        assert (ROOT / combo["task_file"]).is_file()
+    for name in ("glass", "cancer"):
+        assert name in (ROOT / f"run_{name}.sh").read_text(encoding="utf-8")

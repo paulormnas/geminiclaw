@@ -1,0 +1,70 @@
+{
+  "task_file": "scripts/benchmark/task_iris.txt",
+  "timeout_seconds": 12000,
+  "budget_usd": {
+    "google": 8.0,
+    "openai": 6.0
+  },
+  "env": {
+    "LOCALITY_MIN_GROUP_SIZE": "10",
+    "LLM_REQUESTS_PER_MINUTE": "60",
+    "SESSION_MAX_TOKENS": "3000000",
+    "SESSION_MAX_COST_USD": "3",
+    "SESSION_MAX_MINUTES": "180",
+    "GOOGLE_FALLBACK_MODEL": ""
+  },
+  "combinations": [
+    {
+      "name": "argon-dev-luna-juiz-glass",
+      "problem": "glass",
+      "task_file": "scripts/benchmark/task_glass.txt",
+      "roles": {
+        "*": "google/gemini-4-argon",
+        "VALIDATOR": "openai/gpt-6-luna"
+      },
+      "env": {
+        "OPENAI_REASONING_EFFORT": "xhigh"
+      },
+      "requires": "OPENAI_API_KEY"
+    },
+    {
+      "name": "luna-dev-argon-juiz-glass",
+      "problem": "glass",
+      "task_file": "scripts/benchmark/task_glass.txt",
+      "roles": {
+        "*": "openai/gpt-6-luna",
+        "VALIDATOR": "google/gemini-4-argon"
+      },
+      "env": {
+        "OPENAI_REASONING_EFFORT": "medium"
+      },
+      "requires": "OPENAI_API_KEY"
+    },
+    {
+      "name": "argon-dev-luna-juiz-cancer",
+      "problem": "cancer",
+      "task_file": "scripts/benchmark/task_cancer.txt",
+      "roles": {
+        "*": "google/gemini-4-argon",
+        "VALIDATOR": "openai/gpt-6-luna"
+      },
+      "env": {
+        "OPENAI_REASONING_EFFORT": "xhigh"
+      },
+      "requires": "OPENAI_API_KEY"
+    },
+    {
+      "name": "luna-dev-argon-juiz-cancer",
+      "problem": "cancer",
+      "task_file": "scripts/benchmark/task_cancer.txt",
+      "roles": {
+        "*": "openai/gpt-6-luna",
+        "VALIDATOR": "google/gemini-4-argon"
+      },
+      "env": {
+        "OPENAI_REASONING_EFFORT": "medium"
+      },
+      "requires": "OPENAI_API_KEY"
+    }
+  ]
+}

@@ -53,10 +53,46 @@ WINE_DRAFT = ProblemDraft(
     baseline_descricao="classificador que prediz a classe majoritária",
 )
 
+GLASS_DRAFT = ProblemDraft(
+    titulo="Classificação supervisionada no dataset Glass Identification",
+    resumo=(
+        "Dataset tabular de análises do índice de refração e de óxidos em fragmentos de vidro, com nove medidas por "
+        "amostra e seis tipos de vidro, de classes desbalanceadas. O objetivo é montar um pipeline de classificação "
+        "reproduzível, comparar ao menos dois algoritmos e recomendar um modelo com justificativa. Um avanço seria "
+        "um modelo com acurácia de teste superior ao baseline simples, com avaliação comparável."
+    ),
+    classe="classificacao",
+    caracteristicas_dados={"tamanho": "214 amostras", "atributos": "9", "modalidade": "tabular", "classes": "6"},
+    dominios=("Aprendizado de Máquina",),
+    metrica="acurácia",
+    alvo=0.80,
+    delta_min=0.01,
+    baseline_descricao="classificador que prediz a classe majoritária",
+)
+
+CANCER_DRAFT = ProblemDraft(
+    titulo="Classificação supervisionada no dataset Breast Cancer Wisconsin",
+    resumo=(
+        "Dataset tabular de medidas de núcleos celulares de biópsias de mama, com trinta atributos por amostra e "
+        "duas classes (benigno e maligno). O objetivo é montar um pipeline de classificação reproduzível, comparar ao "
+        "menos dois algoritmos e recomendar um modelo com justificativa. Um avanço seria um modelo com acurácia de "
+        "teste superior ao baseline simples, com avaliação comparável."
+    ),
+    classe="classificacao",
+    caracteristicas_dados={"tamanho": "569 amostras", "atributos": "30", "modalidade": "tabular", "classes": "2"},
+    dominios=("Aprendizado de Máquina",),
+    metrica="acurácia",
+    alvo=0.97,
+    delta_min=0.01,
+    baseline_descricao="classificador que prediz a classe majoritária",
+)
+
 # Problemas do corpus de memória entre projetos (``v18.9-memory-evaluation``): chave usada em ``combo["problem"]``.
 PROBLEMS: dict[str, tuple[ProblemDraft, str]] = {
     "iris": (BENCHMARK_DRAFT, "Pipeline de classificação supervisionada para o dataset Iris (tarefa do run.sh)."),
     "wine": (WINE_DRAFT, "Pipeline de classificação supervisionada para o dataset Wine (tarefa do run_wine.sh)."),
+    "glass": (GLASS_DRAFT, "Pipeline de classificação supervisionada para o dataset Glass Identification."),
+    "cancer": (CANCER_DRAFT, "Pipeline de classificação supervisionada para o dataset Breast Cancer Wisconsin."),
 }
 
 

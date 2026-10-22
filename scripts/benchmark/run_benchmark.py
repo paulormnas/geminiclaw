@@ -37,7 +37,7 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
-from scripts.benchmark import footprint, model_versions
+from scripts.benchmark import footprint, model_versions, target_process
 from scripts.benchmark.archive import archive_dir_for, archive_repetition, fetch_events
 from scripts.benchmark.interactions import quota_label
 from scripts.benchmark.reset_stores import (
@@ -712,10 +712,14 @@ def main() -> None:
         sys.exit(2)
     if target is not None:
         env_base = target_env(target, env_base)
-        # O próprio runner (semeadura, pegada, placar) também fala com o banco de benchmark.
-        for key in ("DATABASE_URL", "QDRANT_URL", "KNOWLEDGE_READER_DATABASE_URL"):
-            if env_base.get(key):
-                os.environ[key] = env_base[key]
+        # O próprio runner (semeadura, pegada, placar) também fala com o banco de benchmark. ``src.config`` lê o
+        # ambiente na importação: sem ajustá-lo a semeadura usaria o banco de desenvolvimento do ``.env``.
+        target_process.aplicar_alvo_ao_processo(env_base)
+        try:
+            target_process.conferir_alvo_do_processo(target)
+        except target_process.AlvoNaoAplicado as exc:
+            print(f"[benchmark] ALVO NÃO APLICADO: {exc}", file=sys.stderr, flush=True)
+            sys.exit(2)
         print(f"[benchmark] alvo: {target.label} ({target.safe_url}); Qdrant {target.qdrant_url}", flush=True)
     if not args.reset_stores:
         print("[benchmark] AVISO: sem --reset-stores as execuções não estão isoladas (isolated: false); "

@@ -1,6 +1,8 @@
 # ADR 015 — Modelo de Dados do Grafo de Conhecimento e Ligação com Embeddings
 
 **Status:** Parcialmente implementado — §9 revisado em 2026-10-19 (modelo v2 do veredito, ADR 025); modelo de V17, V18, V18.5 e V18.6 (`Experimento` em `sucesso` com a tentativa e veredito calculado) concluído e arquivado (2026-10-13); entidades de V19 e V20 pendentes; valores iniciais a calibrar com dados reais (aprovado em 2026-10-01 pelo pesquisador responsável; atualizado em 2026-10-13)
+
+> **2026-10-21:** a §9 (equação de confiança, veredito e parâmetros) foi substituída pelo [ADR 026](adr_026_memoria_por_registros_de_resultado.md) (registros de resultado e estado da hipótese por regra). O restante do ADR continua em vigor.
 **Data:** 2026-09-28
 **Autores:** Arquiteto de Soluções (GeminiClaw), com revisão do pesquisador responsável
 **ADRs relacionados:** ADR 009 (camada de conhecimento), ADR 010 (propósito), ADR 011 (embeddings locais), ADR 012 (Curator), ADR 013 (federação), ADR 014 (execução no host)

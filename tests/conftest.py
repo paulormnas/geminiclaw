@@ -354,16 +354,32 @@ def mock_db_connection(request):
 
 @pytest.fixture(scope="session", autouse=True)
 def global_container_cleanup_check():
-    """Garante que não sobrou nenhum container do projeto após rodar os testes."""
+    """Garante que os testes não deixaram containers do projeto.
+
+    Só conta o que nasceu depois do início da sessão de testes: containers anteriores (por exemplo, o sandbox de uma
+    sessão de benchmark rodando em paralelo) não são vazamento destes testes e nunca são removidos aqui.
+    """
+    import re
+    from datetime import datetime, timezone
+
+    started = datetime.now(timezone.utc)
     yield
     try:
         import docker
         client = docker.from_env()
         # all=True checks stopped containers as well
         containers = client.containers.list(filters={"label": "project=geminiclaw"}, all=True)
-        if containers:
-            container_ids = [c.short_id for c in containers]
-            for c in containers:
+        leaked = []
+        for c in containers:
+            match = re.match(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(\.\d{1,6})?", c.attrs.get("Created", ""))
+            if match is None:
+                continue  # sem data confiável: não é seguro afirmar que o container é destes testes
+            born = datetime.fromisoformat(match.group(1) + (match.group(2) or "") + "+00:00")
+            if born >= started:
+                leaked.append(c)
+        if leaked:
+            container_ids = [c.short_id for c in leaked]
+            for c in leaked:
                 try:
                     c.remove(force=True)
                 except Exception:
@@ -371,7 +387,6 @@ def global_container_cleanup_check():
             pytest.fail(f"Vazamento de containers detectado apos os testes: {container_ids}")
     except Exception as e:
         print(f"Aviso na verificacao de containers: {e}")
-
 
 # Hosts dos provedores LLM pagos: nenhum teste pode alcançá-los (créditos só para o benchmark).
 _PAID_LLM_HOSTS = ("api.openai.com", "api.anthropic.com", "googleapis.com")

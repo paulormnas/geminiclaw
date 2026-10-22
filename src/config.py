@@ -798,6 +798,12 @@ VERDICT_THRESHOLDS: tuple[float, float, float] = tuple(
     float(x) for x in _verdict_thresholds_raw.split(",")
 )  # type: ignore[assignment]
 
+# --- Memória de falhas (ADR 026 §5; v18.9-failure-memory) ---
+# Teto de caracteres do bloco "NÃO / USE" que o Developer recebe antes de cada subtarefa de código (0 desliga).
+FAILURE_MEMORY_MAX_CHARS = int(
+    _bounded_number("FAILURE_MEMORY_MAX_CHARS", "1500", int, "um inteiro >= 0 (0 desliga)", lambda v: v >= 0)
+)
+
 # --- Agente Curator (Roadmap V17 / ADR 012 §1-§2, ADR 015 §10; mudança v17-curator-agent) ---
 # O modelo do papel `curator` vem do catálogo (src/llm/catalog.yaml, ADR 017); para fixar um modelo use
 # `CURATOR_MODEL=provedor/modelo`. Os limites abaixo valem POR EXECUÇÃO do Curator (consolidate/close_session).

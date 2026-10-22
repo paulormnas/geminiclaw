@@ -26,7 +26,7 @@ A escrita SHALL alterar apenas `qualificacao`, `limite_aplicabilidade` e `licao`
 - **THEN** o registro passa a `qualificacao = "restricao"` e os campos factuais não mudam
 
 ### Requirement: Atalhos derivados de registros
-O orquestrador SHALL manter `Abordagem-FUNCIONOU_PARA->Problema` quando um registro do par tem `n_atingiu_alvo >= HYPOTHESIS_MIN_REPLICAS`, e `FALHOU_PARA` quando tem `n_abaixo_alvo >= HYPOTHESIS_MIN_REFUTATIONS` e `n_atingiu_alvo == 0`, com `registro_id` na aresta. Quando a condição deixa de valer, SHALL marcar o atalho como `contestada`, sem apagá-lo.
+O orquestrador SHALL manter `Abordagem-FUNCIONOU_PARA->Problema` quando um registro do par tem `n_atingiu_alvo >= HYPOTHESIS_MIN_REPLICAS`, e `FALHOU_PARA` quando nenhum registro do par atinge o alvo e algum tem `n_abaixo_alvo >= HYPOTHESIS_MIN_REFUTATIONS`, com `registro_id` na aresta. Quando a condição deixa de valer, SHALL marcar o atalho como `contestada`, sem apagá-lo.
 
 #### Scenario: Atalho sem Curator
 - **GIVEN** `CURATOR_ENABLED=false` e um registro com `n_atingiu_alvo = 2`
@@ -34,7 +34,7 @@ O orquestrador SHALL manter `Abordagem-FUNCIONOU_PARA->Problema` quando um regis
 - **THEN** existe `FUNCIONOU_PARA` do par com `registro_id` do registro
 
 ### Requirement: Descoberta de funcionamento baseada em registro
-O Curator SHALL só gravar `Descoberta` `funciona`, `nao_funciona` ou `condicional` com `BASEADA_EM` um `RegistroResultado` que cumpra a condição de validação ou de refutação da regra.
+O Curator SHALL só gravar `Descoberta` `funciona` ou `nao_funciona` (e `condicional` com `filtro_condicoes`) quando as tentativas do escopo cumprirem a condição de validação ou de refutação da regra, e a ferramenta SHALL ligar a descoberta (`BASEADA_EM`) aos `RegistroResultado` do escopo que a sustentam.
 
 #### Scenario: Descoberta sem registro
 - **WHEN** o Curator tenta gravar `funciona` sem `BASEADA_EM` um registro validado

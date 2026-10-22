@@ -349,7 +349,7 @@ def test_executar_com_alvo_confirmado_roda_e_grava_o_manifesto(monkeypatch, caps
     assert len(vistos) == 8 and vistos[0] == "haiku-dev-luna-juiz/P/r1"
     manifesto = json.loads((saida / "manifesto.json").read_text(encoding="utf-8"))
     assert manifesto["entradas"]["plano"]["sha256"] and manifesto["sementes_dos_dados"] and "commit" in manifesto
-    assert manifesto["verdict"]["VERDICT_MODEL"] == "v2"
+    assert "verdict" not in manifesto
 
 
 def test_saida_ocupada_e_recusada_e_retomar_pula_as_feitas(monkeypatch, capsys, tmp_path: Path) -> None:

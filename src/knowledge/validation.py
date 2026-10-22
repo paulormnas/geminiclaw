@@ -454,6 +454,11 @@ AGENT_ALLOWED_VALUES: dict[str, dict[str, tuple[str, ...] | None]] = {
 }
 # Fatos estruturais (ADR 015 §1, project.md): escritos só pela ingestão determinística; agente nunca os cria nem altera.
 FACT_LABELS: frozenset[str] = frozenset({"Sessao", "Insumo", "Experimento", "Resultado"})
+# v18.9-result-records (ADR 026 §4): o ``RegistroResultado`` é fato do orquestrador, exceto a qualificação que o Curator
+# escreve. Rótulo -> únicos campos que um agente pode alterar (a criação é sempre do orquestrador).
+AGENT_WRITABLE_FIELDS: dict[str, frozenset[str]] = {
+    "RegistroResultado": frozenset({"qualificacao", "limite_aplicabilidade", "licao"}),
+}
 # Nós rejeitados pelo pesquisador são imutáveis para agentes: a decisão humana não é reaberta por LLM.
 REJECTED_STATUSES: frozenset[str] = frozenset({"rejeitado", "rejeitada"})
 
@@ -485,6 +490,9 @@ def validate_human_only(
     """
     if actor_kind == "agente":
         if label in FACT_LABELS:
+            raise FactWriteNotAllowedError(label, actor_kind)
+        writable = AGENT_WRITABLE_FIELDS.get(label)
+        if writable is not None and (current is None or not set(changes) <= writable):
             raise FactWriteNotAllowedError(label, actor_kind)
         _validate_agent_reserved(label, current, changes)
     if label == "Oportunidade" and actor_kind == "orquestrador":

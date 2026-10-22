@@ -1,4 +1,4 @@
-"""Invariantes do design §7: o status da afirmação não toca veredito, validação nem admissão no grafo."""
+"""Invariantes do design §7: o status da afirmação não toca os registros de resultado, a validação nem a admissão."""
 
 import itertools
 import re
@@ -8,7 +8,7 @@ import pytest
 
 from src.claims.model import STATUSES, Afirmacao
 from src.knowledge import schema
-from src.knowledge.verdict import Attempt, Criterion, VerdictParams, compute_verdict
+from src.knowledge.result_records import Attempt, Criterion, compute_record
 
 pytestmark = pytest.mark.unit
 
@@ -32,14 +32,13 @@ def claim(status):
     return Afirmacao("id", "A1", "c", "t", (0, 1), "modelo", status, **extra)
 
 
-def test_veredito_igual_para_os_seis_status():
+def test_registro_igual_para_os_seis_status():
     criterion = Criterion(sentido="maior_melhor", delta_min=0.05, alvo=None)
-    params = VerdictParams()
-    baseline = compute_verdict(attempts(), criterion, params)
-    # nenhum campo de Attempt/Criterion carrega o status da afirmação; compute_verdict não recebe afirmações
+    baseline = compute_record(attempts(), criterion)
+    # nenhum campo de Attempt/Criterion carrega o status da afirmação; compute_record não recebe afirmações
     for combo in itertools.product(STATUSES, repeat=2):
         _ = [claim(s) for s in combo]
-        assert compute_verdict(attempts(), criterion, params) == baseline
+        assert compute_record(attempts(), criterion) == baseline
 
 
 def test_attempt_e_criterion_nao_tem_status_afirmacao():
@@ -55,8 +54,8 @@ def test_enumeracoes_preservadas():
     assert schema.NODE_SCHEMAS["Afirmacao"].properties["status_afirmacao"].enum == STATUSES
 
 
-def test_ingestao_e_veredito_nao_consultam_o_status_da_afirmacao():
-    for relative in ("knowledge/verdict.py", "knowledge/ingestion.py", "knowledge/ingestion_io.py",
+def test_ingestao_e_registros_nao_consultam_o_status_da_afirmacao():
+    for relative in ("knowledge/result_records.py", "knowledge/ingestion.py", "knowledge/ingestion_io.py",
                      "knowledge/ingestion_queue.py", "knowledge/service.py", "knowledge/hypothesis_cycle.py"):
         text = (ROOT / relative).read_text(encoding="utf-8")
         assert "status_afirmacao" not in text and "src.claims" not in text, relative

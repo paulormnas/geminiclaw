@@ -563,11 +563,13 @@ def _hypotheses(value: object) -> list[dict[str, Any]]:
         if hid is None or not isinstance(status, str) or len(status) > MAX_SHORT_TEXT:
             raise CheckpointError("hipótese inválida.")
         entry: dict[str, Any] = {"id": hid, "status": status}
-        veredito = item.get("veredito")
-        if veredito is not None:
-            if not _is_number(veredito):
-                raise CheckpointError("veredito da hipótese inválido.")
-            entry["veredito"] = veredito
+        # Checkpoints anteriores ao ADR 026 trazem ``veredito``: a chave é aceita e descartada.
+        for key in ("n_atingiu_alvo", "n_abaixo_alvo"):
+            count = item.get(key)
+            if count is not None:
+                if not _is_number(count) or count < 0:
+                    raise CheckpointError(f"{key} da hipótese inválido.")
+                entry[key] = count
         out.append(entry)
     return out
 
@@ -1007,7 +1009,7 @@ class CheckpointRecorder:
         sinalizacoes_pendentes: int | None = None,
         hipotese_por_subtarefa: Mapping[str, str] | None = None,
     ) -> bool:
-        """Checkpoint do Curator: hipóteses (com vereditos), decisões, descobertas e sinalizações pendentes."""
+        """Checkpoint do Curator: hipóteses (com contagens de réplicas), decisões, descobertas e sinalizações."""
 
         def mutate(cp: Checkpoint) -> None:
             if hipoteses is not None:

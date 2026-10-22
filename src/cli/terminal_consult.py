@@ -141,7 +141,8 @@ def build_context(
 ) -> str:
     """Contexto determinístico da pesquisa, delimitado como dado, até ``TERMINAL_CONSULT_CONTEXT_MAX_CHARS``.
 
-    Projeto e Problema, hipóteses com estado e veredito, plano do checkpoint, últimos 30 eventos e pedidos pendentes.
+    Projeto e Problema, hipóteses com estado e contagens de réplicas, plano do checkpoint, últimos 30 eventos e
+    pedidos pendentes.
     Cada bloco é independente: o que não puder ser lido sai como indisponível, sem derrubar a consulta.
     """
     from src.knowledge.curator_tools import wrap_data
@@ -188,9 +189,10 @@ def build_context(
                 "id": node.id, "estado": node.properties.get("status"),
                 "enunciado": sanitize_line(node.properties.get("enunciado", ""), 240),
             }
-            verdict = node.properties.get("veredito")
-            if isinstance(verdict, (int, float)) and not isinstance(verdict, bool):
-                item["veredito"] = round(float(verdict), 3)
+            for key in ("n_atingiu_alvo", "n_abaixo_alvo"):
+                count = node.properties.get(key)
+                if isinstance(count, (int, float)) and not isinstance(count, bool):
+                    item[key] = int(count)
             out.append(item)
         return out
 

@@ -747,7 +747,7 @@ class _Writer:
     def _reference(self, exp_id: str, sub: SubtaskInput) -> None:
         """``Resultado-REFERENCIA_DE->Problema`` para cada ``Resultado`` com ``MEDE`` na métrica M do Problema.
 
-        Sem nenhum ``Resultado`` de M, registra ``referencia_sem_metrica``. O valor não entra no veredito.
+        Sem nenhum ``Resultado`` de M, registra ``referencia_sem_metrica``. O valor não entra nos registros.
         """
         problem, metric = self._problem_node(), self._problem_metric()
         results = [
@@ -854,7 +854,7 @@ class _Writer:
         if sub.agent_status != "success":
             return "falha"
         if cls._is_negative(sub):
-            return "sucesso"  # v18.6-hypothesis-closure: o Resultado validado entra no veredito como evidência
+            return "sucesso"  # v18.6-hypothesis-closure: o Resultado validado entra no registro de resultado
         if sub.review_status == "fail":
             return "falha"
         if sub.review_status == "divergent_but_documented":

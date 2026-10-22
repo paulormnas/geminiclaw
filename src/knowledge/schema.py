@@ -128,6 +128,8 @@ POLITICAS_OBJETIVO: tuple[str, ...] = ("parar", "perguntar", "continuar")
 DEFINIDO_POR_OBJETIVO: tuple[str, ...] = ("pesquisador", "agente")
 CONFERENCIAS_PREDICAO: tuple[str, ...] = ("confirma", "contraria", "inconclusiva")
 CATEGORIAS_RESTRICAO: tuple[str, ...] = ("seguranca", "etica", "recurso")
+# v18.9-result-records (ADR 026 §4): qualificação do registro de resultado pelo Curator.
+QUALIFICACOES_REGISTRO: tuple[str, ...] = ("pendente", "reparo", "restricao", "retido")
 STATUS_RESTRICAO: tuple[str, ...] = ("ativa", "revogada")
 # Campos de ``criterio_sucesso`` por tipo: (obrigatórios, proibidos). Os comuns a todos os tipos ficam em
 # ``CAMPOS_COMUNS_OBJETIVO``; o tipo ``fronteira`` é aceito pelo schema e recusado na confirmação (V19).
@@ -148,7 +150,7 @@ IMMUTABLE_LABEL_FIELDS: dict[str, frozenset[str]] = {
 
 
 # ---------------------------------------------------------------------------
-# Nós (14 tipos — ADR 015 §3; ``Afirmacao`` acrescentado por v18.5-claim-verification)
+# Nós (ADR 015 §3; ``Afirmacao`` por v18.5-claim-verification e ``RegistroResultado`` por v18.9-result-records)
 # ---------------------------------------------------------------------------
 
 NODE_SCHEMAS: dict[str, NodeSchema] = {
@@ -240,12 +242,10 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             "referencia_fixada": PropertySchema(),
             "abandonada_por": PropertySchema(enum=ABANDONADA_POR),
             "motivo_abandono": PropertySchema(),
-            "suporte": PropertySchema(),
-            "certeza": PropertySchema(),
-            "veredito": PropertySchema(),
+            # ADR 026 §3: contagens da regra de réplicas (tentativas válidas e independentes), só do orquestrador.
             "n_tentativas": PropertySchema(),
-            # v18.8-verdict-calibration: modelo da equação que produziu o veredito ("v2" ou "adr015").
-            "modelo_veredito": PropertySchema(),
+            "n_atingiu_alvo": PropertySchema(),
+            "n_abaixo_alvo": PropertySchema(),
             # v18.7-exploration-limits: hipótese concorrente do objetivo de discriminação e sua predição.
             "concorrente": PropertySchema(),
             "predicao": PropertySchema(),
@@ -337,12 +337,9 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             ),
             "enunciado": PropertySchema(required=True),
             "condicoes": PropertySchema(),
-            # v17-curator-agent: filtro estruturado das tentativas que contam no veredito
+            # v17-curator-agent: filtro estruturado das tentativas que contam no registro de resultado
             # (``{"dataset_ids": [...], "no_execucao": [...]}``); ``condicoes`` segue sendo o texto legível.
             "filtro_condicoes": PropertySchema(),
-            "veredito": PropertySchema(),
-            "modelo_veredito": PropertySchema(),
-            "confianca": PropertySchema(),
             "n_evidencias": PropertySchema(required=True),
             "status": PropertySchema(required=True, enum=("ativa", "contestada", "substituida")),
             "ponto_de_parada": PropertySchema(),
@@ -440,6 +437,28 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             "pedido_id": PropertySchema(),
         },
     ),
+    # v18.9-result-records (ADR 026 §2): fatos medidos de uma abordagem num problema, recalculados pelo orquestrador. Só
+    # ``qualificacao``, ``limite_aplicabilidade`` e ``licao`` são do Curator (``validation.AGENT_WRITABLE_FIELDS``).
+    "RegistroResultado": NodeSchema(
+        "RegistroResultado",
+        {
+            "chave": PropertySchema(required=True),
+            "metrica": PropertySchema(required=True),
+            "melhor_valor": PropertySchema(),
+            "delta_base": PropertySchema(),
+            "delta_pai": PropertySchema(),
+            "n_tentativas_validas": PropertySchema(required=True),
+            "n_replicas_independentes": PropertySchema(required=True),
+            "n_atingiu_alvo": PropertySchema(required=True),
+            "n_abaixo_alvo": PropertySchema(required=True),
+            "atingiu_alvo": PropertySchema(required=True),
+            "condicoes": PropertySchema(),
+            "experimentos": PropertySchema(),
+            "qualificacao": PropertySchema(required=True, enum=QUALIFICACOES_REGISTRO),
+            "limite_aplicabilidade": PropertySchema(),
+            "licao": PropertySchema(),
+        },
+    ),
 }
 
 NODE_LABELS: frozenset[str] = frozenset(NODE_SCHEMAS)
@@ -487,10 +506,14 @@ RELATION_SCHEMAS: list[RelationSchema] = [
     _rel("Decisao", "ESCOLHEU", ("Abordagem", "Hipotese")),
     _rel("Decisao", "DESCARTOU", ("Abordagem", "Hipotese"), motivo=PropertySchema(required=True)),
     _rel("Decisao", "INFORMADA_POR", "Descoberta"),
-    _rel("Resultado", "SUSTENTA", "Hipotese", peso=PropertySchema()),
-    _rel("Resultado", "REFUTA", "Hipotese", peso=PropertySchema()),
-    _rel("Descoberta", "BASEADA_EM", ("Resultado", "Experimento", "Decisao")),
+    _rel("Resultado", "SUSTENTA", "Hipotese"),
+    _rel("Resultado", "REFUTA", "Hipotese"),
+    _rel("Descoberta", "BASEADA_EM", ("Resultado", "Experimento", "Decisao", "RegistroResultado")),
     _rel("Descoberta", "SOBRE", ("Abordagem", "Problema", "Hipotese")),
+    # v18.9-result-records: o registro é do par (problema, abordagem) e se apoia nos resultados medidos.
+    _rel("RegistroResultado", "REGISTRA", "Abordagem"),
+    _rel("RegistroResultado", "SOBRE", "Problema"),
+    _rel("RegistroResultado", "BASEADA_EM", "Resultado"),
     _rel("Descoberta", "CONTRADIZ", "Descoberta"),
     _rel("Descoberta", "SUBSTITUI", "Descoberta"),
     _rel(
@@ -499,13 +522,13 @@ RELATION_SCHEMAS: list[RelationSchema] = [
         melhor_valor=PropertySchema(required=True),
         config=PropertySchema(),
         n_exp=PropertySchema(required=True),
-        descoberta_id=PropertySchema(),
+        registro_id=PropertySchema(),
     ),
     _rel(
         "Abordagem", "FALHOU_PARA", "Problema",
         motivo=PropertySchema(required=True),
         n_exp=PropertySchema(required=True),
-        descoberta_id=PropertySchema(),
+        registro_id=PropertySchema(),
     ),
     _rel("Abordagem", "VARIANTE_DE", "Abordagem"),
     # v17-curator-agent: duplicata de abordagem fundida na canônica, sem apagar nenhum nó.

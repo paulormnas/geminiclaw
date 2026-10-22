@@ -56,7 +56,7 @@ class HypothesisWorld:
                       if k not in ("tipo", "definido_por", "sentido")}
             self.store.update_node(self.problem.id, {"criterio_sucesso": legacy}, actor=PESQUISADOR)
             self.problem = get_active_problem(self.store, self.pid)
-        if approve_metric:  # v18.6-hypothesis-closure §4: sem Metrica aprovada o veredito é indisponível
+        if approve_metric:  # v18.6-hypothesis-closure §4: sem Metrica aprovada o critério é indisponível
             for metric in self.store.find_nodes("Metrica", {"status": "candidato"}, limit=10):
                 approve_term(self.store, metric.id)
         self.sid = session_id

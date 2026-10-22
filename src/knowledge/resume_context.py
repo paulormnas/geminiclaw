@@ -2,7 +2,7 @@
 
 Duas funções, ambas somente leitura e tolerantes a falha do grafo:
 
-- ``collect_session_graph_state``: hipóteses (com vereditos), decisões e descobertas da sessão, para o
+- ``collect_session_graph_state``: hipóteses (com contagens de réplicas), decisões e descobertas da sessão, para o
   checkpoint do Curator;
 - ``build_resume_context``: contexto de retomada do Researcher (estado do plano, hipóteses abertas, caminhos
   sem conclusão, experiência relacionada e sinalizações pendentes).
@@ -63,9 +63,10 @@ def collect_session_graph_state(store: GraphStore, project_id: str, session_id: 
             if node.label != "Hipotese":
                 continue
             entry: dict[str, Any] = {"id": node.id, "status": str(node.properties.get("status", ""))[:64]}
-            veredito = node.properties.get("veredito")
-            if isinstance(veredito, (int, float)) and not isinstance(veredito, bool):
-                entry["veredito"] = veredito
+            for key in ("n_atingiu_alvo", "n_abaixo_alvo"):
+                count = node.properties.get(key)
+                if isinstance(count, (int, float)) and not isinstance(count, bool):
+                    entry[key] = count
             hip[node.id] = entry
             sid = exp.properties.get("subtarefa_id")
             if isinstance(sid, str):
@@ -139,8 +140,8 @@ def build_resume_context(
                             "id": node.id,
                             "enunciado": _clip(node.properties.get("enunciado")),
                             "status": node.properties.get("status"),
-                            "veredito": node.properties.get("veredito"),
-                            "certeza": node.properties.get("certeza"),
+                            "n_atingiu_alvo": node.properties.get("n_atingiu_alvo"),
+                            "n_abaixo_alvo": node.properties.get("n_abaixo_alvo"),
                         }
                     )
             if open_h:

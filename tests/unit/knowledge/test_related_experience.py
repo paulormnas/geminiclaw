@@ -38,18 +38,25 @@ def _abordagem(env, nome: str, projeto: str) -> str:
     return env.make("Abordagem", projeto_id=projeto, nome=nome)
 
 
-def _funcionou(env, abordagem: str, problema: str, descoberta: str | None = None) -> None:
+def _funcionou(env, abordagem: str, problema: str, registro: str | None = None) -> None:
     props = {"metrica": "f1", "melhor_valor": 0.9, "n_exp": 3}
-    if descoberta:
-        props["descoberta_id"] = descoberta
+    if registro:
+        props["registro_id"] = registro
     env.store.create_edge(abordagem, "FUNCIONOU_PARA", problema, props, actor=ORQ)
 
 
-def _descoberta(env, texto: str, projeto: str, confianca: float | None, **extra) -> str:
+def _registro(env, projeto: str, replicas: int) -> str:
+    """``RegistroResultado`` com ``replicas`` réplicas independentes (o peso do atalho satura em três)."""
+    return env.make(
+        "RegistroResultado", projeto_id=projeto, n_replicas_independentes=replicas, n_atingiu_alvo=replicas,
+    )
+
+
+def _descoberta(env, texto: str, projeto: str, n_evidencias: int | None, **extra) -> str:
     env.provider.vectors[f"enunciado: {texto}"] = [0.0] * (DIM - 2) + [1.0, 0.0]
     props = dict(extra)
-    if confianca is not None:
-        props.update(confianca=confianca, veredito=confianca)
+    if n_evidencias is not None:
+        props["n_evidencias"] = n_evidencias
     return env.make("Descoberta", projeto_id=projeto, enunciado=texto, **props)
 
 
@@ -70,27 +77,27 @@ class TestRelatedExperience:
         assert item.similarity == pytest.approx(0.8, abs=1e-3)
 
     def test_ordena_por_similaridade_x_confianca_x_recencia(self, env):
-        """Ranking = similaridade × max(confianca, piso) × recência (tarefa 6.9)."""
+        """Ranking = similaridade × max(confiança das réplicas, piso) × recência (tarefa 6.9)."""
         ids = _setup(env)
         forte = _abordagem(env, "forte", "projB")
         fraca = _abordagem(env, "fraca", "projC")
-        sem_veredito = _abordagem(env, "semveredito", "projB")
-        d_forte = _descoberta(env, "dforte", "projB", 0.9)
-        d_fraca = _descoberta(env, "dfraca", "projC", 0.5)
-        _funcionou(env, forte, ids["P2"], d_forte)  # 0,8 × 0,9
-        _funcionou(env, fraca, ids["P3"], d_fraca)  # 0,7 × 0,5
-        _funcionou(env, sem_veredito, ids["P2"])  # 0,8 × piso (0,05)
+        sem_registro = _abordagem(env, "semregistro", "projB")
+        r_forte = _registro(env, "projB", 3)
+        r_fraco = _registro(env, "projC", 1)
+        _funcionou(env, forte, ids["P2"], r_forte)  # 0,8 × 1,0 (três réplicas)
+        _funcionou(env, fraca, ids["P3"], r_fraco)  # 0,7 × 1/3 (uma réplica)
+        _funcionou(env, sem_registro, ids["P2"])  # 0,8 × piso (0,05)
 
         now = datetime.now(timezone.utc) + timedelta(seconds=1)
         itens = env.index.related_experience(ids["P1"], now=now)
 
         nomes = [i.node.properties.get("nome") for i in itens]
-        assert nomes == ["forte", "fraca", "semveredito"]
+        assert nomes == ["forte", "fraca", "semregistro"]
         ranks = [i.rank for i in itens]
         assert ranks == sorted(ranks, reverse=True)
-        assert itens[0].rank == pytest.approx(0.8 * 0.9, rel=2e-2)
-        assert itens[1].rank == pytest.approx(0.7 * 0.5, rel=2e-2)
-        assert itens[2].confidence == config.CONFIDENCE_FLOOR  # sem veredito não zera
+        assert itens[0].rank == pytest.approx(0.8 * 1.0, rel=2e-2)
+        assert itens[1].rank == pytest.approx(0.7 / 3, rel=2e-2)
+        assert itens[2].confidence == config.CONFIDENCE_FLOOR  # sem registro não zera
         assert itens[2].rank > 0
 
     def test_recencia_decai_pela_meia_vida(self, env):
@@ -109,9 +116,9 @@ class TestRelatedExperience:
         ids = _setup(env)
         distante = _abordagem(env, "distante", "projD")
         _funcionou(env, distante, ids["P4"])
-        contestada = _descoberta(env, "contestada", "projB", 0.8, status="contestada")
+        contestada = _descoberta(env, "contestada", "projB", 4, status="contestada")
         env.store.create_edge(contestada, "SOBRE", ids["P2"], {}, actor=ORQ)
-        ativa = _descoberta(env, "ativa", "projB", 0.8)
+        ativa = _descoberta(env, "ativa", "projB", 4)
         env.store.create_edge(ativa, "SOBRE", ids["P2"], {}, actor=ORQ)
 
         itens = env.index.related_experience(ids["P1"])

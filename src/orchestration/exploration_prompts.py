@@ -23,7 +23,7 @@ METRIC_DEFINITION_PLAN_INSTRUCTION = """DEFINIÇÃO DE MÉTRICAS (obrigatória n
 tem métrica aprovada ({motivo}). Inclua no plano a chave "metricas": a métrica (ou o conjunto de métricas) que melhor
 expressa o sucesso para ESTE problema, cada item {{"nome": "...", "sentido": "maior_melhor" ou "menor_melhor",
 "limiar": <número a alcançar>, "delta_min": <menor melhoria relevante, opcional>, "justificativa": "por que esta
-métrica e este limiar servem a este problema"}}. A primeira é a principal (define o veredito das hipóteses). Escolha
-métricas adequadas ao tipo de problema e aos dados, com limiar plausível; evite métrica de vaidade ou calculada sobre
-dados de treino. O Validator avalia a definição junto com o plano; ela só vale depois de aprovada, e um plano sem
-"metricas" é reprovado."""
+métrica e este limiar servem a este problema"}}. A primeira é a principal (define o alvo que valida ou refuta as
+hipóteses). Escolha métricas adequadas ao tipo de problema e aos dados, com limiar plausível; evite métrica de vaidade
+ou calculada sobre dados de treino. O Validator avalia a definição junto com o plano; ela só vale depois de
+aprovada, e um plano sem "metricas" é reprovado."""

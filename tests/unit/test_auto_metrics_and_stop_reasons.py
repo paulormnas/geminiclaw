@@ -68,7 +68,7 @@ def _metric(world: HypothesisWorld, nome: str = "R2"):
     return node
 
 
-# --- hypothesis-loop: conferência do veredito e definição de métricas (modo auto) ------------------------------------
+# --- hypothesis-loop: conferência da métrica e definição de métricas (modo auto) ------------------------------------
 
 
 @pytest.mark.asyncio
@@ -78,7 +78,7 @@ async def test_modo_auto_sem_metrica_aprovada_segue_e_exige_metricas_no_plano(tm
     await h.run()
     assert h.plan_calls >= 1 and h.stop_reason != "erro"
     assert "DEFINIÇÃO DE MÉTRICAS" in h.planner_prompts[0] and '"metricas"' in h.planner_prompts[0]
-    (event,) = _events(telemetry, "veredito_indisponivel")
+    (event,) = _events(telemetry, "metrica_indisponivel")
     assert event["modo"] == "auto"
 
 

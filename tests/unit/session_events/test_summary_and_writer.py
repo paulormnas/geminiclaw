@@ -64,7 +64,8 @@ def test_resumo_respeita_o_teto(monkeypatch):
 @pytest.mark.parametrize("tipo, campos, esperado", [
     ("sessao_iniciada", {"modo": "auto", "papeis": 2}, "iniciada (modo auto, 2 papéis resolvidos)"),
     ("plano_aprovado", {"versao": 2, "subtarefas": 5, "hipoteses": 3}, "plano 2 aprovado: 5 subtarefas, 3 hipóteses"),
-    ("hipotese_concluida", {"hipotese": "h3", "estado": "refutada", "veredito": -0.41}, "h3 refutada (veredito -0,41)"),
+    ("hipotese_concluida", {"hipotese": "h3", "estado": "refutada", "n_atingiu_alvo": 0, "n_abaixo_alvo": 2},
+     "h3 refutada (0 acima e 2 abaixo do alvo)"),
     ("objetivo_atingido", {"metrica": "acuracia", "valor": 1.0, "alvo": 0.95, "politica": "parar"},
      "objetivo atingido: acuracia 1 ≥ 0,95 (política: parar)"),
     ("decisao_pendente", {"decisao": "aprovar_hipotese", "pedido_id": 12, "referencia": "h4"},
@@ -122,7 +123,7 @@ def test_ouvinte_converte_eventos_da_telemetria(gravador):
     tap("plan_validation", "s1", None, {"approved": True, "plan_tasks": 5, "plan_hipoteses": 3})
     tap("plan_validation", "s1", None, {"approved": False, "plan_tasks": 5})
     tap("plan_validation", "s1", None, {"approved": True, "plan_tasks": 2})
-    tap("hipotese_transicao", "s1", None, {"hipotese_id": "h3", "status_novo": "refutada", "veredito_novo": -0.4})
+    tap("hipotese_transicao", "s1", None, {"hipotese_id": "h3", "status_novo": "refutada", "n_atingiu_alvo": 0, "n_abaixo_alvo": 2})
     tap("hipotese_transicao", "s1", None, {"hipotese_id": "h4", "status_novo": "em_teste"})
     tap("objetivo_atingido", "s1", None, {"valor": 1.0, "politica": "parar", "metrica": "acuracia", "alvo": 0.95})
     tap("subtask_start", "outra-sessao", "x", {})

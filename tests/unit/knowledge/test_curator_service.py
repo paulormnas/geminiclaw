@@ -1,4 +1,4 @@
-"""Testes do ``KnowledgeService`` (v17-curator-agent, spec ``curator``: veredito sem LLM e promoção).
+"""Testes do ``KnowledgeService`` (ADR 026: registros de resultado, regra de réplicas, atalhos e promoção).
 
 Grafo em memória, sem rede, sem LLM. Cada teste cita o ``#### Scenario`` ou a tarefa de ``tasks.md`` que cobre.
 """
@@ -9,7 +9,6 @@ import pytest
 
 from src.knowledge.graph_store import InMemoryGraphStore
 from src.knowledge.service import KnowledgeService, KnowledgeServiceError
-from src.knowledge.verdict import VerdictParams
 from tests.support.curator_graph import ORQ, CuratorGraph
 
 pytestmark = pytest.mark.unit
@@ -19,7 +18,7 @@ pytestmark = pytest.mark.unit
 def world():
     store = InMemoryGraphStore()
     graph = CuratorGraph(store).setup_project()
-    service = KnowledgeService(store, VerdictParams(modelo="adr015"))
+    service = KnowledgeService(store)
     return store, graph, service
 
 
@@ -50,126 +49,166 @@ def _descoberta(store, graph, tipo, *, sobre, filtro=None, **extra):
     return did
 
 
-def test_recalculo_reproduz_os_testes_ouro_do_veredito(world):
-    """Tarefa 6.5 — o recálculo a partir de nós reproduz o exemplo do ADR 015 §9.6 (pesos e veredito +0,17)."""
+def _records(store, abordagem=None):
+    nodes = store.find_nodes("RegistroResultado", {})
+    if abordagem is None:
+        return nodes
+    linked = {e.src_id for e in _edges(store, "REGISTRA", dst=abordagem)}
+    return [n for n in nodes if n.id in linked]
+
+
+def test_recalculo_conta_as_replicas_da_hipotese_e_liga_os_resultados(world):
+    """Duas sementes acima do alvo e uma abaixo: contagens na hipótese e SUSTENTA/REFUTA sem peso."""
     store, graph, service = world
     hip, abordagem = graph.hipotese(), graph.abordagem()
-    results = graph.adr_e1_e6(hip, abordagem)
+    _, r1 = graph.tentativa(hip, abordagem, valor=0.80, seed=1)
+    _, r2 = graph.tentativa(hip, abordagem, valor=0.82, seed=2)
+    _, r3 = graph.tentativa(hip, abordagem, valor=0.60, seed=3)
 
-    result = service.recompute_hypothesis(hip)
-
-    pesos = {d.attempt_id: d.w for d in result.detalhes}
-    assert pesos[results["E1"]] == pytest.approx(1.000, abs=0.005)
-    assert pesos[results["E2"]] == pytest.approx(0.160, abs=0.005)
-    assert pesos[results["E3"]] == pytest.approx(0.315, abs=0.005)
-    assert pesos[results["E4"]] == pytest.approx(0.600, abs=0.005)
-    assert pesos[results["E5"]] == pytest.approx(0.800, abs=0.005)
-    assert pesos[results["E6"]] == pytest.approx(0.150, abs=0.005)
-    assert result.veredito == pytest.approx(0.171, abs=0.005)
-    assert result.leitura == "funciona_fraca"
-
-
-def test_recalculo_apos_resultado_atualiza_hipotese_e_arestas_com_peso(world):
-    """Scenario: Recálculo após resultado — Hipotese atualizada e SUSTENTA/REFUTA com peso igual ao w."""
-    store, graph, service = world
-    hip, abordagem = graph.hipotese(), graph.abordagem()
-    results = graph.adr_e1_e6(hip, abordagem)
-
-    result = service.recompute_hypothesis(hip)
+    facts = service.recompute_hypothesis(hip)
 
     node = store.get_node(hip)
-    assert node.properties["veredito"] == pytest.approx(result.veredito, abs=1e-5)
-    assert node.properties["suporte"] == pytest.approx(result.suporte, abs=1e-5)
-    assert node.properties["certeza"] == pytest.approx(result.certeza, abs=1e-5)
-    assert node.properties["n_tentativas"] == 6
-    sustenta = {e.src_id: e for e in _edges(store, "SUSTENTA", dst=hip)}
-    refuta = {e.src_id: e for e in _edges(store, "REFUTA", dst=hip)}
-    assert set(sustenta) == {results[k] for k in ("E1", "E2", "E3", "E4", "E6")}
-    assert set(refuta) == {results["E5"]}
-    pesos = {d.attempt_id: d.w for d in result.detalhes}
-    for rid, edge in {**sustenta, **refuta}.items():
-        assert edge.properties["peso"] == pytest.approx(pesos[rid], abs=1e-5)
-        assert edge.properties["origem"] == "derivado"
+    assert (facts.n_atingiu_alvo, facts.n_abaixo_alvo) == (2, 1)
+    assert node.properties["n_tentativas"] == 3
+    assert node.properties["n_atingiu_alvo"] == 2 and node.properties["n_abaixo_alvo"] == 1
+    assert "veredito" not in node.properties and "suporte" not in node.properties
+    assert {e.src_id for e in _edges(store, "SUSTENTA", dst=hip)} == {r1, r2}
+    assert {e.src_id for e in _edges(store, "REFUTA", dst=hip)} == {r3}
+    for edge in _edges(store, "SUSTENTA", dst=hip) + _edges(store, "REFUTA", dst=hip):
+        assert "peso" not in edge.properties and edge.properties["origem"] == "derivado"
 
 
-def test_recalculo_atualiza_o_peso_sem_duplicar_arestas(world):
-    """Scenario: Recálculo após resultado — um novo resultado muda o ``b`` e o ``peso`` é atualizado in place."""
+def test_recalculo_nao_duplica_arestas(world):
     store, graph, service = world
     hip, abordagem = graph.hipotese(), graph.abordagem()
-    _, r1 = graph.tentativa(hip, abordagem, valor=0.80, config={"modelo": "gb", "p": 1})
+    _, res = graph.tentativa(hip, abordagem, valor=0.80)
     service.recompute_hypothesis(hip)
-    edge = _edges(store, "SUSTENTA", src=r1)[0]
-    antes = edge.properties["peso"]
-    assert antes == pytest.approx(1.0)  # uma só configuração: sem penalidade de busca (b = 1)
-
-    graph.tentativa(hip, abordagem, valor=0.79, no="B", config={"modelo": "gb", "p": 2})  # 2ª config
     service.recompute_hypothesis(hip)
-
-    assert len(_edges(store, "SUSTENTA", src=r1)) == 1
-    assert _edges(store, "SUSTENTA", src=r1)[0].properties["peso"] < antes  # b < 1 com 2 configs sem réplica
+    assert len(_edges(store, "SUSTENTA", src=res)) == 1
 
 
 def test_evidencia_que_deixa_de_contar_e_contestada(world):
-    """Scenario: Recálculo após resultado — evidência que deixa de contar recebe status contestada."""
+    """Resultado que o Validator deixa de verificar não é mais tentativa válida: a aresta fica contestada."""
     store, graph, service = world
     hip, abordagem = graph.hipotese(), graph.abordagem()
     _, res = graph.tentativa(hip, abordagem, valor=0.80)
     service.recompute_hypothesis(hip)
     assert _edges(store, "SUSTENTA", src=res)[0].properties["status"] == "confirmada"
 
-    # O resultado deixa de ser validado (por exemplo, o Validator reavaliou): não é mais evidência.
     store.update_node(res, {"status_validacao": "nao_validado"}, actor=ORQ)
-    service.recompute_hypothesis(hip)
+    facts = service.recompute_hypothesis(hip)
 
+    assert facts.n_tentativas_validas == 0
     assert _edges(store, "SUSTENTA", src=res)[0].properties["status"] == "contestada"
 
 
-def test_atalho_funcionou_para_e_contestado_quando_o_veredito_cai(world, monkeypatch):
-    """Scenario: Atalho contestado — veredito 0,2 mantém FUNCIONOU_PARA; ao cair para 0,05 a aresta é contestada."""
+def test_experimento_em_falha_com_valor_medido_e_tentativa_valida(world):
+    """Falha por critério não atendido, mas com Resultado medido e verificado, conta abaixo do alvo."""
     store, graph, service = world
-    # Este teste protege o mecanismo do atalho com a equação do ADR 015 e o piso histórico de 0,1; o padrão novo (0,3)
-    # tem teste próprio em test_curator_tools.
-    monkeypatch.setattr("src.config.KNOWLEDGE_SHORTCUT_MIN_VERDICT", 0.1)
     hip, abordagem = graph.hipotese(), graph.abordagem()
-    # 5 sementes positivas na mesma sessão: veredito ~ +0,22 (tabela de referência do ADR 015 §9.7).
-    for seed in range(1, 6):
-        graph.tentativa(hip, abordagem, valor=0.80, seed=seed)
-    descoberta = _descoberta(store, graph, "funciona", sobre=[abordagem, graph.problema, hip])
-    result = service.recompute_discovery(descoberta)
-    assert 0.1 <= result.veredito < 0.3
+    exp, _ = graph.tentativa(hip, abordagem, valor=0.40, seed=1)
+    store.update_node(exp, {"status": "falha", "causa_falha": "ambigua", "assinatura_falha": "criterio_nao_atendido"},
+                      actor=ORQ)
+    sem_valor, _ = graph.tentativa(hip, abordagem, valor=None, seed=2)
+    store.update_node(sem_valor, {"status": "falha", "causa_falha": "ambigua", "assinatura_falha": "sem_metricas"},
+                      actor=ORQ)
+
+    facts = service.recompute_hypothesis(hip)
+
+    assert facts.n_tentativas_validas == 1 and facts.n_abaixo_alvo == 1
+
+
+def test_resultado_de_treino_nao_e_tentativa(world):
+    store, graph, service = world
+    hip, abordagem = graph.hipotese(), graph.abordagem()
+    _, res = graph.tentativa(hip, abordagem, valor=0.99)
+    store.update_node(res, {"qualificador": "treino"}, actor=ORQ)
+
+    assert service.recompute_hypothesis(hip).n_tentativas_validas == 0
+
+
+def test_registro_guarda_os_fatos_por_configuracao_com_delta_base_e_delta_pai(world):
+    """Um registro por (problema, abordagem, configuração); ``delta_pai`` é sobre a configuração anterior."""
+    store, graph, service = world
+    problema = store.get_node(graph.problema)
+    hip, abordagem = graph.hipotese(), graph.abordagem()
+    graph.tentativa(hip, abordagem, valor=0.80, baseline=0.70, seed=1, config={"modelo": "gb", "p": 1})
+    graph.tentativa(hip, abordagem, valor=0.78, baseline=0.70, seed=2, config={"modelo": "gb", "p": 1})
+    graph.tentativa(hip, abordagem, valor=0.90, baseline=0.70, seed=1, config={"modelo": "gb", "p": 2})
+
+    ids = service.recompute_records(abordagem, problema)
+
+    assert len(ids) == 2 and len(_records(store, abordagem)) == 2
+    primeiro, segundo = (store.get_node(i) for i in ids)
+    assert primeiro.properties["melhor_valor"] == pytest.approx(0.80)
+    assert primeiro.properties["n_tentativas_validas"] == 2 and primeiro.properties["n_replicas_independentes"] == 2
+    assert primeiro.properties["n_atingiu_alvo"] == 2 and primeiro.properties["atingiu_alvo"] is True
+    assert primeiro.properties["delta_base"] == pytest.approx(0.10) and "delta_pai" not in primeiro.properties
+    assert segundo.properties["melhor_valor"] == pytest.approx(0.90)
+    assert segundo.properties["delta_pai"] == pytest.approx(0.10)
+    assert segundo.properties["qualificacao"] == "pendente" and segundo.properties["criado_por"] == "orquestrador"
+    assert {e.dst_id for e in _edges(store, "SOBRE", src=primeiro.id)} == {graph.problema}
+    assert _edges(store, "BASEADA_EM", src=primeiro.id)
+
+    service.recompute_records(abordagem, problema)  # idempotente
+    assert len(_records(store, abordagem)) == 2 and len(_edges(store, "REGISTRA", dst=abordagem)) == 2
+
+
+def test_atalho_funcionou_para_vem_do_registro_e_e_contestado_quando_a_regra_deixa_de_valer(world):
+    """Duas réplicas acima do alvo mantêm FUNCIONOU_PARA com registro_id; uma delas deixar de valer contesta."""
+    store, graph, service = world
+    problema = store.get_node(graph.problema)
+    hip, abordagem = graph.hipotese(), graph.abordagem()
+    graph.tentativa(hip, abordagem, valor=0.80, seed=1)
+    _, segunda = graph.tentativa(hip, abordagem, valor=0.82, seed=2)
+
+    (registro_id,) = service.recompute_records(abordagem, problema)
+
     atalho = _edges(store, "FUNCIONOU_PARA", src=abordagem, dst=graph.problema)
-    assert len(atalho) == 1
-    assert atalho[0].properties["descoberta_id"] == descoberta
-    assert atalho[0].properties["melhor_valor"] == pytest.approx(0.80)
-    assert atalho[0].properties["n_exp"] == 5
+    assert len(atalho) == 1 and atalho[0].properties["registro_id"] == registro_id
+    assert atalho[0].properties["melhor_valor"] == pytest.approx(0.82) and atalho[0].properties["n_exp"] == 2
     assert atalho[0].properties["status"] == "confirmada"
+    assert not _edges(store, "FALHOU_PARA", src=abordagem)
 
-    # Duas evidências negativas independentes (nós diferentes) levam o veredito para a faixa insuficiente.
-    for i, no in enumerate(("B", "C")):
-        graph.tentativa(hip, abordagem, valor=0.70, no=no, seed=10 + i, datasets=[f"d{i}"])
-    result = service.recompute_discovery(descoberta)
+    store.update_node(segunda, {"status_validacao": "nao_validado"}, actor=ORQ)
+    service.recompute_records(abordagem, problema)
 
-    assert abs(result.veredito) < 0.1
-    atalho = _edges(store, "FUNCIONOU_PARA", src=abordagem, dst=graph.problema)
-    assert len(atalho) == 1
-    assert atalho[0].properties["status"] == "contestada"
+    assert _edges(store, "FUNCIONOU_PARA", src=abordagem, dst=graph.problema)[0].properties["status"] == "contestada"
 
 
-def test_descoberta_condicional_so_conta_as_tentativas_do_dataset(world):
-    """Scenario: Descoberta condicional — filtro_condicoes dataset d1 dá +0,28 e dataset d2 dá -0,08 (ADR 015)."""
+def test_atalho_falhou_para_exige_duas_replicas_abaixo_do_alvo_e_nenhuma_acima(world):
+    store, graph, service = world
+    problema = store.get_node(graph.problema)
+    hip, abordagem = graph.hipotese(), graph.abordagem()
+    graph.tentativa(hip, abordagem, valor=0.60, seed=1)
+    service.recompute_records(abordagem, problema)
+    assert not _edges(store, "FALHOU_PARA", src=abordagem)
+
+    graph.tentativa(hip, abordagem, valor=0.62, seed=2)
+    service.recompute_records(abordagem, problema)
+    falhou = _edges(store, "FALHOU_PARA", src=abordagem, dst=graph.problema)
+    assert len(falhou) == 1 and falhou[0].properties["n_exp"] == 2 and "registro_id" in falhou[0].properties
+
+    graph.tentativa(hip, abordagem, valor=0.90, seed=3)  # uma réplica acima do alvo reabre a abordagem
+    service.recompute_records(abordagem, problema)
+    assert _edges(store, "FALHOU_PARA", src=abordagem, dst=graph.problema)[0].properties["status"] == "contestada"
+
+
+def test_escopo_condicional_so_conta_as_tentativas_do_dataset(world):
+    """``filtro_condicoes`` restringe as tentativas do escopo: ds1 atinge o alvo, ds2 fica abaixo."""
     store, graph, service = world
     hip, abordagem = graph.hipotese(), graph.abordagem()
-    graph.adr_e1_e6(hip, abordagem)
-    d1 = _descoberta(store, graph, "condicional", sobre=[hip], filtro={"dataset_ids": ["ds1"]}, condicoes="ds1")
-    d2 = _descoberta(store, graph, "condicional", sobre=[hip], filtro={"dataset_ids": ["ds2"]}, condicoes="ds2")
+    graph.tentativa(hip, abordagem, valor=0.80, seed=1, datasets=["ds1"])
+    graph.tentativa(hip, abordagem, valor=0.82, seed=2, datasets=["ds1"])
+    graph.tentativa(hip, abordagem, valor=0.60, seed=1, datasets=["ds2"])
+    graph.tentativa(hip, abordagem, valor=0.62, seed=2, datasets=["ds2"])
+    sobre = [store.get_node(hip)]
 
-    r1 = service.recompute_discovery(d1)
-    r2 = service.recompute_discovery(d2)
+    ds1 = service.scope_facts(sobre, {"dataset_ids": ["ds1"]})[0]
+    ds2 = service.scope_facts(sobre, {"dataset_ids": ["ds2"]})[0]
 
-    assert r1.veredito == pytest.approx(0.28, abs=0.005)
-    assert r2.veredito == pytest.approx(-0.08, abs=0.005)
-    assert store.get_node(d1).properties["veredito"] == pytest.approx(0.28, abs=0.005)
-    assert store.get_node(d2).properties["confianca"] == pytest.approx(0.08, abs=0.005)
+    assert (ds1.n_atingiu_alvo, ds1.n_abaixo_alvo) == (2, 0)
+    assert (ds2.n_atingiu_alvo, ds2.n_abaixo_alvo) == (0, 2)
 
 
 def _two_projects(store):
@@ -221,49 +260,48 @@ def test_promocao_com_tres_positivos_em_dois_projetos_promove_e_e_idempotente(wo
     assert len(store.find_nodes("Abordagem", {"tipo": "configuracao"})) == 1
 
 
-def test_fusao_inclui_as_tentativas_da_fundida_no_veredito_da_canonica(world):
-    """Scenario: Fusão — o veredito da canônica passa a incluir as tentativas da fundida (e nada é apagado)."""
+def test_fusao_inclui_as_tentativas_da_fundida_nos_registros_da_canonica(world):
+    """Fusão: o registro da canônica passa a incluir as tentativas da fundida (e nada é apagado)."""
     store, graph, service = world
+    problema = store.get_node(graph.problema)
     hip = graph.hipotese()
     canonica = graph.abordagem("ResNet-18")
     duplicada = graph.abordagem("resnet18")
     graph.tentativa(hip, canonica, valor=0.80, no="A")
-    graph.tentativa(hip, duplicada, valor=0.80, no="B")
-    graph.tentativa(hip, duplicada, valor=0.80, no="C", seed=2)
-    descoberta = _descoberta(store, graph, "funciona", sobre=[canonica, graph.problema])
-    antes = service.recompute_discovery(descoberta)
-    assert antes.n_tentativas == 1
+    graph.tentativa(hip, duplicada, valor=0.80, no="B", seed=2)
+    graph.tentativa(hip, duplicada, valor=0.80, no="C", seed=3)
+    (antes,) = service.recompute_records(canonica, problema)
+    assert store.get_node(antes).properties["n_tentativas_validas"] == 1
 
     store.update_node(duplicada, {"status": "fundida"}, actor=ORQ)
     store.create_edge(duplicada, "FUNDIDA_EM", canonica, {}, actor=ORQ)
-    service.recompute_approach(canonica)
+    assert service.recompute_approach(canonica) == 1
 
-    depois = service.recompute_discovery(descoberta)
-    assert depois.n_tentativas == 3
+    (depois,) = _records(store, canonica)
+    assert depois.properties["n_tentativas_validas"] == 3
     assert store.get_node(duplicada) is not None and store.get_node(canonica) is not None
 
 
-def test_sem_criterio_o_veredito_e_indisponivel_com_erro_acionavel(world):
-    """Fail-fast: hipótese de projeto sem Problema confirmado não tem veredito inventado."""
+def test_sem_criterio_a_contagem_e_indisponivel_com_erro_acionavel(world):
+    """Fail-fast: hipótese de projeto sem Problema confirmado não tem contagem inventada."""
     store = InMemoryGraphStore()
     graph = CuratorGraph(store, "11111111-1111-4111-8111-111111111111")
     graph.projeto = store.create_node("Projeto", graph.base(titulo="P", objetivo="O", status="ativo"), actor=ORQ)
     hip = graph.hipotese(com_problema=False)
 
     with pytest.raises(KnowledgeServiceError):
-        KnowledgeService(store, VerdictParams(modelo="adr015")).recompute_hypothesis(hip)
+        KnowledgeService(store).recompute_hypothesis(hip)
 
 
-def test_apos_subtarefa_recalcula_hipotese_descoberta_e_promocao(world):
-    """Tarefa 2.5 — ``after_subtask`` recalcula as hipóteses testadas e as descobertas ligadas."""
+def test_apos_subtarefa_recalcula_hipotese_e_registros(world):
+    """``after_subtask`` recalcula as hipóteses testadas pelo experimento e os registros da abordagem aplicada."""
     store, graph, service = world
     hip, abordagem = graph.hipotese(), graph.abordagem()
     exp, _ = graph.tentativa(hip, abordagem, valor=0.80)
-    descoberta = _descoberta(store, graph, "funciona", sobre=[abordagem, graph.problema])
     subtarefa = store.get_node(exp).properties["subtarefa_id"]
 
     report = service.after_subtask("proj1", subtarefa)
 
-    assert report.hipoteses == 1 and report.descobertas == 1
+    assert report.hipoteses == 1 and report.registros == 1
     assert store.get_node(hip).properties["n_tentativas"] == 1
-    assert store.get_node(descoberta).properties["veredito"] is not None
+    assert len(_records(store, abordagem)) == 1

@@ -43,22 +43,23 @@ _INSTRUCTION_TEMPLATE = montar_prompt(
         "Chamadas de ferramenta que criam, reforçam e atualizam nós e relações do grafo, e um resumo final curto.\n"
         "Números e referências: cite valores por referência em `enunciado`, `condicoes` e `justificativa`, nunca por "
         "número digitado: `{{res:<exec_id>/<métrica>}}` (valor medido), `{{calc:<expressão sobre res:/src:>}}` "
-        "(cálculo) e `{{src:<insumo_ou_url>#<trecho literal>}}` (fonte citada). Não escreva veredito nem confiança "
-        "no texto: são propriedades calculadas."
+        "(cálculo) e `{{src:<insumo_ou_url>#<trecho literal>}}` (fonte citada). Não escreva contagens de réplicas nem "
+        "valores de registro no texto: são propriedades calculadas."
     ),
     ferramentas=(
-        "Leitura: `similar`, `find_nodes`, `neighbors`, `get_node`, `related_experience`, `verdict_breakdown`, "
+        "Leitura: `similar`, `find_nodes`, `neighbors`, `get_node`, `related_experience`, `result_records`, "
         "`buscar_dominio` e `read_query`, a única consulta livre, somente leitura e limitada. Escrita: as "
-        "ferramentas de criação, `reinforce_discovery`, `register_open_path`, `link_contradiction` e "
+        "ferramentas de criação, `qualify_record`, `reinforce_discovery`, `register_open_path`, `link_contradiction` e "
         "`resolve_flag`. `ler_regimento` devolve uma seção do regimento que não veio no seu recorte. Seu orçamento "
         "por execução é limitado (chamadas, tokens, escritas); o que não couber fica para a próxima execução."
     ),
     avaliado=(
         "As ferramentas de criação repetem a revisão de duplicatas e recusam duplicatas: não tente contorná-las. As "
         "de escrita recusam referências malformadas ou que não resolvem (corrija-as); um número sem referência é "
-        "aceito, mas volta um aviso e será exibido como [não verificado]. O veredito é calculado sem LLM "
-        "(`verdict_breakdown`): você interpreta, não calcula. Descoberta \"funciona\" ou \"nao_funciona\" só existe "
-        "com veredito calculado compatível; na faixa insuficiente use lição de caminho, condicional ou nada. Se as "
+        "aceito, mas volta um aviso e será exibido como [não verificado]. Os registros de resultado são "
+        "calculados sem LLM (`result_records`): você interpreta e qualifica (`qualify_record`: reparo, restrição ou "
+        "retido, com o limite de aplicabilidade), não calcula. Descoberta \"funciona\" ou \"nao_funciona\" só existe "
+        "com réplicas independentes suficientes no registro; sem elas use lição de caminho, condicional ou nada. Se as "
         "evidências se dividem por condição (por dataset, por exemplo), prefira descobertas condicionais com "
         "`filtro_condicoes`."
     ),
@@ -148,7 +149,7 @@ _EDIT_INSTRUCTION_TEMPLATE = montar_prompt(
         "anterior, para ligar um nó novo."
     ),
     ferramentas=(
-        "Leitura: `get_node`, `neighbors`, `find_nodes`, `similar`, `related_experience`, `verdict_breakdown` e "
+        "Leitura: `get_node`, `neighbors`, `find_nodes`, `similar`, `related_experience`, `result_records` e "
         "`read_query`. Proposta: `propose_changes`. Não existe ferramenta de escrita."
     ),
     avaliado=(
@@ -159,8 +160,8 @@ _EDIT_INSTRUCTION_TEMPLATE = montar_prompt(
         "1. Nunca escreva Cypher, SQL ou código. Não peça confirmação: a CLI pede. Não afirme que algo foi aplicado.\n"
         "2. Decisões reservadas ao pesquisador por comando próprio não são propostas aqui: confirmar o Problema ou o "
         "Projeto (`geminiclaw project`) e aprovar ou rejeitar termos do vocabulário (`geminiclaw vocab`). Fatos "
-        "estruturais (Sessao, Insumo, Experimento, Resultado), campos calculados (veredito, suporte, certeza, "
-        "n_tentativas, n_evidencias) e relações derivadas (SUSTENTA, REFUTA, FUNCIONOU_PARA, FALHOU_PARA) não são "
+        "estruturais (Sessao, Insumo, Experimento, Resultado), campos calculados (contagens de réplicas, "
+        "registros de resultado, n_evidencias) e relações derivadas (SUSTENTA, REFUTA, FUNCIONOU_PARA, FALHOU_PARA) não são "
         "editáveis. Se o pedido cair nisso, chame `propose_changes` com ops=[] e explique na `explicacao` o que o "
         "pesquisador deve fazer.\n"
         "3. Nada é apagado. Pedidos de remoção (\"apague\", \"remova\", \"exclua\") viram mudança de status, "
@@ -174,7 +175,7 @@ _EDIT_INSTRUCTION_TEMPLATE = montar_prompt(
     ),
 )
 EDIT_TOOL_NAMES = (
-    "get_node", "neighbors", "find_nodes", "similar", "related_experience", "verdict_breakdown", "read_query",
+    "get_node", "neighbors", "find_nodes", "similar", "related_experience", "result_records", "read_query",
 )
 EDIT_PROPOSE_TOOL = "propose_changes"
 

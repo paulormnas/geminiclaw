@@ -44,7 +44,7 @@ DADOS_PERMITIDOS: dict[str, frozenset[str]] = {
     "subtarefa_concluida": frozenset({"subtarefa", "metrica", "valor", "validada"}),
     "subtarefa_reprovada": frozenset({"subtarefa", "tentativa", "esgotada"}),
     "hipotese_criada": frozenset({"hipotese"}),
-    "hipotese_concluida": frozenset({"hipotese", "estado", "veredito"}),
+    "hipotese_concluida": frozenset({"hipotese", "estado", "n_atingiu_alvo", "n_abaixo_alvo"}),
     "objetivo_atingido": frozenset({"metrica", "valor", "alvo", "politica"}),
     "decisao_pendente": frozenset({"decisao", "pedido_id", "referencia"}),
     "comando_recebido": frozenset({"comando", "subtarefa", "aceito"}),
@@ -141,8 +141,11 @@ def monta_resumo(tipo: str, campos: dict[str, Any]) -> str:
     if tipo == "hipotese_criada":
         return f"{_text(c.get('hipotese', '?'))} criada"
     if tipo == "hipotese_concluida":
-        veredito = f" (veredito {_num(c['veredito'])})" if c.get("veredito") is not None else ""
-        return f"{_text(c.get('hipotese', '?'))} {_text(c.get('estado', 'concluída'))}{veredito}"
+        contagem = (
+            f" ({_num(c['n_atingiu_alvo'])} acima e {_num(c['n_abaixo_alvo'])} abaixo do alvo)"
+            if c.get("n_atingiu_alvo") is not None and c.get("n_abaixo_alvo") is not None else ""
+        )
+        return f"{_text(c.get('hipotese', '?'))} {_text(c.get('estado', 'concluída'))}{contagem}"
     if tipo == "objetivo_atingido":
         corpo = "objetivo atingido"
         if c.get("metrica") and c.get("valor") is not None:
@@ -368,7 +371,7 @@ class TelemetryTap:
         elif event_type == "hipotese_transicao" and payload.get("status_novo") in ("validada", "refutada"):
             emit_event(session_id, "hipotese_concluida", {
                 "hipotese": payload.get("hipotese_id"), "estado": payload.get("status_novo"),
-                "veredito": payload.get("veredito_novo"),
+                "n_atingiu_alvo": payload.get("n_atingiu_alvo"), "n_abaixo_alvo": payload.get("n_abaixo_alvo"),
             })
         elif event_type == "objetivo_atingido":
             emit_event(session_id, "objetivo_atingido", {

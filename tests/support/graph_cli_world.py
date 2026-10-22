@@ -68,7 +68,7 @@ class World:
         abordagem = graph.abordagem("árvores de decisão")
         graph.tentativa(hip, abordagem, valor=0.80)
         graph.tentativa(hip, abordagem, valor=0.82, no="B", sessao="s2")
-        store.update_node(hip, {"veredito": 0.36, "suporte": 0.8, "certeza": 0.4, "n_tentativas": 2}, actor=ORQ)
+        store.update_node(hip, {"n_tentativas": 2, "n_atingiu_alvo": 1, "n_abaixo_alvo": 1}, actor=ORQ)
         ids["hipotese"], ids["abordagem"] = hip, abordagem
         ids["descoberta"] = store.create_node(
             "Descoberta",

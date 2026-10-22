@@ -6,7 +6,7 @@ Tudo aqui é **determinístico** (sem LLM, exceto o ``custo_estimado`` que o Res
 - ``HypothesisCycle.select``: governança por ``SessionMode`` (``assisted`` exige aprovação do pesquisador para
   hipóteses de agentes; ``semi``/``auto`` executam todas as não bloqueadas, por prioridade);
 - prioridade ``0,35·relevância + 0,30·apoio_prévio + 0,20·novidade + 0,15·(1 − custo)`` (pesos configuráveis);
-- ``sync_statuses``: ``validada``/``refutada`` **só** a partir do veredito calculado (nunca por julgamento de LLM);
+- ``sync_statuses``: ``validada``/``refutada`` **só** pela regra de réplicas (ADR 026 §3; nunca por julgamento de LLM);
 - ``evaluate_decisions``: ``Decisao.resultado_posterior`` preenchido deterministicamente;
 
 A aprovação do ``assisted`` é uma ação do **pesquisador no terminal**, registrada no gate persistente: a resposta de
@@ -35,6 +35,7 @@ from src.knowledge.hypotheses import (
 )
 from src.knowledge.projects import get_active_problem
 from src.knowledge.provenance import Actor
+from src.knowledge.result_records import hypothesis_state
 from src.knowledge.schema import MOTIVO_ABANDONO_MAX_CHARS, ORIGEM_SISTEMA
 from src.knowledge.service import KnowledgeService
 from src.knowledge.validation import REVERT_ON_REOPEN_ROLE
@@ -50,7 +51,6 @@ ORQUESTRADOR_REABERTURA = Actor(kind="orquestrador", role=REVERT_ON_REOPEN_ROLE)
 
 CUSTO_VALUES = {"baixo": 0.0, "medio": 0.5, "alto": 1.0}
 NEUTRAL = 0.5
-STRONG_FAILURE_VERDICT = -0.5
 STRONG_FAILURE_SIMILARITY = 0.8
 SESSION_MODES = ("assisted", "semi", "auto")
 MAX_APPROVAL_BATCH = 20
@@ -122,8 +122,16 @@ class Transition:
     hypothesis_id: str
     status_anterior: str
     status_novo: str
-    veredito_novo: float
-    veredito_anterior: float | None
+    regra: str
+    n_atingiu_alvo: int
+    n_abaixo_alvo: int
+
+
+def _count(value: Any) -> int | None:
+    """Contagem inteira não negativa de uma propriedade, ou ``None`` quando ausente ou inválida."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        return None
+    return int(value)
 
 
 def _clamp01(value: float) -> float:
@@ -156,7 +164,7 @@ class HypothesisCycle:
             project_id: Projeto da sessão.
             session_id: Sessão mestra.
             index: ``SemanticIndex`` (relevância/novidade/apoio prévio); sem ele, os termos semânticos ficam neutros.
-            service: ``KnowledgeService`` (veredito); padrão: um novo sobre ``store``.
+            service: ``KnowledgeService`` (registros de resultado); padrão: um novo sobre ``store``.
             weights: Pesos da prioridade (padrão: ``HYPOTHESIS_PRIORITY_WEIGHTS``).
         """
         self._store = store
@@ -212,16 +220,17 @@ class HypothesisCycle:
         return 0.0 if same else 1.0
 
     def _prior_support(self, node: Node, problem: Node | None) -> float:
-        """``max(0, veredito)`` da melhor descoberta ``FUNCIONOU_PARA`` da abordagem em problemas similares.
+        """Apoio prévio da abordagem da hipótese em problemas similares (atalhos derivados dos registros).
 
-        0,5 quando não há experiência; 0 quando há ``FALHOU_PARA`` forte (veredito <= -0,5) em problema com
-        similaridade >= 0,8. Só enxerga problemas do projeto ou ``compartilhavel``.
+        1,0 quando há ``FUNCIONOU_PARA`` ativo em problema similar; 0,0 quando há ``FALHOU_PARA`` ativo em problema
+        com similaridade >= 0,8; 0,5 quando não há experiência. Só enxerga problemas do projeto ou
+        ``compartilhavel``.
         """
         approaches = [n for n in self._neighbors_out(node.id, "PROPOE") if n.label == "Abordagem"]
         if not approaches or problem is None:
             return NEUTRAL
         similar = self._similar_problems(problem)
-        best: float | None = None
+        worked = False
         for approach in approaches:
             canonical = self._service.canonical_approach(approach.id)
             for rel in ("FUNCIONOU_PARA", "FALHOU_PARA"):
@@ -234,14 +243,11 @@ class HypothesisCycle:
                     sim = similar.get(edge.dst_id)
                     if sim is None:
                         continue
-                    verdict = self._discovery_verdict(edge.properties.get("descoberta_id"))
-                    if verdict is None:
-                        continue
-                    if rel == "FALHOU_PARA" and verdict <= STRONG_FAILURE_VERDICT and sim >= STRONG_FAILURE_SIMILARITY:
+                    if rel == "FALHOU_PARA" and sim >= STRONG_FAILURE_SIMILARITY:
                         return 0.0
                     if rel == "FUNCIONOU_PARA":
-                        best = max(best if best is not None else 0.0, max(0.0, verdict))
-        return NEUTRAL if best is None else _clamp01(best)
+                        worked = True
+        return 1.0 if worked else NEUTRAL
 
     def _neighbors_out(self, node_id: str, rel: str) -> list[Node]:
         sub = self._store.neighbors(node_id, [rel], direction="out", depth=1)
@@ -261,13 +267,6 @@ class HypothesisCycle:
         except Exception as exc:  # noqa: BLE001
             logger.debug("Problemas similares indisponíveis", extra={"extra": {"erro": type(exc).__name__}})
         return out
-
-    def _discovery_verdict(self, discovery_id: Any) -> float | None:
-        if not isinstance(discovery_id, str):
-            return None
-        node = self._store.get_node(discovery_id)
-        value = node.properties.get("veredito") if node is not None else None
-        return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
     def priority(self, node: Node, custo: str = "medio") -> float:
         """Prioridade da hipótese (``0..1``) pela fórmula do design §5.
@@ -424,21 +423,21 @@ class HypothesisCycle:
     # ------------------------------------------------------------------ status e decisões
 
     def sync_statuses(self, hypothesis_ids: list[str]) -> dict[str, str]:
-        """Transições de status nos dois sentidos a partir do **veredito calculado** (design §5.3 da mudança).
+        """Transições de status nos dois sentidos pela **regra de réplicas** (ADR 026 §3).
 
-        Com ``floor = DECISION_EVAL_MIN_VERDICT``: ``proposta``/``em_teste``/``inconclusiva`` com veredito ``>= floor``
-        viram ``validada`` e com ``<= -floor``, ``refutada``; ``validada`` com ``<= -floor`` vira ``refutada``;
-        ``refutada`` com ``>= floor``, ``validada``; uma concluída com veredito entre ``-floor`` e ``floor`` volta a
-        ``em_teste``. ``proposta`` só transita com tentativas. Nunca por julgamento de LLM, nunca altera hipótese
-        ``abandonada`` e só deve ser chamada ao fim do ciclo. Cada transição grava uma nota de auditoria com os
-        status e vereditos anterior e novo (``self.transitions``) e revê os efeitos (``_review_effects``).
+        Com ``n_atingiu_alvo`` e ``n_abaixo_alvo`` (tentativas válidas e independentes) gravados pelo orquestrador:
+        ``validada`` quando ``n_atingiu_alvo >= HYPOTHESIS_MIN_REPLICAS`` e ``refutada`` quando
+        ``n_abaixo_alvo >= HYPOTHESIS_MIN_REFUTATIONS`` e nenhuma atinge o alvo. Uma concluída que deixa de cumprir a
+        própria condição muda de lado, se a outra vale, ou volta a ``em_teste``. ``proposta`` só transita com
+        tentativas. Nunca por julgamento de LLM, nunca altera hipótese ``abandonada`` e só deve ser chamada ao fim do
+        ciclo. Cada transição grava uma nota de auditoria (``self.transitions``) e revê os efeitos
+        (``_review_effects``).
 
         Returns:
             ``id`` -> novo status, só das que mudaram.
         """
         changed: dict[str, str] = {}
         self.transitions = []
-        floor = config.DECISION_EVAL_MIN_VERDICT
         for hid in dict.fromkeys(hypothesis_ids):
             node = self.hypothesis(hid)
             if node is None:
@@ -446,17 +445,14 @@ class HypothesisCycle:
             status = node.properties.get("status")
             if status not in (*OPEN_STATUSES, *CONCLUDED_STATUSES):
                 continue
-            verdict = node.properties.get("veredito")
-            if not isinstance(verdict, (int, float)) or isinstance(verdict, bool):
+            n_at, n_ab = _count(node.properties.get("n_atingiu_alvo")), _count(node.properties.get("n_abaixo_alvo"))
+            if n_at is None or n_ab is None:
                 continue
-            tries = node.properties.get("n_tentativas")
-            no_tries = not isinstance(tries, (int, float)) or isinstance(tries, bool) or tries <= 0
-            if status == STATUS_PROPOSTA and no_tries:
+            if status == STATUS_PROPOSTA and (_count(node.properties.get("n_tentativas")) or 0) <= 0:
                 continue
-            new = self._next_status(str(status), float(verdict), floor)
+            new, rule = self._next_status(str(status), n_at, n_ab)
             if new is None:
                 continue
-            previous = self._previous_verdict(node.id)
             self._store.update_node(node.id, {"status": new}, actor=ORQUESTRADOR)
             self._store.record_audit_note(
                 node.id,
@@ -464,34 +460,35 @@ class HypothesisCycle:
                 {
                     "status_anterior": status,
                     "status_novo": new,
-                    "veredito_novo": round(float(verdict), 6),
-                    "veredito_anterior": previous,
+                    "regra": rule,
+                    "n_atingiu_alvo": n_at,
+                    "n_abaixo_alvo": n_ab,
                 },
             )
             changed[node.id] = new
-            self.transitions.append(Transition(node.id, str(status), new, round(float(verdict), 6), previous))
-            self._review_effects(node, str(status), new, float(verdict))
+            self.transitions.append(Transition(node.id, str(status), new, rule, n_at, n_ab))
+            self._review_effects(node, str(status), new, n_at)
         return changed
 
     @staticmethod
-    def _next_status(status: str, verdict: float, floor: float) -> str | None:
+    def _next_status(status: str, n_atingiu: int, n_abaixo: int) -> tuple[str | None, str]:
+        """``(novo status, regra)`` pela contagem; ``(None, "")`` quando o status não muda."""
+        target = hypothesis_state(
+            n_atingiu, n_abaixo,
+            min_replicas=config.HYPOTHESIS_MIN_REPLICAS, min_refutations=config.HYPOTHESIS_MIN_REFUTATIONS,
+        )
+        rules = {STATUS_VALIDADA: "replicas_atingiram_alvo", STATUS_REFUTADA: "replicas_abaixo_alvo"}
         if status in OPEN_STATUSES:
-            return STATUS_VALIDADA if verdict >= floor else (STATUS_REFUTADA if verdict <= -floor else None)
-        if status == STATUS_VALIDADA:
-            return STATUS_REFUTADA if verdict <= -floor else (STATUS_EM_TESTE if verdict < floor else None)
-        if status == STATUS_REFUTADA:
-            return STATUS_VALIDADA if verdict >= floor else (STATUS_EM_TESTE if verdict > -floor else None)
-        return None
+            return (target, rules[target]) if target is not None else (None, "")
+        if status in (STATUS_VALIDADA, STATUS_REFUTADA):
+            if target == status:
+                return None, ""
+            if target is not None:
+                return target, rules[target]
+            return STATUS_EM_TESTE, "reabertura"
+        return None, ""
 
-    def _previous_verdict(self, hypothesis_id: str) -> float | None:
-        """``veredito_novo`` da transição anterior da hipótese (nota de auditoria), ou ``None``."""
-        for entry in self._store.audit_history(hypothesis_id, limit=_MAX_SCAN):
-            value = (entry.get("changes") or {}).get("veredito_novo")
-            if isinstance(value, (int, float)) and not isinstance(value, bool):
-                return float(value)
-        return None
-
-    def _review_effects(self, node: Node, old: str, new: str, verdict: float) -> None:
+    def _review_effects(self, node: Node, old: str, new: str, n_atingiu: int) -> None:
         """Revisão dos efeitos de uma transição (ADR 021 §4.4): ``Oportunidade``, decisões e atalhos."""
         concluded = (STATUS_VALIDADA, STATUS_REFUTADA)
         if new in concluded and old not in concluded:
@@ -501,10 +498,9 @@ class HypothesisCycle:
             return
         reopened = new == STATUS_EM_TESTE
         if reopened:
-            self._reopen_opportunities(node.id, verdict)
-        result = None if reopened else ("acertada" if verdict > 0 else "nao_acertada")
-        self._revalidate_decisions(node.id, result, verdict)
-        self._contest_shortcuts(node)
+            self._reopen_opportunities(node.id, n_atingiu)
+        result = None if reopened else ("acertada" if new == STATUS_VALIDADA else "nao_acertada")
+        self._revalidate_decisions(node.id, result, n_atingiu)
 
     def _conclude_opportunities(self, hypothesis_id: str) -> None:
         sub = self._store.neighbors(hypothesis_id, ["GEROU"], direction="in", depth=1)
@@ -512,7 +508,7 @@ class HypothesisCycle:
             if edge.dst_id == hypothesis_id and edge.rel_type == "GEROU":
                 opportunities.advance_opportunity(self._store, edge.src_id, opportunities.STATUS_CONCLUIDA)
 
-    def _reopen_opportunities(self, hypothesis_id: str, verdict: float) -> None:
+    def _reopen_opportunities(self, hypothesis_id: str, n_atingiu: int) -> None:
         """``Oportunidade`` ``concluida`` ligada por ``GEROU`` volta a ``em_investigacao`` (só por este caminho)."""
         sub = self._store.neighbors(hypothesis_id, ["GEROU"], direction="in", depth=1)
         for edge in sub.edges:
@@ -527,10 +523,10 @@ class HypothesisCycle:
             self._store.record_audit_note(
                 opportunity.id,
                 ORQUESTRADOR,
-                {"reaberta_pela_hipotese": hypothesis_id, "veredito": round(verdict, 6)},
+                {"reaberta_pela_hipotese": hypothesis_id, "n_atingiu_alvo": n_atingiu},
             )
 
-    def _revalidate_decisions(self, hypothesis_id: str, result: str | None, verdict: float) -> None:
+    def _revalidate_decisions(self, hypothesis_id: str, result: str | None, n_atingiu: int) -> None:
         """Decisões com ``ESCOLHEU->`` a hipótese e ``resultado_posterior``: limpa (reabertura) ou inverte."""
         sub = self._store.neighbors(hypothesis_id, ["ESCOLHEU"], direction="in", depth=1)
         for edge in sub.edges:
@@ -545,54 +541,38 @@ class HypothesisCycle:
             self._store.record_audit_note(
                 decision.id,
                 ORQUESTRADOR,
-                {"reavaliacao": result or "reaberta", "hipotese_id": hypothesis_id, "veredito": round(verdict, 6)},
+                {"reavaliacao": result or "reaberta", "hipotese_id": hypothesis_id, "n_atingiu_alvo": n_atingiu},
             )
 
-    def _contest_shortcuts(self, node: Node) -> None:
-        """``FUNCIONOU_PARA``/``FALHOU_PARA`` de descobertas ``SOBRE->`` a hipótese passam a ``contestada``."""
-        problem = self._service.problem_for(node)
-        if problem is None:
-            return
-        discoveries = {
-            e.src_id
-            for e in self._store.neighbors(node.id, ["SOBRE"], direction="in", depth=1).edges
-            if e.dst_id == node.id and e.rel_type == "SOBRE"
-        }
-        if not discoveries:
-            return
-        sub = self._store.neighbors(problem.id, ["FUNCIONOU_PARA", "FALHOU_PARA"], direction="in", depth=1)
-        for edge in sub.edges:
-            if edge.dst_id != problem.id or edge.properties.get("descoberta_id") not in discoveries:
-                continue
-            if edge.properties.get("status") == "contestada":
-                continue
-            self._store.set_edge_status(edge.src_id, edge.rel_type, edge.dst_id, "contestada", actor=ORQUESTRADOR)
-
     def evaluate_decisions(self) -> dict[str, str]:
-        """Preenche ``Decisao.resultado_posterior`` quando a hipótese escolhida atinge ``|veredito| >= 0,3``.
+        """Preenche ``Decisao.resultado_posterior`` quando a hipótese escolhida cumpre a regra de réplicas.
 
-        ``"acertada"`` com veredito positivo, ``"nao_acertada"`` com negativo; o valor do veredito vai para a
-        trilha de auditoria da decisão. Só decisões ainda sem ``resultado_posterior`` são avaliadas.
+        ``"acertada"`` com a hipótese validada pela contagem, ``"nao_acertada"`` com a refutada; as contagens vão para
+        a trilha de auditoria da decisão. Só decisões ainda sem ``resultado_posterior`` são avaliadas.
 
         Returns:
             ``id da decisão`` -> avaliação.
         """
-        floor = config.DECISION_EVAL_MIN_VERDICT
         evaluated: dict[str, str] = {}
         for decision in self._store.find_nodes("Decisao", {"projeto_id": self._project_id}, limit=_MAX_SCAN):
             if decision.properties.get("resultado_posterior"):
                 continue
             for chosen in self._neighbors_out(decision.id, "ESCOLHEU"):
-                verdict = chosen.properties.get("veredito")
-                if chosen.label != "Hipotese" or not isinstance(verdict, (int, float)) or isinstance(verdict, bool):
+                n_at = _count(chosen.properties.get("n_atingiu_alvo"))
+                n_ab = _count(chosen.properties.get("n_abaixo_alvo"))
+                if chosen.label != "Hipotese" or n_at is None or n_ab is None:
                     continue
-                if abs(verdict) < floor:
+                state = hypothesis_state(
+                    n_at, n_ab,
+                    min_replicas=config.HYPOTHESIS_MIN_REPLICAS, min_refutations=config.HYPOTHESIS_MIN_REFUTATIONS,
+                )
+                if state is None:
                     continue
-                result = "acertada" if verdict > 0 else "nao_acertada"
+                result = "acertada" if state == STATUS_VALIDADA else "nao_acertada"
                 self._store.update_node(decision.id, {"resultado_posterior": result}, actor=ORQUESTRADOR)
                 self._store.record_audit_note(
                     decision.id, ORQUESTRADOR,
-                    {"avaliacao": result, "hipotese_id": chosen.id, "veredito": round(float(verdict), 4)},
+                    {"avaliacao": result, "hipotese_id": chosen.id, "n_atingiu_alvo": n_at, "n_abaixo_alvo": n_ab},
                 )
                 evaluated[decision.id] = result
                 break
@@ -637,9 +617,10 @@ class HypothesisCycle:
                 "origem": node.properties.get("origem"),
                 "enunciado": sanitize_text(node.properties.get("enunciado", ""), 300),
             }
-            verdict = node.properties.get("veredito")
-            if isinstance(verdict, (int, float)) and not isinstance(verdict, bool):
-                item["veredito"] = round(float(verdict), 3)
+            for key in ("n_atingiu_alvo", "n_abaixo_alvo"):
+                count = _count(node.properties.get(key))
+                if count is not None:
+                    item[key] = count
             out.append(item)
             if len(out) >= limit:
                 break

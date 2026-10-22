@@ -1,4 +1,4 @@
-"""Sessão simulada de ``v18.6-hypothesis-closure``: uma hipótese refutada e outra validada, com veredito calculado.
+"""Sessão simulada de ``v18.6-hypothesis-closure``: uma hipótese refutada e outra validada, pela regra de réplicas.
 
 Roda sobre qualquer ``GraphStore`` (em memória nos testes unitários; Apache AGE real no teste de integração). A
 refutada recebe um resultado negativo pela ingestão (``review_outcome = resultado_negativo``) mais duas tentativas
@@ -15,12 +15,11 @@ from src.knowledge.graph_store import GraphStore
 from src.knowledge.hypothesis_cycle import HypothesisCycle
 from src.knowledge.ingestion import SessionContext, SubtaskInput, ingest_session_start, ingest_subtask
 from src.knowledge.service import KnowledgeService
-from src.knowledge.verdict import VerdictParams
 from tests.support.curator_graph import ORQ, PESQUISADOR, CuratorGraph
 
 
 def run_closure_scenario(store: GraphStore, session_root: Path, suffix: str) -> dict[str, Any]:
-    """Monta o projeto, ingere as tentativas, recalcula os vereditos e fecha as hipóteses pelo veredito."""
+    """Monta o projeto, ingere as tentativas, recalcula as contagens e fecha as hipóteses pela regra de réplicas."""
     metric = "accuracy"  # nome conhecido do revisor; o vocabulário de um banco compartilhado pode ter outro nó
     project_id, session_id = f"proj-{suffix}", f"sess-{suffix}"
     graph = CuratorGraph(store, project_id, session_id).setup_project(metrica=metric, delta_min=0.01)
@@ -58,10 +57,10 @@ def run_closure_scenario(store: GraphStore, session_root: Path, suffix: str) -> 
     for n, valor in enumerate((0.97, 0.96, 0.98, 0.99, 0.96, 0.97)):
         graph.tentativa(validated, None, valor=valor, baseline=None, no=f"V{n}", sessao=f"v{n}-{suffix}", seed=n + 1)
 
-    service = KnowledgeService(store, VerdictParams())
-    verdicts = {hid: service.recompute_hypothesis(hid) for hid in (refuted, validated)}
+    service = KnowledgeService(store)
+    facts = {hid: service.recompute_hypothesis(hid) for hid in (refuted, validated)}
     changed = HypothesisCycle(store, project_id=project_id, session_id=session_id).sync_statuses([refuted, validated])
-    return {"refuted": refuted, "validated": validated, "experiment": exp_id, "verdicts": verdicts,
+    return {"refuted": refuted, "validated": validated, "experiment": exp_id, "facts": facts,
             "changed": changed, "graph": graph}
 
 

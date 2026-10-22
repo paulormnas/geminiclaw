@@ -20,6 +20,7 @@ from src.knowledge.curator_flags import (
 )
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.graph_store import Node
+from src.knowledge.result_records import QUALIFICACOES, holds_fails, holds_works
 from src.knowledge.semantic_index import IGNORED_STATUSES, canonical_text
 from src.knowledge.service import KnowledgeServiceError
 from src.logger import get_logger
@@ -63,11 +64,12 @@ class CuratorWrites:
         if bad_evidence is not None:
             return self._refuse(bad_evidence)
         variacao = self._id("variacao_de", variacao_de) if variacao_de else None
-        veredito: dict[str, float] = {}
+        record_ids: list[str] = []
         if tipo in ("funciona", "nao_funciona") or (tipo == "condicional" and filtro):
-            blocked, veredito = self._gate_verdict(tipo, sobre_nodes, filtro)
+            blocked, record_ids = self._gate_records(tipo, sobre_nodes, filtro)
             if blocked is not None:
                 return blocked
+        evidencias = list(dict.fromkeys([*evidencias, *record_ids]))
         props = {
             "tipo": tipo,
             "enunciado": enunciado_c,
@@ -91,7 +93,6 @@ class CuratorWrites:
             "status": "ativa",
             "justificativa_criacao": justificativa_final[: self.limits.max_text_chars * 2],
             "nos_consultados": list(dict.fromkeys(review.consultados))[:100],
-            **veredito,
         }
         if condicoes_c:
             node_props["condicoes"] = condicoes_c
@@ -102,7 +103,6 @@ class CuratorWrites:
         self.touched_discoveries.append(new_id)
         self._wire_discovery(new_id, sobre, evidencias)
         linked = self._link_related(new_id, review, variacao) if review.relacionados else []
-        self._finish_discovery(new_id, tipo)
         self.stats.criados += 1
         self._audit("create_discovery", id=new_id, tipo=tipo, sobre=sobre, evidencias=evidencias, variacao_de=variacao)
         return {
@@ -110,31 +110,48 @@ class CuratorWrites:
             **self._take_warnings(),
         }
 
-    def _gate_verdict(
+    def _gate_records(
         self, tipo: str, sobre_nodes: list[Node], filtro: dict[str, Any] | None
-    ) -> tuple[dict[str, Any] | None, dict[str, float]]:
-        """Impede ``funciona``/``nao_funciona`` sem veredito calculado compatível (ADR 015 §9.5)."""
+    ) -> tuple[dict[str, Any] | None, list[str]]:
+        """Impede ``funciona``/``nao_funciona`` sem registro de resultado que cumpra a regra de réplicas (ADR 026 §4).
+
+        Returns:
+            ``(recusa ou None, ids dos registros do escopo que sustentam a descoberta)``; os registros entram
+            como ``BASEADA_EM`` da descoberta.
+        """
         try:
-            scope = self.service.verdict_for_scope(sobre_nodes, filtro)
+            scope = self.service.scope_facts(sobre_nodes, filtro)
         except KnowledgeServiceError as exc:
-            return self._refuse(f"veredito indisponível: {exc}"), {}
+            return self._refuse(f"registro de resultado indisponível: {exc}"), []
         if scope is None:
             if tipo == "condicional":
-                return None, {}
+                return None, []
             return (
                 self._refuse(
-                    "funciona/nao_funciona exigem sobre_ids com uma Hipotese, ou Abordagem + Problema, para o veredito "
-                    "ser calculado; sem isso use licao_de_caminho."
+                    "funciona/nao_funciona exigem sobre_ids com uma Hipotese, ou Abordagem + Problema, para o registro "
+                    "de resultado ser conferido; sem isso use licao_de_caminho."
                 ),
-                {},
+                [],
             )
-        result = scope[0]
-        floor = config.KNOWLEDGE_SHORTCUT_MIN_VERDICT
-        if tipo == "funciona" and result.veredito < floor:
-            return self._refuse(f"veredito {result.veredito:+.2f} insuficiente para 'funciona' (mínimo {floor})."), {}
-        if tipo == "nao_funciona" and result.veredito > -floor:
-            return self._refuse(f"veredito {result.veredito:+.2f} insuficiente para 'nao_funciona'."), {}
-        return None, {"veredito": round(result.veredito, 6), "confianca": round(result.confianca, 6)}
+        facts = scope[0]
+        min_rep, min_ref = config.HYPOTHESIS_MIN_REPLICAS, config.HYPOTHESIS_MIN_REFUTATIONS
+        if tipo == "funciona" and not holds_works(facts, min_replicas=min_rep):
+            return self._refuse(
+                f"{facts.n_atingiu_alvo} réplica(s) independente(s) atingiram o alvo; 'funciona' exige {min_rep}."
+            ), []
+        if tipo == "nao_funciona" and not holds_fails(facts, min_refutations=min_ref):
+            return self._refuse(
+                f"{facts.n_abaixo_alvo} réplica(s) independente(s) abaixo do alvo e {facts.n_atingiu_alvo} acima; "
+                f"'nao_funciona' exige {min_ref} abaixo e nenhuma acima."
+            ), []
+        records = self.service.records_in_scope(sobre_nodes)
+        if tipo == "nao_funciona":
+            chosen = [r for r in records if (r.properties.get("n_abaixo_alvo") or 0) >= 1]
+        else:
+            chosen = [r for r in records if (r.properties.get("n_atingiu_alvo") or 0) >= 1]
+        if not chosen:
+            return self._refuse("nenhum registro de resultado do escopo sustenta a descoberta."), []
+        return None, [r.id for r in chosen[:5]]
 
     def _wire_discovery(self, new_id: str, sobre: list[str], evidencias: list[str]) -> None:
         for target in evidencias:
@@ -142,19 +159,10 @@ class CuratorWrites:
         for target in sobre:
             self._edge(new_id, "SOBRE", target)
 
-    def _finish_discovery(self, descoberta_id: str, tipo: str) -> None:
-        """Recálculo determinístico do veredito e dos atalhos; falha de cálculo não desfaz a criação."""
-        if tipo not in ("funciona", "nao_funciona", "condicional"):
-            return
-        try:
-            self.service.recompute_discovery(descoberta_id)
-        except GraphStoreError as exc:
-            logger.info("Recálculo da descoberta indisponível", extra={"extra": {"motivo": type(exc).__name__}})
-
     def reinforce_discovery(
         self, id: str, evidencia_ids: list[str], condicoes_extra: str | None = None  # noqa: A002
     ) -> dict[str, Any]:
-        """Reforça uma ``Descoberta`` ativa: novas evidências (``BASEADA_EM``), condições ampliadas, recálculo."""
+        """Reforça uma ``Descoberta`` ativa: novas evidências (``BASEADA_EM``) e condições ampliadas."""
         node = self._mutable("id", id, ("Descoberta",))
         if node.properties.get("status") != "ativa":
             return self._refuse("só descobertas ativas são reforçadas.")
@@ -177,12 +185,64 @@ class CuratorWrites:
                 return self._refuse("condições acumuladas longas demais; consolide antes de ampliar.")
             changes["condicoes"] = merged
         self.store.update_node(id, changes, actor=self.actor)
-        self._finish_discovery(id, str(node.properties.get("tipo")))
         self.stats.reforcados += 1
         if id not in self.touched_discoveries:
             self.touched_discoveries.append(id)
         self._audit("reinforce_discovery", id=id, novas=fresh)
         return {"ok": True, "id": id, "evidencias_novas": len(fresh), **self._take_warnings()}
+
+    def qualify_record(
+        self,
+        registro_id: str,
+        qualificacao: str,
+        limite_aplicabilidade: str,
+        evidencia_ids: list[str],
+        licao: str | None = None,
+    ) -> dict[str, Any]:
+        """Qualifica um ``RegistroResultado`` do projeto como reparo, restrição ou retido (ADR 026 §4).
+
+        Só ``qualificacao``, ``limite_aplicabilidade`` e ``licao`` mudam; os fatos medidos são do orquestrador (a porta
+        do grafo recusa qualquer outro campo). A qualificação precisa de evidência: ao menos um ``Resultado`` do próprio
+        registro em ``evidencia_ids``. ``reparo`` exige efeito medido (alvo atingido ou ``delta_pai`` positivo) e
+        ``restricao`` exige tentativa abaixo do alvo ou falha atribuída à abordagem.
+        """
+        node = self._mutable("registro_id", registro_id, ("RegistroResultado",))
+        if qualificacao not in QUALIFICACOES or qualificacao == "pendente":
+            return self._refuse("qualificacao inválida; use reparo, restricao ou retido.")
+        limite = self._text("limite_aplicabilidade", limite_aplicabilidade)
+        licao_c = self._text("licao", licao, required=False)
+        evidencias = self._ids("evidencia_ids", evidencia_ids, required=True)
+        linked = {n.id for n in self._neighbors_out(registro_id, "BASEADA_EM")}
+        if not linked & set(evidencias):
+            return self._refuse("evidencia_ids deve citar ao menos um Resultado do próprio registro (BASEADA_EM).")
+        props = node.properties
+        if qualificacao == "reparo":
+            delta = props.get("delta_pai")
+            positive = isinstance(delta, (int, float)) and not isinstance(delta, bool) and delta > 0
+            if not props.get("atingiu_alvo") and not positive:
+                return self._refuse("reparo exige efeito medido: alvo atingido ou delta_pai positivo.")
+        if qualificacao == "restricao" and not (
+            (props.get("n_abaixo_alvo") or 0) >= 1 or self._approach_failed(registro_id)
+        ):
+            return self._refuse("restricao exige tentativa abaixo do alvo ou falha atribuída à abordagem.")
+        self._spend_write()
+        changes: dict[str, Any] = {"qualificacao": qualificacao, "limite_aplicabilidade": limite}
+        if licao_c:
+            changes["licao"] = licao_c
+        self.store.update_node(registro_id, changes, actor=self.actor)
+        self._audit(
+            "qualify_record", id=registro_id, qualificacao=qualificacao,
+            qualificacao_anterior=props.get("qualificacao"), evidencias=evidencias,
+        )
+        return {"ok": True, "id": registro_id, "qualificacao": qualificacao}
+
+    def _approach_failed(self, registro_id: str) -> bool:
+        """A abordagem do registro tem experimento com falha atribuída a ela (``causa_falha = abordagem``)."""
+        for approach in self._neighbors_out(registro_id, "REGISTRA"):
+            sub = self.store.neighbors(approach.id, ["APLICOU"], direction="in", depth=1)
+            if any(n.label == "Experimento" and n.properties.get("causa_falha") == "abordagem" for n in sub.nodes):
+                return True
+        return False
 
     def set_discovery_status(
         self,

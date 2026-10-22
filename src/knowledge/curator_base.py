@@ -63,7 +63,7 @@ class CuratorBase:
             queue: Fila de similaridade (revisão de pares).
             model: Modelo do Curator (proveniência do ator).
             limits: Orçamento e tamanhos (padrão: ``src/config.py``).
-            service: Serviço determinístico de veredito (padrão: ``KnowledgeService(store)``).
+            service: Serviço determinístico de registros de resultado (padrão: ``KnowledgeService(store)``).
         """
         self.store = store
         self.project_id = project_id

@@ -1,4 +1,4 @@
-"""Domínio de conhecimento (grafo de hipóteses, evidências e veredito).
+"""Domínio de conhecimento (grafo de hipóteses, evidências e registros de resultado).
 
 Este pacote é a **única porta de acesso** ao grafo de conhecimento (Apache AGE
 sobre PostgreSQL 16). Nenhum outro módulo deve montar consultas Cypher

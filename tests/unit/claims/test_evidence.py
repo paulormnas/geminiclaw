@@ -59,7 +59,7 @@ def test_pacote_do_relatorio_tem_um_item_por_codigo_citado(tmp_path):
     assert items[1].ref == "src:https://x#10 %" and items[1].origem is ContentOrigin.DOCUMENTO
 
 
-def test_pacote_da_descoberta_usa_baseada_em_e_veredito():
+def test_pacote_da_descoberta_usa_baseada_em_e_a_propria_descoberta():
     graph = InMemoryGraphStore()
     cg = CuratorGraph(graph).setup_project()
     hip, abordagem = cg.hipotese(), cg.abordagem()
@@ -67,7 +67,7 @@ def test_pacote_da_descoberta_usa_baseada_em_e_veredito():
     did = graph.create_node(
         "Descoberta",
         {**cg.base(), "tipo": "funciona", "enunciado": "e", "n_evidencias": 1, "status": "ativa",
-         "justificativa_criacao": "j", "nos_consultados": [], "veredito": 0.5},
+         "justificativa_criacao": "j", "nos_consultados": []},
         actor=Actor(kind="agente", role="curator"),
     )
     graph.create_edge(did, "BASEADA_EM", res, {}, actor=ORQ)

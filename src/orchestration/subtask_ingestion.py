@@ -60,7 +60,7 @@ async def ingest_subtask(
         applied = await asyncio.to_thread(ingestor.subtask, sub)
         _forward_notices(orchestrator, ingestor, master_session_id)
         if applied:
-            # v17-curator-agent: recálculo determinístico do veredito após cada subtarefa ingerida.
+            # v17-curator-agent: recálculo determinístico dos registros de resultado após cada subtarefa ingerida.
             subtarefa_id = sub.subtask_id or f"{master_session_id}:{sub.task_name}"
             await asyncio.to_thread(orchestrator.knowledge_after_subtask, master_session_id, subtarefa_id)
     except Exception as exc:  # noqa: BLE001 - a ingestão nunca derruba a subtarefa

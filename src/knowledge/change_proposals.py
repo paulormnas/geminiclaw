@@ -10,7 +10,8 @@ Garantias deste módulo:
 - **Só o projeto ativo**: escrever em nó de outro projeto (ou compartilhável) é recusado.
 - **Decisões reservadas continuam reservadas**: o ``Problema`` e o ``Projeto`` têm comandos próprios (``project``),
   termos do vocabulário, os do ``vocab``; fatos estruturais (Sessao, Insumo, Experimento, Resultado), campos calculados
-  (veredito...) e relações derivadas nunca são escritos aqui. Decidir sobre ``Oportunidade`` exige, além da
+  (registros de resultado...) e relações derivadas nunca são escritos aqui. Decidir sobre ``Oportunidade`` exige,
+  além da
   confirmação da proposta, a autorização do gate persistente (``aprovar_oportunidade``).
 - **Aplicação atômica no que for reversível**: verificação prévia do estado e, se uma escrita falhar, reversão das
   alterações de status/propriedades já feitas; nós criados não são apagados (e são reportados).
@@ -48,7 +49,7 @@ BLOCKED_LABELS: dict[str, str] = {
 }
 # Calculados deterministicamente ou geridos pelo sistema: nunca escritos à mão.
 DERIVED_FIELDS = frozenset(
-    {"veredito", "suporte", "certeza", "n_tentativas", "n_evidencias", "confianca", "estado_vetorizacao"}
+    {"n_tentativas", "n_atingiu_alvo", "n_abaixo_alvo", "n_evidencias", "estado_vetorizacao"}
 )
 # Preenchidos pelo sistema (proveniência e escopo): o pedido não os define.
 SYSTEM_FIELDS = frozenset(
@@ -372,7 +373,9 @@ class _Planner:
         if system:
             item.errors.append(f"campos de proveniência/escopo não são editáveis: {', '.join(system)}.")
         if node.label == "Descoberta" and changes.get("tipo") in VERDICT_DISCOVERY_TYPES:
-            item.errors.append("descobertas 'funciona'/'nao_funciona' dependem de veredito calculado: não editáveis.")
+            item.errors.append(
+                "descobertas 'funciona'/'nao_funciona' dependem de registro de resultado: não editáveis."
+            )
         if item.errors:
             return
         validation.validate_node_update(node.label, changes)
@@ -415,7 +418,7 @@ class _Planner:
         what = "relações a partir de" if edge else "alterações em"
         if label in BLOCKED_LABELS:
             item.errors.append(f"{what} {label} não são feitas por aqui: {BLOCKED_LABELS[label]}.")
-        if label in validation.FACT_LABELS:
+        if label in validation.FACT_LABELS or label in validation.AGENT_WRITABLE_FIELDS:
             item.errors.append(f"{what} {label} (fato estrutural, ingestão determinística) não são editáveis.")
 
     def _plan_create_node(self, item: PlannedOp) -> None:
@@ -429,7 +432,7 @@ class _Planner:
         if bad:
             item.errors.append(f"campos definidos pelo sistema não podem ser informados: {', '.join(bad)}.")
         if label == "Descoberta" and props.get("tipo") in VERDICT_DISCOVERY_TYPES:
-            item.errors.append("descobertas 'funciona'/'nao_funciona' dependem de veredito calculado: não criáveis.")
+            item.errors.append("descobertas 'funciona'/'nao_funciona' dependem de registro de resultado: não criáveis.")
         if item.errors:
             return
         # Oportunidade nasce documentada; decidir sobre ela é um passo posterior, com autorização do gate.
@@ -461,7 +464,7 @@ class _Planner:
             item.errors.append(f"relação '{_quote(rel, 40)}' desconhecida.")
             return
         if rel in DERIVED_RELATIONS:
-            item.errors.append(f"{rel} é derivada do cálculo de veredito: não é criada à mão.")
+            item.errors.append(f"{rel} é derivada do registro de resultado: não é criada à mão.")
             return
         src = self._endpoint(item, "src", data["src"], write=True)
         dst = self._endpoint(item, "dst", data["dst"], write=False)
@@ -507,7 +510,7 @@ class _Planner:
             return
         if data["rel"] in DERIVED_RELATIONS and data["status"] != "contestada":
             item.errors.append(
-                f"{data['rel']} é derivada do cálculo de veredito: só pode ser contestada, nunca reafirmada."
+                f"{data['rel']} é derivada do registro de resultado: só pode ser contestada, nunca reafirmada."
             )
             return
         if _REF_RE.fullmatch(data["src"]) or _REF_RE.fullmatch(data["dst"]):

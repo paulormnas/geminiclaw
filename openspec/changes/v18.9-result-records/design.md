@@ -19,8 +19,8 @@ Propriedades, todas gravadas pelo orquestrador (`criado_por = "orquestrador"`):
 | `metrica` | Nome canônico da métrica do critério de sucesso do Problema |
 | `qualificador` | `teste` ou `cv` (os registros nunca usam `treino` nem `validacao`) |
 | `melhor_valor` | Melhor valor entre as tentativas válidas, no sentido da métrica |
-| `delta_base` | `melhor_valor −` melhor valor do registro de referência (experimento com `papel = referencia`) do Problema; ausente sem referência |
-| `delta_pai` | `melhor_valor − melhor valor do registro do experimento de origem` (`DERIVADA_DE`); ausente sem origem |
+| `delta_base` | `melhor_valor − baseline`, com `baseline` do `Resultado` do melhor valor ou, sem ele, o melhor valor medido nos experimentos de referência (`Resultado-REFERENCIA_DE->Problema`); ausente sem referência |
+| `delta_pai` | `melhor_valor −` melhor valor dos registros anteriores da mesma abordagem no mesmo problema (configuração mais antiga primeiro); ausente no primeiro registro. O grafo não tem aresta `DERIVADA_DE` entre experimentos (2026-10-22: a origem da variação é a configuração anterior) |
 | `n_tentativas_validas` | Tentativas válidas (§3.1) |
 | `n_replicas_independentes` | Número de pares distintos (`seed`, `dataset_ids`) entre as tentativas válidas |
 | `n_atingiu_alvo` / `n_abaixo_alvo` | Contagens de tentativas válidas independentes acima e abaixo do alvo |
@@ -38,13 +38,13 @@ Arestas: `RegistroResultado-REGISTRA->Abordagem`, `RegistroResultado-SOBRE->Prob
 
 ### 3.1 Tentativa válida
 
-Um experimento com papel `teste` que produziu `Resultado` da métrica do critério com qualificador `teste` ou `cv`, em qualquer `status`:
+Um experimento que produziu `Resultado` da métrica do critério, sem qualificador ou com `teste` ou `cv` (nunca `treino` nem `validacao`), com `status_validacao` diferente de `nao_validado` (o Validator não verificou o número) e em qualquer `status` do experimento. Havendo vários, vale o melhor:
 
 - `sucesso`;
 - `falha` com `assinatura_falha = criterio_nao_atendido`;
 - `divergente_documentado`.
 
-Sem esse `Resultado`, a tentativa não é válida e não muda o estado. Ela continua contando para a memória de falhas.
+Sem esse `Resultado`, a tentativa não é válida e não muda as contagens. Ela continua contando em `n_tentativas` da hipótese (que conta todas as tentativas, inclusive falhas e resultados não verificados) e na memória de falhas.
 
 ### 3.2 Alvo
 
@@ -53,7 +53,7 @@ Sem esse `Resultado`, a tentativa não é válida e não muda o estado. Ela cont
 
 ### 3.3 Transições ao fim do ciclo
 
-Para cada hipótese não abandonada, sobre a união dos registros das abordagens que ela `PROPOE`:
+Para cada hipótese não abandonada, sobre as tentativas dela (`Experimento-TESTA->Hipotese`, as mesmas que alimentam os registros), com `n_atingiu_alvo` e `n_abaixo_alvo` gravados na `Hipotese` por `recompute_hypothesis` (a independência vale sobre o conjunto, não por configuração):
 
 | Condição | Estado |
 |---|---|
@@ -74,23 +74,24 @@ As variáveis usam `_bounded_number`:
 ## 4. Curator
 
 - **`result_records(problema_id, limit)`:** lista os registros com os fatos e a qualificação.
-- **`qualify_record(registro_id, qualificacao, limite_aplicabilidade, licao, evidencia)`:** recusa quando `evidencia` não cita ao menos um `Resultado` do registro. Também recusa `reparo` quando `atingiu_alvo` é falso e `delta_pai` não é positivo, e `restricao` quando não existe tentativa abaixo do alvo nem falha atribuída à abordagem.
-- **`Descoberta`:** continua para `licao_de_caminho`/`caminho_sem_conclusao`. `funciona`/`nao_funciona`/`condicional` passam a exigir `BASEADA_EM` um registro com a condição correspondente da regra.
+- **`qualify_record(registro_id, qualificacao, limite_aplicabilidade, evidencia_ids, licao)`:** recusa quando `evidencia_ids` não cita ao menos um `Resultado` do registro. Também recusa `reparo` quando `atingiu_alvo` é falso e `delta_pai` não é positivo, e `restricao` quando não existe tentativa abaixo do alvo nem falha atribuída à abordagem.
+- **`Descoberta`:** continua para `licao_de_caminho`/`caminho_sem_conclusao`. `funciona`/`nao_funciona` (e `condicional` com filtro) exigem que as tentativas do escopo cumpram a regra e passam a ser `BASEADA_EM` os registros do escopo que as sustentam (ligados pela própria ferramenta, no máximo cinco).
 - **Prompts:** perdem a menção ao veredito.
 
 ## 5. Atalhos
 
-O orquestrador mantém `Abordagem-FUNCIONOU_PARA->Problema` quando algum registro do par tem `n_atingiu_alvo >= HYPOTHESIS_MIN_REPLICAS`, e `FALHOU_PARA` pela regra de refutação. Cada atalho guarda o `registro_id`. Quando a condição deixa de valer, o atalho passa a `contestada`, como hoje.
+O orquestrador mantém `Abordagem-FUNCIONOU_PARA->Problema` quando algum registro do par tem `n_atingiu_alvo >= HYPOTHESIS_MIN_REPLICAS`, e `FALHOU_PARA` quando nenhum registro do par atinge o alvo e algum tem `n_abaixo_alvo >= HYPOTHESIS_MIN_REFUTATIONS` (uma configuração que falha não refuta a abordagem inteira). Cada atalho guarda o `registro_id`. Quando a condição deixa de valer, o atalho passa a `contestada`, como hoje.
 
 ## 6. Migração
 
-O script `scripts/migrations/v18_9_result_records.py` faz três coisas:
+O script `scripts/migrate_v18_9_result_records.py` faz quatro coisas:
 
 1. Recalcula os registros de cada projeto a partir dos `Resultado` existentes.
 2. Remove as propriedades de veredito.
-3. Remove `peso` das arestas `SUSTENTA`/`REFUTA`.
+3. Marca como `contestada` os atalhos antigos sem `registro_id`.
+4. Remove `peso` das arestas `SUSTENTA`/`REFUTA` e `descoberta_id` dos atalhos (Cypher `REMOVE`, só no Apache AGE).
 
-Ele é idempotente, roda com `--dry-run` por padrão e faz backup do dump antes. Atalhos derivados de descobertas antigas viram `contestada` quando a regra não os sustenta.
+Ele é idempotente, só simula por padrão e, com `--aplicar`, faz `pg_dump` em `--backup-dir` antes de gravar. Os status das hipóteses são reconciliados pela regra no fim do próximo ciclo.
 
 ## 7. Análise de impacto (6 eixos)
 

@@ -428,13 +428,13 @@ class Orchestrator:
                 event_type="knowledge_recompute",
                 payload={
                     "hipoteses": report.hipoteses,
-                    "descobertas": report.descobertas,
+                    "registros": report.registros,
                     "promovidas": len(report.promovidas),
                     "ignoradas": report.ignoradas,
                 },
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Recálculo do veredito não executado", extra={"error": type(exc).__name__})
+            logger.warning("Recálculo dos registros de resultado não executado", extra={"error": type(exc).__name__})
 
     def _register_reserved(self, decisao: str | None, task: "AgentTask", session_id: str | None = None) -> None:
         """Registra no gate persistente a decisão reservada como pendente para o pesquisador (a resposta do consultor

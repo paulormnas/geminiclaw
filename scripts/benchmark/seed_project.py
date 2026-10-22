@@ -94,7 +94,7 @@ def seed_project(
 
         store = open_graph_store()
     # Sem a métrica canônica o Problema ganharia um candidato sem sinônimos e nenhum Resultado ganharia ``MEDE``
-    # (veredito das hipóteses preso em 0): falha antes de criar qualquer nó.
+    # (registros de resultado sem métrica): falha antes de criar qualquer nó.
     if find_approved_metric(store, draft.metrica) is None:
         raise VocabularyNotSeededError(
             f"A métrica '{draft.metrica}' não está aprovada no vocabulário do grafo; "

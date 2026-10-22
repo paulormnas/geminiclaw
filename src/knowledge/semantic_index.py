@@ -74,7 +74,7 @@ _RECONCILE_RETRIEVE_BATCH = 64
 IGNORED_STATUSES = frozenset({"substituida", "rejeitado", "rejeitada", "fundida"})
 # Chaves de payload aceitas em ``filters`` (falha cedo em vez de devolver vazio).
 FILTERABLE_PAYLOAD_KEYS = frozenset(
-    {"tipo_no", "projeto_id", "dominios", "status", "visibilidade", "veredito", "criado_em",
+    {"tipo_no", "projeto_id", "dominios", "status", "visibilidade", "criado_em",
      "embedding_model", "embedding_version"}
 )
 
@@ -405,8 +405,6 @@ class SemanticIndex:
             "visibilidade": props.get("visibilidade"),
             "criado_em": props.get("criado_em"),
         }
-        if props.get("veredito") is not None:
-            payload["veredito"] = props["veredito"]
         if chain is not None:
             ancestors, complete = chain
             payload["nivel"] = props.get("nivel")
@@ -866,7 +864,8 @@ class SemanticIndex:
         1. Busca problemas similares (``SIM_RELATED_MIN_CROSS``).
         2. No grafo, a partir de cada um: ``Abordagem-FUNCIONOU_PARA|FALHOU_PARA->Problema``,
            ``Descoberta-SOBRE->Problema`` (status ``ativa``) e ``Decisao`` do projeto.
-        3. ``rank = similaridade × max(confianca, CONFIDENCE_FLOOR) × recencia``, com
+        3. ``rank = similaridade × max(confianca, CONFIDENCE_FLOOR) × recencia`` (``confianca`` vem das réplicas do
+           registro de resultado do atalho, ou das evidências da descoberta), com
            ``recencia = 0,5 ^ (idade_dias / RECENCY_HALF_LIFE_DAYS)``. A data usada é a
            da aresta (``Abordagem``) ou a de criação do nó (``Descoberta``/``Decisao``).
 
@@ -927,7 +926,7 @@ class SemanticIndex:
                     continue
                 if edge.rel_type in ("FUNCIONOU_PARA", "FALHOU_PARA") and other.label == "Abordagem":
                     kind = "funcionou" if edge.rel_type == "FUNCIONOU_PARA" else "falhou"
-                    confidence = self._edge_confidence(edge.properties.get("descoberta_id"))
+                    confidence = self._record_confidence(edge.properties.get("registro_id"))
                     stamp = edge.properties.get("criado_em") or other.properties.get("criado_em")
                 elif edge.rel_type == "SOBRE" and other.label == "Descoberta":
                     if other.properties.get("status") != "ativa":
@@ -950,16 +949,21 @@ class SemanticIndex:
 
     @staticmethod
     def _node_confidence(node: Node) -> float | None:
-        confianca = node.properties.get("confianca")
-        if confianca is None and node.properties.get("veredito") is not None:
-            confianca = abs(float(node.properties["veredito"]))
-        return None if confianca is None else float(confianca)
-
-    def _edge_confidence(self, descoberta_id: str | None) -> float | None:
-        if not descoberta_id:
+        """Peso (0..1) das evidências de uma ``Descoberta``: ``n_evidencias`` saturado em cinco."""
+        count = node.properties.get("n_evidencias")
+        if isinstance(count, bool) or not isinstance(count, (int, float)):
             return None
-        descoberta = self._store.get_node(descoberta_id)
-        return None if descoberta is None else self._node_confidence(descoberta)
+        return min(1.0, max(0.0, float(count)) / 5)
+
+    def _record_confidence(self, registro_id: str | None) -> float | None:
+        """Peso (0..1) do ``RegistroResultado`` do atalho: réplicas independentes saturadas em três."""
+        if not registro_id:
+            return None
+        registro = self._store.get_node(registro_id)
+        replicas = None if registro is None else registro.properties.get("n_replicas_independentes")
+        if isinstance(replicas, bool) or not isinstance(replicas, (int, float)):
+            return None
+        return min(1.0, max(0.0, float(replicas)) / 3)
 
     @staticmethod
     def _item(

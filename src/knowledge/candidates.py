@@ -29,8 +29,12 @@ logger = get_logger(__name__)
 # Rótulos cujos pares do mesmo rótulo geram candidatos.
 SAME_LABEL_CANDIDATE_LABELS = frozenset({"Projeto", "Problema", "Abordagem", "Descoberta", "Oportunidade"})
 # ``IGNORED_STATUSES`` (importado de ``semantic_index``): pares com estes ``status`` são ignorados.
-# Peso de evidência quando nenhum dos nós tem veredito.
+# Peso de evidência quando nenhum dos nós é uma Descoberta com evidências.
 NO_EVIDENCE_WEIGHT = 0.5
+# Descobertas que existem só com registro de resultado que as sustente (ADR 026 §4): as demais não cruzam projetos.
+CROSS_PROJECT_DISCOVERY_TYPES = frozenset({"funciona", "nao_funciona", "condicional"})
+# Evidências (``n_evidencias``) a partir das quais a descoberta tem peso máximo na prioridade da fila.
+EVIDENCE_SATURATION = 5
 
 
 @dataclass(frozen=True)
@@ -41,15 +45,12 @@ class SimilarityThresholds:
         duplicate_min: A partir daqui o par é ``duplicata``.
         related_same_domain: Início da faixa ``relacionado`` quando o par não cruza domínios.
         related_cross: Início da faixa ``relacionado`` para pares entre domínios.
-        cross_project_min_confidence: ``|veredito|`` mínimo da ``Descoberta`` em
-            pares ``Descoberta->Problema`` de outro projeto.
         cross_domain_boost: Multiplicador de prioridade para pares entre domínios.
     """
 
     duplicate_min: float
     related_same_domain: float
     related_cross: float
-    cross_project_min_confidence: float
     cross_domain_boost: float
 
     @classmethod
@@ -59,16 +60,21 @@ class SimilarityThresholds:
             duplicate_min=config.SIM_DUPLICATE_MIN,
             related_same_domain=config.SIM_RELATED_MIN_SAME_DOMAIN,
             related_cross=config.SIM_RELATED_MIN_CROSS,
-            cross_project_min_confidence=config.SIM_CROSS_PROJECT_MIN_CONFIDENCE,
             cross_domain_boost=config.SIM_CROSS_DOMAIN_BOOST,
         )
 
 
 def _evidence(node: Node) -> float | None:
-    confianca = node.properties.get("confianca")
-    if confianca is None and node.properties.get("veredito") is not None:
-        confianca = abs(float(node.properties["veredito"]))
-    return None if confianca is None else float(confianca)
+    """Peso (0..1) das evidências ligadas a uma ``Descoberta``; ``None`` para os demais nós."""
+    count = node.properties.get("n_evidencias")
+    if (
+        node.label != "Descoberta"
+        or node.properties.get("tipo") not in CROSS_PROJECT_DISCOVERY_TYPES
+        or isinstance(count, bool)
+        or not isinstance(count, (int, float))
+    ):
+        return None
+    return min(1.0, max(0.0, float(count)) / EVIDENCE_SATURATION)
 
 
 def classify_pair(
@@ -90,7 +96,8 @@ def classify_pair(
       **somente** se o par é entre domínios.
     - ``Descoberta`` x ``Problema`` de **outro projeto**: ``relacionado`` com
       ``score >= related_cross`` (mesma regra de domínio na faixa baixa) e
-      ``|veredito|`` da descoberta >= ``cross_project_min_confidence``.
+      a descoberta ser de funcionamento (``funciona``, ``nao_funciona`` ou ``condicional``), que só existe com
+      registro de resultado que a sustente.
     - Nós com ``status`` ``substituida``/``rejeitado``/``rejeitada`` são ignorados.
 
     Returns:
@@ -116,8 +123,7 @@ def classify_pair(
         if not entre_projetos:
             return None
         descoberta = node_a if node_a.label == "Descoberta" else node_b
-        veredito = descoberta.properties.get("veredito")
-        if veredito is None or abs(float(veredito)) < thresholds.cross_project_min_confidence:
+        if descoberta.properties.get("tipo") not in CROSS_PROJECT_DISCOVERY_TYPES:
             return None
         if score >= thresholds.related_same_domain:
             return TIPO_RELACIONADO

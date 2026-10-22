@@ -22,7 +22,6 @@ from src.knowledge.curator_common import (
 )
 from src.knowledge.errors import GraphStoreError
 from src.knowledge.graph_store import Node
-from src.knowledge.service import KnowledgeServiceError
 from src.logger import get_logger
 
 logger = get_logger(__name__)
@@ -233,27 +232,24 @@ class CuratorReads:
             return node_view(node)
         return {"id": node.id, "label": node.label, "projeto": "outro (privado)"}
 
-    def verdict_breakdown(self, hipotese_id: str) -> dict[str, Any]:
-        """Veredito calculado (sem LLM) e o detalhamento ``q·m·d·b`` por tentativa, para o Curator interpretar."""
-        self._node("hipotese_id", hipotese_id, ("Hipotese",))
-        try:
-            result, _, _ = self.service.verdict_for_hypothesis(hipotese_id)
-        except KnowledgeServiceError as exc:
-            return self._refuse(str(exc))
-        return {
-            "ok": True,
-            "veredito": round(result.veredito, 4),
-            "suporte": round(result.suporte, 4),
-            "certeza": round(result.certeza, 4),
-            "leitura": result.leitura,
-            "tipo_descoberta": result.tipo_descoberta,
-            "n_tentativas": result.n_tentativas,
-            "n_evidencias": result.n_evidencias,
-            "detalhes": [
-                {"tentativa": d.attempt_id, "classificacao": d.classificacao, "w": round(d.w, 4)}
-                for d in result.detalhes[:_MAX_ROWS]
-            ],
-        }
+    def result_records(self, problema_id: str, limit: int = 10) -> dict[str, Any]:
+        """Registros de resultado (fatos medidos, sem LLM) do problema, para o Curator interpretar e qualificar."""
+        problema = self._node("problema_id", problema_id, ("Problema",))
+        sub = self.store.neighbors(problema.id, ["SOBRE"], direction="in", depth=1)
+        records = [
+            n for n in sub.nodes if n.label == "RegistroResultado" and self._visible(n)
+        ]
+        records.sort(key=lambda n: (-(n.properties.get("n_atingiu_alvo") or 0), n.id))
+        rows = []
+        for node in records[: max(1, min(int(limit), _MAX_ROWS))]:
+            keep = (
+                "metrica", "melhor_valor", "delta_base", "delta_pai", "n_tentativas_validas",
+                "n_replicas_independentes", "n_atingiu_alvo", "n_abaixo_alvo", "atingiu_alvo", "condicoes",
+                "qualificacao", "limite_aplicabilidade", "licao",
+            )
+            abordagens = [n.id for n in self._neighbors_out(node.id, "REGISTRA")]
+            rows.append({"id": node.id, "abordagem": abordagens[:1], **{k: node.properties.get(k) for k in keep}})
+        return {"ok": True, "problema": problema.id, "registros": rows}
 
     # ------------------------------------------------------------------ escrita: descobertas
 
@@ -284,6 +280,10 @@ class CuratorReads:
             Motivo da recusa, ou ``None`` se toda evidência serve.
         """
         for node in nodes:
+            if node.label == "RegistroResultado":
+                if not self.service.evidence_in_scope(node, sobre_nodes):
+                    return "o registro de resultado não está ligado ao escopo (sobre_ids)."
+                continue
             if node.label == "Resultado" and node.properties.get("status_validacao") != "validado":
                 return "evidência exige Resultado validado pelo Validator (status_validacao='validado')."
             done = ("sucesso", "divergente_documentado")

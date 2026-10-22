@@ -101,7 +101,7 @@ class CuratorReport:
 
 def _node_line(node: Node) -> dict[str, Any]:
     props = node.properties
-    keys = ("status", "veredito", "suporte", "certeza", "n_tentativas")
+    keys = ("status", "n_tentativas", "n_atingiu_alvo", "n_abaixo_alvo")
     return {k: props.get(k) for k in keys if props.get(k) is not None}
 
 
@@ -374,12 +374,13 @@ class Curator:
         digest = self._digest(toolkit, include_queue, motivo_parada)
         steps = [
             "1. Leia as sinalizações pendentes (`pending_flags`) e decida cada uma em lote (`resolve_flag`).",
-            "2. A partir dos resultados e vereditos do resumo, registre ou reforce descobertas, seguindo as diretrizes "
-            "(revise antes de criar; evidência obrigatória; consulte `verdict_breakdown`).",
+            "2. A partir dos resultados e das contagens de réplicas do resumo, registre ou reforce descobertas, "
+            "seguindo as diretrizes (revise antes de criar; evidência obrigatória) e qualifique os registros de "
+            "resultado ainda pendentes (`result_records`, `qualify_record`).",
         ]
         if digest.get("decisoes_avaliadas"):
             steps.append(
-                "2b. Para cada decisão de `decisoes_avaliadas` (a hipótese escolhida já tem veredito moderado), se "
+                "2b. Para cada decisão de `decisoes_avaliadas` (a hipótese escolhida já está validada ou refutada), se "
                 "houver uma LIÇÃO TRANSFERÍVEL sobre por que o caminho funcionou ou não, registre "
                 "`create_discovery(tipo=\"licao_de_caminho\")` sobre a hipótese escolhida, com a decisão como "
                 "evidência. Sem lição transferível, não crie nada."

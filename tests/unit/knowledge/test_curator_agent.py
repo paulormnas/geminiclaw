@@ -452,8 +452,8 @@ def test_cli_abre_o_grafo_do_binder_com_reconciliacao(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_laco_recalcula_o_veredito_apos_cada_subtarefa_ingerida(tmp_path, monkeypatch):
-    """Task 2.5 — depois de ``ingest_subtask`` a hipótese ganha ``n_tentativas``/``veredito`` e o SUSTENTA com peso."""
+async def test_laco_recalcula_os_registros_apos_cada_subtarefa_ingerida(tmp_path, monkeypatch):
+    """Task 2.5 — depois de ``ingest_subtask`` a hipótese ganha as contagens e o SUSTENTA; o registro é criado."""
 
     store = InMemoryGraphStore()
     pid = "11111111-1111-4111-8111-111111111111"
@@ -482,8 +482,10 @@ async def test_laco_recalcula_o_veredito_apos_cada_subtarefa_ingerida(tmp_path, 
     await ingest_subtask(orch, task, result, {"status": "pass", "verified": True}, "s1")
 
     (hip,) = store.find_nodes("Hipotese", {})
-    assert hip.properties["n_tentativas"] == 1 and hip.properties["veredito"] > 0
+    assert hip.properties["n_tentativas"] == 1 and hip.properties["n_atingiu_alvo"] == 1
     assert [e.rel_type for e in store._edges if e.rel_type == "SUSTENTA"] == ["SUSTENTA"]  # noqa: SLF001
+    (registro,) = store.find_nodes("RegistroResultado", {})
+    assert registro.properties["melhor_valor"] == 0.8 and registro.properties["criado_por"] == "orquestrador"
 
 
 @pytest.mark.asyncio

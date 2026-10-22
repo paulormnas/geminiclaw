@@ -143,11 +143,19 @@ def test_descoberta_sem_evidencia_e_recusada(world):
     assert env.raw.find_nodes("Descoberta", {}) == []
 
 
-def test_funciona_exige_veredito_calculado_compativel(world, monkeypatch):
-    """ADR 015 §9.5: 'funciona' só com veredito calculado >= piso (aqui 0,1; 1 positivo = +0,11) e escopo calculável."""
+def _recompute(env, graph, ids):
+    """O orquestrador recalcula os registros depois de cada subtarefa; aqui é feito à mão sobre o grafo do teste."""
+    from src.knowledge.service import KnowledgeService
+
+    return KnowledgeService(env.store).recompute_records(ids["abordagem"], env.raw.get_node(graph.problema))
+
+
+def test_funciona_exige_registro_com_replicas_suficientes_e_escopo_calculavel(world):
+    """ADR 026 §4: 'funciona' só com registro de resultado de duas réplicas independentes e escopo calculável."""
     env, graph, tk, ids = world
-    monkeypatch.setattr("src.config.KNOWLEDGE_SHORTCUT_MIN_VERDICT", 0.1)
     env.provider.vectors["par9b"] = pair_vectors(DIM, 9, 1.0)[0]
+    graph.tentativa(ids["hip"], ids["abordagem"], valor=0.82, seed=2)  # segunda réplica independente
+    (registro,) = _recompute(env, graph, ids)
 
     sem_escopo = _create(tk, ids, tipo="funciona", enunciado="par9b")  # só Abordagem: sem Problema/Hipótese
     com_escopo = _create(tk, ids, tipo="funciona", enunciado="par9b", sobre_ids=[ids["abordagem"], graph.problema])
@@ -157,11 +165,83 @@ def test_funciona_exige_veredito_calculado_compativel(world, monkeypatch):
 
     assert sem_escopo["ok"] is False
     assert com_escopo["ok"] is True
+    assert contrario["ok"] is False and "exige" in contrario["motivo"]
     node = env.raw.get_node(com_escopo["id"])
-    assert node.properties["veredito"] > 0.1
-    assert contrario["ok"] is False and "insuficiente" in contrario["motivo"]
+    assert "veredito" not in node.properties
+    baseadas = {e.dst_id for e in env.raw._edges if e.src_id == com_escopo["id"] and e.rel_type == "BASEADA_EM"}  # noqa: SLF001
+    assert registro in baseadas and ids["res"] in baseadas
     atalhos = [e for e in env.raw._edges if e.rel_type == "FUNCIONOU_PARA"]  # noqa: SLF001
-    assert len(atalhos) == 1 and atalhos[0].properties["descoberta_id"] == com_escopo["id"]
+    assert len(atalhos) == 1 and atalhos[0].properties["registro_id"] == registro
+
+
+def test_uma_replica_so_nao_sustenta_funciona(world):
+    """Com HYPOTHESIS_MIN_REPLICAS = 2, um resultado isolado atingindo o alvo não sustenta 'funciona'."""
+    env, graph, tk, ids = world
+    env.provider.vectors["par9c"] = pair_vectors(DIM, 9, 1.0)[0]
+    _recompute(env, graph, ids)
+
+    out = _create(tk, ids, tipo="funciona", enunciado="par9c", sobre_ids=[ids["abordagem"], graph.problema])
+
+    assert out["ok"] is False and "exige 2" in out["motivo"]
+
+
+def test_nao_funciona_exige_duas_replicas_abaixo_do_alvo(world):
+    env, graph, tk, ids = world
+    env.provider.vectors["par9d"] = pair_vectors(DIM, 9, 1.0)[0]
+    graph.tentativa(ids["hip"], ids["abordagem"], valor=0.60, seed=2, no="C")
+    graph.tentativa(ids["hip"], ids["abordagem"], valor=0.62, seed=3, no="D")
+    _recompute(env, graph, ids)  # uma réplica acima e duas abaixo: ainda não refuta
+
+    misto = _create(tk, ids, tipo="nao_funciona", enunciado="par9d", sobre_ids=[ids["abordagem"], graph.problema])
+
+    assert misto["ok"] is False and "nenhuma acima" in misto["motivo"]
+
+
+def test_qualify_record_escreve_so_a_qualificacao_e_recusa_o_que_a_evidencia_nao_sustenta(world):
+    env, graph, tk, ids = world
+    graph.tentativa(ids["hip"], ids["abordagem"], valor=0.82, seed=2)
+    (registro,) = _recompute(env, graph, ids)
+
+    sem_evidencia = tk.qualify_record(registro, "reparo", "só nos dados tabulares", [ids["res2"]])
+    ok = tk.qualify_record(registro, "reparo", "só nos dados tabulares", [ids["res"]], licao="padronizar antes")
+    restricao = tk.qualify_record(registro, "restricao", "x", [ids["res"]])
+    pendente = tk.qualify_record(registro, "pendente", "x", [ids["res"]])
+
+    assert sem_evidencia["ok"] is False and "Resultado do próprio registro" in sem_evidencia["motivo"]
+    assert ok["ok"] is True
+    node = env.raw.get_node(registro)
+    assert node.properties["qualificacao"] == "reparo" and node.properties["licao"] == "padronizar antes"
+    assert node.properties["limite_aplicabilidade"] == "só nos dados tabulares"
+    assert node.properties["melhor_valor"] == pytest.approx(0.82)  # os fatos medidos não mudam
+    assert restricao["ok"] is False and "restricao exige" in restricao["motivo"]
+    assert pendente["ok"] is False
+
+
+def test_result_records_lista_os_fatos_do_problema(world):
+    env, graph, tk, ids = world
+    _recompute(env, graph, ids)
+
+    texto = tk.dispatch("result_records", {"problema_id": graph.problema})
+
+    assert "dado_nao_confiavel" in texto and "melhor_valor" in texto and "qualificacao" in texto
+
+
+def test_agente_nao_cria_nem_altera_os_fatos_do_registro(world):
+    env, graph, tk, ids = world
+    (registro,) = _recompute(env, graph, ids)
+    from src.knowledge.errors import FactWriteNotAllowedError
+
+    with pytest.raises(FactWriteNotAllowedError):
+        env.store.update_node(registro, {"melhor_valor": 0.99}, actor=CURATOR)
+    with pytest.raises(FactWriteNotAllowedError):
+        env.store.create_node(
+            "RegistroResultado",
+            {"projeto_id": "proj1", "sessao_id": "s1", "chave": "x", "metrica": "r2", "n_tentativas_validas": 1,
+             "n_replicas_independentes": 1, "n_atingiu_alvo": 1, "n_abaixo_alvo": 0, "atingiu_alvo": True,
+             "qualificacao": "pendente", "justificativa_criacao": "j", "nos_consultados": []},
+            actor=CURATOR,
+        )
+    env.store.update_node(registro, {"qualificacao": "retido"}, actor=CURATOR)  # só a qualificação é do Curator
 
 
 def test_sem_indice_semantico_a_criacao_falha_fechada(world, tmp_path):
@@ -602,13 +682,3 @@ def test_fila_so_serve_pares_do_projeto_e_oculta_propriedades_de_outro_projeto(w
     assert "propriedades" in visto[ids["abordagem"]]
     assert "propriedades" not in visto[x] and "Privada X" not in json.dumps(servidos)
     assert env.queue.pending_count() == 2
-
-
-def test_piso_padrao_dos_atalhos_e_0_3(world):
-    """v18.8-verdict-calibration: com o piso padrão (0,3), um positivo isolado não sustenta 'funciona'."""
-    env, graph, tk, ids = world
-    env.provider.vectors["par9c"] = pair_vectors(DIM, 9, 1.0)[0]
-
-    out = _create(tk, ids, tipo="funciona", enunciado="par9c", sobre_ids=[ids["abordagem"], graph.problema])
-
-    assert out["ok"] is False and "insuficiente" in out["motivo"] and "0.3" in out["motivo"]

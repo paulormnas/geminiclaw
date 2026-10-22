@@ -36,12 +36,12 @@ def _no_llm(monkeypatch):
 
 
 def test_visualizar_o_projeto(world):
-    """Scenario: Visualizar o projeto (nós, relações, veredito e leitura; nenhum LLM)."""
+    """Scenario: Visualizar o projeto (nós, relações e contagens de réplicas; nenhum LLM)."""
     code, out, _ = world.run(["show"])
     assert code == 0
     assert "Hipotese (1)" in out and "Descoberta (2)" in out and "Abordagem" in out
     assert world.ids["hipotese"] in out
-    assert "+0,36 funciona (moderada)" in out  # veredito e leitura no nó que os tem
+    assert "1 acima e 1 abaixo do alvo" in out  # leitura das contagens no nó que as tem
     assert "SOBRE" in out  # relações em árvore
     assert "segredo do outro projeto" not in out  # nada de outro projeto
 
@@ -93,22 +93,23 @@ def test_dominio_e_depth(world):
 
 
 def test_detalhe_do_no(world):
-    """Scenario: Detalhe do nó (propriedades, relações, histórico e fatores q, m, d, b, w por tentativa)."""
+    """Scenario: Detalhe do nó (propriedades, relações, histórico e classificação por tentativa)."""
     code, out, _ = world.run(["node", world.ids["hipotese"]])
     assert code == 0
     assert "enunciado: Árvores de decisão melhoram o R2" in out
     assert "TESTA" in out and "Relações" in out
     assert "Histórico de alterações (1)" in out and "orquestrador" in out
-    assert "Veredito por tentativa" in out
-    assert out.count("q=") == 2 and "w=" in out and "m=" in out and "d=" in out and "b=" in out
+    assert "Tentativas válidas por réplica" in out
+    assert out.count(" atingiu: valor") == 2 and "1 réplica(s) independente(s)" in out  # mesma semente
 
 
 def test_detalhe_no_json(world):
-    """``graph node --format json`` traz o detalhamento do veredito estruturado."""
+    """``graph node --format json`` traz a contagem por tentativa estruturada."""
     _, out, _ = world.run(["node", world.ids["hipotese"], "--format", "json"])
     data = json.loads(out)
-    assert len(data["verdict_breakdown"]["tentativas"]) == 2
-    assert set(data["verdict_breakdown"]["tentativas"][0]) >= {"q", "m", "d", "b", "w"}
+    assert len(data["contagem"]["tentativas"]) == 2
+    assert set(data["contagem"]["tentativas"][0]) >= {"tentativa", "classificacao", "valor"}
+    assert data["contagem"]["n_atingiu_alvo"] == 1 and data["contagem"]["n_replicas_independentes"] == 1
 
 
 def test_grafo_grande(world, monkeypatch):

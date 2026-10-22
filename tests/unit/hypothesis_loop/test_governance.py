@@ -205,26 +205,33 @@ def test_prioridade_novidade_cai_com_hipotese_ja_testada_semelhante():
     assert _cycle(w)._novelty(node) == pytest.approx(0.05, abs=0.02)  # noqa: SLF001
 
 
-def test_apoio_previo_usa_o_melhor_veredito_de_funcionou_para_e_zera_com_falha_forte():
+def test_apoio_previo_e_maximo_com_funcionou_para_e_zero_com_falha_em_problema_semelhante():
     w = HypothesisWorld()
     abordagem = w.graph.abordagem("GB")
     hid = w.hypothesis("H")
     w.store.create_edge(hid, "PROPOE", abordagem, {}, actor=AGENTE)
     node = w.raw.get_node(hid)
-    disc = w.discovery("funciona", veredito=0.62)
     w.store.create_edge(abordagem, "FUNCIONOU_PARA", w.problem.id,
-                        {"metrica": "r2", "melhor_valor": 0.9, "n_exp": 3, "descoberta_id": disc},
-                        actor=ORQ)
-    assert _cycle(w)._prior_support(node, w.problem) == pytest.approx(0.62)  # noqa: SLF001
+                        {"metrica": "r2", "melhor_valor": 0.9, "n_exp": 3, "registro_id": "rr-1"}, actor=ORQ)
+    assert _cycle(w)._prior_support(node, w.problem) == pytest.approx(1.0)  # noqa: SLF001
     w2 = HypothesisWorld()
     abordagem2 = w2.graph.abordagem("GB")
     hid2 = w2.hypothesis("H")
     w2.store.create_edge(hid2, "PROPOE", abordagem2, {}, actor=AGENTE)
-    bad = w2.discovery("nao_funciona", veredito=-0.7)
     w2.store.create_edge(abordagem2, "FALHOU_PARA", w2.problem.id,
-                         {"motivo": "m", "n_exp": 3, "descoberta_id": bad},
-                         actor=ORQ)
+                         {"motivo": "m", "n_exp": 3, "registro_id": "rr-2"}, actor=ORQ)
     assert _cycle(w2)._prior_support(w2.raw.get_node(hid2), w2.problem) == 0.0  # noqa: SLF001
+
+
+def test_apoio_previo_ignora_atalho_contestado():
+    w = HypothesisWorld()
+    abordagem = w.graph.abordagem("GB")
+    hid = w.hypothesis("H")
+    w.store.create_edge(hid, "PROPOE", abordagem, {}, actor=AGENTE)
+    w.store.create_edge(abordagem, "FUNCIONOU_PARA", w.problem.id,
+                        {"metrica": "r2", "melhor_valor": 0.9, "n_exp": 3}, actor=ORQ)
+    w.store.set_edge_status(abordagem, "FUNCIONOU_PARA", w.problem.id, "contestada", actor=ORQ)
+    assert _cycle(w)._prior_support(w.raw.get_node(hid), w.problem) == 0.5  # noqa: SLF001
 
 
 # -- status e decisões ---------------------------------------------------------------------------------------
@@ -241,11 +248,10 @@ def _hypothesis_with_attempts(w, values):
 
 
 def test_avaliacao_posterior_da_decisao_nao_acertada():
-    """Scenario: Avaliação posterior — veredito -0,4 da hipótese escolhida: resultado_posterior="nao_acertada"."""
+    """Scenario: Avaliação posterior — hipótese escolhida refutada pela contagem: ``nao_acertada``."""
     w = HypothesisWorld()
     hid = _hypothesis_with_attempts(w, [0.55, 0.52, 0.5, 0.45])
-    verdict = w.raw.get_node(hid).properties["veredito"]
-    assert verdict <= -0.3
+    assert w.raw.get_node(hid).properties["n_atingiu_alvo"] == 0
     decision = w.store.create_node("Decisao", w.base(contexto="c", justificativa="j", justificativa_criacao="t",
                                                       nos_consultados=[]), actor=AGENTE)
     w.store.create_edge(decision, "ESCOLHEU", hid, {}, actor=AGENTE)
@@ -253,11 +259,11 @@ def test_avaliacao_posterior_da_decisao_nao_acertada():
     assert out == {decision: "nao_acertada"}
     assert w.raw.get_node(decision).properties["resultado_posterior"] == "nao_acertada"
     note = [e for e in w.raw.audit_history(decision) if e["changes"].get("avaliacao")][0]
-    assert note["changes"]["veredito"] == pytest.approx(verdict, abs=1e-3) and note["actor"] == "orquestrador"
+    assert note["changes"]["n_abaixo_alvo"] == 4 and note["actor"] == "orquestrador"
     assert _cycle(w).evaluate_decisions() == {}  # idempotente: só decisões sem avaliação
 
 
-def test_avaliacao_posterior_acertada_e_abaixo_do_limiar_nao_avalia():
+def test_avaliacao_posterior_acertada_e_com_uma_replica_so_nao_avalia():
     w = HypothesisWorld()
     hid = _hypothesis_with_attempts(w, [0.85, 0.86, 0.87, 0.88, 0.9])
     weak = _hypothesis_with_attempts(w, [0.85])
@@ -272,13 +278,13 @@ def test_avaliacao_posterior_acertada_e_abaixo_do_limiar_nao_avalia():
     assert "resultado_posterior" not in w.raw.get_node(decisions[weak]).properties
 
 
-def test_status_validada_e_refutada_so_pelo_veredito_calculado():
+def test_status_validada_e_refutada_so_pela_regra_de_replicas():
     w = HypothesisWorld()
     good = _hypothesis_with_attempts(w, [0.85, 0.86, 0.87, 0.88, 0.9])
     bad = _hypothesis_with_attempts(w, [0.55, 0.52, 0.5, 0.45])
     weak = _hypothesis_with_attempts(w, [0.85])
     rejected = w.hypothesis("rejeitada pelo pesquisador", status="abandonada", abandonada_por="pesquisador")
-    w.store.update_node(rejected, {"veredito": 0.9}, actor=ORQ)
+    w.store.update_node(rejected, {"n_atingiu_alvo": 5, "n_abaixo_alvo": 0, "n_tentativas": 5}, actor=ORQ)
     changed = _cycle(w).sync_statuses([good, bad, weak, rejected])
     assert changed == {good: "validada", bad: "refutada"}
     assert _status(w, weak) == "em_teste" and _status(w, rejected) == "abandonada"

@@ -6,7 +6,7 @@ cada ciclo ``planejar -> executar -> consolidar -> sugerir``:
 - ``prompt_block``: contexto do Researcher (hipóteses, sugestões pendentes) como **dado não confiável** delimitado;
 - ``prepare_cycle``: grava hipóteses/decisões/respostas do plano, amarra as subtarefas às hipóteses e aplica a
   governança do ``SessionMode`` (aprovação no ``assisted``; prioridade no ``semi``/``auto``);
-- ``after_cycle``: status e avaliação de decisões a partir do veredito calculado e sugestões do Curator;
+- ``after_cycle``: status e avaliação de decisões pela regra de réplicas e sugestões do Curator;
 - ``check_solution`` / ``confirm_solution``: critério de parada "solução encontrada" (o ``assisted`` pergunta).
 
 Segurança: nenhuma decisão reservada ao pesquisador é tomada aqui. A aprovação de hipótese no ``assisted`` é feita no
@@ -658,7 +658,7 @@ class ExplorationSession(StagnationMixin, RestrictionsMixin, ObjectiveRevisionMi
     # ------------------------------------------------------------------ fim do ciclo
 
     def after_cycle(self, abandoned_tasks: Iterable[str] = ()) -> dict[str, int]:
-        """Status das hipóteses e avaliação das decisões a partir do veredito calculado (síncrono).
+        """Status das hipóteses e avaliação das decisões pela regra de réplicas (síncrono).
 
         Args:
             abandoned_tasks: Subtarefas marcadas ``abandonada`` no DAG por retentativas esgotadas: a hipótese do
@@ -671,7 +671,8 @@ class ExplorationSession(StagnationMixin, RestrictionsMixin, ObjectiveRevisionMi
                 "hipotese_transicao",
                 {
                     "hipotese_id": move.hypothesis_id, "status_anterior": move.status_anterior,
-                    "status_novo": move.status_novo, "veredito_novo": move.veredito_novo,
+                    "status_novo": move.status_novo, "regra": move.regra,
+                    "n_atingiu_alvo": move.n_atingiu_alvo, "n_abaixo_alvo": move.n_abaixo_alvo,
                 },
             )
         evaluated = self.cycle.evaluate_decisions()
@@ -770,8 +771,8 @@ class ExplorationSession(StagnationMixin, RestrictionsMixin, ObjectiveRevisionMi
         except Exception as exc:  # noqa: BLE001 - sem o pedido o evento ainda registra o desfecho
             logger.warning("Pedido de continuidade não registrado", extra={"extra": {"erro": type(exc).__name__}})
 
-    def verdict_availability(self) -> tuple[str, str] | None:
-        """Confere se o veredito pode ser calculado (``v18.6-hypothesis-closure`` §4).
+    def metric_availability(self) -> tuple[str, str] | None:
+        """Confere se o critério do Problema pode ser medido (``v18.6-hypothesis-closure`` §4).
 
         Returns:
             ``None`` se a ``Metrica`` do ``Problema`` está aprovada no vocabulário; senão ``(motivo, correção)``.
@@ -957,7 +958,7 @@ class ExplorationSession(StagnationMixin, RestrictionsMixin, ObjectiveRevisionMi
         )
 
     def apply_metrics(self, extras: PlanExtras) -> AppliedMetrics | None:
-        """Grava as métricas já validadas (``metrics_approved``) e desliga a exigência se o veredito ficou disponível.
+        """Grava as métricas já validadas (``metrics_approved``) e desliga a exigência se a métrica ficou disponível.
 
         Returns:
             O resultado da gravação, ou ``None`` se a definição não é exigida ou o plano não trouxe métricas.
@@ -986,7 +987,7 @@ class ExplorationSession(StagnationMixin, RestrictionsMixin, ObjectiveRevisionMi
                 "metricas_nao_aplicadas",
                 {"metricas": [{"nome": o.nome[:120], "motivo": o.motivo} for o in applied.descartadas][:10]},
             )
-        remaining = self.verdict_availability()
+        remaining = self.metric_availability()
         if remaining is None:
             self.metric_definition_required = False
             self.metric_definition_reason = ""

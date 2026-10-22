@@ -28,7 +28,7 @@ BENCHMARK_DRAFT = ProblemDraft(
         "Um avanço seria um modelo com acurácia de teste superior ao baseline simples, com avaliação comparável."
     ),
     classe="classificacao",
-    caracteristicas_dados={"tamanho": "150 amostras", "modalidade": "tabular", "classes": "3"},
+    caracteristicas_dados={"tamanho": "150 amostras", "atributos": "4", "modalidade": "tabular", "classes": "3"},
     dominios=("Aprendizado de Máquina",),
     metrica="acurácia",
     alvo=0.95,
@@ -36,8 +36,45 @@ BENCHMARK_DRAFT = ProblemDraft(
     baseline_descricao="classificador que prediz a classe majoritária",
 )
 
+WINE_DRAFT = ProblemDraft(
+    titulo="Classificação supervisionada no dataset Wine",
+    resumo=(
+        "Dataset tabular de análises químicas de vinhos italianos de três cultivares, com treze medidas por amostra. "
+        "O objetivo é montar um pipeline de classificação reproduzível, comparar ao menos dois algoritmos e recomendar "
+        "um modelo com justificativa. Um avanço seria um modelo com acurácia de teste superior ao baseline simples, "
+        "com avaliação comparável."
+    ),
+    classe="classificacao",
+    caracteristicas_dados={"tamanho": "178 amostras", "atributos": "13", "modalidade": "tabular", "classes": "3"},
+    dominios=("Aprendizado de Máquina",),
+    metrica="acurácia",
+    alvo=0.95,
+    delta_min=0.01,
+    baseline_descricao="classificador que prediz a classe majoritária",
+)
 
-def seed_project(name: str, store: Any | None = None, draft: ProblemDraft | None = None) -> str:
+# Problemas do corpus de memória entre projetos (``v18.9-memory-evaluation``): chave usada em ``combo["problem"]``.
+PROBLEMS: dict[str, tuple[ProblemDraft, str]] = {
+    "iris": (BENCHMARK_DRAFT, "Pipeline de classificação supervisionada para o dataset Iris (tarefa do run.sh)."),
+    "wine": (WINE_DRAFT, "Pipeline de classificação supervisionada para o dataset Wine (tarefa do run_wine.sh)."),
+}
+
+
+def seeder_for(problem: str):
+    """Semeador do problema registrado em :data:`PROBLEMS` (``seed_project`` com o ``Problema`` e a descrição dele).
+
+    Raises:
+        KeyError: Problema desconhecido (a mensagem lista os registrados).
+    """
+    if problem not in PROBLEMS:
+        raise KeyError(f"Problema '{problem}' desconhecido; registrados: {', '.join(sorted(PROBLEMS))}.")
+    draft, description = PROBLEMS[problem]
+    return lambda name: seed_project(name, draft=draft, description=description)
+
+
+def seed_project(
+    name: str, store: Any | None = None, draft: ProblemDraft | None = None, description: str | None = None
+) -> str:
     """Cria o projeto ``Benchmark <name>`` com o ``Problema`` confirmado e devolve o ``projeto_id``.
 
     Args:
@@ -45,6 +82,7 @@ def seed_project(name: str, store: Any | None = None, draft: ProblemDraft | None
         store: ``GraphStore`` (padrão: o de produção, com índice semântico, que vetoriza título, objetivo e domínios).
         draft: ``Problema`` a confirmar (padrão: o do Iris, ``BENCHMARK_DRAFT``); as explorações controladas passam o do
             regime (``v18.8-verdict-controlled-sessions``).
+        description: Descrição do projeto (padrão: a do pipeline Iris).
 
     Raises:
         ProjectError: Falha ao criar o projeto ou confirmar o ``Problema``.
@@ -65,7 +103,7 @@ def seed_project(name: str, store: Any | None = None, draft: ProblemDraft | None
     project_id = projects.create_project(
         store,
         f"Benchmark {name}",
-        "Pipeline de classificação supervisionada para o dataset Iris (tarefa do run.sh).",
+        description or "Pipeline de classificação supervisionada para o dataset Iris (tarefa do run.sh).",
         list(draft.dominios),
     )
     projects.confirm_problem(store, project_id, draft, sentido_metrica="maior_melhor")

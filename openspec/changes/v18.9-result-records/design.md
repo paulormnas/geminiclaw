@@ -22,7 +22,7 @@ Propriedades, todas gravadas pelo orquestrador (`criado_por = "orquestrador"`):
 | `delta_base` | `melhor_valor − baseline`, com `baseline` do `Resultado` do melhor valor ou, sem ele, o melhor valor medido nos experimentos de referência (`Resultado-REFERENCIA_DE->Problema`); ausente sem referência |
 | `delta_pai` | `melhor_valor −` melhor valor dos registros anteriores da mesma abordagem no mesmo problema (configuração mais antiga primeiro); ausente no primeiro registro. O grafo não tem aresta `DERIVADA_DE` entre experimentos (2026-10-22: a origem da variação é a configuração anterior) |
 | `n_tentativas_validas` | Tentativas válidas (§3.1) |
-| `n_replicas_independentes` | Número de pares distintos (`seed`, `dataset_ids`) entre as tentativas válidas |
+| `n_replicas_independentes` | Número de trincas distintas (`config_hash`, `seed`, `dataset_ids`) entre as tentativas válidas (2026-10-22: a configuração entra na independência, como no modelo v2 do ADR 015, em que a variação era evidência nova) |
 | `n_atingiu_alvo` / `n_abaixo_alvo` | Contagens de tentativas válidas independentes acima e abaixo do alvo |
 | `atingiu_alvo` | `n_atingiu_alvo >= 1` |
 | `condicoes` | `{dataset_ids, no_execucao, config_normalizada}` |

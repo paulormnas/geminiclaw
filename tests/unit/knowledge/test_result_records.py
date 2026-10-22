@@ -22,10 +22,12 @@ ALVO = Criterion(sentido="maior_melhor", delta_min=0.01, alvo=0.93)
 MENOR = Criterion(sentido="menor_melhor", delta_min=None, alvo=0.10)
 
 
-def attempt(valor, *, seed=1, datasets=("d1",), when="2026-10-22T10:00:00", baseline=None, kind="resultado", aid=None):
+def attempt(
+    valor, *, seed=1, datasets=("d1",), when="2026-10-22T10:00:00", baseline=None, kind="resultado", aid=None, config="h"
+):
     return Attempt(
         attempt_id=aid or f"a-{seed}-{valor}-{'-'.join(datasets)}", timestamp=when, node_id="A", session_id="s",
-        seed=seed, dataset_ids=tuple(datasets), config_hash="h", outcome_kind=kind, value=valor, baseline=baseline,
+        seed=seed, dataset_ids=tuple(datasets), config_hash=config, outcome_kind=kind, value=valor, baseline=baseline,
         validation="validado",
     )
 
@@ -93,3 +95,11 @@ def test_classificacao_da_tentativa_e_o_resultado_nao_depende_da_ordem():
     assert classify_attempt(a, ALVO) == "atingiu" and classify_attempt(b, ALVO) == "abaixo"
     assert classify_attempt(attempt(None, kind="falha"), ALVO) == "invalida"
     assert compute_record([a, b], ALVO) == compute_record([b, a], ALVO)
+
+
+def test_outra_configuracao_e_replica_independente_mesmo_com_a_mesma_semente_e_os_mesmos_dados():
+    """Uma variação de configuração é evidência nova; repetir a mesma configuração e a mesma semente não é."""
+    mesma = compute_record([attempt(0.94, seed=42, config="a"), attempt(0.95, seed=42, config="a")], ALVO)
+    variacao = compute_record([attempt(0.94, seed=42, config="a"), attempt(0.95, seed=42, config="b")], ALVO)
+    assert mesma.n_replicas_independentes == 1 and variacao.n_replicas_independentes == 2
+    assert variacao.n_atingiu_alvo == 2

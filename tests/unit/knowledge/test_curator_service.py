@@ -305,3 +305,64 @@ def test_apos_subtarefa_recalcula_hipotese_e_registros(world):
     assert report.hipoteses == 1 and report.registros == 1
     assert store.get_node(hip).properties["n_tentativas"] == 1
     assert len(_records(store, abordagem)) == 1
+
+
+def test_registro_que_perdeu_as_tentativas_validas_e_zerado_e_nao_sustenta_mais_nada(world):
+    """Uma réplica deixa de valer: o registro antigo não pode manter ``atingiu_alvo`` nem ``melhor_valor``."""
+    store, graph, service = world
+    problema = store.get_node(graph.problema)
+    hip, abordagem = graph.hipotese(), graph.abordagem()
+    _, r1 = graph.tentativa(hip, abordagem, valor=0.80, seed=1)
+    _, r2 = graph.tentativa(hip, abordagem, valor=0.82, seed=2)
+    (registro,) = service.recompute_records(abordagem, problema)
+    assert store.get_node(registro).properties["atingiu_alvo"] is True
+
+    for res in (r1, r2):
+        store.update_node(res, {"status_validacao": "nao_validado"}, actor=ORQ)
+    assert service.recompute_records(abordagem, problema) == []
+
+    node = store.get_node(registro)
+    assert node.properties["atingiu_alvo"] is False and node.properties["n_atingiu_alvo"] == 0
+    assert node.properties["n_tentativas_validas"] == 0 and node.properties.get("melhor_valor") is None
+    assert service.records_in_scope([store.get_node(abordagem), problema])  # o nó segue existindo (nada é apagado)
+
+
+def test_atalho_decide_sobre_a_abordagem_inteira_e_atualiza_as_evidencias(world):
+    """Duas configurações com um acerto cada: a abordagem tem duas réplicas independentes e o atalho existe."""
+    store, graph, service = world
+    problema = store.get_node(graph.problema)
+    hip, abordagem = graph.hipotese(), graph.abordagem()
+    _, r1 = graph.tentativa(hip, abordagem, valor=0.80, seed=42, config={"modelo": "gb", "p": 1})
+    graph.tentativa(hip, abordagem, valor=0.82, seed=42, config={"modelo": "gb", "p": 2})
+    ids = service.recompute_records(abordagem, problema)
+
+    assert len(ids) == 2
+    (atalho,) = _edges(store, "FUNCIONOU_PARA", src=abordagem, dst=graph.problema)
+    assert atalho.properties["n_exp"] == 2 and atalho.properties["melhor_valor"] == pytest.approx(0.82)
+    assert atalho.properties["registro_id"] in ids
+
+    _, r3 = graph.tentativa(hip, abordagem, valor=0.90, seed=42, config={"modelo": "gb", "p": 3})
+    service.recompute_records(abordagem, problema)
+    (atalho,) = _edges(store, "FUNCIONOU_PARA", src=abordagem, dst=graph.problema)
+    assert atalho.properties["melhor_valor"] == pytest.approx(0.90) and r3 in atalho.properties["evidencias"]
+    assert store.get_node(atalho.properties["registro_id"]).properties["melhor_valor"] == pytest.approx(0.90)
+
+
+def test_valor_de_teste_vale_mais_que_o_de_validacao_cruzada(world):
+    """O experimento com cv=0,97 e teste=0,90 conta o valor de teste (o cv costuma ser otimista)."""
+    store, graph, service = world
+    hip, abordagem = graph.hipotese(), graph.abordagem()
+    exp, cv = graph.tentativa(hip, abordagem, valor=0.97)
+    store.update_node(cv, {"qualificador": "cv"}, actor=ORQ)
+    teste = store.create_node(
+        "Resultado",
+        {**graph.base(), "nome_original": "r2", "valor": 0.90, "status_validacao": "validado", "caminho_metrics": "/m",
+         "baseline": 0.7, "qualificador": "teste"},
+        actor=ORQ,
+    )
+    store.create_edge(exp, "PRODUZIU", teste, {}, actor=ORQ)
+    store.create_edge(teste, "MEDE", graph.metrica, {}, actor=ORQ)
+
+    facts = service.recompute_hypothesis(hip)
+
+    assert facts.melhor_valor == pytest.approx(0.90) and facts.resultado_ids == (teste,)

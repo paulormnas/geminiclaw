@@ -8,7 +8,9 @@ hipótese é uma contagem que qualquer pessoa confere:
 - **validada**: o alvo é atingido em pelo menos ``min_replicas`` tentativas independentes;
 - **refutada**: pelo menos ``min_refutations`` tentativas independentes ficam abaixo do alvo e nenhuma o atinge.
 
-Duas tentativas são independentes quando diferem na semente ou nos conjuntos de dados.
+Duas tentativas são independentes quando diferem na configuração, na semente ou nos conjuntos de dados: uma
+variação de configuração é evidência nova (o modelo v2 do ADR 015 já a tratava assim), enquanto repetir a mesma
+configuração com a mesma semente e os mesmos dados não acrescenta nada.
 """
 
 from __future__ import annotations
@@ -88,7 +90,8 @@ class RecordFacts:
         delta_base: Melhora do melhor valor sobre a linha de base (positiva = melhor); ``None`` sem referência.
         delta_pai: Melhora sobre o melhor valor do registro de origem; ``None`` sem origem.
         n_tentativas_validas: Tentativas com valor da métrica do critério.
-        n_replicas_independentes: Pares distintos (semente, conjuntos de dados) entre as tentativas válidas.
+        n_replicas_independentes: Trincas distintas (configuração, semente, conjuntos de dados) entre as tentativas
+            válidas.
         n_atingiu_alvo: Réplicas independentes cujo melhor valor atinge o alvo.
         n_abaixo_alvo: Réplicas independentes cujo melhor valor fica abaixo do alvo.
         atingiu_alvo: ``n_atingiu_alvo >= 1``.
@@ -142,8 +145,8 @@ def _best(items: list[Attempt], sentido: Sentido) -> Attempt:
     return pick(items, key=lambda a: (a.value if a.value is not None else 0.0))
 
 
-def _independence_key(attempt: Attempt) -> tuple[int | None, tuple[str, ...]]:
-    return attempt.seed, tuple(sorted(attempt.dataset_ids))
+def _independence_key(attempt: Attempt) -> tuple[str, int | None, tuple[str, ...]]:
+    return attempt.config_hash, attempt.seed, tuple(sorted(attempt.dataset_ids))
 
 
 def compute_record(
@@ -164,7 +167,7 @@ def compute_record(
     valid = sorted((a for a in attempts if is_valid(a)), key=lambda a: (a.timestamp, a.attempt_id))
     if not valid:
         return RecordFacts(None, None, None, 0, 0, 0, 0, False, ())
-    groups: dict[tuple[int | None, tuple[str, ...]], list[Attempt]] = {}
+    groups: dict[tuple[str, int | None, tuple[str, ...]], list[Attempt]] = {}
     for attempt in valid:
         groups.setdefault(_independence_key(attempt), []).append(attempt)
     best = _best(valid, criterion.sentido)

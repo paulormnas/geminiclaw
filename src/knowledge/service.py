@@ -330,8 +330,10 @@ class KnowledgeService:
         results = self._results_of(exp, metric)
         if results:
             pick = max if metric.properties.get("sentido") == "maior_melhor" else min
-            verified = [r for r in results if r.properties.get("status_validacao") != "nao_validado"]
-            result = pick(verified or results, key=lambda r: float(r.properties["valor"]))
+            verified = [r for r in results if r.properties.get("status_validacao") != "nao_validado"] or results
+            # O valor de teste vale mais que o de validação cruzada, que costuma ser otimista.
+            held_out = [r for r in verified if r.properties.get("qualificador") == "teste"] or verified
+            result = pick(held_out, key=lambda r: float(r.properties["valor"]))
             baseline = result.properties.get("baseline")
             attempt = Attempt(
                 attempt_id=result.id,
@@ -523,6 +525,14 @@ class KnowledgeService:
         return collected
 
     @_operation
+    def attempt_classes(
+        self, collected: list[CollectedAttempt], criterion: Criterion, problema: Node | None, metric: Node
+    ) -> list[str]:
+        """``atingiu``, ``abaixo`` ou ``invalida`` de cada tentativa, com a mesma referência das contagens."""
+        reference = self._reference_value(problema, metric) if problema is not None else None
+        return [classify_attempt(c.attempt, criterion, reference) for c in collected]
+
+    @_operation
     def records_in_scope(self, sobre: list[Node]) -> list[Node]:
         """``RegistroResultado``s do escopo: da abordagem (e fundidas) no problema, ou das hipóteses indicadas."""
         pairs: set[tuple[str, str]] = set()
@@ -552,8 +562,12 @@ class KnowledgeService:
     def recompute_records(self, abordagem_id: str, problema: Node) -> list[str]:
         """Recalcula os registros da abordagem canônica no problema (um por configuração) e os atalhos derivados.
 
+        Registros que deixaram de ter tentativa válida (resultado reclassificado, abordagem fundida em outra) são
+        zerados, nunca apagados. Os atalhos decidem sobre as tentativas da abordagem inteira no problema, as mesmas da
+        contagem das hipóteses e do portão das descobertas.
+
         Returns:
-            Os ids dos registros, na ordem da primeira tentativa de cada configuração.
+            Os ids dos registros com tentativas, na ordem da primeira tentativa de cada configuração.
 
         Raises:
             KnowledgeServiceError: Problema sem critério ou métrica canônica.
@@ -564,8 +578,9 @@ class KnowledgeService:
             raise KnowledgeServiceError(f"Abordagem '{abordagem_id}' não encontrada.")
         criterion, metric = self.criterion_for(problema)
         reference = self._reference_value(problema, metric)
+        attempts = self._family_attempts(canonical, problema, metric)
         groups: dict[str, list[CollectedAttempt]] = {}
-        for item in self._family_attempts(canonical, problema, metric):
+        for item in attempts:
             groups.setdefault(item.attempt.config_hash, []).append(item)
         ordered = sorted(groups.items(), key=lambda kv: min(c.attempt.timestamp for c in kv[1]))
         computed: list[tuple[str, RecordFacts, list[CollectedAttempt]]] = []
@@ -580,8 +595,33 @@ class KnowledgeService:
                 better = facts.melhor_valor
                 if earlier is None or improvement(better, earlier, criterion.sentido) > 0:
                     earlier = better
-        self._sync_shortcuts(abordagem, problema, metric, computed)
+        live = {record_id for record_id, _, _ in computed}
+        for record in self._existing_records(canonical, problema):
+            if record.id not in live:
+                self._zero_record(record)
+        overall = compute_record([c.attempt for c in attempts], criterion, reference_value=reference)
+        self._sync_shortcuts(abordagem, problema, metric, computed, overall)
         return [record_id for record_id, _, _ in computed]
+
+    def _existing_records(self, canonical: str, problema: Node) -> list[Node]:
+        """``RegistroResultado``s da abordagem canônica (e das fundidas nela) no problema."""
+        found: dict[str, Node] = {}
+        for member in self.merged_approaches(canonical):
+            for record in self._in(member, "REGISTRA"):
+                if record.label == "RegistroResultado" and any(
+                    p.id == problema.id for p in self._out(record.id, "SOBRE")
+                ):
+                    found[record.id] = record
+        return list(found.values())
+
+    def _zero_record(self, record: Node) -> None:
+        zeros: dict[str, Any] = {
+            "melhor_valor": None, "delta_base": None, "delta_pai": None, "n_tentativas_validas": 0,
+            "n_replicas_independentes": 0, "n_atingiu_alvo": 0, "n_abaixo_alvo": 0, "atingiu_alvo": False,
+        }
+        changed = {k: v for k, v in zeros.items() if record.properties.get(k) != v}
+        if changed:
+            self._store.update_node(record.id, changed, actor=self._actor)
 
     def _upsert_record(
         self, problema: Node, abordagem: Node, digest: str, items: list[CollectedAttempt], facts: RecordFacts,
@@ -610,10 +650,10 @@ class KnowledgeService:
             "experimentos": sorted({c.experimento_id for c in valid})[:_MAX_RECORD_REFS],
             "visibilidade": "compartilhavel" if shared else "privado",
         }
-        values = {k: v for k, v in values.items() if v is not None}
         found = self._store.find_nodes("RegistroResultado", {"chave": chave}, limit=1)
         if found:
             record = found[0]
+            # Um valor que deixou de existir (``None``) apaga o anterior; na criação ele nem entra no nó.
             changed = {k: v for k, v in values.items() if record.properties.get(k) != v}
             if changed:
                 self._store.update_node(record.id, changed, actor=self._actor)
@@ -622,7 +662,7 @@ class KnowledgeService:
             record_id = self._store.create_node(
                 "RegistroResultado",
                 {
-                    **values,
+                    **{k: v for k, v in values.items() if v is not None},
                     "chave": chave,
                     "qualificacao": "pendente",
                     "projeto_id": str(problema.properties.get("projeto_id") or ""),
@@ -643,40 +683,41 @@ class KnowledgeService:
 
     def _sync_shortcuts(
         self, abordagem: Node, problema: Node, metric: Node,
-        computed: list[tuple[str, RecordFacts, list[CollectedAttempt]]],
+        computed: list[tuple[str, RecordFacts, list[CollectedAttempt]]], overall: RecordFacts,
     ) -> None:
-        """Mantém ``FUNCIONOU_PARA``/``FALHOU_PARA`` derivados dos registros (ou os contesta quando deixam de valer)."""
-        works = [c for c in computed if holds_works(c[1], min_replicas=config.HYPOTHESIS_MIN_REPLICAS)]
-        fails = (
-            not any(f.n_atingiu_alvo for _, f, _ in computed)
-            and any(holds_fails(f, min_refutations=config.HYPOTHESIS_MIN_REFUTATIONS) for _, f, _ in computed)
-        )
+        """Mantém ``FUNCIONOU_PARA``/``FALHOU_PARA`` derivados dos registros (ou os contesta quando deixam de valer).
+
+        A decisão é sobre as tentativas da abordagem inteira no problema (``overall``); o atalho aponta o registro de
+        melhor valor (``FUNCIONOU_PARA``) ou o de mais tentativas abaixo do alvo (``FALHOU_PARA``).
+        """
+        works = holds_works(overall, min_replicas=config.HYPOTHESIS_MIN_REPLICAS)
+        fails = not works and holds_fails(overall, min_refutations=config.HYPOTHESIS_MIN_REFUTATIONS)
         if works:
-            record_id, facts, items = max(works, key=lambda c: _rank(c[1], metric))
+            record_id, facts, items = max(computed, key=lambda c: _rank(c[1], metric))
             cfg = next((c.config for c in items if c.config), {})
             self._set_shortcut(
                 abordagem, problema, "FUNCIONOU_PARA",
                 {
                     "metrica": str(metric.properties.get("nome")),
-                    "melhor_valor": facts.melhor_valor,
+                    "melhor_valor": overall.melhor_valor,
                     "config": cfg,
-                    "n_exp": facts.n_tentativas_validas,
+                    "n_exp": overall.n_tentativas_validas,
                     "registro_id": record_id,
                 },
-                [r for r in facts.resultado_ids][:50],
+                list(facts.resultado_ids)[:50],
             )
         else:
             self._contest_shortcut(abordagem, problema, "FUNCIONOU_PARA")
-        if fails and not works:
+        if fails:
             record_id, facts, _ = max(computed, key=lambda c: c[1].n_abaixo_alvo)
             self._set_shortcut(
                 abordagem, problema, "FALHOU_PARA",
                 {
                     "motivo": (
-                        f"{facts.n_abaixo_alvo} réplica(s) independente(s) abaixo do alvo "
+                        f"{overall.n_abaixo_alvo} réplica(s) independente(s) abaixo do alvo "
                         f"({metric.properties.get('nome')}); nenhuma o atinge"
                     ),
-                    "n_exp": facts.n_tentativas_validas,
+                    "n_exp": overall.n_tentativas_validas,
                     "registro_id": record_id,
                 },
                 list(facts.resultado_ids)[:50],
@@ -689,7 +730,9 @@ class KnowledgeService:
     ) -> None:
         edges = [e for e in self._out_edges(abordagem.id, rel) if e.dst_id == problema.id]
         if edges:
-            self._store.update_edge(abordagem.id, rel, problema.id, props, actor=self._actor)
+            self._store.update_edge(
+                abordagem.id, rel, problema.id, {**props, "evidencias": evidencias}, actor=self._actor
+            )
             if edges[0].properties.get("status") == "contestada":
                 self._store.set_edge_status(abordagem.id, rel, problema.id, "confirmada", actor=self._actor)
         else:

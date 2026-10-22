@@ -222,15 +222,15 @@ class HypothesisCycle:
     def _prior_support(self, node: Node, problem: Node | None) -> float:
         """Apoio prévio da abordagem da hipótese em problemas similares (atalhos derivados dos registros).
 
-        1,0 quando há ``FUNCIONOU_PARA`` ativo em problema similar; 0,0 quando há ``FALHOU_PARA`` ativo em problema
-        com similaridade >= 0,8; 0,5 quando não há experiência. Só enxerga problemas do projeto ou
-        ``compartilhavel``.
+        A maior similaridade entre o problema do projeto e um problema com ``FUNCIONOU_PARA`` ativo da abordagem (1,0
+        no próprio problema); 0,0 quando há ``FALHOU_PARA`` ativo em problema com similaridade >= 0,8; 0,5 quando não
+        há experiência. Só enxerga problemas do projeto ou ``compartilhavel``.
         """
         approaches = [n for n in self._neighbors_out(node.id, "PROPOE") if n.label == "Abordagem"]
         if not approaches or problem is None:
             return NEUTRAL
         similar = self._similar_problems(problem)
-        worked = False
+        worked: float | None = None
         for approach in approaches:
             canonical = self._service.canonical_approach(approach.id)
             for rel in ("FUNCIONOU_PARA", "FALHOU_PARA"):
@@ -246,8 +246,8 @@ class HypothesisCycle:
                     if rel == "FALHOU_PARA" and sim >= STRONG_FAILURE_SIMILARITY:
                         return 0.0
                     if rel == "FUNCIONOU_PARA":
-                        worked = True
-        return 1.0 if worked else NEUTRAL
+                        worked = max(worked if worked is not None else 0.0, sim)
+        return NEUTRAL if worked is None else _clamp01(worked)
 
     def _neighbors_out(self, node_id: str, rel: str) -> list[Node]:
         sub = self._store.neighbors(node_id, [rel], direction="out", depth=1)

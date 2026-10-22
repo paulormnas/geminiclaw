@@ -124,6 +124,18 @@ _REMOVED_VARIABLES: dict[str, str | Callable[[str], str]] = {
 }
 
 
+# As 21 variáveis ``VERDICT_*`` do modelo v2 do veredito (ADR 015 §9; removidas pelo ADR 026). Lista fechada: outras
+# variáveis com o mesmo prefixo, de fora do projeto, não são recusadas.
+_REMOVED_VERDICT_VARIABLES: tuple[str, ...] = (
+    "VERDICT_Q_VALIDATED_COMPLETE", "VERDICT_Q_VALIDATED_INCOMPLETE", "VERDICT_Q_DIVERGENT",
+    "VERDICT_D_NEW_NODE_OR_DATASET", "VERDICT_D_NEW_SESSION", "VERDICT_D_NEW_SEED", "VERDICT_GAMMA",
+    "VERDICT_LAMBDA_AMBIGUOUS", "VERDICT_APPROACH_FAILURE_Q", "VERDICT_APPROACH_FAILURE_MIN_REPEATS", "VERDICT_PRIOR",
+    "VERDICT_MODEL", "VERDICT_D_VARIATION", "VERDICT_D_REPLICA_NODE", "VERDICT_D_NEW_DATASET",
+    "VERDICT_D_VARIATION_NO_GAIN", "VERDICT_D_REPLICA_AGAINST", "VERDICT_USEFUL_VARIATION_EPSILON",
+    "VERDICT_M_FLOOR_NO_BASELINE", "VERDICT_REQUIRE_TARGET", "VERDICT_THRESHOLDS",
+)
+
+
 def check_removed_variables(environ: Mapping[str, str]) -> None:
     """Falha se ``environ`` traz algum nome removido, com uma linha por nome encontrado.
 
@@ -137,8 +149,8 @@ def check_removed_variables(environ: Mapping[str, str]) -> None:
     lines.extend(
         f"'{name}' foi removida pelo ADR 026 (o veredito deixou de existir; ver HYPOTHESIS_MIN_REPLICAS e "
         "HYPOTHESIS_MIN_REFUTATIONS); remova a linha."
-        for name in sorted(environ)
-        if name.startswith("VERDICT_")
+        for name in _REMOVED_VERDICT_VARIABLES
+        if name in environ
     )
     if lines:
         raise ConfigurationError("Configuração com nomes removidos:\n- " + "\n- ".join(lines))
@@ -785,7 +797,8 @@ TRIAGE_MODE = get_env("TRIAGE_MODE", default="hybrid")
 TRIAGE_CONFIDENCE_THRESHOLD = float(get_env("TRIAGE_CONFIDENCE_THRESHOLD", default="0.7"))
 
 # --- Regra de estado da hipótese (ADR 026 §3; substitui o veredito do ADR 015 §9) ---
-# Tentativas válidas e independentes (semente ou conjunto de dados distintos) que atingem o alvo e validam a hipótese.
+# Tentativas válidas e independentes (configuração, semente ou conjunto de dados distintos) que atingem o alvo e
+# validam a hipótese.
 HYPOTHESIS_MIN_REPLICAS = int(
     _bounded_number("HYPOTHESIS_MIN_REPLICAS", "2", int, "um inteiro >= 1", lambda v: v >= 1)
 )

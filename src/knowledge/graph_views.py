@@ -488,13 +488,14 @@ def _visible(node: Node, projeto_id: str) -> bool:
 
 def _counts_detail(store: GraphReader, node: Node) -> tuple[dict[str, Any] | None, str | None]:
     """Contagem por tentativa (cálculo determinístico do ``KnowledgeService``; sem LLM)."""
-    from src.knowledge.result_records import classify_attempt
     from src.knowledge.service import KnowledgeService, KnowledgeServiceError
 
     service = KnowledgeService(store)  # type: ignore[arg-type]  # só chama métodos de leitura
     try:
+        problema: Any = None
         if node.label == "Hipotese":
             facts, collected, metric, criterion = service.hypothesis_facts(node.id)
+            problema = service.problem_for(node)
         else:
             sub = store.neighbors(node.id, ["SOBRE"], "out", 1)
             filtro = node.properties.get("filtro_condicoes")
@@ -506,6 +507,10 @@ def _counts_detail(store: GraphReader, node: Node) -> tuple[dict[str, Any] | Non
                 return None, "sem escopo calculável (SOBRE sem Hipótese ou Abordagem+Problema)."
             facts, collected, metric, _, problema = scope
             criterion = service.criterion_for(problema)[0] if problema is not None else None
+        classes = (
+            service.attempt_classes(collected, criterion, problema, metric)
+            if criterion is not None else ["invalida"] * len(collected)
+        )
     except KnowledgeServiceError as exc:
         return None, f"detalhamento indisponível: {sanitize_text(exc, 160)}"
     return {
@@ -514,13 +519,9 @@ def _counts_detail(store: GraphReader, node: Node) -> tuple[dict[str, Any] | Non
         "n_atingiu_alvo": facts.n_atingiu_alvo,
         "n_abaixo_alvo": facts.n_abaixo_alvo,
         "tentativas": [
-            {
-                "tentativa": sanitize_text(c.attempt.attempt_id, 64),
-                "classificacao": classify_attempt(c.attempt, criterion) if criterion is not None else "invalida",
-                "valor": c.attempt.value,
-            }
-            for c in collected[:_MAX_COLLECTION_ITEMS * 3]
-        ],
+            {"tentativa": sanitize_text(c.attempt.attempt_id, 64), "classificacao": kind, "valor": c.attempt.value}
+            for c, kind in zip(collected, classes)
+        ][:_MAX_COLLECTION_ITEMS * 3],
     }, None
 
 

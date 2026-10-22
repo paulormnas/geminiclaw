@@ -27,6 +27,11 @@ O sistema SHALL manter um `RegistroResultado` por par (Problema, Abordagem, `con
 - **WHEN** o segundo `Resultado` é ingerido
 - **THEN** o registro do par tem `melhor_valor = 0.95`, `n_replicas_independentes = 2`, `n_atingiu_alvo = 2` e `atingiu_alvo = true`
 
+#### Scenario: Variação de configuração é réplica independente
+- **GIVEN** duas tentativas com a mesma semente e os mesmos dados, em configurações diferentes, ambas acima do alvo
+- **WHEN** a hipótese é recalculada
+- **THEN** `n_atingiu_alvo = 2`; com a mesma configuração, a mesma semente e os mesmos dados, `n_replicas_independentes = 1`
+
 #### Scenario: Diferença para a configuração anterior
 - **GIVEN** uma abordagem com um registro de `melhor_valor = 0.88` e, depois, uma nova configuração que produz 0.91
 - **WHEN** os registros são recalculados

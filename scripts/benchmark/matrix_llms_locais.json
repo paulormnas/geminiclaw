@@ -1,0 +1,85 @@
+{
+  "task_file": "scripts/benchmark/task_iris.txt",
+  "timeout_seconds": 16000,
+  "env": {
+    "LOCALITY_MIN_GROUP_SIZE": "10",
+    "LLM_REQUESTS_PER_MINUTE": "600",
+    "SESSION_MAX_TOKENS": "3000000",
+    "SESSION_MAX_COST_USD": "3",
+    "SESSION_MAX_MINUTES": "240",
+    "GOOGLE_FALLBACK_MODEL": "",
+    "LLM_PRICING_OVERRIDES": "{\"openai_compatible/qwen3.8-27b\": [0, 0, 0], \"openai_compatible/gemma-4-31b\": [0, 0, 0], \"openai_compatible/qwen3-coder-next\": [0, 0, 0]}"
+  },
+  "combinations": [
+    {
+      "name": "qwen-dev-gemma-juiz-iris",
+      "problem": "iris",
+      "roles": {
+        "*": "openai_compatible/qwen3.8-27b",
+        "VALIDATOR": "openai_compatible/gemma-4-31b"
+      }
+    },
+    {
+      "name": "gemma-dev-qwen-juiz-iris",
+      "problem": "iris",
+      "roles": {
+        "*": "openai_compatible/gemma-4-31b",
+        "VALIDATOR": "openai_compatible/qwen3.8-27b"
+      }
+    },
+    {
+      "name": "qwen-dev-gemma-juiz-wine",
+      "problem": "wine",
+      "roles": {
+        "*": "openai_compatible/qwen3.8-27b",
+        "VALIDATOR": "openai_compatible/gemma-4-31b"
+      },
+      "task_file": "scripts/benchmark/task_wine.txt"
+    },
+    {
+      "name": "gemma-dev-qwen-juiz-wine",
+      "problem": "wine",
+      "roles": {
+        "*": "openai_compatible/gemma-4-31b",
+        "VALIDATOR": "openai_compatible/qwen3.8-27b"
+      },
+      "task_file": "scripts/benchmark/task_wine.txt"
+    },
+    {
+      "name": "qwen-dev-gemma-juiz-glass",
+      "problem": "glass",
+      "roles": {
+        "*": "openai_compatible/qwen3.8-27b",
+        "VALIDATOR": "openai_compatible/gemma-4-31b"
+      },
+      "task_file": "scripts/benchmark/task_glass.txt"
+    },
+    {
+      "name": "gemma-dev-qwen-juiz-glass",
+      "problem": "glass",
+      "roles": {
+        "*": "openai_compatible/gemma-4-31b",
+        "VALIDATOR": "openai_compatible/qwen3.8-27b"
+      },
+      "task_file": "scripts/benchmark/task_glass.txt"
+    },
+    {
+      "name": "qwen-dev-gemma-juiz-cancer",
+      "problem": "cancer",
+      "roles": {
+        "*": "openai_compatible/qwen3.8-27b",
+        "VALIDATOR": "openai_compatible/gemma-4-31b"
+      },
+      "task_file": "scripts/benchmark/task_cancer.txt"
+    },
+    {
+      "name": "gemma-dev-qwen-juiz-cancer",
+      "problem": "cancer",
+      "roles": {
+        "*": "openai_compatible/gemma-4-31b",
+        "VALIDATOR": "openai_compatible/qwen3.8-27b"
+      },
+      "task_file": "scripts/benchmark/task_cancer.txt"
+    }
+  ]
+}

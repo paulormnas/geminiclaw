@@ -40,7 +40,7 @@ Se qualquer especificação estiver ambígua, solicite esclarecimento. Não tome
 
 A stack frontend será decidida via ADR no momento da implementação. Possibilidades incluem:
 
-- **Web com JavaScript/TypeScript:** permitida pelo AGENTS.md, em diretório isolado do backend.
+- **Web com JavaScript/TypeScript:** permitida pelo AGENTS.md, em diretório isolado do backend. Lógica de servidor em JS/TS (desenvolvimento, renderização, proxy) é permitida só a serviço da própria interface, falando com o backend Python pela API; nunca acessa bancos, gate ou orquestrador.
 - **Python-first:** Streamlit, Gradio, NiceGUI ou FastHTML, se o ADR concluir que atendem melhor.
 
 Independentemente da stack escolhida:

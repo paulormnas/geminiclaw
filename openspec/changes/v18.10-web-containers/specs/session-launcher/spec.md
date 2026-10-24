@@ -56,3 +56,14 @@ O lançador SHALL assumir um pedido por vez com `FOR UPDATE SKIP LOCKED`, revali
 #### Scenario: Dois consumidores na fila
 - **GIVEN** dois pedidos de projetos diferentes e duas conexões assumindo ao mesmo tempo
 - **THEN** cada pedido é assumido uma vez só
+
+### Requirement: Resposta de saúde
+O lançador SHALL responder a cada `launcher_ping` com `launcher_pong` contendo o mesmo nonce, seu id, versão e `laco_ok`, por uma tarefa separada do laço de pedidos, e MUST NOT incluir segredos ou dados de pesquisa na resposta.
+
+#### Scenario: Ping respondido
+- **WHEN** `NOTIFY launcher_ping, 'abc123'`
+- **THEN** chega `launcher_pong` com `nonce='abc123'` e `laco_ok=true`, com no máximo 512 bytes
+
+#### Scenario: Nonce inválido ignorado
+- **WHEN** o ping traz carga que não é hex de 32 caracteres
+- **THEN** nenhuma resposta é enviada

@@ -75,12 +75,29 @@ class OpenAICompatibleProvider(LLMProvider):
         self._client = httpx.AsyncClient(base_url=self._base_url, headers=headers, timeout=_request_timeout())
 
     def _build_messages(self, messages: list[dict], system: str | None) -> list[dict]:
+        history = [self._with_string_arguments(msg) for msg in messages]
         if not system:
-            return list(messages)
-        first_msg = messages[0] if messages else None
+            return history
+        first_msg = history[0] if history else None
         if first_msg and first_msg.get("role") == "system" and first_msg.get("content") == system:
-            return list(messages)
-        return [{"role": "system", "content": system}] + list(messages)
+            return history
+        return [{"role": "system", "content": system}] + history
+
+    @staticmethod
+    def _with_string_arguments(msg: dict) -> dict:
+        """O histórico guarda ``arguments`` como dict; a API exige string JSON (o vLLM responde 400 sem isso)."""
+        tool_calls = msg.get("tool_calls")
+        if not tool_calls:
+            return msg
+        fixed = []
+        for call in tool_calls:
+            function = call.get("function") or {}
+            arguments = function.get("arguments")
+            if not isinstance(arguments, str):
+                function = {**function, "arguments": json.dumps(arguments or {}, ensure_ascii=False)}
+                call = {**call, "function": function}
+            fixed.append(call)
+        return {**msg, "tool_calls": fixed}
 
     def _build_payload(
         self,

@@ -279,3 +279,32 @@ async def test_max_tokens_piso_nao_reduz_pedido_maior(monkeypatch):
     monkeypatch.setattr("src.config.OPENAI_COMPATIBLE_MAX_TOKENS", 16384)
 
     assert await _max_tokens_enviado(32000) == 32000
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_historico_envia_arguments_como_string_json():
+    """O histórico interno guarda ``arguments`` como dict; o servidor (vLLM) exige string JSON."""
+    provider = OpenAICompatibleProvider(base_url=BASE_URL, model=MODEL)
+    history = [
+        {"role": "user", "content": "Busque"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "c1", "type": "function", "function": {"name": "quick_search", "arguments": {"query": "ação"}}},
+                {"id": "c2", "type": "function", "function": {"name": "memory", "arguments": '{"k": 1}'}},
+            ],
+        },
+        {"role": "tool", "tool_call_id": "c1", "content": "ok"},
+    ]
+    payload = {"choices": [{"message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}]}
+
+    async with respx.mock:
+        route = respx.post(f"{BASE_URL}/chat/completions").mock(return_value=httpx.Response(200, json=payload))
+        await provider.generate(messages=history)
+
+    sent = json.loads(route.calls.last.request.content)["messages"][1]["tool_calls"]
+    assert sent[0]["function"]["arguments"] == '{"query": "ação"}'
+    assert sent[1]["function"]["arguments"] == '{"k": 1}'
+    assert isinstance(history[1]["tool_calls"][0]["function"]["arguments"], dict)  # o histórico não é alterado

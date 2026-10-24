@@ -813,6 +813,16 @@ HYPOTHESIS_MIN_REFUTATIONS = int(
     _bounded_number("HYPOTHESIS_MIN_REFUTATIONS", "2", int, "um inteiro >= 1", lambda v: v >= 1)
 )
 
+# --- Candidatos estruturais (ADR 026 §6; v18.9-memory-evaluation) ---
+# Semelhança mínima entre Problemas para uma abordagem de um virar candidata de transferência no outro.
+CANDIDATE_MIN_SIMILARITY = float(
+    _bounded_number("CANDIDATE_MIN_SIMILARITY", "0.60", float, "um número em [0, 1]", lambda v: 0 <= v <= 1)
+)
+# Descendentes no máximo para uma abordagem com ganho contar como pouco explorada.
+CANDIDATE_MAX_DESCENDANTS = int(
+    _bounded_number("CANDIDATE_MAX_DESCENDANTS", "2", int, "um inteiro >= 0", lambda v: v >= 0)
+)
+
 # --- Memória de falhas (ADR 026 §5; v18.9-failure-memory) ---
 # Teto de caracteres do bloco "NÃO / USE" que o Developer recebe antes de cada subtarefa de código (0 desliga).
 FAILURE_MEMORY_MAX_CHARS = int(

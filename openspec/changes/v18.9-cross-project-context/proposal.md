@@ -21,7 +21,7 @@ Hoje o primeiro plano de um projeto novo não recebe nada de outros projetos: `r
 - **Bloco `experiencia_de_problemas_semelhantes` no prompt do primeiro plano e de cada ciclo.** Traz até `RELATED_RECORDS_K` registros (padrão 5) de Problemas de outros projetos visíveis, com fatos, qualificação e limite de aplicabilidade, em texto de modelo fixo, via `wrap_data` (design §2).
 - **Semelhança de Problemas:** combina o cosseno do texto com a semelhança de `caracteristicas_dados` (design §3).
 - **Candidatos no ciclo:**
-  - os candidatos de `src/knowledge/candidates.py` do próprio projeto entram como sugestões ao Researcher;
+  - os candidatos de `src/knowledge/structural_candidates.py` do próprio projeto entram como sugestões ao Researcher;
   - os candidatos de outro projeto viram `Oportunidade` com `origem = "grafo"`, à espera do pesquisador;
   - controle por `CROSS_PROJECT_CANDIDATES` (padrão `false` até a regra de decisão do E0) (design §4).
 

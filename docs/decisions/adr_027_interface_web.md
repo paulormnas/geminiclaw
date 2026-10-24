@@ -14,7 +14,8 @@
 | ADR 023, alternativa B | O "serviço permanente com API HTTP" volta, mas só como **interface** (loopback, autenticado); o canal entre a sessão e quem a acompanha continua o PostgreSQL. A web é mais um terminal no sentido do ADR 023 §4.3: só ela e o REPL respondem o gate (§6.6). |
 | ADR 024 §3 | Novo pacote de topo `src/web/`, na mesma camada de `src/cli/` e independente dele (`cli \| web`). |
 | AGENTS.md §1, §7 e §9 | Diretório do frontend: `frontend/`; gerenciador `pnpm`; testes do frontend entram na verificação antes do commit quando `frontend/` muda. |
-| `.agents/rules/frontend-dev.md` e `designer.md` | Stack, diretório e testes definidos (§2–§5); o frontend **não** é containerizado nem roda na `geminiclaw-net`: é estático, servido pelo backend. |
+| `.agents/rules/frontend-dev.md` e `designer.md` | Stack, diretório e testes definidos (§2–§5); frontend e backend web rodam em containers próprios na `geminiclaw-net` (§9), junto de um lançador de sessões no host. |
+| AGENTS.md §1 | Lógica de servidor em JS/TS passa a ser permitida só dentro do projeto de frontend e a serviço dele (decisão de 2026-10-24); o backend do GeminiClaw continua 100% Python. |
 
 ---
 
@@ -111,6 +112,17 @@ O design system **"Bancada"** ([`docs/design-system/README.md`](../design-system
 
 Uma página de configurações altera só o que é do controle do pesquisador (limites de tempo, tokens e custo, modelos e chaves de API dos provedores LLM), por uma **lista fechada** de variáveis; banco, credenciais de infraestrutura, `WEB_*`, egresso e sandbox ficam fora. Os valores vão para um arquivo próprio, separado do `.env`, lido por cima dele; chaves nunca voltam ao navegador. Detalhes em `v18.10-web-settings`.
 
+### 9. Execução: containers web e lançador no host (decisão de 2026-10-24)
+
+Motivação do pesquisador: subir tudo com um comando, build igual em qualquer máquina e isolar o processo web, sem criar containers por sessão de pesquisa (as sessões já usam um sandbox por execução de código; containers paralelos por exploração pesariam no futuro).
+
+- **`geminiclaw-web`** (backend FastAPI, Python): container na `geminiclaw-net`, usuário não root, sistema de arquivos só leitura (exceto diretórios de trabalho declarados), porta publicada só em `127.0.0.1` (acesso remoto por `tailscale serve`). Serve a API, lê bancos, grafo e artefatos (volume de saída montado só leitura), grava pedidos do pesquisador. **Nunca inicia sessão nem recebe o socket do Docker.**
+- **`geminiclaw-web-frontend`** (Node): hoje gera o build estático com `pnpm` travado e sem scripts de instalação; pode evoluir para servidor de desenvolvimento, renderização ou proxy da interface (AGENTS.md §1, regra revista), sempre falando com o backend pela API.
+- **Lançador no host** (`src/launcher/`, Python, `uv run`): processo leve fora de container que lê no PostgreSQL os pedidos de "iniciar pesquisa" e inicia a sessão como processo local, exatamente como o REPL (ADR 014, ADR 023). Sessões e sandboxes continuam no host; nenhuma exploração ganha container próprio. Lançador ausente → a web mostra "não é possível iniciar pesquisa" e o resto funciona.
+- **Comandos, gate e caixa de entrada** já passam pelo banco e funcionam do container sem mudança. A consulta só leitura ao Researcher (chat) decide-se na spec do chat: no container da web (não usa sandbox) ou pelo lançador.
+- **Um comando:** `scripts/up.sh` sobe `docker compose --profile web` (infra + web) e o lançador; `scripts/down.sh` desfaz.
+- **Pendências de aprovação:** a fila de pedidos de início é mudança de schema (tabela nova ou extensão da caixa de entrada) e alteração do `docker-compose.yml`; ambas na mudança `v18.10-web-containers`, com parecer de segurança e aviso à trilha 1. O modo local (`uv run python -m src.web`) continua para desenvolvimento.
+
 ### 6.7 Limites
 
 Todo limite da web informa o que ficou de fora e oferece como ver o restante na própria web (paginar ou "carregar mais"), não só filtrar ou baixar; os padrões vêm de medição no `geminiclaw_bench`, não de estimativa (revisão adversarial de 2026-10-24).
@@ -142,10 +154,13 @@ Sem JavaScript no repositório e mais rápida para o painel. **Rejeitada pelo pe
 Uma linguagem só e quase nenhum build. **Rejeitada:** o grafo interativo e o chat com SSE exigiriam JavaScript à mão mesmo assim, sem tipos nem testes de componente.
 
 ### C. Next.js, Remix ou outro framework com servidor Node
-**Rejeitada:** traria um segundo servidor (Node) com lógica própria, contra AGENTS.md §1 (JavaScript nunca executa lógica do backend). A SPA é estática.
+**Rejeitada:** traria um segundo servidor (Node) com lógica própria, contra AGENTS.md §1 (JavaScript nunca executa lógica do backend do GeminiClaw). A SPA é estática hoje; servidor JS a serviço só da interface fica permitido para o futuro (§9).
 
 ### D. Frontend em container na `geminiclaw-net` (regra antiga do `frontend-dev.md`)
-**Rejeitada:** o build é estático e servido pelo backend; um container a mais só serviria arquivos e traria outra porta a proteger.
+**Revista em 2026-10-24 e adotada** (§9): o container do frontend dá build reprodutível e espaço para a interface ficar dinâmica.
+
+### D2. Backend web em container iniciando as sessões (socket do Docker montado)
+**Rejeitada:** o socket equivale a root no host e anula o isolamento do sandbox (ADR 014); sessões rodariam de forma diferente pela web e pelo REPL. Substituída pelo lançador no host (§9).
 
 ### E. Autenticação por token no cabeçalho guardado no `localStorage`
 **Rejeitada:** qualquer XSS lê o token. O cookie `HttpOnly` com CSRF por cabeçalho limita o estrago de um XSS ao tempo da página aberta.
@@ -191,7 +206,8 @@ Distinguiria o canal no próprio estado do pedido. **Rejeitada pelo pesquisador:
 | `v18.10-web-artifacts` | `web-interface` | §6.3, §6.4 |
 | `v18.10-web-graph` | `web-interface` | §6.4, §6.5 |
 | `v18.10-web-settings` | `web-interface` | §6.8: página de configurações do pesquisador (limites, chaves de API), lista fechada |
-| `v18.10-web-chat` | `web-interface`, `researcher-consult` | §6.6: conversa, nova pesquisa, eventos por SSE, caixa de entrada, gate com `Source.WEB`, código comum fora de `src/cli/` |
+| `v18.10-web-chat` | `web-interface`, `researcher-consult` | §6.6: conversa, nova pesquisa, eventos por SSE, caixa de entrada, gate com `canal: web`, código comum fora de `src/cli/` |
+| `v18.10-web-containers` | `web-interface`, `session-launcher` | §9: containers `geminiclaw-web` e `geminiclaw-web-frontend`, lançador no host, fila de pedidos de início (schema, com aprovação), `scripts/up.sh`; antes do chat |
 
 ---
 

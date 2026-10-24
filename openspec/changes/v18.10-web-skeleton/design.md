@@ -92,7 +92,7 @@ As variáveis `WEB_*` só são exigidas quando `src.web` inicia: o REPL e as ses
 |---|---|
 | Orquestrador & laço | Nenhum. |
 | Agentes & prompts | Nenhum. |
-| Sandboxes & containers | Nenhum; o frontend não é container. `docker-compose.yml` não muda. |
+| Sandboxes & containers | Nenhum nesta mudança (modo local); containers e lançador ficam em `v18.10-web-containers` (ADR 027 §9). `docker-compose.yml` não muda aqui. |
 | Persistência | Só `update_node` em `Projeto` (propriedades existentes) e criação pelo caminho atual; sem schema. |
 | Segurança | Porta HTTP nova em loopback; autenticação, CSRF, `Host`/`Origin`, CSP (§7). |
 | Testes & telemetria | Suíte pytest nova (`tests/unit/web/`, `tests/integration/web/`) e suíte Vitest; logs JSON por requisição sem dados sensíveis. |

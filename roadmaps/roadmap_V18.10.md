@@ -35,6 +35,11 @@ Interface web local (SPA em TypeScript servida por FastAPI no Mac, só loopback/
 - **Critérios de aceite:** [ ] lista fechada · [ ] chaves nunca voltam ao navegador · [ ] senha para salvar · [ ] vale para a próxima pesquisa
 - **Complexidade estimada:** Média
 
+### Tarefa 7: Containers web e lançador no host
+- **Spec:** `v18.10-web-containers` (a escrever; ADR 027 §9)
+- **Critérios de aceite:** [ ] `scripts/up.sh` sobe tudo · [ ] container da web sem root, sem socket do Docker, porta só em loopback · [ ] build do frontend reprodutível · [ ] lançador inicia sessão como o REPL · [ ] fila de início aprovada (schema)
+- **Complexidade estimada:** Alta
+
 ### Tarefa 5: Conversa
 - **Spec:** [`v18.10-web-chat`](../openspec/changes/v18.10-web-chat/proposal.md)
 - **Critérios de aceite:** [ ] consulta só leitura em processo filho · [ ] nova pesquisa com as confirmações do REPL · [ ] SSE sem perda · [ ] gate respondido pela web com senha nas decisões reservadas e `canal: web` · [ ] Problema definido pela web · [ ] comandos a qualquer momento · [ ] `assisted` só no REPL
@@ -43,7 +48,8 @@ Interface web local (SPA em TypeScript servida por FastAPI no Mac, só loopback/
 ## Ordem de implementação
 1. Tarefa 1.
 2. Tarefas 2, 3, 4 e 6 em paralelo (subagentes em worktrees próprias; conflito esperado só no OpenAPI e no `routes.tsx`, resolvido no merge, um PR por vez).
-3. Tarefa 5.
+3. Tarefa 7 (spec escrita e aprovada antes).
+4. Tarefa 5.
 
 ## Validação da Etapa
 - [ ] Testes do backend (`unit or integration`) e do frontend passam.

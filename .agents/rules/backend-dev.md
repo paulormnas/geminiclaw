@@ -220,7 +220,7 @@ client.containers.run(
 
 ## Princípios Adicionais
 
-1. **Backend 100% Python** — JavaScript/TypeScript é permitido somente no frontend (AGENTS.md §1), nunca no orquestrador, agentes, skills ou scripts.
+1. **Backend 100% Python** — JavaScript/TypeScript é permitido somente no frontend (AGENTS.md §1), nunca no orquestrador, agentes, skills ou scripts; lógica de servidor em JS/TS só dentro do projeto de frontend e a serviço dele.
 2. **Footprint mínimo** — justifique cada nova dependência; prefira a stdlib.
 3. **Single-process por agente** — estado compartilhado apenas via PostgreSQL, Qdrant ou IPC.
 4. **Idempotência** — scripts de setup re-executáveis sem efeitos colaterais.

@@ -71,9 +71,13 @@
 - **WHEN** a lista é pedida duas vezes em 10 minutos e depois com `atualizar=1`
 - **THEN** o provedor simulado é chamado uma vez e depois mais uma
 
-#### Scenario: Validator com modelo novo
-- **WHEN** `PUT /api/settings` define `VALIDATOR_MODEL` com um modelo `novo`
-- **THEN** 422 citando a família não declarada (ADR 020)
+#### Scenario: Modelo fora do catálogo recusado
+- **WHEN** `PUT /api/settings` define qualquer `{PAPEL}_MODEL` com um modelo `novo` ou `indisponivel`
+- **THEN** 422 com `modelo_fora_do_catalogo` e nada é gravado
+
+#### Scenario: Modelo novo só informativo
+- **GIVEN** MSW com um modelo `novo`
+- **THEN** a página o mostra desabilitado, com a dica "fora do catálogo: inclua em `src/llm/catalog.yaml`"
 
 #### Scenario: Validator da mesma família do Developer
 - **GIVEN** `DEVELOPER_MODEL` da família X

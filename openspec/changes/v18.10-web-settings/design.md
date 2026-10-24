@@ -41,7 +41,7 @@ Para que a escolha de modelo acompanhe o que os provedores oferecem, um módulo 
 
 - O resultado é cruzado com o catálogo (`src/llm/catalog.yaml`, ADR 017) e cada modelo vem marcado: `no_catalogo` (preço, papéis e família conhecidos), `novo` (oferecido pelo provedor e ausente do catálogo) ou `indisponivel` (no catálogo e não oferecido mais).
 - Cache em memória por `MODEL_DISCOVERY_CACHE_SECONDS` (padrão 3600) e botão "Atualizar". Falha de um provedor (sem chave, rede, 401) aparece como erro daquele provedor, sem esconder os outros, e nunca vira lista vazia silenciosa.
-- **Modelo `novo`:** pode ser escolhido, mas a página avisa que não há preço no catálogo; até ele entrar no catálogo, o custo dessas chamadas conta em `sem_custo_registrado` e o limite `SESSION_MAX_COST_USD` não as enxerga (Questão 1). A independência do Validator usa a família declarada no catálogo; modelo `novo` não pode ser escolhido para o Validator enquanto a família não for declarada.
+- **Modelo `novo` (decisão do pesquisador, 2026-10-24, opção c):** aparece na lista só como informação, sem poder ser escolhido: fora do catálogo é provável que as requisições não funcionem (parâmetros, papéis e família desconhecidos), e o limite de custo não o enxergaria. Para usá-lo, alguém o inclui no `src/llm/catalog.yaml` por PR. `indisponivel` também não pode ser escolhido. Só `no_catalogo` é aceito em `PUT /api/settings`, para qualquer papel; a independência do Validator usa a família do catálogo.
 - Também disponível na CLI (`geminiclaw models list`), para o mesmo uso fora da web, e para manter `docs/` e o catálogo atualizados.
 
 ## 2. Arquivo de sobreposição
@@ -86,4 +86,4 @@ Orquestrador e agentes: leem a configuração como hoje. Sandbox: nenhum. Persis
 
 Decidido em 2026-10-24: modelos na lista; busca de modelos por provedor; lista revisada contra o `.env`.
 
-1. **Modelo fora do catálogo:** (a) permitir com aviso, custo não estimado e fora do limite de custo (proposta atual); (b) permitir só depois de declarar preço e família no catálogo pela própria página (mais seguro para os limites, um passo a mais); (c) só modelos do catálogo.
+Decidido também: modelo fora do catálogo não pode ser escolhido (opção c).

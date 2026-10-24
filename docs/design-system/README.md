@@ -1,6 +1,6 @@
 # Design System — "Bancada"
 
-**Status:** Proposto (2026-10-24) · **Dono:** Designer de Produto · **Origem:** ADR 027 §5
+**Status:** Proposto (2026-10-24, variação 2 aprovada pelo pesquisador) · **Dono:** Designer de Produto · **Origem:** ADR 027 §5
 **Exemplo visual:** [`exemplo.html`](exemplo.html) (abrir no navegador; usa Google Fonts só no exemplo, a aplicação hospeda as fontes).
 **Vale para:** todo código em `frontend/`. Os agentes desenvolvedores seguem este documento; valor visual fora dele exige atualizar este documento antes (regra do `designer.md`).
 
@@ -11,8 +11,8 @@
 A interface é uma **bancada de laboratório digital**: um instrumento de precisão, não um site de marketing. Três ideias guiam tudo:
 
 1. **Evidência em primeiro plano.** Todo número mostra de onde veio (sessão, experimento, registro) com um toque. Nada de métricas soltas.
-2. **Calma e densidade ao mesmo tempo.** Fundo escuro quase preto, superfícies que sobem por pequenas mudanças de luminosidade, um único acento. A densidade é alta nas telas de trabalho (tabelas, grafo, conversa) e mais folgada nas telas de leitura (relatório, detalhe de hipótese).
-3. **Caráter editorial.** Uma serifa de exposição só nos títulos de página e nos números de destaque, contra uma sans técnica no corpo e uma mono para dados. É o contraste "caderno de laboratório × instrumento" que dá identidade única, sem decoração.
+2. **Calma e densidade ao mesmo tempo.** Superfícies claras ou marinho profundo, um único sinal forte (lima). Densidade alta nas telas de trabalho e mais folgada nas de leitura.
+3. **Uma voz tipográfica.** Uma família só (Plus Jakarta Sans) para títulos, interface e números; a hierarquia vem de peso (400–800), tamanho e tracking negativo nos títulos, não de troca de família. Mono só para código, IDs e caminhos. Decisão do pesquisador em 2026-10-24, após rejeitar a v1 (serifa + sans + mono não conversavam).
 
 ### Referências pesquisadas (2026-10-24)
 
@@ -21,6 +21,8 @@ A interface é uma **bancada de laboratório digital**: um instrumento de precis
 | Linear (redesenho com temas gerados em espaço perceptual LCH) | superfícies por luminosidade em vez de sombras; tema gerado a partir de poucos parâmetros (base, acento, contraste); bordas finas como textura; atalhos e paleta de comandos |
 | Painéis de referência em 2026 (Linear, PostHog, Grafana, Stripe) | cor só como sinal de estado; métrica principal em destaque e detalhe sob demanda (*progressive disclosure*); contraste legível à noite e seguro para daltonismo |
 | Vencedores de prêmios de 2025–2026 (Awwwards SOTY: Lando Norris / OFF+BRAND, Messenger / abeto; Webby 2026 Best Visual Design–Function: FOLLOW.ART) | tipografia como elemento principal, contraste forte entre texto de exposição enorme e texto de apoio discreto; movimento com propósito, nunca gratuito |
+| Sollytch (sollytch.com, cliente futuro) | paleta marinho + lima, Plus Jakarta Sans, sombra de cartão suave |
+| Vercel Geist, guias de pareamento para painéis | uma família com algarismos tabulares é melhor que mono para colunas; mono reservada a dados técnicos |
 | Ferramentas de dados científicos (Observable, Hex) | separar a "vista de leitura" da "vista de trabalho"; painéis laterais de contexto (arquivos, variáveis, conexões) |
 
 O que **não** aproveitamos dos sites premiados: rolagem cinematográfica, WebGL, cursores customizados, tipografia cinética no conteúdo. São bons para marca e ruins para trabalho diário de pesquisa.
@@ -29,82 +31,57 @@ O que **não** aproveitamos dos sites premiados: rolagem cinematográfica, WebGL
 
 ## 2. Cor
 
-Cores definidas em **OKLCH** (perceptualmente uniforme: mesma luminosidade parece igualmente clara em qualquer matiz). Os valores abaixo são os tokens; nenhum componente usa cor fora deles.
+Tokens em **HSL**, derivados da Sollytch. Os valores canônicos estão em `exemplo.html` (`:root` e `[data-theme="dark"]`); nenhum componente usa cor fora deles. Tema **claro por padrão**, escuro com o mesmo cuidado, e "Sistema" segue `prefers-color-scheme`.
 
-### 2.1 Tema escuro (padrão)
+| Token | Claro | Escuro | Uso |
+|---|---|---|---|
+| `--bg` | `220 30% 98%` | `230 60% 6%` | fundo |
+| `--surface` / `-2` / `-3` | `0 0% 100%` / `220 40% 96.5%` / `220 45% 93%` | `230 50% 9.5%` / `230 42% 12.5%` / `230 38% 16%` | cartões, hover, campo |
+| `--border` / `-strong` | `220 22% 88%` / `222 20% 78%` | `230 30% 18%` / `230 25% 27%` | bordas 1 px |
+| `--text` / `-muted` / `-faint` | `230 60% 14%` / `230 18% 40%` / `230 12% 46%` | `220 30% 95%` / `220 18% 70%` / `220 14% 60%` | texto (`-faint` só em rótulos) |
+| `--primary` | marinho `230 80% 25%` | lima `72 100% 50%` | ação primária |
+| `--accent` | lima `72 100% 50%` | lima | sinal: pendências, envio, destaque |
+| `--focus` | `230 80% 45%` | lima | anel de foco 2 px |
 
-| Token | Valor | Uso |
-|---|---|---|
-| `--color-bg` | `oklch(0.155 0.006 265)` | fundo da aplicação |
-| `--color-surface-1` | `oklch(0.185 0.007 265)` | barra lateral, cartões |
-| `--color-surface-2` | `oklch(0.215 0.008 265)` | cartão elevado, menu, popover |
-| `--color-surface-3` | `oklch(0.255 0.009 265)` | linha em foco/hover, campo de entrada |
-| `--color-border` | `oklch(0.29 0.008 265)` | bordas finas (1 px) |
-| `--color-border-strong` | `oklch(0.38 0.01 265)` | divisores de seção, campo em foco |
-| `--color-text` | `oklch(0.95 0.004 265)` | texto principal |
-| `--color-text-muted` | `oklch(0.74 0.01 265)` | texto secundário (≥ 4,5:1 sobre `--color-surface-2`) |
-| `--color-text-faint` | `oklch(0.60 0.01 265)` | **só** rótulos ≥ 12 px em caixa alta e marcas de eixo; nunca texto corrido |
-| `--color-accent` | `oklch(0.80 0.15 85)` | acento único: "âmbar de instrumento" — ação primária, seleção, foco |
-| `--color-accent-contrast` | `oklch(0.20 0.03 85)` | texto sobre o acento |
-| `--color-focus` | `oklch(0.85 0.16 85)` | anel de foco (2 px + 2 px de afastamento) |
+**Sinais de estado** (sempre com rótulo ou forma), cada um com `-bg`: `--pos` validada/sucesso, `--neg` refutada/falha, `--warn` aguarda você/limite, `--info` em teste/executando, `--neu` proposta/inconclusiva/arquivado. Valores por tema no exemplo.
 
-**Sinais de estado** (cor nunca sozinha: sempre com rótulo ou forma):
+**Grafo:** Problema marinho (quadrado com marca lima), Hipótese `--info` (círculo), Experimento `--g-exp` (quadrado), Resultado `--pos`/`--neg` (triângulo), Abordagem `--g-abo` (hexágono); forma sempre junto da cor.
 
-| Token | Valor | Significa |
-|---|---|---|
-| `--color-signal-positive` | `oklch(0.78 0.14 160)` | validada, sucesso, atingiu o alvo |
-| `--color-signal-negative` | `oklch(0.72 0.16 25)` | refutada, falha |
-| `--color-signal-warning` | `oklch(0.82 0.14 70)` | aguarda pesquisador, limite próximo |
-| `--color-signal-info` | `oklch(0.76 0.10 240)` | em teste, executando |
-| `--color-signal-neutral` | `oklch(0.70 0.01 265)` | proposta, inconclusiva, arquivado |
+### 2.1 Regras
 
-Cada sinal tem a variante `-bg` (mesma matiz, `L 0.25`, `C 0.04`) para fundo de etiqueta.
-
-**Paleta categórica do grafo** (rótulos de nó; validada para daltonismo junto com a forma do nó): `--graph-problema` `oklch(0.80 0.15 85)`, `--graph-hipotese` `oklch(0.76 0.10 240)`, `--graph-experimento` `oklch(0.75 0.12 300)`, `--graph-resultado` `oklch(0.78 0.14 160)`, `--graph-abordagem` `oklch(0.75 0.13 200)`, `--graph-descoberta` `oklch(0.80 0.13 120)`, `--graph-dominio` `oklch(0.70 0.01 265)`, `--graph-outro` `oklch(0.62 0.02 265)`.
-
-### 2.2 Tema claro
-
-Mesma matiz e croma, luminosidade espelhada: `--color-bg` `oklch(0.985 0.003 265)`, superfícies `0.97 / 0.955 / 0.93`, borda `0.88`, texto `0.22`, texto secundário `0.45`, acento `oklch(0.58 0.14 70)` (o âmbar escurece para manter 4,5:1 sobre o fundo claro), sinais com `L` entre `0.50` e `0.58`.
-
-### 2.3 Regras
-
-- Profundidade por luminosidade das superfícies; sombra só em menus e diálogos flutuantes (`--shadow-float: 0 8px 24px oklch(0 0 0 / 0.35)`).
-- O acento aparece em no máximo **um** elemento de ação por região da tela.
-- Contraste conferido por teste automático (`tokens.test.ts`): texto ≥ 4,5:1; elementos de interface e bordas de campo ≥ 3:1.
+- Sombra de cartão suave (`--shadow`, a da Sollytch); profundidade também por superfícies.
+- Lima em no máximo um elemento de ação por região; no tema claro, lima nunca como cor de texto (usar `--accent-ink`).
+- Contraste conferido por teste automático (`tokens.test.ts`): texto ≥ 4,5:1; interface e bordas de campo ≥ 3:1, nos dois temas.
 
 ---
 
 ## 3. Tipografia
 
-Fontes **hospedadas pelo próprio backend** (CSP `font-src 'self'`; nada de Google Fonts em produção), instaladas por pacotes `@fontsource-variable/*` com licença OFL:
+Fontes **hospedadas pelo backend** (CSP `font-src 'self'`; Google Fonts só no exemplo), via `@fontsource-variable/plus-jakarta-sans` e `@fontsource-variable/jetbrains-mono` (OFL).
 
 | Papel | Família | Token |
 |---|---|---|
-| Exposição (títulos de página, número de destaque do painel) | **Instrument Serif** | `--font-display` |
-| Interface e texto | **Geist** (variável) | `--font-sans` |
-| Dados, IDs, código, valores de métrica | **Geist Mono** (variável) | `--font-mono` |
+| Títulos, interface, texto e números | **Plus Jakarta Sans** com `font-feature-settings: "tnum"` | `--font` |
+| Código, IDs, caminhos (nunca métricas) | **JetBrains Mono** | `--font-code` |
 
-Escala (rem sobre 16 px; corpo da interface em 13–14 px, como nas ferramentas de trabalho densas):
-
-| Token | Tamanho / altura de linha | Uso |
+| Token | Tamanho / altura | Uso |
 |---|---|---|
-| `--text-display` | 2.75rem / 1.05, `--font-display` | título de página |
-| `--text-metric` | 2.25rem / 1, `--font-display`, algarismos tabulares | número de destaque |
-| `--text-h2` | 1.125rem / 1.3, sans 600 | título de seção |
-| `--text-h3` | 0.9375rem / 1.35, sans 600 | título de cartão |
-| `--text-body` | 0.875rem / 1.5, sans 400 | texto corrido, conversa |
-| `--text-ui` | 0.8125rem / 1.4, sans 450 | tabelas, menus, botões |
-| `--text-label` | 0.6875rem / 1.3, sans 550, caixa alta, `letter-spacing: 0.06em` | rótulos de campo e de coluna |
-| `--text-mono` | 0.8125rem / 1.45, mono, `font-variant-numeric: tabular-nums` | números, IDs, caminhos |
+| `--text-display` | clamp(1.75rem, 3.4vw, 2.5rem) / 1.08, 800, `-0.035em` | título de página |
+| `--text-metric` | 2.125rem / 1, 800, `-0.04em` | número de destaque |
+| `--text-h2` | 0.9375rem / 1.3, 700 | título de seção/cartão |
+| `--text-body` | 0.875rem / 1.55, 500 | conversa, leitura |
+| `--text-ui` | 0.8125rem / 1.45, 500–650 | tabelas, menus, botões |
+| `--text-label` | 0.6875rem / 1.3, 700, caixa alta, `0.07em` | rótulos |
+| `--text-code` | 0.75rem / 1.4, mono | código, IDs |
 
-Regras: números sempre com algarismos tabulares e alinhados à direita em tabelas; IDs longos cortados no meio (`a1b2…f9e0`) com o valor inteiro na dica e no botão copiar; leitura longa (relatório, resposta do Researcher) com largura máxima de `68ch`.
+Regras: números com algarismos tabulares, alinhados à direita em tabelas; IDs longos cortados no meio (`a1b2…f9e0`) com o valor inteiro na dica; leitura longa com até `66ch`.
 
 ---
 
 ## 4. Espaço, forma e grade
 
 - **Espaçamento** em escala de 4 px: `--space-1` 4 px, `-2` 8, `-3` 12, `-4` 16, `-5` 24, `-6` 32, `-7` 48, `-8` 64.
-- **Raio:** `--radius-sm` 4 px (etiquetas, campos), `--radius-md` 6 px (botões, cartões), `--radius-lg` 10 px (diálogos). Nada de pílulas grandes nem cantos muito arredondados.
+- **Raio:** `--r-sm` 6 px, `--r-md` 10 px (botões, campos), `--r-lg` 14 px (cartões, diálogos); etiquetas de estado em pílula.
 - **Densidade:** linha de tabela de 32 px (compacta) ou 40 px (confortável, escolha do pesquisador); padding de célula 6 × 12 px.
 - **Grade:** barra lateral de 240 px (recolhível para 56 px), conteúdo em grade de 12 colunas com gutter de 24 px; telas de trabalho com painéis redimensionáveis (lista | conteúdo | detalhe).
 - **Bordas:** 1 px `--color-border`; divisores de seção com uma linha fina e um rótulo em `--text-label`, como cabeçalho de caderno de laboratório.

@@ -12,18 +12,18 @@ A conversa é o que o REPL faz hoje: o pesquisador pergunta ao Researcher (só l
 
 - **Novo:** pacote `src/interaction/` (camada logo abaixo de `cli | web`): o que o REPL e a web fazem igual, extraído de `src/cli/` sem mudar comportamento: lançar pesquisa nova (`SessionStarter` sem a parte de impressão), consulta em processo filho (lado do terminal de `src/cli/terminal_consult.py`), envio de comandos e orientação, leitura de pedidos pendentes. `src/cli/` passa a chamar `src/interaction/`.
 - **Novo:** rotas `src/web/routes/chat.py`: `POST /api/projects/{id}/chat/ask` (consulta), `POST /api/projects/{id}/research` (nova pesquisa), `GET /api/projects/{id}/research` (pesquisas do projeto), `GET /api/sessions/{sid}/events/stream` (SSE), `POST /api/sessions/{sid}/inbox` (orientação), `POST /api/sessions/{sid}/commands` (pausar, retomar, parar, cancelar, replanejar), `GET /api/gate/pending`, `POST /api/gate/{request_id}/answer`.
-- **Novo:** `Source.WEB` em `src/gate/types.py`, incluído em `HUMAN_SOURCES`; `TerminalGate` instanciado pelo processo da web.
+- **Novo:** `TerminalGate` instanciado pelo processo da web, resolvendo com `Source.TERMINAL` e `canal: web` na resposta JSONB (decisão de 2026-10-24).
 - **Novo:** página Conversa: linha do tempo única com mensagens do pesquisador, respostas do Researcher, eventos da sessão e cartões de decisão do gate.
-- **Modificado:** `scripts/init_db.sql` e migração `scripts/migrations/v18_10_001_web_gate_source.sql`: `gate_requests.resolvido_por` aceita `web`; conforme a Questão 2, `terminal_presence.tipo` aceita `web`.
+- **Modificado (só se a Questão 2 pedir):** `scripts/init_db.sql` e migração `scripts/migrations/v18_10_001_web_presence.sql`: `terminal_presence.tipo` aceita `web`.
 - **Fora do escopo:** confirmar o Problema e editar o rascunho pela web (continua na CLI nesta versão, Questão 3); modo sem limite pela web; vários usuários.
 
 ## Impacto
 
-- **Código:** `src/interaction/` (novo, código movido), `src/cli/{session_start,terminal_consult,progress_view,gate_commands}.py` (passam a delegar), `src/gate/types.py`, `src/gate/persistent_gate.py` (`_HUMAN`), `src/web/`, `frontend/`, contrato do `import-linter`.
+- **Código:** `src/interaction/` (novo, código movido), `src/cli/{session_start,terminal_consult,progress_view,gate_commands}.py` (passam a delegar), `src/gate/persistent_gate.py` (`clean_answer` preserva `canal`), `src/web/`, `frontend/`, contrato do `import-linter`.
 - **Contratos:** rotas acima; formato do evento SSE igual ao `Event` de `src/session/events.py` serializado.
 - **Custo:** a consulta chama o modelo do Researcher, como no REPL (`TERMINAL_CONSULT_MAX_TOKENS`, consumo em `token_usage` com `task_name='consulta_terminal'`; a web usa `consulta_web`). Testes com provedor simulado.
 
 ## Aprovações necessárias
 
-- **Alteração de schema relacional (AGENTS.md §1.5):** `CHECK` de `gate_requests.resolvido_por` com `web`; e, se a Questão 2 for decidida por presença própria, `CHECK` de `terminal_presence.tipo` com `web`. Migração idempotente que descobre o nome das restrições `CHECK` implícitas em `pg_constraint` antes de trocá-las, aplicada no banco do Mac; no Pi só quando o pesquisador autorizar (a trilha 1 usa o Pi). **Nenhuma alteração do esquema do grafo.**
+- **Alteração de schema relacional (AGENTS.md §1.5):** só se a Questão 2 for decidida por presença própria: `CHECK` de `terminal_presence.tipo` com `web` (o gate não muda de schema). Migração idempotente que descobre o nome das restrições `CHECK` implícitas em `pg_constraint` antes de trocá-las, aplicada no banco do Mac; no Pi só quando o pesquisador autorizar (a trilha 1 usa o Pi). **Nenhuma alteração do esquema do grafo.**
 - **Mudança de camadas:** pacote novo `src/interaction/` no contrato do `import-linter`.

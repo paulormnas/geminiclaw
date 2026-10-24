@@ -43,7 +43,7 @@ Todas as rotas `/api/*`, exceto `POST /api/session/login`, exigem sessão; as qu
 | `GET /api/projects/{id}` | — | 200 `ProjectDetail` (título, objetivo, status, domínios, Problema ativo resumido, contagem de sessões); 404 |
 | `PATCH /api/projects/{id}` | `{titulo?, objetivo?, status?}` | 200 `ProjectDetail`; 422; 404 |
 
-Sem `DELETE`: a interface oferece "Concluir" e "Pausar" (`PATCH status`). Erros seguem `{erro: <código>, mensagem: <texto curto>, campo?: <nome>}`; nenhum traceback ou caminho sai na resposta.
+Sem `DELETE`: a interface oferece "Pausar", "Concluir" e "Arquivar" (`PATCH status`); `arquivado` = não explorar mais. `GET /api/projects` omite os arquivados, a menos que `status=arquivado` ou `incluir_arquivados=1`. "Desarquivar" volta a `pausado`. Erros seguem `{erro: <código>, mensagem: <texto curto>, campo?: <nome>}`; nenhum traceback ou caminho sai na resposta.
 
 ## 3. Autenticação (ADR 027 §4)
 
@@ -79,7 +79,8 @@ As variáveis `WEB_*` só são exigidas quando `src.web` inicia: o REPL e as ses
 
 - **Cliente da API:** `fetch` com `credentials: 'same-origin'`; guarda o `csrf_token` só em memória (estado do React); 401 leva à tela de login preservando a rota de destino; erros viram `ApiError {status, erro, mensagem, campo}`.
 - **Tipos:** `pnpm --dir frontend gen:api` roda `openapi-typescript` sobre `frontend/openapi.json`, que o backend exporta por `uv run python -m src.web.openapi`; teste do backend compara o esquema exportado com o arquivo versionado.
-- **Tokens (Designer):** `tokens.css` define as variáveis da ADR 027 §5 em `:root` (escuro) e em `[data-theme="light"]`; `prefers-color-scheme: light` aplica o claro quando não há escolha salva. Contrastes conferidos por teste (`tokens.test.ts` calcula a razão WCAG dos pares texto/fundo declarados e exige ≥ 4,5).
+- **Design system:** [`docs/design-system/README.md`](../../../docs/design-system/README.md) ("Bancada") é obrigatório; o esqueleto implementa os tokens, as fontes, os componentes base, a paleta de comandos (`⌘K`) e a página `/_design`.
+- **Tokens (Designer):** `tokens.css` define as variáveis do design system em `:root` (escuro) e em `[data-theme="light"]`; `prefers-color-scheme: light` aplica o claro quando não há escolha salva. Contrastes conferidos por teste (`tokens.test.ts` calcula a razão WCAG dos pares texto/fundo declarados e exige ≥ 4,5).
 - **Componentes e estados:** cada componente de formulário e de estado tem os estados padrão, foco, desabilitado, carregando e erro; `StatusBadge` mostra rótulo e cor para `ativo`, `pausado`, `concluido`.
 - **Telas:** Login; Projetos (tabela com filtro de estado e busca por título, vazio com chamada para criar); Detalhe (título, objetivo, domínios, Problema ativo, ações Editar/Pausar/Concluir/Reativar com diálogo de confirmação para Concluir); Formulário (criar/editar, validação de título ≤ 200 e objetivo ≤ 20 000 antes de enviar, erros do servidor no campo).
 - **Seletor de projeto:** a barra lateral guarda o projeto selecionado na URL (`/p/:projetoId/...`); as seções futuras (Painel, Conversa, Artefatos, Grafo) aparecem desabilitadas com o texto "em breve" até as mudanças próprias.
@@ -119,6 +120,5 @@ Risco residual aceito: o bloqueio de login é global, então um processo local p
 
 ## 9. Questões em aberto
 
-1. **Exclusão física de projeto.** Recomendação: não oferecer (proveniência). Se o pesquisador quiser apagar projetos de teste, fica para uma mudança própria com confirmação dupla e exclusão em cascata explícita.
 2. **Porta padrão** `8765`: aceitar ou outra.
-3. **Escrita de `Projeto` pela web** como exceção ao "só leia o grafo" da trilha 2: confirmar.
+Decididas em 2026-10-24: aprovar ADR e specs; escrita de `Projeto` pela web; arquivar em vez de apagar.

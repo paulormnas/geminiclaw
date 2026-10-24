@@ -14,19 +14,21 @@ O pesquisador quer acompanhar e conduzir os projetos fora do terminal. Antes de 
 - **Novo:** `update_project(store, projeto_id, *, titulo=None, objetivo=None, status=None)` em `src/knowledge/projects.py` (ator `pesquisador`, mesmas validações do `create_project`).
 - **Novo:** `frontend/` (Vite + React + TypeScript estrito, `pnpm`): tokens, layout com barra lateral e seletor de projeto, tela de login, telas de projetos (lista, detalhe, criar, editar, concluir/pausar/reativar), cliente da API tipado por `openapi-typescript`, testes Vitest + Testing Library + MSW.
 - **Modificado:** `pyproject.toml` (dependências e contrato `cli | web`), `.env.example`, `src/config.py`, `.gitignore` (`frontend/node_modules`, `frontend/dist`, `frontend/coverage`), `AGENTS.md` §1/§6/§7/§9, `.agents/rules/frontend-dev.md`, `.agents/rules/designer.md`, `.agents/workflows/commit.md` e `run-tests.md` (comandos do frontend), `README.md` (como rodar).
+- **Novo (decisão do pesquisador, 2026-10-24):** estado `arquivado` do `Projeto`, que marca projeto que não deve mais ser explorado: some das listas por padrão, recusa nova pesquisa e retomada (pela web e pela CLI) e pode ser desarquivado. Substitui a exclusão.
 - **Fora do escopo:** painel, artefatos, grafo e conversa (mudanças próprias); exclusão física de projeto; confirmação do Problema (decisão reservada; fica na conversa ou na CLI); mais de um usuário.
 
 ## Impacto
 
 - **Código:** só arquivos novos, mais `projects.py` (função nova) e configuração. Nada no orquestrador, nos agentes ou na sessão.
 - **Contratos:** API `/api/session/*` e `/api/projects/*` (design §2); esquema OpenAPI versionado em `frontend/src/api/schema.d.ts`.
-- **Schema:** nenhum (relacional ou grafo). A edição de projeto usa `update_node` com propriedades já existentes do `Projeto`.
+- **Schema:** nenhum relacional. No grafo, só o valor novo `arquivado` no `enum` de `Projeto.status` (sem migração: nós existentes continuam válidos). `list_projects` aceita o filtro novo; o início e a retomada de pesquisa (`src/cli/session_start.py`) recusam projeto arquivado.
 - **Custo:** nenhuma chamada de LLM.
 
 ## Aprovações necessárias
 
 - **Dependências novas (backend):** `fastapi`, `uvicorn`, `argon2-cffi` (`uv add`).
-- **Dependências novas (frontend, `pnpm`):** `react`, `react-dom`, `react-router`, `@tanstack/react-query`; dev: `vite`, `@vitejs/plugin-react`, `typescript`, `vitest`, `@vitest/coverage-v8`, `jsdom`, `@testing-library/react`, `@testing-library/user-event`, `@testing-library/jest-dom`, `msw`, `openapi-typescript`, `eslint`, `typescript-eslint`, `eslint-plugin-react-hooks`.
+- **Dependências novas (frontend, `pnpm`):** `react`, `react-dom`, `react-router`, `@tanstack/react-query`, `@fontsource-variable/geist`, `@fontsource-variable/geist-mono`, `@fontsource/instrument-serif`; dev: `vite`, `@vitejs/plugin-react`, `typescript`, `vitest`, `@vitest/coverage-v8`, `jsdom`, `@testing-library/react`, `@testing-library/user-event`, `@testing-library/jest-dom`, `msw`, `openapi-typescript`, `eslint`, `typescript-eslint`, `eslint-plugin-react-hooks`.
 - **`AGENTS.md`:** §1, §6, §7 e §9 (ADR 027 §8).
 - **Regras e workflows:** `frontend-dev.md`, `designer.md`, `commit.md`, `run-tests.md`.
-- **Escrita no grafo:** criar e editar nós `Projeto` pela web (única escrita da trilha web; confirmar que vale como exceção ao "só leia o grafo").
+- **Escrita no grafo:** criar e editar nós `Projeto` pela web (aprovada pelo pesquisador em 2026-10-24).
+- **Vocabulário do grafo:** `Projeto.status` ganha `arquivado` em `src/knowledge/schema.py` (aditivo; avisar a trilha 1 antes do merge).

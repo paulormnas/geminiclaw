@@ -11,6 +11,7 @@
 - [ ] 1.3 `src/web/auth.py` e `security.py` (senha, sessões, bloqueio, CSRF, `Host`/`Origin`, cabeçalhos), com relógio injetável. Testes de unidade dos cenários de login, bloqueio, CSRF, origem, host, cabeçalhos e erro interno.
 - [ ] 1.4 `src/web/__main__.py` (recusa fora do loopback), `password.py`, `static.py`, `openapi.py`. Testes: endereço externo recusado, sem hash, SPA, build ausente, esquema versionado.
 - [ ] 1.5 `update_project` em `src/knowledge/projects.py` e `routes/projects.py`. Testes de unidade com `InMemoryGraphStore` (criar, título vazio, editar, concluir, 409 com sessão viva, sem DELETE, 404) e um de integração com AGE real no banco de teste.
+- [ ] 1.6 `arquivado` em `Projeto.status` (`src/knowledge/schema.py`), filtro em `list_projects` e recusa em `src/cli/session_start.py`; avisar a trilha 1. Testes: arquivar, arquivado recusa pesquisa.
 
 ## 2. Frontend
 - [ ] 2.1 `frontend/` com `pnpm` (`packageManager`, `.nvmrc` LTS), Vite, React, TypeScript estrito, ESLint (`react/no-danger` erro), Vitest com cobertura ≥ 70%.

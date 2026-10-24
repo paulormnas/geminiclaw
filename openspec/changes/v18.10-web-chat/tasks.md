@@ -8,8 +8,8 @@
 - [ ] 0.3 Reconciliar a spec consolidada `openspec/specs/researcher-consult/spec.md` com o código (papel `terminal_writer` e gatilhos não implementados por decisão de 2026-10-16): o Arquiteto propõe o texto, o pesquisador aprova.
 
 ## 1. Gate e presença
-- [ ] 1.1 `Source.WEB`, `_HUMAN` e seu comentário; reautenticação por senha nas `DECISOES_RESERVADAS` e troca do CSRF; `scripts/init_db.sql` e `scripts/migrations/v18_10_001_web_gate_source.sql` (idempotente, descobrindo o nome das restrições em `pg_constraint`; aplicação no Mac aprovada pelo pesquisador; no Pi só com autorização). Testes: migração duas vezes, resposta pela web, já resolvido, ação fora das opções, teste estático de uso de `Source.WEB`.
-- [ ] 1.2 Presença `web` (se Questão 2 = a) e leitura pelo `assisted`. Testes: web mantém, última aba fecha.
+- [ ] 1.1 Resposta pela web com `Source.TERMINAL` e `canal: web` (preservado por `clean_answer`); reautenticação por senha nas `DECISOES_RESERVADAS` e troca do CSRF. Testes: resposta pela web, já resolvido, ação fora das opções, decisão reservada sem senha, teste estático do `canal`.
+- [ ] 1.2 Presença `web` (se Questão 2 = a; migração `v18_10_001_web_presence.sql` idempotente, descobrindo o nome da restrição em `pg_constraint`, aprovada para o Mac; no Pi só com autorização) e leitura pelo `assisted`. Testes: web mantém, última aba fecha.
 
 ## 2. Rotas
 - [ ] 2.1 Consulta (processo filho, tempo limite, `consulta_web`), nova pesquisa com os 409, pesquisas do projeto. Testes de unidade e de integração com provedor gravado e processo real.

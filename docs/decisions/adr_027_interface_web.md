@@ -90,7 +90,9 @@ Versões exatas ficam no lockfile; a spec do esqueleto lista os pacotes. Toda de
 
 ### 5. Design
 
-- **Tokens semânticos** (`tokens.css`): cores por função (`--color-bg`, `--color-surface`, `--color-text`, `--color-text-muted`, `--color-accent`, `--color-success`, `--color-warning`, `--color-danger`, `--color-focus`), espaçamento em escala de 4 px, raio, tipografia (escala e família do sistema), movimento. Nenhum valor de cor ou espaçamento fora dos tokens.
+O design system **"Bancada"** ([`docs/design-system/README.md`](../design-system/README.md)) é a fonte de verdade visual e é seguido por todos os agentes desenvolvedores; os pontos abaixo são o resumo.
+
+- **Tokens semânticos** (`tokens.css`, em OKLCH): superfícies por luminosidade, um acento âmbar, sinais de estado (`--color-signal-*`), foco; tipografia Instrument Serif (exposição), Geist e Geist Mono, hospedadas pelo próprio backend, espaçamento em escala de 4 px, raio, tipografia (escala e família do sistema), movimento. Nenhum valor de cor ou espaçamento fora dos tokens.
 - **Tema:** escuro por padrão quando o sistema não declara preferência; segue `prefers-color-scheme` quando declara; o pesquisador pode trocar e a escolha fica no navegador. `prefers-reduced-motion` desliga animações, inclusive a do layout do grafo.
 - **Layout:** barra lateral com o seletor de projeto e as seções (Projetos, Painel, Conversa, Artefatos, Grafo); conteúdo à direita; em telas estreitas, a barra vira menu. Alvos: monitor de 1080p, tablet e telefone pelo Tailscale.
 - **Acessibilidade:** WCAG AA (contraste 4,5:1 no texto), navegação completa por teclado, foco visível, rótulos em todos os controles. O grafo em canvas tem **alternativa acessível**: lista dos nós filtrados e dos vizinhos do nó selecionado, navegável por teclado.
@@ -98,12 +100,16 @@ Versões exatas ficam no lockfile; a spec do esqueleto lista os pacotes. Toda de
 
 ### 6. Funcionalidades
 
-1. **Projetos (CRUD).** Criar (`create_project`), listar, ver, editar título, objetivo e estado (`ativo`, `pausado`, `concluido`) por uma função tipada nova em `src/knowledge/projects.py`, com ator `pesquisador`. **Não há exclusão física:** o "excluir" da interface é concluir ou pausar, porque sessões, experimentos e registros apontam para o projeto (proveniência, ADR 019). Essas são as **únicas escritas no grafo** feitas pela web, e nenhuma muda o esquema.
+1. **Projetos (CRUD).** Criar (`create_project`), listar, ver, editar título, objetivo e estado (`ativo`, `pausado`, `concluido` e o novo `arquivado`, que marca projeto a não explorar mais e recusa nova pesquisa) por uma função tipada nova em `src/knowledge/projects.py`, com ator `pesquisador`. **Não há exclusão física:** o "excluir" da interface é concluir ou pausar, porque sessões, experimentos e registros apontam para o projeto (proveniência, ADR 019). Essas são as **únicas escritas no grafo** feitas pela web; a única mudança de vocabulário é o valor `arquivado` em `Projeto.status` (aditivo, avisado à trilha 1).
 2. **Painel.** Resumo global e por projeto: contagens por rótulo e por estado de todos os rótulos do esquema (lidos de `src/knowledge/schema.py`), sessões por estado, custo e tokens por sessão quando registrados, última atividade. Consultas fixas, só leitura.
 3. **Artefatos.** Lista, por sessão do projeto, os arquivos de `outputs/<sessão>/`, com visualização por tipo: texto e JSON como texto; Markdown renderizado sem HTML; CSV em tabela das primeiras linhas; imagens raster em `<img>`; SVG e HTML só em `<iframe sandbox>` servidos com `Content-Security-Policy: sandbox`; demais tipos só para baixar. Caminho resolvido dentro da pasta da sessão, sem links simbólicos, com limite de tamanho para pré-visualização.
 4. **Leitura somente.** Painel, artefatos e grafo usam `ReadOnlyGraphStore` sobre o papel `knowledge_reader` e conexões relacionais com `default_transaction_read_only = on`.
 5. **Grafo.** Subgrafo do projeto com filtros por rótulo, estado e domínio; detalhe do nó (propriedades, vizinhos, histórico de auditoria); expansão por vizinhos; sem Cypher livre vindo do navegador. Quando o subgrafo passa de `WEB_GRAPH_MAX_NODES`, a resposta diz quantos nós ficaram de fora e a interface pede filtro: nunca corta em silêncio.
-6. **Conversa.** No projeto selecionado, o pesquisador: conversa com o Researcher em modo consulta só leitura (o mesmo processo filho do REPL); inicia pesquisa (equivalente a `nova-pesquisa`); acompanha os eventos de `session_events` em tempo real (Server-Sent Events alimentados por consulta periódica ao banco); envia orientação e comandos pela caixa de entrada; responde pedidos do gate. A resposta a pedidos de `DECISOES_RESERVADAS` exige a senha de novo (uma sessão sequestrada não basta). A web resolve o gate como **origem humana própria** (`Source.WEB`, `resolvido_por = 'web'`), o que exige ampliar a restrição de `gate_requests.resolvido_por` (alteração de schema relacional, não do grafo; aprovação na spec do chat). O texto do pesquisador e as respostas são dados exibidos como texto, nunca HTML.
+6. **Conversa.** No projeto selecionado, o pesquisador: conversa com o Researcher em modo consulta só leitura (o mesmo processo filho do REPL); inicia pesquisa (equivalente a `nova-pesquisa`); acompanha os eventos de `session_events` em tempo real (Server-Sent Events alimentados por consulta periódica ao banco); envia orientação e comandos pela caixa de entrada; responde pedidos do gate. A resposta a pedidos de `DECISOES_RESERVADAS` exige a senha de novo (uma sessão sequestrada não basta). A origem da decisão é o pesquisador: a web resolve como o terminal (`resolvido_por = 'terminal'`) e marca `canal: web` na resposta JSONB, só para auditoria de segurança, sem alteração de schema (decisão de 2026-10-24). O texto do pesquisador e as respostas são dados exibidos como texto, nunca HTML.
+
+### 6.8 Configurações do pesquisador (decisão de 2026-10-24)
+
+Uma página de configurações altera só o que é do controle do pesquisador (limites de tempo, tokens e custo, modelos e chaves de API dos provedores LLM), por uma **lista fechada** de variáveis; banco, credenciais de infraestrutura, `WEB_*`, egresso e sandbox ficam fora. Os valores vão para um arquivo próprio, separado do `.env`, lido por cima dele; chaves nunca voltam ao navegador. Detalhes em `v18.10-web-settings`.
 
 ### 6.7 Limites
 
@@ -121,7 +127,9 @@ Todo limite da web informa o que ficou de fora e oferece como ver o restante na 
 - **`AGENTS.md`:** §1 (diretório `frontend/` e `pnpm`), §6 (comandos), §7 (estrutura com `frontend/` e `src/web/`) e §9 (testes do frontend antes do commit quando `frontend/` muda).
 - **Regras de papéis:** `frontend-dev.md` e `designer.md` atualizadas com a stack (sem container).
 - **`pyproject.toml`:** contrato do `import-linter` com `cli | web` no topo.
-- **Schema relacional (só na mudança do chat):** `gate_requests.resolvido_por` aceita `web`; e, conforme a Questão 2 do chat, `terminal_presence.tipo` aceita `web`. Nenhuma alteração do esquema do grafo.
+- **Vocabulário do grafo:** `Projeto.status` ganha `arquivado`.
+- **Schema relacional (só no chat e só conforme a Questão 2):** `terminal_presence.tipo` aceita `web`.
+- **Configurações pela web (`v18.10-web-settings`):** arquivo de sobreposição do pesquisador com lista fechada de variáveis, incluindo chaves de API.
 
 ---
 
@@ -151,8 +159,8 @@ Sobreviveriam ao reinício. **Não adotada agora:** exige schema novo para um us
 ### H. npm, Yarn ou Bun
 `npm` vem com o Node. **Rejeitados:** o `pnpm` já está no Mac, isola dependências (sem acesso a pacotes não declarados) e o lockfile é estável; o Bun mudaria também o runtime.
 
-### I. Web reutilizando `resolvido_por = 'terminal'`
-Sem schema novo. **Rejeitada:** perde-se de onde veio a decisão (repúdio, STRIDE R).
+### I. Origem própria `resolvido_por = 'web'` no gate
+Distinguiria o canal no próprio estado do pedido. **Rejeitada pelo pesquisador:** a origem é sempre o pesquisador; o canal fica na resposta JSONB, sem schema novo.
 
 ### J. Biblioteca de componentes (MUI, Chakra) ou Tailwind
 **Rejeitada:** a regra do Designer exige tokens próprios como fonte de verdade; uma biblioteca impõe os seus e aumenta o pacote.
@@ -182,6 +190,7 @@ Sem schema novo. **Rejeitada:** perde-se de onde veio a decisão (repúdio, STRI
 | `v18.10-web-dashboard` | `web-interface` | §6.2, §6.4 |
 | `v18.10-web-artifacts` | `web-interface` | §6.3, §6.4 |
 | `v18.10-web-graph` | `web-interface` | §6.4, §6.5 |
+| `v18.10-web-settings` | `web-interface` | §6.8: página de configurações do pesquisador (limites, chaves de API), lista fechada |
 | `v18.10-web-chat` | `web-interface`, `researcher-consult` | §6.6: conversa, nova pesquisa, eventos por SSE, caixa de entrada, gate com `Source.WEB`, código comum fora de `src/cli/` |
 
 ---

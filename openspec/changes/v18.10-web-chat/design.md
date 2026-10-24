@@ -42,7 +42,7 @@ Camadas: `"cli | web"`, depois `"interaction"`, depois `"orchestration"`. Nenhum
 | `POST /api/gate/{request_id}/answer` | `{acao, texto?}` | 200 com o pedido resolvido; 409 `{erro:"ja_resolvido"}`; 422 resposta fora de `opcoes` |
 
 - **SSE:** o servidor consulta `session_events` a cada `SESSION_EVENTS_POLL_SECONDS` (mesma variável do REPL) a partir do último `seq` enviado, pegando e devolvendo uma conexão do pool a cada consulta (nenhuma conexão fica presa à stream); a cada consulta revalida a sessão de login, e logout ou expiração encerram a stream; o gerador termina quando o cliente desconecta; um gerador por conexão; no máximo `WEB_MAX_EVENT_STREAMS` (padrão 8) conexões simultâneas (503 acima). O `EventSource` reconecta com `Last-Event-ID` e não perde nem duplica eventos.
-- **Gate:** `TerminalGate.answer(..., source=Source.WEB)`; `resolvido_por='web'`; `_HUMAN` passa a ter `terminal`, `cli` e `web` (e o comentário de `src/gate/persistent_gate.py:52` é atualizado). A resposta passa por `clean_answer` (opções do pedido, limite de texto). Toda resposta exige sessão, CSRF e `Origin` (skeleton).
+- **Gate (decisão do pesquisador, 2026-10-24):** a origem da decisão é o pesquisador, pela web ou pelo terminal; a web resolve com `source=Source.TERMINAL` (`resolvido_por='terminal'`), **sem alteração de schema**. Para auditoria de segurança (saber quais decisões revisar se uma sessão de login web for comprometida), a resposta guardada em `gate_requests.resposta` (JSONB) leva `"canal": "web"`, gravado só pelo código da web e preservado por `clean_answer`. O mesmo campo `canal` marca as mensagens da caixa de entrada e o registro da conversa, quando houver. A resposta passa por `clean_answer` (opções do pedido, limite de texto). Toda resposta exige sessão, CSRF e `Origin` (skeleton).
 - **Reautenticação nas decisões reservadas** (revisão cética, 2026-10-24): como `web` passa a valer como origem humana em todo consumo do gate, uma sessão de login sequestrada (XSS com a página aberta) não pode bastar para autorizar `DECISOES_RESERVADAS`. A resposta a esses pedidos exige a senha no próprio corpo (`{acao, texto?, senha}`), verificada por argon2id e contada no bloqueio de tentativas; os demais tipos do gate (aprovar hipótese, continuar em estagnação etc.) exigem só sessão e CSRF. O token CSRF é trocado a cada resposta ao gate.
 - **Pedidos sem sessão de pesquisa** (`session_id` nulo, criados pela CLI): a web não os lista nem responde; continuam só na CLI.
 - **Banco:** hoje o gate não usa papel de banco próprio (decisão de 2026-10-16: só a regra na aplicação; o papel `terminal_writer` e os gatilhos ficaram para o endurecimento antes da produção). **Divergência encontrada na revisão:** a spec consolidada `openspec/specs/researcher-consult/spec.md` ("Somente o papel do terminal resolve pedidos") descreve o papel e os gatilhos como se existissem; o código não os tem. Esta mudança segue o código; a correção da spec consolidada é registrada à parte (tarefa 0.3). Quando o endurecimento vier, a web usa a mesma credencial do terminal, lida por função própria de `src/config.py` só no processo da web, e a ameaça de credencial num processo HTTP de vida longa entra no parecer daquela mudança.
@@ -78,9 +78,9 @@ O `assisted` se suspende quando nenhum terminal está presente (ADR 023 §1.2). 
 | Ameaça | Mitigação |
 |---|---|
 | S — página maliciosa responde o gate (CSRF) | Sessão, `X-CSRF-Token`, `Origin` e `SameSite=Strict` (skeleton); teste específico na rota do gate |
-| S — agente ou documento "responde" o gate | A sessão não tem rota HTTP nem credencial da web; `Source.WEB` só é usada em `src/web/routes/chat.py` e `src/interaction/decisions.py`; teste estático junto dos existentes em `tests/unit/persistent_gate/` |
+| S — agente ou documento "responde" o gate | A sessão não tem rota HTTP nem credencial da web; `canal: web` só é gravado por `src/web/routes/chat.py` e `src/interaction/decisions.py`; teste estático junto dos existentes em `tests/unit/persistent_gate/` |
 | T — resposta fora das opções | `clean_answer`; transição condicional `pendente → …` |
-| R — de onde veio a decisão | `resolvido_por='web'` |
+| R — de onde veio a decisão | `resolvido_por='terminal'` (pesquisador) e `resposta.canal='web'` |
 | I — eventos com dado bruto | Os eventos já passam pelos filtros (ADR 023 §2); a web exibe como texto |
 | I — consulta escreve | Processo filho com `PGOPTIONS` somente leitura e invólucros (inalterado) |
 | D — muitas conexões SSE ou consultas | `WEB_MAX_EVENT_STREAMS`; `WEB_MAX_CONCURRENT_CONSULTS` global; subprocesso assíncrono; tempo limite; conexão do pool por consulta |
@@ -89,7 +89,7 @@ O `assisted` se suspende quando nenhum terminal está presente (ADR 023 §1.2). 
 
 ## 7. Questões em aberto
 
-1. **Origem própria `web` no gate** (recomendado, exige o `CHECK` novo) ou reutilizar `terminal` (sem schema, perde o repúdio)?
+1. ~~Origem própria no gate~~: decidido em 2026-10-24 — `resolvido_por='terminal'` com `canal: web` na resposta, sem schema.
 2. **Presença:** (a) presença `tipo='web'` enquanto houver conexão de eventos, coexistindo com o REPL (recomendado; exige o `CHECK` novo); (b) a web conta como "o terminal" e é exclusiva com o REPL; (c) a web não mantém presença e o `assisted` só funciona pelo REPL.
 3. **Confirmar o Problema pela web** (o Advogado do Valor recomenda incluir nesta mudança, porque sem isso uma pesquisa nova pela web volta à CLI justamente no primeiro passo) (decisão reservada `confirmar_problema`, com edição do rascunho): fica para uma mudança seguinte, ou entra nesta?
 4. **Ativar modo sem limite pela web:** recomendação é não oferecer (continua só na CLI, com a confirmação atual).

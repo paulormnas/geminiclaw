@@ -107,7 +107,7 @@ O backend SHALL servir `WEB_STATIC_DIR` em `/` e devolver `index.html` para rota
 - **THEN** a resposta é 503 com a dica `pnpm --dir frontend build`, e `GET /api/session` continua respondendo
 
 ### Requirement: CRUD de projetos sem exclusão física
-A API SHALL criar, listar, ler e editar (`titulo`, `objetivo`, `status ∈ {ativo, pausado, concluido}`) projetos pelas funções de `src/knowledge/projects.py`, com ator `pesquisador`, e MUST NOT oferecer exclusão (ADR 027 §6.1).
+A API SHALL criar, listar, ler e editar (`titulo`, `objetivo`, `status ∈ {ativo, pausado, concluido, arquivado}`) projetos pelas funções de `src/knowledge/projects.py`, com ator `pesquisador`, e MUST NOT oferecer exclusão (ADR 027 §6.1).
 
 #### Scenario: Criar
 - **WHEN** `POST /api/projects {"titulo":"Iris","objetivo":"Classificar espécies"}`
@@ -126,6 +126,16 @@ A API SHALL criar, listar, ler e editar (`titulo`, `objetivo`, `status ∈ {ativ
 - **GIVEN** uma sessão viva do projeto
 - **WHEN** `PATCH {"status":"concluido"}`
 - **THEN** a resposta é 409 com o apelido da sessão viva e o projeto continua `ativo`
+
+#### Scenario: Arquivar
+- **GIVEN** um projeto sem sessão viva
+- **WHEN** `PATCH {"status":"arquivado"}`
+- **THEN** `GET /api/projects` não o traz, `GET /api/projects?incluir_arquivados=1` traz, e `PATCH {"status":"pausado"}` o desarquiva
+
+#### Scenario: Projeto arquivado recusa pesquisa
+- **GIVEN** um projeto `arquivado`
+- **WHEN** o REPL pede `nova-pesquisa` ou `retomar` nele
+- **THEN** a pesquisa é recusada com a mensagem "projeto arquivado; desarquive para explorar" e nenhum processo de sessão é criado
 
 #### Scenario: Sem DELETE
 - **WHEN** `DELETE /api/projects/{id}`

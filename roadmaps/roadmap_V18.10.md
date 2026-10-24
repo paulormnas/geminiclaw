@@ -30,18 +30,24 @@ Interface web local (SPA em TypeScript servida por FastAPI no Mac, só loopback/
 - **Critérios de aceite:** [ ] filtros validados pelo esquema · [ ] limite com `omitidos` · [ ] lista acessível sincronizada · [ ] só leitura
 - **Complexidade estimada:** Média
 
+### Tarefa 6: Configurações do pesquisador
+- **Spec:** [`v18.10-web-settings`](../openspec/changes/v18.10-web-settings/proposal.md)
+- **Critérios de aceite:** [ ] lista fechada · [ ] chaves nunca voltam ao navegador · [ ] senha para salvar · [ ] vale para a próxima pesquisa
+- **Complexidade estimada:** Média
+
 ### Tarefa 5: Conversa
 - **Spec:** [`v18.10-web-chat`](../openspec/changes/v18.10-web-chat/proposal.md)
-- **Critérios de aceite:** [ ] consulta só leitura em processo filho · [ ] nova pesquisa com as confirmações do REPL · [ ] SSE sem perda · [ ] gate com `resolvido_por='web'` · [ ] presença conforme decisão
+- **Critérios de aceite:** [ ] consulta só leitura em processo filho · [ ] nova pesquisa com as confirmações do REPL · [ ] SSE sem perda · [ ] gate respondido pela web com senha nas decisões reservadas e `canal: web` · [ ] presença conforme decisão
 - **Complexidade estimada:** Alta
 
 ## Ordem de implementação
 1. Tarefa 1.
-2. Tarefas 2, 3 e 4 em paralelo (subagentes em worktrees próprias; conflito esperado só no OpenAPI e no `routes.tsx`, resolvido no merge, um PR por vez).
+2. Tarefas 2, 3, 4 e 6 em paralelo (subagentes em worktrees próprias; conflito esperado só no OpenAPI e no `routes.tsx`, resolvido no merge, um PR por vez).
 3. Tarefa 5.
 
 ## Validação da Etapa
 - [ ] Testes do backend (`unit or integration`) e do frontend passam.
 - [ ] Validação manual no Mac com o `geminiclaw_bench` (leitura) e o `geminiclaw` (escrita).
-- [ ] Pareceres do Analista de Segurança (esqueleto, artefatos, conversa).
+- [ ] Pareceres do Analista de Segurança (esqueleto, artefatos, configurações, conversa).
+- [ ] Design system (`docs/design-system/README.md`) seguido; página `/_design` com todos os estados.
 - [ ] ADR 027 Aceito; PRs mergeados em `dev`; mudanças arquivadas.

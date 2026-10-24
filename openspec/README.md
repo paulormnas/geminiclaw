@@ -131,6 +131,7 @@ abertos em [`changes/archive/PENDENCIAS.md`](changes/archive/PENDENCIAS.md). **A
 | V18.10 | [v18.10-web-dashboard](changes/v18.10-web-dashboard/proposal.md) | `web-interface` | 027, 015 | v18.10-web-skeleton |
 | V18.10 | [v18.10-web-artifacts](changes/v18.10-web-artifacts/proposal.md) | `web-interface` | 027, 008, 019 | v18.10-web-skeleton |
 | V18.10 | [v18.10-web-graph](changes/v18.10-web-graph/proposal.md) | `web-interface` | 027, 015 | v18.10-web-skeleton |
+| V18.10 | [v18.10-web-settings](changes/v18.10-web-settings/proposal.md) | `web-interface` | 027, 011, 017 | v18.10-web-skeleton |
 | V18.10 | [v18.10-web-chat](changes/v18.10-web-chat/proposal.md) | `web-interface`, `researcher-consult` | 027, 023 | v18.10-web-skeleton, ADR 023 implementado |
 | V19 | [v19-equipment-control](changes/v19-equipment-control/proposal.md) | `equipment-control` | 019, 014, 015, 010 | V18.5, v18-researcher-consult |
 | V20 | [v20-node-identity](changes/v20-node-identity/proposal.md) | `node-identity` | 013 | V16–V19 validadas |

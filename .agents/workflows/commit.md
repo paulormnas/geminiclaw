@@ -23,6 +23,8 @@ uv run lint-imports
 uv run pytest -m "unit or integration" -v
 ```
 
+Se a mudança alterar `frontend/`, rode também `pnpm --dir frontend lint typecheck test build` (e `uv run python -m src.web.openapi && pnpm --dir frontend gen:api` quando a API mudar).
+
 Só avance se o `ruff`, a verificação de camadas e todos os testes passarem. Nunca faça commit com testes falhando.
 
 ---

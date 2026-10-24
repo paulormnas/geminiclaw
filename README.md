@@ -16,6 +16,7 @@ O projeto permite que múltiplos agentes especializados colaborem em tarefas com
 - [Loop Autônomo](#-loop-de-execução-autônoma)
 - [Agentes Especializados](#-agentes-especializados)
 - [Comunicação (IPC)](#-comunicação-ipc)
+- [Interface web](#-interface-web)
 - [Infraestrutura Docker](#-infraestrutura-docker)
 - [Como testar](#-como-testar)
 - [Status do Desenvolvimento](#-status-do-desenvolvimento)
@@ -292,6 +293,23 @@ A mensagem orienta o plano mas **não decide** nada reservado ("rejeite a hipót
 Com várias pesquisas simultâneas, a concorrência efetiva de agentes é `MAX_CONCURRENT_AGENTS` multiplicado pelo número de processos. As variáveis (`SESSION_LAUNCH_TIMEOUT_SECONDS`, `SESSION_LOG_DIR`, `SESSION_LOOP_TICK_SECONDS`, `TERMINAL_PRESENCE_*` etc.) estão documentadas no `.env.example`.
 
 ---
+
+## 🖥️ Interface web
+
+Interface do pesquisador (ADR 027): projetos, e nas próximas etapas painel, artefatos, grafo, configurações e conversa. Servidor FastAPI **só em loopback** (`127.0.0.1:8765`), com senha.
+
+```bash
+# 1. Senha: gera o hash argon2id e mostra a linha para o .env (WEB_PASSWORD_HASH='...')
+uv run python -m src.web.password
+
+# 2. Build do frontend (pnpm via corepack: `corepack enable`)
+pnpm --dir frontend install --frozen-lockfile && pnpm --dir frontend build
+
+# 3. Servidor
+uv run python -m src.web      # abre em http://127.0.0.1:8765
+```
+
+Acesso de outra máquina da tailnet: `tailscale serve --https=443 http://127.0.0.1:8765`; depois acrescente o nome da máquina em `WEB_ALLOWED_HOSTS` e use `WEB_COOKIE_SECURE=true`. O servidor nunca escuta fora do loopback. Desenvolvimento do frontend: `uv run python -m src.web` e, em outro terminal, `pnpm --dir frontend dev`. Variáveis `WEB_*` em `.env.example`; design system em `docs/design-system/README.md`.
 
 ## 🐳 Infraestrutura Docker
 

@@ -1,0 +1,72 @@
+/* Tokens do design system "Bancada" v2 (docs/design-system/README.md). Nenhum valor visual fora deles. */
+:root {
+  color-scheme: light;
+  --ink-900: hsl(230 80% 15%);
+  --navy: hsl(230 80% 25%);
+  --lime: hsl(72 100% 50%);
+  --lime-deep: hsl(72 90% 32%);
+
+  --bg: hsl(220 30% 98%);
+  --surface: hsl(0 0% 100%);
+  --surface-2: hsl(220 40% 96.5%);
+  --surface-3: hsl(220 45% 93%);
+  --border: hsl(220 22% 88%);
+  --border-strong: hsl(222 20% 78%);
+  --text: hsl(230 60% 14%);
+  --text-muted: hsl(230 18% 40%);
+  --text-faint: hsl(230 12% 46%);
+  --primary: var(--navy);
+  --primary-text: hsl(0 0% 100%);
+  --accent: var(--lime);
+  --accent-text: hsl(230 80% 12%);
+  --accent-ink: hsl(72 85% 26%);
+  --focus: hsl(230 80% 45%);
+  --pos: hsl(152 60% 30%); --pos-bg: hsl(150 50% 93%);
+  --neg: hsl(4 70% 45%);   --neg-bg: hsl(4 80% 95%);
+  --warn: hsl(32 90% 29%); --warn-bg: hsl(38 95% 92%);
+  --info: hsl(222 75% 45%); --info-bg: hsl(222 90% 95%);
+  --neu: hsl(230 10% 42%); --neu-bg: hsl(225 20% 93%);
+  --g-exp: hsl(268 55% 52%); --g-abo: hsl(190 70% 34%);
+  --shadow: 0 8px 32px -8px hsl(230 80% 15% / 0.10);
+
+  --font: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-code: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
+  --r-sm: 6px; --r-md: 10px; --r-lg: 14px;
+  --fast: 120ms; --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: hsl(230 60% 6%); --surface: hsl(230 50% 9.5%); --surface-2: hsl(230 42% 12.5%); --surface-3: hsl(230 38% 16%);
+    --border: hsl(230 30% 18%); --border-strong: hsl(230 25% 27%);
+    --text: hsl(220 30% 95%); --text-muted: hsl(220 18% 70%); --text-faint: hsl(220 14% 60%);
+    --primary: var(--lime); --primary-text: hsl(230 80% 10%);
+    --accent: var(--lime); --accent-text: hsl(230 80% 10%); --accent-ink: var(--lime);
+    --focus: var(--lime);
+    --pos: hsl(150 55% 62%); --pos-bg: hsl(152 40% 14%);
+    --neg: hsl(4 85% 70%);  --neg-bg: hsl(4 45% 15%);
+    --warn: hsl(38 95% 64%); --warn-bg: hsl(36 50% 14%);
+    --info: hsl(218 90% 74%); --info-bg: hsl(225 50% 17%);
+    --neu: hsl(220 12% 66%); --neu-bg: hsl(230 25% 16%);
+    --g-exp: hsl(268 70% 76%); --g-abo: hsl(188 65% 60%);
+    --shadow: 0 8px 32px -8px hsl(230 80% 2% / 0.6);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: hsl(230 60% 6%); --surface: hsl(230 50% 9.5%); --surface-2: hsl(230 42% 12.5%); --surface-3: hsl(230 38% 16%);
+  --border: hsl(230 30% 18%); --border-strong: hsl(230 25% 27%);
+  --text: hsl(220 30% 95%); --text-muted: hsl(220 18% 70%); --text-faint: hsl(220 14% 60%);
+  --primary: var(--lime); --primary-text: hsl(230 80% 10%);
+  --accent: var(--lime); --accent-text: hsl(230 80% 10%); --accent-ink: var(--lime);
+  --focus: var(--lime);
+  --pos: hsl(150 55% 62%); --pos-bg: hsl(152 40% 14%);
+  --neg: hsl(4 85% 70%);  --neg-bg: hsl(4 45% 15%);
+  --warn: hsl(38 95% 64%); --warn-bg: hsl(36 50% 14%);
+  --info: hsl(218 90% 74%); --info-bg: hsl(225 50% 17%);
+  --neu: hsl(220 12% 66%); --neu-bg: hsl(230 25% 16%);
+  --g-exp: hsl(268 70% 76%); --g-abo: hsl(188 65% 60%);
+  --shadow: 0 8px 32px -8px hsl(230 80% 2% / 0.6);
+}
+

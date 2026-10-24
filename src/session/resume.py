@@ -272,6 +272,8 @@ async def prepare_resume(
             detail = await asyncio.to_thread(projects.get_project, store, project_id)
         except GraphStoreError as exc:
             raise ResumeError(f"projeto da sessão indisponível: {exc}") from exc
+        if detail.status == "arquivado":
+            raise ResumeError("projeto arquivado; desarquive para explorar.")
         if detail.problema is None:
             raise ResumeError(
                 f"o projeto {project_id} não tem Problema confirmado; a retomada não confirma o Problema. "

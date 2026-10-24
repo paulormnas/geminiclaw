@@ -1,0 +1,25 @@
+.head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--s4); }
+.head h1 { font: 800 clamp(1.75rem, 3.4vw, 2.5rem)/1.08 var(--font); letter-spacing: -0.035em; text-wrap: balance; margin-top: 6px; }
+.label { font: 700 0.6875rem/1.3 var(--font); text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-faint); }
+.actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow); overflow: hidden; }
+.tablewrap { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; }
+.table th { text-align: left; padding: 10px var(--s5); background: var(--surface-2); border-bottom: 1px solid var(--border); white-space: nowrap; }
+.table td { padding: 10px var(--s5); border-bottom: 1px solid var(--border); }
+.table tbody tr:last-child td { border-bottom: 0; }
+.table tbody tr:hover { background: var(--surface-2); }
+.table a { font-weight: 700; text-decoration: none; }
+.table a:hover { text-decoration: underline; }
+.filters { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: end; }
+.form { display: grid; gap: var(--s4); max-width: 640px; }
+.login { min-height: 100%; display: grid; place-items: center; padding: var(--s5) max(16px, env(safe-area-inset-left, 0px)); }
+.loginCard { width: min(380px, 100%); display: grid; gap: var(--s4); padding: var(--s6); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow); }
+.loginCard h1 { font: 800 1.5rem var(--font); letter-spacing: -0.03em; }
+.detail { display: grid; gap: var(--s5); padding: var(--s5); }
+.detail dl { display: grid; grid-template-columns: max-content 1fr; gap: var(--s2) var(--s5); margin: 0; }
+.detail dt { color: var(--text-faint); font-weight: 700; }
+.detail dd { margin: 0; white-space: pre-wrap; }
+.muted { color: var(--text-muted); }
+.swatches { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--s3); padding: var(--s5); }
+.swatch { height: 56px; border-radius: var(--r-md); border: 1px solid var(--border); display: grid; place-items: end start; padding: 6px; font-size: 0.6875rem; font-weight: 700; }

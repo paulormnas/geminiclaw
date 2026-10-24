@@ -87,5 +87,5 @@ Quando o Design System for criado:
 
 - Nunca implemente código de frontend diretamente. O papel é de especificação e design.
 - Nunca introduza frameworks ou bibliotecas de CSS/UI sem ADR aprovado.
-- JavaScript/TypeScript é permitido apenas no frontend (AGENTS.md §1); siga a stack definida no ADR do frontend.
+- JavaScript/TypeScript é permitido apenas no frontend (AGENTS.md §1); siga a stack do ADR 027 e o design system em `docs/design-system/README.md` ("Bancada" v2).
 - Mantenha segredos fora de especificações. Referencie variáveis de ambiente sem expor valores.

@@ -5,9 +5,11 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "argon2-cffi>=25.1.0",
     "beautifulsoup4>=4.14.3",
     "cryptography>=46.0.5",
     "docker>=7.1.0",
+    "fastapi>=0.162.0",
     "fastembed>=0.7.4",
     "httpx>=0.28.1",
     "lxml>=6.0.2",
@@ -21,6 +23,7 @@ dependencies = [
     "pyyaml>=6.0.3",
     "scikit-learn>=1.8.0",
     "seaborn>=0.13.2",
+    "uvicorn>=0.54.0",
 ]
 
 [project.optional-dependencies]
@@ -110,7 +113,7 @@ type = "layers"
 containers = ["src"]
 # De cima para baixo; pacotes na mesma linha são independentes entre si. Ordem medida em v18.7-source-layout.
 layers = [
-    "cli",
+    "cli | web",
     "orchestration",
     "agent_runtime",
     "agents",
@@ -130,3 +133,10 @@ layers = [
 ]
 # Exceções (cada uma com dono, ADR 024 §3.5): lista vazia ao fim de v18.7-layer-cycles.
 ignore_imports = []
+
+[[tool.importlinter.contracts]]
+name = "A web não executa agentes (ADR 027 §3)"
+type = "forbidden"
+source_modules = ["src.web"]
+forbidden_modules = ["src.cli", "src.orchestration", "src.agent_runtime", "src.agents"]
+allow_indirect_imports = true

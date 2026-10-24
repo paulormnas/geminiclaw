@@ -44,9 +44,10 @@ A stack frontend será decidida via ADR no momento da implementação. Possibili
 - **Python-first:** Streamlit, Gradio, NiceGUI ou FastHTML, se o ADR concluir que atendem melhor.
 
 Independentemente da stack escolhida:
-- O gerenciamento de dependências Python deve usar `uv`; o gerenciador de pacotes JavaScript será definido no ADR do frontend.
-- O frontend deve ser containerizado e rodar na rede `geminiclaw-net`.
-- Os arquivos de frontend devem ficar em diretório dedicado (`frontend/` ou similar).
+- O gerenciamento de dependências Python usa `uv`; o do frontend usa `pnpm` (ADR 027), com `packageManager` fixado no `package.json` e `pnpm-lock.yaml` versionado. Nunca `npm`/`yarn`.
+- O frontend é um projeto próprio em `frontend/` (React + TypeScript estrito + Vite); tokens do design system em `frontend/src/styles/tokens.css`, sem valor de cor, espaçamento ou fonte fora deles.
+- Execução: ADR 027 §9 — containers `geminiclaw-web` e `geminiclaw-web-frontend` (mudança `v18.10-web-containers`); até lá, `uv run python -m src.web` + `pnpm --dir frontend dev`.
+- Testes: `pnpm --dir frontend test` (Vitest + Testing Library + MSW, cobertura ≥ 70%), `lint`, `typecheck` e `build` antes de cada commit que altere `frontend/`. `react/no-danger` é erro.
 
 ---
 

@@ -11,6 +11,9 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+frontend/node_modules/
+frontend/coverage/
+config/researcher.env
 downloads/
 eggs/
 .eggs/

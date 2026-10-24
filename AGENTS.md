@@ -17,7 +17,7 @@ Este documento é o **ponto de entrada e fonte primária de governança** para a
 6. **Fail-Fast e Integridade Metodológica:** Nunca inventar dados fictícios ou gerar mocks silenciosos em fluxos de produção. Erros devem ser explícitos e acionáveis.
 7. **Zero Secrets em Código:** Credenciais e chaves de API vêm exclusivamente de variáveis de ambiente gerenciadas em `.env` e `src/config.py`. Nunca versionar `.env`, `*.db` ou arquivos de log.
 8. **Gerenciamento Exclusivo com `uv`:** Nunca usar `pip`, `pip3`, `pipenv` ou `poetry`. Sempre `uv add`, `uv sync`, `uv run`.
-9. **Testes Antes de Commit:** Nunca commitar com testes falhando. Executar `uv run pytest -m "unit or integration" -v` antes de cada commit.
+9. **Testes Antes de Commit:** Nunca commitar com testes falhando. Executar `uv run pytest -m "unit or integration" -v` antes de cada commit; se `frontend/` mudou, também `pnpm --dir frontend lint typecheck test build`.
 10. **Status de Desenvolvimento Sempre Refletido:** Antes de implementar, o desenvolvedor revisa a mudança OpenSpec e a confronta com o estado real do código (a spec pode estar desatualizada). Ao implementar, reflete no mesmo PR o estado em `tasks.md` (caixas e linha `**Estado (data):**`). Depois do PR, a implementação é confirmada com o Arquiteto de Soluções, que atualiza o status dos ADRs de origem e o índice `docs/decisions/README.md` (Aprovado → Parcialmente implementado → Aceito). Nenhum ADR ou OpenSpec fica com status que o código não sustenta.
 
 ---
@@ -124,6 +124,13 @@ uv run python -m scripts.platform_images ensure --imagens sandbox
 # Verificar a regra de camadas entre pacotes de src/ (junto com ruff e pytest, antes de cada commit)
 uv run lint-imports
 
+# Interface web (ADR 027): hash da senha, servidor em loopback, frontend
+uv run python -m src.web.password
+uv run python -m src.web                       # http://127.0.0.1:8765 (precisa de WEB_PASSWORD_HASH no .env)
+pnpm --dir frontend install --frozen-lockfile  # pnpm via corepack (versão em frontend/package.json)
+pnpm --dir frontend build                      # gera frontend/dist, servido pelo backend
+pnpm --dir frontend lint && pnpm --dir frontend typecheck && pnpm --dir frontend test  # antes de commitar frontend/
+
 # Rodar todos os testes
 uv run pytest
 
@@ -186,8 +193,10 @@ geminiclaw/
 │   ├── observability/         # Telemetria
 │   ├── host/                  # Saúde da máquina e imagens por plataforma
 │   ├── report/                # Relatórios e agregações
+│   ├── web/                   # Interface web do pesquisador: API FastAPI e estáticos (ADR 027), só loopback
 │   ├── skills/                # Ferramentas dos agentes
 │   └── utils/                 # Utilitários sem dependências do projeto
+├── frontend/                  # SPA React + TypeScript (pnpm, Vite, Vitest); único lugar de .js/.ts (ADR 027)
 ├── containers/                # Dockerfile do sandbox de código e do PostgreSQL (AGE)
 ├── tests/                     # Testes pytest
 ├── roadmaps/                  # Roadmaps de versões (V10–V20)

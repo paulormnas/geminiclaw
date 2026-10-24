@@ -6,7 +6,7 @@ Movimentação antes do comportamento novo (ADR 024 §5), suíte verde antes de 
 
 | De | Para | O que |
 |---|---|---|
-| `src/cli/session_start.py` | `src/interaction/research.py` | preparar e lançar pesquisa nova e retomada (verificação de memória, orçamento, `launch` do processo da sessão); a impressão do banner e as perguntas ao terminal ficam em `src/cli/` |
+| `src/cli/session_start.py` (**feito em `v18.10-web-containers`**) | `src/interaction/research.py` | preparar e lançar pesquisa nova e retomada (verificação de memória, orçamento, `launch` do processo da sessão); a impressão do banner e as perguntas ao terminal ficam em `src/cli/` |
 | `src/cli/terminal_consult.py` (lado do terminal) | `src/interaction/consult.py` | criar o processo filho com `filtered_env` e `PGOPTIONS` somente leitura, passar a pergunta, validar o JSON da resposta; o ponto de entrada do filho continua um módulo executado por `python -m`, nunca importado pela web |
 | `src/cli/progress_view.py` (envio de comandos) | `src/interaction/commands.py` | validar e gravar comandos e orientação pela `SessionInbox` |
 | `src/cli/gate_commands.py` (resolver pedido) | `src/interaction/decisions.py` | listar pendentes por projeto ou sessão e responder por `TerminalGate.answer(source=...)` |
@@ -33,7 +33,7 @@ Camadas: `"cli | web"`, depois `"interaction"`, depois `"orchestration"`. Nenhum
 | Rota | Corpo | Resposta |
 |---|---|---|
 | `POST /api/projects/{id}/chat/ask` | `{texto, session_id?}` (≤ 4 000 caracteres) | `{resposta, orientacao_sugerida?, tokens, sessao_consultada}`; 409 se a consulta estiver desligada (`TERMINAL_CONSULT_ENABLED=false`); 504 após `WEB_CONSULT_TIMEOUT_SECONDS` (padrão 180) |
-| `POST /api/projects/{id}/research` | `{tarefa, modo: "assisted"\|"semi"\|"auto", confirmar_outra_em_execucao?: bool, confirmar_memoria_baixa?: bool}` | 202 `{session_id, alias}`; 409 `{erro:"outra_em_execucao", sessoes}` ou `{erro:"memoria_baixa", disponivel_mb, sessoes}` até o pesquisador confirmar; 409 `{erro:"problema_nao_confirmado"}` |
+| `POST /api/projects/{id}/research` | `{tarefa, modo: "assisted"\|"semi"\|"auto", confirmar_outra_em_execucao?: bool, confirmar_memoria_baixa?: bool}` | **Substituído por `v18.10-web-containers` §5:** 202 `{pedido_id}`; as confirmações (outra em execução, memória baixa) e `problema_nao_confirmado` chegam como estado `recusado` do pedido |
 | `GET /api/projects/{id}/research` | — | pesquisas do projeto com estado, apelido, último evento, pedidos pendentes |
 | `GET /api/sessions/{sid}/events/stream` | `Last-Event-ID` opcional | `text/event-stream`; `id: <seq>`, `event: <tipo>`, `data: <JSON do evento>`; histórico de `TERMINAL_FOLLOW_HISTORY` eventos ao conectar sem `Last-Event-ID`; comentário `: ping` a cada 15 s |
 | `POST /api/sessions/{sid}/inbox` | `{texto}` | 201 `{id}`; 422 acima do limite da caixa (2 000) |
@@ -47,7 +47,7 @@ Camadas: `"cli | web"`, depois `"interaction"`, depois `"orchestration"`. Nenhum
 - **Pedidos sem sessão de pesquisa** (`session_id` nulo, criados pela CLI): a web não os lista nem responde; continuam só na CLI.
 - **Banco:** hoje o gate não usa papel de banco próprio (decisão de 2026-10-16: só a regra na aplicação; o papel `terminal_writer` e os gatilhos ficaram para o endurecimento antes da produção). **Divergência encontrada na revisão:** a spec consolidada `openspec/specs/researcher-consult/spec.md` ("Somente o papel do terminal resolve pedidos") descreve o papel e os gatilhos como se existissem; o código não os tem. Esta mudança segue o código; a correção da spec consolidada é registrada à parte (tarefa 0.3). Quando o endurecimento vier, a web usa a mesma credencial do terminal, lida por função própria de `src/config.py` só no processo da web, e a ameaça de credencial num processo HTTP de vida longa entra no parecer daquela mudança.
 - **Consulta não bloqueia o servidor:** o filho é criado com `asyncio.create_subprocess_exec` (hoje `src/cli/terminal_consult.py:110` usa `subprocess.run` síncrono, que travaria o laço do servidor, o SSE e o gate); no máximo `WEB_MAX_CONCURRENT_CONSULTS` (padrão 1) filhos ao mesmo tempo no processo inteiro (429 acima), o que também limita memória e custo de LLM.
-- **Nova pesquisa:** exige Problema confirmado do projeto (a confirmação continua na CLI, Questão 3); com outra pesquisa viva ou memória abaixo de `MIN_AVAILABLE_MEMORY_MB`, a API devolve 409 com os dados e só lança com a confirmação correspondente — o mesmo diálogo do REPL (ADR 023 §1).
+- **Nova pesquisa:** exige Problema confirmado do projeto (a confirmação continua na CLI, Questão 3); com outra pesquisa viva ou memória abaixo de `MIN_AVAILABLE_MEMORY_MB`, o lançador no host recusa o pedido com os dados e só lança um novo pedido com a confirmação correspondente (`v18.10-web-containers`) — o mesmo diálogo do REPL (ADR 023 §1).
 - **Texto livre:** sempre consulta, nunca inicia pesquisa (decisão de 2026-10-15 para o REPL); iniciar pesquisa é o botão "Nova pesquisa".
 
 ## 3. Modos pela web e comandos a qualquer momento (decisão do pesquisador, 2026-10-24)

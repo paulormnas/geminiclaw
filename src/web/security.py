@@ -9,8 +9,11 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from src.logger import get_logger
 from src.web.auth import SessionStore
 from src.web.settings import WebSettings
+
+logger = get_logger(__name__)
 
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 LOGIN_PATH = "/api/session/login"
@@ -93,4 +96,17 @@ class SecurityMiddleware:
         if denied is not None:
             await denied(scope, receive, send_with_headers)
             return
-        await self.app(scope, receive, send_with_headers)
+        started = False
+
+        async def tracking_send(message: Message) -> None:
+            nonlocal started
+            started = started or message["type"] == "http.response.start"
+            await send_with_headers(message)
+
+        try:
+            await self.app(scope, receive, tracking_send)
+        except Exception as exc:  # noqa: BLE001 - qualquer falha vira 500 sem detalhe, ainda com os cabeçalhos
+            logger.error("Erro interno", extra={"extra": {"tipo": type(exc).__name__, "rota": request.url.path}})
+            if started:
+                raise
+            await error_response(500, "interno", "Erro interno.")(scope, receive, send_with_headers)

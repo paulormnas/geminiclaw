@@ -59,4 +59,4 @@ def logout(
 
 @router.get("", response_model=SessionOut, responses={401: {"model": ErrorOut}})
 def whoami(session: WebSession = Depends(current_session), state: AppState = Depends(app_state)) -> SessionOut:
-    return SessionOut(autenticado=True, expira_em=state.sessions.expires_at(session))
+    return SessionOut(autenticado=True, expira_em=state.sessions.expires_at(session), csrf_token=session.csrf)

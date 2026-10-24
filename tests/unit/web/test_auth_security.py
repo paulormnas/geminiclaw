@@ -52,6 +52,11 @@ def test_expira_por_idade_mesmo_com_uso(client, clock, auth) -> None:
     assert client.get("/api/session").status_code == 401
 
 
+def test_recarregar_a_pagina_recupera_o_csrf(client, auth) -> None:
+    body = client.get("/api/session").json()
+    assert body["csrf_token"] == auth["X-CSRF-Token"]
+
+
 def test_logout(client, auth) -> None:
     assert client.post("/api/session/logout", headers=auth).status_code == 204
     assert client.get("/api/session").status_code == 401
@@ -128,6 +133,7 @@ def test_excecao_interna_sem_vazar(make_client, caplog) -> None:
     assert resp.status_code == 500 and resp.json() == {"erro": "interno", "mensagem": "Erro interno."}
     assert "segredo" not in resp.text
     assert "segredo" not in caplog.text and "gc_session" not in caplog.text
+    assert "frame-ancestors 'none'" in resp.headers["content-security-policy"]
     assert headers
 
 

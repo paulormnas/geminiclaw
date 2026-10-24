@@ -22,6 +22,7 @@ class LoginOut(BaseModel):
 class SessionOut(BaseModel):
     autenticado: bool
     expira_em: float
+    csrf_token: str
 
 
 class ProjectItem(BaseModel):

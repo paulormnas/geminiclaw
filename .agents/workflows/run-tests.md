@@ -13,6 +13,15 @@ detalhadas destinadas ao desenvolvedor, que precisam de contexto completo de rep
 
 ---
 
+## 0. Testes do frontend (quando `frontend/` mudar)
+
+```bash
+pnpm --dir frontend install --frozen-lockfile
+pnpm --dir frontend lint && pnpm --dir frontend typecheck && pnpm --dir frontend test && pnpm --dir frontend build
+```
+
+O pnpm vem do `corepack` (`corepack enable`); a versão está em `frontend/package.json` (`packageManager`).
+
 ## 1. Testes Unitários
 
 Execução rápida de testes que não dependem de Docker ou API externa.

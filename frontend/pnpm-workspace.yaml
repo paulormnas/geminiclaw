@@ -1,0 +1,2 @@
+# Scripts de instalação das dependências ficam bloqueados; só os pacotes listados podem rodar (supply chain).
+onlyBuiltDependencies: []

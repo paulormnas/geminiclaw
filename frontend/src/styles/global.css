@@ -1,0 +1,16 @@
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 500 0.8125rem/1.45 var(--font);
+  font-feature-settings: "tnum" 1, "cv11" 1;
+  -webkit-font-smoothing: antialiased;
+}
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-sm); }
+code { font: 400 0.75rem/1.4 var(--font-code); }
+h1, h2, h3 { margin: 0; }
+a { color: inherit; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

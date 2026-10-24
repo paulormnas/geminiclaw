@@ -37,7 +37,7 @@ Todas as rotas `/api/*`, exceto `POST /api/session/login`, exigem sessão; as qu
 |---|---|---|
 | `POST /api/session/login` | `{senha}` | 200 `{csrf_token, expira_em}` + cookie `gc_session`; 401 `{erro:"credenciais_invalidas"}`; 429 `{erro:"bloqueado", tentar_em_segundos}` |
 | `POST /api/session/logout` | — | 204, cookie apagado |
-| `GET /api/session` | — | 200 `{autenticado:true, expira_em}`; 401 |
+| `GET /api/session` | — | 200 `{autenticado:true, expira_em, csrf_token}`; 401. O token volta aqui para a SPA recuperá-lo ao recarregar a página (só com o cookie válido, `no-store`) |
 | `GET /api/projects` | `status?` | 200 `[{projeto_id, titulo, status, criado_em}]` |
 | `POST /api/projects` | `{titulo, objetivo, dominios?: string[]}` | 201 `{projeto_id}`; 422 com o campo |
 | `GET /api/projects/{id}` | — | 200 `ProjectDetail` (título, objetivo, status, domínios, Problema ativo resumido, contagem de sessões); 404 |

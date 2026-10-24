@@ -64,6 +64,7 @@ def test_config_llm_routing_defaults():
         assert src.config.LLM_PROVIDER_PRIORITY == ""
         assert src.config.LLM_HEALTH_CHECK_TIMEOUT_SECONDS == 5
         assert src.config.OPENAI_COMPATIBLE_TIMEOUT_SECONDS == 120
+        assert src.config.OPENAI_COMPATIBLE_MAX_TOKENS == 0
         assert src.config.LLM_CATALOG_LOCAL_PATH == ""
 
 @pytest.mark.unit

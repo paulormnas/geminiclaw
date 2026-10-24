@@ -244,3 +244,38 @@ def test_timeout_nao_positivo_falha_na_criacao(monkeypatch, valor):
 
     with pytest.raises(ValueError, match="OPENAI_COMPATIBLE_TIMEOUT_SECONDS"):
         OpenAICompatibleProvider(base_url=BASE_URL, model=MODEL)
+
+
+async def _max_tokens_enviado(pedido: int) -> int:
+    provider = OpenAICompatibleProvider(base_url=BASE_URL, model=MODEL)
+    payload = {"choices": [{"message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}], "usage": {}}
+    async with respx.mock:
+        route = respx.post(f"{BASE_URL}/chat/completions").mock(return_value=httpx.Response(200, json=payload))
+        await provider.generate(messages=[{"role": "user", "content": "Oi"}], max_tokens=pedido)
+        return json.loads(route.calls.last.request.content)["max_tokens"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_max_tokens_sem_piso_respeita_o_pedido(monkeypatch):
+    monkeypatch.setattr("src.config.OPENAI_COMPATIBLE_MAX_TOKENS", 0)
+
+    assert await _max_tokens_enviado(4096) == 4096
+    assert await _max_tokens_enviado(800) == 800
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_max_tokens_piso_eleva_pedido_menor(monkeypatch):
+    monkeypatch.setattr("src.config.OPENAI_COMPATIBLE_MAX_TOKENS", 16384)
+
+    assert await _max_tokens_enviado(4096) == 16384
+    assert await _max_tokens_enviado(800) == 16384
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_max_tokens_piso_nao_reduz_pedido_maior(monkeypatch):
+    monkeypatch.setattr("src.config.OPENAI_COMPATIBLE_MAX_TOKENS", 16384)
+
+    assert await _max_tokens_enviado(32000) == 32000

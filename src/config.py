@@ -207,6 +207,9 @@ LLM_HEALTH_CHECK_TIMEOUT_SECONDS = float(get_env("LLM_HEALTH_CHECK_TIMEOUT_SECON
 # Timeout (s) de cada requisição ao provedor `openai_compatible`. O padrão cobre serviços hospedados; servidores
 # locais lentos (vLLM com raciocínio longo a ~30 tok/s) precisam de mais, senão o cliente desiste e a geração é perdida.
 OPENAI_COMPATIBLE_TIMEOUT_SECONDS = float(get_env("OPENAI_COMPATIBLE_TIMEOUT_SECONDS", default="120"))
+# Piso (tokens) do `max_tokens` enviado ao `openai_compatible`; 0 = respeita o valor pedido pelo chamador (padrão 4096).
+# Planos chegam a ~9 mil tokens e modelos com raciocínio gastam o limite pensando: com 4096 o texto final sai vazio.
+OPENAI_COMPATIBLE_MAX_TOKENS = int(get_env("OPENAI_COMPATIBLE_MAX_TOKENS", default="0"))
 # Catálogo local opcional (só acrescenta modelos). Vazio = src/llm/catalog.local.yaml.
 LLM_CATALOG_LOCAL_PATH = get_env("LLM_CATALOG_LOCAL_PATH", default="")
 

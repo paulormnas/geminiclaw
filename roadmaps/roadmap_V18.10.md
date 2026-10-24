@@ -36,7 +36,7 @@ Interface web local (SPA em TypeScript servida por FastAPI no Mac, só loopback/
 - **Complexidade estimada:** Média
 
 ### Tarefa 7: Containers web e lançador no host
-- **Spec:** `v18.10-web-containers` (a escrever; ADR 027 §9)
+- **Spec:** [`v18.10-web-containers`](../openspec/changes/v18.10-web-containers/proposal.md)
 - **Critérios de aceite:** [ ] `scripts/up.sh` sobe tudo · [ ] container da web sem root, sem socket do Docker, porta só em loopback · [ ] build do frontend reprodutível · [ ] lançador inicia sessão como o REPL · [ ] fila de início aprovada (schema)
 - **Complexidade estimada:** Alta
 

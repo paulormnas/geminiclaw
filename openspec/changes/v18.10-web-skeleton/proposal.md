@@ -27,7 +27,7 @@ O pesquisador quer acompanhar e conduzir os projetos fora do terminal. Antes de 
 ## Aprovações necessárias
 
 - **Dependências novas (backend):** `fastapi`, `uvicorn`, `argon2-cffi` (`uv add`).
-- **Dependências novas (frontend, `pnpm`):** `react`, `react-dom`, `react-router`, `@tanstack/react-query`, `@fontsource-variable/geist`, `@fontsource-variable/geist-mono`, `@fontsource/instrument-serif`; dev: `vite`, `@vitejs/plugin-react`, `typescript`, `vitest`, `@vitest/coverage-v8`, `jsdom`, `@testing-library/react`, `@testing-library/user-event`, `@testing-library/jest-dom`, `msw`, `openapi-typescript`, `eslint`, `typescript-eslint`, `eslint-plugin-react-hooks`.
+- **Dependências novas (frontend, `pnpm`):** `react`, `react-dom`, `react-router`, `@tanstack/react-query`, `@fontsource-variable/plus-jakarta-sans`, `@fontsource-variable/jetbrains-mono`; dev: `vite`, `@vitejs/plugin-react`, `typescript`, `vitest`, `@vitest/coverage-v8`, `jsdom`, `@testing-library/react`, `@testing-library/user-event`, `@testing-library/jest-dom`, `msw`, `openapi-typescript`, `eslint`, `typescript-eslint`, `eslint-plugin-react-hooks`.
 - **`AGENTS.md`:** §1, §6, §7 e §9 (ADR 027 §8).
 - **Regras e workflows:** `frontend-dev.md`, `designer.md`, `commit.md`, `run-tests.md`.
 - **Escrita no grafo:** criar e editar nós `Projeto` pela web (aprovada pelo pesquisador em 2026-10-24).

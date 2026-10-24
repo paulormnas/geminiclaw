@@ -77,15 +77,15 @@ class TestRelatedExperience:
         assert item.similarity == pytest.approx(0.8, abs=1e-3)
 
     def test_ordena_por_similaridade_x_confianca_x_recencia(self, env):
-        """Ranking = similaridade × max(confiança das réplicas, piso) × recência (tarefa 6.9)."""
+        """Ranking = similaridade × (1 + margem) × min(réplicas, 3) × recência (ADR 026 §6)."""
         ids = _setup(env)
         forte = _abordagem(env, "forte", "projB")
         fraca = _abordagem(env, "fraca", "projC")
         sem_registro = _abordagem(env, "semregistro", "projB")
         r_forte = _registro(env, "projB", 3)
         r_fraco = _registro(env, "projC", 1)
-        _funcionou(env, forte, ids["P2"], r_forte)  # 0,8 × 1,0 (três réplicas)
-        _funcionou(env, fraca, ids["P3"], r_fraco)  # 0,7 × 1/3 (uma réplica)
+        _funcionou(env, forte, ids["P2"], r_forte)  # 0,8 × 3 (três réplicas)
+        _funcionou(env, fraca, ids["P3"], r_fraco)  # 0,7 × 1 (uma réplica)
         _funcionou(env, sem_registro, ids["P2"])  # 0,8 × piso (0,05)
 
         now = datetime.now(timezone.utc) + timedelta(seconds=1)
@@ -95,8 +95,8 @@ class TestRelatedExperience:
         assert nomes == ["forte", "fraca", "semregistro"]
         ranks = [i.rank for i in itens]
         assert ranks == sorted(ranks, reverse=True)
-        assert itens[0].rank == pytest.approx(0.8 * 1.0, rel=2e-2)
-        assert itens[1].rank == pytest.approx(0.7 / 3, rel=2e-2)
+        assert itens[0].rank == pytest.approx(0.8 * 3, rel=2e-2)
+        assert itens[1].rank == pytest.approx(0.7 * 1, rel=2e-2)
         assert itens[2].confidence == config.CONFIDENCE_FLOOR  # sem registro não zera
         assert itens[2].rank > 0
 

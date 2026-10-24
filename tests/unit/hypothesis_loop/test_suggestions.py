@@ -190,3 +190,38 @@ def test_bloco_do_prompt_entrega_sugestoes_como_dado_delimitado(tmp_path):
     from src.agents.researcher.agent import AGENT_INSTRUCTION
 
     assert "hipoteses" in AGENT_INSTRUCTION and "respostas_sugestoes" in AGENT_INSTRUCTION
+
+
+def test_prompt_do_plano_traz_a_experiencia_de_problemas_semelhantes(tmp_path):
+    """Scenario: Projeto novo com experiência disponível (v18.9-cross-project-context)."""
+    w = HypothesisWorld(index=True)
+    p, q = pair_vectors(DIM, 0, 0.9)
+    w.provider.vectors["Previsão de rendimento"] = p
+    w.provider.vectors["Problema irmão"] = q
+    w.index.upsert(w.problem)
+    other_problem = w.store.create_node(
+        "Problema", {"projeto_id": "irmao", "sessao_id": "x", "titulo": "Problema irmão", "resumo": "R",
+                     "status": "confirmado", "visibilidade": "compartilhavel",
+                     "criterio_sucesso": {"metrica": "r2", "alvo": 0.85}},
+        actor=PESQUISADOR,
+    )
+    approach = w.store.create_node(
+        "Abordagem",
+        {"projeto_id": "irmao", "sessao_id": "x", "nome": "Floresta aleatória", "tipo": "algoritmo",
+         "descricao": "D", "visibilidade": "compartilhavel", "justificativa_criacao": "t", "nos_consultados": []},
+        actor=AGENTE,
+    )
+    record = w.store.create_node(
+        "RegistroResultado",
+        {"projeto_id": "irmao", "sessao_id": "x", "chave": "k1", "metrica": "r2", "melhor_valor": 0.9,
+         "delta_base": 0.3, "n_tentativas_validas": 3, "n_replicas_independentes": 3, "n_atingiu_alvo": 3,
+         "n_abaixo_alvo": 0, "atingiu_alvo": True, "qualificacao": "pendente"},
+        actor=ORQ,
+    )
+    w.store.create_edge(record, "REGISTRA", approach, {"origem": "derivado"}, actor=ORQ)
+    w.store.create_edge(record, "SOBRE", other_problem, {"origem": "derivado"}, actor=ORQ)
+    block = ExplorationSession(lambda: w.store, w.ctx, tmp_path, mode="auto", index=w.index).prompt_block()
+    assert 'origem="experiencia_de_problemas_semelhantes"' in block
+    assert "Floresta aleatória" in block and "0.9" in block
+    sem_indice = ExplorationSession(lambda: w.store, w.ctx, tmp_path, mode="auto").prompt_block()
+    assert "experiencia_de_problemas_semelhantes" not in sem_indice

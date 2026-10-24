@@ -823,6 +823,20 @@ CANDIDATE_MAX_DESCENDANTS = int(
     _bounded_number("CANDIDATE_MAX_DESCENDANTS", "2", int, "um inteiro >= 0", lambda v: v >= 0)
 )
 
+# --- Experiência de problemas semelhantes (ADR 026 §6; v18.9-cross-project-context) ---
+# Problemas de outros projetos cujos registros entram no bloco do plano (e quantos).
+RELATED_RECORDS_K = int(_bounded_number("RELATED_RECORDS_K", "5", int, "um inteiro >= 1", lambda v: v >= 1))
+# Teto de caracteres do bloco ``experiencia_de_problemas_semelhantes``.
+RELATED_RECORDS_MAX_CHARS = int(
+    _bounded_number("RELATED_RECORDS_MAX_CHARS", "2500", int, "um inteiro >= 200", lambda v: v >= 200)
+)
+# Peso do cosseno do texto na semelhança de Problemas; o resto é a semelhança de ``caracteristicas_dados``.
+RELATED_TEXT_WEIGHT = float(
+    _bounded_number("RELATED_TEXT_WEIGHT", "0.5", float, "um número em [0, 1]", lambda v: 0 <= v <= 1)
+)
+# Candidatos vindos de outro projeto viram ``Oportunidade`` (``origem = "grafo"``). Desligado até a regra do E0.
+CROSS_PROJECT_CANDIDATES = get_env_bool("CROSS_PROJECT_CANDIDATES", default=False)
+
 # --- Memória de falhas (ADR 026 §5; v18.9-failure-memory) ---
 # Teto de caracteres do bloco "NÃO / USE" que o Developer recebe antes de cada subtarefa de código (0 desliga).
 FAILURE_MEMORY_MAX_CHARS = int(

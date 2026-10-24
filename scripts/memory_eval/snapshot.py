@@ -16,9 +16,7 @@ import argparse
 import hashlib
 import json
 import math
-import re
 import sys
-import unicodedata
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
@@ -31,15 +29,10 @@ from src.embeddings.base import get_embedding_provider  # noqa: E402
 from src.knowledge.graph_store import GraphStore, Node  # noqa: E402
 from src.knowledge.semantic_index import canonical_text  # noqa: E402
 from src.knowledge.service import KnowledgeService, KnowledgeServiceError  # noqa: E402
+from src.knowledge.structural_candidates import approach_key  # noqa: E402
 
 VERSAO = 1
 _PAGE = 200
-
-
-def approach_key(name: str) -> str:
-    """Nome da abordagem em minúsculas, sem acentos nem pontuação (``Random Forest`` == ``random forest``)."""
-    folded = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
-    return re.sub(r"[^a-z0-9]+", " ", folded.lower()).strip()
 
 
 def problem_signature(caracteristicas: Any) -> str:

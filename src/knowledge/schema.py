@@ -388,6 +388,9 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
             "decidido_por": PropertySchema(),
             "decidido_em": PropertySchema(),
             "motivo_decisao": PropertySchema(),
+            # v18.9-cross-project-context: ``curator`` (ausente = ``curator``) ou ``grafo`` (candidato estrutural).
+            "origem": PropertySchema(enum=("curator", "grafo")),
+            "registro_origem_id": PropertySchema(),
         },
     ),
     "Dominio": NodeSchema(

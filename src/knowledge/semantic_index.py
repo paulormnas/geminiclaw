@@ -45,6 +45,7 @@ from src.knowledge.domains import (
     node_domains,
 )
 from src.knowledge.graph_store import GraphStore, Node
+from src.knowledge.problem_similarity import problem_similarity
 from src.knowledge.provenance import Actor
 from src.logger import get_logger
 
@@ -197,7 +198,8 @@ class ExperienceItem:
         similarity: Similaridade do problema de origem com o problema consultado.
         confidence: Confiança usada no ranking (já com piso aplicado).
         recency: Fator de recência (0,5 ^ idade_dias / meia-vida).
-        rank: ``similarity × confidence × recency``.
+        rank: ``similarity × (1 + margin) × confidence × recency``.
+        margin: Melhor ``delta_base`` do registro de resultado (0 sem registro ou sem ganho).
     """
 
     node: Node
@@ -207,6 +209,7 @@ class ExperienceItem:
     confidence: float
     recency: float
     rank: float
+    margin: float = 0.0
 
 
 @dataclass
@@ -864,8 +867,9 @@ class SemanticIndex:
         1. Busca problemas similares (``SIM_RELATED_MIN_CROSS``).
         2. No grafo, a partir de cada um: ``Abordagem-FUNCIONOU_PARA|FALHOU_PARA->Problema``,
            ``Descoberta-SOBRE->Problema`` (status ``ativa``) e ``Decisao`` do projeto.
-        3. ``rank = similaridade × max(confianca, CONFIDENCE_FLOOR) × recencia`` (``confianca`` vem das réplicas do
-           registro de resultado do atalho, ou das evidências da descoberta), com
+        3. ``rank = similaridade × (1 + margem) × confianca × recencia``; nos atalhos, ``similaridade`` combina texto e
+           ``caracteristicas_dados`` (``problem_similarity``), ``margem`` é o ``delta_base`` do registro e
+           ``confianca`` é ``min(réplicas, 3)``; nas descobertas, ``max(confianca, CONFIDENCE_FLOOR)`` das evidências. 
            ``recencia = 0,5 ^ (idade_dias / RECENCY_HALF_LIFE_DAYS)``. A data usada é a
            da aresta (``Abordagem``) ou a de criação do nó (``Descoberta``/``Decisao``).
 
@@ -914,6 +918,11 @@ class SemanticIndex:
             problema = self._store.get_node(hit.node_id)
             if problema is None:
                 continue
+            hit_score = problem_similarity(
+                hit.score,
+                origin.properties.get("caracteristicas_dados") if origin else None,
+                problema.properties.get("caracteristicas_dados"),
+            )
             sub = self._store.neighbors(
                 hit.node_id, ["FUNCIONOU_PARA", "FALHOU_PARA", "SOBRE"], direction="in", depth=1
             )
@@ -926,24 +935,25 @@ class SemanticIndex:
                     continue
                 if edge.rel_type in ("FUNCIONOU_PARA", "FALHOU_PARA") and other.label == "Abordagem":
                     kind = "funcionou" if edge.rel_type == "FUNCIONOU_PARA" else "falhou"
-                    confidence = self._record_confidence(edge.properties.get("registro_id"))
+                    confidence, margin = self._record_weight(edge.properties.get("registro_id"))
                     stamp = edge.properties.get("criado_em") or other.properties.get("criado_em")
                 elif edge.rel_type == "SOBRE" and other.label == "Descoberta":
                     if other.properties.get("status") != "ativa":
                         continue
                     kind = "descoberta"
                     confidence = self._node_confidence(other)
+                    margin = 0.0
                     stamp = other.properties.get("criado_em")
                 else:
                     continue
-                _consider(self._item(other, kind, hit, confidence, stamp, now))
+                _consider(self._item(other, kind, hit, confidence, stamp, now, hit_score, margin))
             hit_projeto = problema.properties.get("projeto_id")
             if hit_projeto:
                 for decisao in self._store.find_nodes("Decisao", {"projeto_id": hit_projeto}, limit=limit):
                     if not _allowed(decisao):
                         continue
                     _consider(
-                        self._item(decisao, "decisao", hit, None, decisao.properties.get("criado_em"), now)
+                        self._item(decisao, "decisao", hit, None, decisao.properties.get("criado_em"), now, hit_score)
                     )
         return sorted(best.values(), key=lambda i: i.rank, reverse=True)[:limit]
 
@@ -955,30 +965,40 @@ class SemanticIndex:
             return None
         return min(1.0, max(0.0, float(count)) / 5)
 
-    def _record_confidence(self, registro_id: str | None) -> float | None:
-        """Peso (0..1) do ``RegistroResultado`` do atalho: réplicas independentes saturadas em três."""
+    def _record_weight(self, registro_id: str | None) -> tuple[float | None, float]:
+        """``(confiança, margem)`` do registro do atalho: ``min(réplicas, 3)`` e o ``delta_base`` (>= 0)."""
         if not registro_id:
-            return None
+            return None, 0.0
         registro = self._store.get_node(registro_id)
-        replicas = None if registro is None else registro.properties.get("n_replicas_independentes")
-        if isinstance(replicas, bool) or not isinstance(replicas, (int, float)):
-            return None
-        return min(1.0, max(0.0, float(replicas)) / 3)
+        if registro is None:
+            return None, 0.0
+        replicas = registro.properties.get("n_replicas_independentes")
+        delta = registro.properties.get("delta_base")
+        weight = (
+            None
+            if isinstance(replicas, bool) or not isinstance(replicas, (int, float))
+            else float(min(max(replicas, 1), 3))
+        )
+        margin = float(delta) if isinstance(delta, (int, float)) and not isinstance(delta, bool) else 0.0
+        return weight, max(margin, 0.0)
 
     @staticmethod
     def _item(
-        node: Node, kind: str, hit: Hit, confidence: float | None, stamp: Any, now: datetime
+        node: Node, kind: str, hit: Hit, confidence: float | None, stamp: Any, now: datetime,
+        similarity: float | None = None, margin: float = 0.0,
     ) -> ExperienceItem:
         conf = max(confidence if confidence is not None else 0.0, config.CONFIDENCE_FLOOR)
         created = _parse_ts(stamp)
         age_days = max((now - created).total_seconds() / 86400, 0.0) if created else 0.0
         recency = 0.5 ** (age_days / config.RECENCY_HALF_LIFE_DAYS)
+        sim = hit.score if similarity is None else similarity
         return ExperienceItem(
             node=node,
             kind=kind,
             origem_problema_id=hit.node_id,
-            similarity=hit.score,
+            similarity=sim,
             confidence=conf,
             recency=recency,
-            rank=hit.score * conf * recency,
+            rank=sim * (1.0 + margin) * conf * recency,
+            margin=margin,
         )

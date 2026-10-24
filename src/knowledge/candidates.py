@@ -18,7 +18,6 @@ from src.knowledge.graph_store import GraphStore, Node
 from src.knowledge.semantic_index import IGNORED_STATUSES, SemanticIndex, canonical_text
 from src.knowledge.similarity_queue import (
     TIPO_DUPLICATA,
-    TIPO_RELACIONADO,
     Candidate,
     SimilarityQueue,
 )
@@ -86,49 +85,20 @@ def classify_pair(
     entre_projetos: bool,
     thresholds: SimilarityThresholds,
 ) -> str | None:
-    """Decide se o par entra na fila e com que tipo.
+    """Decide se o par entra na fila: só duplicatas (ADR 026 §6; ``v18.9-cross-project-context``).
 
-    Regras (design §5):
-
-    - Mesmo rótulo em {Projeto, Problema, Abordagem, Descoberta, Oportunidade}:
-      ``score >= duplicate_min`` -> ``duplicata``; ``related_same_domain <= score < duplicate_min``
-      -> ``relacionado``; ``related_cross <= score < related_same_domain`` -> ``relacionado``
-      **somente** se o par é entre domínios.
-    - ``Descoberta`` x ``Problema`` de **outro projeto**: ``relacionado`` com
-      ``score >= related_cross`` (mesma regra de domínio na faixa baixa) e
-      a descoberta ser de funcionamento (``funciona``, ``nao_funciona`` ou ``condicional``), que só existe com
-      registro de resultado que a sustente.
-    - Nós com ``status`` ``substituida``/``rejeitado``/``rejeitada`` são ignorados.
+    Mesmo rótulo em {Projeto, Problema, Abordagem, Descoberta, Oportunidade} com ``score >= duplicate_min`` é
+    ``duplicata``. A relação entre Problemas (``relacionado``) deixou de ser enfileirada: é calculada sob demanda pela
+    consulta de experiência relacionada. Nós com ``status`` ``substituida``/``rejeitado``/``rejeitada`` são ignorados.
 
     Returns:
-        ``"duplicata"``, ``"relacionado"`` ou ``None`` (ignorado).
+        ``"duplicata"`` ou ``None`` (ignorado).
     """
     for node in (node_a, node_b):
         if node.properties.get("status") in IGNORED_STATUSES:
             return None
-
-    if node_a.label == node_b.label:
-        if node_a.label not in SAME_LABEL_CANDIDATE_LABELS:
-            return None
-        if score >= thresholds.duplicate_min:
-            return TIPO_DUPLICATA
-        if score >= thresholds.related_same_domain:
-            return TIPO_RELACIONADO
-        if score >= thresholds.related_cross and entre_dominios:
-            return TIPO_RELACIONADO
-        return None
-
-    labels = {node_a.label, node_b.label}
-    if labels == {"Descoberta", "Problema"}:
-        if not entre_projetos:
-            return None
-        descoberta = node_a if node_a.label == "Descoberta" else node_b
-        if descoberta.properties.get("tipo") not in CROSS_PROJECT_DISCOVERY_TYPES:
-            return None
-        if score >= thresholds.related_same_domain:
-            return TIPO_RELACIONADO
-        if score >= thresholds.related_cross and entre_dominios:
-            return TIPO_RELACIONADO
+    if node_a.label == node_b.label and node_a.label in SAME_LABEL_CANDIDATE_LABELS:
+        return TIPO_DUPLICATA if score >= thresholds.duplicate_min else None
     return None
 
 
@@ -175,10 +145,6 @@ class CandidateGenerator:
         if node.label not in SAME_LABEL_CANDIDATE_LABELS or node.properties.get("status") in IGNORED_STATUSES:
             return 0
         labels = [node.label]
-        if node.label == "Descoberta":
-            labels.append("Problema")
-        elif node.label == "Problema":
-            labels.append("Descoberta")
 
         text = canonical_text(node.label, node.properties) or ""
         info = self._index.embedding_info
@@ -191,7 +157,7 @@ class CandidateGenerator:
 
         inserted = 0
         for hit in self._index.iter_neighbors(
-            node.id, labels, self._thresholds.related_cross, self._scan_limit
+            node.id, labels, self._thresholds.duplicate_min, self._scan_limit
         ):
             other = self._store.get_node(hit.node_id)
             if other is None:

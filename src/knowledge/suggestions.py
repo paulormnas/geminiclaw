@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from src import config
-from src.knowledge import opportunities
+from src.knowledge import opportunities, structural_view
 from src.knowledge.graph_store import GraphStore, Node
 from src.knowledge.graph_views import sanitize_text
 from src.knowledge.hypotheses import PendingSuggestion
@@ -38,11 +38,13 @@ TIPO_OPORTUNIDADE = "oportunidade_aprovada"
 TIPO_CAMINHO = "caminho_sem_conclusao"
 TIPO_LICAO = "licao_de_caminho"
 TIPO_VARIACAO = "abordagem_em_problema_similar"
+# v18.9-cross-project-context: candidatos estruturais do próprio projeto (composição e ramo pouco explorado).
+TIPO_ESTRUTURAL = "candidato_estrutural"
 # v18.7-exploration-limits (design §7): direções que só o modo intervenção (estagnação) sugere.
 TIPO_DIVERSIFICACAO = "diversificacao"
 TIPO_DERIVADA = "hipotese_derivada"
 SUGGESTION_TYPES = (
-    TIPO_OPORTUNIDADE, TIPO_CAMINHO, TIPO_LICAO, TIPO_VARIACAO, TIPO_DIVERSIFICACAO, TIPO_DERIVADA,
+    TIPO_OPORTUNIDADE, TIPO_CAMINHO, TIPO_LICAO, TIPO_VARIACAO, TIPO_ESTRUTURAL, TIPO_DIVERSIFICACAO, TIPO_DERIVADA,
 )
 _MAX_TRIED = 10
 _MAX_TEXT = 300
@@ -215,6 +217,28 @@ def _variation_candidates(
     return out
 
 
+def _structural_candidates(store: GraphStore, project_id: str, index: Any | None) -> list[Suggestion]:
+    """Composição e ramo pouco explorado do próprio projeto (``structural_candidates``; sem LLM)."""
+    problem = get_active_problem(store, project_id)
+    if index is None or problem is None:
+        return []
+    try:
+        ctx = structural_view.build_context(store, index, problem.id)
+        found = structural_view.own_project_candidates(ctx, problem.id)
+    except Exception as exc:  # noqa: BLE001 - sem índice ou grafo a fonte é omitida
+        logger.info("Candidatos estruturais indisponíveis", extra={"extra": {"erro": type(exc).__name__}})
+        return []
+    return [
+        Suggestion(
+            suggestion_id(TIPO_ESTRUTURAL, [c.tipo, *c.origem_ids]),
+            structural_view.describe(ctx, c),
+            c.origem_ids,
+            TIPO_ESTRUTURAL,
+        )
+        for c in found
+    ]
+
+
 def build_candidates(store: GraphStore, project_id: str, index: Any | None = None) -> list[Suggestion]:
     """Candidatas das fontes permitidas, em ordem de prioridade (oportunidades aprovadas primeiro).
 
@@ -249,6 +273,7 @@ def build_candidates(store: GraphStore, project_id: str, index: Any | None = Non
                            (disc.id,), TIPO_LICAO)
             )
     out.extend(_variation_candidates(store, project_id, index, proposed))
+    out.extend(_structural_candidates(store, project_id, index))
     return [s for s in out if s.texto and normalize_domain_term(s.texto) not in texts]
 
 

@@ -26,6 +26,20 @@ def _health_timeout() -> float:
     return config.LLM_HEALTH_CHECK_TIMEOUT_SECONDS
 
 
+def _request_timeout() -> float:
+    """Timeout por requisição (``OPENAI_COMPATIBLE_TIMEOUT_SECONDS``), lido no uso.
+
+    Raises:
+        ValueError: Valor não positivo (um timeout infinito travaria o host num servidor pendurado).
+    """
+    from src import config
+
+    timeout = config.OPENAI_COMPATIBLE_TIMEOUT_SECONDS
+    if timeout <= 0:
+        raise ValueError(f"OPENAI_COMPATIBLE_TIMEOUT_SECONDS deve ser positivo (recebido {timeout}).")
+    return timeout
+
+
 class OpenAICompatibleProvider(LLMProvider):
     """Provedor para qualquer servidor que implemente `/chat/completions` com
     Tool Calling no formato da API da OpenAI — cobre llama.cpp server, vLLM,
@@ -47,7 +61,8 @@ class OpenAICompatibleProvider(LLMProvider):
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         # Timeout limitado (não infinito): este provedor também cobre serviços
         # hospedados, onde uma resposta pendurada não deve travar o host indefinidamente.
-        self._client = httpx.AsyncClient(base_url=self._base_url, headers=headers, timeout=120.0)
+        # Configurável porque servidores locais lentos precisam de mais que o padrão de 120 s.
+        self._client = httpx.AsyncClient(base_url=self._base_url, headers=headers, timeout=_request_timeout())
 
     def _build_messages(self, messages: list[dict], system: str | None) -> list[dict]:
         if not system:

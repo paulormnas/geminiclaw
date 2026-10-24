@@ -159,7 +159,7 @@ NODE_SCHEMAS: dict[str, NodeSchema] = {
         {
             "titulo": PropertySchema(required=True),
             "objetivo": PropertySchema(required=True),
-            "status": PropertySchema(required=True, enum=("ativo", "pausado", "concluido")),
+            "status": PropertySchema(required=True, enum=("ativo", "pausado", "concluido", "arquivado")),
             # v18.5-operation-metrics: marcação do modo sem limite (só o pesquisador; cada execução ainda confirma).
             "modo_sem_limite": PropertySchema(),
             "modo_sem_limite_decidido_em": PropertySchema(),

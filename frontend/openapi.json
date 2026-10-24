@@ -1,0 +1,676 @@
+{
+  "components": {
+    "schemas": {
+      "ErrorOut": {
+        "properties": {
+          "campo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campo"
+          },
+          "erro": {
+            "title": "Erro",
+            "type": "string"
+          },
+          "mensagem": {
+            "default": "",
+            "title": "Mensagem",
+            "type": "string"
+          }
+        },
+        "required": [
+          "erro"
+        ],
+        "title": "ErrorOut",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LoginIn": {
+        "additionalProperties": false,
+        "properties": {
+          "senha": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Senha",
+            "type": "string"
+          }
+        },
+        "required": [
+          "senha"
+        ],
+        "title": "LoginIn",
+        "type": "object"
+      },
+      "LoginOut": {
+        "properties": {
+          "csrf_token": {
+            "title": "Csrf Token",
+            "type": "string"
+          },
+          "expira_em": {
+            "title": "Expira Em",
+            "type": "number"
+          }
+        },
+        "required": [
+          "csrf_token",
+          "expira_em"
+        ],
+        "title": "LoginOut",
+        "type": "object"
+      },
+      "ProblemSummary": {
+        "properties": {
+          "problema_id": {
+            "title": "Problema Id",
+            "type": "string"
+          },
+          "resumo": {
+            "title": "Resumo",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "problema_id",
+          "resumo",
+          "status"
+        ],
+        "title": "ProblemSummary",
+        "type": "object"
+      },
+      "ProjectCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "dominios": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Dominios",
+            "type": "array"
+          },
+          "objetivo": {
+            "title": "Objetivo",
+            "type": "string"
+          },
+          "titulo": {
+            "title": "Titulo",
+            "type": "string"
+          }
+        },
+        "required": [
+          "titulo",
+          "objetivo"
+        ],
+        "title": "ProjectCreate",
+        "type": "object"
+      },
+      "ProjectCreated": {
+        "properties": {
+          "projeto_id": {
+            "title": "Projeto Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projeto_id"
+        ],
+        "title": "ProjectCreated",
+        "type": "object"
+      },
+      "ProjectDetailOut": {
+        "properties": {
+          "criado_em": {
+            "title": "Criado Em",
+            "type": "string"
+          },
+          "dominios": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dominios",
+            "type": "array"
+          },
+          "n_hipoteses": {
+            "title": "N Hipoteses",
+            "type": "integer"
+          },
+          "n_sessoes": {
+            "title": "N Sessoes",
+            "type": "integer"
+          },
+          "objetivo": {
+            "title": "Objetivo",
+            "type": "string"
+          },
+          "problema": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProblemSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "projeto_id": {
+            "title": "Projeto Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "titulo": {
+            "title": "Titulo",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projeto_id",
+          "titulo",
+          "objetivo",
+          "status",
+          "criado_em",
+          "dominios",
+          "problema",
+          "n_sessoes",
+          "n_hipoteses"
+        ],
+        "title": "ProjectDetailOut",
+        "type": "object"
+      },
+      "ProjectItem": {
+        "properties": {
+          "criado_em": {
+            "title": "Criado Em",
+            "type": "string"
+          },
+          "projeto_id": {
+            "title": "Projeto Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "titulo": {
+            "title": "Titulo",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projeto_id",
+          "titulo",
+          "status",
+          "criado_em"
+        ],
+        "title": "ProjectItem",
+        "type": "object"
+      },
+      "ProjectPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "objetivo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objetivo"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ativo",
+                  "pausado",
+                  "concluido",
+                  "arquivado"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "titulo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Titulo"
+          }
+        },
+        "title": "ProjectPatch",
+        "type": "object"
+      },
+      "SessionOut": {
+        "properties": {
+          "autenticado": {
+            "title": "Autenticado",
+            "type": "boolean"
+          },
+          "expira_em": {
+            "title": "Expira Em",
+            "type": "number"
+          }
+        },
+        "required": [
+          "autenticado",
+          "expira_em"
+        ],
+        "title": "SessionOut",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "GeminiClaw — interface do pesquisador",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/projects": {
+      "get": {
+        "operationId": "list__api_projects_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "incluir_arquivados",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Incluir Arquivados",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectItem"
+                  },
+                  "title": "Response List  Api Projects Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List ",
+        "tags": [
+          "projetos"
+        ]
+      },
+      "post": {
+        "operationId": "create_api_projects_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Create",
+        "tags": [
+          "projetos"
+        ]
+      }
+    },
+    "/api/projects/{projeto_id}": {
+      "get": {
+        "operationId": "read_api_projects__projeto_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projeto_id",
+            "required": true,
+            "schema": {
+              "title": "Projeto Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read",
+        "tags": [
+          "projetos"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_api_projects__projeto_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projeto_id",
+            "required": true,
+            "schema": {
+              "title": "Projeto Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Patch",
+        "tags": [
+          "projetos"
+        ]
+      }
+    },
+    "/api/session": {
+      "get": {
+        "operationId": "whoami_api_session_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Whoami",
+        "tags": [
+          "sessão"
+        ]
+      }
+    },
+    "/api/session/login": {
+      "post": {
+        "operationId": "login_api_session_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "sessão"
+        ]
+      }
+    },
+    "/api/session/logout": {
+      "post": {
+        "operationId": "logout_api_session_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Logout",
+        "tags": [
+          "sessão"
+        ]
+      }
+    }
+  }
+}

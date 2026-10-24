@@ -40,6 +40,9 @@ PESQUISADOR = Actor(kind="pesquisador")
 # Sessão fictícia de proveniência para escritas feitas pela CLI fora de uma sessão de agentes.
 CLI_SESSION_ID = "__cli__"
 
+#: Estados do projeto; ``arquivado`` marca projeto a não explorar mais (ADR 027 §6.1) e recusa nova pesquisa.
+PROJECT_STATUSES = ("ativo", "pausado", "concluido", "arquivado")
+
 MAX_TITULO_PROJETO = 200
 MAX_OBJETIVO_PROJETO = 20_000
 AUTO_TITLE_MAX = 120
@@ -79,7 +82,7 @@ class ProjectDetail:
         projeto_id: Identificador do projeto.
         titulo: Título.
         objetivo: Objetivo.
-        status: ``ativo``, ``pausado`` ou ``concluido``.
+        status: ``ativo``, ``pausado``, ``concluido`` ou ``arquivado``.
         criado_em: Instante de criação (ISO-8601).
         dominios: Termos canônicos dos domínios ligados ao projeto.
         problema: Problema com ``status="confirmado"``, ou ``None``.
@@ -280,8 +283,8 @@ def list_projects(store: GraphStore, status: str | None = None) -> list[ProjectS
     Raises:
         ProjectError: Se ``status`` não for ``ativo``, ``pausado`` ou ``concluido``.
     """
-    if status is not None and status not in ("ativo", "pausado", "concluido"):
-        raise ProjectError("status inválido: use ativo, pausado ou concluido.")
+    if status is not None and status not in PROJECT_STATUSES:
+        raise ProjectError("status inválido: use ativo, pausado, concluido ou arquivado.")
     items = [
         ProjectSummary(
             projeto_id=str(n.properties["projeto_id"]),
@@ -293,6 +296,41 @@ def list_projects(store: GraphStore, status: str | None = None) -> list[ProjectS
         if status is None or n.properties.get("status") == status
     ]
     return sorted(items, key=lambda p: p.criado_em)
+
+
+def update_project(
+    store: GraphStore,
+    projeto_id: str,
+    *,
+    titulo: str | None = None,
+    objetivo: str | None = None,
+    status: str | None = None,
+) -> ProjectDetail:
+    """Edita título, objetivo e/ou estado do projeto, com ator ``pesquisador`` (ADR 027 §6.1).
+
+    Não há exclusão física: ``arquivado`` marca o projeto a não explorar mais.
+
+    Raises:
+        ProjectError: Projeto inexistente, id inválido ou ``status`` desconhecido.
+        ProblemDraftError: Título ou objetivo vazio/grande demais.
+    """
+    node = _find_project_node(store, projeto_id)
+    changes: dict[str, Any] = {}
+    if titulo is not None:
+        changes["titulo"] = clean_text(titulo, "titulo", MAX_TITULO_PROJETO, required=True, single_line=True)
+    if objetivo is not None:
+        changes["objetivo"] = clean_text(objetivo, "objetivo", MAX_OBJETIVO_PROJETO, required=True)
+    if status is not None:
+        if status not in PROJECT_STATUSES:
+            raise ProjectError("status inválido: use ativo, pausado, concluido ou arquivado.")
+        changes["status"] = status
+    if changes:
+        store.update_node(node.id, changes, actor=PESQUISADOR)
+        logger.info(
+            "Projeto editado",
+            extra={"extra": {"projeto_id": node.properties["projeto_id"], "campos": sorted(changes)}},
+        )
+    return get_project(store, str(node.properties["projeto_id"]))
 
 
 def get_active_problem(store: GraphStore, projeto_id: str) -> Node | None:

@@ -101,7 +101,10 @@ def resolve_project(
     try:
         chosen = project_arg or projects.get_default_project(config_dir)
         if chosen:
-            return projects.get_project(store, chosen).projeto_id, False
+            detail = projects.get_project(store, chosen)
+            if detail.status == "arquivado":
+                raise ProjectFlowError("projeto arquivado; desarquive para explorar.")
+            return detail.projeto_id, False
         if not allow_create:
             raise ProjectFlowError(_NON_INTERACTIVE_MESSAGE.format(projeto="novo", cmd="`geminiclaw project new ...`"))
         titulo = projects.derive_title(prompt)

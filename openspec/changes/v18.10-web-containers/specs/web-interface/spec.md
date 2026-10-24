@@ -35,4 +35,4 @@ O container `geminiclaw-web` SHALL rodar sem root, com sistema de arquivos só l
 
 #### Scenario: Subir duas vezes
 - **WHEN** `scripts/up.sh` roda duas vezes
-- **THEN** existe um só lançador (PID em `logs/launcher.pid`) e um só `geminiclaw-web`
+- **THEN** existe um só lançador (PID em `logs/launcher/launcher.pid`) e um só `geminiclaw-web`

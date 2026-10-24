@@ -1,9 +1,9 @@
 # Tarefas: v18.10-web-containers
 
-**Estado (2026-10-24):** especificada; schema e `docker-compose.yml` aprovados pelo pesquisador; aguarda aprovação da mudança.
+**Estado (2026-10-24):** especificada; schema e `docker-compose.yml` aprovados pelo pesquisador; mudança aprovada pelo pesquisador (batimento por arquivo de estado).
 
 ## 0. Pré-requisitos
-- [ ] 0.1 `v18.10-web-skeleton` mergeada; conferir a spec contra `dev` (`src/session/launcher.py`, `src/cli/session_start.py`, batimentos existentes) e decidir a Questão 1.
+- [ ] 0.1 `v18.10-web-skeleton` mergeada; conferir a spec contra `dev` (`src/session/launcher.py`, `src/cli/session_start.py`, batimentos existentes).
 - [ ] 0.2 Movimentação de preparar/lançar pesquisa de `src/cli/session_start.py` para `src/interaction/research.py` (só mover; perguntas e banner ficam no REPL); contrato `"cli | web | launcher"` acima de `"interaction"`; `lint-imports` e suíte verdes antes de seguir.
 
 ## 1. Fila
@@ -12,7 +12,7 @@
 
 ## 2. Lançador
 - [ ] 2.1 `src/launcher/__main__.py` e `service.py`: trava, laço, verificações via `src/interaction/research.py`, `LaunchSpec` + `spawn_session`, estados finais, TERM limpo, pedido órfão → `falhou`. Testes dos cenários da spec com `spawn` falso; um de integração com processo real de sessão simulada.
-- [ ] 2.2 `LAUNCHER_POLL_SECONDS`, `LAUNCHER_REQUEST_TTL_SECONDS`, `LAUNCHER_CLAIM_TIMEOUT_SECONDS` em `src/config.py` e `.env.example`; batimento conforme a Questão 1.
+- [ ] 2.2 `LAUNCHER_POLL_SECONDS`, `LAUNCHER_REQUEST_TTL_SECONDS`, `LAUNCHER_CLAIM_TIMEOUT_SECONDS` em `src/config.py` e `.env.example`; batimento em `logs/launcher/state.json` (design §3).
 - [ ] 2.3 Rotas da web: `POST /api/projects/{id}/research` grava pedido; `GET /api/start-requests/{id}`, `POST .../cancel`; `GET /api/launcher` (presente/ausente); `GET /api/health`. Testes dos cenários; regenerar o OpenAPI.
 
 ## 3. Containers

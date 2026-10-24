@@ -57,11 +57,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_ssr_projeto_pendente
 ## 3. Lançador (`src/launcher/`)
 
 - `uv run python -m src.launcher`: laço que assume pedidos com `UPDATE ... SET estado='assumido' WHERE id = (SELECT id ... WHERE estado='pendente' ORDER BY criado_em FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *`, a cada `LAUNCHER_POLL_SECONDS` (padrão 1) e também por `LISTEN session_start` (a web faz `NOTIFY` depois do `INSERT`), para responder rápido sem consulta pesada.
-- **Uma instância por máquina:** trava de arquivo em `logs/launcher.lock`; segunda instância sai com erro claro. Pedido `assumido` há mais de `LAUNCHER_CLAIM_TIMEOUT_SECONDS` (padrão 60) por um lançador que morreu volta a `falhou` com `motivo=lancador_interrompido` (nunca relançado sozinho).
+- **Uma instância por máquina:** trava de arquivo em `logs/launcher/launcher.lock`; segunda instância sai com erro claro. Pedido `assumido` há mais de `LAUNCHER_CLAIM_TIMEOUT_SECONDS` (padrão 60) por um lançador que morreu volta a `falhou` com `motivo=lancador_interrompido` (nunca relançado sozinho).
 - **Verificações (as mesmas do REPL, de `src/interaction/research.py`):** projeto existe e não está `arquivado`/`concluido`; Problema confirmado; modo `semi`/`auto`; outra pesquisa viva e memória abaixo de `MIN_AVAILABLE_MEMORY_MB` com a confirmação do pedido; orçamento da configuração vigente (`.env` + `RESEARCHER_ENV_FILE`, relidos a cada pedido); retomada só de sessão do mesmo projeto em estado retomável.
 - **Início:** monta o `LaunchSpec` (com `terminal_id=None` e o canal `web` no resumo), grava o arquivo de lançamento `0600` e chama `spawn_session(foreground=False)`, exatamente o caminho do REPL em segundo plano. Espera a sessão se registrar (`LAUNCH_TIMEOUT` atual); grava `lancado` + `session_id`, ou `falhou` com `motivo=processo_nao_registrou` e o fim do log no log do lançador (nunca no banco).
 - **Pedido como dado não confiável:** o lançador valida tudo de novo (tamanhos, enums, ids), como o processo da sessão faz com o arquivo de lançamento. O pedido não escolhe módulo, ambiente, diretório nem modo sem limite: modo sem limite continua só pelo REPL.
-- **Batimento:** o lançador grava `launcher_heartbeat` numa linha da tabela existente de batimentos de processo (ou, se não couber, em `logs/launcher.state` lido pela web via volume; decidir na tarefa 0.1 sem schema novo além da fila). A web mostra "lançador ausente" e desabilita "Nova pesquisa" quando o batimento passa de `3 × LAUNCHER_POLL_SECONDS` + 10 s.
+- **Batimento (decisão do pesquisador, 2026-10-24):** arquivo de estado `logs/launcher/state.json` (`{launcher_id, pid, atualizado_em, versao}`), gravado de forma atômica a cada ciclo, modo `0644` no diretório `logs/launcher/` (montado só leitura no `geminiclaw-web`; sem segredos). Sem schema novo. A web mostra "lançador ausente" e desabilita "Nova pesquisa" quando o arquivo falta, é inválido ou `atualizado_em` passa de `3 × LAUNCHER_POLL_SECONDS` + 10 s.
 - Camadas: `"cli | web | launcher"` acima de `"interaction"`; `launcher` não importa `cli` nem `web`.
 
 ## 4. Containers
@@ -71,7 +71,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_ssr_projeto_pendente
 - Base `python:3.11-slim` fixada por digest, `uv` copiado da imagem oficial fixada; `uv sync --frozen --no-dev` em estágio de build; imagem final sem compiladores.
 - Usuário `10001:10001`, `read_only: true`, `tmpfs: /tmp`, `cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`, `pids_limit`, `mem_limit` (`WEB_CONTAINER_MEM_LIMIT`, padrão 512m).
 - `ports: ["127.0.0.1:${WEB_PORT:-8765}:8765"]`; dentro do container o servidor escuta em `0.0.0.0:8765` **só** com `WEB_IN_CONTAINER=true`, que o `src/web/__main__.py` aceita apenas se também houver `/.dockerenv` (fora disso continua recusando endereço não loopback). `WEB_ALLOWED_HOSTS` continua exigido.
-- Volumes: `./outputs:/app/outputs:ro` (artefatos), `web_dist:/app/frontend/dist:ro`, `./config:/app/config:rw` (só para `RESEARCHER_ENV_FILE` da `v18.10-web-settings`; o diretório só contém esse arquivo), `./logs/launcher.state` só leitura se o batimento for por arquivo. **Nunca** `/var/run/docker.sock`, `.env` inteiro ou o repositório.
+- Volumes: `./outputs:/app/outputs:ro` (artefatos), `web_dist:/app/frontend/dist:ro`, `./config:/app/config:rw` (só para `RESEARCHER_ENV_FILE` da `v18.10-web-settings`; o diretório só contém esse arquivo), `./logs/launcher:/app/logs/launcher:ro` (batimento). **Nunca** `/var/run/docker.sock`, `.env` inteiro ou o repositório.
 - Ambiente: `DATABASE_URL` com host `postgres`; `QDRANT_URL` com host `qdrant`; `WEB_PASSWORD_HASH`, `WEB_*`, chaves só se a página de configurações precisar listar modelos (passadas por `env_file` restrito a nomes da lista, tarefa 2.3).
 - `depends_on` com `condition: service_healthy` em `postgres`; `healthcheck` em `GET /api/health` (rota sem dados, sem autenticação, só `{"ok": true}`).
 
@@ -83,7 +83,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_ssr_projeto_pendente
 
 ### 4.3 Comando único
 
-- `scripts/up.sh`: confere Docker e `.env`, `docker compose --profile web up -d --build` (infra + build do frontend + web), espera a saúde, inicia o lançador em segundo plano (`nohup uv run python -m src.launcher`, log em `logs/launcher.log`, PID em `logs/launcher.pid`) e imprime a URL. Idempotente.
+- `scripts/up.sh`: confere Docker e `.env`, `docker compose --profile web up -d --build` (infra + build do frontend + web), espera a saúde, inicia o lançador em segundo plano (`nohup uv run python -m src.launcher`, log em `logs/launcher/launcher.log`, PID em `logs/launcher/launcher.pid`) e imprime a URL. Idempotente.
 - `scripts/down.sh`: para o lançador pelo PID (sinal TERM; o lançador termina o pedido em curso e sai) e `docker compose --profile web stop`. Não remove volumes nem containers de sandbox; nada destrutivo.
 - O modo local (`uv run python -m src.web` + `pnpm dev`) continua para desenvolvimento.
 
@@ -121,4 +121,4 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_ssr_projeto_pendente
 
 Decidido em 2026-10-24: lançador no host junto dos containers; schema e `docker-compose.yml` aprovados.
 
-1. **Batimento do lançador** (tarefa 0.1): reutilizar uma tabela de batimentos existente, se houver uma compatível, ou arquivo de estado lido pelo volume. Recomendado: arquivo, para não ampliar o schema.
+Decidido também: batimento por arquivo de estado (Questão 1).

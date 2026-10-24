@@ -51,7 +51,7 @@ O lançador SHALL assumir um pedido por vez com `FOR UPDATE SKIP LOCKED`, revali
 #### Scenario: Dois lançadores
 - **GIVEN** um lançador com a trava
 - **WHEN** outro inicia
-- **THEN** o segundo sai com erro que cita `logs/launcher.lock`
+- **THEN** o segundo sai com erro que cita `logs/launcher/launcher.lock`
 
 #### Scenario: Dois consumidores na fila
 - **GIVEN** dois pedidos de projetos diferentes e duas conexões assumindo ao mesmo tempo

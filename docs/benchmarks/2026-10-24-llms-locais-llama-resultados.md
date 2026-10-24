@@ -15,7 +15,7 @@ pedido do pesquisador** para liberar o servidor; Cancer não rodou. Dados brutos
 | `qwen-dev-gemma-juiz-wine` | `solucao_encontrada` (exit 0), texto 5/6, acurácia declarada 1,0 | 31 min | 61 | 0,76 M | 4 de 7 |
 | `gemma-dev-qwen-juiz-wine` | `solucao_encontrada` (exit 0), texto 6/6, acurácia declarada 1,0 | 21 min | 41 | 0,44 M | 6 de 7 |
 | `qwen-dev-gemma-juiz-glass` | `erro` (exit 1): disjuntor de zero progresso | 87 min | 153 | 2,53 M | 3 de 5 |
-| `gemma-dev-qwen-juiz-glass` | **interrompida** após ~6 h, sem registro nos resultados | ~6 h | 154 | 1,79 M | 13 concluídas e 2 abandonadas de 15 (checkpoint `em_execucao`) |
+| `gemma-dev-qwen-juiz-glass` | **interrompida** após ~6 h, sem registro nos resultados | ~6 h | 158 | 2,04 M | 13 concluídas e 2 abandonadas de 15 (checkpoint `em_execucao`) |
 | `qwen-dev-gemma-juiz-cancer`, `gemma-dev-qwen-juiz-cancer` | não rodaram | | | | |
 
 "Texto" é a conferência por texto do relatório final (EDA, pré-processamento, dois algoritmos, comparação, recomendação,

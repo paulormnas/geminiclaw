@@ -100,6 +100,14 @@ class _Review:
 _DATA_TAG_RE = re.compile(r"<(?=\s*/?\s*" + DATA_TAG + r")", re.IGNORECASE)
 
 
+def wrap_text(origem: str, text: str, limit: int) -> str:
+    """Entrega ``text`` já formatado entre delimitadores, como dado não confiável (mesmo cuidado de ``wrap_data``)."""
+    text = _DATA_TAG_RE.sub("&lt;", text)
+    if len(text) > limit:
+        text = text[: max(limit - 1, 0)] + "…"
+    return f'<{DATA_TAG} origem="{origem}">\n{text}\n</{DATA_TAG}>'
+
+
 def wrap_data(origem: str, payload: Any, limit: int) -> str:
     """Serializa ``payload`` e o entrega entre delimitadores, como dado não confiável (limite em caracteres).
 

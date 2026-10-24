@@ -1,6 +1,7 @@
 import pytest
 
-from scripts.memory_eval.snapshot import approach_key, problem_signature
+from scripts.memory_eval.snapshot import problem_signature
+from src.knowledge.structural_candidates import approach_key
 
 pytestmark = pytest.mark.unit
 

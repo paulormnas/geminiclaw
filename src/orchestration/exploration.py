@@ -50,7 +50,9 @@ from src.knowledge.metric_definition import AppliedMetrics, apply_validated_metr
 from src.knowledge.objective import CycleView, DiscriminatingTask, effective_type, parse_discrimina
 from src.knowledge.objective_definition import ObjectiveDecl, objective_issues
 from src.knowledge.projects import get_active_problem
+from src.knowledge.related_records import experience_block
 from src.knowledge.schema import PAPEIS_EXPERIMENTO
+from src.knowledge.structural_view import publish_cross_candidates
 from src.knowledge.suggestions import Suggestion, SuggestionError, SuggestionStore
 from src.knowledge.system_hypotheses import MetricRef, metric_ref
 from src.logger import get_logger
@@ -274,6 +276,9 @@ class ExplorationSession(StagnationMixin, RestrictionsMixin, ObjectiveRevisionMi
             for s in self.pending_suggestions()[:_MAX_BLOCK_ITEMS]
         ]
         parts.append(wrap_data("sugestoes_pendentes_do_curator", suggestions, limit))
+        experience = self._experience_block()
+        if experience:
+            parts.append(experience)
         if self._feedback:  # v18.7-hypothesis-linking §8: o que o sistema decidiu do ciclo anterior (nomes do LLM)
             parts.append(wrap_data("ligacoes_e_retiradas_do_ciclo_anterior", self._feedback, limit))
         parts.append(
@@ -282,6 +287,17 @@ class ExplorationSession(StagnationMixin, RestrictionsMixin, ObjectiveRevisionMi
             "problema ou aprovar termo: isso é do pesquisador."
         )
         return "\n".join(parts)
+
+    def _experience_block(self) -> str | None:
+        """Bloco ``experiencia_de_problemas_semelhantes`` do Problema ativo (omitido sem experiência semelhante)."""
+        try:
+            problem = get_active_problem(self.store, self.ctx.project_id)
+        except Exception as exc:  # noqa: BLE001 - sem grafo o bloco sai sem a experiência
+            logger.warning(
+                "Problema ativo indisponível para a experiência", extra={"extra": {"erro": type(exc).__name__}}
+            )
+            return None
+        return experience_block(self.store, self._index, problem)
 
     def plan_requirements(self) -> str:
         """Exigências desta chamada ao Researcher (definição de métricas e de objetivo); vazio quando não há."""
@@ -677,8 +693,22 @@ class ExplorationSession(StagnationMixin, RestrictionsMixin, ObjectiveRevisionMi
             )
         evaluated = self.cycle.evaluate_decisions()
         counts = {"hipoteses_concluidas": len(changed), "decisoes_avaliadas": len(evaluated)}
+        counts["oportunidades_do_grafo"] = self._publish_graph_opportunities()
         self._emit("hypothesis_evaluation", counts)
         return counts
+
+    def _publish_graph_opportunities(self) -> int:
+        """Candidatos de transferência de outro projeto viram ``Oportunidade`` (só com ``CROSS_PROJECT_CANDIDATES``)."""
+        if not config.CROSS_PROJECT_CANDIDATES or self._index is None:
+            return 0
+        try:
+            problem = get_active_problem(self.store, self.ctx.project_id)
+            if problem is None:
+                return 0
+            return len(publish_cross_candidates(self.store, self._index, problem.id))
+        except Exception as exc:  # noqa: BLE001 - a publicação é acessória: o ciclo não falha por ela
+            logger.warning("Candidatos entre projetos indisponíveis", extra={"extra": {"erro": type(exc).__name__}})
+            return 0
 
     async def suggest(self, intervencao: Any | None = None) -> int:
         """Sugestões do Curator ao fim do ciclo (``intervencao``: contexto da estagnação, design §7).

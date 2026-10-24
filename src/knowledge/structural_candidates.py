@@ -12,6 +12,8 @@ abordagem (os nós ``Abordagem`` são por projeto; quem monta a vista escolhe a 
 from __future__ import annotations
 
 import math
+import re
+import unicodedata
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Literal
@@ -91,6 +93,16 @@ class Candidate:
     abordagem_id: str
     origem_ids: tuple[str, ...]
     atributos: Mapping[str, float]
+
+
+def approach_key(name: str) -> str:
+    """Nome da abordagem em minúsculas, sem acentos nem pontuação (``Random Forest`` == ``random forest``).
+
+    Os nós ``Abordagem`` são por projeto; o mesmo nome em projetos diferentes designa a mesma abordagem. É uma
+    heurística: nomes diferentes para a mesma técnica contam como abordagens distintas.
+    """
+    folded = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", " ", folded.lower()).strip()
 
 
 def _positive(fact: ResultFact) -> bool:

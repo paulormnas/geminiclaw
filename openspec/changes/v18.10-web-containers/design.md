@@ -61,7 +61,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_ssr_projeto_pendente
 - **Verificações (as mesmas do REPL, de `src/interaction/research.py`):** projeto existe e não está `arquivado`/`concluido`; Problema confirmado; modo `semi`/`auto`; outra pesquisa viva e memória abaixo de `MIN_AVAILABLE_MEMORY_MB` com a confirmação do pedido; orçamento da configuração vigente (`.env` + `RESEARCHER_ENV_FILE`, relidos a cada pedido); retomada só de sessão do mesmo projeto em estado retomável.
 - **Início:** monta o `LaunchSpec` (com `terminal_id=None` e o canal `web` no resumo), grava o arquivo de lançamento `0600` e chama `spawn_session(foreground=False)`, exatamente o caminho do REPL em segundo plano. Espera a sessão se registrar (`LAUNCH_TIMEOUT` atual); grava `lancado` + `session_id`, ou `falhou` com `motivo=processo_nao_registrou` e o fim do log no log do lançador (nunca no banco).
 - **Pedido como dado não confiável:** o lançador valida tudo de novo (tamanhos, enums, ids), como o processo da sessão faz com o arquivo de lançamento. O pedido não escolhe módulo, ambiente, diretório nem modo sem limite: modo sem limite continua só pelo REPL.
-- **Batimento (decisão do pesquisador, 2026-10-24):** arquivo de estado `logs/launcher/state.json` (`{launcher_id, pid, atualizado_em, versao}`), gravado de forma atômica a cada ciclo, modo `0644` no diretório `logs/launcher/` (montado só leitura no `geminiclaw-web`; sem segredos). Sem schema novo. A web mostra "lançador ausente" e desabilita "Nova pesquisa" quando o arquivo falta, é inválido ou `atualizado_em` passa de `3 × LAUNCHER_POLL_SECONDS` + 10 s.
+- **Verificação de saúde por ping e resposta no PostgreSQL (decisão do pesquisador, 2026-10-24; substitui o arquivo de estado):** a web faz `NOTIFY launcher_ping, '<nonce>'` (nonce de 128 bits em hex, nada mais) e escuta `launcher_pong`; o lançador, que já mantém `LISTEN` para a fila, responde `NOTIFY launcher_pong, '{"nonce","launcher_id","versao","pid","laco_ok","pedido_em_curso"}'` (JSON ≤ 512 bytes, sem segredos). `laco_ok` é falso se o último ciclo do laço passou de `3 × LAUNCHER_POLL_SECONDS` ou se a última consulta à fila falhou (o ping é respondido por uma tarefa separada do laço, para mostrar laço travado em vez de só "ausente"). Sem resposta com o mesmo nonce em `LAUNCHER_PING_TIMEOUT_SECONDS` (padrão 2) → ausente. `GET /api/launcher` faz a verificação e guarda o resultado por `LAUNCHER_HEALTH_CACHE_SECONDS` (padrão 5), com no máximo um ping em voo (pedidos concorrentes esperam o mesmo). Sem porta, volume, arquivo ou tabela novos; igual no Mac e no Linux. A web desabilita "Nova pesquisa" quando ausente ou `laco_ok=false`.
 - Camadas: `"cli | web | launcher"` acima de `"interaction"`; `launcher` não importa `cli` nem `web`.
 
 ## 4. Containers
@@ -71,7 +71,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_ssr_projeto_pendente
 - Base `python:3.11-slim` fixada por digest, `uv` copiado da imagem oficial fixada; `uv sync --frozen --no-dev` em estágio de build; imagem final sem compiladores.
 - Usuário `10001:10001`, `read_only: true`, `tmpfs: /tmp`, `cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`, `pids_limit`, `mem_limit` (`WEB_CONTAINER_MEM_LIMIT`, padrão 512m).
 - `ports: ["127.0.0.1:${WEB_PORT:-8765}:8765"]`; dentro do container o servidor escuta em `0.0.0.0:8765` **só** com `WEB_IN_CONTAINER=true`, que o `src/web/__main__.py` aceita apenas se também houver `/.dockerenv` (fora disso continua recusando endereço não loopback). `WEB_ALLOWED_HOSTS` continua exigido.
-- Volumes: `./outputs:/app/outputs:ro` (artefatos), `web_dist:/app/frontend/dist:ro`, `./config:/app/config:rw` (só para `RESEARCHER_ENV_FILE` da `v18.10-web-settings`; o diretório só contém esse arquivo), `./logs/launcher:/app/logs/launcher:ro` (batimento). **Nunca** `/var/run/docker.sock`, `.env` inteiro ou o repositório.
+- Volumes: `./outputs:/app/outputs:ro` (artefatos), `web_dist:/app/frontend/dist:ro`, `./config:/app/config:rw` (só para `RESEARCHER_ENV_FILE` da `v18.10-web-settings`; o diretório só contém esse arquivo). **Nunca** `/var/run/docker.sock`, `.env` inteiro ou o repositório.
 - Ambiente: `DATABASE_URL` com host `postgres`; `QDRANT_URL` com host `qdrant`; `WEB_PASSWORD_HASH`, `WEB_*`, chaves só se a página de configurações precisar listar modelos (passadas por `env_file` restrito a nomes da lista, tarefa 2.3).
 - `depends_on` com `condition: service_healthy` em `postgres`; `healthcheck` em `GET /api/health` (rota sem dados, sem autenticação, só `{"ok": true}`).
 
@@ -99,7 +99,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_ssr_projeto_pendente
 |---|---|
 | Orquestração e agentes | Nenhum: a sessão nasce igual. |
 | Sandboxes & containers | Dois containers novos sem socket do Docker; o sandbox continua criado pela sessão no host. |
-| Persistência | Uma tabela aditiva; `NOTIFY` sem payload sensível (só o id). |
+| Persistência | Uma tabela aditiva; `NOTIFY` sem payload sensível (id do pedido, nonce do ping, resposta de saúde). |
 | Segurança | §7. |
 | Testes | Unidade do lançador com relógio e `spawn` injetados; integração da fila com Postgres real (`SKIP LOCKED`, índice único, expiração); teste de imagem (usuário, `read_only`, ausência do socket) por `docker inspect` num teste marcado `container`. |
 | Recursos no host | Lançador ocioso: um `LISTEN` e uma consulta por segundo; container da web ≤ 512 MB. |
@@ -114,6 +114,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_ssr_projeto_pendente
 | D — enxurrada de pedidos | Um pedido aberto por projeto; uma sessão nova por pedido; confirmação para outra pesquisa viva e memória baixa |
 | R — quem iniciou | `canal='web'` no pedido e no resumo do lançamento; log do lançador com id do pedido |
 | I — log da sessão vazando pelo banco | O fim do log fica só no log local do lançador |
+| S — processo qualquer responde o ping como se fosse o lançador | Só quem já tem credencial do banco pode `NOTIFY`, e esse já é confiável; a resposta só habilita o botão, o pedido continua revalidado por quem o assumir |
+| D — enxurrada de pings | Cache de 5 s e um ping em voo no servidor web |
 | S — segundo lançador | Trava de arquivo; pedido assumido por lançador morto vai a `falhou`, nunca relançado sozinho |
 | Porta exposta | Publicada só em `127.0.0.1`; `WEB_IN_CONTAINER` só com `/.dockerenv` |
 
@@ -121,4 +123,4 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_ssr_projeto_pendente
 
 Decidido em 2026-10-24: lançador no host junto dos containers; schema e `docker-compose.yml` aprovados.
 
-Decidido também: batimento por arquivo de estado (Questão 1).
+Decidido também: saúde do lançador por ping e resposta no PostgreSQL (`LISTEN/NOTIFY`), em vez de arquivo de estado ou porta HTTP no host (Questão 1, revista pelo pesquisador em 2026-10-24).

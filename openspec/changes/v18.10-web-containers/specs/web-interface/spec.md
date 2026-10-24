@@ -27,8 +27,17 @@ O container `geminiclaw-web` SHALL rodar sem root, com sistema de arquivos só l
 - **THEN** mostra o diálogo com a memória disponível e, ao confirmar, cria novo pedido com `confirmacoes.memoria_baixa=true`
 
 #### Scenario: Lançador ausente
-- **GIVEN** batimento do lançador mais velho que o limite
-- **THEN** `GET /api/launcher` devolve `presente=false` e o botão Nova pesquisa fica desabilitado com o aviso
+- **GIVEN** nenhum lançador escutando `launcher_ping`
+- **WHEN** `GET /api/launcher`
+- **THEN** a resposta chega em até `LAUNCHER_PING_TIMEOUT_SECONDS` + 1 s, `GET /api/launcher` devolve `presente=false` e o botão Nova pesquisa fica desabilitado com o aviso
+
+#### Scenario: Lançador vivo com laço travado
+- **GIVEN** lançador que responde ao ping mas cujo último ciclo passou de `3 × LAUNCHER_POLL_SECONDS`
+- **THEN** `GET /api/launcher` devolve `presente=true`, `laco_ok=false` e o botão fica desabilitado
+
+#### Scenario: Várias abas
+- **WHEN** dez pedidos a `GET /api/launcher` chegam em 1 s
+- **THEN** no máximo um `NOTIFY launcher_ping` é enviado
 
 ### Requirement: Comando único
 `scripts/up.sh` SHALL subir infra, build do frontend, web e lançador, de forma idempotente; `scripts/down.sh` SHALL parar web e lançador sem remover volumes nem containers de sandbox.

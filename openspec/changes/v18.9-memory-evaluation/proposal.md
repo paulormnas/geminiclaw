@@ -15,7 +15,7 @@ A proposta só vale se a estrutura do grafo indicar bons próximos passos melhor
 ## O que muda
 
 ### Novo
-- `src/knowledge/candidates.py`: gerador puro de candidatos estruturais (transferência, composição e ramo pouco explorado) com ordenação por atributos simples. É usado pelo replay e, depois, por `v18.9-cross-project-context` (design §2).
+- `src/knowledge/structural_candidates.py`: gerador puro de candidatos estruturais (transferência, composição e ramo pouco explorado) com ordenação por atributos simples. É usado pelo replay e, depois, por `v18.9-cross-project-context` (design §2).
 - `scripts/memory_eval/replay.py`: corta o grafo de um ou mais projetos em instantes `t`, gera candidatos com o grafo até `t` e mede a AUC contra os eventos depois de `t`. Compara com as ordenações aleatória e por semelhança textual (design §3).
 - `scripts/memory_eval/metrics.py`: calcula, a partir de explorações arquivadas, as métricas do núcleo, com intervalo de confiança por bootstrap (design §4):
   - taxa de sucesso;
@@ -30,7 +30,7 @@ A proposta só vale se a estrutura do grafo indicar bons próximos passos melhor
 - Escolher o corpus do E0 (questão em aberto 1 do design).
 
 ## Impacto
-- **Código:** `src/knowledge/candidates.py` (novo, puro) e `scripts/memory_eval/` (novo).
+- **Código:** `src/knowledge/structural_candidates.py` (novo, puro) e `scripts/memory_eval/` (novo).
 - **Schema:** nenhuma mudança.
 - **Custo:** E0 não chama LLM. A construção de famílias (design §5) chama, e só roda com confirmação.
 

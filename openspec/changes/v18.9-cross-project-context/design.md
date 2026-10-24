@@ -38,7 +38,7 @@ Este problema: <classe> | <n_linhas> linhas, <n_atributos> atributos
 
 ## 4. Candidatos no ciclo
 
-Ao fim de cada ciclo, `candidates.generate` roda sobre o grafo:
+Ao fim de cada ciclo, `structural_candidates.generate` roda sobre o grafo:
 - **Mesmo projeto:** os candidatos entram em `sugestoes_pendentes_do_curator` (bloco já existente em `exploration.py:276`), com `tipo` e atributos em texto.
 - **Outro projeto:** quando `CROSS_PROJECT_CANDIDATES=true`, o candidato vira `Oportunidade` com `origem = "grafo"`, a propriedade `registro_origem_id` e status `documentada` (aguarda o pesquisador). Nunca vira hipótese sem aprovação (ADR 013).
 

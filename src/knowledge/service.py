@@ -525,6 +525,21 @@ class KnowledgeService:
         return collected
 
     @_operation
+    def approach_attempts(self, abordagem_id: str, problema: Node) -> tuple[list[CollectedAttempt], float | None]:
+        """Tentativas válidas da abordagem (e das fundidas nela) no problema, com a linha de base de referência.
+
+        Leitura pura: serve à avaliação da memória, que precisa das tentativas com o instante de cada uma.
+
+        Returns:
+            ``(tentativas, referência)``; ``referência`` é o melhor valor dos experimentos de referência do problema.
+
+        Raises:
+            KnowledgeServiceError: Problema sem critério ou métrica canônica.
+        """
+        _, metric = self.criterion_for(problema)
+        return self._family_attempts(abordagem_id, problema, metric), self._reference_value(problema, metric)
+
+    @_operation
     def attempt_classes(
         self, collected: list[CollectedAttempt], criterion: Criterion, problema: Node | None, metric: Node
     ) -> list[str]:

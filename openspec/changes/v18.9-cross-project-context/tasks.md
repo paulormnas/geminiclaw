@@ -11,7 +11,7 @@
 - [ ] 1.3 Testes de `knowledge-semantics`.
 
 ## 2. Candidatos no ciclo
-- [ ] 2.1 Integração de `candidates.generate`, sugestões e `Oportunidade` com `origem = "grafo"`.
+- [ ] 2.1 Integração de `structural_candidates.generate`, sugestões e `Oportunidade` com `origem = "grafo"`.
 - [ ] 2.2 Testes de "Candidatos estruturais no ciclo".
 
 ## 3. Fila

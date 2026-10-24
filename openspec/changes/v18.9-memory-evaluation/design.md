@@ -9,7 +9,7 @@
 
 Conclusão: **o histórico não permite o E0**. Não há pares entre Problemas, e 11 positivos não sustentam uma AUC com intervalo útil. O replay pode rodar sobre esses grafos como teste de fumaça, mas o resultado não é relatado como evidência.
 
-## 2. Candidatos estruturais (`src/knowledge/candidates.py`)
+## 2. Candidatos estruturais (`src/knowledge/structural_candidates.py`; `candidates.py` já é a fila de similaridade)
 
 A entrada é uma vista do grafo: Problemas, Abordagens, registros e arestas `DERIVADA_DE`, até um instante `t`. A saída é a lista de `Candidate(tipo, problema_id, abordagem_id, origem_ids, atributos)`.
 

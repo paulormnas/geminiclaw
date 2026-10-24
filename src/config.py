@@ -834,6 +834,14 @@ RELATED_RECORDS_MAX_CHARS = int(
 RELATED_TEXT_WEIGHT = float(
     _bounded_number("RELATED_TEXT_WEIGHT", "0.5", float, "um número em [0, 1]", lambda v: 0 <= v <= 1)
 )
+# Modo do bloco de experiência (E2 da avaliação da memória): ``grafo`` (padrão: Problemas semelhantes, registros
+# qualificados), ``plana`` (todos os registros dos mesmos Problemas, sem qualificação), ``distante`` (Problemas pouco
+# semelhantes) e ``sem`` (sem bloco).
+RELATED_RECORDS_MODE = get_env("RELATED_RECORDS_MODE", default="grafo").strip().lower()
+if RELATED_RECORDS_MODE not in ("sem", "grafo", "plana", "distante"):
+    raise ConfigurationError("'RELATED_RECORDS_MODE' deve ser sem, grafo, plana ou distante.")
+# Só Problemas criados até este instante (ISO 8601) entram no bloco: congela o corpus de um experimento. Vazio = todos.
+RELATED_RECORDS_CUTOFF = get_env("RELATED_RECORDS_CUTOFF", default="").strip()
 # Candidatos vindos de outro projeto viram ``Oportunidade`` (``origem = "grafo"``). Desligado até a regra do E0.
 CROSS_PROJECT_CANDIDATES = get_env_bool("CROSS_PROJECT_CANDIDATES", default=False)
 

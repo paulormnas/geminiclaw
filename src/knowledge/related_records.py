@@ -123,13 +123,22 @@ def related_records(
     k: int | None = None,
     min_similarity: float | None = None,
     now: datetime | None = None,
+    mode: str | None = None,
 ) -> list[RelatedRecord]:
     """Registros dos ``k`` Problemas de outros projetos mais semelhantes (visão local do pesquisador).
 
     Por Problema entram o melhor registro que atingiu o alvo e o registro ``restricao`` mais recente; ``retido`` fica
     de fora (design §2). Só Problemas com semelhança de pelo menos ``min_similarity`` (padrão
     ``CANDIDATE_MIN_SIMILARITY``).
+
+    ``mode`` (padrão ``RELATED_RECORDS_MODE``) escolhe o braço do E2: ``grafo`` (o descrito acima), ``plana`` (todos os
+    registros dos mesmos Problemas, sem filtro de qualificação nem seleção), ``distante`` (os ``k`` Problemas mais
+    próximos *abaixo* do limiar, com a seleção do ``grafo``) e ``sem`` (nada). ``RELATED_RECORDS_CUTOFF`` congela o
+    corpus: Problemas criados depois dele não entram.
     """
+    mode = config.RELATED_RECORDS_MODE if mode is None else mode
+    if mode == "sem":
+        return []
     k = config.RELATED_RECORDS_K if k is None else k
     floor = config.CANDIDATE_MIN_SIMILARITY if min_similarity is None else min_similarity
     now = now or datetime.now(timezone.utc)
@@ -146,12 +155,23 @@ def related_records(
         sim = problem_similarity(
             hit.score, origin.properties.get("caracteristicas_dados"), other.properties.get("caracteristicas_dados")
         )
-        if sim >= floor:
+        created = str(other.properties.get("criado_em") or "")
+        if config.RELATED_RECORDS_CUTOFF and created > config.RELATED_RECORDS_CUTOFF:
+            continue
+        if (sim < floor) == (mode == "distante"):
             scored.append((sim, other))
     scored.sort(key=lambda item: (-item[0], item[1].id))
     found: list[RelatedRecord] = []
     for sim, problem in scored[:k]:
         sub = store.neighbors(problem.id, ["SOBRE"], direction="in", depth=1)
+        if mode == "plana":
+            found.extend(
+                r
+                for node in sub.nodes
+                if node.label == "RegistroResultado"
+                if (r := _record_of(store, node, problem, sim, now)) is not None
+            )
+            continue
         items = [
             r
             for node in sub.nodes
@@ -173,7 +193,9 @@ def _fmt(value: float | None) -> str:
     return "?" if value is None else f"{value:.4g}"
 
 
-def render_block(records: list[RelatedRecord], here: dict[str, str], *, limit: int | None = None) -> str | None:
+def render_block(
+    records: list[RelatedRecord], here: dict[str, str], *, limit: int | None = None, flat: bool = False
+) -> str | None:
     """Bloco ``experiencia_de_problemas_semelhantes`` em modelo fixo (design §2); ``None`` sem registros.
 
     Args:
@@ -190,6 +212,9 @@ def render_block(records: list[RelatedRecord], here: dict[str, str], *, limit: i
         if rec.problema_id != current:
             current = rec.problema_id
             lines.append(f"[{rec.titulo} | classe {rec.classe} | {rec.n_linhas} linhas, {rec.n_atributos} atributos]")
+        if flat:  # memória plana (E2): só abordagem e valor, sem fatos qualificados nem limite de aplicabilidade
+            lines.append(f"{rec.abordagem}: {rec.metrica} {_fmt(rec.melhor_valor)}")
+            continue
         cfg = f" ({rec.config_resumida})" if rec.config_resumida else ""
         lines.append(
             f"{rec.abordagem}{cfg}: {rec.metrica} {_fmt(rec.melhor_valor)} (alvo {_fmt(rec.alvo)}; "
@@ -227,4 +252,4 @@ def experience_block(store: GraphStore, index: SemanticIndex | None, problem: No
             "Experiência de problemas semelhantes indisponível", extra={"extra": {"erro": type(exc).__name__}}
         )
         return None
-    return render_block(records, problem_description(problem))
+    return render_block(records, problem_description(problem), flat=config.RELATED_RECORDS_MODE == "plana")

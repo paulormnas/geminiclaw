@@ -141,3 +141,42 @@ class TestCandidatesInCycle:
         assert len(compositions) == 1
         text = structural_view.describe(ctx, compositions[0])
         assert "var a" in text and "var b" in text
+
+
+class TestE2Modes:
+    def test_sem_nao_traz_registros(self, env, monkeypatch):
+        monkeypatch.setattr(config, "RELATED_RECORDS_MODE", "sem")
+        p1, p2 = _problems(env)
+        _record(env, "random forest", p2, atingiu_alvo=True)
+        assert related_records.experience_block(env.raw, env.index, env.node(p1)) is None
+
+    def test_plana_traz_tudo_sem_qualificacao(self, env, monkeypatch):
+        monkeypatch.setattr(config, "RELATED_RECORDS_MODE", "plana")
+        p1, p2 = _problems(env)
+        _record(env, "random forest", p2, atingiu_alvo=True)
+        _record(env, "knn", p2, atingiu_alvo=False, qualificacao="retido")
+        block = related_records.experience_block(env.raw, env.index, env.node(p1))
+        assert "random forest" in block and "knn" in block
+        assert "Limite:" not in block and "réplicas" not in block
+
+    def test_distante_so_traz_problemas_pouco_semelhantes(self, env, monkeypatch):
+        monkeypatch.setattr(config, "RELATED_RECORDS_MODE", "distante")
+        p1, p2 = _problems(env, cosine=0.3)
+        _record(env, "svm", p2, atingiu_alvo=True)
+        assert "svm" in related_records.experience_block(env.raw, env.index, env.node(p1))
+        monkeypatch.setattr(config, "RELATED_RECORDS_MODE", "grafo")
+        assert related_records.experience_block(env.raw, env.index, env.node(p1)) is None
+
+    def test_distante_ignora_o_semelhante(self, env, monkeypatch):
+        monkeypatch.setattr(config, "RELATED_RECORDS_MODE", "distante")
+        p1, p2 = _problems(env, cosine=0.8)
+        _record(env, "svm", p2, atingiu_alvo=True)
+        assert related_records.experience_block(env.raw, env.index, env.node(p1)) is None
+
+    def test_corte_congela_o_corpus(self, env, monkeypatch):
+        p1, p2 = _problems(env)
+        _record(env, "random forest", p2, atingiu_alvo=True)
+        monkeypatch.setattr(config, "RELATED_RECORDS_CUTOFF", "2000-01-01T00:00:00+00:00")
+        assert related_records.experience_block(env.raw, env.index, env.node(p1)) is None
+        monkeypatch.setattr(config, "RELATED_RECORDS_CUTOFF", "2999-01-01T00:00:00+00:00")
+        assert "random forest" in related_records.experience_block(env.raw, env.index, env.node(p1))

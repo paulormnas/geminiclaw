@@ -45,7 +45,7 @@ Tokens em **HSL**, derivados da Sollytch. Os valores canônicos estão em `exemp
 
 **Sinais de estado** (sempre com rótulo ou forma), cada um com `-bg`: `--pos` validada/sucesso, `--neg` refutada/falha, `--warn` aguarda você/limite, `--info` em teste/executando, `--neu` proposta/inconclusiva/arquivado. Valores por tema no exemplo.
 
-**Grafo:** Problema marinho (quadrado com marca lima), Hipótese `--info` (círculo), Experimento `--g-exp` (quadrado), Resultado `--pos`/`--neg` (triângulo), Abordagem `--g-abo` (hexágono); forma sempre junto da cor.
+**Grafo:** cada nó é um contêiner com fundo tingido (`-bg` ou `color-mix` 14% com `--surface`), contorno 1,8 px e um glifo de traço do mesmo tipo (símbolos SVG compartilhados com a legenda): Problema = alvo, num quadrado marinho com marca lima (âncora); Hipótese = lâmpada, círculo `--info`; Experimento = frasco, quadrado arredondado `--g-exp`; Resultado = barras, pílula `--pos`/`--neg` conforme o alvo; Abordagem = ramificação, losango `--g-abo`. Seleção = halo de 5 px a 35%; nó fora do foco a 60% de opacidade; arestas curvas finas, tracejadas quando sugeridas. Forma e glifo sempre junto da cor.
 
 ### 2.1 Regras
 

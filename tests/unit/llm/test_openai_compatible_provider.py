@@ -219,3 +219,28 @@ async def test_http_error_message_includes_response_body():
     )
     with pytest.raises(httpx.HTTPStatusError, match="Unsupported parameter: foo"):
         await provider.generate(messages=[{"role": "user", "content": "oi"}])
+
+
+@pytest.mark.unit
+def test_timeout_padrao_de_120_segundos(monkeypatch):
+    monkeypatch.setattr("src.config.OPENAI_COMPATIBLE_TIMEOUT_SECONDS", 120.0)
+    provider = OpenAICompatibleProvider(base_url=BASE_URL, model=MODEL)
+
+    assert provider._client.timeout.read == 120.0
+
+
+@pytest.mark.unit
+def test_timeout_configuravel_para_servidor_local_lento(monkeypatch):
+    monkeypatch.setattr("src.config.OPENAI_COMPATIBLE_TIMEOUT_SECONDS", 1800.0)
+    provider = OpenAICompatibleProvider(base_url=BASE_URL, model=MODEL)
+
+    assert provider._client.timeout.read == 1800.0
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("valor", [0.0, -5.0])
+def test_timeout_nao_positivo_falha_na_criacao(monkeypatch, valor):
+    monkeypatch.setattr("src.config.OPENAI_COMPATIBLE_TIMEOUT_SECONDS", valor)
+
+    with pytest.raises(ValueError, match="OPENAI_COMPATIBLE_TIMEOUT_SECONDS"):
+        OpenAICompatibleProvider(base_url=BASE_URL, model=MODEL)

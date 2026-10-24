@@ -204,6 +204,9 @@ LLM_JUDGE_INDEPENDENCE = get_env("LLM_JUDGE_INDEPENDENCE", default="").strip().l
 LLM_PROVIDER_PRIORITY = get_env("LLM_PROVIDER_PRIORITY", default="")
 # Timeout (s) do health check de cada (provedor, modelo) no início da sessão.
 LLM_HEALTH_CHECK_TIMEOUT_SECONDS = float(get_env("LLM_HEALTH_CHECK_TIMEOUT_SECONDS", default="5"))
+# Timeout (s) de cada requisição ao provedor `openai_compatible`. O padrão cobre serviços hospedados; servidores
+# locais lentos (vLLM com raciocínio longo a ~30 tok/s) precisam de mais, senão o cliente desiste e a geração é perdida.
+OPENAI_COMPATIBLE_TIMEOUT_SECONDS = float(get_env("OPENAI_COMPATIBLE_TIMEOUT_SECONDS", default="120"))
 # Catálogo local opcional (só acrescenta modelos). Vazio = src/llm/catalog.local.yaml.
 LLM_CATALOG_LOCAL_PATH = get_env("LLM_CATALOG_LOCAL_PATH", default="")
 

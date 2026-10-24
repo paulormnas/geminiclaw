@@ -40,6 +40,16 @@ def _request_timeout() -> float:
     return timeout
 
 
+def _effective_max_tokens(requested: int) -> int:
+    """``max_tokens`` enviado ao servidor: o pedido do chamador, elevado ao piso ``OPENAI_COMPATIBLE_MAX_TOKENS``.
+
+    O piso (0 = desligado) só eleva o teto de saída; o modelo continua parando por conta própria ao terminar.
+    """
+    from src import config
+
+    return max(requested, config.OPENAI_COMPATIBLE_MAX_TOKENS)
+
+
 class OpenAICompatibleProvider(LLMProvider):
     """Provedor para qualquer servidor que implemente `/chat/completions` com
     Tool Calling no formato da API da OpenAI — cobre llama.cpp server, vLLM,
@@ -98,7 +108,7 @@ class OpenAICompatibleProvider(LLMProvider):
         temperature: float = 0.7,
         max_tokens: int = 4096,
     ) -> LLMResponse:
-        payload = self._build_payload(messages, tools, system, temperature, max_tokens)
+        payload = self._build_payload(messages, tools, system, temperature, _effective_max_tokens(max_tokens))
 
         data, retry_count = await self._post_with_retry("/chat/completions", payload)
 

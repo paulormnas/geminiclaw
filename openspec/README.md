@@ -127,6 +127,11 @@ abertos em [`changes/archive/PENDENCIAS.md`](changes/archive/PENDENCIAS.md). **A
 | V18.9 | [v18.9-cross-project-context](changes/v18.9-cross-project-context/proposal.md) | `knowledge-semantics`, `hypothesis-loop` | 026, 013 | v18.9-result-records, v18.9-memory-evaluation (E0) |
 | V18.7 | [v18.7-exploration-metrics](changes/v18.7-exploration-metrics/proposal.md) | `operation-metrics`, `benchmark` | 021, 022 | v18.7-hypothesis-linking, v18.7-subtask-contract |
 | V18.7 | [v18.7-agent-system-prompts](changes/v18.7-agent-system-prompts/proposal.md) | `agent-prompts`, `agent-runtime` | 022 | v18.7-subtask-contract, v18.7-hypothesis-linking, v18.7-exploration-limits, v18.7-persistent-human-gate |
+| V18.10 | [v18.10-web-skeleton](changes/v18.10-web-skeleton/proposal.md) | `web-interface` | 027 |  — |
+| V18.10 | [v18.10-web-dashboard](changes/v18.10-web-dashboard/proposal.md) | `web-interface` | 027, 015 | v18.10-web-skeleton |
+| V18.10 | [v18.10-web-artifacts](changes/v18.10-web-artifacts/proposal.md) | `web-interface` | 027, 008, 019 | v18.10-web-skeleton |
+| V18.10 | [v18.10-web-graph](changes/v18.10-web-graph/proposal.md) | `web-interface` | 027, 015 | v18.10-web-skeleton |
+| V18.10 | [v18.10-web-chat](changes/v18.10-web-chat/proposal.md) | `web-interface`, `researcher-consult` | 027, 023 | v18.10-web-skeleton, ADR 023 implementado |
 | V19 | [v19-equipment-control](changes/v19-equipment-control/proposal.md) | `equipment-control` | 019, 014, 015, 010 | V18.5, v18-researcher-consult |
 | V20 | [v20-node-identity](changes/v20-node-identity/proposal.md) | `node-identity` | 013 | V16–V19 validadas |
 | V20 | [v20-federated-records](changes/v20-federated-records/proposal.md) | `federation-records` | 013, 019, 015 | v20-node-identity, V18.5 |

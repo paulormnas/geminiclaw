@@ -36,6 +36,7 @@ Cada ADR documenta uma decisão técnica significativa com: contexto, decisão t
 | [024](adr_024_organizacao_do_codigo.md) | Organização do Código por Responsabilidade e Regra de Camadas | 🟠 Parcialmente implementado (Etapas 1 e 2 mergeadas; Etapa 3 pendente em duas mudanças) | 2026-10-15 |
 | [025](adr_025_calibracao_do_veredito.md) | Calibração do Veredito: Exploração e Teste dos Parâmetros | ⚠️ Deprecado (substituído pelo 026 em 2026-10-21; etapas 1 e 2 e modelo v2 implementados, etapa 3 encerrada sem a bateria) | 2026-10-15 |
 | [026](adr_026_memoria_por_registros_de_resultado.md) | Memória por Registros de Resultado e Correlação entre Pesquisas (substitui o veredito) | 🟢 Aprovado (direção; mudanças `v18.9-*` especificadas, aguardam aprovação) | 2026-10-21 |
+| [027](adr_027_interface_web.md) | Interface Web do Pesquisador: SPA em TypeScript e API FastAPI Local | 🔵 Proposto (mudanças `v18.10-web-*` especificadas, aguardam aprovação) | 2026-10-24 |
 
 
 ---
@@ -115,6 +116,8 @@ ADR 010 (Propósito: Assistente de Pesquisa) ← define o escopo de tudo (substi
 ---
 
 ## Lacunas de especificação (2026-10-01)
+
+**Atualização 2026-10-24 (V18.10):** o ADR 027 (interface web) está Proposto, com as cinco mudanças `v18.10-web-*` especificadas ([`roadmap_V18.10.md`](../../roadmaps/roadmap_V18.10.md)); nada implementado.
 
 **Atualização 2026-10-21 (V18.9):** o ADR 026 substitui o ADR 015 §9 e o ADR 025 (Deprecado): o veredito dá lugar a registros de resultado com estado da hipótese por regra de réplicas, memória de falhas e experiência de problemas semelhantes no planejamento. As quatro mudanças `v18.9-*` estão especificadas e aguardam aprovação ([`roadmap_V18.9.md`](../../roadmaps/roadmap_V18.9.md)). `v18.8-verdict-controlled-sessions` foi encerrada sem 5.3, 5.4 e 6.
 

@@ -37,7 +37,7 @@ Interface web local (SPA em TypeScript servida por FastAPI no Mac, só loopback/
 
 ### Tarefa 5: Conversa
 - **Spec:** [`v18.10-web-chat`](../openspec/changes/v18.10-web-chat/proposal.md)
-- **Critérios de aceite:** [ ] consulta só leitura em processo filho · [ ] nova pesquisa com as confirmações do REPL · [ ] SSE sem perda · [ ] gate respondido pela web com senha nas decisões reservadas e `canal: web` · [ ] presença conforme decisão
+- **Critérios de aceite:** [ ] consulta só leitura em processo filho · [ ] nova pesquisa com as confirmações do REPL · [ ] SSE sem perda · [ ] gate respondido pela web com senha nas decisões reservadas e `canal: web` · [ ] Problema definido pela web · [ ] comandos a qualquer momento · [ ] `assisted` só no REPL
 - **Complexidade estimada:** Alta
 
 ## Ordem de implementação

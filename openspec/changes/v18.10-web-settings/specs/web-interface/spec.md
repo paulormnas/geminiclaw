@@ -54,6 +54,32 @@
 - **WHEN** uma chave é gravada
 - **THEN** o log registra o nome `GEMINI_API_KEY` e não contém o valor
 
+### Requirement: Modelos disponíveis por provedor
+`GET /api/models` SHALL listar os modelos oferecidos por cada provedor configurado, marcados `no_catalogo`, `novo` ou `indisponivel` contra `src/llm/catalog.yaml`, e MUST mostrar a falha de um provedor sem esconder os outros (ADR 017; decisão de 2026-10-24).
+
+#### Scenario: Cruzamento com o catálogo
+- **GIVEN** provedor simulado que oferece `m-a` (no catálogo) e `m-novo` (fora), e o catálogo com `m-velho` não oferecido
+- **WHEN** `GET /api/models`
+- **THEN** `m-a` vem `no_catalogo`, `m-novo` vem `novo` e `m-velho` vem `indisponivel`
+
+#### Scenario: Provedor sem chave
+- **GIVEN** Anthropic sem chave e Google com chave
+- **THEN** Anthropic vem `ok=false` com `erro="sem_chave"` e a lista do Google vem completa
+
+#### Scenario: Cache
+- **GIVEN** `MODEL_DISCOVERY_CACHE_SECONDS=3600` e relógio simulado
+- **WHEN** a lista é pedida duas vezes em 10 minutos e depois com `atualizar=1`
+- **THEN** o provedor simulado é chamado uma vez e depois mais uma
+
+#### Scenario: Validator com modelo novo
+- **WHEN** `PUT /api/settings` define `VALIDATOR_MODEL` com um modelo `novo`
+- **THEN** 422 citando a família não declarada (ADR 020)
+
+#### Scenario: Validator da mesma família do Developer
+- **GIVEN** `DEVELOPER_MODEL` da família X
+- **WHEN** `VALIDATOR_MODEL` é definido com modelo da família X
+- **THEN** 422 citando o ADR 020
+
 ### Requirement: Página de configurações
 O frontend SHALL mostrar os grupos, a origem de cada valor, as chaves mascaradas e o aviso de que a mudança vale para a próxima pesquisa, e SHALL pedir a senha ao salvar.
 

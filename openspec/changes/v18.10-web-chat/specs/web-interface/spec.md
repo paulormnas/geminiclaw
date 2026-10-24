@@ -36,6 +36,10 @@
 - **WHEN** a nova pesquisa é pedida sem `confirmar_outra_em_execucao`
 - **THEN** a resposta é 409 `outra_em_execucao` com o apelido; com a confirmação, 202 e o PID novo registrado na sessão
 
+#### Scenario: Assisted recusado na web
+- **WHEN** a nova pesquisa é pedida com `modo="assisted"`
+- **THEN** 422 `modo_nao_suportado_na_web` e nenhum processo é criado
+
 #### Scenario: Problema não confirmado
 - **GIVEN** projeto sem Problema confirmado
 - **THEN** a resposta é 409 `problema_nao_confirmado` e nenhum processo é criado
@@ -68,6 +72,11 @@ As rotas de comando e orientação SHALL gravar na `session_inbox` pelo mesmo c�
 - **GIVEN** uma sessão viva
 - **WHEN** `POST /commands {"comando":"pausar"}`
 - **THEN** a caixa tem um `tipo='comando'` codificado como no REPL e a sessão, no laço de teste, termina a subtarefa e fica `suspended` com `pausada_pesquisador`
+
+#### Scenario: Parar a qualquer momento
+- **GIVEN** uma pesquisa `auto` no meio de uma subtarefa
+- **WHEN** `POST /commands {"comando":"parar"}`
+- **THEN** a subtarefa em curso termina, a sessão grava relatório e o motivo de parada que o `parar` do REPL grava hoje, e a página mostra o comando como aplicado
 
 #### Scenario: Sessão sem processo
 - **GIVEN** uma sessão `completed`

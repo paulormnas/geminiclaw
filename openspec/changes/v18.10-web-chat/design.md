@@ -50,9 +50,26 @@ Camadas: `"cli | web"`, depois `"interaction"`, depois `"orchestration"`. Nenhum
 - **Nova pesquisa:** exige Problema confirmado do projeto (a confirmação continua na CLI, Questão 3); com outra pesquisa viva ou memória abaixo de `MIN_AVAILABLE_MEMORY_MB`, a API devolve 409 com os dados e só lança com a confirmação correspondente — o mesmo diálogo do REPL (ADR 023 §1).
 - **Texto livre:** sempre consulta, nunca inicia pesquisa (decisão de 2026-10-15 para o REPL); iniciar pesquisa é o botão "Nova pesquisa".
 
-## 3. Presença e modo `assisted` (ver Questão 2)
+## 3. Modos pela web e comandos a qualquer momento (decisão do pesquisador, 2026-10-24)
 
-O `assisted` se suspende quando nenhum terminal está presente (ADR 023 §1.2). Proposta: enquanto houver ao menos uma conexão SSE aberta para uma sessão do projeto **e** interação recente do pesquisador (tecla, clique ou foco na aba nos últimos `WEB_PRESENCE_IDLE_MINUTES`, padrão 30, informado pelo frontend), o processo da web mantém uma linha de presença `tipo='web'` com batimento; sem interação recente, sem conexão ou com a sessão de login encerrada, grava `ended_at`. Uma aba esquecida aberta não segura o `assisted`. O REPL e a web podem coexistir (a regra "um REPL por vez" continua só entre REPLs). A sessão `assisted` considera presente qualquer presença viva, de REPL ou web.
+- **`assisted` só no REPL.** A web inicia e acompanha pesquisas `semi` e `auto`; o diálogo de nova pesquisa não oferece `assisted`, e a API recusa (`422 modo_nao_suportado_na_web`). A web não registra presença: nenhuma mudança em `terminal_presence`, nenhum schema novo. Uma pesquisa `assisted` iniciada no REPL aparece na web para leitura (eventos, artefatos), e pedidos do gate dela podem ser respondidos pela web.
+- **Comandos a qualquer momento.** Com o chat aberto, o pesquisador manda comandos e orientações quando quiser; a sessão os lê da caixa de entrada a cada `SESSION_INBOX_POLL_SECONDS` e os aplica na próxima janela segura, como já faz para o REPL (ADR 023 §3; `v18.7-session-events-terminal` §3): `pausar` (termina a subtarefa atual, grava checkpoint e fica retomável com `pausada_pesquisador`), `parar` (encerra os experimentos com fechamento gracioso, relatório e motivo de parada), `retomar` (cria o processo novo pelo mecanismo de retomada), `cancelar <subtarefa>` (só antes de começar), `replanejar` (ao fim da subtarefa atual). A interface mostra o comando como "enviado" e depois "aplicado" quando chega o evento `comando_recebido` e o evento do efeito.
+
+## 3.1 Definir e editar o Problema pela web (decisão do pesquisador, 2026-10-24)
+
+Hoje a CLI pede ao Researcher um rascunho do Problema, o pesquisador edita campo a campo (`apply_edit`, `EDITABLE_FIELDS` de `src/knowledge/problem.py`) e confirma (`confirm_problem`, decisão reservada `confirmar_problema`). A web faz o mesmo, pelo mesmo código:
+
+| Rota | O que faz |
+|---|---|
+| `POST /api/projects/{id}/problem/draft` | pede o rascunho ao Researcher pelo processo filho da consulta (custo registrado como `rascunho_problema_web`); devolve o `ProblemDraft` serializado |
+| `POST /api/projects/{id}/problem/draft/validate` | `{rascunho}` → aplica `parse_problem_draft` e as validações de `confirm_problem` sem gravar; devolve erros por campo (inclusive `MetricSentidoRequired`) |
+| `POST /api/projects/{id}/problem/confirm` | `{rascunho, sentido_metrica?, senha}` → `confirm_problem` com ator `pesquisador`, depois do registro no gate como na CLI (`TerminalGate.resolve('confirmar_problema', ...)`, `canal: web`) |
+| `GET /api/projects/{id}/problem` | Problema ativo confirmado e o histórico de Problemas do projeto |
+
+- O rascunho fica só no navegador até a confirmação (nada é gravado antes; o Researcher só lê).
+- Redefinir um Problema já confirmado segue exatamente a regra atual da CLI (o desenvolvedor confere na tarefa 0.1 se a CLI substitui, versiona ou recusa); a web não cria caminho novo.
+- A confirmação exige a senha (decisão reservada) e nunca acontece sem clique explícito em "Confirmar Problema".
+- Formulário com os campos de `EDITABLE_FIELDS`, ajuda por campo, concorrentes (tipo `discriminacao`) como lista editável, métrica com sentido obrigatório quando o catálogo pede.
 
 ## 4. Frontend (Designer)
 
@@ -66,10 +83,10 @@ O `assisted` se suspende quando nenhum terminal está presente (ADR 023 §1.2). 
 
 | Eixo | Impacto |
 |---|---|
-| Orquestrador & laço | Nenhum comportamento novo; só a origem `web` nos pedidos resolvidos e a presença `web` lida pelo `assisted`. |
+| Orquestrador & laço | Nenhum comportamento novo (comandos pela caixa de entrada, como o REPL). |
 | Agentes & prompts | Nenhum; a consulta é a mesma do REPL. |
 | Sandboxes | Nenhum. |
-| Persistência | `CHECK` ampliados em `gate_requests` e (Questão 2) `terminal_presence`; leitura de `session_events`; gravação na `session_inbox`. |
+| Persistência | Nenhum schema novo; leitura de `session_events`; gravação na `session_inbox` e no gate; `Problema` gravado por `confirm_problem`. |
 | Segurança | Gate respondido por HTTP: ponto principal (§6). |
 | Testes & telemetria | Movimentação com suíte verde; testes de integração com processo de sessão real e provedor gravado (ajudas de `v18.7-background-sessions`). |
 
@@ -89,7 +106,4 @@ O `assisted` se suspende quando nenhum terminal está presente (ADR 023 §1.2). 
 
 ## 7. Questões em aberto
 
-1. ~~Origem própria no gate~~: decidido em 2026-10-24 — `resolvido_por='terminal'` com `canal: web` na resposta, sem schema.
-2. **Presença:** (a) presença `tipo='web'` enquanto houver conexão de eventos, coexistindo com o REPL (recomendado; exige o `CHECK` novo); (b) a web conta como "o terminal" e é exclusiva com o REPL; (c) a web não mantém presença e o `assisted` só funciona pelo REPL.
-3. **Confirmar o Problema pela web** (o Advogado do Valor recomenda incluir nesta mudança, porque sem isso uma pesquisa nova pela web volta à CLI justamente no primeiro passo) (decisão reservada `confirmar_problema`, com edição do rascunho): fica para uma mudança seguinte, ou entra nesta?
-4. **Ativar modo sem limite pela web:** recomendação é não oferecer (continua só na CLI, com a confirmação atual).
+Decididas em 2026-10-24: canal no JSON da resposta (sem schema); `assisted` só no REPL, sem presença da web; Problema definido e editado pela web; modo sem limite continua só na CLI.

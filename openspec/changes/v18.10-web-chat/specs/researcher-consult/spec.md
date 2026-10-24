@@ -33,15 +33,24 @@ Os pedidos do gate SHALL ser resolvidos só por `TerminalGate` com origem em `HU
 - **WHEN** `{"acao":"aprovar_tudo"}`
 - **THEN** 422 e o pedido segue `pendente`
 
-#### Scenario: Web mantém o assisted
-- **GIVEN** uma sessão `assisted` e só a web conectada
-- **WHEN** passa o prazo de `TERMINAL_PRESENCE_STALE_SECONDS`
-- **THEN** a sessão não se suspende
+## ADDED Requirements
 
-#### Scenario: Última aba fecha
-- **WHEN** a última conexão SSE fecha e nenhum REPL está aberto
-- **THEN** a presença web ganha `ended_at` e a sessão `assisted` se suspende como no ADR 023 §1.2
+### Requirement: Problema definido e confirmado pela web
+A web SHALL pedir o rascunho do Problema ao Researcher pelo processo filho só leitura, validar o rascunho editado com `parse_problem_draft` sem gravar, e confirmar por `confirm_problem` com ator `pesquisador` só com a senha do pesquisador (ADR 027 §6.6; decisão de 2026-10-24).
 
-#### Scenario: Aba esquecida
-- **GIVEN** uma conexão SSE aberta sem interação há 31 minutos e `WEB_PRESENCE_IDLE_MINUTES=30`
-- **THEN** a presença web ganha `ended_at` e a sessão `assisted` se suspende
+#### Scenario: Rascunho não grava
+- **GIVEN** provedor simulado que devolve um rascunho válido
+- **WHEN** `POST /problem/draft` e depois `POST /problem/draft/validate`
+- **THEN** ambos respondem 200 e o grafo não tem nenhum `Problema` novo
+
+#### Scenario: Erro por campo
+- **WHEN** o rascunho validado tem métrica sem sentido quando o catálogo exige
+- **THEN** 422 com `campo="sentido_metrica"` e nada é gravado
+
+#### Scenario: Confirmar com senha
+- **WHEN** `POST /problem/confirm` com rascunho válido e a senha correta
+- **THEN** existe `Projeto-INVESTIGA->Problema` com `status="confirmado"` e autor `pesquisador`, e o pedido `confirmar_problema` do gate está `autorizada` com `resposta.canal="web"`
+
+#### Scenario: Confirmar sem senha
+- **WHEN** o mesmo pedido sem senha
+- **THEN** 403 e nenhum `Problema` é criado

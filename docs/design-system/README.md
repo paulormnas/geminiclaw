@@ -1,6 +1,7 @@
 # Design System — "Bancada"
 
 **Status:** Proposto (2026-10-24) · **Dono:** Designer de Produto · **Origem:** ADR 027 §5
+**Exemplo visual:** [`exemplo.html`](exemplo.html) (abrir no navegador; usa Google Fonts só no exemplo, a aplicação hospeda as fontes).
 **Vale para:** todo código em `frontend/`. Os agentes desenvolvedores seguem este documento; valor visual fora dele exige atualizar este documento antes (regra do `designer.md`).
 
 ---

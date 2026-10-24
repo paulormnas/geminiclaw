@@ -1,15 +1,48 @@
 # Design: v18.10-web-settings
 
-## 1. Lista fechada (proposta; o desenvolvedor confere nomes e validações contra `src/config.py` na tarefa 0.1)
+## 1. Lista fechada (revisada contra o `.env` do Mac em 2026-10-24; o desenvolvedor confere nomes e validações em `src/config.py` na tarefa 0.1)
+
+Critério: valores que o pesquisador ajusta no dia a dia, que só mudam o comportamento da **próxima** pesquisa (cada processo de sessão lê a configuração ao iniciar) e que não mexem em infraestrutura, egresso, isolamento ou dados já gravados. Nenhum deles exige reiniciar o sistema; a consulta do REPL já aberto passa a usá-los ao reabrir o REPL, e a web relê a sobreposição a cada consulta que ela inicia.
 
 | Grupo | Variáveis | Validação (a mesma de `src/config.py`) |
 |---|---|---|
-| Limites da sessão | `SESSION_MAX_MINUTES`, `SESSION_MAX_TOKENS`, `SESSION_MAX_COST_USD`, `SESSION_MAX_COST_USD_BY_PROVIDER`, `AGENT_TIMEOUT_SECONDS`, `MAX_SUBTASKS_PER_TASK`, `MAX_CONCURRENT_AGENTS` | números > 0 (ou `0` onde significa sem limite, como hoje) |
-| Consulta | `TERMINAL_CONSULT_MAX_TOKENS`, `TERMINAL_EVENT_DETAIL` | idem |
-| Modelos e provedores | `LLM_PROVIDER_PRIORITY`, `{PAPEL}_MODEL` (pins por papel), `GOOGLE_FALLBACK_MODEL`, `ON_MODEL_VERSION_CHANGE` | provedor e modelo existentes no catálogo (`src/llm/catalog.yaml`) |
+| Limites da sessão | `SESSION_MAX_MINUTES`, `SESSION_MAX_TOKENS`, `SESSION_MAX_COST_USD`, `SESSION_MAX_COST_USD_BY_PROVIDER`, `SESSION_CLOSING_RESERVE_PCT`, `LIMIT_GRACE_SECONDS`, `AGENT_TIMEOUT_SECONDS`, `CODE_SANDBOX_TIMEOUT_SECONDS` | números > 0, ou `0` onde já significa sem limite |
+| Execução | `SESSION_DEFAULT_MODE` (só `semi`/`auto` pela web; `assisted` continua válido no `.env`), `MAX_SUBTASKS_PER_TASK`, `MAX_CONCURRENT_AGENTS`, `MAX_PLANNING_ITERATIONS`, `MAX_PLAN_RETRIES`, `MAX_RETRY_PER_SUBTASK`, `SESSION_MAX_TASK_RETRIES`, `TRIAGE_MODE`, `TRIAGE_CONFIDENCE_THRESHOLD`, `OPERATIONAL_THRESHOLD_SESSION_DURATION_PCT`, `OPERATIONAL_THRESHOLD_TOKEN_USAGE_PCT` | enum ou faixa atual |
+| Modelos e provedores | `RESEARCHER_MODEL`, `DEVELOPER_MODEL`, `VALIDATOR_MODEL`, `REVIEWER_MODEL`, `SUMMARIZER_MODEL` (e os demais `{PAPEL}_MODEL` existentes), `GOOGLE_FALLBACK_MODEL`, `LLM_PROVIDER_PRIORITY`, `ON_MODEL_VERSION_CHANGE`, `ANTHROPIC_EFFORT`, `ANTHROPIC_REFUSAL_FALLBACK`, `OLLAMA_ENABLE_THINKING`, `OLLAMA_NUM_CTX`, `MAX_LOCAL_LLM_CONCURRENT`, `LLM_REQUESTS_PER_MINUTE`, `LLM_RATE_LIMIT_COOLDOWN_SECONDS`, `CONTEXT_COMPRESSION_MODE` | modelo escolhido da lista do §1.1; demais pelas regras atuais; a independência do Validator (ADR 020: família diferente da do Developer) é conferida antes de gravar |
+| Ferramentas dos agentes | `SKILL_DEEP_SEARCH_ENABLED`, `SKILL_WEB_READER_ENABLED`, `SKILL_DOCUMENT_PROCESSOR_ENABLED`, `SKILL_MEMORY_ENABLED`, `QUICK_SEARCH_STRATEGY`, `DEEP_SEARCH_MAX_PAGES_PER_DOMAIN`, `SEARCH_CACHE_TTL_SECONDS`, `DEEP_SEARCH_CACHE_TTL_SECONDS` | booleano ou faixa atual |
+| Cache de LLM | `LLM_CACHE_ENABLED`, `LLM_CACHE_TTL_SECONDS`, `LLM_CACHE_MAX_ENTRIES` | idem |
+| Consulta e exibição | `TERMINAL_CONSULT_MAX_TOKENS`, `TERMINAL_EVENT_DETAIL` | idem |
 | Chaves de API | `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENAI_COMPATIBLE_API_KEY`, `BRAVE_API_KEY` | texto de 1 a 512 caracteres, sem espaço nem quebra de linha |
 
-Ficam de fora, mesmo que pareçam inofensivas: tudo de banco (`DATABASE_URL`, `POSTGRES_*`, `QDRANT_*`), `OPENAI_COMPATIBLE_BASE_URL` e endereços de provedor (mudar o destino é decisão de egresso, ADR 019), `EGRESS_*`, `SANDBOX_*`, `WEB_*`, `MIN_AVAILABLE_MEMORY_MB`, `TEMPERATURE_LIMIT`, o modo sem limite e variáveis de experimento.
+**Ficam de fora, com o motivo:**
+
+| Variáveis | Motivo |
+|---|---|
+| `DATABASE_URL`, `POSTGRES_*`, `QDRANT_URL`, `KNOWLEDGE_*`, `BENCHMARK_*`, `LONG_TERM_MEMORY_DB`, `OUTPUT_BASE_DIR` | infraestrutura e dados; mudar perde ou mistura dados |
+| `OLLAMA_BASE_URL`, `OPENAI_BASE_URL`, `OPENAI_COMPATIBLE_BASE_URL`, `DEEP_SEARCH_DOMAINS` | destino de rede: decisão de egresso (ADR 019) |
+| `LLM_DATA_POLICY`, `EGRESS_*` | localidade e egresso dos dados de pesquisa (ADR 019) |
+| `EMBEDDING_MODEL`, `EMBEDDING_BATCH_SIZE`, `EMBEDDING_OFFLINE` | trocar o modelo de embedding invalida os vetores já gravados no Qdrant |
+| `SKILL_CODE_ENABLED`, `SKILL_HUMAN_FEEDBACK_ENABLED`, `CODE_SANDBOX_MEMORY_LIMIT`, `CODE_SANDBOX_SETUP_TIMEOUT_SECONDS`, `DOCKER_*` | isolamento do sandbox e canal humano (ADR 014, ADR 023) |
+| `MIN_AVAILABLE_MEMORY_MB`, `TEMPERATURE_LIMIT`, `HEALTH_CHECK_ENABLED`, `AGENT_RUNTIME` | proteção da máquina |
+| `GITHUB_*`, `APP_NAME`, `LOG_LEVEL`, `WEB_*`, `BASE_MODEL`, `KNOWLEDGE_GRAPH_NAME` | governança, identidade e infraestrutura; `BASE_MODEL` fica de fora até o desenvolvedor confirmar o uso (tarefa 0.1) |
+| modo sem limite, `VERDICT_*` e variáveis de experimento | decisões reservadas ou medição da dissertação |
+
+## 1.1 Modelos disponíveis por provedor (decisão do pesquisador, 2026-10-24)
+
+Para que a escolha de modelo acompanhe o que os provedores oferecem, um módulo novo, `src/llm/model_discovery.py`, consulta a **lista de modelos** de cada provedor configurado, sem enviar nenhum dado de pesquisa (só a chave do próprio provedor):
+
+| Provedor | Fonte |
+|---|---|
+| Google (Gemini) | API de listagem de modelos do Gemini |
+| Anthropic | endpoint de listagem de modelos da API |
+| OpenAI | endpoint de listagem de modelos da API |
+| `openai_compatible` (vLLM do servidor LLAMA) | `GET {base}/v1/models` do endereço já configurado no `.env` |
+| Ollama | `GET {base}/api/tags` |
+
+- O resultado é cruzado com o catálogo (`src/llm/catalog.yaml`, ADR 017) e cada modelo vem marcado: `no_catalogo` (preço, papéis e família conhecidos), `novo` (oferecido pelo provedor e ausente do catálogo) ou `indisponivel` (no catálogo e não oferecido mais).
+- Cache em memória por `MODEL_DISCOVERY_CACHE_SECONDS` (padrão 3600) e botão "Atualizar". Falha de um provedor (sem chave, rede, 401) aparece como erro daquele provedor, sem esconder os outros, e nunca vira lista vazia silenciosa.
+- **Modelo `novo`:** pode ser escolhido, mas a página avisa que não há preço no catálogo; até ele entrar no catálogo, o custo dessas chamadas conta em `sem_custo_registrado` e o limite `SESSION_MAX_COST_USD` não as enxerga (Questão 1). A independência do Validator usa a família declarada no catálogo; modelo `novo` não pode ser escolhido para o Validator enquanto a família não for declarada.
+- Também disponível na CLI (`geminiclaw models list`), para o mesmo uso fora da web, e para manter `docs/` e o catálogo atualizados.
 
 ## 2. Arquivo de sobreposição
 
@@ -22,6 +55,7 @@ Ficam de fora, mesmo que pareçam inofensivas: tudo de banco (`DATABASE_URL`, `P
 
 | Rota | Resposta |
 |---|---|
+| `GET /api/models?atualizar=0` | `{provedores: [{provedor, ok, erro?, modelos: [{id, nome, estado: no_catalogo\|novo\|indisponivel, familia?, preco?}]}], consultado_em}` |
 | `GET /api/settings` | `[{nome, grupo, valor?, definido: bool, origem: "padrao"\|"env"\|"pesquisador", segredo: bool, ultimos4?}]`. Para segredos, `valor` nunca vem; vem só `definido` e os 4 últimos caracteres |
 | `PUT /api/settings` | `{alteracoes: {NOME: valor\|null}, senha}` → 200 com a lista atualizada; `null` remove a sobreposição; 422 com o nome e a mensagem de validação; 403 sem senha correta |
 
@@ -50,4 +84,6 @@ Orquestrador e agentes: leem a configuração como hoje. Sandbox: nenhum. Persis
 
 ## 7. Questões em aberto
 
-1. A lista do §1 está boa? Em particular: incluir `{PAPEL}_MODEL` e `LLM_PROVIDER_PRIORITY` (mudam qual modelo responde) e `MAX_CONCURRENT_AGENTS`.
+Decidido em 2026-10-24: modelos na lista; busca de modelos por provedor; lista revisada contra o `.env`.
+
+1. **Modelo fora do catálogo:** (a) permitir com aviso, custo não estimado e fora do limite de custo (proposta atual); (b) permitir só depois de declarar preço e família no catálogo pela própria página (mais seguro para os limites, um passo a mais); (c) só modelos do catálogo.
